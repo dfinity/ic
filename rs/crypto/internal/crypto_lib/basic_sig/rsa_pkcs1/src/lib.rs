@@ -24,7 +24,7 @@ pub fn algorithm_identifier() -> der_utils::PkixAlgorithmIdentifier {
 }
 
 /// A RSA public key usable for signature verification
-#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize)]
 pub struct RsaPublicKey {
     der: Vec<u8>,
     #[serde(skip_serializing)]

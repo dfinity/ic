@@ -18,11 +18,11 @@ rand = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 simple_asn1 = { workspace = true }
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 hex = { workspace = true }
 ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
-wycheproof = "0.5"
+wycheproof = { version = "0.6", default-features = false, features = ["ecdsa"] }

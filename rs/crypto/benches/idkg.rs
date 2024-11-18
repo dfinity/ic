@@ -23,7 +23,7 @@ use std::collections::HashSet;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
-#[derive(EnumIter, PartialEq, Copy, Clone, Default)]
+#[derive(Copy, Clone, PartialEq, Default, EnumIter)]
 enum VaultType {
     Local,
     #[default]
@@ -453,7 +453,6 @@ fn bench_retain_active_transcripts<M: Measurement, R: RngCore + CryptoRng>(
                                 receivers,
                                 test_case.alg(),
                                 key_transcript,
-                                false,
                                 rng,
                             )
                         };

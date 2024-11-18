@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/logmon",
     "//rs/monitoring/metrics",
     "//rs/test_utilities/metrics",

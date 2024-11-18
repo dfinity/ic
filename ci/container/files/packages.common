@@ -1,0 +1,70 @@
+# Essentials
+curl
+build-essential
+git
+git-lfs
+gnupg
+node-json5
+uuid-dev
+zsh
+fish
+clang
+iproute2
+shellcheck
+xxd
+vim
+
+# Bitcoin core (for bitcoin adapter integration test)
+libtool
+libevent-dev
+libboost-dev
+
+# GitHub CI
+sudo
+gosu
+jq
+rclone
+time
+qemu-system-x86
+
+# Test
+rsync
+lcov
+
+# RUST
+gcc
+lld
+pkg-config
+libssl-dev
+libunwind-dev
+libusb-1.0-0-dev
+libsqlite3-dev
+zlib1g-dev
+libclang-10-dev
+protobuf-compiler
+llvm
+liblmdb-dev
+liblzma-dev
+
+# Haskell
+libtinfo5
+libtinfo-dev
+libffi-dev
+libgmp-dev
+
+# IC-OS
+cryptsetup-bin
+dosfstools
+fakeroot
+faketime
+grub-efi-amd64-bin
+iputils-ping
+libselinux-dev
+libsystemd-dev
+lsb-release
+lvm2
+mtools
+python-is-python3
+python3
+python3-pip
+zstd

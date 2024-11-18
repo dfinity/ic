@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//rs/sns/governance:__pkg__"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/proto",
 ]
 

@@ -42,15 +42,15 @@ const SUBNET_TYPE_ALLOW_LIST: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];
 
 #[derive(
-    Debug,
     Copy,
     Clone,
     PartialEq,
+    Debug,
+    Deserialize,
     EnumIter,
+    EnumMessage,
     EnumString,
     Serialize,
-    Deserialize,
-    EnumMessage,
     clap::ValueEnum,
 )]
 pub enum StepType {
@@ -78,15 +78,15 @@ pub enum StepType {
     Cleanup,
 }
 
-#[derive(Debug, Clone, PartialEq, Parser, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
 #[clap(version = "1.0")]
 pub struct SubnetSplittingArgs {
     /// Id of the subnet whose state will be split.
-    #[clap(long, parse(try_from_str=ic_recovery::util::subnet_id_from_str))]
+    #[clap(long, value_parser=ic_recovery::util::subnet_id_from_str)]
     pub source_subnet_id: SubnetId,
 
     /// Id of the destination subnet.
-    #[clap(long, parse(try_from_str=ic_recovery::util::subnet_id_from_str))]
+    #[clap(long, value_parser=ic_recovery::util::subnet_id_from_str)]
     pub destination_subnet_id: SubnetId,
 
     /// Public ssh key to be deployed to the subnet for read only access.
@@ -115,7 +115,7 @@ pub struct SubnetSplittingArgs {
     pub next_step: Option<StepType>,
 
     /// The canister ID ranges to be moved to the destination subnet.
-    #[clap(long, multiple_values(true), required = true)]
+    #[clap(long, num_args(1..), required = true)]
     pub canister_id_ranges_to_move: Vec<CanisterIdRange>,
 }
 
@@ -433,7 +433,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 if self.params.pub_key.is_none() {
                     self.params.pub_key = read_optional(
                         &self.logger,
-                        "Enter public key to add readonly SSH access to subnet: ",
+                        "Enter public key to add readonly SSH access to subnet. Ensure the right format.\n\
+                        Format:   ssh-ed25519 <pubkey> <identity>\n\
+                        Example:  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPwS/0S6xH0g/xLDV0Tz7VeMZE9AKPeSbLmCsq9bY3F1 foo@dfinity.org\n\
+                        Enter your key: ",
                     )
                 }
             }

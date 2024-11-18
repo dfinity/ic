@@ -5,6 +5,7 @@ load("//bazel:defs.bzl", "rust_ic_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/http_types",
     "//rs/types/base_types",
     "@crate_index//:candid",
@@ -22,6 +23,7 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:ic-cdk-macros",
 ]
 
@@ -64,12 +66,12 @@ DEV_ENV = {
     "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
     "GOVERNANCE_DIR": "rs/nns/governance",
     "GOVERNANCE_WASM": "$(rootpath //rs/nns/governance:governance-canister)",
-    "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister)",
-    "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index:index_canister)",
-    "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
-    "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm)",
-    "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
-    "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
+    "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister)",
+    "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index:index_canister)",
+    "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+    "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm)",
+    "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
+    "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
     "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister)",
@@ -80,12 +82,14 @@ DEV_ENV = {
     "XRC_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
 }
 
-DEPENDENCIES_TEST = [
+DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nns/test_utils",
     "//rs/rosetta-api/tvl",
     "//rs/rosetta-api/tvl/xrc_mock",
     "//rs/state_machine_tests",
     "//rs/test_utilities/load_wasm",
+    "//rs/types/base_types",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
     "@crate_index//:rand",
@@ -99,12 +103,12 @@ DEV_DATA = [
     "//rs/nns/handlers/root/impl:root-canister",
     "//rs/nns/sns-wasm:sns-wasm-canister",
     "//rs/registry/canister:registry-canister",
-    "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm",
-    "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
-    "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
-    "//rs/rosetta-api/icrc1/archive:archive_canister",
-    "//rs/rosetta-api/icrc1/index:index_canister",
-    "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+    "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm",
+    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
+    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
+    "//rs/ledger_suite/icrc1/archive:archive_canister",
+    "//rs/ledger_suite/icrc1/index:index_canister",
+    "//rs/ledger_suite/icrc1/ledger:ledger_canister",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
     "//rs/rosetta-api/tvl:tvl_canister",
     "//rs/sns/governance:sns-governance-canister",
@@ -117,5 +121,5 @@ rust_ic_test(
     srcs = ["tests/tests.rs"],
     data = DEV_DATA,
     env = DEV_ENV,
-    deps = DEPENDENCIES_TEST,
+    deps = DEV_DEPENDENCIES,
 )

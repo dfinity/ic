@@ -1,6 +1,9 @@
 //! Prunes a replicated state, as part of a subnet split.
 use crate::{
-    checkpoint::{load_checkpoint, make_checkpoint},
+    checkpoint::{
+        load_checkpoint, make_checkpoint, validate_checkpoint_and_remove_unverified_marker,
+    },
+    flush_canister_snapshots_and_page_maps,
     tip::spawn_tip_thread,
     StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
 };
@@ -89,11 +92,11 @@ pub fn split(
         .map_err(|e| format!("{:?}", e))?;
 
     // Split the state.
-    let split_state = state.split(subnet_id, &routing_table, new_subnet_batch_time)?;
+    let mut split_state = state.split(subnet_id, &routing_table, new_subnet_batch_time)?;
 
     // Write the split state as a new checkpoint.
     write_checkpoint(
-        &split_state,
+        &mut split_state,
         state_layout,
         &cp,
         &mut thread_pool,
@@ -147,7 +150,9 @@ fn read_checkpoint(
             "No checkpoints found at {}",
             state_layout.raw_path().display()
         ))?;
-    let cp = state_layout.checkpoint(height).map_err(|e| e.to_string())?;
+    let cp = state_layout
+        .checkpoint_verified(height)
+        .map_err(|e| e.to_string())?;
 
     let state = load_checkpoint(
         &cp,
@@ -170,7 +175,7 @@ fn read_checkpoint(
 /// Writes the given `ReplicatedState` into a new checkpoint under
 /// `state_layout`, based off of `old_cp`.
 fn write_checkpoint(
-    state: &ReplicatedState,
+    state: &mut ReplicatedState,
     state_layout: StateLayout,
     old_cp: &CheckpointLayout<ReadOnly>,
     thread_pool: &mut Pool,
@@ -199,9 +204,19 @@ fn write_checkpoint(
         MaliciousFlags::default(),
     );
 
-    make_checkpoint(
+    let new_height = old_height.increment();
+
+    // We need to flush to handle the deletion of canister snapshots.
+    flush_canister_snapshots_and_page_maps(
         state,
-        old_height.increment(),
+        new_height,
+        &tip_channel,
+        &metrics.checkpoint_metrics,
+    );
+
+    let (cp_layout, _state, _has_downgrade) = make_checkpoint(
+        state,
+        new_height,
         &tip_channel,
         &metrics.checkpoint_metrics,
         thread_pool,
@@ -209,6 +224,8 @@ fn write_checkpoint(
         config.lsmt_config.lsmt_status,
     )
     .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
+    validate_checkpoint_and_remove_unverified_marker(&cp_layout, Some(thread_pool))
+        .map_err(|e| format!("Failed to validate checkpoint: {}", e))?;
 
     Ok(())
 }

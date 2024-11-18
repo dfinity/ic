@@ -1,15 +1,14 @@
 use anyhow::Result;
-use std::time::Duration;
-
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::nns_tests::sns_deployment::{
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
+use sns_system_test_lib::sns_deployment::{
     initiate_token_swap_with_oc_parameters, sns_setup_with_many_sale_participants,
     workload_many_users_rps100_refresh_buyer_tokens,
     workload_many_users_rps200_refresh_buyer_tokens,
     workload_many_users_rps20_refresh_buyer_tokens,
     workload_many_users_rps400_refresh_buyer_tokens,
 };
-use ic_tests::systest;
+use std::time::Duration;
 
 /// This is a non-interactive load test:
 /// 1. Install NNS and SNS

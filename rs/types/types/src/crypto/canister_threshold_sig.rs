@@ -25,7 +25,7 @@ mod tests;
 /// The public key itself is stored as raw bytes.
 ///
 /// The chain key is included for BIP32-style key derivation.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct PublicKey {
     pub algorithm_id: AlgorithmId,
     #[serde(with = "serde_bytes")]
@@ -37,7 +37,7 @@ pub struct PublicKey {
 /// A master public key for canister threshold signatures.
 ///
 /// The public key itself is stored as raw bytes.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct MasterPublicKey {
     pub algorithm_id: AlgorithmId,
     #[serde(with = "serde_bytes")]
@@ -47,7 +47,7 @@ pub struct MasterPublicKey {
 /// A combined threshold ECDSA signature.
 ///
 /// The signature itself is stored as raw bytes.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct ThresholdEcdsaCombinedSignature {
     #[serde(with = "serde_bytes")]
     pub signature: Vec<u8>,
@@ -76,7 +76,7 @@ impl fmt::Debug for ThresholdEcdsaCombinedSignature {
 /// * a masked transcript for sharing of another random value `lambda`
 /// * a masked transcript for sharing the value `kappa * lambda`
 /// * a masked transcript for sharing the value `private_key * lambda`
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct EcdsaPreSignatureQuadruple {
     kappa_unmasked: IDkgTranscript,
     lambda_masked: IDkgTranscript,
@@ -276,7 +276,7 @@ impl EcdsaPreSignatureQuadruple {
 
 /// Metadata used to derive a specific ECDSA keypair.
 #[serde_with::serde_as]
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ExtendedDerivationPath {
     pub caller: PrincipalId,
@@ -303,7 +303,7 @@ impl fmt::Debug for ExtendedDerivationPath {
 }
 
 /// All inputs required to generate a canister threshold signature.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct ThresholdEcdsaSigInputs {
     derivation_path: ExtendedDerivationPath,
     #[serde(with = "serde_bytes")]
@@ -480,7 +480,7 @@ impl ThresholdEcdsaSigInputs {
 }
 
 /// A single threshold ECDSA signature share.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct ThresholdEcdsaSigShare {
     #[serde(with = "serde_bytes")]
     pub sig_share_raw: Vec<u8>,
@@ -501,7 +501,7 @@ impl fmt::Debug for ThresholdEcdsaSigShare {
 /// A combined threshold Schnorr signature.
 ///
 /// The signature itself is stored as raw bytes.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct ThresholdSchnorrCombinedSignature {
     #[serde(with = "serde_bytes")]
     pub signature: Vec<u8>,
@@ -520,11 +520,13 @@ impl fmt::Debug for ThresholdSchnorrCombinedSignature {
 }
 
 /// All inputs required to generate a canister threshold signature.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct ThresholdSchnorrSigInputs {
     derivation_path: ExtendedDerivationPath,
     #[serde(with = "serde_bytes")]
     message: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    taproot_tree_root: Option<Vec<u8>>,
     nonce: Randomness,
     presig_transcript: SchnorrPreSignatureTranscript,
     key_transcript: IDkgTranscript,
@@ -537,6 +539,9 @@ impl fmt::Debug for ThresholdSchnorrSigInputs {
         write!(f, "ThresholdSchnorrSigInputs {{ ")?;
         write!(f, "derivation_path: {:?}", self.derivation_path)?;
         write!(f, ", message: 0x{}", hex::encode(&self.message))?;
+        if let Some(ttr) = &self.taproot_tree_root {
+            write!(f, ", taproot_tree_root: 0x{}", hex::encode(ttr))?;
+        }
         write!(f, ", nonce: 0x{}", hex::encode(self.nonce.as_ref()))?;
         write!(f, ", presig_transcript: {}", self.presig_transcript)?;
         write!(f, ", key_transcript: {}", self.key_transcript.transcript_id)?;
@@ -565,6 +570,7 @@ impl ThresholdSchnorrSigInputs {
     pub fn new(
         derivation_path: &ExtendedDerivationPath,
         message: &[u8],
+        taproot_tree_root: Option<&[u8]>,
         nonce: Randomness,
         presig_transcript: SchnorrPreSignatureTranscript,
         key_transcript: IDkgTranscript,
@@ -573,10 +579,12 @@ impl ThresholdSchnorrSigInputs {
         Self::check_algorithm_id_validity(key_transcript.algorithm_id)?;
         Self::check_receivers_consistency(&presig_transcript, &key_transcript)?;
         Self::check_presig_transcript_origin(&presig_transcript)?;
+        Self::check_taproot_tree_root_argument(key_transcript.algorithm_id, taproot_tree_root)?;
 
         Ok(Self {
             derivation_path: derivation_path.clone(),
             message: message.to_vec(),
+            taproot_tree_root: taproot_tree_root.map(Vec::from),
             nonce,
             presig_transcript,
             key_transcript,
@@ -589,6 +597,10 @@ impl ThresholdSchnorrSigInputs {
 
     pub fn message(&self) -> &[u8] {
         &self.message
+    }
+
+    pub fn taproot_tree_root(&self) -> Option<&[u8]> {
+        self.taproot_tree_root.as_deref()
     }
 
     pub fn nonce(&self) -> &Randomness {
@@ -674,6 +686,24 @@ impl ThresholdSchnorrSigInputs {
             ),
         }
     }
+
+    fn check_taproot_tree_root_argument(
+        algorithm: AlgorithmId,
+        taproot_tree_root: Option<&[u8]>,
+    ) -> Result<(), error::ThresholdSchnorrSigInputsCreationError> {
+        match taproot_tree_root {
+            None => Ok(()),
+            Some(ttr) => {
+                if algorithm == AlgorithmId::ThresholdSchnorrBip340
+                    && (ttr.is_empty() || ttr.len() == 32)
+                {
+                    Ok(())
+                } else {
+                    Err(error::ThresholdSchnorrSigInputsCreationError::InvalidUseOfTaprootHash)
+                }
+            }
+        }
+    }
 }
 
 /// Presignature containing a random unmasked IDKG transcript consumed by a
@@ -683,7 +713,7 @@ impl ThresholdSchnorrSigInputs {
 ///
 /// Each signature, in addition to the transcript for the sharing of the private
 /// key, requires a presignature.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct SchnorrPreSignatureTranscript {
     blinder_unmasked: IDkgTranscript,
 }
@@ -747,7 +777,7 @@ impl SchnorrPreSignatureTranscript {
 }
 
 /// A single threshold Schnorr signature share.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct ThresholdSchnorrSigShare {
     #[serde(with = "serde_bytes")]
     pub sig_share_raw: Vec<u8>,

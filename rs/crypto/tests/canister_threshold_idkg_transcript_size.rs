@@ -72,7 +72,7 @@ fn should_have_expected_size_for_idkg_transcripts() {
             AlgorithmId::ThresholdEcdsaSecp256k1,
             28,
             49000,
-            49000,
+            47800,
             57900,
             111800,
             111800,
@@ -81,7 +81,7 @@ fn should_have_expected_size_for_idkg_transcripts() {
             AlgorithmId::ThresholdEcdsaSecp256k1,
             40,
             93500,
-            93500,
+            92200,
             112300,
             219000,
             219000,
@@ -123,7 +123,6 @@ fn should_have_expected_size_for_idkg_transcripts() {
             &receivers,
             config.alg,
             &unmasked_key_transcript,
-            false,
             rng,
         );
 

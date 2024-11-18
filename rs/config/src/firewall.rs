@@ -10,7 +10,7 @@ use proptest_derive::Arbitrary;
 // This path is not used in practice. The code should panic if it is.
 pub const FIREWALL_FILE_DEFAULT_PATH: &str = "/This/must/not/be/a/real/path";
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct ReplicaConfig {
@@ -55,7 +55,7 @@ impl Default for ReplicaConfig {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct BoundaryNodeConfig {

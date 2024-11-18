@@ -3,22 +3,22 @@ use crate::tls::rustls::certified_key;
 use crate::tls::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
 use crate::tls::rustls::node_cert_verifier::NodeClientCertVerifier;
 use crate::tls::tls_cert_from_registry;
-use ic_crypto_internal_csp::api::CspTlsHandshakeSignerProvider;
 use ic_crypto_internal_csp::key_id::KeyId;
+use ic_crypto_internal_csp::vault::api::CspVault;
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfigError, TlsPublicKeyCert};
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{NodeId, RegistryVersion};
 use rustls::{
-    cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
-    server::{ClientCertVerifier, NoClientAuth, ResolvesServerCert},
+    crypto::ring::cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
+    server::{danger::ClientCertVerifier, NoClientAuth, ResolvesServerCert},
     sign::CertifiedKey,
     version::TLS13,
     ServerConfig, SignatureScheme,
 };
 use std::sync::Arc;
 
-pub fn server_config<P: CspTlsHandshakeSignerProvider>(
-    signer_provider: &P,
+pub fn server_config(
+    vault: &Arc<dyn CspVault>,
     self_node_id: NodeId,
     registry_client: Arc<dyn RegistryClient>,
     allowed_clients: SomeOrAllNodes,
@@ -37,7 +37,7 @@ pub fn server_config<P: CspTlsHandshakeSignerProvider>(
         registry_version,
     );
     let ed25519_signing_key =
-        CspServerEd25519SigningKey::new(self_tls_cert_key_id, signer_provider.handshake_signer());
+        CspServerEd25519SigningKey::new(self_tls_cert_key_id, Arc::clone(vault));
     Ok(
         server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
             Arc::new(client_cert_verifier),
@@ -47,8 +47,8 @@ pub fn server_config<P: CspTlsHandshakeSignerProvider>(
     )
 }
 
-pub fn server_config_without_client_auth<P: CspTlsHandshakeSignerProvider>(
-    signer_provider: &P,
+pub fn server_config_without_client_auth(
+    vault: &Arc<dyn CspVault>,
     self_node_id: NodeId,
     registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
@@ -60,7 +60,7 @@ pub fn server_config_without_client_auth<P: CspTlsHandshakeSignerProvider>(
         }
     })?;
     let ed25519_signing_key =
-        CspServerEd25519SigningKey::new(self_tls_cert_key_id, signer_provider.handshake_signer());
+        CspServerEd25519SigningKey::new(self_tls_cert_key_id, Arc::clone(vault));
     let config = server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
         Arc::new(NoClientAuth),
         self_tls_cert,
@@ -74,9 +74,10 @@ fn server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
     self_tls_cert: TlsPublicKeyCert,
     ed25519_signing_key: CspServerEd25519SigningKey,
 ) -> ServerConfig {
-    ServerConfig::builder()
-        .with_cipher_suites(&[TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256])
-        .with_safe_default_kx_groups()
+    let mut ring_crypto_provider = rustls::crypto::ring::default_provider();
+    ring_crypto_provider.cipher_suites = vec![TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256];
+
+    ServerConfig::builder_with_provider(Arc::new(ring_crypto_provider))
         .with_protocol_versions(&[&TLS13])
         .expect("Valid rustls server config.")
         .with_client_cert_verifier(client_cert_verifier)

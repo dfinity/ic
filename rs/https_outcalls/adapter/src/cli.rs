@@ -4,7 +4,8 @@
 
 use crate::config::Config;
 use clap::Parser;
-use reqwest::Url;
+use http::Uri;
+use slog::Level;
 use std::{fs::File, io, path::PathBuf};
 use thiserror::Error;
 
@@ -31,6 +32,15 @@ pub struct Cli {
 }
 
 impl Cli {
+    /// Gets the log filter level by checking the verbose field.
+    pub fn get_logging_level(&self) -> Level {
+        if self.verbose {
+            Level::Debug
+        } else {
+            Level::Info
+        }
+    }
+
     /// Loads the config from the provided `config` argument.
     pub fn get_config(&self) -> Result<Config, CliError> {
         // The expected JSON config.
@@ -38,20 +48,17 @@ impl Cli {
         let config: Config =
             serde_json::from_reader(file).map_err(|err| CliError::Deserialize(err.to_string()))?;
 
-        // The socks_proxy default value is an empty string which causes the socks proxy client to be None.
-        if !config.socks_proxy.is_empty() {
-            // Validate proxy URL.
-            // Check for general validation errors.
-            let uri = &config
-                .socks_proxy
-                .parse::<Url>()
-                .map_err(|_| CliError::Validation("Failed to parse socks_proxy url".to_string()))?;
-            // scheme, host, port should be present. 'socks5://someproxy.com:80'
-            if uri.scheme().is_empty() || uri.host().is_none() || uri.port().is_none() {
-                return Err(CliError::Validation(
-                    "Make sure socks proxy url contains (scheme,host,port)".to_string(),
-                ));
-            }
+        // Validate proxy URL.
+        // Check for general validation errors.
+        let uri = &config
+            .socks_proxy
+            .parse::<Uri>()
+            .map_err(|_| CliError::Validation("Failed to parse socks_proxy url".to_string()))?;
+        // scheme, host, port should be present. 'socks5://someproxy.com:80'
+        if uri.scheme().is_none() || uri.host().is_none() || uri.port().is_none() {
+            return Err(CliError::Validation(
+                "Make sure socks proxy url contains (scheme,host,port)".to_string(),
+            ));
         }
 
         Ok(config)
@@ -66,6 +73,24 @@ pub mod test {
     use std::path::PathBuf;
     use std::str::FromStr;
     use tempfile::NamedTempFile;
+
+    /// This function tests the `Cli::get_logging_level()` function.
+    #[test]
+    fn test_cli_get_logging_level() {
+        let cli = Cli {
+            config: PathBuf::new(),
+            verbose: false,
+        };
+
+        assert_eq!(cli.get_logging_level(), Level::Info);
+
+        let cli = Cli {
+            config: PathBuf::new(),
+            verbose: true,
+        };
+
+        assert_eq!(cli.get_logging_level(), Level::Debug);
+    }
 
     // This function tests opening a config file that does not exist.
     #[test]
@@ -175,7 +200,7 @@ pub mod test {
         assert!(result.is_err());
         let error = result.unwrap_err();
         let matches = match error {
-            CliError::Validation(message) => message.contains("Make sure socks proxy url contains"),
+            CliError::Validation(message) => message.contains("Failed to parse socks_proxy url"),
             _ => false,
         };
         assert!(matches);
@@ -288,6 +313,7 @@ pub mod test {
             http_request_timeout_secs: 50,
             incoming_source: IncomingSource::Path(PathBuf::from("/tmp/path.socket")),
             logger: ic_config::logger::Config {
+                level: ic_config::logger::Level::Info,
                 format: ic_config::logger::LogFormat::Json,
                 ..Default::default()
             },

@@ -5,6 +5,7 @@ load("//bazel:defs.bzl", "rust_ic_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/types/types",
     "//rs/validator/ingress_message",
     "@crate_index//:build-info",
@@ -13,10 +14,12 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:ic-cdk-macros",
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:build-info-build",
 ]
 
@@ -51,6 +54,7 @@ rust_ic_test(
         "IC_VALIDATOR_INGRESS_MESSAGE_TEST_CANISTER_WASM_PATH": "$(rootpath :test_canister)",
     },
     deps = [
+        # Keep sorted.
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
         "//rs/types/types",

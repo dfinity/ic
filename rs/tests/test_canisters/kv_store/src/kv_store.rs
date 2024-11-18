@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, convert::AsRef, hash::Hash};
 use candid::CandidType;
 use serde::Deserialize;
 
-#[derive(CandidType, Deserialize, Default)]
+#[derive(Default, CandidType, Deserialize)]
 pub struct KVStore<K, V>
 where
     K: Eq + Hash + AsRef<[u8]> + 'static,

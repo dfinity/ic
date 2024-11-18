@@ -9,13 +9,13 @@
   <memory unit='GiB'>{{ resources_memory }}</memory>
   <currentMemory unit='GiB'>{{ resources_memory }}</currentMemory>
   <vcpu placement='static'>64</vcpu>
-{{ cpu_spec }}
+  {{ cpu_spec }}
   <resource>
     <partition>/machine</partition>
   </resource>
   <os>
     <type arch='x86_64' machine='pc-q35-5.0'>hvm</type>
-    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE.fd</loader>
+    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
     <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
     <boot dev='hd'/>
   </os>
@@ -135,6 +135,7 @@
         <model name='isa-serial'/>
       </target>
       <alias name='serial0'/>
+      <log file='/var/log/libvirt/qemu/guestos-serial.log' append='off'/>
     </serial>
     <console type='pty' tty='/dev/pts/3'>
       <source path='/dev/pts/3'/>

@@ -13,7 +13,7 @@ use utils::{get_command_stdout, retry, retry_pred};
 
 static SYSFS_NETWORK_DIR: &str = "/sys/class/net";
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Interface {
     pub name: String,
     pub speed_mbps: Option<u64>,
@@ -22,11 +22,11 @@ pub struct Interface {
 pub fn has_ipv6_connectivity(
     interface: &Interface,
     generated_ipv6: &Ipv6Addr,
-    ipv6_subnet: u8,
+    ipv6_prefix_length: u8,
     ping_target: &str,
 ) -> Result<bool> {
     // Format with the prefix length
-    let ip = format!("{}/{}", generated_ipv6, ipv6_subnet);
+    let ip = format!("{}/{}", generated_ipv6, ipv6_prefix_length);
     let interface_down_func = || {
         eprintln!("Removing ip address and bringing interface down");
         get_command_stdout("ip", ["addr", "del", &ip, "dev", &interface.name])?;

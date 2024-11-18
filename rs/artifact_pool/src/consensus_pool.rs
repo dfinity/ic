@@ -12,11 +12,11 @@ use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::p2p::consensus::ArtifactWithOpt;
 use ic_interfaces::{
     consensus_pool::{
-        ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
-        ConsensusPoolCache, ConsensusTime, HeightIndexedPool, HeightRange, PoolSection,
+        ChangeAction, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool, ConsensusPoolCache,
+        ConsensusTime, HeightIndexedPool, HeightRange, Mutations, PoolSection,
         PurgeableArtifactType, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
-    p2p::consensus::{ChangeResult, MutablePool, ValidatedPoolReader},
+    p2p::consensus::{ArtifactTransmit, ArtifactTransmits, MutablePool, ValidatedPoolReader},
     time_source::TimeSource,
 };
 use ic_logger::{warn, ReplicaLogger};
@@ -24,15 +24,12 @@ use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
 use ic_types::crypto::CryptoHashOf;
 use ic_types::NodeId;
-use ic_types::{
-    artifact::ArtifactKind, artifact::ConsensusMessageId, artifact_kind::ConsensusArtifact,
-    consensus::*, Height, SubnetId, Time,
-};
+use ic_types::{artifact::ConsensusMessageId, consensus::*, Height, SubnetId, Time};
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
 use std::time::Instant;
 use std::{marker::PhantomData, sync::Arc, time::Duration};
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum PoolSectionOp<T> {
     /// Insert the artifact into the pool section.
     Insert(T),
@@ -189,6 +186,7 @@ struct PoolMetrics {
     notarization_share: PerTypeMetrics<NotarizationShare>,
     finalization_share: PerTypeMetrics<FinalizationShare>,
     catch_up_package_share: PerTypeMetrics<CatchUpPackageShare>,
+    equivocation_proof: PerTypeMetrics<EquivocationProof>,
 }
 
 impl PoolMetrics {
@@ -213,6 +211,7 @@ impl PoolMetrics {
                 pool_portion,
                 "catch_up_package_share",
             ),
+            equivocation_proof: PerTypeMetrics::new(&registry, pool_portion, "equivocation_proof"),
         }
     }
 
@@ -239,6 +238,8 @@ impl PoolMetrics {
             .update_from_height_indexed_pool(pool_section.finalization_share());
         self.catch_up_package_share
             .update_from_height_indexed_pool(pool_section.catch_up_package_share());
+        self.equivocation_proof
+            .update_from_height_indexed_pool(pool_section.equivocation_proof());
     }
 
     fn update_count_per_height<T>(
@@ -266,6 +267,7 @@ impl PoolMetrics {
         update_count_per_height!(random_tape_share);
         update_count_per_height!(notarization_share);
         update_count_per_height!(finalization_share);
+        update_count_per_height!(equivocation_proof);
     }
 }
 
@@ -308,7 +310,7 @@ impl UncachedConsensusPoolImpl {
                     log,
                 ),
             ) as Box<_>,
-            #[cfg(feature = "rocksdb_backend")]
+            #[cfg(target_os = "macos")]
             PersistentPoolBackend::RocksDB(config) => Box::new(
                 crate::rocksdb_pool::PersistentHeightIndexedPool::new_consensus_pool(config, log),
             ) as Box<_>,
@@ -684,8 +686,8 @@ impl ConsensusPool for ConsensusPoolImpl {
     }
 }
 
-impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
-    type ChangeSet = ChangeSet;
+impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
+    type Mutations = Mutations;
 
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
         let mut ops = PoolSectionOps::new();
@@ -700,12 +702,12 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
         self.apply_changes_unvalidated(ops);
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<ConsensusArtifact> {
+    fn apply(&mut self, change_set: Mutations) -> ArtifactTransmits<ConsensusMessage> {
         let changed = !change_set.is_empty();
         let updates = self.cache.prepare(&change_set);
         let mut unvalidated_ops = PoolSectionOps::new();
         let mut validated_ops = PoolSectionOps::new();
-        let mut artifacts_with_opt = Vec::new();
+        let mut transmits = vec![];
         // DO NOT Add a default nop. Explicitly mention all cases.
         // This helps with keeping this readable and obvious what
         // change is causing tests to break.
@@ -713,10 +715,10 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
             match change_action {
                 ChangeAction::AddToValidated(to_add) => {
                     self.record_instant(&to_add);
-                    artifacts_with_opt.push(ArtifactWithOpt {
-                        advert: ConsensusArtifact::message_to_advert(&to_add.msg),
+                    transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
+                        artifact: to_add.msg.clone(),
                         is_latency_sensitive: is_latency_sensitive(&to_add.msg),
-                    });
+                    }));
                     validated_ops.insert(to_add);
                 }
                 ChangeAction::RemoveFromValidated(to_remove) => {
@@ -724,10 +726,10 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
                 }
                 ChangeAction::MoveToValidated(to_move) => {
                     if !to_move.is_share() {
-                        artifacts_with_opt.push(ArtifactWithOpt {
-                            advert: ConsensusArtifact::message_to_advert(&to_move),
+                        transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
+                            artifact: to_move.clone(),
                             is_latency_sensitive: false,
-                        });
+                        }));
                     }
                     let msg_id = to_move.get_id();
                     let timestamp = self.unvalidated.get_timestamp(&msg_id).unwrap_or_else(|| {
@@ -793,7 +795,11 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
             .max_height()
             .unwrap_or_default();
         self.apply_changes_unvalidated(unvalidated_ops);
-        let purged = self.apply_changes_validated(validated_ops);
+        transmits.extend(
+            self.apply_changes_validated(validated_ops)
+                .drain(..)
+                .map(ArtifactTransmit::Abort),
+        );
 
         if let Some(backup) = &self.backup {
             self.backup_artifacts(backup, latest_finalization_height, artifacts_for_backup);
@@ -803,9 +809,8 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
             self.cache.update(self, updates);
         }
 
-        ChangeResult {
-            purged,
-            artifacts_with_opt,
+        ArtifactTransmits {
+            transmits,
             poll_immediately: changed,
         }
     }
@@ -829,12 +834,12 @@ fn is_latency_sensitive(msg: &ConsensusMessage) -> bool {
     }
 }
 
-impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
+impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
     fn get(&self, id: &ConsensusMessageId) -> Option<ConsensusMessage> {
         self.validated.get(id)
     }
 
-    fn get_all_validated(&self) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
+    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
         let node_id = self.node_id;
         let max_catch_up_height = self
             .validated
@@ -895,6 +900,13 @@ impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
             .map(|x| x.max)
             .unwrap_or(min);
         let min_block_proposal_height = min;
+        let max_equivocation_proof_height = self
+            .validated
+            .equivocation_proof()
+            .height_range()
+            .map(|x| x.max)
+            .unwrap_or(min);
+        let min_equivocation_proof_height = min;
 
         // Because random tape & shares do not come in a consecutive sequence, we
         // compute a custom iterator through their height range to either return
@@ -1006,6 +1018,15 @@ impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
                         })
                         .map(|x| x.into_message()),
                 )
+                .chain(
+                    self.validated
+                        .equivocation_proof()
+                        .get_by_height_range(HeightRange {
+                            min: min_equivocation_proof_height,
+                            max: max_equivocation_proof_height,
+                        })
+                        .map(|x| x.into_message()),
+                )
                 .chain(random_tape_iterator),
         )
     }
@@ -1028,6 +1049,7 @@ mod tests {
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
+        artifact::IdentifiableArtifact,
         batch::ValidationContext,
         consensus::{BlockProposal, RandomBeacon},
         crypto::{crypto_hash, CryptoHash, CryptoHashOf},
@@ -1122,7 +1144,7 @@ mod tests {
                 ChangeAction::MoveToValidated(msg_0),
                 ChangeAction::RemoveFromUnvalidated(msg_1),
             ];
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             // Check timestamp is carried over for msg_0.
             assert_eq!(pool.unvalidated().get_timestamp(&msg_id_0), None);
@@ -1185,34 +1207,31 @@ mod tests {
                     timestamp: time_source.get_relative_time(),
                 }),
             ];
-            let result = pool.apply_changes(changeset);
-            assert!(result.purged.is_empty());
-            assert_eq!(result.artifacts_with_opt.len(), 2);
+            let result = pool.apply(changeset);
+            assert_eq!(result.transmits.len(), 2);
             assert!(result.poll_immediately);
-            assert_eq!(
-                result.artifacts_with_opt[0].advert.id,
-                random_beacon_2.get_id()
-            );
-            assert_eq!(
-                result.artifacts_with_opt[1].advert.id,
-                random_beacon_3.get_id()
-            );
+            assert!(matches!(
+                &result.transmits[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_2.get_id()));
+            assert!(matches!(
+                &result.transmits[1], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_3.get_id()));
 
-            let result =
-                pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
-            assert!(result.artifacts_with_opt.is_empty());
+            let result = pool.apply(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
+            assert!(!result
+                .transmits
+                .iter()
+                .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
             // purging genesis CUP & beacon + validated beacon at height 2
-            assert_eq!(result.purged.len(), 3);
-            assert!(result.purged.contains(&random_beacon_2.get_id()));
+            assert_eq!(result.transmits.len(), 3);
+            assert!(result.transmits.iter().any(
+                |x| matches!(x, ArtifactTransmit::Abort(id) if *id == random_beacon_2.get_id())
+            ));
             assert!(result.poll_immediately);
 
-            let result =
-                pool.apply_changes(vec![ChangeAction::PurgeUnvalidatedBelow(Height::from(3))]);
-            assert!(result.artifacts_with_opt.is_empty());
-            assert!(result.purged.is_empty());
+            let result = pool.apply(vec![ChangeAction::PurgeUnvalidatedBelow(Height::from(3))]);
+            assert_eq!(result.transmits.len(), 0);
             assert!(result.poll_immediately);
 
-            let result = pool.apply_changes(vec![]);
+            let result = pool.apply(vec![]);
             assert!(!result.poll_immediately);
         })
     }
@@ -1264,25 +1283,25 @@ mod tests {
                     timestamp: time_source.get_relative_time(),
                 }),
             ];
-            let result = pool.apply_changes(changeset);
+            let result = pool.apply(changeset);
             // share 3 should be added to the validated pool and create an advert
             // share 2 should be moved to the validated pool and not create an advert
             // share 1 should remain in the unvalidated pool
-            assert!(result.purged.is_empty());
-            assert_eq!(result.artifacts_with_opt.len(), 1);
+            assert_eq!(result.transmits.len(), 1);
             assert!(result.poll_immediately);
-            assert_eq!(
-                result.artifacts_with_opt[0].advert.id,
-                random_beacon_share_3.get_id()
-            );
+            assert!(matches!(
+                &result.transmits[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_share_3.get_id()
+            ));
 
-            let result =
-                pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
-            assert!(result.artifacts_with_opt.is_empty());
+            let result = pool.apply(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
+            assert!(!result
+                .transmits
+                .iter()
+                .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
             // purging genesis CUP & beacon + 2 validated beacon shares
-            assert_eq!(result.purged.len(), 4);
-            assert!(result.purged.contains(&random_beacon_share_2.get_id()));
-            assert!(result.purged.contains(&random_beacon_share_3.get_id()));
+            assert_eq!(result.transmits.len(), 4);
+            assert!(result.transmits.iter().any(|x| matches!(x, ArtifactTransmit::Abort(id) if *id == random_beacon_share_2.get_id())));
+            assert!(result.transmits.iter().any(|x| matches!(x, ArtifactTransmit::Abort(id) if *id == random_beacon_share_3.get_id())));
             assert!(result.poll_immediately);
         })
     }
@@ -1440,7 +1459,7 @@ mod tests {
                 .into_message(),
             );
 
-            pool.apply_changes(
+            pool.apply(
                 messages
                     .into_iter()
                     .map(|msg| {
@@ -1461,7 +1480,7 @@ mod tests {
                 _ => panic!("No signer for aggregate artifacts"),
             };
 
-            pool.get_all_validated().for_each(|m| {
+            pool.get_all_for_broadcast().for_each(|m| {
                 if m.height().get() <= height_offset + 15 {
                     assert!(!m.is_share());
                 }
@@ -1471,7 +1490,7 @@ mod tests {
             });
 
             assert_eq!(
-                pool.get_all_validated().count(),
+                pool.get_all_for_broadcast().count(),
                 // 1 CUP, 15 heights of aggregates, 5 heights of shares, 20 heights of proposals
                 1 + 15 * 4 + 5 * 4 + 20 * 5
             );
@@ -1552,7 +1571,7 @@ mod tests {
             //
             let block = fake_block(Height::new(3), Rank(0));
 
-            pool.apply_changes(vec![
+            pool.apply(vec![
                 fake_block_proposal(&block),
                 fake_notarization(&block),
                 fake_finalization(&block),
@@ -1568,7 +1587,7 @@ mod tests {
             let block1 = fake_block(Height::new(4), Rank(0));
             let block2 = fake_block(Height::new(4), Rank(1));
 
-            pool.apply_changes(vec![
+            pool.apply(vec![
                 fake_block_proposal(&block1),
                 fake_notarization(&block1),
                 fake_block_proposal(&block2),
@@ -1585,7 +1604,7 @@ mod tests {
             //
             let block = fake_block(Height::new(5), Rank(0));
 
-            pool.apply_changes(vec![
+            pool.apply(vec![
                 fake_block_proposal(&block),
                 fake_notarization(&block),
                 fake_finalization(&block),
@@ -1758,7 +1777,7 @@ mod tests {
             })
             .collect();
 
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
             // We sync the backup before checking the asserts to make sure all backups have
             // been written.
             pool.backup.as_ref().unwrap().sync_backup();
@@ -1919,7 +1938,7 @@ mod tests {
             time_source
                 .set_time(time_source.get_relative_time() + purging_interval)
                 .unwrap();
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             pool.backup.as_ref().unwrap().sync_purging();
 
             // Make sure the subnet directory is empty, as we purged everything.
@@ -1932,7 +1951,7 @@ mod tests {
             time_source
                 .set_time(time_source.get_relative_time() + sleep_time)
                 .unwrap();
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             pool.backup.as_ref().unwrap().sync_purging();
             assert!(!path.exists());
         })
@@ -2048,7 +2067,7 @@ mod tests {
                 .collect();
 
             // Apply changes
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
             // sync
             pool.backup.as_ref().unwrap().sync_backup();
 
@@ -2081,7 +2100,7 @@ mod tests {
             })
             .collect();
 
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
             // sync
             pool.backup.as_ref().unwrap().sync_backup();
 
@@ -2098,7 +2117,7 @@ mod tests {
             add_age(sleep_time);
 
             // Trigger the purging.
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
@@ -2114,7 +2133,7 @@ mod tests {
             add_age(sleep_time);
 
             // Trigger the purging.
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
@@ -2130,7 +2149,7 @@ mod tests {
             add_age(sleep_time);
 
             // Trigger the purging.
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
@@ -2147,7 +2166,7 @@ mod tests {
             add_age(sleep_time);
 
             // Trigger the purging.
-            pool.apply_changes(Vec::new());
+            pool.apply(Vec::new());
             // sync
             pool.backup.as_ref().unwrap().sync_purging();
 
@@ -2192,18 +2211,18 @@ mod tests {
             check_iterator(&pool, pool.as_cache().finalized_block(), vec![2, 1, 0]);
 
             // Two notarized rounds added
+            pool.insert_validated(pool.make_next_beacon());
             let block = pool.make_next_block();
             pool.insert_validated(block.clone());
             pool.notarize(&block);
 
+            pool.insert_validated(pool.make_next_beacon());
             let block = pool.make_next_block();
             pool.insert_validated(block.clone());
             pool.notarize(&block);
             check_iterator(&pool, block.clone().into(), vec![4, 3, 2, 1, 0]);
 
             pool.finalize(&block);
-            pool.insert_validated(pool.make_next_beacon());
-            pool.insert_validated(pool.make_next_beacon());
             pool.insert_validated(pool.make_next_tape());
             pool.insert_validated(pool.make_next_tape());
             check_iterator(&pool, block.into(), vec![4, 3, 2, 1, 0]);
@@ -2285,11 +2304,11 @@ mod tests {
             assert!(pool.message_instant(&random_beacon_id).is_some());
 
             // Check that purging of instants respects PurgeValidatedBelow semantics
-            pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(height)]);
+            pool.apply(vec![ChangeAction::PurgeValidatedBelow(height)]);
             assert!(pool.message_instant(&cup_id).is_some());
             assert!(pool.message_instant(&notarization_id).is_some());
             assert!(pool.message_instant(&random_beacon_id).is_some());
-            pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(height.increment())]);
+            pool.apply(vec![ChangeAction::PurgeValidatedBelow(height.increment())]);
             assert!(pool.message_instant(&cup_id).is_none());
             assert!(pool.message_instant(&notarization_id).is_none());
             assert!(pool.message_instant(&random_beacon_id).is_none());

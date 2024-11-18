@@ -10,17 +10,19 @@ use std::{
 
 pub mod audit;
 pub mod eventlog;
+pub mod invariants;
 
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::logs::P0;
+use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::{address::BitcoinAddress, ECDSAPublicKey};
 use candid::{CandidType, Deserialize, Principal};
 use ic_base_types::CanisterId;
 pub use ic_btc_interface::Network;
 use ic_btc_interface::{OutPoint, Txid, Utxo};
 use ic_canister_log::log;
-use ic_utils_ensure::{ensure, ensure_eq};
+use ic_utils_ensure::ensure_eq;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
 use std::collections::btree_map::Entry;
@@ -34,7 +36,7 @@ thread_local! {
 }
 
 // A pending retrieve btc request
-#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub struct RetrieveBtcRequest {
     /// The amount to convert to BTC.
     /// The minter withdraws BTC transfer fees from this amount.
@@ -59,7 +61,7 @@ pub struct RetrieveBtcRequest {
 }
 
 /// A transaction output storing the minter's change.
-#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub struct ChangeOutput {
     /// The index of the output in the transaction.
     pub vout: u32,
@@ -68,7 +70,7 @@ pub struct ChangeOutput {
 }
 
 /// Represents a transaction sent to the Bitcoin network.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SubmittedBtcTransaction {
     /// The original retrieve_btc requests that initiated the transaction.
     pub requests: Vec<RetrieveBtcRequest>,
@@ -87,7 +89,7 @@ pub struct SubmittedBtcTransaction {
 }
 
 /// Pairs a retrieve_btc request with its outcome.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct FinalizedBtcRetrieval {
     /// The original retrieve_btc request that initiated the transaction.
     pub request: RetrieveBtcRequest,
@@ -96,7 +98,7 @@ pub struct FinalizedBtcRetrieval {
 }
 
 /// The outcome of a retrieve_btc request.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum FinalizedStatus {
     /// The request amount was to low to cover the fees.
     AmountTooLow,
@@ -108,7 +110,7 @@ pub enum FinalizedStatus {
 }
 
 /// The status of a Bitcoin transaction that the minter hasn't yet sent to the Bitcoin network.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum InFlightStatus {
     /// Awaiting signatures for transaction inputs.
     Signing,
@@ -117,7 +119,7 @@ pub enum InFlightStatus {
 }
 
 /// The status of a retrieve_btc request.
-#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, candid::CandidType)]
 pub enum RetrieveBtcStatus {
     /// The minter has no data for this request.
     /// The request id is either invalid or too old.
@@ -136,7 +138,7 @@ pub enum RetrieveBtcStatus {
     Confirmed { txid: Txid },
 }
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct BtcRetrievalStatusV2 {
     pub block_index: u64,
     pub status_v2: Option<RetrieveBtcStatusV2>,
@@ -156,7 +158,7 @@ impl From<RetrieveBtcStatus> for RetrieveBtcStatusV2 {
     }
 }
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum RetrieveBtcStatusV2 {
     /// The minter has no data for this request.
     /// The request id is either invalid or too old.
@@ -180,7 +182,7 @@ pub enum RetrieveBtcStatusV2 {
 }
 
 /// Controls which operations the minter can perform.
-#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, candid::CandidType, serde::Deserialize)]
 pub enum Mode {
     /// Minter's state is read-only.
     ReadOnly,
@@ -235,7 +237,7 @@ impl Default for Mode {
 }
 
 /// The outcome of a UTXO KYT check.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, serde::Deserialize)]
 pub enum UtxoCheckStatus {
     /// The KYT check did not reveal any problems.
     Clean,
@@ -258,13 +260,13 @@ impl UtxoCheckStatus {
 }
 
 /// Indicates that fee distribution overdrafted.
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Overdraft(pub u64);
 
 /// The state of the ckBTC Minter.
 ///
 /// Every piece of state of the Minter should be stored as field of this struct.
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, serde::Deserialize)]
 pub struct CkBtcMinterState {
     /// The bitcoin network that the minter will connect to
     pub btc_network: Network,
@@ -291,6 +293,9 @@ pub struct CkBtcMinterState {
 
     /// Minimum amount of bitcoin that can be retrieved
     pub retrieve_btc_min_amount: u64,
+
+    /// Minimum amount of bitcoin that can be retrieved based on recent fees
+    pub fee_based_retrieve_btc_min_amount: u64,
 
     /// Retrieve_btc requests that are waiting to be served, sorted by
     /// received_at.
@@ -334,6 +339,9 @@ pub struct CkBtcMinterState {
 
     /// The principal of the KYT canister.
     pub kyt_principal: Option<CanisterId>,
+
+    /// The new principal of the KYT canister.
+    pub new_kyt_principal: Option<CanisterId>,
 
     /// The set of UTXOs unused in pending transactions.
     pub available_utxos: BTreeSet<Utxo>,
@@ -390,14 +398,14 @@ pub struct CkBtcMinterState {
     pub reimbursed_transactions: BTreeMap<u64, ReimbursedDeposit>,
 }
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, serde::Deserialize)]
 pub struct ReimburseDepositTask {
     pub account: Account,
     pub amount: u64,
     pub reason: ReimbursementReason,
 }
 
-#[derive(CandidType, Clone, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize, serde::Deserialize)]
 pub struct ReimbursedDeposit {
     pub account: Account,
     pub amount: u64,
@@ -405,7 +413,7 @@ pub struct ReimbursedDeposit {
     pub mint_block_index: u64,
 }
 
-#[derive(Debug, Deserialize, Eq, PartialEq, Clone, Serialize, candid::CandidType, Copy)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub enum ReimbursementReason {
     TaintedDestination {
         kyt_provider: Principal,
@@ -427,15 +435,18 @@ impl CkBtcMinterState {
             mode,
             kyt_fee,
             kyt_principal,
+            new_kyt_principal,
         }: InitArgs,
     ) {
         self.btc_network = btc_network.into();
         self.ecdsa_key_name = ecdsa_key_name;
         self.retrieve_btc_min_amount = retrieve_btc_min_amount;
+        self.fee_based_retrieve_btc_min_amount = retrieve_btc_min_amount;
         self.ledger_id = ledger_id;
         self.max_time_in_queue_nanos = max_time_in_queue_nanos;
         self.mode = mode;
         self.kyt_principal = kyt_principal;
+        self.new_kyt_principal = new_kyt_principal;
         if let Some(kyt_fee) = kyt_fee {
             self.kyt_fee = kyt_fee;
         }
@@ -451,12 +462,14 @@ impl CkBtcMinterState {
             max_time_in_queue_nanos,
             min_confirmations,
             mode,
+            new_kyt_principal,
             kyt_principal,
             kyt_fee,
         }: UpgradeArgs,
     ) {
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
             self.retrieve_btc_min_amount = retrieve_btc_min_amount;
+            self.fee_based_retrieve_btc_min_amount = retrieve_btc_min_amount;
         }
         if let Some(max_time_in_queue_nanos) = max_time_in_queue_nanos {
             self.max_time_in_queue_nanos = max_time_in_queue_nanos;
@@ -476,6 +489,9 @@ impl CkBtcMinterState {
         if let Some(mode) = mode {
             self.mode = mode;
         }
+        if let Some(new_kyt_principal) = new_kyt_principal {
+            self.new_kyt_principal = Some(new_kyt_principal);
+        }
         if let Some(kyt_principal) = kyt_principal {
             self.kyt_principal = Some(kyt_principal);
         }
@@ -494,94 +510,17 @@ impl CkBtcMinterState {
         if self.kyt_principal.is_none() {
             ic_cdk::trap("KYT principal is not set");
         }
+        if self.new_kyt_principal.is_none() {
+            ic_cdk::trap("New KYT principal is not set");
+        }
     }
 
     pub fn check_invariants(&self) -> Result<(), String> {
-        for utxo in self.available_utxos.iter() {
-            ensure!(
-                self.outpoint_account.contains_key(&utxo.outpoint),
-                "the output_account map is missing an entry for {:?}",
-                utxo.outpoint
-            );
-
-            ensure!(
-                self.utxos_state_addresses
-                    .iter()
-                    .any(|(_, utxos)| utxos.contains(utxo)),
-                "available utxo {:?} does not belong to any account",
-                utxo
-            );
-        }
-
-        for (addr, utxos) in self.utxos_state_addresses.iter() {
-            for utxo in utxos.iter() {
-                ensure_eq!(
-                    self.outpoint_account.get(&utxo.outpoint),
-                    Some(addr),
-                    "missing outpoint account for {:?}",
-                    utxo.outpoint
-                );
-            }
-        }
-
-        for (l, r) in self
-            .pending_retrieve_btc_requests
-            .iter()
-            .zip(self.pending_retrieve_btc_requests.iter().skip(1))
-        {
-            ensure!(
-                l.received_at <= r.received_at,
-                "pending retrieve_btc requests are not sorted by receive time"
-            );
-        }
-
-        for tx in &self.stuck_transactions {
-            ensure!(
-                self.replacement_txid.contains_key(&tx.txid),
-                "stuck transaction {} does not have a replacement id",
-                &tx.txid,
-            );
-        }
-
-        for (old_txid, new_txid) in &self.replacement_txid {
-            ensure!(
-                self.stuck_transactions
-                    .iter()
-                    .any(|tx| &tx.txid == old_txid),
-                "not found stuck transaction {}",
-                old_txid,
-            );
-
-            ensure!(
-                self.submitted_transactions
-                    .iter()
-                    .chain(self.stuck_transactions.iter())
-                    .any(|tx| &tx.txid == new_txid),
-                "not found replacement transaction {}",
-                new_txid,
-            );
-        }
-
-        ensure_eq!(
-            self.replacement_txid.len(),
-            self.rev_replacement_txid.len(),
-            "direct and reverse TX replacement links don't match"
-        );
-        for (old_txid, new_txid) in &self.replacement_txid {
-            ensure_eq!(
-                self.rev_replacement_txid.get(new_txid),
-                Some(old_txid),
-                "no back link for {} -> {} TX replacement",
-                old_txid,
-                new_txid,
-            );
-        }
-
-        Ok(())
+        CheckInvariantsImpl::check_invariants(self)
     }
 
     // public for only for tests
-    pub(crate) fn add_utxos(&mut self, account: Account, utxos: Vec<Utxo>) {
+    pub(crate) fn add_utxos<I: CheckInvariants>(&mut self, account: Account, utxos: Vec<Utxo>) {
         if utxos.is_empty() {
             return;
         }
@@ -597,9 +536,9 @@ impl CkBtcMinterState {
             account_bucket.insert(utxo);
         }
 
-        #[cfg(debug_assertions)]
-        self.check_invariants()
-            .expect("state invariants are violated");
+        if cfg!(debug_assertions) {
+            I::check_invariants(self).expect("state invariants are violated");
+        }
     }
 
     pub fn retrieve_btc_status_v2_by_account(
@@ -1087,7 +1026,9 @@ impl CkBtcMinterState {
                 kyt_provider,
                 kyt_fee,
             } => {
-                *self.owed_kyt_amount.entry(kyt_provider).or_insert(0) += kyt_fee;
+                if kyt_fee > 0 {
+                    *self.owed_kyt_amount.entry(kyt_provider).or_insert(0) += kyt_fee;
+                }
             }
             ReimbursementReason::CallFailed => {}
         }
@@ -1215,6 +1156,17 @@ impl CkBtcMinterState {
 
         Ok(())
     }
+
+    pub fn get_total_btc_managed(&self) -> u64 {
+        let mut total_btc = 0_u64;
+        for req in self.submitted_transactions.iter() {
+            if let Some(change_output) = &req.change_output {
+                total_btc += change_output.value;
+            }
+        }
+        total_btc += self.available_utxos.iter().map(|u| u.value).sum::<u64>();
+        total_btc
+    }
 }
 
 fn as_sorted_vec<T, K: Ord>(values: impl Iterator<Item = T>, key: impl Fn(&T) -> K) -> Vec<T> {
@@ -1236,6 +1188,7 @@ impl From<InitArgs> for CkBtcMinterState {
             update_balance_principals: Default::default(),
             retrieve_btc_principals: Default::default(),
             retrieve_btc_min_amount: args.retrieve_btc_min_amount,
+            fee_based_retrieve_btc_min_amount: args.retrieve_btc_min_amount,
             pending_retrieve_btc_requests: Default::default(),
             requests_in_flight: Default::default(),
             last_transaction_submission_time_ns: None,
@@ -1250,6 +1203,7 @@ impl From<InitArgs> for CkBtcMinterState {
             tokens_burned: 0,
             ledger_id: args.ledger_id,
             kyt_principal: args.kyt_principal,
+            new_kyt_principal: args.new_kyt_principal,
             available_utxos: Default::default(),
             outpoint_account: Default::default(),
             utxos_state_addresses: Default::default(),

@@ -11,6 +11,7 @@ use candid::Decode;
 use serde_json::{json, Value as JsonValue};
 
 use crate::{call_dfx, call_dfx_or_panic, get_identity, hex_encode_candid, DeployTestflightArgs};
+use anyhow::{anyhow, Context, Result};
 use ic_base_types::PrincipalId;
 use ic_nns_constants::ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID;
 use ic_sns_governance::pb::v1::ListNeuronsResponse;
@@ -108,7 +109,7 @@ pub fn get_canister_id(
 
 /// Merges the given JSON into a JSON file.
 /// - If the file is missing or empty, the JSON is simply written to the file.
-pub fn merge_into_json_file<P>(path: P, value: &JsonValue) -> anyhow::Result<()>
+pub fn merge_into_json_file<P>(path: P, value: &JsonValue) -> Result<()>
 where
     P: AsRef<Path>,
 {
@@ -156,7 +157,10 @@ pub struct DirectSnsDeployerForTests {
 }
 
 impl DirectSnsDeployerForTests {
-    pub fn new_testflight(args: DeployTestflightArgs, sns_init_payload: SnsInitPayload) -> Self {
+    pub fn new_testflight(
+        args: DeployTestflightArgs,
+        sns_init_payload: SnsInitPayload,
+    ) -> Result<Self> {
         let sns_canisters = lookup_or_else_create_canisters(
             args.verbose,
             &args.network,
@@ -168,13 +172,13 @@ impl DirectSnsDeployerForTests {
         let sns_canister_payloads =
             match sns_init_payload.build_canister_payloads(&sns_canisters, None, true) {
                 Ok(payload) => payload,
-                Err(e) => panic!("Could not build canister init payloads: {}", e),
+                Err(e) => return Err(anyhow!("Could not build canister init payloads: {}", e)),
             };
 
         let wallet_canister = get_identity("get-wallet", &args.network);
         let dfx_identity = get_identity("get-principal", &args.network);
 
-        Self {
+        Ok(Self {
             network: args.network,
             sns_canister_ids_save_to: args.sns_canister_ids_save_to,
             wasms_dir: args.wasms_dir,
@@ -183,30 +187,27 @@ impl DirectSnsDeployerForTests {
             wallet_canister,
             dfx_identity,
             testflight: true,
-        }
+        })
     }
 
     /// Deploy an SNS
-    pub fn deploy(&self) {
+    pub fn deploy(&self) -> Result<()> {
         self.install_sns_canisters();
         self.set_sns_canister_controllers();
-        self.save_canister_ids();
+        self.save_canister_ids()?;
         self.validate_deployment();
+        Ok(())
     }
 
     /// Records the created canister IDs in sns_canister_ids.json
-    pub fn save_canister_ids(&self) {
+    pub fn save_canister_ids(&self) -> Result<()> {
         let canisters_file = {
             let path = &self.sns_canister_ids_save_to;
             if let Some(dir) = path.parent() {
-                create_dir_all(dir)
-                    .map_err(|err| {
-                        format!(
-                            "Failed to create directory for {}: {err}",
-                            path.to_string_lossy()
-                        )
-                    })
-                    .unwrap();
+                create_dir_all(dir).context(format!(
+                    "Failed to create directory for {}",
+                    path.to_string_lossy()
+                ))?;
             }
             path
         };
@@ -240,6 +241,7 @@ impl DirectSnsDeployerForTests {
         });
         merge_into_json_file(canisters_file, &sns_quill_canister_ids_json)
             .expect("cannot write SNS canister IDs to file");
+        Ok(())
     }
 
     /// Validate that the SNS deployment executed successfully

@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/interfaces/sig_verification",
     "//rs/interfaces/state_manager",
     "//rs/phantom_newtype",
@@ -23,11 +24,13 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/crypto_service_provider/csp_proptest_utils",
     "@crate_index//:proptest",
 ]
 
 PROC_MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:strum_macros",
 ]
 

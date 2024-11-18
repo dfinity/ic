@@ -8,8 +8,8 @@ documentation.workspace = true
 
 [dependencies]
 serde = { workspace = true }
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
-serde_cbor = { workspace = true }
 serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }

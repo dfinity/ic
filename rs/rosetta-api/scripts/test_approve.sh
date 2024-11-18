@@ -14,7 +14,8 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 source "$SCRIPT_DIR/constants.sh"
 
 NUM_OF_BATCHES=50
-NUM_OF_APPROVALS_PER_BATCH=21 # 100 fails for some reason related to the testnet setup
+NUM_OF_APPROVALS_PER_BATCH=21           # 100 fails for some reason related to the testnet setup
+export DFX_DISABLE_QUERY_VERIFICATION=1 # Query verification fails on dynamic testnets with recovered mainnet NNS state, so disable query verification
 
 dfx identity use "$NNS_TEST_ID"
 

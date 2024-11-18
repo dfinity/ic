@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use slog::Level;
 use std::path::PathBuf;
 
 /// Represents the required log level defined in the `LoggerConfig`.
@@ -7,10 +6,9 @@ use std::path::PathBuf;
 // Note that `slog::Level` does not provide an implementation of `Deserialize`
 // so we use the approach for remote derives (https://serde.rs/remote-derive.html)
 // provided by serde.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(remote = "Level")]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum LevelDef {
+pub enum Level {
     Critical,
     Error,
     Warning,
@@ -20,7 +18,7 @@ pub enum LevelDef {
 }
 
 /// Possible formatting for log lines
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LogFormat {
     TextFull,
@@ -28,7 +26,7 @@ pub enum LogFormat {
 }
 
 /// Possible destitations where emitted logs can be written
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub enum LogDestination {
     #[default]
     Stdout,
@@ -36,10 +34,9 @@ pub enum LogDestination {
     File(PathBuf),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Config {
-    #[serde(with = "LevelDef")]
     pub level: Level,
     /// The format of emitted log lines.
     pub format: LogFormat,
@@ -54,7 +51,7 @@ pub struct Config {
 }
 
 fn default_block_on_overflow() -> bool {
-    true
+    false
 }
 
 impl Default for Config {
@@ -63,7 +60,7 @@ impl Default for Config {
             level: Level::Debug,
             format: LogFormat::TextFull,
             log_destination: LogDestination::default(),
-            block_on_overflow: true,
+            block_on_overflow: false,
         }
     }
 }

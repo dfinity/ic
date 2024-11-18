@@ -1,4 +1,6 @@
-use crate::{governance::MAX_DISSOLVE_DELAY_SECONDS, pb::v1::NeuronState};
+use crate::{
+    governance::MAX_DISSOLVE_DELAY_SECONDS, neuron::StoredDissolveStateAndAge, pb::v1::NeuronState,
+};
 
 /// An enum to represent different combinations of a neurons dissolve_state and
 /// aging_since_timestamp_seconds. Currently, the back-and-forth conversions should make sure the
@@ -6,7 +8,7 @@ use crate::{governance::MAX_DISSOLVE_DELAY_SECONDS, pb::v1::NeuronState};
 /// changes. After we make sure all neuron mutations or creations must mutate states to valid ones
 /// and the invalid states have been migrated to valid ones on the mainnet, we can panic in
 /// conversion when invalid states are encountered.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum DissolveStateAndAge {
     /// A non-dissolving neuron has a dissolve delay and an aging since timestamp.
     NotDissolving {
@@ -20,6 +22,21 @@ pub enum DissolveStateAndAge {
 }
 
 impl DissolveStateAndAge {
+    pub fn validate(self) -> Result<Self, String> {
+        let original = self;
+        let stored_dissolve_state_and_age = StoredDissolveStateAndAge::from(self);
+
+        let validated_dissolve_state_and_age = Self::try_from(stored_dissolve_state_and_age)
+            .map_err(|e| format!("Invalid dissolve state and age: {}", e))?;
+
+        if validated_dissolve_state_and_age != original {
+            return Err( format!(
+                    "Dissolve state and age is not valid, as roundtrip conversion did not result in same value. In: {:?}, Out: {:?}",
+                    original, validated_dissolve_state_and_age
+                ));
+        }
+        Ok(self)
+    }
     /// Returns the current state given the current time. Mainly for differentiating between
     /// dissolving and dissolved neurons.
     pub fn current_state(self, now_seconds: u64) -> NeuronState {

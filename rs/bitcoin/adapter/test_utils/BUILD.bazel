@@ -3,15 +3,16 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:bitcoin",
+    "@crate_index//:flate2",
     "@crate_index//:hex",
     "@crate_index//:rand",
     "@crate_index//:serde_json",
     "@crate_index//:tokio",
 ]
 
-DEV_DEPENDENCIES = [
-]
+DEV_DEPENDENCIES = []
 
 MACRO_DEPENDENCIES = []
 

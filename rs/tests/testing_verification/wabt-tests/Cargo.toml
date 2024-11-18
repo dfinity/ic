@@ -8,4 +8,4 @@ documentation.workspace = true
 
 [dependencies]
 leb128 = "0.2.5"
-wat = "1.0.57"
+wat = { workspace = true }

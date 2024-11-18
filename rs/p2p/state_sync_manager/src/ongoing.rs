@@ -333,7 +333,7 @@ impl OngoingStateSync {
     }
 }
 
-#[derive(Debug, Clone, Error)]
+#[derive(Clone, Debug, Error)]
 pub(crate) enum DownloadChunkError {
     /// Request was processed but requested content was not available.
     /// This error is permanent.
@@ -364,7 +364,7 @@ mod tests {
     use ic_p2p_test_utils::mocks::{MockChunkable, MockTransport};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{crypto::CryptoHash, Height};
-    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    use ic_types_test_utils::ids::NODE_1;
     use prost::Message;
     use tokio::runtime::Runtime;
 
@@ -410,7 +410,7 @@ mod tests {
 
             rt.block_on(async move {
                 ongoing.sender.send(NODE_1).await.unwrap();
-                ongoing.shutdown.shutdown().await;
+                ongoing.shutdown.shutdown().await.unwrap();
             });
         });
     }
@@ -423,7 +423,6 @@ mod tests {
             t.expect_rpc().returning(|_, _| {
                 Ok(Response::builder()
                     .status(StatusCode::OK)
-                    .extension(NODE_2)
                     .body(compress_empty_bytes())
                     .unwrap())
             });
@@ -449,7 +448,7 @@ mod tests {
             rt.block_on(async move {
                 ongoing.sender.send(NODE_1).await.unwrap();
                 // State sync should exit because NODE_1 got removed.
-                ongoing.shutdown.shutdown().await;
+                ongoing.shutdown.shutdown().await.unwrap();
             });
         });
     }
@@ -463,7 +462,6 @@ mod tests {
             t.expect_rpc().returning(|_, _| {
                 Ok(Response::builder()
                     .status(StatusCode::OK)
-                    .extension(NODE_2)
                     .body(compress_empty_bytes())
                     .unwrap())
             });
@@ -491,7 +489,7 @@ mod tests {
                 ongoing.sender.send(NODE_1).await.unwrap();
                 ongoing.sender.send(NODE_1).await.unwrap();
                 // State sync should exit because NODE_1 got removed.
-                ongoing.shutdown.shutdown().await;
+                ongoing.shutdown.shutdown().await.unwrap();
             });
         });
     }

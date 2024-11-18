@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 //! Access a local store through the standard `RegistryClient` trait. Hides the
 //! complexities of syncing the local store with the NNS registry behind a
 //! simple function call. Control over when the synchronization happens is left
@@ -239,7 +240,7 @@ impl RegistryClient for LocalRegistry {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq)]
 struct RootSubnetInfo {
     registry_version: RegistryVersion,
     urls_and_pubkey: (Vec<Url>, ThresholdSigPublicKey),
@@ -265,7 +266,7 @@ fn registry_result_to_local_registry_error<T>(
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum LocalRegistryError {
     #[error("The provided registry is at version 0 (empty)")]
     EmptyRegistry,

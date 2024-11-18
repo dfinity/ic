@@ -1,10 +1,10 @@
 // Set up a testnet containing:
 //   one 1-node System and one 1-node Application subnets, one unassigned node, single boundary node, and a p8s (with grafana) VM.
-// All replica nodes use the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
+// All replica nodes use the following resources: 6 vCPUs, 24 GiB of RAM, and 50 GiB disk.
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
-//   $ ./gitlab-ci/tools/docker-run
+//   $ ./ci/tools/docker-run
 //   $ ict testnet create small --lifetime-mins=180 --output-dir=./small -- --test_tmpdir=./small
 //
 // The --output-dir=./small will store the debug output of the test driver in the specified directory.
@@ -36,19 +36,16 @@
 
 use anyhow::Result;
 
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::{
+use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{
-        await_boundary_node_healthy, HasTopologySnapshot, NnsCanisterWasmStrategy,
-        NnsCustomizations,
-    },
+    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCustomizations},
 };
-use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
@@ -71,7 +68,6 @@ pub fn setup(env: TestEnv) {
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
     BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
@@ -81,6 +77,6 @@ pub fn setup(env: TestEnv) {
         .use_real_certs_and_dns()
         .start(&env)
         .expect("failed to setup BoundaryNode VM");
-    env.sync_with_prometheus();
+    env.sync_with_prometheus_by_name("", env.get_playnet_url(BOUNDARY_NODE_NAME));
     await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
 }

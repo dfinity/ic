@@ -18,6 +18,6 @@ ic-crypto-internal-seed = { path = "../../crypto_lib/seed" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "../../crypto_lib/threshold_sig/bls12_381" }
 ic-protobuf = { path = "../../../../protobuf" }
 ic-types = { path = "../../../../types/types" }
-paste = "1.0.12"
-proptest = "1.0"
+paste = { workspace = true }
+proptest = { workspace = true }
 strum = { workspace = true }

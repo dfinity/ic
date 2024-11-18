@@ -11,8 +11,8 @@ LIB_DEPENDENCIES = [
 ]
 
 DEPENDENCIES = [
-    ":lib",
     # Keep sorted.
+    ":lib",
     "@crate_index//:lazy_static",
     "@crate_index//:wee_alloc",
 ]
@@ -35,6 +35,16 @@ rust_library(
 
 rust_canister(
     name = "universal_canister",
+    srcs = glob(["src/*.rs"]),
+    aliases = ALIASES,
+    crate_features = ["heartbeat"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":interface.did",
+    deps = LIB_DEPENDENCIES + DEPENDENCIES,
+)
+
+rust_canister(
+    name = "universal_canister_no_heartbeat",
     srcs = glob(["src/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,

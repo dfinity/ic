@@ -118,10 +118,10 @@ use ic_config::flag_status::FlagStatus;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
 use ic_sys::PAGE_SIZE;
-use ic_types::{methods::WasmMethod, MAX_WASM_MEMORY_IN_BYTES};
-use ic_types::{NumInstructions, MAX_STABLE_MEMORY_IN_BYTES};
+use ic_types::methods::WasmMethod;
+use ic_types::NumBytes;
+use ic_types::NumInstructions;
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
-use wasmtime_environ::WASM_PAGE_SIZE;
 
 use crate::wasmtime_embedder::{
     STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME,
@@ -129,15 +129,17 @@ use crate::wasmtime_embedder::{
 };
 use ic_wasm_transform::{self, Global, Module};
 use wasmparser::{
-    BlockType, CompositeType, Export, ExternalKind, FuncType, GlobalType, Import, MemoryType,
-    Operator, SubType, TypeRef, ValType,
+    BlockType, CompositeInnerType, CompositeType, Export, ExternalKind, FuncType, GlobalType,
+    Import, MemoryType, Operator, SubType, TypeRef, ValType,
 };
 
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum WasmMemoryType {
+pub enum WasmMemoryType {
     Wasm32,
     Wasm64,
 }
@@ -172,11 +174,12 @@ impl InjectedImports {
 }
 
 // Gets the cost of an instruction.
-pub fn instruction_to_cost(i: &Operator) -> u64 {
+pub fn instruction_to_cost(i: &Operator, mem_type: WasmMemoryType) -> u64 {
     // This aims to be a complete list of all instructions that can be executed, with certain exceptions.
-    // The exceptions are: SIMD instructions, atomic instructions, and the dynamic cost of
+    // The exceptions are: atomic instructions, and the dynamic cost of
     // of operations such as table/memory fill, copy, init. This
     // dynamic cost is treated separately. Here we only assign a static cost to these instructions.
+    // Cost for certain instructions differ based on the memory type (Wasm32 vs. Wasm64).
     match i {
         // The following instructions are mostly signaling the start/end of code blocks,
         // so we assign 0 cost to them.
@@ -356,9 +359,8 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
         | Operator::I64TruncF64S { .. }
         | Operator::I64TruncF64U { .. } => 20,
 
-        // All load/store instructions are of cost 2.
+        // All load/store instructions are of cost 1 in Wasm32 mode.
         // Validated in benchmarks.
-        // The cost is adjusted to 1 after benchmarking with real canisters.
         Operator::I32Load { .. }
         | Operator::I64Load { .. }
         | Operator::F32Load { .. }
@@ -381,7 +383,10 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
         | Operator::I32Store16 { .. }
         | Operator::I64Store8 { .. }
         | Operator::I64Store16 { .. }
-        | Operator::I64Store32 { .. } => 1,
+        | Operator::I64Store32 { .. } => match mem_type {
+            WasmMemoryType::Wasm32 => 1,
+            WasmMemoryType::Wasm64 => 2,
+        },
 
         // Global get/set operations are similarly expensive to loads/stores.
         Operator::GlobalGet { .. } | Operator::GlobalSet { .. } => 2,
@@ -453,28 +458,34 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
 
         ////////////////////////////////////////////////////////////////
         // Wasm SIMD Operators
-        Operator::V128Load { .. } => 1,
-        Operator::V128Load8x8S { .. } => 1,
-        Operator::V128Load8x8U { .. } => 1,
-        Operator::V128Load16x4S { .. } => 1,
-        Operator::V128Load16x4U { .. } => 1,
-        Operator::V128Load32x2S { .. } => 1,
-        Operator::V128Load32x2U { .. } => 1,
-        Operator::V128Load8Splat { .. } => 1,
-        Operator::V128Load16Splat { .. } => 1,
-        Operator::V128Load32Splat { .. } => 1,
-        Operator::V128Load64Splat { .. } => 1,
-        Operator::V128Load32Zero { .. } => 1,
-        Operator::V128Load64Zero { .. } => 1,
-        Operator::V128Store { .. } => 1,
-        Operator::V128Load8Lane { .. } => 2,
-        Operator::V128Load16Lane { .. } => 2,
-        Operator::V128Load32Lane { .. } => 1,
-        Operator::V128Load64Lane { .. } => 1,
-        Operator::V128Store8Lane { .. } => 1,
-        Operator::V128Store16Lane { .. } => 1,
-        Operator::V128Store32Lane { .. } => 1,
-        Operator::V128Store64Lane { .. } => 1,
+
+        // Load/store for SIMD cost 1 in Wasm32 mode and 2 in Wasm64 mode.
+        Operator::V128Load { .. }
+        | Operator::V128Load8x8S { .. }
+        | Operator::V128Load8x8U { .. }
+        | Operator::V128Load16x4S { .. }
+        | Operator::V128Load16x4U { .. }
+        | Operator::V128Load32x2S { .. }
+        | Operator::V128Load32x2U { .. }
+        | Operator::V128Load8Splat { .. }
+        | Operator::V128Load16Splat { .. }
+        | Operator::V128Load32Splat { .. }
+        | Operator::V128Load64Splat { .. }
+        | Operator::V128Load32Zero { .. }
+        | Operator::V128Load64Zero { .. }
+        | Operator::V128Store { .. }
+        | Operator::V128Load8Lane { .. }
+        | Operator::V128Load16Lane { .. }
+        | Operator::V128Load32Lane { .. }
+        | Operator::V128Load64Lane { .. }
+        | Operator::V128Store8Lane { .. }
+        | Operator::V128Store16Lane { .. }
+        | Operator::V128Store32Lane { .. }
+        | Operator::V128Store64Lane { .. } => match mem_type {
+            WasmMemoryType::Wasm32 => 1,
+            WasmMemoryType::Wasm64 => 2,
+        },
+
         Operator::V128Const { .. } => 1,
         Operator::I8x16Shuffle { .. } => 3,
         Operator::I8x16ExtractLaneS { .. } => 1,
@@ -707,18 +718,18 @@ pub(crate) const DIRTY_PAGES_COUNTER_GLOBAL_NAME: &str = "canister counter_dirty
 pub(crate) const ACCESSED_PAGES_COUNTER_GLOBAL_NAME: &str = "canister counter_accessed_pages";
 const CANISTER_START_STR: &str = "canister_start";
 
-/// There is one byte for each OS page in the wasm heap.
-const BYTEMAP_SIZE_IN_WASM_PAGES: u64 =
-    MAX_WASM_MEMORY_IN_BYTES / (PAGE_SIZE as u64) / (WASM_PAGE_SIZE as u64);
+/// There is one byte for each OS page in the memory.
+fn bytemap_size_in_wasm_pages(memory_size: NumBytes) -> u64 {
+    memory_size.get() / (PAGE_SIZE as u64) / (WASM_PAGE_SIZE as u64)
+}
 
-const MAX_STABLE_MEMORY_IN_WASM_PAGES: u64 = MAX_STABLE_MEMORY_IN_BYTES / (WASM_PAGE_SIZE as u64);
-const MAX_WASM_MEMORY_IN_WASM_PAGES: u64 = MAX_WASM_MEMORY_IN_BYTES / (WASM_PAGE_SIZE as u64);
-/// There is one byte for each OS page in the stable memory.
-const STABLE_BYTEMAP_SIZE_IN_WASM_PAGES: u64 = MAX_STABLE_MEMORY_IN_WASM_PAGES / (PAGE_SIZE as u64);
+fn max_memory_size_in_wasm_pages(memory_size: NumBytes) -> u64 {
+    memory_size.get() / (WASM_PAGE_SIZE as u64)
+}
 
 fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
     for (idx, existing_subtype) in module.types.iter().enumerate() {
-        if let CompositeType::Func(existing_ty) = &existing_subtype.composite_type {
+        if let CompositeInnerType::Func(existing_ty) = &existing_subtype.composite_type.inner {
             if *existing_ty == ty {
                 return idx as u32;
             }
@@ -727,7 +738,10 @@ fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
     module.types.push(SubType {
         is_final: true,
         supertype_idx: None,
-        composite_type: CompositeType::Func(ty),
+        composite_type: CompositeType {
+            inner: CompositeInnerType::Func(ty),
+            shared: false,
+        },
     });
     (module.types.len() - 1) as u32
 }
@@ -789,6 +803,18 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 
     if let Some(start_idx) = module.start.as_mut() {
         *start_idx = f(*start_idx);
+    }
+
+    if let Some(name_section) = module.name_section.as_mut() {
+        for (index, _name) in &mut name_section.function_names {
+            *index = f(*index);
+        }
+        for (index, _map) in &mut name_section.local_names {
+            *index = f(*index);
+        }
+        for (index, _map) in &mut name_section.label_names {
+            *index = f(*index);
+        }
     }
 }
 
@@ -917,13 +943,20 @@ pub(super) fn instrument(
     metering_type: MeteringType,
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
+    max_wasm_memory_size: NumBytes,
+    max_stable_memory_size: NumBytes,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
     let main_memory_type = main_memory_type(&module);
     let stable_memory_index;
     let mut module = inject_helper_functions(module, wasm_native_stable_memory, main_memory_type);
     module = export_table(module);
-    (module, stable_memory_index) =
-        update_memories(module, write_barrier, wasm_native_stable_memory);
+    (module, stable_memory_index) = update_memories(
+        module,
+        write_barrier,
+        wasm_native_stable_memory,
+        max_wasm_memory_size,
+        max_stable_memory_size,
+    );
 
     let mut extra_strs: Vec<String> = Vec::new();
     module = export_mutable_globals(module, &mut extra_strs);
@@ -993,7 +1026,10 @@ pub(super) fn instrument(
     // type) reference to the `code_section`.
     let mut func_types = Vec::new();
     for i in 0..module.code_sections.len() {
-        if let CompositeType::Func(t) = &module.types[module.functions[i] as usize].composite_type {
+        if let CompositeInnerType::Func(t) = &module.types[module.functions[i] as usize]
+            .composite_type
+            .inner
+        {
             func_types.push((i, t.clone()));
         } else {
             return Err(WasmInstrumentationError::InvalidFunctionType(format!(
@@ -1023,6 +1059,7 @@ pub(super) fn instrument(
             subnet_type,
             dirty_page_overhead,
             main_memory_type,
+            max_wasm_memory_size,
         )
     }
 
@@ -1107,6 +1144,7 @@ fn replace_system_api_functions(
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
     main_memory_type: WasmMemoryType,
+    max_wasm_memory_size: NumBytes,
 ) {
     let api_indexes = calculate_api_indexes(module);
     let number_of_func_imports = module
@@ -1123,6 +1161,7 @@ fn replace_system_api_functions(
         subnet_type,
         dirty_page_overhead,
         main_memory_type,
+        max_wasm_memory_size,
     ) {
         if let Some(old_index) = api_indexes.get(&api) {
             let type_idx = add_func_type(module, ty);
@@ -1338,6 +1377,7 @@ fn export_additional_symbols<'a>(
         ty: GlobalType {
             content_type: ValType::I64,
             mutable: true,
+            shared: false,
         },
         init_expr: Operator::I64Const { value: 0 },
     });
@@ -1348,6 +1388,7 @@ fn export_additional_symbols<'a>(
             ty: GlobalType {
                 content_type: ValType::I64,
                 mutable: true,
+                shared: false,
             },
             init_expr: Operator::I64Const { value: 0 },
         });
@@ -1356,6 +1397,7 @@ fn export_additional_symbols<'a>(
             ty: GlobalType {
                 content_type: ValType::I64,
                 mutable: true,
+                shared: false,
             },
             init_expr: Operator::I64Const { value: 0 },
         });
@@ -1366,21 +1408,33 @@ fn export_additional_symbols<'a>(
 
 // Represents a hint about the context of each static cost injection point in
 // wasm.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum Scope {
     ReentrantBlockStart,
     NonReentrantBlockStart,
     BlockEnd,
 }
 
+// Represents the type of the cost operand on the stack.
+// Needed to determine the correct instruction to decrement the instruction counter.
+#[derive(Copy, Clone, PartialEq, Debug)]
+enum CostOperandOnStack {
+    X32Bit,
+    X64Bit,
+}
 // Describes how to calculate the instruction cost at this injection point.
 // `StaticCost` injection points contain information about the cost of the
 // following basic block. `DynamicCost` injection points assume there is an i32
 // on the stack which should be decremented from the instruction counter.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum InjectionPointCostDetail {
-    StaticCost { scope: Scope, cost: u64 },
-    DynamicCost,
+    StaticCost {
+        scope: Scope,
+        cost: u64,
+    },
+    DynamicCost {
+        operand_on_stack: CostOperandOnStack,
+    },
 }
 
 impl InjectionPointCostDetail {
@@ -1389,7 +1443,7 @@ impl InjectionPointCostDetail {
     fn increment_cost(&mut self, additional_cost: u64) {
         match self {
             Self::StaticCost { scope: _, cost } => *cost += additional_cost,
-            Self::DynamicCost => {}
+            Self::DynamicCost { .. } => {}
         }
     }
 }
@@ -1409,9 +1463,9 @@ impl InjectionPoint {
         }
     }
 
-    fn new_dynamic_cost(position: usize) -> Self {
+    fn new_dynamic_cost(position: usize, operand_on_stack: CostOperandOnStack) -> Self {
         InjectionPoint {
-            cost_detail: InjectionPointCostDetail::DynamicCost,
+            cost_detail: InjectionPointCostDetail::DynamicCost { operand_on_stack },
             position,
         }
     }
@@ -1434,7 +1488,7 @@ fn inject_metering(
 ) {
     let points = match metering_type {
         MeteringType::None => Vec::new(),
-        MeteringType::New => injections(code),
+        MeteringType::New => injections(code, mem_type),
     };
     let points = points.iter().filter(|point| match point.cost_detail {
         InjectionPointCostDetail::StaticCost {
@@ -1442,7 +1496,7 @@ fn inject_metering(
             cost: _,
         } => true,
         InjectionPointCostDetail::StaticCost { scope: _, cost } => cost > 0,
-        InjectionPointCostDetail::DynamicCost => true,
+        InjectionPointCostDetail::DynamicCost { .. } => true,
     });
     let orig_elems = code;
     let mut elems: Vec<Operator> = Vec::new();
@@ -1481,24 +1535,24 @@ fn inject_metering(
                     ]);
                 }
             }
-            InjectionPointCostDetail::DynamicCost => {
-                match mem_type {
-                    WasmMemoryType::Wasm32 => {
+            InjectionPointCostDetail::DynamicCost { operand_on_stack } => {
+                match operand_on_stack {
+                    CostOperandOnStack::X64Bit => {
+                        elems.extend_from_slice(&[Call {
+                            function_index: export_data_module.decr_instruction_counter_fn,
+                        }]);
+                    }
+                    CostOperandOnStack::X32Bit => {
                         elems.extend_from_slice(&[
                             I64ExtendI32U,
                             Call {
                                 function_index: export_data_module.decr_instruction_counter_fn,
                             },
-                            // decr_instruction_counter returns it's argument unchanged,
+                            // decr_instruction_counter returns its argument unchanged,
                             // so we can convert back to I32 without worrying about
                             // overflows.
                             I32WrapI64,
                         ]);
-                    }
-                    WasmMemoryType::Wasm64 => {
-                        elems.extend_from_slice(&[Call {
-                            function_index: export_data_module.decr_instruction_counter_fn,
-                        }]);
                     }
                 }
             }
@@ -1779,7 +1833,7 @@ fn inject_try_grow_wasm_memory(
 // with no branches) and before each bulk memory instruction. An injection point
 // contains a "hint" about the context of every basic block, specifically if
 // it's re-entrant or not.
-fn injections(code: &[Operator]) -> Vec<InjectionPoint> {
+fn injections(code: &[Operator], mem_type: WasmMemoryType) -> Vec<InjectionPoint> {
     let mut res = Vec::new();
     use Operator::*;
     // The function itself is a re-entrant code block.
@@ -1787,7 +1841,8 @@ fn injections(code: &[Operator]) -> Vec<InjectionPoint> {
     // functions should consume at least some fuel.
     let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart, 1);
     for (position, i) in code.iter().enumerate() {
-        curr.cost_detail.increment_cost(instruction_to_cost(i));
+        curr.cost_detail
+            .increment_cost(instruction_to_cost(i, mem_type));
         match i {
             // Start of a re-entrant code block.
             Loop { .. } => {
@@ -1817,13 +1872,29 @@ fn injections(code: &[Operator]) -> Vec<InjectionPoint> {
             }
             // Bulk memory instructions require injected metering __before__ the instruction
             // executes so that size arguments can be read from the stack at runtime.
-            MemoryFill { .. }
-            | MemoryCopy { .. }
-            | MemoryInit { .. }
-            | TableCopy { .. }
-            | TableInit { .. }
-            | TableFill { .. } => {
-                res.push(InjectionPoint::new_dynamic_cost(position));
+            MemoryFill { .. } | MemoryCopy { .. } | TableCopy { .. } | TableFill { .. } => {
+                match mem_type {
+                    WasmMemoryType::Wasm32 => {
+                        // These ops in Wasm32 will need to extend the i32 to i64.
+                        res.push(InjectionPoint::new_dynamic_cost(
+                            position,
+                            CostOperandOnStack::X32Bit,
+                        ));
+                    }
+                    WasmMemoryType::Wasm64 => {
+                        res.push(InjectionPoint::new_dynamic_cost(
+                            position,
+                            CostOperandOnStack::X64Bit,
+                        ));
+                    }
+                }
+            }
+            // MemoryInit and TableInit have i32 arguments even in 64-bit mode.
+            MemoryInit { .. } | TableInit { .. } => {
+                res.push(InjectionPoint::new_dynamic_cost(
+                    position,
+                    CostOperandOnStack::X32Bit,
+                ));
             }
             // Nothing special to be done for other instructions.
             _ => (),
@@ -1914,12 +1985,26 @@ fn update_memories(
     mut module: Module,
     write_barrier: FlagStatus,
     wasm_native_stable_memory: FlagStatus,
+    max_wasm_memory_size: NumBytes,
+    max_stable_memory_size: NumBytes,
 ) -> (Module, u32) {
     let mut stable_index = 0;
 
     if let Some(mem) = module.memories.first_mut() {
-        if mem.memory64 && mem.maximum.is_none() {
-            mem.maximum = Some(MAX_WASM_MEMORY_IN_WASM_PAGES);
+        if mem.memory64 {
+            let max_wasm_memory_size_in_wasm_pages =
+                max_memory_size_in_wasm_pages(max_wasm_memory_size);
+            match mem.maximum {
+                Some(max) => {
+                    // In case the maximum memory size is larger than the maximum allowed, cap it.
+                    if max > max_wasm_memory_size_in_wasm_pages {
+                        mem.maximum = Some(max_wasm_memory_size_in_wasm_pages);
+                    }
+                }
+                None => {
+                    mem.maximum = Some(max_wasm_memory_size_in_wasm_pages);
+                }
+            }
         }
     }
 
@@ -1940,12 +2025,14 @@ fn update_memories(
         module.exports.push(memory_export);
     }
 
+    let wasm_bytemap_size_in_wasm_pages = bytemap_size_in_wasm_pages(max_wasm_memory_size);
     if write_barrier == FlagStatus::Enabled && !module.memories.is_empty() {
         module.memories.push(MemoryType {
             memory64: false,
             shared: false,
-            initial: BYTEMAP_SIZE_IN_WASM_PAGES,
-            maximum: Some(BYTEMAP_SIZE_IN_WASM_PAGES),
+            initial: wasm_bytemap_size_in_wasm_pages,
+            maximum: Some(wasm_bytemap_size_in_wasm_pages),
+            page_size_log2: None,
         });
 
         module.exports.push(Export {
@@ -1961,7 +2048,8 @@ fn update_memories(
             memory64: true,
             shared: false,
             initial: 0,
-            maximum: Some(MAX_STABLE_MEMORY_IN_WASM_PAGES),
+            maximum: Some(max_memory_size_in_wasm_pages(max_stable_memory_size)),
+            page_size_log2: None,
         });
 
         module.exports.push(Export {
@@ -1970,11 +2058,13 @@ fn update_memories(
             index: stable_index,
         });
 
+        let stable_bytemap_size_in_wasm_pages = bytemap_size_in_wasm_pages(max_stable_memory_size);
         module.memories.push(MemoryType {
             memory64: false,
             shared: false,
-            initial: STABLE_BYTEMAP_SIZE_IN_WASM_PAGES,
-            maximum: Some(STABLE_BYTEMAP_SIZE_IN_WASM_PAGES),
+            initial: stable_bytemap_size_in_wasm_pages,
+            maximum: Some(stable_bytemap_size_in_wasm_pages),
+            page_size_log2: None,
         });
 
         module.exports.push(Export {

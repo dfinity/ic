@@ -13,6 +13,8 @@ use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
 #[cfg(feature = "test")]
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
+#[cfg(feature = "test")]
+use ic_nns_governance_api::pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem;
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 #[cfg(feature = "test")]
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -22,6 +24,8 @@ use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
 use std::convert::TryFrom;
 
+mod neurons_fund;
+mod node_provider_rewards;
 mod stake_maturity;
 
 #[test]
@@ -133,6 +137,84 @@ mod settle_neurons_fund_participation_request_tests {
 } // end mod settle_neurons_fund_participation_request_tests
 
 #[cfg(feature = "test")]
+mod settle_neurons_fund_participation_mem_tests {
+    use crate::{
+        governance::MAX_NEURONS_FUND_PARTICIPANTS,
+        neurons_fund::{
+            neurons_fund_neuron::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON, NeuronsFundNeuronPortion,
+            NeuronsFundSnapshot,
+        },
+        pb::v1 as gov_pb,
+    };
+    use ic_base_types::PrincipalId;
+    use ic_nns_common::pb::v1::NeuronId;
+    use ic_nns_governance_api::pb::v1::SettleNeuronsFundParticipationResponse;
+
+    fn make_dummy_neuron_portion() -> NeuronsFundNeuronPortion {
+        NeuronsFundNeuronPortion {
+            id: Default::default(),
+            hotkeys: Default::default(),
+            controller: Default::default(),
+            amount_icp_e8s: 1_000_000_000,
+            maturity_equivalent_icp_e8s: 1_000_000_000,
+            is_capped: false,
+        }
+    }
+
+    /// This test ensures that the number of bytes representing the response payload of
+    /// `NnsGov.settle_neurons_fund_participation` is (worst-case) within IC ingress message limits.
+    /// See https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits
+    #[test]
+    fn settle_neurons_fund_participation_ingress_mem_limits_pass() {
+        let neurons = (0..MAX_NEURONS_FUND_PARTICIPANTS).map(|id| {
+            let hotkeys = (0..(MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON as u64))
+                .map(|k| PrincipalId::new_user_test_id(MAX_NEURONS_FUND_PARTICIPANTS + k))
+                .collect();
+
+            NeuronsFundNeuronPortion {
+                hotkeys,
+                id: NeuronId { id },
+                ..make_dummy_neuron_portion()
+            }
+        });
+        let response = Ok(NeuronsFundSnapshot::new(neurons));
+        let intermediate = gov_pb::SettleNeuronsFundParticipationResponse::from(response);
+        let payload = SettleNeuronsFundParticipationResponse::from(intermediate);
+        let bytes = candid::encode_args((payload,)).unwrap();
+        assert!(bytes.len() < 2_000_000);
+    }
+
+    /// This test may be adjusted slightly; it is here to help monitor the potentially unbounded
+    /// `NnsGov.settle_neurons_fund_participation` response payload byte size.
+    #[test]
+    fn settle_neurons_fund_participation_ingress_mem_limits_worst_case_bound() {
+        let neurons = (0..MAX_NEURONS_FUND_PARTICIPANTS).map(|id| {
+            let hotkeys = (0..(MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON as u64))
+                .map(|k| PrincipalId::new_user_test_id(MAX_NEURONS_FUND_PARTICIPANTS + k))
+                .collect();
+
+            NeuronsFundNeuronPortion {
+                id: NeuronId { id },
+                hotkeys,
+                ..make_dummy_neuron_portion()
+            }
+        });
+        let response = Ok(NeuronsFundSnapshot::new(neurons));
+        let intermediate = gov_pb::SettleNeuronsFundParticipationResponse::from(response);
+        let payload = SettleNeuronsFundParticipationResponse::from(intermediate);
+        let bytes = candid::encode_args((payload,)).unwrap();
+        // The following bound is obtained experimentally.
+        let expected_bytes_cap = 620_113;
+        assert!(
+            bytes.len() < expected_bytes_cap,
+            "The bytes.len() = {}, expected_bytes_cap = {}",
+            bytes.len(),
+            expected_bytes_cap
+        );
+    }
+}
+
+#[cfg(feature = "test")]
 mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
     use super::*;
     use ic_nervous_system_proto::pb::v1 as pb;
@@ -168,9 +250,10 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
         // Step 1: Prepare the world. (In this case, trivial.)
 
         // Step 2: Call the code under test.
-        let converted =
-            SnsInitPayload::try_from(CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone())
-                .unwrap();
+        let converted = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(
+            CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
+        ))
+        .unwrap();
 
         // Step 3: Inspect the result.
 
@@ -199,7 +282,6 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 initial_token_distribution: None,
                 swap_start_timestamp_seconds: None,
                 swap_due_timestamp_seconds: None,
-                neurons_fund_participants: None,
                 nns_proposal_id: None,
                 neuron_basket_construction_parameters: None,
                 ..converted
@@ -296,7 +378,6 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 // We'll examine these later
                 initial_token_distribution: None,
                 neuron_basket_construction_parameters: None,
-                neurons_fund_participants: None,
                 swap_start_timestamp_seconds: None,
                 swap_due_timestamp_seconds: None,
                 nns_proposal_id: None,
@@ -399,7 +480,6 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
         );
 
         assert_eq!(converted.nns_proposal_id, None);
-        assert_eq!(converted.neurons_fund_participants, None);
         assert_eq!(converted.swap_start_timestamp_seconds, None);
         assert_eq!(converted.swap_due_timestamp_seconds, None);
     }
@@ -421,7 +501,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
             });
 
         // Step 2: Call the code under test.
-        let converted = SnsInitPayload::try_from(original);
+        let converted = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(original));
 
         // Step 3: Inspect the result: Err must contain "wait for quiet".
         match converted {
@@ -432,7 +512,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
 }
 
 #[cfg(feature = "test")]
-mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_payload_tests_with_test_feature {
+mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_with_test_feature {
     use super::*;
     use ic_nervous_system_proto::pb::v1 as pb;
     use ic_sns_init::pb::v1::sns_init_payload;
@@ -470,23 +550,52 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
         let current_timestamp_seconds = 13_245;
         let proposal_id = 1000;
 
-        let executed_create_service_nervous_system_proposal =
-            ExecutedCreateServiceNervousSystemProposal {
-                current_timestamp_seconds,
-                create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
-                    .clone(),
-                proposal_id,
-                random_swap_start_time: GlobalTimeOfDay {
+        // Step 2: Call the code under test.
+        let converted = {
+            let create_service_nervous_system =
+                CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone();
+            // The computation for swap_start_timestamp_seconds and swap_due_timestamp_seconds below
+            // is inlined from `Governance::make_sns_init_payload`.
+            let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) = {
+                let random_swap_start_time = GlobalTimeOfDay {
                     seconds_after_utc_midnight: Some(0),
-                },
+                };
+
+                let start_time = create_service_nervous_system
+                    .swap_parameters
+                    .as_ref()
+                    .and_then(|swap_parameters| swap_parameters.start_time);
+
+                let duration = create_service_nervous_system
+                    .swap_parameters
+                    .as_ref()
+                    .and_then(|swap_parameters| swap_parameters.duration);
+
+                CreateServiceNervousSystem::swap_start_and_due_timestamps(
+                    start_time.unwrap_or(random_swap_start_time),
+                    duration.unwrap_or_default(),
+                    current_timestamp_seconds,
+                )
+                .expect("Cannot compute swap_start_timestamp_seconds, swap_due_timestamp_seconds.")
+            };
+
+            let sns_init_payload = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(
+                create_service_nervous_system,
+            ))
+            .unwrap();
+
+            SnsInitPayload {
                 neurons_fund_participation_constraints: Some(
                     NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone(),
                 ),
-            };
+                nns_proposal_id: Some(proposal_id),
+                swap_start_timestamp_seconds: Some(swap_start_timestamp_seconds),
+                swap_due_timestamp_seconds: Some(swap_due_timestamp_seconds),
+                ..sns_init_payload
+            }
+        };
 
-        // Step 2: Call the code under test.
-        let converted =
-            SnsInitPayload::try_from(executed_create_service_nervous_system_proposal).unwrap();
+        converted.validate_post_execution().unwrap();
 
         // Step 3: Inspect the result.
 
@@ -606,7 +715,6 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                 confirmation_text: original_swap_parameters.confirmation_text.clone(),
                 restricted_countries: original_swap_parameters.restricted_countries.clone(),
                 nns_proposal_id: Some(proposal_id),
-                neurons_fund_participants: None,
                 neurons_fund_participation: Some(true),
 
                 neurons_fund_participation_constraints: Some(
@@ -1028,10 +1136,11 @@ mod neuron_archiving_tests {
 
 mod cast_vote_and_cascade_follow {
     use crate::{
-        governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
+        governance::MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
         pb::v1::{neuron::Followees, Ballot, Topic, Vote},
+        voting::cast_vote_and_cascade_follow,
     };
     use ic_base_types::PrincipalId;
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -1085,9 +1194,9 @@ mod cast_vote_and_cascade_follow {
                                       followees: Vec<u64>,
                                       vote: Vote| {
             let neuron = make_neuron(id, followees);
-            let voting_power = neuron.voting_power(now);
+            let deciding_voting_power = neuron.deciding_voting_power(now);
             neuron_map.insert(id, neuron);
-            ballots.insert(id, make_ballot(voting_power, vote));
+            ballots.insert(id, make_ballot(deciding_voting_power, vote));
         };
 
         let add_neuron_without_ballot =
@@ -1124,7 +1233,7 @@ mod cast_vote_and_cascade_follow {
 
         let mut neuron_store = NeuronStore::new(heap_neurons);
 
-        Governance::cast_vote_and_cascade_follow(
+        cast_vote_and_cascade_follow(
             &ProposalId { id: 1 },
             &mut ballots,
             &NeuronId { id: 1 },
@@ -1133,15 +1242,20 @@ mod cast_vote_and_cascade_follow {
             &mut neuron_store,
         );
 
+        let deciding_voting_power = |neuron_id| {
+            neuron_store
+                .with_neuron(&neuron_id, |n| n.deciding_voting_power(now))
+                .unwrap()
+        };
         assert_eq!(
             ballots,
             hashmap! {
-                1 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 1}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                2 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 2}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-                3 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 3}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-                4 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 4}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-                5 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 5}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-                6 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 6}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
+                1 => make_ballot(deciding_voting_power(NeuronId { id: 1}), Vote::Yes),
+                2 => make_ballot(deciding_voting_power(NeuronId { id: 2}), Vote::Unspecified),
+                3 => make_ballot(deciding_voting_power(NeuronId { id: 3}), Vote::Unspecified),
+                4 => make_ballot(deciding_voting_power(NeuronId { id: 4}), Vote::Unspecified),
+                5 => make_ballot(deciding_voting_power(NeuronId { id: 5}), Vote::Unspecified),
+                6 => make_ballot(deciding_voting_power(NeuronId { id: 6}), Vote::Unspecified),
             }
         );
     }
@@ -1161,9 +1275,9 @@ mod cast_vote_and_cascade_follow {
                                       followees: Vec<u64>,
                                       vote: Vote| {
             let neuron = make_neuron(id, followees);
-            let voting_power = neuron.voting_power(now);
+            let deciding_voting_power = neuron.deciding_voting_power(now);
             neuron_map.insert(id, neuron);
-            ballots.insert(id, make_ballot(voting_power, vote));
+            ballots.insert(id, make_ballot(deciding_voting_power, vote));
         };
 
         let add_neuron_without_ballot =
@@ -1188,7 +1302,7 @@ mod cast_vote_and_cascade_follow {
 
         let mut neuron_store = NeuronStore::new(neurons);
 
-        Governance::cast_vote_and_cascade_follow(
+        cast_vote_and_cascade_follow(
             &ProposalId { id: 1 },
             &mut ballots,
             &NeuronId { id: 1 },
@@ -1197,15 +1311,20 @@ mod cast_vote_and_cascade_follow {
             &mut neuron_store,
         );
 
+        let deciding_voting_power = |neuron_id| {
+            neuron_store
+                .with_neuron(&neuron_id, |n| n.deciding_voting_power(now))
+                .unwrap()
+        };
         assert_eq!(
             ballots,
             hashmap! {
-                1 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 1}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                2 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 2}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                3 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 3}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                4 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 4}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                5 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 5}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                6 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 6}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
+                1 => make_ballot(deciding_voting_power(NeuronId { id: 1 }), Vote::Yes),
+                2 => make_ballot(deciding_voting_power(NeuronId { id: 2 }), Vote::Yes),
+                3 => make_ballot(deciding_voting_power(NeuronId { id: 3 }), Vote::Yes),
+                4 => make_ballot(deciding_voting_power(NeuronId { id: 4 }), Vote::Yes),
+                5 => make_ballot(deciding_voting_power(NeuronId { id: 5 }), Vote::Yes),
+                6 => make_ballot(deciding_voting_power(NeuronId { id: 6 }), Vote::Unspecified),
             }
         );
     }
@@ -1245,6 +1364,8 @@ fn test_pre_and_post_upgrade_first_time() {
         Box::new(StubIcpLedger {}),
         Box::new(StubCMC {}),
     );
+
+    assert_eq!(governance.neuron_store.len(), 1);
     // On next pre-upgrade, we get the heap proto and store it in stable memory
     let mut extracted_proto = governance.take_heap_proto();
 
@@ -1259,7 +1380,6 @@ fn test_pre_and_post_upgrade_first_time() {
         },
     );
 
-    assert_eq!(extracted_proto.neurons.len(), 1);
     assert_eq!(extracted_proto.topic_followee_index.len(), 2);
 
     // We now simulate the post_upgrade
@@ -1270,6 +1390,7 @@ fn test_pre_and_post_upgrade_first_time() {
         Box::new(StubCMC {}),
     );
 
+    assert_eq!(governance.neuron_store.len(), 1);
     // It should not rebuild during post_upgrade so it should still be mis-matched with neurons.
     let extracted_proto = governance.take_heap_proto();
     assert_eq!(extracted_proto.topic_followee_index.len(), 2);
@@ -1481,10 +1602,6 @@ fn test_validate_execute_nns_function() {
             payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX],
         },
         ExecuteNnsFunction {
-            nns_function: NnsFunction::NnsCanisterUpgrade as i32,
-            payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX + 1],
-        },
-        ExecuteNnsFunction {
             nns_function: NnsFunction::IcpXdrConversionRate as i32,
             payload: Encode!(&UpdateIcpXdrConversionRatePayload {
                 xdr_permyriad_per_icp: 101,
@@ -1547,4 +1664,173 @@ fn topic_min_max_test() {
         assert!(topic >= Topic::MIN, "Topic::MIN needs to be updated");
         assert!(topic <= Topic::MAX, "Topic::MAX needs to be updated");
     }
+}
+
+#[cfg(feature = "test")]
+#[test]
+fn test_update_neuron_errors_out_expectedly() {
+    fn build_neuron_proto(account: Vec<u8>) -> NeuronProto {
+        NeuronProto {
+            account,
+            id: Some(NeuronId { id: 1 }),
+            controller: Some(PrincipalId::new_user_test_id(1)),
+            followees: hashmap! {
+                2 => Followees {
+                    followees: vec![NeuronId { id : 3}]
+                }
+            },
+            aging_since_timestamp_seconds: 1,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(42)),
+            ..Default::default()
+        }
+    }
+
+    let neuron1_subaccount_blob = vec![1; 32];
+    let neuron1_subaccount = Subaccount::try_from(neuron1_subaccount_blob.as_slice()).unwrap();
+    let neuron1 = build_neuron_proto(neuron1_subaccount_blob.clone());
+    let neurons = btreemap! { 1 => neuron1 };
+    let governance_proto = GovernanceProto {
+        neurons,
+        ..Default::default()
+    };
+    let mut governance = Governance::new(
+        governance_proto,
+        Box::<MockEnvironment>::default(),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+
+    assert_eq!(
+        governance.update_neuron(build_neuron_proto(vec![0; 32])),
+        Err(GovernanceError::new_with_message(
+            ErrorType::PreconditionFailed,
+            format!(
+                "Cannot change the subaccount {} of a neuron.",
+                neuron1_subaccount
+            ),
+        )),
+    );
+}
+
+#[test]
+fn test_compute_ballots_for_new_proposal() {
+    const CREATED_TIMESTAMP_SECONDS: u64 = 1729791574;
+    let now_seconds = CREATED_TIMESTAMP_SECONDS + 999;
+
+    fn new_neuron(i: u64) -> NeuronProto {
+        let controller = PrincipalId::new_user_test_id(i);
+        let d = i / 10_u64.pow(i.ilog10());
+
+        NeuronBuilder::new(
+            NeuronId { id: i },
+            Subaccount::try_from([d as u8; 32].as_slice()).unwrap(),
+            controller,
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
+                aging_since_timestamp_seconds: CREATED_TIMESTAMP_SECONDS + 42,
+            },
+            CREATED_TIMESTAMP_SECONDS,
+        )
+        .with_cached_neuron_stake_e8s(i * E8)
+        .build()
+        .into()
+    }
+
+    let mut neuron_10 = new_neuron(10);
+    neuron_10.followees = hashmap! {
+        Topic::NeuronManagement as i32 => Followees {
+            followees: vec![
+                NeuronId { id: 10 },
+                NeuronId { id: 201 },
+                NeuronId { id: 202 },
+                NeuronId { id: 203 },
+                NeuronId { id: 204 },
+                NeuronId { id: 205 },
+                NeuronId { id: 206 },
+            ]
+        }
+    };
+    let neurons = btreemap! {10 => neuron_10, 200 => new_neuron(200), 3_000 => new_neuron(3_000)};
+    let governance_proto = GovernanceProto {
+        neurons,
+        ..Default::default()
+    };
+
+    let mut governance = Governance::new(
+        governance_proto,
+        Box::<MockEnvironment>::default(),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+    let manage_neuron_action = Action::ManageNeuron(Box::new(ManageNeuron {
+        id: Some(NeuronId { id: 10 }),
+        neuron_id_or_subaccount: None,
+        command: None,
+    }));
+    let (ballots, tot_potential_voting_power) = governance
+        .compute_ballots_for_new_proposal(&manage_neuron_action, &NeuronId { id: 10 }, now_seconds)
+        .expect("Failed computing ballots for new proposal");
+
+    let expected = 7; // 7 followees
+    assert_eq!(tot_potential_voting_power, expected);
+    assert_eq!(
+        ballots,
+        hashmap! {
+        10 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        201 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        202 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        203 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        204 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        205 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        206 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
+        }
+    );
+
+    let motion_action = Action::Motion(Default::default());
+    let (ballots, tot_potential_voting_power) = governance
+        .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
+        .expect("Failed computing ballots for new proposal");
+    // Similar to previous; this time though, Action::ManageNeuron, the weird
+    // special case.
+    let expected_potential_voting_power: u64 =
+        governance.neuron_store.with_active_neurons_iter(|iter| {
+            iter.map(|neuron| neuron.potential_voting_power(now_seconds))
+                .sum()
+        });
+
+    let deciding_vote = |g: &Governance, id, now| {
+        g.neuron_store
+            .with_neuron(&NeuronId { id }, |n| n.deciding_voting_power(now))
+            .unwrap()
+    };
+    assert_eq!(tot_potential_voting_power, expected_potential_voting_power);
+    assert_eq!(
+        ballots,
+        hashmap! {
+            10 => Ballot { voting_power: deciding_vote(&governance,10, now_seconds), vote: Vote::Unspecified as i32 },
+            200 => Ballot { voting_power: deciding_vote(&governance, 200, now_seconds), vote: Vote::Unspecified as i32 },
+            3_000 => Ballot { voting_power: deciding_vote(&governance,3_000 , now_seconds), vote: Vote::Unspecified as i32 },
+        }
+    );
+
+    // Not affected by refresh.
+    let now_seconds = CREATED_TIMESTAMP_SECONDS + 20 * ONE_YEAR_SECONDS;
+
+    let (ballots, tot_potential_voting_power) = governance
+        .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
+        .expect("Failed computing ballots for new proposal");
+    let expected: u64 = governance.neuron_store.with_active_neurons_iter(|iter| {
+        iter.map(|neuron| neuron.potential_voting_power(now_seconds))
+            .sum()
+    });
+
+    assert_eq!(tot_potential_voting_power, expected);
+    assert_eq!(
+        ballots,
+        hashmap! {
+            10 => Ballot { voting_power: deciding_vote(&governance,10, now_seconds), vote: Vote::Unspecified as i32 },
+            200 => Ballot { voting_power: deciding_vote(&governance, 200, now_seconds), vote: Vote::Unspecified as i32 },
+            3_000 => Ballot { voting_power: deciding_vote(&governance,3_000 , now_seconds), vote: Vote::Unspecified as i32 },
+        }
+    );
 }

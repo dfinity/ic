@@ -13,7 +13,7 @@ use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 
 /// The event describing the ckETH minter state transition.
-#[derive(Clone, Debug, Encode, Decode, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub enum EventType {
     /// The minter initialization event.
     /// Must be the first event in the log.
@@ -164,6 +164,13 @@ pub enum EventType {
         #[n(1)]
         block_number: BlockNumber,
     },
+    /// The minter processed the deposit helper smart contract with subaccount logs up to the specified height.
+    #[n(24)]
+    SyncedDepositWithSubaccountToBlock {
+        /// The last processed block number for the helper contract (inclusive).
+        #[n(0)]
+        block_number: BlockNumber,
+    },
 }
 
 impl ReceivedEvent {
@@ -175,7 +182,7 @@ impl ReceivedEvent {
     }
 }
 
-#[derive(Encode, Decode, Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, Decode, Encode)]
 pub struct Event {
     /// The canister time at which the minter generated this event.
     #[n(0)]

@@ -118,7 +118,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_bless_a_version() {
         let payload = ReviseElectedGuestosVersionsPayload {
             replica_version_to_elect: Some("version_43".into()),
             release_package_sha256_hex: Some(MOCK_HASH.into()),
-            release_package_urls: vec!["http://release_package.tar.gz".into()],
+            release_package_urls: vec!["http://release_package.tar.zst".into()],
             guest_launch_measurement_sha256_hex: None,
             replica_versions_to_unelect: vec![],
         };
@@ -170,7 +170,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         let payload_v43 = ReviseElectedGuestosVersionsPayload {
             replica_version_to_elect: Some("version_43".into()),
             release_package_sha256_hex: Some(MOCK_HASH.into()),
-            release_package_urls: vec!["http://release_package.tar.gz".into()],
+            release_package_urls: vec!["http://release_package.tar.zst".into()],
             guest_launch_measurement_sha256_hex: None,
             replica_versions_to_unelect: vec![],
         };
@@ -215,11 +215,11 @@ fn test_accepted_proposal_mutates_the_registry() {
             .await
         );
         // The URL in the registry should still the old one.
-        let release_package_url = "http://release_package.tar.gz".to_string();
+        let release_package_url = "http://release_package.tar.zst".to_string();
         assert_eq!(
             get_value_or_panic::<ReplicaVersionRecord>(
                 &registry,
-                make_replica_version_key(&ReplicaVersion::default()).as_bytes()
+                make_replica_version_key(ReplicaVersion::default()).as_bytes()
             )
             .await,
             ReplicaVersionRecord {

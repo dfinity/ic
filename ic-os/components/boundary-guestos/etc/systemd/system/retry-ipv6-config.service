@@ -1,0 +1,10 @@
+[Unit]
+Description=Monitor and retry IPv6 configuration
+After=systemd-networkd.service
+
+[Service]
+Type=simple
+ExecStart=/opt/ic/bin/retry-ipv6-config.sh
+
+[Install]
+WantedBy=multi-user.target

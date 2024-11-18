@@ -12,7 +12,7 @@ use ic_agent::{
 };
 use ic_config::http_handler::Config;
 use ic_error_types::{ErrorCode, UserError};
-use ic_http_endpoints_public::{CallServiceV2, IngressValidatorBuilder};
+use ic_http_endpoints_public::{call_v2, IngressValidatorBuilder};
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
@@ -44,7 +44,7 @@ type IngressFilterHandle =
     Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;
 type CallServiceEndpoint = BoxCloneService<Request<Body>, Response<Body>, Infallible>;
 
-#[derive(Arbitrary, Clone, Debug)]
+#[derive(Clone, Debug, Arbitrary)]
 struct CallServiceImpl {
     content: AnonymousContent,
     allow_ingress_filter: bool,
@@ -197,6 +197,7 @@ fn new_call_service(
 
     let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(1)));
     let call_handler = IngressValidatorBuilder::builder(
+        log.clone(),
         node_test_id(1),
         subnet_test_id(1),
         Arc::clone(&mock_registry_client),
@@ -205,14 +206,13 @@ fn new_call_service(
         ingress_throttler,
         ingress_tx,
     )
-    .with_logger(log.clone())
     .build();
     let call_service = BoxCloneService::new(
         ServiceBuilder::new()
             .layer(GlobalConcurrencyLimitLayer::new(
                 config.max_call_concurrent_requests,
             ))
-            .service(CallServiceV2::new_service(call_handler)),
+            .service(call_v2::new_service(call_handler)),
     );
     (ingress_filter_handle, call_service)
 }

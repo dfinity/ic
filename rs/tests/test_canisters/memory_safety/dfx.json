@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "canisters": {
+    "memory_safety": {
+      "type": "motoko",
+      "main": "src/memory_safety/main.mo"
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": ""
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:8080",
+      "type": "ephemeral"
+    }
+  }
+}

@@ -3,7 +3,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    finalize_registry, StateMachine, StateMachineBuilder, StateMachineConfig,
+    finalize_registry, StateMachine, StateMachineBuilder, StateMachineConfig, Subnets,
 };
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
@@ -16,9 +16,33 @@ use std::sync::{Arc, RwLock};
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
-fn test_setup(
+struct SubnetsImpl {
     subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
-    subnet_seq_no: u8,
+}
+
+impl SubnetsImpl {
+    fn new() -> Self {
+        Self {
+            subnets: Arc::new(RwLock::new(BTreeMap::new())),
+        }
+    }
+}
+
+impl Subnets for SubnetsImpl {
+    fn insert(&self, state_machine: Arc<StateMachine>) {
+        self.subnets
+            .write()
+            .unwrap()
+            .insert(state_machine.get_subnet_id(), state_machine);
+    }
+    fn get(&self, subnet_id: SubnetId) -> Option<Arc<StateMachine>> {
+        self.subnets.read().unwrap().get(&subnet_id).cloned()
+    }
+}
+
+fn test_setup(
+    subnets: Arc<SubnetsImpl>,
+    subnet_seed: u8,
     subnet_type: SubnetType,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
 ) -> Arc<StateMachine> {
@@ -26,9 +50,8 @@ fn test_setup(
         StateMachineConfig::new(SubnetConfig::new(subnet_type), HypervisorConfig::default());
     StateMachineBuilder::new()
         .with_config(Some(config))
-        .with_subnet_seq_no(subnet_seq_no)
+        .with_subnet_seed([subnet_seed; 32])
         .with_registry_data_provider(registry_data_provider)
-        .with_multisubnet_ecdsa_key()
         .build_with_subnets(subnets)
 }
 
@@ -41,7 +64,7 @@ fn counter_canister_call_test() {
     let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
     // Set up the two state machines for the two (app) subnets.
-    let subnets = Arc::new(RwLock::new(BTreeMap::new()));
+    let subnets = Arc::new(SubnetsImpl::new());
     let env1 = test_setup(
         subnets.clone(),
         1,

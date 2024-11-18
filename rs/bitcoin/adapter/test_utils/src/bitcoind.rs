@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, VecDeque},
-    io::{self, ErrorKind},
+    io::{self, ErrorKind, Read},
     net::SocketAddr,
     sync::Arc,
 };
@@ -115,6 +115,15 @@ async fn handle_getheaders(
     write_network_message(socket, magic, NetworkMessage::Headers(block_headers)).await
 }
 
+fn decompress(location: String) -> Vec<u8> {
+    let bytes = std::fs::read(location).unwrap();
+    let mut dec = flate2::read::GzDecoder::new(bytes.as_slice());
+    let mut decompressed = Vec::new();
+    dec.read_to_end(&mut decompressed)
+        .expect("failed to decode gzip");
+    decompressed
+}
+
 #[derive(Clone)]
 struct FakeBitcoind {
     cached_headers: Arc<HashMap<BlockHash, BlockHeader>>,
@@ -124,16 +133,16 @@ struct FakeBitcoind {
 
 impl FakeBitcoind {
     pub fn new(headers_location: String, blocks_location: String) -> Self {
-        let headers_json = std::fs::read_to_string(headers_location).unwrap();
-        let headers: Vec<BlockHeader> = serde_json::from_str(&headers_json).unwrap();
+        let decompressed_headers = decompress(headers_location);
+        let headers: Vec<BlockHeader> = serde_json::from_slice(&decompressed_headers).unwrap();
         let cached_headers = Arc::new(
             headers
                 .iter()
                 .map(|header| (header.block_hash(), *header))
                 .collect(),
         );
-        let blocks_json = std::fs::read_to_string(blocks_location).unwrap();
-        let blocks: Vec<Block> = serde_json::from_str(&blocks_json).unwrap();
+        let decompressed_blocks = decompress(blocks_location);
+        let blocks: Vec<Block> = serde_json::from_slice(&decompressed_blocks).unwrap();
         let blocks: Arc<HashMap<BlockHash, Block>> = Arc::new(
             blocks
                 .iter()

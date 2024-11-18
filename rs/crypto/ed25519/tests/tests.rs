@@ -1,10 +1,24 @@
 use hex_literal::hex;
 use ic_crypto_ed25519::*;
 use rand::Rng;
+use rand_chacha::ChaCha20Rng;
+
+fn test_rng_with_seed(seed: [u8; 32]) -> ChaCha20Rng {
+    use rand::SeedableRng;
+    ChaCha20Rng::from_seed(seed)
+}
+
+fn test_rng() -> ChaCha20Rng {
+    let seed = rand::thread_rng().gen::<[u8; 32]>();
+    // If a test ever fails, reproduce it using
+    // let mut rng = test_rng_with_seed(hex!("SEED"));
+    println!("RNG seed: {}", hex::encode(seed));
+    test_rng_with_seed(seed)
+}
 
 #[test]
 fn secret_key_serialization_round_trips() {
-    let mut rng = &mut rand::thread_rng();
+    let mut rng = &mut test_rng();
 
     let pkcs8_formats = [
         PrivateKeyFormat::Pkcs8v1,
@@ -31,8 +45,31 @@ fn secret_key_serialization_round_trips() {
 }
 
 #[test]
+fn secret_key_generation_from_seed_is_stable() {
+    let tests = [
+        (
+            "",
+            "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce",
+        ),
+        (
+            "abcdef",
+            "d5d81c66c3b1a0efb49e980ebc5629c352342dc3332c0697cbeeb55f892a8526",
+        ),
+        (
+            "03fc46909ddfe5ed2f37af7923d846ecab53f962a83e4fc30be550671ceab3e6",
+            "f3c92b5fe0c39a07b23447427a092f43cca5d03ad5a2b41658426ec5dcd493e2",
+        ),
+    ];
+
+    for (seed, expected_key) in tests {
+        let sk = PrivateKey::generate_from_seed(&hex::decode(seed).unwrap());
+        assert_eq!(hex::encode(sk.serialize_raw()), expected_key);
+    }
+}
+
+#[test]
 fn pkcs8_v2_rep_includes_the_public_key() {
-    let mut rng = &mut rand::thread_rng();
+    let mut rng = &mut test_rng();
     let sk = PrivateKey::generate_using_rng(&mut rng);
     let pk = sk.public_key().serialize_raw();
 
@@ -45,7 +82,7 @@ fn pkcs8_v2_rep_includes_the_public_key() {
 
 #[test]
 fn signatures_we_generate_will_verify() {
-    let mut rng = &mut rand::thread_rng();
+    let mut rng = &mut test_rng();
     for _ in 0..100 {
         let sk = PrivateKey::generate_using_rng(&mut rng);
         let pk = sk.public_key();
@@ -80,10 +117,15 @@ fn public_key_deserialization_rejects_keys_of_incorrect_length() {
 
 #[test]
 fn batch_verification_works() {
-    fn batch_verifies(msg: &[[u8; 32]], sigs: &[[u8; 64]], keys: &[PublicKey]) -> bool {
+    fn batch_verifies(
+        msg: &[[u8; 32]],
+        sigs: &[[u8; 64]],
+        keys: &[PublicKey],
+        rng: &mut ChaCha20Rng,
+    ) -> bool {
         let msg_ref = msg.iter().map(|m| m.as_ref()).collect::<Vec<&[u8]>>();
         let sig_ref = sigs.iter().map(|s| s.as_ref()).collect::<Vec<&[u8]>>();
-        PublicKey::batch_verify(&msg_ref, &sig_ref, keys).is_ok()
+        PublicKey::batch_verify(&msg_ref, &sig_ref, keys, rng).is_ok()
     }
 
     // Return two distinct positions in [0..max)
@@ -100,11 +142,14 @@ fn batch_verification_works() {
         }
     }
 
-    let mut rng = &mut rand::thread_rng();
+    let rng = &mut test_rng();
 
-    for batch_size in 1..15 {
+    // Check that empty batches are accepted
+    assert!(PublicKey::batch_verify(&[], &[], &[], rng).is_ok());
+
+    for batch_size in (1..30).chain([50, 75, 100]) {
         let sk = (0..batch_size)
-            .map(|_| PrivateKey::generate_using_rng(&mut rng))
+            .map(|_| PrivateKey::generate_using_rng(rng))
             .collect::<Vec<_>>();
         let mut pk = sk.iter().map(|k| k.public_key()).collect::<Vec<_>>();
 
@@ -115,42 +160,54 @@ fn batch_verification_works() {
             .map(|i| sk[i].sign_message(&msg[i]))
             .collect::<Vec<_>>();
 
-        assert!(batch_verifies(&msg, &sigs, &pk));
+        assert!(batch_verifies(&msg, &sigs, &pk, rng));
 
         // Corrupt a random signature and check that the batch fails:
         let corrupted_sig_idx = rng.gen::<usize>() % batch_size;
         let corrupted_sig_byte = rng.gen::<usize>() % 64;
         let corrupted_sig_mask = std::cmp::max(1, rng.gen::<u8>());
         sigs[corrupted_sig_idx][corrupted_sig_byte] ^= corrupted_sig_mask;
-        assert!(!batch_verifies(&msg, &sigs, &pk));
+        assert!(!batch_verifies(&msg, &sigs, &pk, rng));
 
         // Uncorrupt the signature, then corrupt a random message, verify it fails:
         sigs[corrupted_sig_idx][corrupted_sig_byte] ^= corrupted_sig_mask;
         // We fixed the signature so the batch should verify again:
-        debug_assert!(batch_verifies(&msg, &sigs, &pk));
+        debug_assert!(batch_verifies(&msg, &sigs, &pk, rng));
 
         let corrupted_msg_idx = rng.gen::<usize>() % batch_size;
         let corrupted_msg_byte = rng.gen::<usize>() % 32;
         let corrupted_msg_mask = std::cmp::max(1, rng.gen::<u8>());
         msg[corrupted_msg_idx][corrupted_msg_byte] ^= corrupted_msg_mask;
-        assert!(!batch_verifies(&msg, &sigs, &pk));
+        assert!(!batch_verifies(&msg, &sigs, &pk, rng));
 
         // Fix the corrupted message
         msg[corrupted_msg_idx][corrupted_msg_byte] ^= corrupted_msg_mask;
+
+        // Corrupt a random public key and check that the batch fails:
+        let corrupted_pk_idx = rng.gen::<usize>() % batch_size;
+        let correct_pk = pk[corrupted_pk_idx];
+        let wrong_pk = PrivateKey::generate_using_rng(rng).public_key();
+        assert_ne!(correct_pk, wrong_pk);
+        pk[corrupted_pk_idx] = wrong_pk;
+        assert!(!batch_verifies(&msg, &sigs, &pk, rng));
+        // Fix the corrupted public key
+        pk[corrupted_pk_idx] = correct_pk;
+        // We fixed the public key so the batch should verify again:
+        debug_assert!(batch_verifies(&msg, &sigs, &pk, rng));
 
         if batch_size > 1 {
             // Swapping a key causes batch verification to fail:
             let (swap0, swap1) = two_positions(batch_size, rng);
             pk.swap(swap0, swap1);
-            assert!(!batch_verifies(&msg, &sigs, &pk));
+            assert!(!batch_verifies(&msg, &sigs, &pk, rng));
 
             // If we swap (also) the message, verification still fails:
             msg.swap(swap0, swap1);
-            assert!(!batch_verifies(&msg, &sigs, &pk));
+            assert!(!batch_verifies(&msg, &sigs, &pk, rng));
 
             // If we swap the signature so it is consistent, batch is accepted:
             sigs.swap(swap0, swap1);
-            assert!(batch_verifies(&msg, &sigs, &pk));
+            assert!(batch_verifies(&msg, &sigs, &pk, rng));
         }
     }
 }
@@ -341,7 +398,7 @@ fn should_produce_expected_derived_public_keys() {
 
 #[test]
 fn private_derivation_is_compatible_with_public_derivation() {
-    let mut rng = &mut rand::thread_rng();
+    let rng = &mut test_rng();
 
     fn random_path<R: Rng>(rng: &mut R) -> DerivationPath {
         let l = 1 + rng.gen::<usize>() % 9;
@@ -350,7 +407,7 @@ fn private_derivation_is_compatible_with_public_derivation() {
     }
 
     for _ in 0..100 {
-        let master_sk = PrivateKey::generate_using_rng(&mut rng);
+        let master_sk = PrivateKey::generate_using_rng(rng);
         let master_pk = master_sk.public_key();
 
         let path = random_path(rng);
@@ -372,5 +429,163 @@ fn private_derivation_is_compatible_with_public_derivation() {
         let derived_sig = derived_sk.sign_message(&msg);
 
         assert!(derived_pk.verify_signature(&msg, &derived_sig).is_ok());
+    }
+}
+
+#[test]
+fn private_derivation_also_works_for_derived_keys() {
+    let rng = &mut test_rng();
+
+    for _ in 0..100 {
+        let master_sk = PrivateKey::generate_using_rng(rng);
+
+        let chain_code = rng.gen::<[u8; 32]>();
+        let path_len = 2 + rng.gen::<usize>() % 32;
+        let path = (0..path_len)
+            .map(|_| rng.gen::<u32>())
+            .collect::<Vec<u32>>();
+
+        // First derive directly from a normal key
+        let (derived_sk, cc_sk) =
+            master_sk.derive_subkey_with_chain_code(&DerivationPath::new_bip32(&path), &chain_code);
+
+        // Now derive with the path split in half
+
+        let split = rng.gen::<usize>() % (path_len - 1);
+        let path1 = DerivationPath::new_bip32(&path[..split]);
+        let path2 = DerivationPath::new_bip32(&path[split..]);
+
+        // Derive the intermediate secret key and chain code
+        let (isk, icc) = master_sk.derive_subkey_with_chain_code(&path1, &chain_code);
+
+        // From the intermediate key, use the second part of the path to derive the final key
+
+        let (fsk, fcc) = isk.derive_subkey_with_chain_code(&path2, &icc);
+
+        assert_eq!(hex::encode(fcc), hex::encode(cc_sk));
+
+        // We can't serialize the keys so instead compare their respective public keys
+        assert_eq!(
+            hex::encode(fsk.public_key().serialize_raw()),
+            hex::encode(derived_sk.public_key().serialize_raw())
+        );
+    }
+}
+
+#[test]
+fn public_key_accepts_but_can_detect_non_canonical_keys() {
+    // The only non-canonical but torsion free points are 3 non-canonical
+    // encodings of the identity element:
+
+    const NON_CANONICAL: [[u8; 32]; 3] = [
+        hex!("0100000000000000000000000000000000000000000000000000000000000080"),
+        hex!("eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+        hex!("eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+    ];
+
+    for nc in &NON_CANONICAL {
+        let k = PublicKey::deserialize_raw(nc).unwrap();
+        assert!(k.is_torsion_free());
+        assert!(!k.is_canonical());
+    }
+}
+
+#[test]
+fn public_key_accepts_but_can_detect_keys_with_torsion_component() {
+    const WITH_TORSION: [[u8; 32]; 18] = [
+        hex!("c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa"),
+        hex!("26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85"),
+        hex!("868b1e2248079aa8e24834a827ae8892ed0c826f87c897893cefffce3ac15242"),
+        hex!("539903bdd44ecf43aa8ddcb730b1170be7879eab807b2f845754aa07001985bf"),
+        hex!("5f44d0277fa2916ae1c7900ad094cff286a8163ee3aa20b4afe2ba91785389d6"),
+        hex!("67867e99109b36830205573bcf3875f947ee473dc0d562786c7240ff8941d04d"),
+        hex!("67fbbe649a6b8337006f8a2778e79d4f4e8e9c0a7042836eeaa60cb118e9841b"),
+        hex!("dda5020fbe04b0ba7449157945718dfe20299f697b39681b03a5d0bec279ffae"),
+        hex!("872d3823dcc001e354b09d618c70b2658cc3700c097514ae125cd14704c35a20"),
+        hex!("92507296f36dd62d42b7e1306b99d02ffe19dea76f69cdaaf7211ce7f6c24fb9"),
+        hex!("b93d302d6a2d629dee6e1415a00651c20e44c2545feb1914d7d41e4eecead522"),
+        hex!("f41202b41dcda6410ffd5b8b5cd492b98986b60964d2f04aa1d963cdee64b7b0"),
+        hex!("97766a5f4da3bb231935496300946d60bfbe04491750d1e23c4c8eceded274f4"),
+        hex!("ae7ab64ec5821986bed36f98d4135cc047c9630c39b61b5f755678f818804eac"),
+        hex!("05dd133d881cc14005f3cca6f5e759a8c7ea0bbfcef222e15bce904c70a4851b"),
+        hex!("02ce23d0c026d9c95aecc36d5f40d7b7f505e29cad9c2014afd1f467ea15cf40"),
+        hex!("ef164a8acaf9fde87b8dffb1b355f3dcefb857d76842720aefc1bfe26a0d9f2e"),
+        hex!("4c95b17aa3870017da2b9e62d09689a8e9bb12a605093cba2fc2df02fde2fdbf"),
+    ];
+
+    for nc in &WITH_TORSION {
+        let k = PublicKey::deserialize_raw(nc).unwrap();
+        assert!(!k.is_torsion_free());
+        assert!(k.is_canonical());
+    }
+}
+
+#[test]
+fn public_key_accepts_but_can_detect_non_canonical_keys_with_torsion_component() {
+    const WITH_TORSION_AND_NON_CANONICAL: [[u8; 32]; 3] = [
+        hex!("ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+        hex!("edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+        hex!("edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+    ];
+
+    for nc in &WITH_TORSION_AND_NON_CANONICAL {
+        let k = PublicKey::deserialize_raw(nc).unwrap();
+        assert!(!k.is_torsion_free());
+        assert!(!k.is_canonical());
+    }
+}
+
+#[test]
+fn verification_follows_zip215() {
+    let rng = &mut test_rng();
+
+    // ZIP215 test data from https://github.com/zcash/zcash/blob/master/src/gtest/test_consensus.cpp#L119-L1298
+    let zip215_str = include_str!("data/zip215.txt");
+
+    let testcases = zip215_str
+        .split('\n')
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            s.split(':')
+                .map(|s| hex::decode(s).unwrap())
+                .collect::<Vec<_>>()
+        })
+        .map(|s| {
+            (
+                ic_crypto_ed25519::PublicKey::deserialize_raw(&s[0]).unwrap(),
+                s[1].clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let msg = b"Zcash";
+
+    // Test each signature individually
+    for (pk, sig) in &testcases {
+        assert!(pk.verify_signature(msg, sig).is_ok());
+    }
+
+    for n in 1..testcases.len() {
+        let bmsg = vec![&msg[..]; n];
+
+        // Choose n (signature,pk) pairs to validate
+        let (bkeys, bsigs) = {
+            let mut keys = vec![];
+            let mut sigs = vec![];
+
+            for _ in 0..n {
+                // Note this intentionally allows repeats!
+                let idx = rng.gen::<usize>() % testcases.len();
+                keys.push(testcases[idx].0);
+                sigs.push(&testcases[idx].1[..]);
+            }
+
+            (keys, sigs)
+        };
+
+        assert!(
+            ic_crypto_ed25519::PublicKey::batch_verify(&bmsg[..], &bsigs[..], &bkeys[..], rng)
+                .is_ok()
+        );
     }
 }

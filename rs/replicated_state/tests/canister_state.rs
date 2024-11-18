@@ -18,7 +18,6 @@ use std::sync::Arc;
 
 const CANISTER_ID: CanisterId = CanisterId::from_u64(0);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
-const CALLBACK_ID_RAW: u64 = 1;
 
 fn default_input_request() -> RequestOrResponse {
     RequestBuilder::new()
@@ -37,8 +36,8 @@ fn input_response_from(respondent: CanisterId, callback_id: CallbackId) -> Reque
         .into()
 }
 
-fn default_input_response() -> RequestOrResponse {
-    input_response_from(OTHER_CANISTER_ID, CallbackId::from(CALLBACK_ID_RAW))
+fn default_input_response(callback_id: CallbackId) -> RequestOrResponse {
+    input_response_from(OTHER_CANISTER_ID, callback_id)
 }
 
 fn output_request_to(canister_id: CanisterId, callback_id: CallbackId) -> Request {
@@ -76,16 +75,6 @@ impl CanisterFixture {
         }
     }
 
-    fn register_default_callback(&mut self) {
-        register_callback(
-            &mut self.canister_state,
-            CANISTER_ID,
-            OTHER_CANISTER_ID,
-            CallbackId::from(CALLBACK_ID_RAW),
-            NO_DEADLINE,
-        );
-    }
-
     fn push_input(
         &mut self,
         msg: RequestOrResponse,
@@ -109,13 +98,19 @@ impl CanisterFixture {
         iter.pop()
     }
 
-    fn with_input_slot_reservation(&mut self) {
-        self.push_output_request(output_request_to(
+    fn with_input_slot_reservation(&mut self) -> CallbackId {
+        let callback_id = register_callback(
+            &mut self.canister_state,
+            CANISTER_ID,
             OTHER_CANISTER_ID,
-            CallbackId::from(CALLBACK_ID_RAW),
-        ))
-        .unwrap();
+            NO_DEADLINE,
+        );
+
+        self.push_output_request(output_request_to(OTHER_CANISTER_ID, callback_id))
+            .unwrap();
         self.pop_output().unwrap();
+
+        callback_id
     }
 }
 
@@ -128,9 +123,10 @@ fn running_canister_accepts_requests() {
 #[test]
 fn running_canister_accepts_responses() {
     let mut fixture = CanisterFixture::running();
-    fixture.register_default_callback();
-    fixture.with_input_slot_reservation();
-    fixture.push_input(default_input_response()).unwrap();
+    let callback_id = fixture.with_input_slot_reservation();
+    fixture
+        .push_input(default_input_response(callback_id))
+        .unwrap();
 }
 
 #[test]
@@ -148,9 +144,10 @@ fn stopping_canister_rejects_requests() {
 #[test]
 fn stopping_canister_accepts_responses() {
     let mut fixture = CanisterFixture::stopping();
-    fixture.register_default_callback();
-    fixture.with_input_slot_reservation();
-    fixture.push_input(default_input_response()).unwrap();
+    let callback_id = fixture.with_input_slot_reservation();
+    fixture
+        .push_input(default_input_response(callback_id))
+        .unwrap();
 }
 
 #[test]
@@ -169,12 +166,11 @@ fn stopped_canister_rejects_requests() {
 fn stopped_canister_rejects_responses() {
     let mut fixture = CanisterFixture::stopped();
     // A stopped canister can't make a callback id.
-    fixture.with_input_slot_reservation();
     assert_eq!(
-        fixture.push_input(default_input_response()),
+        fixture.push_input(default_input_response(CallbackId::new(123))),
         Err((
             StateError::CanisterStopped(CANISTER_ID),
-            default_input_response(),
+            default_input_response(CallbackId::new(123)),
         )),
     );
 }
@@ -207,22 +203,18 @@ fn validate_responses_against_callback_details() {
     let canister_c_id = canister_test_id(17);
 
     // Creating the CallContext and registering the callback for a request from this canister -> canister B.
-    let callback_id_1 = CallbackId::from(1);
-    register_callback(
+    let callback_id_1 = register_callback(
         &mut fixture.canister_state,
         CANISTER_ID,
         canister_b_id,
-        callback_id_1,
         NO_DEADLINE,
     );
 
     // Creating the CallContext and registering the callback for a request from this canister -> canister C.
-    let callback_id_2 = CallbackId::from(2);
-    register_callback(
+    let callback_id_2 = register_callback(
         &mut fixture.canister_state,
         CANISTER_ID,
         canister_c_id,
-        callback_id_2,
         NO_DEADLINE,
     );
 
@@ -264,7 +256,7 @@ fn validate_responses_against_callback_details() {
 
 #[test]
 fn validate_response_fails_with_mismatching_deadline() {
-    const CALLBACK_ID: CallbackId = CallbackId::new(CALLBACK_ID_RAW);
+    const CALLBACK_ID: CallbackId = CallbackId::new(123);
     const DEADLINE_1: CoarseTime = CoarseTime::from_secs_since_unix_epoch(13);
     const DEADLINE_2: CoarseTime = CoarseTime::from_secs_since_unix_epoch(17);
 
@@ -287,11 +279,10 @@ fn validate_response_fails_with_mismatching_deadline() {
         let mut fixture = CanisterFixture::running();
 
         // Register a callback with the given `callback_deadline`.
-        register_callback(
+        let callback_id = register_callback(
             &mut fixture.canister_state,
             CANISTER_ID,
             OTHER_CANISTER_ID,
-            CALLBACK_ID,
             callback_deadline,
         );
 
@@ -306,7 +297,7 @@ fn validate_response_fails_with_mismatching_deadline() {
         let response = ResponseBuilder::new()
             .originator(CANISTER_ID)
             .respondent(OTHER_CANISTER_ID)
-            .originator_reply_callback(CALLBACK_ID)
+            .originator_reply_callback(callback_id)
             .deadline(response_deadline)
             .build()
             .into();

@@ -2,7 +2,7 @@ use crate::{
     admin_helper::RegistryParams,
     cli::{print_height_info, read_optional, read_optional_node_ids, read_optional_version},
     command_helper::pipe_all,
-    error::RecoveryError,
+    error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
     NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
@@ -21,7 +21,7 @@ use url::Url;
 pub const CANISTER_CALLER_ID: &str = "r7inp-6aaaa-aaaaa-aaabq-cai";
 
 #[derive(
-    Debug, Copy, Clone, EnumIter, EnumString, PartialEq, Deserialize, Serialize, EnumMessage,
+    Copy, Clone, PartialEq, Debug, Deserialize, EnumIter, EnumMessage, EnumString, Serialize,
 )]
 pub enum StepType {
     StopReplica,
@@ -41,15 +41,15 @@ pub enum StepType {
     Cleanup,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Parser)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
 #[clap(version = "1.0")]
 pub struct NNSRecoveryFailoverNodesArgs {
     /// Id of the broken subnet
-    #[clap(long, parse(try_from_str=crate::util::subnet_id_from_str))]
+    #[clap(long, value_parser=crate::util::subnet_id_from_str)]
     pub subnet_id: SubnetId,
 
     /// Replica version to start the new NNS with (has to be blessed by parent NNS)
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub replica_version: Option<ReplicaVersion>,
 
     #[clap(long)]
@@ -84,7 +84,7 @@ pub struct NNSRecoveryFailoverNodesArgs {
     #[clap(long)]
     pub parent_nns_host_ip: Option<IpAddr>,
 
-    #[clap(long, multiple_values(true), parse(try_from_str=crate::util::node_id_from_str))]
+    #[clap(long, num_args(1..), value_parser=crate::util::node_id_from_str)]
     /// Replace the members of the given subnet with these nodes
     pub replacement_nodes: Option<Vec<NodeId>>,
 
@@ -121,7 +121,7 @@ impl NNSRecoveryFailoverNodes {
             subnet_args.validate_nns_url.clone(),
             RegistryPollingStrategy::OnlyOnInit,
         )
-        .expect("Failed to init recovery");
+        .expect_graceful("Failed to init recovery");
 
         let new_registry_local_store = recovery.work_dir.join(IC_REGISTRY_LOCAL_STORE);
         Self {
@@ -142,7 +142,7 @@ impl NNSRecoveryFailoverNodes {
     pub fn get_local_store_tar(&self) -> PathBuf {
         self.recovery
             .work_dir
-            .join(format!("{}.tar.gz", IC_REGISTRY_LOCAL_STORE))
+            .join(format!("{}.tar.zst", IC_REGISTRY_LOCAL_STORE))
     }
 }
 
@@ -336,7 +336,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
             StepType::ProposeCUP => {
                 let url = if let Some(aux_ip) = self.params.aux_ip {
                     let url_str = format!(
-                        "http://[{}]:8081/tmp/recovery_registry/{}.tar.gz",
+                        "http://[{}]:8081/tmp/recovery_registry/{}.tar.zst",
                         aux_ip, IC_REGISTRY_LOCAL_STORE
                     );
                     Some(Url::parse(&url_str).map_err(|e| {

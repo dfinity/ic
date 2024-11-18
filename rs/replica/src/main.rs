@@ -16,7 +16,7 @@ use ic_types::{
     SubnetId,
 };
 use nix::unistd::{setpgid, Pid};
-use opentelemetry::KeyValue;
+use opentelemetry::{trace::TracerProvider, KeyValue};
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{trace, Resource};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
@@ -30,7 +30,7 @@ mod jemalloc_metrics;
 
 // On mac jemalloc causes lmdb to segfault
 #[cfg(target_os = "linux")]
-use jemallocator::Jemalloc;
+use tikv_jemallocator::Jemalloc;
 #[cfg(target_os = "linux")]
 #[global_allocator]
 static ALLOC: Jemalloc = Jemalloc;
@@ -68,11 +68,6 @@ fn main() -> io::Result<()> {
     compile_error!("compilation is only allowed for 64-bit targets");
     // Ensure that the hardcoded constant matches the OS page size.
     assert_eq!(ic_sys::sysconf_page_size(), PAGE_SIZE);
-
-    // Produce a thread dump and exit if this is a child process created for this
-    // purpose.
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    ic_backtrace::init();
 
     // At this point we need to setup a new process group. This is
     // done to ensure all our children processes belong to the same
@@ -287,7 +282,7 @@ fn main() -> io::Result<()> {
             match opentelemetry_otlp::new_pipeline()
                 .tracing()
                 .with_trace_config(
-                    trace::config()
+                    trace::Config::default()
                         .with_sampler(opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(0.01))
                         .with_resource(Resource::new(vec![KeyValue::new(
                             "service.name",
@@ -298,7 +293,8 @@ fn main() -> io::Result<()> {
                 .install_batch(opentelemetry_sdk::runtime::Tokio)
             {
                 Ok(tracer) => {
-                    let otel_layer = tracing_opentelemetry::OpenTelemetryLayer::new(tracer);
+                    let otel_layer =
+                        tracing_opentelemetry::OpenTelemetryLayer::new(tracer.tracer("jaeger"));
                     tracing_layers.push(otel_layer.boxed());
                 }
                 Err(err) => {

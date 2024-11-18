@@ -1,10 +1,9 @@
 use std::time::{Duration, SystemTime};
 
-use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
 
 use prost::Message;
 
-use candid::{CandidType, Deserialize};
 use dfn_core::api::now;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -12,6 +11,7 @@ use ic_base_types::NodeId;
 use ic_crypto_node_key_validation::ValidIDkgDealingEncryptionPublicKey;
 use ic_nns_common::registry::get_subnet_ids_from_subnet_list;
 use ic_protobuf::registry::{crypto::v1::PublicKey, subnet::v1::SubnetRecord};
+use ic_registry_canister_api::UpdateNodeDirectlyPayload;
 use ic_registry_keys::{make_crypto_node_key, make_node_record_key};
 use ic_registry_transport::update;
 use ic_types::{crypto::KeyPurpose, PrincipalId};
@@ -149,7 +149,7 @@ impl Registry {
         // 6. Create mutation for new record
         let insert_idkg_key = update(
             idkg_pk_key.as_bytes(),
-            encode_or_panic(valid_idkg_dealing_encryption_pk.get()),
+            valid_idkg_dealing_encryption_pk.get().encode_to_vec(),
         );
 
         let mutations = vec![insert_idkg_key];
@@ -192,12 +192,6 @@ impl Registry {
             })
             .max()
     }
-}
-
-/// The payload of an request to update keys of the existing node.
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct UpdateNodeDirectlyPayload {
-    pub idkg_dealing_encryption_pk: Option<Vec<u8>>,
 }
 
 #[cfg(test)]
@@ -464,7 +458,7 @@ mod test {
                     );
                     update(
                         make_crypto_node_key(*id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
-                        encode_or_panic(&idkg_public_key),
+                        idkg_public_key.encode_to_vec(),
                     )
                 })
                 .collect(),

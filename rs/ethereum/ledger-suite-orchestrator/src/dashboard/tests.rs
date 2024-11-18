@@ -1,5 +1,7 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
-use crate::dashboard::tests::fixtures::usdc_metadata;
+use crate::dashboard::tests::fixtures::{
+    cketh_ledger_suite, usdc_metadata, usdc_token_id, usdt_token_id,
+};
 use crate::dashboard::DashboardTemplate;
 use candid::Principal;
 use fixtures::{usdc, usdt, USDC_ADDRESS, USDT_ADDRESS};
@@ -15,11 +17,15 @@ use ic_stable_structures::DefaultMemoryImpl;
 use std::str::FromStr;
 
 #[test]
-fn should_display_managed_canisters() {
+fn should_be_empty_initially() {
     DashboardAssert::assert_that(initial_dashboard())
         .has_no_elements_matching("#managed-canisters")
+        .has_no_elements_matching("#other-canisters")
         .has_no_elements_matching("#wasm-store");
+}
 
+#[test]
+fn should_display_managed_canisters() {
     const USDC_LEDGER_ID: &str = "apia6-jaaaa-aaaar-qabma-cai";
     const USDC_INDEX_ID: &str = "s3zol-vqaaa-aaaar-qacpa-cai";
     const USDC_ARCHIVE_ID: &str = "t4dy3-uiaaa-aaaar-qafua-cai";
@@ -35,7 +41,7 @@ fn should_display_managed_canisters() {
     state.record_new_erc20_token(
         usdc(),
         CanistersMetadata {
-            ckerc20_token_symbol: "ckUSDC".to_string(),
+            token_symbol: "ckUSDC".to_string(),
         },
     );
     state.record_created_canister::<Ledger>(&usdc(), Principal::from_str(USDC_LEDGER_ID).unwrap());
@@ -66,7 +72,7 @@ fn should_display_managed_canisters() {
     state.record_new_erc20_token(
         usdt(),
         CanistersMetadata {
-            ckerc20_token_symbol: "ckUSDT".to_string(),
+            token_symbol: "ckUSDT".to_string(),
         },
     );
     state.record_created_canister::<Ledger>(&usdt(), Principal::from_str(USDT_LEDGER_ID).unwrap());
@@ -106,8 +112,14 @@ fn should_display_managed_canisters() {
         .has_ledger(USDT_LEDGER_ID, LEDGER_WASM_HASH)
         .has_index(USDT_INDEX_ID, INDEX_WASM_HASH);
 
-    state.record_archives(&usdc(), vec![Principal::from_str(USDC_ARCHIVE_ID).unwrap()]);
-    state.record_archives(&usdt(), vec![Principal::from_str(USDT_ARCHIVE_ID).unwrap()]);
+    state.record_archives(
+        &usdc_token_id(),
+        vec![Principal::from_str(USDC_ARCHIVE_ID).unwrap()],
+    );
+    state.record_archives(
+        &usdt_token_id(),
+        vec![Principal::from_str(USDT_ARCHIVE_ID).unwrap()],
+    );
     DashboardAssert::assert_that_dashboard_from_state(&state)
         .has_erc20("ckUSDC", 1, USDC_ADDRESS)
         .has_ledger(USDC_LEDGER_ID, LEDGER_WASM_HASH)
@@ -117,6 +129,25 @@ fn should_display_managed_canisters() {
         .has_ledger(USDT_LEDGER_ID, LEDGER_WASM_HASH)
         .has_index(USDT_INDEX_ID, INDEX_WASM_HASH)
         .has_archive(USDT_ARCHIVE_ID);
+}
+
+#[test]
+fn should_display_other_managed_canisters() {
+    let mut state = initial_state();
+    let cketh = cketh_ledger_suite(&state);
+    state.record_manage_other_canisters(cketh);
+
+    DashboardAssert::assert_that_dashboard_from_state(&state)
+        .has_other_token("ckETH")
+        .has_ledger(
+            "ss2fx-dyaaa-aaaar-qacoq-cai",
+            "8457289d3b3179aa83977ea21bfa2fc85e402e1f64101ecb56a4b963ed33a1e6",
+        )
+        .has_index(
+            "s3zol-vqaaa-aaaar-qacpa-cai",
+            "eb3096906bf9a43996d2ca9ca9bfec333a402612f132876c8ed1b01b9844112a",
+        )
+        .has_archive("xob7s-iqaaa-aaaar-qacra-cai");
 }
 
 #[test]
@@ -278,16 +309,32 @@ mod assertions {
             ckerc20_token_symbol: &str,
             chain_id: u64,
             erc20_address: &str,
-        ) -> DashboardErc20Assert {
+        ) -> DashboardTokenAssert {
             self.has_string_value(
                 &format!("#managed-canisters-{chain_id}-{erc20_address}"),
                 &format!("{ckerc20_token_symbol}({erc20_address})"),
                 "wrong erc20 token",
             );
-            DashboardErc20Assert {
+            DashboardTokenAssert {
                 assert: self,
-                chain_id,
-                erc20_address: erc20_address.to_string(),
+                token_selector: TokenSelector::Erc20 {
+                    chain_id,
+                    erc20_address: erc20_address.to_string(),
+                },
+            }
+        }
+
+        pub fn has_other_token(self, token_symbol: &str) -> DashboardTokenAssert {
+            self.has_string_value(
+                &format!("#other-canisters-{token_symbol}"),
+                token_symbol,
+                "wrong other token",
+            );
+            DashboardTokenAssert {
+                assert: self,
+                token_selector: TokenSelector::Other {
+                    token_symbol: token_symbol.to_string(),
+                },
             }
         }
 
@@ -344,46 +391,65 @@ mod assertions {
         }
     }
 
-    pub struct DashboardErc20Assert {
+    pub struct DashboardTokenAssert {
         assert: DashboardAssert,
-        chain_id: u64,
-        erc20_address: String,
+        token_selector: TokenSelector,
     }
 
-    impl DashboardErc20Assert {
+    pub enum TokenSelector {
+        Erc20 {
+            chain_id: u64,
+            erc20_address: String,
+        },
+        Other {
+            token_symbol: String,
+        },
+    }
+
+    impl DashboardTokenAssert {
         pub fn has_erc20(
             self,
             ckerc20_token_symbol: &str,
             chain_id: u64,
             erc20_address: &str,
-        ) -> DashboardErc20Assert {
+        ) -> DashboardTokenAssert {
             self.assert
                 .has_erc20(ckerc20_token_symbol, chain_id, erc20_address)
         }
 
         pub fn has_ledger(self, expected_canister_id: &str, expected_version: &str) -> Self {
-            self.has_erc20_table_row_string_value("Ledger", expected_canister_id, expected_version)
+            self.has_token_table_row_string_value("Ledger", expected_canister_id, expected_version)
         }
 
         pub fn has_index(self, expected_canister_id: &str, expected_version: &str) -> Self {
-            self.has_erc20_table_row_string_value("Index", expected_canister_id, expected_version)
+            self.has_token_table_row_string_value("Index", expected_canister_id, expected_version)
         }
 
         pub fn has_archive(self, expected_canister_id: &str) -> Self {
-            self.has_erc20_table_row_string_value("Archive", expected_canister_id, "N/A")
+            self.has_token_table_row_string_value("Archive", expected_canister_id, "N/A")
         }
 
-        fn has_erc20_table_row_string_value(
+        fn has_token_table_row_string_value(
             self,
             canister_type: &str,
             expected_canister_id: &str,
             expected_version: &str,
         ) -> Self {
-            let row_selector = Selector::parse(&format!(
-                "#managed-canisters-{}-{} + table > tbody > tr",
-                self.chain_id, self.erc20_address
-            ))
-            .unwrap();
+            let row_selector = match &self.token_selector {
+                TokenSelector::Erc20 {
+                    chain_id,
+                    erc20_address,
+                } => Selector::parse(&format!(
+                    "#managed-canisters-{}-{} + table > tbody > tr",
+                    chain_id, erc20_address
+                ))
+                .unwrap(),
+                TokenSelector::Other { token_symbol } => Selector::parse(&format!(
+                    "#other-canisters-{} + table > tbody > tr",
+                    token_symbol
+                ))
+                .unwrap(),
+            };
             let cell_selector = Selector::parse("td").unwrap();
             for row in self.assert.actual.select(&row_selector) {
                 let cells: Vec<_> = row
@@ -429,8 +495,13 @@ mod assertions {
 }
 
 mod fixtures {
+    use ic_ledger_suite_orchestrator::candid::{
+        InstalledCanister, InstalledLedgerSuite as CandidInstalledLedgerSuite,
+    };
     use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
-    use ic_ledger_suite_orchestrator::state::CanistersMetadata;
+    use ic_ledger_suite_orchestrator::state::{
+        CanistersMetadata, InstalledLedgerSuite, State, TokenId,
+    };
 
     pub const USDC_ADDRESS: &str = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
     pub const USDT_ADDRESS: &str = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
@@ -446,7 +517,7 @@ mod fixtures {
 
     pub fn usdc_metadata() -> CanistersMetadata {
         CanistersMetadata {
-            ckerc20_token_symbol: "ckUSDC".to_string(),
+            token_symbol: "ckUSDC".to_string(),
         }
     }
 
@@ -456,6 +527,37 @@ mod fixtures {
             address: USDT_ADDRESS.to_string(),
         }
         .try_into()
+        .unwrap()
+    }
+
+    pub fn usdc_token_id() -> TokenId {
+        TokenId::from(usdc())
+    }
+
+    pub fn usdt_token_id() -> TokenId {
+        TokenId::from(usdt())
+    }
+
+    pub fn cketh_ledger_suite(state: &State) -> InstalledLedgerSuite {
+        InstalledLedgerSuite::validate(
+            state,
+            CandidInstalledLedgerSuite {
+                token_symbol: "ckETH".to_string(),
+                ledger: InstalledCanister {
+                    canister_id: "ss2fx-dyaaa-aaaar-qacoq-cai".parse().unwrap(),
+                    installed_wasm_hash:
+                        "8457289d3b3179aa83977ea21bfa2fc85e402e1f64101ecb56a4b963ed33a1e6"
+                            .to_string(),
+                },
+                index: InstalledCanister {
+                    canister_id: "s3zol-vqaaa-aaaar-qacpa-cai".parse().unwrap(),
+                    installed_wasm_hash:
+                        "eb3096906bf9a43996d2ca9ca9bfec333a402612f132876c8ed1b01b9844112a"
+                            .to_string(),
+                },
+                archives: Some(vec!["xob7s-iqaaa-aaaar-qacra-cai".parse().unwrap()]),
+            },
+        )
         .unwrap()
     }
 }

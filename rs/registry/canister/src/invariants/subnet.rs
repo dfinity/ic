@@ -8,9 +8,10 @@ use crate::invariants::common::{
 };
 
 use ic_base_types::{NodeId, PrincipalId};
-use ic_nns_common::registry::{decode_or_panic, MAX_NUM_SSH_KEYS};
+use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
 use ic_registry_keys::{make_node_record_key, make_subnet_record_key, SUBNET_RECORD_KEY_PREFIX};
+use prost::Message;
 
 /// Subnet invariants hold iff:
 ///    * Each SSH key access list does not contain more than 50 keys
@@ -125,7 +126,7 @@ pub(crate) fn get_subnet_records_map(
     let mut subnets: BTreeMap<Vec<u8>, SubnetRecord> = BTreeMap::new();
     for (k, v) in snapshot {
         if k.starts_with(SUBNET_RECORD_KEY_PREFIX.as_bytes()) {
-            let record = decode_or_panic::<SubnetRecord>(v.clone());
+            let record = SubnetRecord::decode(v.as_slice()).unwrap();
             subnets.insert((*k).clone(), record);
         }
     }

@@ -14,7 +14,7 @@ BAZEL_ICT_TARGET="//rs/tests/ict:ict"
 ICT_BIN="$CURRENT_SCRIPT_DIR/../bazel-out/k8-opt/bin/rs/tests/ict/ict_/ict"
 
 if [ "$(hostname)" != "devenv-container" ]; then
-    echo -e "${BOLD}${RED}This script can only be executed within a devenv-container. Make sure you first executed:\n/ic$ ./gitlab-ci/container/container-run.sh${NC}"
+    echo -e "${BOLD}${RED}This script can only be executed within a devenv-container. Make sure you first executed:\n/ic$ ./ci/container/container-run.sh${NC}"
     exit 1
 fi
 

@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/types/types",
 ]
 

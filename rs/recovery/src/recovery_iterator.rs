@@ -107,7 +107,7 @@ impl Iterator for NNSRecoveryFailoverNodes {
 mod tests {
     use super::*;
 
-    #[derive(Debug, Copy, Clone, EnumMessage, PartialEq)]
+    #[derive(Copy, Clone, PartialEq, Debug, EnumMessage)]
     enum FakeStep {
         P0,
         P1,

@@ -1,9 +1,10 @@
 use canister_test::{Canister, Runtime};
 use dfn_candid::candid;
-use ic_nns_gtc::{init::GenesisTokenCanisterInitPayloadBuilder, pb::v1::Gtc};
+use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
-use ic_nns_test_utils::itest_helpers::{
-    maybe_upgrade_to_self, set_up_genesis_token_canister, UpgradeTestingScenario,
+use ic_nns_test_utils::{
+    gtc_helpers::GenesisTokenCanisterInitPayloadBuilder,
+    itest_helpers::{maybe_upgrade_to_self, set_up_genesis_token_canister, UpgradeTestingScenario},
 };
 use ic_nns_test_utils_macros::parameterized_upgrades;
 

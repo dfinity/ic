@@ -8,8 +8,30 @@ actor {
     private let governanceCanister : Principal = Prim.principalOfActor Governance;
     private let root : Principal = Prim.principalOfActor Root;
 
-    type UpgradeRootProposalPayload = { wasm_module : Blob; module_arg : Blob; stop_upgrade_start : Bool };
-    type HardResetRootToVersionPayload = { wasm_module : Blob; init_arg : Blob; };
+    type UpgradeRootProposalPayload = {
+      wasm_module : Blob;
+      module_arg : Blob;
+      stop_upgrade_start : Bool;
+    };
+
+    type HardResetRootToVersionPayload = {
+      wasm_module : Blob;
+      init_arg : Blob;
+    };
+
+    type CanisterIdRecord = { canister_id : Principal };
+
+    type LogVisibility = {#controllers; #public_};
+
+    type CanisterSettings = {
+      controllers : ?[Principal];
+      compute_allocation: ?Nat;
+      memory_allocation: ?Nat;
+      freezing_threshold: ?Nat;
+      reserved_cycles_limit: ?Nat;
+      wasm_memory_limit: ?Nat;
+      log_visibility: ?LogVisibility;
+    };
 
     // IC00 is the management canister. We rely on it for the four
     // fundamental methods as listed below.
@@ -22,7 +44,11 @@ actor {
       } -> async ();
       start_canister : CanisterIdRecord -> async ();
       stop_canister : CanisterIdRecord -> async ();
-      uninstall_code : CanisterIdRecord -> async ()
+      uninstall_code : CanisterIdRecord -> async ();
+      update_settings: {
+        canister_id: Principal;
+        settings: CanisterSettings;
+      } -> async ();
     };
 
     public shared ({caller}) func upgrade_root(pl : UpgradeRootProposalPayload) : async () {
@@ -72,10 +98,16 @@ actor {
       debug { Prim.debugPrint "hard_reset_root: finished installing" };
     };
 
-    type CanisterIdRecord = { canister_id : Principal };
+    public shared ({caller}) func update_root_settings(settings: CanisterSettings) : async () {
+      assert caller == governanceCanister;
 
-    type DefiniteCanisterSettings = {
-        controllers : [Principal];
+      debug { Prim.debugPrint ("update_root_settings: about to update settings") };
 
+      await ic00.update_settings({
+        canister_id = root;
+        settings = settings;
+      });
+
+      debug { Prim.debugPrint ("update_root_settings: finished updating settings") };
     };
 }

@@ -5,10 +5,12 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_types",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:strum_macros",
     ],
     version = "0.9.0",
     visibility = [
+        "//packages/ic-signature-verification:__pkg__",
         "//rs/certification:__pkg__",
         "//rs/certification/test-utils:__pkg__",
         "//rs/crypto:__subpackages__",
@@ -20,6 +22,7 @@ rust_library(
         "//rs/validator/http_request_test_utils:__subpackages__",
     ],
     deps = [
+        # Keep sorted.
         "//rs/phantom_newtype",
         "//rs/protobuf",
         "@crate_index//:arrayvec",

@@ -1,32 +1,32 @@
 use std::{
-    fmt,
     hash::{Hash, Hasher},
     str::FromStr,
     sync::Arc,
+    time::Duration,
 };
 
 use anyhow::anyhow;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
-    body::{Body, StreamBody},
-    extract::{MatchedPath, Path, State},
-    http::{Request, StatusCode},
+    body::Body,
+    extract::{MatchedPath, Path, Request, State},
+    http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
     BoxError, Extension,
 };
 use bytes::Bytes;
 use candid::{CandidType, Decode, Principal};
-use http::{
-    header::{HeaderName, HeaderValue, CONTENT_TYPE},
-    Method,
+use http::header::{HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
+use ic_bn_lib::http::{
+    body::buffer_body, headers::*, proxy, Client as HttpClient, Error as IcBnError,
 };
+pub use ic_bn_lib::types::RequestType;
 use ic_types::{
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     CanisterId, PrincipalId, SubnetId,
 };
-
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -37,7 +37,7 @@ use url::Url;
 use crate::{
     cache::CacheStatus,
     core::{decoder_config, MAX_REQUEST_BODY_SIZE},
-    http::{read_streaming_body, reqwest_error_infer, HttpClient},
+    http::error_infer,
     persist::{RouteSubnet, Routes},
     retry::RetryResult,
     snapshot::{Node, RegistrySnapshot},
@@ -47,44 +47,6 @@ use crate::{
 const IC_API_VERSION: &str = "0.18.0";
 pub const ANONYMOUS_PRINCIPAL: Principal = Principal::anonymous();
 const METHOD_HTTP: &str = "http_request";
-
-// Clippy complains that these are interior-mutable.
-// We don't mutate them, so silence it.
-// https://rust-lang.github.io/rust-clippy/master/index.html#/declare_interior_mutable_const
-#[allow(clippy::declare_interior_mutable_const)]
-const CONTENT_TYPE_CBOR: HeaderValue = HeaderValue::from_static("application/cbor");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_CACHE: HeaderName = HeaderName::from_static("x-ic-cache-status");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_CACHE_BYPASS_REASON: HeaderName =
-    HeaderName::from_static("x-ic-cache-bypass-reason");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_SUBNET_ID: HeaderName = HeaderName::from_static("x-ic-subnet-id");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_SUBNET_TYPE: HeaderName = HeaderName::from_static("x-ic-subnet-type");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_NODE_ID: HeaderName = HeaderName::from_static("x-ic-node-id");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_CANISTER_ID_CBOR: HeaderName = HeaderName::from_static("x-ic-canister-id-cbor");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_METHOD_NAME: HeaderName = HeaderName::from_static("x-ic-method-name");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_SENDER: HeaderName = HeaderName::from_static("x-ic-sender");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_REQUEST_TYPE: HeaderName = HeaderName::from_static("x-ic-request-type");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_RETRIES: HeaderName = HeaderName::from_static("x-ic-retries");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_ERROR_CAUSE: HeaderName = HeaderName::from_static("x-ic-error-cause");
-#[allow(clippy::declare_interior_mutable_const)]
-const HEADER_X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
-#[allow(clippy::declare_interior_mutable_const)]
-pub const HEADER_X_REAL_IP: http::HeaderName = http::HeaderName::from_static("x-real-ip");
-#[allow(clippy::declare_interior_mutable_const)]
-pub const HEADER_X_IC_COUNTRY_CODE: http::HeaderName =
-    http::HeaderName::from_static("x-ic-country-code");
 
 const HEADERS_HIDE_HTTP_REQUEST: [&str; 4] =
     ["x-real-ip", "x-forwarded-for", "x-request-id", "user-agent"];
@@ -103,33 +65,20 @@ lazy_static! {
         Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
 }
 
-// Type of IC request
-#[derive(Debug, Default, Clone, Copy, Display, PartialEq, Eq, Hash, IntoStaticStr, Deserialize)]
-#[strum(serialize_all = "snake_case")]
-#[serde(rename_all = "snake_case")]
-pub enum RequestType {
-    #[default]
-    Unknown,
-    Status,
-    Query,
-    Call,
-    CallV3,
-    ReadState,
-    ReadStateSubnet,
-}
-
-#[derive(Debug, Clone, Display)]
+#[derive(Clone, Debug, Display)]
 #[strum(serialize_all = "snake_case")]
 pub enum RateLimitCause {
     Normal,
     Bouncer,
-    Canister,
+    Generic,
 }
 
 // Categorized possible causes for request processing failures
 // Not using Error as inner type since it's not cloneable
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Display)]
+#[strum(serialize_all = "snake_case")]
 pub enum ErrorCause {
+    BodyTimedOut,
     UnableToReadBody(String),
     PayloadTooLarge(usize),
     UnableToParseCBOR(String),
@@ -139,6 +88,7 @@ pub enum ErrorCause {
     MalformedResponse(String),
     NoRoutingTable,
     SubnetNotFound,
+    CanisterNotFound,
     NoHealthyNodes,
     ReplicaErrorDNS(String),
     ReplicaErrorConnect,
@@ -146,34 +96,13 @@ pub enum ErrorCause {
     ReplicaTLSErrorOther(String),
     ReplicaTLSErrorCert(String),
     ReplicaErrorOther(String),
+    #[strum(serialize = "rate_limited_{0}")]
     RateLimited(RateLimitCause),
+    #[strum(serialize = "internal_server_error")]
     Other(String),
 }
 
 impl ErrorCause {
-    pub fn status_code(&self) -> StatusCode {
-        match self {
-            Self::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
-            Self::UnableToReadBody(_) => StatusCode::REQUEST_TIMEOUT,
-            Self::UnableToParseCBOR(_) => StatusCode::BAD_REQUEST,
-            Self::UnableToParseHTTPArg(_) => StatusCode::BAD_REQUEST,
-            Self::LoadShed => StatusCode::TOO_MANY_REQUESTS,
-            Self::MalformedRequest(_) => StatusCode::BAD_REQUEST,
-            Self::MalformedResponse(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::NoRoutingTable => StatusCode::SERVICE_UNAVAILABLE,
-            Self::SubnetNotFound => StatusCode::BAD_REQUEST, // TODO change to 404?
-            Self::NoHealthyNodes => StatusCode::SERVICE_UNAVAILABLE,
-            Self::ReplicaErrorDNS(_) => StatusCode::SERVICE_UNAVAILABLE,
-            Self::ReplicaErrorConnect => StatusCode::SERVICE_UNAVAILABLE,
-            Self::ReplicaTimeout => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::ReplicaTLSErrorOther(_) => StatusCode::SERVICE_UNAVAILABLE,
-            Self::ReplicaTLSErrorCert(_) => StatusCode::SERVICE_UNAVAILABLE,
-            Self::ReplicaErrorOther(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::RateLimited(_) => StatusCode::TOO_MANY_REQUESTS,
-        }
-    }
-
     pub fn details(&self) -> Option<String> {
         match self {
             Self::Other(x) => Some(x.clone()),
@@ -193,37 +122,31 @@ impl ErrorCause {
     }
 
     pub fn retriable(&self) -> bool {
-        matches!(
-            self,
-            Self::ReplicaErrorDNS(_)
-                | Self::ReplicaErrorConnect
-                | Self::ReplicaTLSErrorOther(_)
-                | Self::ReplicaTLSErrorCert(_)
-        )
+        !matches!(self, Self::PayloadTooLarge(_) | Self::MalformedResponse(_))
     }
-}
 
-impl fmt::Display for ErrorCause {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    pub fn to_client_facing_error(&self) -> ErrorClientFacing {
         match self {
-            Self::Other(_) => write!(f, "general_error"),
-            Self::UnableToReadBody(_) => write!(f, "unable_to_read_body"),
-            Self::PayloadTooLarge(_) => write!(f, "payload_too_large"),
-            Self::UnableToParseCBOR(_) => write!(f, "unable_to_parse_cbor"),
-            Self::UnableToParseHTTPArg(_) => write!(f, "unable_to_parse_http_arg"),
-            Self::LoadShed => write!(f, "load_shed"),
-            Self::MalformedRequest(_) => write!(f, "malformed_request"),
-            Self::MalformedResponse(_) => write!(f, "malformed_response"),
-            Self::NoRoutingTable => write!(f, "no_routing_table"),
-            Self::SubnetNotFound => write!(f, "subnet_not_found"),
-            Self::NoHealthyNodes => write!(f, "no_healthy_nodes"),
-            Self::ReplicaErrorDNS(_) => write!(f, "replica_error_dns"),
-            Self::ReplicaErrorConnect => write!(f, "replica_error_connect"),
-            Self::ReplicaTimeout => write!(f, "replica_timeout"),
-            Self::ReplicaTLSErrorOther(_) => write!(f, "replica_tls_error"),
-            Self::ReplicaTLSErrorCert(_) => write!(f, "replica_tls_error_cert"),
-            Self::ReplicaErrorOther(_) => write!(f, "replica_error_other"),
-            Self::RateLimited(x) => write!(f, "rate_limited_{x}"),
+            Self::Other(_) => ErrorClientFacing::Other,
+            Self::BodyTimedOut => ErrorClientFacing::BodyTimedOut,
+            Self::UnableToReadBody(_) => ErrorClientFacing::Other,
+            Self::PayloadTooLarge(x) => ErrorClientFacing::PayloadTooLarge(*x),
+            Self::UnableToParseCBOR(x) => ErrorClientFacing::UnableToParseCBOR(x.clone()),
+            Self::UnableToParseHTTPArg(x) => ErrorClientFacing::UnableToParseHTTPArg(x.clone()),
+            Self::LoadShed => ErrorClientFacing::LoadShed,
+            Self::MalformedRequest(x) => ErrorClientFacing::MalformedRequest(x.clone()),
+            Self::MalformedResponse(_) => ErrorClientFacing::ReplicaError,
+            Self::NoRoutingTable => ErrorClientFacing::ServiceUnavailable,
+            Self::SubnetNotFound => ErrorClientFacing::SubnetNotFound,
+            Self::CanisterNotFound => ErrorClientFacing::CanisterNotFound,
+            Self::NoHealthyNodes => ErrorClientFacing::NoHealthyNodes,
+            Self::ReplicaErrorDNS(_) => ErrorClientFacing::ReplicaError,
+            Self::ReplicaErrorConnect => ErrorClientFacing::ReplicaError,
+            Self::ReplicaTimeout => ErrorClientFacing::ReplicaError,
+            Self::ReplicaTLSErrorOther(_) => ErrorClientFacing::ReplicaError,
+            Self::ReplicaTLSErrorCert(_) => ErrorClientFacing::ReplicaError,
+            Self::ReplicaErrorOther(_) => ErrorClientFacing::ReplicaError,
+            Self::RateLimited(_) => ErrorClientFacing::RateLimited,
         }
     }
 }
@@ -231,19 +154,83 @@ impl fmt::Display for ErrorCause {
 // Creates the response from ErrorCause and injects itself into extensions to be visible by middleware
 impl IntoResponse for ErrorCause {
     fn into_response(self) -> Response {
-        let mut body = self.to_string();
+        let client_facing_error = self.to_client_facing_error();
+        client_facing_error.into_response()
+    }
+}
 
-        if let Some(v) = self.details() {
-            body = format!("{body}: {v}");
+#[derive(Clone, Debug, Display, IntoStaticStr)]
+#[strum(serialize_all = "snake_case")]
+pub enum ErrorClientFacing {
+    BodyTimedOut,
+    CanisterNotFound,
+    LoadShed,
+    MalformedRequest(String),
+    NoHealthyNodes,
+    #[strum(serialize = "internal_server_error")]
+    Other,
+    PayloadTooLarge(usize),
+    RateLimited,
+    ReplicaError,
+    ServiceUnavailable,
+    SubnetNotFound,
+    UnableToParseCBOR(String),
+    UnableToParseHTTPArg(String),
+}
+
+impl ErrorClientFacing {
+    pub fn status_code(&self) -> StatusCode {
+        match self {
+            Self::BodyTimedOut => StatusCode::REQUEST_TIMEOUT,
+            Self::CanisterNotFound => StatusCode::BAD_REQUEST,
+            Self::LoadShed => StatusCode::TOO_MANY_REQUESTS,
+            Self::MalformedRequest(_) => StatusCode::BAD_REQUEST,
+            Self::NoHealthyNodes => StatusCode::SERVICE_UNAVAILABLE,
+            Self::Other => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+            Self::ReplicaError => StatusCode::SERVICE_UNAVAILABLE,
+            Self::ServiceUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+            Self::SubnetNotFound => StatusCode::BAD_REQUEST,
+            Self::UnableToParseCBOR(_) => StatusCode::BAD_REQUEST,
+            Self::UnableToParseHTTPArg(_) => StatusCode::BAD_REQUEST,
         }
+    }
 
-        let mut resp = (self.status_code(), format!("{body}\n")).into_response();
+    pub fn details(&self) -> String {
+        match self {
+            Self::BodyTimedOut => "Reading the request body timed out due to data arriving too slowly.".to_string(),
+            Self::CanisterNotFound => "The specified canister does not exist.".to_string(),
+            Self::LoadShed => "Temporarily unable to handle the request due to high load. Please try again later.".to_string(),
+            Self::MalformedRequest(x) => x.clone(),
+            Self::NoHealthyNodes => "There are currently no healthy replica nodes available to handle the request. This may be due to an ongoing upgrade of the replica software in the subnet. Please try again later.".to_string(),
+            Self::Other => "Internal Server Error".to_string(),
+            Self::PayloadTooLarge(x) => format!("Payload is too large: maximum body size is {x} bytes."),
+            Self::RateLimited => "Rate limit exceeded. Please slow down requests and try again later.".to_string(),
+            Self::ReplicaError => "An unexpected error occurred while communicating with the upstream replica node. Please try again later.".to_string(),
+            Self::ServiceUnavailable => "The API boundary node is temporarily unable to process the request. Please try again later.".to_string(),
+            Self::SubnetNotFound => "The specified subnet cannot be found.".to_string(),
+            Self::UnableToParseCBOR(x) => format!("Failed to parse the CBOR request body: {x}"),
+            Self::UnableToParseHTTPArg(x) => format!("Unable to decode the arguments of the request to the http_request method: {x}"),
+        }
+    }
+}
+
+// Creates the response from ErrorClientFacing and injects itself into extensions to be visible by middleware
+impl IntoResponse for ErrorClientFacing {
+    fn into_response(self) -> Response {
+        let error_cause = self.to_string();
+
+        let headers = [(X_IC_ERROR_CAUSE, error_cause.clone())];
+        let body = format!("error: {}\ndetails: {}", error_cause, self.details());
+
+        let mut resp = (self.status_code(), headers, body).into_response();
         resp.extensions_mut().insert(self);
         resp
     }
 }
 
-#[derive(Clone, CandidType, Deserialize, Hash, PartialEq)]
+#[derive(Clone, PartialEq, Hash, CandidType, Deserialize)]
 pub struct HttpRequest {
     pub method: String,
     pub url: String,
@@ -253,7 +240,7 @@ pub struct HttpRequest {
 }
 
 // Object that holds per-request information
-#[derive(Default, Clone)]
+#[derive(Clone, Default)]
 pub struct RequestContext {
     pub request_type: RequestType,
     pub request_size: u32,
@@ -314,7 +301,7 @@ impl PartialEq for RequestContext {
 impl Eq for RequestContext {}
 
 // This is the subset of the request fields
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct ICRequestContent {
     sender: Principal,
     canister_id: Option<Principal>,
@@ -324,7 +311,7 @@ struct ICRequestContent {
     arg: Option<Blob>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ICRequestEnvelope {
     content: ICRequestContent,
 }
@@ -375,28 +362,11 @@ impl ProxyRouter {
 
 #[async_trait]
 impl Proxy for ProxyRouter {
-    async fn proxy(&self, request: Request<Body>, url: Url) -> Result<Response, ErrorCause> {
-        // Prepare the request
-        let (parts, body) = request.into_parts();
-
-        let mut request = reqwest::Request::new(Method::POST, url);
-        *request.headers_mut() = parts.headers;
-        *request.body_mut() = Some(body.into());
-
-        // Execute request
-        let response = self
-            .http_client
-            .execute(request)
+    async fn proxy(&self, request: Request, url: Url) -> Result<Response, ErrorCause> {
+        // TODO map errors
+        let response = proxy::proxy(url, request, &self.http_client)
             .await
-            .map_err(reqwest_error_infer)?;
-
-        // Convert Reqwest response into Axum one with body streaming
-        let status = response.status();
-        let headers = response.headers().clone();
-
-        let mut response = StreamBody::new(response.bytes_stream()).into_response();
-        *response.status_mut() = status;
-        *response.headers_mut() = headers;
+            .map_err(|e| error_infer(&e))?;
 
         Ok(response)
     }
@@ -413,7 +383,7 @@ impl Lookup for ProxyRouter {
             .load_full()
             .ok_or(ErrorCause::NoRoutingTable)? // No routing table present
             .lookup_by_canister_id(canister_id.get_ref().0)
-            .ok_or(ErrorCause::SubnetNotFound)?; // Requested canister route wasn't found
+            .ok_or(ErrorCause::CanisterNotFound)?; // Requested canister route wasn't found
 
         Ok(subnet)
     }
@@ -516,13 +486,13 @@ impl From<BoxError> for ApiError {
 pub async fn validate_canister_request(
     matched_path: MatchedPath,
     canister_id: Path<String>,
-    mut request: Request<Body>,
-    next: Next<Body>,
+    mut request: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     let request_type = match matched_path.as_str() {
         PATH_QUERY => RequestType::Query,
         PATH_CALL => RequestType::Call,
-        PATH_CALL_V3 => RequestType::CallV3,
+        PATH_CALL_V3 => RequestType::SyncCall,
         PATH_READ_STATE => RequestType::ReadState,
         _ => panic!("unknown path, should never happen"),
     };
@@ -537,9 +507,8 @@ pub async fn validate_canister_request(
     request.extensions_mut().insert(canister_id);
 
     let mut resp = next.run(request).await;
-
     resp.headers_mut().insert(
-        HEADER_IC_CANISTER_ID,
+        X_IC_CANISTER_ID,
         HeaderValue::from_maybe_shared(Bytes::from(canister_id.to_string())).unwrap(),
     );
 
@@ -549,8 +518,8 @@ pub async fn validate_canister_request(
 pub async fn validate_subnet_request(
     matched_path: MatchedPath,
     subnet_id: Path<String>,
-    mut request: Request<Body>,
-    next: Next<Body>,
+    mut request: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     let request_type = match matched_path.as_str() {
         PATH_SUBNET_READ_STATE => RequestType::ReadStateSubnet,
@@ -574,11 +543,8 @@ pub async fn validate_subnet_request(
     Ok(resp)
 }
 
-pub async fn validate_request(
-    request: Request<Body>,
-    next: Next<Body>,
-) -> Result<impl IntoResponse, ApiError> {
-    if let Some(id_header) = request.headers().get(HEADER_X_REQUEST_ID) {
+pub async fn validate_request(request: Request, next: Next) -> Result<impl IntoResponse, ApiError> {
+    if let Some(id_header) = request.headers().get(X_REQUEST_ID) {
         let is_valid_id = id_header
             .to_str()
             .map(|id| UUID_REGEX.is_match(id))
@@ -587,26 +553,32 @@ pub async fn validate_request(
         if !is_valid_id {
             #[allow(clippy::borrow_interior_mutable_const)]
             return Err(ErrorCause::MalformedRequest(format!(
-                "value of '{HEADER_X_REQUEST_ID}' header is not in UUID format"
+                "Unable to parse the request ID in the '{X_REQUEST_ID}': the value is not in UUID format"
             ))
             .into());
         }
     }
 
     let resp = next.run(request).await;
-
     Ok(resp)
 }
 
 // Middleware: preprocess the request before handing it over to handlers
 pub async fn preprocess_request(
     Extension(request_type): Extension<RequestType>,
-    request: Request<Body>,
-    next: Next<Body>,
+    request: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     // Consume body
     let (parts, body) = request.into_parts();
-    let body = read_streaming_body(body, MAX_REQUEST_BODY_SIZE).await?;
+    let body = buffer_body(body, MAX_REQUEST_BODY_SIZE, Duration::from_secs(60))
+        .await
+        .map_err(|e| match e {
+            IcBnError::BodyReadingFailed(v) => ErrorCause::UnableToReadBody(v),
+            IcBnError::BodyTooBig => ErrorCause::PayloadTooLarge(MAX_REQUEST_BODY_SIZE),
+            IcBnError::BodyTimedOut => ErrorCause::BodyTimedOut,
+            _ => ErrorCause::Other(e.to_string()),
+        })?;
 
     // Parse the request body
     let envelope: ICRequestEnvelope = serde_cbor::from_slice(&body)
@@ -671,17 +643,16 @@ pub async fn preprocess_request(
 // Middleware: looks up the target subnet in the routing table
 pub async fn lookup_subnet(
     State(lk): State<Arc<dyn Lookup>>,
-    mut request: Request<Body>,
-    next: Next<Body>,
+    mut request: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
-    let subnet: Arc<RouteSubnet> =
-        if let Some(canister_id) = request.extensions().get::<CanisterId>() {
-            lk.lookup_subnet_by_canister_id(canister_id)?
-        } else if let Some(subnet_id) = request.extensions().get::<SubnetId>() {
-            lk.lookup_subnet_by_id(subnet_id)?
-        } else {
-            panic!("canister_id and subnet_id can't be both empty for a request")
-        };
+    let subnet = if let Some(canister_id) = request.extensions().get::<CanisterId>() {
+        lk.lookup_subnet_by_canister_id(canister_id)?
+    } else if let Some(subnet_id) = request.extensions().get::<SubnetId>() {
+        lk.lookup_subnet_by_id(subnet_id)?
+    } else {
+        panic!("canister_id and subnet_id can't be both empty for a request")
+    };
 
     // Inject subnet into request
     request.extensions_mut().insert(Arc::clone(&subnet));
@@ -696,7 +667,7 @@ pub async fn lookup_subnet(
 }
 
 // Middleware: postprocess the response
-pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> impl IntoResponse {
+pub async fn postprocess_response(request: Request, next: Next) -> impl IntoResponse {
     let mut response = next.run(request).await;
 
     let error_cause = response
@@ -710,10 +681,16 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
         response
             .headers_mut()
             .insert(CONTENT_TYPE, CONTENT_TYPE_CBOR);
+        response
+            .headers_mut()
+            .insert(X_CONTENT_TYPE_OPTIONS, X_CONTENT_TYPE_OPTIONS_NO_SNIFF);
+        response
+            .headers_mut()
+            .insert(X_FRAME_OPTIONS, X_FRAME_OPTIONS_DENY);
     }
 
     response.headers_mut().insert(
-        HEADER_IC_ERROR_CAUSE,
+        X_IC_ERROR_CAUSE,
         HeaderValue::from_maybe_shared(Bytes::from(error_cause)).unwrap(),
     );
 
@@ -721,13 +698,13 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
     let cache_status = response.extensions().get::<CacheStatus>().cloned();
     if let Some(v) = cache_status {
         response.headers_mut().insert(
-            HEADER_IC_CACHE,
+            X_IC_CACHE_STATUS,
             HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
         );
 
         if let CacheStatus::Bypass(v) = v {
             response.headers_mut().insert(
-                HEADER_IC_CACHE_BYPASS_REASON,
+                X_IC_CACHE_BYPASS_REASON,
                 HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
             );
         }
@@ -735,8 +712,8 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
 
     if let Some(v) = response.extensions().get::<Arc<RouteSubnet>>().cloned() {
         response.headers_mut().insert(
-            HEADER_IC_SUBNET_ID,
-            HeaderValue::from_maybe_shared(Bytes::from(v.id.clone())).unwrap(),
+            X_IC_SUBNET_ID,
+            HeaderValue::from_maybe_shared(Bytes::from(v.id.to_string())).unwrap(),
         );
     }
 
@@ -744,39 +721,39 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
     if let Some(v) = node {
         // Principals and subnet type are always ASCII printable, so unwrap is safe
         response.headers_mut().insert(
-            HEADER_IC_NODE_ID,
+            X_IC_NODE_ID,
             HeaderValue::from_maybe_shared(Bytes::from(v.id.to_string())).unwrap(),
         );
 
         response.headers_mut().insert(
-            HEADER_IC_SUBNET_TYPE,
+            X_IC_SUBNET_TYPE,
             HeaderValue::from_str(v.subnet_type.as_ref()).unwrap(),
         );
     }
 
     if let Some(ctx) = response.extensions().get::<Arc<RequestContext>>().cloned() {
         response.headers_mut().insert(
-            HEADER_IC_REQUEST_TYPE,
+            X_IC_REQUEST_TYPE,
             HeaderValue::from_maybe_shared(Bytes::from(ctx.request_type.to_string())).unwrap(),
         );
 
         ctx.canister_id.and_then(|v| {
             response.headers_mut().insert(
-                HEADER_IC_CANISTER_ID_CBOR,
+                X_IC_CANISTER_ID_CBOR,
                 HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
             )
         });
 
         ctx.sender.and_then(|v| {
             response.headers_mut().insert(
-                HEADER_IC_SENDER,
+                X_IC_SENDER,
                 HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
             )
         });
 
         ctx.method_name.as_ref().and_then(|v| {
             response.headers_mut().insert(
-                HEADER_IC_METHOD_NAME,
+                X_IC_METHOD_NAME,
                 HeaderValue::from_maybe_shared(Bytes::from(v.clone())).unwrap(),
             )
         });
@@ -785,7 +762,7 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
     let retry_result = response.extensions().get::<RetryResult>().cloned();
     if let Some(v) = retry_result {
         response.headers_mut().insert(
-            HEADER_IC_RETRIES,
+            X_IC_RETRIES,
             HeaderValue::from_maybe_shared(Bytes::from(v.retries.to_string())).unwrap(),
         );
     }
@@ -830,6 +807,12 @@ pub async fn status(
     response
         .headers_mut()
         .insert(CONTENT_TYPE, CONTENT_TYPE_CBOR);
+    response
+        .headers_mut()
+        .insert(X_CONTENT_TYPE_OPTIONS, X_CONTENT_TYPE_OPTIONS_NO_SNIFF);
+    response
+        .headers_mut()
+        .insert(X_FRAME_OPTIONS, X_FRAME_OPTIONS_DENY);
 
     response
 }

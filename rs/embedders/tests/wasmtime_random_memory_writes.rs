@@ -1,5 +1,6 @@
 use ic_config::{
-    embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
+    embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
+    flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::compile;
@@ -66,7 +67,7 @@ fn test_api_for_update(
         call_context_test_id(13),
     );
 
-    let static_system_state = SandboxSafeSystemState::new(
+    let static_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         *cycles_account_manager,
         &NetworkTopology::default(),
@@ -77,6 +78,7 @@ fn test_api_for_update(
         }
         .dirty_page_overhead,
         ComputeAllocation::default(),
+        HypervisorConfig::default().subnet_callback_soft_limit as u64,
         RequestMetadata::new(0, UNIX_EPOCH),
         Some(caller),
         api_type.call_context_id(),
@@ -99,6 +101,9 @@ fn test_api_for_update(
             canister_memory_limit,
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
+            canister_guaranteed_callback_quota: HypervisorConfig::default()
+                .canister_guaranteed_callback_quota
+                as u64,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
@@ -108,8 +113,10 @@ fn test_api_for_update(
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
+        EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
+        NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::new(instruction_limit)),
         log,
     )
@@ -265,39 +272,39 @@ fn make_module64_wat_for_api_calls(heap_size: usize) -> String {
     (module
       (import "ic0" "msg_reply" (func $msg_reply))
       (import "ic0" "msg_reply_data_append"
-        (func $msg_reply_data_append (param i32) (param i32)))
+        (func $msg_reply_data_append (param i64) (param i64)))
       (import "ic0" "msg_arg_data_copy"
-        (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
+        (func $ic0_msg_arg_data_copy (param i64) (param i64) (param i64)))
       (import "ic0" "msg_arg_data_size"
-        (func $ic0_msg_arg_data_size (result i32)))
+        (func $ic0_msg_arg_data_size (result i64)))
       (import "ic0" "msg_caller_copy"
-        (func $ic0_msg_caller_copy (param i32) (param i32) (param i32)))
+        (func $ic0_msg_caller_copy (param i64) (param i64) (param i64)))
       (import "ic0" "msg_caller_size"
-        (func $ic0_msg_caller_size (result i32)))
+        (func $ic0_msg_caller_size (result i64)))
       (import "ic0" "canister_self_copy"
-        (func $ic0_canister_self_copy (param i32) (param i32) (param i32)))
+        (func $ic0_canister_self_copy (param i64) (param i64) (param i64)))
       (import "ic0" "canister_self_size"
-        (func $ic0_canister_self_size (result i32)))
+        (func $ic0_canister_self_size (result i64)))
 
       (import "ic0" "canister_cycle_balance128"
-        (func $ic0_canister_cycle_balance128 (param i32)))
+        (func $ic0_canister_cycle_balance128 (param i64)))
 
-      (import "ic0" "stable_grow"
-        (func $ic0_stable_grow (param $pages i32) (result i32)))
+      (import "ic0" "stable64_grow"
+        (func $ic0_stable64_grow (param $pages i64) (result i64)))
       (import "ic0" "stable64_read"
         (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
       (import "ic0" "stable64_write"
         (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
 
       (func $touch_heap_with_api_calls
-        (call $ic0_msg_caller_copy (i32.const 4096) (i32.const 0) (call $ic0_msg_caller_size))
-        (call $ic0_msg_arg_data_copy (i32.const 12288) (i32.const 0) (call $ic0_msg_arg_data_size))
-        (call $ic0_canister_self_copy (i32.const 20480) (i32.const 0) (call $ic0_canister_self_size))
-        (call $ic0_canister_cycle_balance128 (i32.const 36864))
+        (call $ic0_msg_caller_copy (i64.const 4096) (i64.const 0) (call $ic0_msg_caller_size))
+        (call $ic0_msg_arg_data_copy (i64.const 12288) (i64.const 0) (call $ic0_msg_arg_data_size))
+        (call $ic0_canister_self_copy (i64.const 20480) (i64.const 0) (call $ic0_canister_self_size))
+        (call $ic0_canister_cycle_balance128 (i64.const 36864))
 
         (; Write some data to page 10 using stable_read, by first copying 4
         bytes from the second page to stable memory, then copying back ;)
-        (drop (call $ic0_stable_grow (i32.const 1)))
+        (drop (call $ic0_stable64_grow (i64.const 1)))
         (call $ic0_stable64_write (i64.const 0) (i64.const 4096) (i64.const 4))
         (call $ic0_stable64_read (i64.const 40960) (i64.const 0) (i64.const 4))
       )
@@ -406,7 +413,7 @@ fn make_i32_store_forward_module_wat(heap_size: usize) -> String {
     make_module_wat_with_write_fun(heap_size, write_fun)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Write {
     dst: u32,
     bytes: Vec<u8>,
@@ -480,7 +487,7 @@ mod tests {
 
     use ic_embedders::{
         wasm_executor::compute_page_delta, wasm_utils::instrumentation::instruction_to_cost,
-        wasmtime_embedder::CanisterMemoryType,
+        wasm_utils::instrumentation::WasmMemoryType, wasmtime_embedder::CanisterMemoryType,
     };
     // Get .current() trait method
     use ic_interfaces::execution_environment::{HypervisorError, SystemApi};
@@ -728,9 +735,9 @@ mod tests {
 
             // (call $trap (i32.const 0) (i32.const 2147483648)) ;; equivalent to 2 ^ 31
             let expected_instructions = 1 // Function is 1 instruction.
-                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 })
+                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
                 + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::TRAP.get()
-                + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
+                + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32);
             assert_eq!(
                 instructions_executed.get(),
                 expected_instructions + (num_bytes / BYTES_PER_INSTRUCTION) as u64
@@ -788,17 +795,18 @@ mod tests {
         };
         use ic_config::subnet_config::SchedulerConfig;
         use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
+        use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
         use ic_logger::replica_logger::no_op_logger;
 
         // (drop (call $ic0_stable_grow (i32.const 1)))
         // (call $ic0_stable64_read (i64.const 0) (i64.const 0) (i64.const {STABLE_OP_BYTES}))
         fn setup_instruction_overhead() -> u64 {
-            instruction_to_cost(&wasmparser::Operator::Drop)
-                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 })
+            instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm32)
+                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
                 + ic_embedders::wasmtime_embedder::system_api_complexity::overhead_native::STABLE_GROW.get()
-                + instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 })
-                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 })
-                + 3 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 })
+                + instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32)
+                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
+                + 3 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32)
                 + 1 // Function is 1 instruction.
         }
 

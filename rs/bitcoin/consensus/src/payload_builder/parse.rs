@@ -1,4 +1,4 @@
-use ic_btc_types_internal::BitcoinAdapterResponse;
+use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_interfaces::batch_payload::{iterator_to_bytes, slice_to_messages, PastPayload};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::{

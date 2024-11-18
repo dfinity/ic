@@ -6,10 +6,11 @@ use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
+use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
 use ic_management_canister_types::{
-    CanisterChange, CanisterHttpResponsePayload, CanisterUpgradeOptions,
+    CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -19,13 +20,13 @@ use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
     canister_state::execution_state::CustomSectionType, ExportedFunctions, Global, PageIndex,
 };
-use ic_replicated_state::{CanisterStatus, NumWasmPages, PageMap};
+use ic_replicated_state::{NumWasmPages, PageMap};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
-    assert_empty_reply, check_ingress_status, get_reply, wasm_compilation_cost,
-    wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
+    assert_empty_reply, check_ingress_status, cycles_reserved_for_app_and_verified_app_subnets,
+    get_reply, wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_metrics::{fetch_histogram_vec_stats, metric_vec, HistogramStats};
@@ -40,14 +41,16 @@ use ic_types::{
     CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::prelude::*;
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::test_runner::{TestRng, TestRunner};
 use std::collections::BTreeSet;
 use std::mem::size_of;
 use std::time::Duration;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
-const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
+const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
 
 #[test]
 fn ic0_canister_status_works() {
@@ -2107,7 +2110,7 @@ fn ic0_call_cycles_add_deducts_cycles() {
             (data (i32.const 0) "some_remote_method XYZ")
             (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
-    let initial_cycles = Cycles::new(100_000_000_000);
+    let initial_cycles = Cycles::new(301_000_000_000);
     let canister_id = test
         .canister_from_cycles_and_wat(initial_cycles, wat)
         .unwrap();
@@ -2128,7 +2131,11 @@ fn ic0_call_cycles_add_deducts_cycles() {
             MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             test.subnet_size(),
         )
-        + mgr.execution_cost(MAX_NUM_INSTRUCTIONS, test.subnet_size());
+        + mgr.execution_cost(
+            MAX_NUM_INSTRUCTIONS,
+            test.subnet_size(),
+            test.canister_wasm_execution_mode(canister_id),
+        );
     let transferred_cycles = Cycles::new(10_000_000_000);
     assert_eq!(
         initial_cycles - messaging_fee - transferred_cycles - test.execution_cost(),
@@ -2166,7 +2173,7 @@ fn ic0_call_cycles_add_has_no_effect_without_ic0_call_perform() {
             (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
 
-    let initial_cycles = Cycles::new(100_000_000_000);
+    let initial_cycles = Cycles::new(301_000_000_000);
     let canister_id = test
         .canister_from_cycles_and_wat(initial_cycles, wat)
         .unwrap();
@@ -2339,6 +2346,49 @@ fn ic0_call_perform_enqueues_request() {
             (memory 1 1)
             (data (i32.const 0) "some_remote_method XYZ")
             (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(WasmResult::Reply(vec![]), result);
+    let canister_state = test.canister_state(canister_id);
+    assert_eq!(1, canister_state.system_state.queues().output_queues_len());
+}
+
+#[test]
+fn wasm64_ic0_call_perform_enqueues_request() {
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let wat = r#"
+        (module
+            (import "ic0" "call_new"
+                (func $ic0_call_new
+                    (param i64 i64)
+                    (param $method_name_src i64)    (param $method_name_len i64)
+                    (param $reply_fun i64)          (param $reply_env i64)
+                    (param $reject_fun i64)         (param $reject_env i64)
+                )
+            )
+            (import "ic0" "call_data_append"
+                (func $ic0_call_data_append (param $src i64) (param $size i64))
+            )
+            (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_update test")
+                (call $ic0_call_new
+                    (i64.const 100) (i64.const 10)  ;; callee canister id = 777
+                    (i64.const 0) (i64.const 18)    ;; refers to "some_remote_method" on the heap
+                    (i64.const 11) (i64.const 22)   ;; fictive on_reply closure
+                    (i64.const 33) (i64.const 44)   ;; fictive on_reject closure
+                )
+                (call $ic0_call_data_append
+                    (i64.const 19) (i64.const 3)    ;; refers to "XYZ" on the heap
+                )
+                (call $ic0_call_perform)
+                drop
+                (call $msg_reply)
+            )
+            (memory i64 1 1)
+            (data (i64.const 0) "some_remote_method XYZ")
+            (data (i64.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]).unwrap();
@@ -2805,6 +2855,63 @@ fn ic0_msg_cycles_available_works_for_calls() {
         .build();
     let result = test.ingress(caller_id, "update", caller).unwrap();
     assert_eq!(WasmResult::Reply(vec![]), result);
+}
+
+#[test]
+fn wasm64_ic0_msg_cycles_available128_works_for_calls() {
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let wat = r#"
+        (module
+            (import "ic0" "msg_cycles_available128" (func $msg_cycles_available128 (param i64)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+              (func $ic0_msg_reply_data_append (param i64) (param i64)))
+            (func (export "canister_update test")
+                (call $msg_cycles_available128 (i64.const 0))
+                (call $ic0_msg_reply_data_append (i64.const 0) (i64.const 16))
+                (call $msg_reply)
+            )
+            (memory i64 1)
+        )"#;
+    let callee_id = test.canister_from_wat(wat).unwrap();
+    let caller_id = test.universal_canister().unwrap();
+    let caller = wasm()
+        .call_with_cycles(callee_id, "test", call_args(), Cycles::from(50u128))
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+
+    let x = 50u128;
+    let x = Vec::from(x.to_le_bytes());
+    assert_eq!(WasmResult::Reply(x), result);
+}
+
+#[test]
+fn wasm64_ic0_msg_cycles_accept128_works_for_calls() {
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let wat = r#"
+        (module
+            (import "ic0" "msg_cycles_accept128"
+              (func $ic0_msg_cycles_accept128 (param i64) (param i64) (param i64)))
+            (import "ic0" "msg_reply" (func $ic0_msg_reply))
+            (import "ic0" "msg_reply_data_append"
+              (func $ic0_msg_reply_data_append (param i64) (param i64)))
+            (func (export "canister_update test")
+                (call $ic0_msg_cycles_accept128 (i64.const 0) (i64.const 22) (i64.const 0))
+                (call $ic0_msg_reply_data_append (i64.const 0) (i64.const 16))
+                (call $ic0_msg_reply)
+            )
+            (memory i64 1)
+        )"#;
+    let callee_id = test.canister_from_wat(wat).unwrap();
+    let caller_id = test.universal_canister().unwrap();
+    let caller = wasm()
+        .call_with_cycles(callee_id, "test", call_args(), Cycles::from(50u128))
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+
+    let x = 22u128;
+    let x = Vec::from(x.to_le_bytes());
+    assert_eq!(WasmResult::Reply(x), result);
 }
 
 #[test]
@@ -3387,11 +3494,8 @@ fn cannot_execute_update_on_stopping_canister() {
     let canister_id = test.universal_canister().unwrap();
     test.stop_canister(canister_id);
     assert_matches!(
-        test.canister_state(canister_id).system_state.status,
-        CanisterStatus::Stopping {
-            call_context_manager: _,
-            stop_contexts: _
-        }
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Stopping
     );
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopping, err.code());
@@ -3408,8 +3512,8 @@ fn cannot_execute_update_on_stopped_canister() {
     test.stop_canister(canister_id);
     test.process_stopping_canisters();
     assert_eq!(
-        CanisterStatus::Stopped,
-        test.canister_state(canister_id).system_state.status
+        CanisterStatusType::Stopped,
+        test.canister_state(canister_id).system_state.status()
     );
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopped, err.code());
@@ -3425,11 +3529,8 @@ fn cannot_execute_query_on_stopping_canister() {
     let canister_id = test.universal_canister().unwrap();
     test.stop_canister(canister_id);
     assert_matches!(
-        test.canister_state(canister_id).system_state.status,
-        CanisterStatus::Stopping {
-            call_context_manager: _,
-            stop_contexts: _
-        }
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Stopping
     );
     let err = test.ingress(canister_id, "query", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopping, err.code());
@@ -3446,8 +3547,8 @@ fn cannot_execute_query_on_stopped_canister() {
     test.stop_canister(canister_id);
     test.process_stopping_canisters();
     assert_eq!(
-        CanisterStatus::Stopped,
-        test.canister_state(canister_id).system_state.status
+        CanisterStatusType::Stopped,
+        test.canister_state(canister_id).system_state.status()
     );
     let err = test.ingress(canister_id, "query", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopped, err.code());
@@ -3480,9 +3581,9 @@ fn ic0_trap_preserves_some_cycles() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
     let expected_executed_instructions = NumInstructions::from(
-        instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 })
+        instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
             + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::TRAP.get()
-            + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 })
+            + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 }, WasmMemoryType::Wasm32)
             + 12 /* trap data */
             + 1, // Function is 1 instruction.
     );
@@ -3764,6 +3865,7 @@ impl MemoryAccessor {
         assert_empty_reply(result);
     }
 
+    #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
     fn verify_dirty_pages(&self, is_dirty_page: &[bool]) {
         let execution_state = self.test.execution_state(self.canister_id);
         let mut actual_dirty = vec![false; is_dirty_page.len()];
@@ -3821,7 +3923,8 @@ fn write_after_grow() {
     );
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 enum Operation {
     Read(i32),
     Write(i32, u8),
@@ -3829,6 +3932,7 @@ enum Operation {
     GrowAndWrite(u8),
 }
 
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn random_operations(
     num_pages: i32,
     num_operations: usize,
@@ -4810,11 +4914,8 @@ fn cannot_send_request_to_stopping_canister() {
     // Move canister B to a stopping state before calling it.
     test.stop_canister(b_id);
     assert_matches!(
-        test.canister_state(b_id).system_state.status,
-        CanisterStatus::Stopping {
-            call_context_manager: _,
-            stop_contexts: _
-        }
+        test.canister_state(b_id).system_state.status(),
+        CanisterStatusType::Stopping
     );
 
     // Send a message to canister A which will call canister B.
@@ -4853,8 +4954,8 @@ fn cannot_send_request_to_stopped_canister() {
     test.stop_canister(b_id);
     test.process_stopping_canisters();
     assert_eq!(
-        CanisterStatus::Stopped,
-        test.canister_state(b_id).system_state.status
+        CanisterStatusType::Stopped,
+        test.canister_state(b_id).system_state.status()
     );
 
     // Send a message to canister A which will call canister B.
@@ -4907,11 +5008,8 @@ fn cannot_stop_canister_with_open_call_context() {
     // Canister A cannot transition to the stopped state because it has an open
     // call context.
     assert_matches!(
-        test.canister_state(a_id).system_state.status,
-        CanisterStatus::Stopping {
-            call_context_manager: _,
-            stop_contexts: _
-        }
+        test.canister_state(a_id).system_state.status(),
+        CanisterStatusType::Stopping
     );
 
     // Execute the call in canister B.
@@ -4927,8 +5025,8 @@ fn cannot_stop_canister_with_open_call_context() {
     // Now it should be possible to stop canister A.
     test.process_stopping_canisters();
     assert_eq!(
-        test.canister_state(a_id).system_state.status,
-        CanisterStatus::Stopped
+        test.canister_state(a_id).system_state.status(),
+        CanisterStatusType::Stopped
     );
 }
 
@@ -4938,7 +5036,7 @@ fn can_use_more_instructions_during_install_code() {
         .with_instruction_limit(1_000_000)
         .with_cost_to_compile_wasm_instruction(0)
         .with_install_code_instruction_limit(
-            1_000_000 + wasm_compilation_cost(UNIVERSAL_CANISTER_WASM).get(),
+            1_000_000 + wasm_compilation_cost(&UNIVERSAL_CANISTER_WASM).get(),
         )
         .build();
     let canister_id = test.universal_canister().unwrap();
@@ -5027,9 +5125,11 @@ fn dts_abort_works_in_update_call() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         original_system_state.balance()
-            - test
-                .cycles_account_manager()
-                .execution_cost(NumInstructions::from(100_000_000), test.subnet_size()),
+            - test.cycles_account_manager().execution_cost(
+                NumInstructions::from(100_000_000),
+                test.subnet_size(),
+                test.canister_wasm_execution_mode(canister_id)
+            ),
     );
     assert_eq!(
         test.canister_state(canister_id)
@@ -5058,9 +5158,11 @@ fn dts_abort_works_in_update_call() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         original_system_state.balance()
-            - test
-                .cycles_account_manager()
-                .execution_cost(NumInstructions::from(100_000_000), test.subnet_size()),
+            - test.cycles_account_manager().execution_cost(
+                NumInstructions::from(100_000_000),
+                test.subnet_size(),
+                test.canister_wasm_execution_mode(canister_id)
+            ),
     );
     assert_eq!(
         test.canister_state(canister_id)
@@ -5180,6 +5282,121 @@ fn system_state_apply_change_fails() {
             );
         }
     };
+}
+
+/// Tests that given specific canister callback quota and subnet available
+/// callback numbers, exactly the expected number of calls succeed.
+fn test_callback_limits_impl(
+    canister_callback_quota: usize,
+    subnet_available_callbacks: i64,
+    expected_successful_calls: usize,
+) {
+    let mut test = ExecutionTestBuilder::new()
+        .with_canister_callback_quota(canister_callback_quota)
+        // Enough cycles for more than a handful of concurrent calls.
+        .with_initial_canister_cycles(1_000_000_000_000_000)
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+
+    // A no-op update call.
+    let a0 = wasm().message_payload().reply().build();
+
+    // An update call that makes one self-call.
+    let a1 = wasm()
+        .inter_update(
+            a_id,
+            call_args()
+                .other_side(a0.clone())
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+
+    // Set the size of the subnet-wide shared callback pool.
+    test.set_subnet_available_callbacks(subnet_available_callbacks);
+
+    // Make `expected_successful_calls + 1` calls to `a1`.
+    let mut ingress_ids = Vec::new();
+    for _ in 0..expected_successful_calls + 1 {
+        let (ingress_id, _) = test.ingress_raw(a_id, "update", a1.clone());
+        ingress_ids.push(ingress_id);
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::StartNew,
+        );
+        test.execute_message(a_id);
+    }
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    // Only `expected_successful_calls` calls have resulted in a downstream call.
+    test.induct_messages();
+    for _ in 0..expected_successful_calls {
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::StartNew,
+        );
+        test.execute_message(a_id);
+    }
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    // Process `expected_successful_calls` responses.
+    test.induct_messages();
+    for _ in 0..expected_successful_calls {
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::StartNew,
+        );
+        test.execute_message(a_id);
+    }
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    // The first `expected_successful_calls` calls have succeeded.
+    for ingress_id in ingress_ids.iter().take(expected_successful_calls) {
+        let ingress_status = test.ingress_status(ingress_id);
+        let result = check_ingress_status(ingress_status).unwrap();
+        assert_matches!(result, WasmResult::Reply(_));
+    }
+
+    // The last call has failed synchronously when invoking `call_perform`.
+    let ingress_status = test.ingress_status(&ingress_ids[expected_successful_calls]);
+    assert_matches!(ingress_status, IngressStatus::Known {
+            state: IngressState::Failed(err),
+            ..
+        } if err.description().contains("call_perform failed"));
+
+    // Sanity check that the round limits were accurately updated.
+    assert_eq!(
+        test.subnet_available_callbacks(),
+        subnet_available_callbacks - expected_successful_calls as i64
+    );
+}
+
+#[test]
+fn call_perform_fails_when_out_of_callback_quota() {
+    // With a canister callback quota of 3; and 1 available callback in the shared
+    // subnet pool; we expect only 3 downstream calls to be allowed.
+    let canister_callback_quota = 3;
+    let subnet_available_callbacks = 1;
+    test_callback_limits_impl(canister_callback_quota, subnet_available_callbacks, 3);
+}
+
+#[test]
+fn call_perform_fails_when_out_of_subnet_callbacks() {
+    // With a canister callback quota of 3; and 4 available callbacks in the shared
+    // subnet pool; we expect only 4 downstream calls to be allowed.
+    let canister_callback_quota = 3;
+    let subnet_available_callbacks = 4;
+    test_callback_limits_impl(canister_callback_quota, subnet_available_callbacks, 4);
 }
 
 #[test]
@@ -5308,7 +5525,6 @@ fn call_with_best_effort_response_test_helper(
     match test
         .canister_state_mut(canister_receiver)
         .system_state
-        .queues_mut()
         .pop_input()
         .unwrap()
     {
@@ -6334,7 +6550,7 @@ fn call_perform_checks_freezing_threshold_in_update() {
         .with_initial_canister_cycles(1_000_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
-    test.update_freezing_threshold(canister_id, NumSeconds::new(2_500_000_000))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_500_000_000))
         .unwrap();
     let body = wasm()
         .call_simple(
@@ -6359,7 +6575,7 @@ fn call_perform_does_not_check_freezing_threshold_in_reply() {
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
-    test.update_freezing_threshold(canister_id, NumSeconds::new(2_200_000_000))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_200_000_000))
         .unwrap();
     let body = wasm()
         .call_simple(
@@ -6393,7 +6609,7 @@ fn call_perform_does_not_check_freezing_threshold_in_reject() {
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
-    test.update_freezing_threshold(canister_id, NumSeconds::new(2_200_000_000))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_200_000_000))
         .unwrap();
     let body = wasm()
         .call_simple(
@@ -6508,106 +6724,111 @@ fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_after_pre_
 
 #[test]
 fn stable_memory_grow_reserves_cycles() {
-    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
-    const CAPACITY: u64 = 1_000_000_000;
-    const THRESHOLD: u64 = 500_000_000;
-    const WASM_PAGE_SIZE: u64 = 65_536;
-    // 7500 of stable memory pages is close to 500MB, but still leaves some room
-    // for Wasm memory of the universal canister.
-    const NUM_PAGES: u64 = 7_500;
+    cycles_reserved_for_app_and_verified_app_subnets(|subnet_type| {
+        const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+        const CAPACITY: u64 = 1_000_000_000;
+        const THRESHOLD: u64 = 500_000_000;
+        const WASM_PAGE_SIZE: u64 = 65_536;
+        // 7500 of stable memory pages is close to 500MB, but still leaves some room
+        // for Wasm memory of the universal canister.
+        const NUM_PAGES: u64 = 7_500;
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
-        .with_subnet_memory_reservation(0)
-        .build();
+        let mut test = ExecutionTestBuilder::new()
+            .with_subnet_type(subnet_type)
+            .with_subnet_execution_memory(CAPACITY as i64)
+            .with_subnet_memory_threshold(THRESHOLD as i64)
+            .with_subnet_memory_reservation(0)
+            .build();
 
-    let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
-        .unwrap();
+        let canister_id = test
+            .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+            .unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
-        .unwrap();
-    test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
-        .unwrap();
+        test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+            .unwrap();
+        test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
+            .unwrap();
 
-    let balance_before = test.canister_state(canister_id).system_state.balance();
-    let result = test
-        .ingress(
-            canister_id,
-            "update",
-            wasm()
-                .stable64_grow(NUM_PAGES)
-                // Access the last byte to make sure that growing succeeded.
-                .stable64_read(NUM_PAGES * WASM_PAGE_SIZE - 1, 1)
-                .push_bytes(&[])
-                .append_and_reply()
-                .build(),
-        )
-        .unwrap();
-    assert_eq!(result, WasmResult::Reply(vec![]));
-    let balance_after = test.canister_state(canister_id).system_state.balance();
+        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let result = test
+            .ingress(
+                canister_id,
+                "update",
+                wasm()
+                    .stable64_grow(NUM_PAGES)
+                    // Access the last byte to make sure that growing succeeded.
+                    .stable64_read(NUM_PAGES * WASM_PAGE_SIZE - 1, 1)
+                    .push_bytes(&[])
+                    .append_and_reply()
+                    .build(),
+            )
+            .unwrap();
+        assert_eq!(result, WasmResult::Reply(vec![]));
+        let balance_after = test.canister_state(canister_id).system_state.balance();
 
-    assert_eq!(
-        test.canister_state(canister_id)
+        assert_eq!(
+            test.canister_state(canister_id)
+                .system_state
+                .reserved_balance(),
+            Cycles::zero()
+        );
+        // Message execution fee is an order of a few million cycles.
+        assert!(balance_before - balance_after < Cycles::new(1_000_000_000));
+
+        let subnet_memory_usage =
+            CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
+        let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
+        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let result = test
+            .ingress(
+                canister_id,
+                "update",
+                wasm()
+                    .stable64_grow(NUM_PAGES)
+                    // Access the last byte to make sure that growing succeeded.
+                    .stable64_read(2 * NUM_PAGES * WASM_PAGE_SIZE - 1, 1)
+                    .push_bytes(&[])
+                    .append_and_reply()
+                    .build(),
+            )
+            .unwrap();
+        assert_eq!(result, WasmResult::Reply(vec![]));
+        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
+
+        let reserved_cycles = test
+            .canister_state(canister_id)
             .system_state
-            .reserved_balance(),
-        Cycles::zero()
-    );
-    // Message execution fee is an order of a few million cycles.
-    assert!(balance_before - balance_after < Cycles::new(1_000_000_000));
+            .reserved_balance();
 
-    let subnet_memory_usage =
-        CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
-    let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
-    let balance_before = test.canister_state(canister_id).system_state.balance();
-    let result = test
-        .ingress(
-            canister_id,
-            "update",
-            wasm()
-                .stable64_grow(NUM_PAGES)
-                // Access the last byte to make sure that growing succeeded.
-                .stable64_read(2 * NUM_PAGES * WASM_PAGE_SIZE - 1, 1)
-                .push_bytes(&[])
-                .append_and_reply()
-                .build(),
-        )
-        .unwrap();
-    assert_eq!(result, WasmResult::Reply(vec![]));
-    let balance_after = test.canister_state(canister_id).system_state.balance();
-    let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
+        assert_eq!(
+            reserved_cycles,
+            test.cycles_account_manager().storage_reservation_cycles(
+                memory_usage_after - memory_usage_before,
+                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                test.subnet_size(),
+            )
+        );
 
-    let reserved_cycles = test
-        .canister_state(canister_id)
-        .system_state
-        .reserved_balance();
-
-    assert_eq!(
-        reserved_cycles,
-        test.cycles_account_manager().storage_reservation_cycles(
-            memory_usage_after - memory_usage_before,
-            &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-            test.subnet_size(),
-        )
-    );
-
-    assert!(balance_before - balance_after > reserved_cycles);
+        assert!(balance_before - balance_after > reserved_cycles);
+    });
 }
 
 #[test]
 fn wasm_memory_grow_reserves_cycles() {
-    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
-    const CAPACITY: u64 = 1_000_000_000;
-    const THRESHOLD: u64 = 500_000_000;
+    cycles_reserved_for_app_and_verified_app_subnets(|subnet_type| {
+        const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+        const CAPACITY: u64 = 1_000_000_000;
+        const THRESHOLD: u64 = 500_000_000;
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
-        .with_subnet_memory_reservation(0)
-        .build();
+        let mut test = ExecutionTestBuilder::new()
+            .with_subnet_type(subnet_type)
+            .with_subnet_execution_memory(CAPACITY as i64)
+            .with_subnet_memory_threshold(THRESHOLD as i64)
+            .with_subnet_memory_reservation(0)
+            .build();
 
-    let wat = r#"
+        let wat = r#"
         (module
             (import "ic0" "msg_reply" (func $msg_reply))
             (import "ic0" "msg_reply_data_append"
@@ -6623,53 +6844,54 @@ fn wasm_memory_grow_reserves_cycles() {
             (export "canister_update update" (func $update))
         )"#;
 
-    let wasm = wat::parse_str(wat).unwrap();
+        let wasm = wat::parse_str(wat).unwrap();
 
-    let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
+        let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
-        .unwrap();
-    test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
-        .unwrap();
+        test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+            .unwrap();
+        test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
+            .unwrap();
 
-    let balance_before = test.canister_state(canister_id).system_state.balance();
-    let result = test.ingress(canister_id, "update", vec![]).unwrap();
-    assert_eq!(result, WasmResult::Reply(vec![]));
-    let balance_after = test.canister_state(canister_id).system_state.balance();
+        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let result = test.ingress(canister_id, "update", vec![]).unwrap();
+        assert_eq!(result, WasmResult::Reply(vec![]));
+        let balance_after = test.canister_state(canister_id).system_state.balance();
 
-    assert_eq!(
-        test.canister_state(canister_id)
+        assert_eq!(
+            test.canister_state(canister_id)
+                .system_state
+                .reserved_balance(),
+            Cycles::zero()
+        );
+        // Message execution fee is an order of a few million cycles.
+        assert!(balance_before - balance_after < Cycles::new(1_000_000_000));
+
+        let subnet_memory_usage =
+            CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
+        let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
+        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let result = test.ingress(canister_id, "update", vec![]).unwrap();
+        assert_eq!(result, WasmResult::Reply(vec![]));
+        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
+
+        let reserved_cycles = test
+            .canister_state(canister_id)
             .system_state
-            .reserved_balance(),
-        Cycles::zero()
-    );
-    // Message execution fee is an order of a few million cycles.
-    assert!(balance_before - balance_after < Cycles::new(1_000_000_000));
+            .reserved_balance();
 
-    let subnet_memory_usage =
-        CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
-    let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
-    let balance_before = test.canister_state(canister_id).system_state.balance();
-    let result = test.ingress(canister_id, "update", vec![]).unwrap();
-    assert_eq!(result, WasmResult::Reply(vec![]));
-    let balance_after = test.canister_state(canister_id).system_state.balance();
-    let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
+        assert_eq!(
+            reserved_cycles,
+            test.cycles_account_manager().storage_reservation_cycles(
+                memory_usage_after - memory_usage_before,
+                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                test.subnet_size(),
+            )
+        );
 
-    let reserved_cycles = test
-        .canister_state(canister_id)
-        .system_state
-        .reserved_balance();
-
-    assert_eq!(
-        reserved_cycles,
-        test.cycles_account_manager().storage_reservation_cycles(
-            memory_usage_after - memory_usage_before,
-            &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-            test.subnet_size(),
-        )
-    );
-
-    assert!(balance_before - balance_after > reserved_cycles);
+        assert!(balance_before - balance_after > reserved_cycles);
+    });
 }
 
 #[test]
@@ -6752,10 +6974,7 @@ fn set_reserved_cycles_limit_below_existing_fails() {
         .canister_update_reserved_cycles_limit(canister_id, Cycles::from(reserved_cycles.get() - 1))
         .unwrap_err();
 
-    assert_eq!(
-        err.code(),
-        ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
-    );
+    assert_eq!(err.code(), ErrorCode::ReservedCyclesLimitIsTooLow);
 }
 
 #[test]
@@ -6946,7 +7165,7 @@ fn stable_memory_grow_respects_reserved_cycles_limit() {
         .build();
 
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
     test.update_freezing_threshold(canister_id, NumSeconds::new(0))
@@ -6991,7 +7210,7 @@ fn stable_memory_grow_does_not_reserve_cycles_on_out_of_memory() {
         .build();
 
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     test.update_freezing_threshold(canister_id, NumSeconds::new(0))
         .unwrap();
@@ -7636,4 +7855,140 @@ fn wasm_memory_limit_cannot_exceed_256_tb() {
         .unwrap_err();
 
     assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+}
+
+// Test the result that is close to 2^64.
+#[test]
+fn ic0_canister_cycle_balance_u64() {
+    let mut test: ExecutionTest = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles((1 << 64) - 1)
+        .build();
+    let id = test.universal_canister().unwrap();
+    let result = test
+        .ingress(id, "update", wasm().cycles_balance().reply_int64().build())
+        .unwrap();
+    match result {
+        WasmResult::Reply(response) => {
+            let result = u64::from_le_bytes(response.try_into().unwrap());
+            assert!(result >= (1 << 63));
+        }
+        WasmResult::Reject(err) => unreachable!("{:?}", err),
+    }
+}
+
+// Test the result that is close to 2^64.
+#[test]
+fn ic0_msg_cycles_available_u64() {
+    let mut test: ExecutionTest = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(2 * (1 << 64))
+        .build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().msg_cycles_available().reply_int64().build();
+    let caller = wasm()
+        .call_with_cycles(
+            callee_id,
+            "update",
+            call_args()
+                .other_side(callee)
+                .on_reject(wasm().reject_message().reject())
+                .on_reply(wasm().message_payload().append_and_reply()),
+            Cycles::new((1 << 64) - 1),
+        )
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+    match result {
+        WasmResult::Reply(response) => {
+            let result = u64::from_le_bytes(response.try_into().unwrap());
+            assert!(result >= (1 << 63));
+        }
+        WasmResult::Reject(err) => unreachable!("{:?}", err),
+    }
+}
+
+// Test the result that is close to 2^64.
+#[test]
+fn ic0_msg_cycles_refunded_u64() {
+    let mut test: ExecutionTest = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(2 * (1 << 64))
+        .build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().push_int64(0).reply_int64().build();
+    let caller = wasm()
+        .call_with_cycles(
+            callee_id,
+            "update",
+            call_args()
+                .other_side(callee)
+                .on_reject(wasm().reject_message().reject())
+                .on_reply(wasm().msg_cycles_refunded().reply_int64()),
+            Cycles::new((1 << 64) - 1),
+        )
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+    match result {
+        WasmResult::Reply(response) => {
+            let result = u64::from_le_bytes(response.try_into().unwrap());
+            assert!(result >= (1 << 63));
+        }
+        WasmResult::Reject(err) => unreachable!("{:?}", err),
+    }
+}
+
+// Test the result that is close to 2^64.
+#[test]
+fn ic0_mint_cycles_u64() {
+    let mut test: ExecutionTest = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1 << 64)
+        .build();
+    let wat = r#"
+        (module
+            (import "ic0" "mint_cycles" (func $mint_cycles (param i64) (result i64)))
+
+            (func (export "canister_update test")
+                (drop (call $mint_cycles (i64.const 18446744073709551615)))
+            )
+        )"#;
+    let mut canister_id = test.canister_from_wat(wat).unwrap();
+    // This loop should finish after four iterations.
+    while canister_id != CYCLES_MINTING_CANISTER_ID {
+        canister_id = test.canister_from_wat(wat).unwrap();
+    }
+    let result = test.ingress(canister_id, "test", vec![]);
+    assert_empty_reply(result);
+    assert_balance_equals(
+        test.canister_state(canister_id).system_state.balance(),
+        Cycles::new(2 * (1 << 64)),
+        BALANCE_EPSILON,
+    );
+}
+
+fn check_correct_execution_state(is_wasm64: bool) {
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let memory_size = if is_wasm64 { "i64" } else { "" };
+    let wat = format!(
+        r#"
+        (module
+            (func (export "canister_update test")
+                (drop (i64.const 0))
+            )
+            (memory {memory_size} 12)
+        )"#,
+    );
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]);
+    assert_empty_reply(result);
+    let execution_state = test.execution_state(canister_id);
+    assert_eq!(execution_state.is_wasm64, is_wasm64);
+}
+
+#[test]
+fn wasm64_correct_execution_state() {
+    check_correct_execution_state(true);
+}
+
+#[test]
+fn wasm32_correct_execution_state() {
+    check_correct_execution_state(false);
 }

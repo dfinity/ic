@@ -17,7 +17,7 @@ fn encode<T: minicbor::Encode<()>>(t: &T) -> Vec<u8> {
     encoder.into_writer()
 }
 
-#[derive(Decode, Encode, Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug, Decode, Encode)]
 pub enum MintMemo {
     #[n(0)]
     /// The minter received some ETH or ERC20 token.
@@ -56,7 +56,7 @@ impl From<MintMemo> for Memo {
     }
 }
 
-#[derive(Decode, Encode, Debug, Eq, PartialEq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub enum BurnMemo {
     #[n(0)]
     /// The minter processed a withdrawal request.

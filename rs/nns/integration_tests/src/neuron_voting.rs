@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_nns_common::types::ProposalId;
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     governance_error::ErrorType,
     manage_neuron_response::{Command, RegisterVoteResponse},
     Vote,
@@ -161,7 +161,7 @@ fn proposer_neuron_cannot_vote_explicitly() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::PreconditionFailed);
+    assert_matches!(response, Command::Error(ref err) if err.error_type() == ErrorType::NeuronAlreadyVoted);
     assert_matches!(response, Command::Error(ref err) if err.error_message.contains("Neuron already voted"));
 }
 
@@ -196,7 +196,7 @@ fn neuron_cannot_vote_twice() {
     .command
     .expect("Casting vote failed");
 
-    assert_matches!(response_2, Command::Error(ref err) if err.error_type() == ErrorType::PreconditionFailed);
+    assert_matches!(response_2, Command::Error(ref err) if err.error_type() == ErrorType::NeuronAlreadyVoted);
     assert_matches!(response_2, Command::Error(ref err) if err.error_message.contains("Neuron already voted"));
 }
 

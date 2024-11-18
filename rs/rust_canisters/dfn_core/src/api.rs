@@ -855,7 +855,7 @@ pub fn data_certificate() -> Option<Vec<u8>> {
     Some(buf)
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 pub enum CanisterStatus {
     Running,
     Stopping,

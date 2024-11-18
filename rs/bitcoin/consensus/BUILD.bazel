@@ -3,7 +3,8 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/bitcoin/types/internal",
+    # Keep sorted.
+    "//rs/bitcoin/replica_types",
     "//rs/config",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",
@@ -27,8 +28,9 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
-    "//rs/interfaces/state_manager/mocks",
+    # Keep sorted.
     "//rs/interfaces/registry/mocks",
+    "//rs/interfaces/state_manager/mocks",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/state",
@@ -56,6 +58,9 @@ rust_test(
     name = "consensus_test",
     aliases = ALIASES,
     crate = ":consensus",
+    crate_features = [
+        "proptest",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

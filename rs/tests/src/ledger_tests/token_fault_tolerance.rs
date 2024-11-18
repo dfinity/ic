@@ -14,16 +14,16 @@ Runbook::
 Success:: balances obtained by queries matches expected balances after transfers
 
 end::catalog[] */
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
 };
-use crate::util;
+use ic_system_test_driver::util;
 
-use crate::driver::ic::{InternetComputer, Subnet};
 use canister_test::Canister;
 use ic_nns_constants::{LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_types::CanisterId;
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use slog::{info, Logger};

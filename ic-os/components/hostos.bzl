@@ -15,7 +15,6 @@ component_files = {
     Label("hostos-scripts/libvirt/setup-libvirt.sh"): "/opt/ic/bin/setup-libvirt.sh",
     Label("hostos-scripts/libvirt/setup-libvirt.service"): "/etc/systemd/system/setup-libvirt.service",
     Label("hostos-scripts/misc/setup-var.sh"): "/opt/ic/bin/setup-var.sh",
-    Label("hostos-scripts/misc/fetch-mgmt-mac.sh"): "/opt/ic/bin/fetch-mgmt-mac.sh",
     Label("hostos-scripts/misc/detect-first-boot.sh"): "/opt/ic/bin/detect-first-boot.sh",
     Label("hostos-scripts/monitoring/monitor-guestos.sh"): "/opt/ic/bin/monitor-guestos.sh",
     Label("hostos-scripts/monitoring/monitor-guestos.service"): "/etc/systemd/system/monitor-guestos.service",
@@ -27,6 +26,11 @@ component_files = {
     Label("hostos-scripts/monitoring/monitor-power.service"): "/etc/systemd/system/monitor-power.service",
     Label("hostos-scripts/monitoring/monitor-power.timer"): "/etc/systemd/system/monitor-power.timer",
     Label("hostos-scripts/build-bootstrap-config-image.sh"): "/opt/ic/bin/build-bootstrap-config-image.sh",
+    Label("hostos-scripts/verbose-logging/verbose-logging.sh"): "/opt/ic/bin/verbose-logging.sh",
+    Label("hostos-scripts/verbose-logging/verbose-logging.service"): "/etc/systemd/system/verbose-logging.service",
+    Label("hostos-scripts/verbose-logging/logrotate.d/verbose-logging"): "/etc/logrotate.d/verbose-logging",
+    Label("hostos-scripts/log-config/log-config.service"): "/etc/systemd/system/log-config.service",
+    Label("hostos-scripts/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
 
     # early-boot
     Label("early-boot/relabel-machine-id/relabel-machine-id.sh"): "/opt/ic/bin/relabel-machine-id.sh",
@@ -39,10 +43,13 @@ component_files = {
     Label("early-boot/fstab/fstab-hostos"): "/etc/fstab",
     Label("early-boot/locale"): "/etc/default/locale",
     Label("early-boot/initramfs-tools/hostos/initramfs.conf"): "/etc/initramfs-tools/initramfs.conf",
+    Label("early-boot/initramfs-tools/hostos/amd64-microcode"): "/etc/default/amd64-microcode",
+    Label("early-boot/initramfs-tools/hostos/intel-microcode"): "/etc/default/intel-microcode",
     Label("early-boot/initramfs-tools/hostos/modules"): "/etc/initramfs-tools/modules",
     Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id/set-machine-id",
 
     # misc
+    Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("misc/fetch-property.sh"): "/opt/ic/bin/fetch-property.sh",
     Label("misc/vsock/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",
@@ -65,6 +72,7 @@ component_files = {
     Label("monitoring/metrics-proxy/hostos/metrics-proxy.yaml"): "/etc/metrics-proxy.yaml",
     Label("monitoring/metrics-proxy/metrics-proxy.service"): "/etc/systemd/system/metrics-proxy.service",
     Label("monitoring/journald.conf"): "/etc/systemd/journald.conf",
+    Label("monitoring/logrotate/override.conf"): "/etc/systemd/system/logrotate.service.d/override.conf",
 
     # networking
     Label("networking/generate-network-config/hostos/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",
@@ -83,7 +91,7 @@ component_files = {
     Label("ssh/deploy-updated-ssh-account-keys/deploy-updated-ssh-account-keys.service"): "/etc/systemd/system/deploy-updated-ssh-account-keys.service",
 
     # upgrade
-    Label("upgrade/manageboot/hostos/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
+    Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
     Label("upgrade/systemd-generators/hostos/mount-generator"): "/etc/systemd/system-generators/mount-generator",
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/install-upgrade.sh"): "/opt/ic/bin/install-upgrade.sh",

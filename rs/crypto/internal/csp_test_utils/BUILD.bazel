@@ -9,6 +9,7 @@ rust_library(
     crate_name = "ic_crypto_internal_csp_test_utils",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
         "//rs/crypto/internal/crypto_lib/multi_sig/bls12_381",
         "//rs/crypto/internal/crypto_service_provider",

@@ -6,6 +6,7 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/certification/test-utils",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",

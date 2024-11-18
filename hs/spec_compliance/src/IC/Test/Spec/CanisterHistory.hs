@@ -47,23 +47,23 @@ canister_history_tests ecid =
                     c .! #origin @?= mapChangeOrigin o
                     c .! #details @?= mapChangeDetails d
            in [ simpleTestCase "after creation and code deployments" ecid $ \unican -> do
-                  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+                  let Just ucan_chunk_hash = tc_ucan_chunk_hash agentConfig
 
-                  cid <- ic_provisional_create ic00 ecid Nothing Nothing R.empty
+                  cid <- ic_provisional_create ic00 ecid Nothing Nothing Nothing
                   info <- get_canister_info unican cid (Just 1)
                   void $ check_history info 1 [(0, ChangeFromUser (EntityId defaultUser), Creation [(EntityId defaultUser)])]
 
-                  ic_install ic00 (enum #install) cid universal_wasm (run no_heartbeat)
+                  installAt cid no_heartbeat
                   info <- get_canister_info unican cid (Just 1)
-                  void $ check_history info 2 [(1, ChangeFromUser (EntityId defaultUser), CodeDeployment Install (sha256 universal_wasm))]
+                  void $ check_history info 2 [(1, ChangeFromUser (EntityId defaultUser), CodeDeployment Install ucan_chunk_hash)]
 
                   ic_install_with_sender_canister_version ic00 (enum #reinstall) cid trivialWasmModule "" (Just 666) -- sender_canister_version in ingress message is ignored
                   info <- get_canister_info unican cid (Just 1)
                   void $ check_history info 3 [(2, ChangeFromUser (EntityId defaultUser), CodeDeployment Reinstall (sha256 trivialWasmModule))]
 
-                  ic_install ic00 (enumNothing #upgrade) cid universal_wasm (run no_heartbeat)
+                  upgrade cid no_heartbeat
                   info <- get_canister_info unican cid (Just 1)
-                  void $ check_history info 4 [(3, ChangeFromUser (EntityId defaultUser), CodeDeployment Upgrade (sha256 universal_wasm))]
+                  void $ check_history info 4 [(3, ChangeFromUser (EntityId defaultUser), CodeDeployment Upgrade ucan_chunk_hash)]
 
                   return (),
                 simpleTestCase "after uninstall" ecid $ \unican -> do
@@ -101,7 +101,7 @@ canister_history_tests ecid =
                 testCase "changes from canister" $ do
                   unican <- install ecid no_heartbeat
 
-                  cid <- ic_create (ic00viaWithCycles unican 20_000_000_000_000) ecid (R.empty .+ #controllers .== Vec.fromList [Principal unican, Principal defaultUser])
+                  cid <- ic_create_with_controllers (ic00viaWithCycles unican 20_000_000_000_000) ecid [unican, defaultUser]
                   info <- get_canister_info unican cid (Just 1)
                   void $ check_history info 1 [(0, ChangeFromCanister (EntityId unican) Nothing, Creation [EntityId unican, EntityId defaultUser])]
 
@@ -111,8 +111,8 @@ canister_history_tests ecid =
 
                   return (),
                 simpleTestCase "does not track all update_settings calls" ecid $ \unican -> do
-                  cid <- ic_provisional_create ic00 ecid Nothing Nothing R.empty
-                  ic_update_settings ic00 cid (R.empty .+ #freezing_threshold .== 2 ^ (10 :: Int)) -- not stored in canister history; canister version still bumped
+                  cid <- ic_provisional_create ic00 ecid Nothing Nothing Nothing
+                  ic_set_freezing_threshold ic00 cid (2 ^ 10) -- not stored in canister history; canister version still bumped
                   ic_install ic00 (enum #install) cid trivialWasmModule ""
 
                   info <- get_canister_info unican cid (Just 2)
@@ -125,19 +125,19 @@ canister_history_tests ecid =
                       ],
                 testCase "incorrect sender_canister_version" $ do
                   unican <- install ecid no_heartbeat
-                  ic_create_with_sender_canister_version' (ic00via unican) ecid (Just 666) R.empty >>= isReject [5],
+                  ic_create_with_sender_canister_version' (ic00via unican) ecid (Just 666) Nothing >>= isReject [5],
                 simpleTestCase "user call to canister_info" ecid $ \cid ->
                   ic_canister_info'' defaultUser cid Nothing >>= is2xx >>= isReject [4],
                 simpleTestCase "calling canister_info" ecid $ \unican -> do
-                  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+                  let Just ucan_chunk_hash = tc_ucan_chunk_hash agentConfig
 
-                  cid <- ic_provisional_create ic00 ecid Nothing Nothing R.empty
+                  cid <- ic_provisional_create ic00 ecid Nothing Nothing Nothing
                   ic_install ic00 (enum #install) cid trivialWasmModule ""
-                  ic_install ic00 (enum #reinstall) cid universal_wasm (run no_heartbeat)
+                  reinstall cid no_heartbeat
 
                   info <- get_canister_info unican cid Nothing
                   info .! #controllers @?= (Vec.fromList [Principal defaultUser])
-                  info .! #module_hash @?= (Just $ sha256 universal_wasm)
+                  info .! #module_hash @?= (Just $ ucan_chunk_hash)
 
                   ic_install ic00 (enumNothing #upgrade) cid trivialWasmModule ""
 
@@ -156,7 +156,7 @@ canister_history_tests ecid =
                   let hist =
                         [ (0, ChangeFromUser (EntityId defaultUser), Creation [(EntityId defaultUser)]),
                           (1, ChangeFromUser (EntityId defaultUser), CodeDeployment Install (sha256 trivialWasmModule)),
-                          (2, ChangeFromUser (EntityId defaultUser), CodeDeployment Reinstall (sha256 universal_wasm)),
+                          (2, ChangeFromUser (EntityId defaultUser), CodeDeployment Reinstall ucan_chunk_hash),
                           (3, ChangeFromUser (EntityId defaultUser), CodeDeployment Upgrade (sha256 trivialWasmModule)),
                           (4, ChangeFromUser (EntityId defaultUser), CodeUninstall),
                           (5, ChangeFromUser (EntityId defaultUser), ControllersChange [EntityId otherUser, EntityId defaultUser])

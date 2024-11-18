@@ -1,10 +1,14 @@
-use crate::wasmtime_embedder::{
-    system_api_complexity::{overhead, overhead_native},
-    StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
+use crate::{
+    wasm_utils::instrumentation::WasmMemoryType,
+    wasmtime_embedder::{
+        convert_backtrace,
+        system_api_complexity::{overhead, overhead_native},
+        StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
+    },
+    InternalErrorCode,
 };
-
 use ic_config::{
-    embedders::{FeatureFlags, StableMemoryDirtyPageLimit},
+    embedders::{FeatureFlags, StableMemoryPageLimit},
     flag_status::FlagStatus,
 };
 use ic_interfaces::execution_environment::{
@@ -14,21 +18,18 @@ use ic_interfaces::execution_environment::{
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
-use ic_types::{Cycles, NumBytes, NumInstructions, NumOsPages, Time};
-use ic_wasm_types::WasmEngineError;
-
-use wasmtime::{AsContextMut, Caller, Global, Linker, Val};
-
-use crate::InternalErrorCode;
-use std::convert::TryFrom;
-
-use crate::wasm_utils::instrumentation::WasmMemoryType;
 use ic_system_api::SystemApiImpl;
+use ic_types::{Cycles, NumBytes, NumInstructions, Time};
+use ic_wasm_types::WasmEngineError;
+use num_traits::ops::saturating::SaturatingAdd;
+
+use wasmtime::{AsContext, AsContextMut, Caller, Global, Linker, Val, WasmBacktrace};
+
+use std::convert::TryFrom;
 
 /// The amount of instructions required to process a single byte in a payload.
 /// This includes the cost of memory as well as time passing the payload
 /// from wasm sandbox to the replica execution environment.
-
 const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
 
 fn unexpected_err(s: String) -> HypervisorError {
@@ -37,8 +38,9 @@ fn unexpected_err(s: String) -> HypervisorError {
 
 fn process_err(
     store: &mut impl AsContextMut<Data = StoreData>,
-    e: HypervisorError,
+    mut e: HypervisorError,
 ) -> anyhow::Error {
+    add_backtrace(&mut e, &store);
     match store.as_context_mut().data_mut().system_api_mut() {
         Ok(api) => {
             let result = anyhow::Error::msg(format! {"{}", e});
@@ -48,6 +50,24 @@ fn process_err(
         Err(_) => anyhow::Error::msg(
             format! {"Failed to access system api while processing error: {}", e},
         ),
+    }
+}
+
+fn add_backtrace(e: &mut HypervisorError, store: impl AsContext<Data = StoreData>) {
+    if store.as_context().data().canister_backtrace == FlagStatus::Enabled {
+        match e {
+            HypervisorError::Trapped {
+                trap_code: _,
+                backtrace,
+            }
+            | HypervisorError::CalledTrap {
+                message: _,
+                backtrace,
+            } => {
+                *backtrace = Some(convert_backtrace(&WasmBacktrace::capture(store)));
+            }
+            _ => {}
+        }
     }
 }
 
@@ -85,7 +105,7 @@ fn store_value(
 /// Updates heap bytemap marking which pages have been written to dst and size
 /// need to have valid values (need to pass checks performed by the function
 /// that actually writes to the heap)
-#[inline(never)]
+#[inline(always)]
 fn mark_writes_on_bytemap(
     caller: &mut Caller<'_, StoreData>,
     dst: usize,
@@ -117,6 +137,7 @@ fn mark_writes_on_bytemap(
 }
 
 /// Charge for system api call that doesn't involve touching memory
+#[inline(always)]
 fn charge_for_cpu(
     caller: &mut Caller<'_, StoreData>,
     overhead: NumInstructions,
@@ -125,6 +146,7 @@ fn charge_for_cpu(
 }
 
 /// Charge for system api call that involves writing/reading heap
+#[inline(always)]
 fn charge_for_cpu_and_mem(
     caller: &mut Caller<'_, StoreData>,
     overhead: NumInstructions,
@@ -135,51 +157,31 @@ fn charge_for_cpu_and_mem(
 
 /// Charge for system api call that involves writing/reading stable memory
 // TODO: RUN-841: Cover with tests
-#[inline(never)]
+#[inline(always)]
 fn charge_for_stable_write(
     caller: &mut Caller<'_, StoreData>,
     mut overhead: NumInstructions,
     offset: u64,
     size: u64,
-    dirty_page_limit_message: NumOsPages,
-    dirty_page_limit_upgrade: NumOsPages,
+    dirty_page_limit: StableMemoryPageLimit,
 ) -> HypervisorResult<()> {
     let system_api = caller.data().system_api()?;
     let (new_stable_dirty_pages, dirty_page_cost) =
         system_api.dirty_pages_from_stable_write(offset, size)?;
 
-    let dirty_page_limit = if system_api.is_install_or_upgrade_message() {
-        dirty_page_limit_upgrade
-    } else {
-        dirty_page_limit_message
-    };
+    let dirty_page_limit = system_api.get_page_limit(&dirty_page_limit);
 
-    overhead = overhead
-        .get()
-        .checked_add(dirty_page_cost.get())
-        .ok_or(unexpected_err(format!(
-            "Overflow while calculating charge for stable write:\
-             overhead: {}, dirty page cost: {}",
-            overhead, dirty_page_cost
-        )))?
-        .into();
-
-    #[allow(non_upper_case_globals)]
-    const KiB: u64 = 1024;
+    overhead = overhead.saturating_add(&dirty_page_cost);
 
     let stable_dirty_pages = &mut caller
         .data_mut()
         .num_stable_dirty_pages_from_non_native_writes;
-    let total_pages = NumOsPages::from(
-        stable_dirty_pages
-            .get()
-            .saturating_add(new_stable_dirty_pages.get()),
-    );
+    let total_pages = stable_dirty_pages.saturating_add(&new_stable_dirty_pages);
 
     if total_pages > dirty_page_limit {
         let error = HypervisorError::MemoryAccessLimitExceeded(
                             format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB.",
-                            dirty_page_limit * (PAGE_SIZE as u64 / KiB),
+                            dirty_page_limit * (PAGE_SIZE as u64 / 1024),
                             ),
                         );
         return Err(error);
@@ -205,39 +207,24 @@ fn charge_for_stable_write(
 //
 // Note: marked not for inlining as we don't want to spill this code into every system API call.
 // TODO: RUN-841: Cover with tests
-#[inline(never)]
+#[inline(always)]
 fn charge_for_system_api_call(
     caller: &mut Caller<'_, StoreData>,
-    mut overhead: NumInstructions,
+    overhead: NumInstructions,
     num_bytes: usize,
 ) -> HypervisorResult<()> {
     let system_api = caller.data_mut().system_api()?;
-    if num_bytes > 0 {
-        let bytes_charge =
-            system_api.get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64));
-        overhead = overhead
-            .get()
-            .checked_add(bytes_charge.get())
-            .ok_or(unexpected_err(format!(
-                "Overflow while calculating charge for System API call:\
-             overhead: {}, bytes charge: {}",
-                overhead, bytes_charge
-            )))?
-            .into();
-    }
-
+    let bytes_charge = system_api.get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64));
+    let overhead = overhead.saturating_add(&bytes_charge);
     charge_direct_fee(caller, overhead)
 }
 
 // TODO: RUN-841: Cover with tests
+#[inline(always)]
 fn charge_direct_fee(
     caller: &mut Caller<'_, StoreData>,
     fee: NumInstructions,
 ) -> HypervisorResult<()> {
-    if fee == NumInstructions::from(0) {
-        return Ok(());
-    }
-
     let num_instructions_global = get_num_instructions_global(caller)?;
     let mut instruction_counter = load_value(&num_instructions_global, caller)?;
     // Assert the current instruction counter is sane
@@ -299,13 +286,29 @@ fn ic0_performance_counter_helper(
     }
 }
 
-pub(crate) fn syscalls(
+/// pub for usage in fuzzing to generate the available system api imports
+#[doc(hidden)]
+pub fn syscalls<
+    I: TryInto<usize>
+        + TryInto<u64>
+        + TryInto<u32>
+        + TryFrom<usize>
+        + wasmtime::WasmTy
+        + std::fmt::Display
+        + Copy,
+>(
     linker: &mut Linker<StoreData>,
     feature_flags: FeatureFlags,
-    stable_memory_dirty_page_limit: StableMemoryDirtyPageLimit,
-    stable_memory_access_page_limit: NumOsPages,
+    stable_memory_dirty_page_limit: StableMemoryPageLimit,
+    stable_memory_access_page_limit: StableMemoryPageLimit,
     main_memory_type: WasmMemoryType,
-) {
+) where
+    <I as TryInto<usize>>::Error: std::fmt::Display,
+    <I as TryInto<usize>>::Error: std::fmt::Debug,
+    <I as TryFrom<usize>>::Error: std::fmt::Display,
+    <I as TryInto<u64>>::Error: std::fmt::Debug,
+    <I as TryInto<u32>>::Error: std::fmt::Display,
+{
     fn with_system_api<T>(
         mut caller: &mut Caller<'_, StoreData>,
         f: impl Fn(&mut SystemApiImpl) -> HypervisorResult<T>,
@@ -340,6 +343,10 @@ pub(crate) fn syscalls(
                     })
             })
             .and_then(|mem| {
+                // False positive clippy lint.
+                // Issue: https://github.com/rust-lang/rust-clippy/issues/12856
+                // Fixed in: https://github.com/rust-lang/rust-clippy/pull/12892
+                #[allow(clippy::needless_borrows_for_generic_args)]
                 let (mem, store) = mem.data_and_store_mut(&mut caller);
                 f(store.system_api_mut()?, mem)
             })
@@ -384,8 +391,10 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_caller_copy", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::MSG_CALLER_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_caller_copy(dst, offset, size, memory)
@@ -404,7 +413,7 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_CALLER_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_msg_caller_size()).and_then(|s| {
-                    i32::try_from(s).map_err(|e| {
+                    I::try_from(s).map_err(|e| {
                         anyhow::Error::msg(format!("ic0::msg_caller_size failed: {}", e))
                     })
                 })
@@ -417,7 +426,7 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_ARG_DATA_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_msg_arg_data_size()).and_then(|s| {
-                    i32::try_from(s).map_err(|e| {
+                    I::try_from(s).map_err(|e| {
                         anyhow::Error::msg(format!("ic0::msg_arg_data_size failed: {}", e))
                     })
                 })
@@ -427,8 +436,10 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_arg_data_copy", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::MSG_ARG_DATA_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, mem| {
                     system_api.ic0_msg_arg_data_copy(dst, offset, size, mem)
@@ -447,7 +458,7 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_METHOD_NAME_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_msg_method_name_size()).and_then(|s| {
-                    i32::try_from(s).map_err(|e| {
+                    I::try_from(s).map_err(|e| {
                         anyhow::Error::msg(format!("ic0::msg_metohd_name_size failed: {}", e))
                     })
                 })
@@ -457,8 +468,10 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_method_name_copy", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::MSG_METHOD_NAME_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_method_name_copy(dst, offset, size, memory)
@@ -483,12 +496,13 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_reply_data_append", {
-            move |mut caller: Caller<'_, StoreData>, src: u32, size: u32| {
-                let (src, size) = (src as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I| {
+                let src: usize = src.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead::MSG_REPLY_DATA_APPEND,
-                    size.saturating_mul(BYTE_TRANSMISSION_COST_FACTOR),
+                    BYTE_TRANSMISSION_COST_FACTOR.saturating_mul(size),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reply_data_append(src, size, memory)
@@ -517,12 +531,13 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_reject", {
-            move |mut caller: Caller<'_, StoreData>, src: u32, size: u32| {
-                let (src, size) = (src as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I| {
+                let src: usize = src.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead::MSG_REJECT,
-                    size.saturating_mul(BYTE_TRANSMISSION_COST_FACTOR),
+                    BYTE_TRANSMISSION_COST_FACTOR.saturating_mul(size),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject(src, size, memory)
@@ -536,7 +551,7 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_REJECT_MSG_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_msg_reject_msg_size()).and_then(|s| {
-                    i32::try_from(s).map_err(|e| {
+                    I::try_from(s).map_err(|e| {
                         anyhow::Error::msg(format!("ic0_msg_reject_msg_size failed: {}", e))
                     })
                 })
@@ -546,8 +561,10 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_reject_msg_copy", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::MSG_REJECT_MSG_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject_msg_copy(dst, offset, size, memory)
@@ -566,7 +583,7 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::CANISTER_SELF_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_canister_self_size()).and_then(|s| {
-                    i32::try_from(s).map_err(|e| {
+                    I::try_from(s).map_err(|e| {
                         anyhow::Error::msg(format!("ic0_canister_self_size failed: {}", e))
                     })
                 })
@@ -576,8 +593,10 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "canister_self_copy", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::CANISTER_SELF_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_canister_self_copy(dst, offset, size, memory)
@@ -593,26 +612,19 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "debug_print", {
-            move |mut caller: Caller<'_, StoreData>, offset: u32, length: u32| {
+            move |mut caller: Caller<'_, StoreData>, offset: I, length: I| {
+                let length: u64 = length.try_into().expect("Failed to convert I to u64");
                 let mut num_bytes = 0;
-                let canister_logging_is_enabled =
-                    feature_flags.canister_logging == FlagStatus::Enabled;
-                if canister_logging_is_enabled {
-                    num_bytes += logging_charge_bytes(&mut caller, length as u64)?
-                }
+                num_bytes += logging_charge_bytes(&mut caller, length)?;
                 let debug_print_is_enabled = debug_print_is_enabled(&mut caller, feature_flags)?;
                 if debug_print_is_enabled {
-                    num_bytes += length as u64;
+                    num_bytes += length;
                 }
                 charge_for_cpu_and_mem(&mut caller, overhead::DEBUG_PRINT, num_bytes as usize)?;
-                let (offset, length) = (offset as usize, length as usize);
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let length = length as usize;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.save_log_message(
-                        canister_logging_is_enabled,
-                        offset,
-                        length,
-                        memory,
-                    );
+                    system_api.save_log_message(offset, length, memory);
                     if debug_print_is_enabled {
                         system_api.ic0_debug_print(offset, length, memory)
                     } else {
@@ -625,8 +637,9 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "trap", {
-            move |mut caller: Caller<'_, StoreData>, offset: u32, length: u32| -> Result<(), _> {
-                let (offset, length) = (offset as usize, length as usize);
+            move |mut caller: Caller<'_, StoreData>, offset: I, length: I| -> Result<(), _> {
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let length: usize = length.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::TRAP, length)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_trap(offset, length, memory)
@@ -638,22 +651,32 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "call_new", {
             move |mut caller: Caller<'_, StoreData>,
-                  callee_src: u32,
-                  callee_size: u32,
-                  name_src: u32,
-                  name_len: u32,
-                  reply_fun: u32,
-                  reply_env: u32,
-                  reject_fun: u32,
-                  reject_env: u32| {
-                let (callee_src, callee_size) = (callee_src as usize, callee_size as usize);
-                let (name_src, name_len) = (name_src as usize, name_len as usize);
+                  callee_src: I,
+                  callee_size: I,
+                  name_src: I,
+                  name_len: I,
+                  reply_fun: I,
+                  reply_env: I,
+                  reject_fun: I,
+                  reject_env: I| {
+                let callee_src: usize =
+                    callee_src.try_into().expect("Failed to convert I to usize");
+                let callee_size: usize = callee_size
+                    .try_into()
+                    .expect("Failed to convert I to usize");
+                let name_src: usize = name_src.try_into().expect("Failed to convert I to usize");
+                let name_len: usize = name_len.try_into().expect("Failed to convert I to usize");
+                let reply_env: u64 = reply_env.try_into().expect("Failed to convert I to u64");
+                let reject_env: u64 = reject_env.try_into().expect("Failed to convert I to u64");
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead::CALL_NEW,
                     callee_size.saturating_add(name_len),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    // A valid function index should be much smaller than u32::max
+                    let reply_fun: u32 = reply_fun.try_into().unwrap_or(u32::MAX);
+                    let reject_fun: u32 = reject_fun.try_into().unwrap_or(u32::MAX);
                     system_api.ic0_call_new(
                         callee_src,
                         callee_size,
@@ -672,12 +695,13 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "call_data_append", {
-            move |mut caller: Caller<'_, StoreData>, src: u32, size: u32| {
-                let (src, size) = (src as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I| {
+                let src: usize = src.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead::CALL_DATA_APPEND,
-                    size.saturating_mul(BYTE_TRANSMISSION_COST_FACTOR),
+                    BYTE_TRANSMISSION_COST_FACTOR.saturating_mul(size),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_call_data_append(src, size, memory)
@@ -688,9 +712,14 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "call_on_cleanup", {
-            move |mut caller: Caller<'_, StoreData>, fun: u32, env: u32| {
+            move |mut caller: Caller<'_, StoreData>, fun: I, env: I| {
+                let env: u64 = env.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::CALL_ON_CLEANUP)?;
-                with_system_api(&mut caller, |s| s.ic0_call_on_cleanup(fun, env))
+                with_system_api(&mut caller, |s| {
+                    // A valid function index should be much smaller than u32::max
+                    let fun: u32 = fun.try_into().unwrap_or(u32::MAX);
+                    s.ic0_call_on_cleanup(fun, env)
+                })
             }
         })
         .unwrap();
@@ -728,10 +757,7 @@ pub(crate) fn syscalls(
         .func_wrap("ic0", "stable_size", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::STABLE_SIZE)?;
-                with_system_api(&mut caller, |s| s.ic0_stable_size()).and_then(|s| {
-                    i32::try_from(s)
-                        .map_err(|e| anyhow::Error::msg(format!("ic0_stable_size failed: {}", e)))
-                })
+                with_system_api(&mut caller, |s| s.ic0_stable_size())
             }
         })
         .unwrap();
@@ -769,8 +795,7 @@ pub(crate) fn syscalls(
                     overhead::STABLE_WRITE,
                     offset as u64,
                     size as u64,
-                    stable_memory_dirty_page_limit.message,
-                    stable_memory_dirty_page_limit.upgrade,
+                    stable_memory_dirty_page_limit,
                 )
                 .map_err(|e| process_err(&mut caller, e))?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
@@ -784,10 +809,7 @@ pub(crate) fn syscalls(
         .func_wrap("ic0", "stable64_size", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::STABLE64_SIZE)?;
-                with_system_api(&mut caller, |s| s.ic0_stable64_size()).and_then(|s| {
-                    i64::try_from(s)
-                        .map_err(|e| anyhow::Error::msg(format!("ic0_stable64_size failed: {}", e)))
-                })
+                with_system_api(&mut caller, |s| s.ic0_stable64_size())
             }
         })
         .unwrap();
@@ -840,8 +862,7 @@ pub(crate) fn syscalls(
                     overhead::STABLE64_WRITE,
                     offset,
                     size,
-                    stable_memory_dirty_page_limit.message,
-                    stable_memory_dirty_page_limit.upgrade,
+                    stable_memory_dirty_page_limit,
                 )
                 .map_err(|e| process_err(&mut caller, e))?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
@@ -896,19 +917,15 @@ pub(crate) fn syscalls(
         .func_wrap("ic0", "canister_cycle_balance", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::CANISTER_CYCLE_BALANCE)?;
-                with_system_api(&mut caller, |s| s.ic0_canister_cycle_balance()).and_then(|s| {
-                    i64::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0_canister_cycle_balance failed: {}", e))
-                    })
-                })
+                with_system_api(&mut caller, |s| s.ic0_canister_cycle_balance())
             }
         })
         .unwrap();
 
     linker
         .func_wrap("ic0", "canister_cycle_balance128", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32| {
-                let dst = dst as usize;
+            move |mut caller: Caller<'_, StoreData>, dst: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::CANISTER_CYCLE_BALANCE128)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     s.ic0_canister_cycle_balance128(dst, memory)
@@ -926,19 +943,15 @@ pub(crate) fn syscalls(
         .func_wrap("ic0", "msg_cycles_available", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_AVAILABLE)?;
-                with_system_api(&mut caller, |s| s.ic0_msg_cycles_available()).and_then(|s| {
-                    i64::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0_msg_cycles_available failed: {}", e))
-                    })
-                })
+                with_system_api(&mut caller, |s| s.ic0_msg_cycles_available())
             }
         })
         .unwrap();
 
     linker
         .func_wrap("ic0", "msg_cycles_available128", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32| {
-                let dst = dst as usize;
+            move |mut caller: Caller<'_, StoreData>, dst: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_AVAILABLE128)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_available128(dst, memory)
@@ -956,19 +969,15 @@ pub(crate) fn syscalls(
         .func_wrap("ic0", "msg_cycles_refunded", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_REFUNDED)?;
-                with_system_api(&mut caller, |s| s.ic0_msg_cycles_refunded()).and_then(|s| {
-                    i64::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0_msg_cycles_refunded failed: {}", e))
-                    })
-                })
+                with_system_api(&mut caller, |s| s.ic0_msg_cycles_refunded())
             }
         })
         .unwrap();
 
     linker
         .func_wrap("ic0", "msg_cycles_refunded128", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32| {
-                let dst = dst as usize;
+            move |mut caller: Caller<'_, StoreData>, dst: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_REFUNDED128)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_refunded128(dst, memory)
@@ -993,8 +1002,8 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_cycles_accept128", {
-            move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: u32| {
-                let dst = dst as usize;
+            move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_ACCEPT128)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_accept128(
@@ -1075,7 +1084,10 @@ pub(crate) fn syscalls(
                         additional_pages as u64,
                         stable_memory_api
                             .try_into()
-                            .map_err(|()| HypervisorError::Trapped(TrapCode::Other))?,
+                            .map_err(|()| HypervisorError::Trapped {
+                                trap_code: TrapCode::Other,
+                                backtrace: None,
+                            })?,
                     )? {
                         StableGrowOutcome::Success => Ok(current_size),
                         StableGrowOutcome::Failure => Ok(-1),
@@ -1096,8 +1108,9 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "certified_data_set", {
-            move |mut caller: Caller<'_, StoreData>, src: u32, size: u32| {
-                let (src, size) = (src as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I| {
+                let src: usize = src.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::CERTIFIED_DATA_SET, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_certified_data_set(src, size, memory)
@@ -1119,8 +1132,10 @@ pub(crate) fn syscalls(
         .func_wrap("ic0", "data_certificate_size", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::DATA_CERTIFICATE_SIZE)?;
-                with_system_api(&mut caller, |s| {
-                    s.ic0_data_certificate_size().map(|x| x as u32)
+                with_system_api(&mut caller, |s| s.ic0_data_certificate_size()).and_then(|x| {
+                    I::try_from(x).map_err(|e| {
+                        anyhow::Error::msg(format!("ic0::data_certificate_size failed: {}", e))
+                    })
                 })
             }
         })
@@ -1128,8 +1143,9 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "is_controller", {
-            move |mut caller: Caller<'_, StoreData>, src: u32, size: u32| {
-                let (src, size) = (src as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I| {
+                let src: usize = src.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::IS_CONTROLLER, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_is_controller(src, size, memory)
@@ -1149,8 +1165,10 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "data_certificate_copy", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::DATA_CERTIFICATE_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_data_certificate_copy(dst, offset, size, memory)
@@ -1167,19 +1185,16 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "mint_cycles", {
             move |mut caller: Caller<'_, StoreData>, amount: u64| {
-                with_system_api(&mut caller, |s| s.ic0_mint_cycles(amount)).and_then(|s| {
-                    i64::try_from(s)
-                        .map_err(|e| anyhow::Error::msg(format!("ic0_mint_cycles failed: {}", e)))
-                })
+                with_system_api(&mut caller, |s| s.ic0_mint_cycles(amount))
             }
         })
         .unwrap();
 
     linker
         .func_wrap("ic0", "cycles_burn128", {
-            move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: u32| {
-                let dst = dst as usize;
+            move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: I| {
                 with_memory_and_system_api(&mut caller, |s, memory| {
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cycles_burn128(Cycles::from_parts(amount_high, amount_low), dst, memory)
                 })
                 .map_err(|e| anyhow::Error::msg(format!("ic0_cycles_burn128 failed: {}", e)))
@@ -1196,10 +1211,8 @@ pub(crate) fn syscalls(
                         system_api.ic0_call_with_best_effort_response(timeout_seconds)
                     })
                 } else {
-                    let err = HypervisorError::UserContractViolation {
+                    let err = HypervisorError::ToolchainContractViolation {
                         error: "ic0::call_with_best_effort_response is not enabled.".to_string(),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     };
                     Err(process_err(&mut caller, err))
                 }
@@ -1214,10 +1227,8 @@ pub(crate) fn syscalls(
                 if feature_flags.best_effort_responses == FlagStatus::Enabled {
                     with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
                 } else {
-                    let err = HypervisorError::UserContractViolation {
+                    let err = HypervisorError::ToolchainContractViolation {
                         error: "ic0::msg_deadline is not enabled.".to_string(),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     };
                     Err(process_err(&mut caller, err))
                 }
@@ -1229,36 +1240,52 @@ pub(crate) fn syscalls(
         .func_wrap("__", "internal_trap", {
             move |mut caller: Caller<'_, StoreData>, err_code: i32| -> Result<(), _> {
                 let err = match InternalErrorCode::from_i32(err_code) {
-                    InternalErrorCode::HeapOutOfBounds => {
-                        HypervisorError::Trapped(TrapCode::HeapOutOfBounds)
-                    }
-                    InternalErrorCode::StableMemoryOutOfBounds => {
-                        HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds)
-                    }
-                    InternalErrorCode::StableMemoryTooBigFor32Bit => {
-                        HypervisorError::Trapped(TrapCode::StableMemoryTooBigFor32Bit)
-                    }
+                    InternalErrorCode::HeapOutOfBounds => HypervisorError::Trapped {
+                        trap_code: TrapCode::HeapOutOfBounds,
+                        backtrace: None,
+                    },
+                    InternalErrorCode::StableMemoryOutOfBounds => HypervisorError::Trapped {
+                        trap_code: TrapCode::StableMemoryOutOfBounds,
+                        backtrace: None,
+                    },
+                    InternalErrorCode::StableMemoryTooBigFor32Bit => HypervisorError::Trapped {
+                        trap_code: TrapCode::StableMemoryTooBigFor32Bit,
+                        backtrace: None,
+                    },
                     InternalErrorCode::MemoryWriteLimitExceeded => {
-                        HypervisorError::MemoryAccessLimitExceeded(
-                            format!("Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages and {} KB for upgrade messages.",
-                            stable_memory_dirty_page_limit.message.get() * (PAGE_SIZE as u64 / 1024), stable_memory_dirty_page_limit.upgrade.get() * (PAGE_SIZE as u64 / 1024),
-                            )
-                        )
+                        HypervisorError::MemoryAccessLimitExceeded(format!(
+                            "Exceeded the limit for the number of \
+                            modified pages in the stable memory in a single \
+                            execution: limit {} KB for regular messages, {} KB \
+                            for upgrade messages and {} KB for queries.",
+                            stable_memory_dirty_page_limit.message.get()
+                                * (PAGE_SIZE as u64 / 1024),
+                            stable_memory_dirty_page_limit.upgrade.get()
+                                * (PAGE_SIZE as u64 / 1024),
+                            stable_memory_dirty_page_limit.query.get() * (PAGE_SIZE as u64 / 1024)
+                        ))
                     }
                     InternalErrorCode::MemoryAccessLimitExceeded => {
-                        HypervisorError::MemoryAccessLimitExceeded(
-                            format!("Exceeded the limit for the number of accessed pages in the stable memory in a single message execution: limit: {} KB.",
-                                    stable_memory_access_page_limit * (PAGE_SIZE as u64 / 1024),
-                            )
-                        )
+                        HypervisorError::MemoryAccessLimitExceeded(format!(
+                            "Exceeded the limit for the number of \
+                            accessed pages in the stable memory in a single \
+                            message execution: limit {} KB for regular messages \
+                            and {} KB for queries.",
+                            stable_memory_access_page_limit.message.get()
+                                * (PAGE_SIZE as u64 / 1024),
+                            stable_memory_access_page_limit.query.get() * (PAGE_SIZE as u64 / 1024),
+                        ))
                     }
-                    InternalErrorCode::StableGrowFailed => {
-                        HypervisorError::CalledTrap("Internal error: `memory.grow` instruction failed to grow stable memory".to_string())
-                    }
-                    InternalErrorCode::Unknown => HypervisorError::CalledTrap(format!(
-                        "Trapped with internal error code: {}",
-                        err_code
-                    )),
+                    InternalErrorCode::StableGrowFailed => HypervisorError::CalledTrap {
+                        message:
+                            "Internal error: `memory.grow` instruction failed to grow stable memory"
+                                .to_string(),
+                        backtrace: None,
+                    },
+                    InternalErrorCode::Unknown => HypervisorError::CalledTrap {
+                        message: format!("Trapped with internal error code: {}", err_code),
+                        backtrace: None,
+                    },
                 };
                 Err(process_err(&mut caller, err))
             }

@@ -1,8 +1,8 @@
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::CspSignature;
-use ic_crypto_internal_csp::vault::api::CspTlsSignError;
-use ic_crypto_internal_csp::TlsHandshakeCspVault;
+use ic_crypto_internal_csp::vault::api::{CspTlsSignError, CspVault};
 use rustls::{self, Error as TLSError, SignatureAlgorithm, SignatureScheme};
+use std::fmt;
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -12,6 +12,7 @@ mod tests;
 /// `CspServerEd25519Signer` in `choose_scheme`. The signing operation is
 /// delegated to the `TlsHandshakeCspServer` which may perform the signing
 /// operation in a separate process or remotely on an HSM.
+#[derive(Debug)]
 pub struct CspServerEd25519SigningKey {
     signer: CspServerEd25519Signer,
 }
@@ -19,7 +20,7 @@ pub struct CspServerEd25519SigningKey {
 impl CspServerEd25519SigningKey {
     /// Creates a `CspServerEd25519SigningKey` that uses `tls_csp_vault` to
     /// create signatures. The `key_id` indicates which secret key is used for signing.
-    pub fn new(key_id: KeyId, tls_csp_vault: Arc<dyn TlsHandshakeCspVault>) -> Self {
+    pub fn new(key_id: KeyId, tls_csp_vault: Arc<dyn CspVault>) -> Self {
         Self {
             signer: CspServerEd25519Signer {
                 key_id,
@@ -50,7 +51,18 @@ impl rustls::sign::SigningKey for CspServerEd25519SigningKey {
 #[derive(Clone)]
 struct CspServerEd25519Signer {
     key_id: KeyId,
-    tls_csp_vault: Arc<dyn TlsHandshakeCspVault>,
+    // Ideally, this would be of type `Arc<dyn TlsHandshakeCspVault>` (because
+    // that is all that is needed) but because `CryptoComponentImpl::vault` is
+    // of type `Arc<dyn CspVault>` and [dyn upcasting
+    // coersion](https://github.com/rust-lang/rust/issues/65991) is not
+    // stabilized yet, we use the same type here.
+    tls_csp_vault: Arc<dyn CspVault>,
+}
+
+impl fmt::Debug for CspServerEd25519Signer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "CspServerEd25519Signer{{ key_id: {} }}", self.key_id)
+    }
 }
 
 impl rustls::sign::Signer for CspServerEd25519Signer {

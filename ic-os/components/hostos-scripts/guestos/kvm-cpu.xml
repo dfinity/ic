@@ -1,5 +1,5 @@
-  <cpu mode='host-passthrough' migratable='off'>
-    <cache mode='passthrough'/>
-    <topology sockets='2' cores='16' threads='2'/>
-    <feature policy="require" name="topoext"/>
-  </cpu>
+<cpu mode='host-passthrough' migratable='off'>
+  <cache mode='passthrough'/>
+  <topology sockets='2' cores='16' threads='2'/>
+  <feature policy="require" name="topoext"/>
+</cpu>

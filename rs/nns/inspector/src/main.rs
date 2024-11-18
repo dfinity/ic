@@ -6,7 +6,7 @@ use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
 };
-use ic_nns_governance::pb::v1::{Governance as GovernanceProto, Neuron};
+use ic_nns_governance_api::pb::v1::{Governance as GovernanceProto, Neuron};
 use ic_nns_gtc::pb::v1::Gtc as GtcProto;
 use icp_ledger::{AccountIdentifier, Subaccount};
 use prost::Message;
@@ -27,14 +27,13 @@ use std::{
 )]
 struct CliArgs {
     /// Path to stable the `canister_states` directory
-    #[clap(parse(from_os_str))]
     input: PathBuf,
 
-    #[clap(parse(from_os_str), default_value = ".")]
+    #[clap(default_value = ".")]
     output: PathBuf,
 
     /// The location of the "rs" directory. Used to find .proto files.
-    #[clap(long, parse(from_os_str), default_value = ".")]
+    #[clap(long, default_value = ".")]
     rs: PathBuf,
 }
 
@@ -148,7 +147,7 @@ fn decode_governance_stable_memory(gov_pb: PathBuf, output: &Path, rs: &Path) {
     let cmd = cmd_base
         // -I: where to find included protos (transitively)
         .args(["-I", "nns/governance/proto"])
-        .args(["-I", "rosetta-api/icp_ledger/proto"])
+        .args(["-I", "ledger_suite/icp/proto"])
         .args(["-I", "types/base_types/proto"])
         .args(["-I", "nns/common/proto"])
         // Main arg: the main proto file
@@ -227,7 +226,7 @@ fn decode_gtc_stable_memory(gtc_pb: PathBuf, output: &Path, rs: &Path) {
     let cmd = cmd_base
         // -I: where to find included protos (transitively)
         .args(["-I", "nns/governance/proto"])
-        .args(["-I", "rosetta-api/icp_ledger/proto"])
+        .args(["-I", "ledger_suite/icp/proto"])
         .args(["-I", "types/base_types/proto"])
         .args(["-I", "nns/common/proto"])
         .args(["-I", "nns/gtc/proto"])

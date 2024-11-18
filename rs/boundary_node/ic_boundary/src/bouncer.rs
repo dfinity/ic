@@ -1,5 +1,5 @@
 use std::{
-    net::{IpAddr, SocketAddr},
+    net::IpAddr,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -9,14 +9,10 @@ use std::{
 
 use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
-use axum::{
-    body::Body,
-    extract::{ConnectInfo, State},
-    middleware::Next,
-    response::IntoResponse,
-};
+use axum::{body::Body, extract::State, middleware::Next, response::IntoResponse};
 use dashmap::DashMap;
 use http::Request;
+use ic_bn_lib::http::ConnInfo;
 use moka::sync::{Cache, CacheBuilder};
 use prometheus::{
     register_histogram_with_registry, register_int_gauge_vec_with_registry, Histogram, IntGaugeVec,
@@ -26,9 +22,8 @@ use ratelimit::Ratelimiter;
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    cli::BouncerConfig,
+    cli,
     routes::{ErrorCause, RateLimitCause},
-    socket::TcpConnectInfo,
 };
 
 // Common firewall backend operations required by the bouncer
@@ -41,7 +36,7 @@ pub trait Firewall: Send + Sync {
 }
 
 // Ban decision for a single IP
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct Decision {
     pub ip: IpAddr,
     pub when: Instant,
@@ -262,7 +257,7 @@ impl Bouncer {
     }
 }
 
-pub fn setup(cli: &BouncerConfig, registry: &Registry) -> Result<Arc<Bouncer>, Error> {
+pub fn setup(cli: &cli::Bouncer, registry: &Registry) -> Result<Arc<Bouncer>, Error> {
     let executor = Arc::new(exec::Executor::new(
         cli.bouncer_sudo,
         cli.bouncer_sudo_path.clone(),
@@ -284,9 +279,9 @@ pub fn setup(cli: &BouncerConfig, registry: &Registry) -> Result<Arc<Bouncer>, E
         Bouncer::new(
             cli.bouncer_ratelimit,
             cli.bouncer_burst_size,
-            Duration::from_secs(cli.bouncer_ban_seconds),
+            cli.bouncer_ban_time,
             cli.bouncer_max_buckets,
-            Duration::from_secs(cli.bouncer_bucket_ttl),
+            cli.bouncer_bucket_ttl,
             firewall,
             registry,
         )
@@ -295,7 +290,7 @@ pub fn setup(cli: &BouncerConfig, registry: &Registry) -> Result<Arc<Bouncer>, E
 
     // Start background task
     let bouncer_task = bouncer.clone();
-    let interval = Duration::from_secs(cli.bouncer_apply_interval);
+    let interval = cli.bouncer_apply_interval;
     tokio::spawn(async move {
         bouncer_task.clone().run(interval).await;
     });
@@ -306,18 +301,13 @@ pub fn setup(cli: &BouncerConfig, registry: &Registry) -> Result<Arc<Bouncer>, E
 pub async fn middleware(
     State(bouncer): State<Arc<Bouncer>>,
     request: Request<Body>,
-    next: Next<Body>,
+    next: Next,
 ) -> Result<impl IntoResponse, ErrorCause> {
     // Attempt to extract client's IP from the request
     let ip = request
         .extensions()
-        .get::<ConnectInfo<TcpConnectInfo>>()
-        .map(|x| (x.0).0)
-        .or(request
-            .extensions()
-            .get::<ConnectInfo<SocketAddr>>()
-            .map(|x| x.0))
-        .map(|x| x.ip());
+        .get::<Arc<ConnInfo>>()
+        .map(|x| x.remote_addr.ip());
 
     if let Some(v) = ip {
         if !bouncer.acquire_token(v) {

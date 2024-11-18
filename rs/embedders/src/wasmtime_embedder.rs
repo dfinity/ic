@@ -1,6 +1,8 @@
 pub mod host_memory;
 mod signal_stack;
-mod system_api;
+/// pub for usage in fuzzing
+#[doc(hidden)]
+pub mod system_api;
 pub mod system_api_complexity;
 
 use std::{
@@ -20,7 +22,7 @@ use wasmtime::{
 pub use host_memory::WasmtimeMemoryCreator;
 use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
+    CanisterBacktrace, HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
 };
 use ic_logger::{debug, error, fatal, ReplicaLogger};
 use ic_replicated_state::{
@@ -58,11 +60,31 @@ pub(crate) const STABLE_MEMORY_NAME: &str = "stable_memory";
 pub(crate) const STABLE_BYTEMAP_MEMORY_NAME: &str = "stable_bytemap_memory";
 
 pub(crate) const MAX_STORE_TABLES: usize = 1;
-pub(crate) const MAX_STORE_TABLE_ELEMENTS: u32 = 1_000_000;
+pub(crate) const MAX_STORE_TABLE_ELEMENTS: usize = 1_000_000;
+
+fn demangle(func_name: &str) -> String {
+    if let Ok(name) = rustc_demangle::try_demangle(func_name) {
+        format!("{:#}", name)
+    } else {
+        func_name.to_string()
+    }
+}
+
+fn convert_backtrace(wasm: &wasmtime::WasmBacktrace) -> CanisterBacktrace {
+    let funcs: Vec<_> = wasm
+        .frames()
+        .iter()
+        .map(|f| (f.func_index(), f.func_name().map(demangle)))
+        .collect();
+    CanisterBacktrace(funcs)
+}
 
 fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
+    let backtrace = err
+        .downcast_ref::<wasmtime::WasmBacktrace>()
+        .map(convert_backtrace);
     match err.downcast::<wasmtime::Trap>() {
-        Ok(trap) => trap_code_to_hypervisor_error(trap),
+        Ok(trap) => trap_code_to_hypervisor_error(trap, backtrace),
         Err(err) => {
             // The error could be either a compile error or some other error.
             // We have to inspect the error message to distinguish these cases.
@@ -90,28 +112,36 @@ fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
                     error: BAD_SIGNATURE_MESSAGE.to_string(),
                 };
             }
-            HypervisorError::Trapped(TrapCode::Other)
+            HypervisorError::Trapped {
+                trap_code: TrapCode::Other,
+                backtrace,
+            }
         }
     }
 }
 
-fn trap_code_to_hypervisor_error(trap: wasmtime::Trap) -> HypervisorError {
-    match trap {
-        wasmtime::Trap::StackOverflow => HypervisorError::Trapped(TrapCode::StackOverflow),
-        wasmtime::Trap::MemoryOutOfBounds => HypervisorError::Trapped(TrapCode::HeapOutOfBounds),
-        wasmtime::Trap::TableOutOfBounds => HypervisorError::Trapped(TrapCode::TableOutOfBounds),
-        wasmtime::Trap::BadSignature => HypervisorError::ToolchainContractViolation {
+fn trap_code_to_hypervisor_error(
+    trap: wasmtime::Trap,
+    backtrace: Option<CanisterBacktrace>,
+) -> HypervisorError {
+    if trap == wasmtime::Trap::BadSignature {
+        return HypervisorError::ToolchainContractViolation {
             error: BAD_SIGNATURE_MESSAGE.to_string(),
-        },
-        wasmtime::Trap::IntegerDivisionByZero => {
-            HypervisorError::Trapped(TrapCode::IntegerDivByZero)
-        }
-        wasmtime::Trap::UnreachableCodeReached => HypervisorError::Trapped(TrapCode::Unreachable),
-        _ => {
-            // The `wasmtime::TrapCode` enum is marked as #[non_exhaustive]
-            // so we have to use the wildcard matching here.
-            HypervisorError::Trapped(TrapCode::Other)
-        }
+        };
+    };
+    let trap_code = match trap {
+        wasmtime::Trap::StackOverflow => TrapCode::StackOverflow,
+        wasmtime::Trap::MemoryOutOfBounds => TrapCode::HeapOutOfBounds,
+        wasmtime::Trap::TableOutOfBounds => TrapCode::TableOutOfBounds,
+        wasmtime::Trap::IntegerDivisionByZero => TrapCode::IntegerDivByZero,
+        wasmtime::Trap::UnreachableCodeReached => TrapCode::Unreachable,
+        // The `wasmtime::TrapCode` enum is marked as #[non_exhaustive]
+        // so we have to use the wildcard matching here.
+        _ => TrapCode::Other,
+    };
+    HypervisorError::Trapped {
+        trap_code,
+        backtrace,
     }
 }
 
@@ -141,7 +171,7 @@ fn get_exported_globals<T>(
         .collect()
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CanisterMemoryType {
     Heap,
     Stable,
@@ -241,13 +271,26 @@ impl WasmtimeEmbedder {
             }
         }
 
-        system_api::syscalls(
-            &mut linker,
-            self.config.feature_flags,
-            self.config.stable_memory_dirty_page_limit,
-            self.config.stable_memory_accessed_page_limit,
-            main_memory_type,
-        );
+        match main_memory_type {
+            WasmMemoryType::Wasm32 => {
+                system_api::syscalls::<u32>(
+                    &mut linker,
+                    self.config.feature_flags,
+                    self.config.stable_memory_dirty_page_limit,
+                    self.config.stable_memory_accessed_page_limit,
+                    main_memory_type,
+                );
+            }
+            WasmMemoryType::Wasm64 => {
+                system_api::syscalls::<u64>(
+                    &mut linker,
+                    self.config.feature_flags,
+                    self.config.stable_memory_dirty_page_limit,
+                    self.config.stable_memory_accessed_page_limit,
+                    main_memory_type,
+                );
+            }
+        }
 
         let instance_pre = linker.instantiate_pre(module).map_err(|e| {
             HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(format!(
@@ -350,19 +393,20 @@ impl WasmtimeEmbedder {
             Err(err) => return Err((err.clone(), system_api)),
         };
 
-        // Compute dirty page limit based on the message type.
-        let current_dirty_page_limit = match system_api {
-            Some(ref system_api) => {
-                if system_api.is_install_or_upgrade_message() {
-                    self.config.stable_memory_dirty_page_limit.upgrade
-                } else {
-                    self.config.stable_memory_dirty_page_limit.message
-                }
-            }
+        // Compute dirty page limit and access page limit based on the message type.
+        let (current_dirty_page_limit, current_accessed_limit) = match system_api {
+            Some(ref system_api) => (
+                system_api.get_page_limit(&self.config.stable_memory_dirty_page_limit),
+                system_api.get_page_limit(&self.config.stable_memory_accessed_page_limit),
+            ),
+
             // If system api is not present, then this function has been called from
             // get_initial_globals_and_memory(). In this case, the number of
             // dirty pages does not matter as the canister is not running.
-            None => self.config.stable_memory_dirty_page_limit.message,
+            None => (
+                self.config.stable_memory_dirty_page_limit.message,
+                self.config.stable_memory_accessed_page_limit.message,
+            ),
         };
 
         let mut store = Store::new(
@@ -377,6 +421,7 @@ impl WasmtimeEmbedder {
                     .tables(MAX_STORE_TABLES)
                     .table_elements(MAX_STORE_TABLE_ELEMENTS)
                     .build(),
+                canister_backtrace: self.config.feature_flags.canister_backtrace,
             },
         );
         store.limiter(|state| &mut state.limits);
@@ -466,7 +511,7 @@ impl WasmtimeEmbedder {
                 .expect("Couldn't set dirty page counter global");
             instance.get_global(&mut store, ACCESSED_PAGES_COUNTER_GLOBAL_NAME)
                 .expect("Counter for accessed pages global should have been added with native stable memory enabled.")
-                .set(&mut store, Val::I64(self.config.stable_memory_accessed_page_limit.get() as i64))
+                .set(&mut store, Val::I64(current_accessed_limit.get() as i64))
                 .expect("Couldn't set dirty page counter global");
         }
 
@@ -482,6 +527,20 @@ impl WasmtimeEmbedder {
         let memory_trackers = sigsegv_memory_tracker(memories, &mut store, self.log.clone());
 
         let signal_stack = WasmtimeSignalStack::new();
+        let mut main_memory_type = WasmMemoryType::Wasm32;
+        if let Some(mem) = instance.get_memory(&mut store, WASM_HEAP_MEMORY_NAME) {
+            if mem.ty(&store).is_64() {
+                main_memory_type = WasmMemoryType::Wasm64;
+            }
+        }
+        let dirty_page_overhead = match main_memory_type {
+            WasmMemoryType::Wasm32 => self.config.dirty_page_overhead,
+            WasmMemoryType::Wasm64 => NumInstructions::from(
+                self.config.dirty_page_overhead.get()
+                    * self.config.wasm64_dirty_page_overhead_multiplier,
+            ),
+        };
+
         Ok(WasmtimeInstance {
             instance,
             memory_trackers,
@@ -491,11 +550,13 @@ impl WasmtimeEmbedder {
             store,
             write_barrier: self.config.feature_flags.write_barrier,
             wasm_native_stable_memory: self.config.feature_flags.wasm_native_stable_memory,
+            canister_backtrace: self.config.feature_flags.canister_backtrace,
             modification_tracking,
-            dirty_page_overhead: self.config.dirty_page_overhead,
+            dirty_page_overhead,
             #[cfg(debug_assertions)]
             stable_memory_dirty_page_limit: current_dirty_page_limit,
-            stable_memory_page_access_limit: self.config.stable_memory_accessed_page_limit,
+            stable_memory_page_access_limit: current_accessed_limit,
+            main_memory_type,
         })
     }
 
@@ -678,6 +739,7 @@ pub struct StoreData {
     /// Tracks the number of dirty pages in stable memory in non-native stable mode
     pub num_stable_dirty_pages_from_non_native_writes: NumOsPages,
     pub limits: StoreLimits,
+    pub canister_backtrace: FlagStatus,
 }
 
 impl StoreData {
@@ -737,12 +799,15 @@ pub struct WasmtimeInstance {
     store: wasmtime::Store<StoreData>,
     write_barrier: FlagStatus,
     wasm_native_stable_memory: FlagStatus,
+    #[allow(unused)]
+    canister_backtrace: FlagStatus,
     modification_tracking: ModificationTracking,
     dirty_page_overhead: NumInstructions,
     #[cfg(debug_assertions)]
     #[allow(dead_code)]
     stable_memory_dirty_page_limit: ic_types::NumOsPages,
     stable_memory_page_access_limit: ic_types::NumOsPages,
+    main_memory_type: WasmMemoryType,
 }
 
 impl WasmtimeInstance {
@@ -955,13 +1020,22 @@ impl WasmtimeInstance {
         let result = match &func_ref {
             FuncRef::Method(wasm_method) => self.invoke_export(&wasm_method.to_string(), &[]),
             FuncRef::QueryClosure(closure) | FuncRef::UpdateClosure(closure) => {
-                // As the 64-bit `env` values will be supported in `wasm64`,
-                // which is disabled for now, the conversion should always succeed.
-                let Ok(env32): Result<u32, _> = closure.env.try_into() else {
-                    return Err(HypervisorError::ToolchainContractViolation {
-                        error: format!("error converting additional value {} to u32", closure.env),
-                    });
+                let call_args = match self.main_memory_type {
+                    WasmMemoryType::Wasm32 => {
+                        // Wasm32 closure should hold a value which fits in u32
+                        let Ok(env32): Result<u32, _> = closure.env.try_into() else {
+                            return Err(HypervisorError::ToolchainContractViolation {
+                                error: format!(
+                                    "error converting additional value {} to u32",
+                                    closure.env
+                                ),
+                            });
+                        };
+                        [Val::I32(env32 as i32)]
+                    }
+                    WasmMemoryType::Wasm64 => [Val::I64(closure.env as i64)],
                 };
+
                 self.instance
                     .get_export(&mut self.store, "table")
                     .ok_or_else(|| HypervisorError::ToolchainContractViolation {
@@ -971,7 +1045,7 @@ impl WasmtimeInstance {
                     .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                         error: "export 'table' is not a table".to_string(),
                     })?
-                    .get(&mut self.store, closure.func_idx)
+                    .get(&mut self.store, closure.func_idx as u64)
                     .ok_or(HypervisorError::FunctionNotFound(0, closure.func_idx))?
                     .as_func()
                     .ok_or_else(|| HypervisorError::ToolchainContractViolation {
@@ -980,7 +1054,7 @@ impl WasmtimeInstance {
                     .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                         error: "unexpected null function reference".to_string(),
                     })?
-                    .call(&mut self.store, &[Val::I32(env32 as i32)], &mut [])
+                    .call(&mut self.store, &call_args, &mut [])
                     .map_err(wasmtime_error_to_hypervisor_error)
             }
         }
@@ -1182,6 +1256,11 @@ impl WasmtimeInstance {
             CanisterMemoryType::Stable => STABLE_MEMORY_NAME,
         };
         NumWasmPages::from(self.get_memory(name).map_or(0, |mem| mem.size(&self.store)) as usize)
+    }
+
+    /// Returns true iff the Wasm memory is 32 bit.
+    pub fn is_wasm32(&self) -> bool {
+        matches!(self.main_memory_type, WasmMemoryType::Wasm32)
     }
 
     /// Returns a list of exported globals.

@@ -10,8 +10,8 @@ documentation.workspace = true
 ic-base-types = { path = "../types/base_types" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-error-types = { path = "../types/error_types" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces-state-manager = { path = "./state_manager" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
@@ -23,9 +23,9 @@ prost = { workspace = true }
 serde = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-tower = { workspace = true }
 thiserror = { workspace = true }
+tower = { workspace = true }
 
 [dev-dependencies]
 ic-crypto-internal-csp-proptest-utils = { path = "../crypto/internal/crypto_service_provider/csp_proptest_utils" }
-proptest = "1.0"
+proptest = { workspace = true }

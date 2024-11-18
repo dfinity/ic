@@ -14,28 +14,28 @@
         "ledger": {
             "type": "custom",
             "build": [
-                "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister"
+                "bazel build //rs/ledger_suite/icrc1/ledger:ledger_canister"
             ],
-            "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister.wasm",
-            "candid": "../../../rosetta-api/icrc1/ledger/ledger.did",
+            "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/ledger/ledger_canister.wasm",
+            "candid": "../../../ledger_suite/icrc1/ledger/ledger.did",
             "shrink": false
         },
         "archive": {
             "type": "custom",
             "build": [
-                "bazel build //rs/rosetta-api/icrc1/archive:archive_canister"
+                "bazel build //rs/ledger_suite/icrc1/archive:archive_canister"
             ],
-            "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/archive/archive_canister.wasm",
-            "candid": "../../../rosetta-api/icrc1/archive/archive.did",
+            "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/archive/archive_canister.wasm",
+            "candid": "../../../ledger_suite/icrc1/archive/archive.did",
             "shrink": false
         },
         "index": {
             "type": "custom",
             "build": [
-                "bazel build //rs/rosetta-api/icrc1/index:index_canister"
+                "bazel build //rs/ledger_suite/icrc1/index:index_canister"
             ],
-            "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index/index_canister.wasm",
-            "candid": "../../../rosetta-api/icrc1/index/index.did",
+            "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/index/index_canister.wasm",
+            "candid": "../../../ledger_suite/icrc1/index/index.did",
             "shrink": false
         },
         "kyt": {

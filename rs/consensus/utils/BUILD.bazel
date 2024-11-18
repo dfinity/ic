@@ -7,20 +7,17 @@ DEPENDENCIES = [
     "//rs/crypto/prng",
     "//rs/interfaces",
     "//rs/interfaces/registry",
-    "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
     "//rs/protobuf",
     "//rs/registry/helpers",
     "//rs/replicated_state",
     "//rs/types/types",
-    "@crate_index//:hex",
     "@crate_index//:rand",
     "@crate_index//:slog",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/consensus",
     "//rs/consensus/mocks",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
@@ -39,6 +36,7 @@ rust_library(
     }),
     crate_name = "ic_consensus_utils",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:strum_macros",
     ],
     version = "0.9.0",

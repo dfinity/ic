@@ -1,0 +1,37 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "@crate_index//:ic_principal",
+    "@crate_index//:ic-canister-sig-creation",
+    "@crate_index//:ic-certification",
+    "@crate_index//:ic-verify-bls-signature",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:sha2",
+]
+
+TEST_DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/test_utils/canister_sigs",
+    "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/types/types",
+    "@crate_index//:assert_matches",
+    "@crate_index//:hex",
+]
+
+rust_library(
+    name = "ic-signature-verification",
+    srcs = glob(["src/**/*.rs"]),
+    deps = DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "ic_signature_verification_tests",
+    srcs = glob(
+        ["tests/**/*.rs"],
+    ),
+    deps = [":ic-signature-verification"] + DEPENDENCIES + TEST_DEPENDENCIES,
+)

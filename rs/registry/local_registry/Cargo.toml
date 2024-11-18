@@ -9,15 +9,15 @@ documentation.workspace = true
 [dependencies]
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-protobuf = { path = "../../protobuf" }
-ic-registry-nns-data-provider = { path = "../nns_data_provider" }
 ic-registry-client-fake = { path = "../fake" }
 ic-registry-client-helpers = { path = "../helpers" }
 ic-registry-local-store = { path = "../local_store" }
+ic-registry-nns-data-provider = { path = "../nns_data_provider" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-url = { version = "2.1.1", features = ["serde"] }
+url = { workspace = true }
 
 [dev-dependencies]
 ic-registry-local-store-artifacts = { path = "../local_store/artifacts" }

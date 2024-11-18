@@ -19,11 +19,10 @@ use std::{
     convert::TryFrom,
     net::IpAddr,
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
-use tokio::sync::RwLock;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum DataSource {
     Config,
     Registry,
@@ -259,11 +258,11 @@ impl Firewall {
     }
 
     /// Checks for the firewall configuration that applies to this node
-    async fn check_for_firewall_config(
+    fn check_for_firewall_config(
         &mut self,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
-        if *self.last_applied_version.read().await == registry_version {
+        if *self.last_applied_version.read().unwrap() == registry_version {
             // No update in the registry, so no need to re-check
             return Ok(());
         }
@@ -376,7 +375,7 @@ impl Firewall {
                 .firewall_registry_version
                 .set(i64::try_from(registry_version.get()).unwrap_or(-1));
         }
-        *self.last_applied_version.write().await = registry_version;
+        *self.last_applied_version.write().unwrap() = registry_version;
 
         Ok(())
     }
@@ -393,7 +392,7 @@ impl Firewall {
 
     /// Checks for new firewall config, and if found, update local firewall
     /// rules
-    pub async fn check_and_update(&mut self) {
+    pub fn check_and_update(&mut self) {
         if !self.enabled {
             return;
         }
@@ -403,7 +402,7 @@ impl Firewall {
             "Checking for firewall config registry version: {}", registry_version
         );
 
-        if let Err(e) = self.check_for_firewall_config(registry_version).await {
+        if let Err(e) = self.check_for_firewall_config(registry_version) {
             info!(
                 self.logger,
                 "Failed to check for firewall config at version {}: {}", registry_version, e
@@ -639,7 +638,7 @@ mod tests {
     use super::*;
 
     const CFG_TEMPLATE_BYTES: &[u8] =
-        include_bytes!("../../../ic-os/components/ic/ic.json5.template");
+        include_bytes!("../../../ic-os/components/ic/generate-ic-config/ic.json5.template");
     const NFTABLES_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_assigned_replica.conf.golden");
     const NFTABLES_BOUNDARY_NODE_GOLDEN_BYTES: &[u8] =
@@ -768,29 +767,27 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn nftables_golden_test() {
+    #[test]
+    fn nftables_golden_test() {
         golden_test(
             Role::AssignedReplica(subnet_test_id(1)),
             NFTABLES_GOLDEN_BYTES,
             "assigned_replica",
-        )
-        .await
+        );
     }
 
-    #[tokio::test]
-    async fn nftables_golden_boundary_node_test() {
+    #[test]
+    fn nftables_golden_boundary_node_test() {
         golden_test(
             Role::BoundaryNode,
             NFTABLES_BOUNDARY_NODE_GOLDEN_BYTES,
             "boundary_node",
-        )
-        .await
+        );
     }
 
     /// Runs [`Firewall::check_for_firewall_config`] and compares the output against the specified
     /// golden output.
-    async fn golden_test(role: Role, golden_bytes: &[u8], label: &str) {
+    fn golden_test(role: Role, golden_bytes: &[u8], label: &str) {
         let tmp_dir = tempfile::tempdir().unwrap();
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
         let config = get_config();
@@ -811,7 +808,6 @@ mod tests {
 
         firewall
             .check_for_firewall_config(RegistryVersion::new(1))
-            .await
             .expect("Should successfully produce a firewall config");
 
         let golden = String::from_utf8(golden_bytes.to_vec()).unwrap();
@@ -832,13 +828,11 @@ mod tests {
         // Make the string parsable by filling the template placeholders with dummy values
         let cfg = String::from_utf8(CFG_TEMPLATE_BYTES.to_vec())
             .unwrap()
-            .replace("{{ node_index }}", "0")
             .replace("{{ ipv6_address }}", "::")
             .replace("{{ backup_retention_time_secs }}", "0")
             .replace("{{ backup_purging_interval_secs }}", "0")
-            .replace("{{ nns_url }}", "http://www.fakeurl.com/")
+            .replace("{{ nns_urls }}", "http://www.fakeurl.com/")
             .replace("{{ malicious_behavior }}", "null")
-            .replace("{{ query_stats_aggregation }}", "\"Enabled\"")
             .replace("{{ query_stats_epoch_length }}", "600");
         let config_source = ConfigSource::Literal(cfg);
 
@@ -878,12 +872,15 @@ mod tests {
 
         let registry = set_up_registry(role, node);
 
-        let registry_helper = Arc::new(RegistryHelper::new(node, registry, no_op_logger()));
+        let registry_helper = Arc::new(RegistryHelper::new(node, registry.clone(), no_op_logger()));
 
+        let (crypto, _) =
+            ic_crypto_test_utils_tls::temp_crypto_component_with_tls_keys(registry, node);
         let catch_up_package_provider = CatchUpPackageProvider::new(
             registry_helper.clone(),
             tmp_dir.join("cups"),
             Arc::new(CryptoReturningOk::default()),
+            Arc::new(crypto),
             no_op_logger(),
             node,
         );
@@ -903,7 +900,7 @@ mod tests {
     /// 1) two node records - one for the specified node + another one,
     /// 2) a bunch of firewall rules,
     /// 3) a Subnet record,
-    /// and returns a registry client.
+    ///    and returns a registry client.
     fn set_up_registry(role: Role, node: NodeId) -> Arc<FakeRegistryClient> {
         let registry_version = RegistryVersion::new(1);
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
@@ -1024,6 +1021,7 @@ mod tests {
                     hostos_version_id: None,
                     public_ipv4_config: None,
                     domain: None,
+                    node_reward_type: None,
                 }),
             )
             .expect("Failed to add node record.");

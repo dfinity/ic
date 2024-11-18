@@ -1,21 +1,23 @@
 //! Canister threshold transcripts and references related defininitions.
-use crate::crypto::{
-    canister_threshold_sig::{
-        error::IDkgParamsValidationError,
-        idkg::{
-            IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
-            IDkgTranscriptType,
+use crate::{
+    crypto::{
+        canister_threshold_sig::{
+            error::IDkgParamsValidationError,
+            idkg::{
+                IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
+                IDkgTranscriptType,
+            },
+            ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
+            ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
         },
-        ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
-        ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
+        AlgorithmId,
     },
-    AlgorithmId,
+    messages::CallbackId,
 };
 use crate::{Height, RegistryVersion};
 use ic_base_types::{NodeId, PrincipalId};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
@@ -36,13 +38,14 @@ use super::{
         PreSignatureTranscriptRef, ThresholdSchnorrSigInputsError, ThresholdSchnorrSigInputsRef,
         TranscriptInCreation,
     },
+    IDkgMasterPublicKeyId,
 };
 
 /// PseudoRandomId is defined in execution context as plain 32-byte vector, we give it a synonym here.
 pub type PseudoRandomId = [u8; 32];
 
 /// RequestId is used for two purposes:
-/// 1. to identify the matching request in sign_with_ecdsa_contexts.
+/// 1. to identify the matching request in signature request contexts.
 /// 2. to identify which pre-signature the request is matched to.
 ///
 /// Pre-signatures must be matched with requests in the same order as requests
@@ -50,19 +53,17 @@ pub type PseudoRandomId = [u8; 32];
 ///
 /// The height field represents at which block the RequestId is created.
 /// It is used for purging purpose.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RequestId {
-    pub pre_signature_id: PreSigId,
-    pub pseudo_random_id: PseudoRandomId,
+    pub callback_id: CallbackId,
     pub height: Height,
 }
 
 impl From<RequestId> for pb::RequestId {
     fn from(request_id: RequestId) -> Self {
         Self {
-            pre_signature_id: request_id.pre_signature_id.id(),
-            pseudo_random_id: request_id.pseudo_random_id.to_vec(),
+            callback_id: request_id.callback_id.get(),
             height: request_id.height.get(),
         }
     }
@@ -72,24 +73,14 @@ impl TryFrom<&pb::RequestId> for RequestId {
     type Error = ProxyDecodeError;
 
     fn try_from(request_id: &pb::RequestId) -> Result<Self, Self::Error> {
-        if request_id.pseudo_random_id.len() != 32 {
-            Err(ProxyDecodeError::Other(String::from(
-                "request_id.pseudo_random_id must be 32 bytes long",
-            )))
-        } else {
-            let mut pseudo_random_id = [0; 32];
-            pseudo_random_id.copy_from_slice(&request_id.pseudo_random_id);
-
-            Ok(Self {
-                pre_signature_id: PreSigId(request_id.pre_signature_id),
-                pseudo_random_id,
-                height: Height::from(request_id.height),
-            })
-        }
+        Ok(Self {
+            callback_id: CallbackId::from(request_id.callback_id),
+            height: Height::from(request_id.height),
+        })
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct PreSigId(pub u64);
 
@@ -99,7 +90,7 @@ impl PreSigId {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct TranscriptRef {
     /// The on chain location of the IDkgTranscript.
@@ -147,14 +138,14 @@ impl TryFrom<&pb::TranscriptRef> for TranscriptRef {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct TranscriptCastError {
     pub transcript_id: IDkgTranscriptId,
     pub from_type: IDkgTranscriptType,
     pub expected_type: &'static str,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct MaskedTranscript(TranscriptRef);
 
@@ -203,7 +194,7 @@ impl TryFrom<&pb::MaskedTranscript> for MaskedTranscript {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct UnmaskedTranscript(TranscriptRef);
 
@@ -291,7 +282,7 @@ impl TranscriptAttributes for IDkgTranscriptParamsRef {
 }
 
 /// Attributes of `IDkgTranscript`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgTranscriptAttributes {
     receivers: BTreeSet<NodeId>,
@@ -358,7 +349,7 @@ impl TranscriptAttributes for IDkgTranscriptAttributes {
 
 /// Wrappers for the common types.
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RandomTranscriptParams(IDkgTranscriptParamsRef);
 impl RandomTranscriptParams {
@@ -407,7 +398,7 @@ impl TryFrom<&pb::RandomTranscriptParams> for RandomTranscriptParams {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RandomUnmaskedTranscriptParams(IDkgTranscriptParamsRef);
 impl RandomUnmaskedTranscriptParams {
@@ -456,7 +447,7 @@ impl TryFrom<&pb::RandomUnmaskedTranscriptParams> for RandomUnmaskedTranscriptPa
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ReshareOfMaskedParams(IDkgTranscriptParamsRef);
 impl ReshareOfMaskedParams {
@@ -505,7 +496,7 @@ impl TryFrom<&pb::ReshareOfMaskedParams> for ReshareOfMaskedParams {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ReshareOfUnmaskedParams(IDkgTranscriptParamsRef);
 impl ReshareOfUnmaskedParams {
@@ -585,7 +576,7 @@ impl TryFrom<&pb::ReshareOfUnmaskedParams> for ReshareOfUnmaskedParams {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct UnmaskedTimesMaskedParams(IDkgTranscriptParamsRef);
 impl UnmaskedTimesMaskedParams {
@@ -643,8 +634,8 @@ impl TryFrom<&pb::UnmaskedTimesMaskedParams> for UnmaskedTimesMaskedParams {
 
 pub type TranscriptLookupError = String;
 
-/// Wrapper to access the ECDSA related info from the blocks.
-pub trait EcdsaBlockReader: Send + Sync {
+/// Wrapper to access the IDKG related info from the blocks.
+pub trait IDkgBlockReader: Send + Sync {
     /// Returns the height of the tip
     fn tip_height(&self) -> Height;
 
@@ -654,7 +645,7 @@ pub trait EcdsaBlockReader: Send + Sync {
     /// Returns the IDs of pre-signatures in creation by the tip.
     fn pre_signatures_in_creation(
         &self,
-    ) -> Box<dyn Iterator<Item = (PreSigId, MasterPublicKeyId)> + '_>;
+    ) -> Box<dyn Iterator<Item = (PreSigId, IDkgMasterPublicKeyId)> + '_>;
 
     /// For the given pre-signature ID, returns the pre-signature ref if available.
     fn available_pre_signature(&self, id: &PreSigId) -> Option<&PreSignatureRef>;
@@ -683,7 +674,7 @@ pub trait EcdsaBlockReader: Send + Sync {
 
 /// Counterpart of IDkgTranscriptParams that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum IDkgTranscriptOperationRef {
     Random,
@@ -705,7 +696,7 @@ impl IDkgTranscriptOperationRef {
     /// Resolves the refs to get the IDkgTranscriptOperation.
     pub fn translate(
         &self,
-        resolver: &dyn EcdsaBlockReader,
+        resolver: &dyn IDkgBlockReader,
     ) -> Result<IDkgTranscriptOperation, TranscriptOperationError> {
         match self {
             Self::Random => Ok(IDkgTranscriptOperation::Random),
@@ -843,7 +834,7 @@ impl TryFrom<&pb::IDkgTranscriptOperationRef> for IDkgTranscriptOperationRef {
 
 /// Counterpart of IDkgTranscriptParams that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgTranscriptParamsRef {
     pub transcript_id: IDkgTranscriptId,
@@ -940,7 +931,7 @@ impl IDkgTranscriptParamsRef {
     /// Resolves the refs to get the IDkgTranscriptParams.
     pub fn translate(
         &self,
-        resolver: &dyn EcdsaBlockReader,
+        resolver: &dyn IDkgBlockReader,
     ) -> Result<IDkgTranscriptParams, TranscriptParamsError> {
         let operation_type = self
             .operation_type_ref
@@ -968,7 +959,7 @@ impl IDkgTranscriptParamsRef {
     }
 }
 
-#[derive(Hash, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum PreSignatureInCreation {
     Ecdsa(QuadrupleInCreation),
@@ -1031,7 +1022,7 @@ impl TryFrom<&pb::PreSignatureInCreation> for PreSignatureInCreation {
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum PreSignatureRef {
     Ecdsa(PreSignatureQuadrupleRef),
@@ -1114,7 +1105,7 @@ fn err_schnorr(err: ThresholdSchnorrSigInputsError) -> ThresholdSigInputsResult 
     Err(ThresholdSigInputsError::Schnorr(err))
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ThresholdSigInputsRef {
     Ecdsa(ThresholdEcdsaSigInputsRef),
     Schnorr(ThresholdSchnorrSigInputsRef),
@@ -1146,7 +1137,7 @@ impl ThresholdSigInputsRef {
         }
     }
 
-    pub fn translate(&self, resolver: &dyn EcdsaBlockReader) -> ThresholdSigInputsResult {
+    pub fn translate(&self, resolver: &dyn IDkgBlockReader) -> ThresholdSigInputsResult {
         match self {
             ThresholdSigInputsRef::Ecdsa(inputs_ref) => inputs_ref
                 .translate(resolver)
@@ -1163,13 +1154,13 @@ pub enum ThresholdSigInputs {
     Schnorr(ThresholdSchnorrSigInputs),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CombinedSignature {
     Ecdsa(ThresholdEcdsaCombinedSignature),
     Schnorr(ThresholdSchnorrCombinedSignature),
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum SignatureScheme {
     Ecdsa,
     Schnorr,

@@ -64,7 +64,6 @@
 // the sum of all compute allocations with the multiplier.
 
 pub mod artifact;
-pub mod artifact_kind;
 pub mod batch;
 pub mod canister_http;
 pub mod canister_log;
@@ -102,12 +101,13 @@ pub use ic_crypto_internal_types::NodeIndex;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb_state_bits;
 use ic_protobuf::types::v1 as pb;
-use phantom_newtype::{AmountOf, Id};
+use phantom_newtype::{AmountOf, DisplayerOf, Id};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
 use std::sync::Arc;
-use strum::EnumIter;
+use strum_macros::EnumIter;
+use thousands::Separable;
 
 pub struct UserTag {}
 /// An end-user's [`PrincipalId`].
@@ -172,6 +172,12 @@ pub struct NumInstructionsTag;
 /// respective amount of `Cycles` on a canister's balance for message execution.
 pub type NumInstructions = AmountOf<NumInstructionsTag, u64>;
 
+impl DisplayerOf<NumInstructions> for NumInstructionsTag {
+    fn display(amount: &NumInstructions, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", amount.get().separate_with_underscores())
+    }
+}
+
 pub struct NumMessagesTag;
 /// Represents the number of messages.
 pub type NumMessages = AmountOf<NumMessagesTag, u64>;
@@ -211,7 +217,7 @@ pub type AccumulatedPriority = AmountOf<AccumulatedPriorityTag, i64>;
 /// equivalently a rational number A/100. Having an `ComputeAllocation` of A/100
 /// guarantees that the canister will get a full round at least A out of 100
 /// execution rounds.
-#[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct ComputeAllocation(u64);
 
 impl ComputeAllocation {
@@ -312,7 +318,7 @@ fn display_canister_id() {
 }
 
 /// Represents Canister timer.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CanisterTimer {
     /// The canister timer is not set.
     Inactive,
@@ -386,7 +392,7 @@ impl From<LongExecutionMode> for pb_state_bits::LongExecutionMode {
 /// All long execution start in the Opportunistic mode, and then the scheduler
 /// prioritizes top `long_execution_cores` some of them. This is to enforce FIFO
 /// behavior, and guarantee the progress for long executions.
-#[derive(Clone, Copy, Debug, EnumIter, Eq, PartialEq, PartialOrd, Ord, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, EnumIter)]
 pub enum LongExecutionMode {
     /// The long execution might be opportunistically scheduled on the new execution cores,
     /// so its progress depends on the number of new messages to execute.
@@ -398,7 +404,7 @@ pub enum LongExecutionMode {
 }
 
 /// Represents the memory allocation of a canister.
-#[derive(Copy, Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 pub enum MemoryAllocation {
     /// A reserved number of bytes between 0 and 2^48 inclusively that is
     /// guaranteed to be available to the canister. Charging happens based on
@@ -471,17 +477,17 @@ pub struct InvalidMemoryAllocationError {
     pub given: candid::Nat,
 }
 
-const GB: u64 = 1024 * 1024 * 1024;
+const GIB: u64 = 1024 * 1024 * 1024;
 
 /// The upper limit on the stable memory size.
 /// This constant is used by other crates to define other constants, that's why
 /// it is public and `u64` (`NumBytes` cannot be used in const expressions).
-pub const MAX_STABLE_MEMORY_IN_BYTES: u64 = 400 * GB;
+pub const MAX_STABLE_MEMORY_IN_BYTES: u64 = 500 * GIB;
 
 /// The upper limit on the Wasm memory size.
 /// This constant is used by other crates to define other constants, that's why
 /// it is public and `u64` (`NumBytes` cannot be used in const expressions).
-pub const MAX_WASM_MEMORY_IN_BYTES: u64 = 4 * GB;
+pub const MAX_WASM_MEMORY_IN_BYTES: u64 = 4 * GIB;
 
 const MIN_MEMORY_ALLOCATION: NumBytes = NumBytes::new(0);
 pub const MAX_MEMORY_ALLOCATION: NumBytes =

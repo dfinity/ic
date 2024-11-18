@@ -30,8 +30,7 @@ use ic_types::{
     consensus::certification::Certification, crypto::KeyPurpose, Height, NodeId, PrincipalId,
     RegistryVersion, SubnetId,
 };
-use std::net::SocketAddr;
-use std::os::unix::fs::PermissionsExt;
+use std::{net::SocketAddr, os::unix::fs::PermissionsExt};
 
 const CRYPTO_DIR: &str = "crypto";
 const STATE_DIR: &str = "state";
@@ -229,7 +228,7 @@ impl InitializedNode {
         );
 
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Full);
+        state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Full, None);
 
         loop {
             match state_manager.get_state_hash_at(Height::new(1)) {
@@ -243,7 +242,7 @@ impl InitializedNode {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Node {
     /// Node index
@@ -279,7 +278,7 @@ impl Display for Node {
 }
 
 /// Structured definition of a node provided by the `--node` flag.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NodeConfiguration {
     // Endpoints where the replica provides the Xnet interface
@@ -303,6 +302,10 @@ pub struct NodeConfiguration {
     /// directory chosen by ic-prep.
     #[serde(skip_serializing, skip_deserializing)]
     pub secret_key_store: Option<NodeSecretKeyStore>,
+
+    /// The domain name of the node
+    #[serde(skip_serializing, skip_deserializing)]
+    pub domain: Option<String>,
 }
 
 impl From<NodeConfiguration> for pbNodeRecord {
@@ -320,12 +323,13 @@ impl From<NodeConfiguration> for pbNodeRecord {
                 .node_operator_principal_id
                 .map(|id| id.to_vec())
                 .unwrap_or_default(),
+            domain: node_configuration.domain,
             ..Default::default()
         }
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum InitializeNodeError {
     #[error("could not create node path: {path}: {source}")]
     CreateNodePathFailed { path: String, source: io::Error },
@@ -377,7 +381,7 @@ impl NodeConfiguration {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize)]
 pub struct NodeSecretKeyStore {
     pub node_id: NodeId,
     pub node_pks: ValidNodePublicKeys,
@@ -426,8 +430,7 @@ impl NodeSecretKeyStore {
 mod node_configuration {
     use super::*;
     use pretty_assertions::assert_eq;
-    use std::net::SocketAddr;
-    use std::str::FromStr;
+    use std::{net::SocketAddr, str::FromStr};
 
     #[test]
     fn into_proto_http() {
@@ -436,6 +439,7 @@ mod node_configuration {
             public_api: SocketAddr::from_str("1.2.3.4:8081").unwrap(),
             node_operator_principal_id: None,
             secret_key_store: None,
+            domain: None,
         };
 
         let got = pbNodeRecord::from(node_configuration);
@@ -454,6 +458,7 @@ mod node_configuration {
             chip_id: None,
             public_ipv4_config: None,
             domain: None,
+            node_reward_type: None,
         };
 
         assert_eq!(got, want);

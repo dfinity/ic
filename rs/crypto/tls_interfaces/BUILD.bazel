@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = [
     "//rs/crypto:__subpackages__",
     "//rs/http_endpoints:__subpackages__",
+    "//rs/orchestrator:__subpackages__",
     "//rs/p2p:__subpackages__",
     "//rs/replica:__subpackages__",
     "//rs/replica/setup_ic_network:__subpackages__",
@@ -18,9 +19,10 @@ rust_library(
     crate_name = "ic_crypto_tls_interfaces",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/protobuf",
         "//rs/types/types",
-        "@crate_index//:rustls_0_21_12",
+        "@crate_index//:rustls",
         "@crate_index//:serde",
         "@crate_index//:thiserror",
         "@crate_index//:x509-parser",
@@ -31,6 +33,7 @@ rust_test(
     name = "tls_interfaces_test",
     crate = ":tls_interfaces",
     deps = [
+        # Keep sorted.
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/crypto/test_utils/tls",
         "@crate_index//:assert_matches",

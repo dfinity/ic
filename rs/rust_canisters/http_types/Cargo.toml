@@ -8,5 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
+dfn_candid = { path = "../dfn_candid" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

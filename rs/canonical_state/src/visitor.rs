@@ -2,7 +2,7 @@
 //! canonical form.
 
 /// Data structure controlling the traversal of the state tree.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum Control {
     /// Continue descending into the state tree.
     Continue,

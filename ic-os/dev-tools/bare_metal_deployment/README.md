@@ -15,7 +15,7 @@ Reserve the target machine in Dee before deploying.
 
 ### Run it via bazel target 
     
-Must be run inside the devenv container. Use `./gitlab-ci/container/container-run.sh`.
+Must be run inside the devenv container. Use `./ci/container/container-run.sh`.
 
 The config files must be accessible from inside the container - e.g., at the root of the ic directory, which maps to `/ic` inside the container.
 
@@ -96,7 +96,7 @@ The csv file contains secrets which should _not_ be submitted via the command li
 
 deploy.py requires a CSV file with the information to deploy to multiple BMC's. Include the BMC info _for each BMC_ where each row is "ip address, username, password".
 
-Each row optionally includes a final parameter - the GuestOS ipv6 address. This is used to check if the resulting machine has deployed successfully. This is calculated deterministically. See bazel target /rs/ic_os/deterministic_ips to calculate.
+Each row optionally includes a final parameter - the GuestOS ipv6 address. This is used to check if the resulting machine has deployed successfully. This is calculated deterministically. See bazel target /rs/ic_os/dev_test_tools/deterministic_ips to calculate.
 
 This file is plaintext readable - make it readable only by the current user.
 

@@ -12,7 +12,7 @@ use crate::{
     snapshot::{NodesChanged, NodesSnapshotError, Snapshot},
 };
 
-#[derive(Default, Debug, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct HealthBasedSnapshot {
     current_idx: Arc<AtomicUsize>,
     healthy_nodes: HashSet<String>,

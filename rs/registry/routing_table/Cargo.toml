@@ -8,8 +8,8 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-ic-protobuf = { path = "../../protobuf" }
 ic-base-types = { path = "../../types/base_types" }
+ic-protobuf = { path = "../../protobuf" }
 serde = { workspace = true }
 
 [dev-dependencies]

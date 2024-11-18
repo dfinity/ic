@@ -1,5 +1,5 @@
 use ic_nns_governance_protobuf_generator::{generate_prost_files, ProtoPaths};
-use std::{fs::copy, path::PathBuf};
+use std::path::PathBuf;
 
 fn main() {
     let manifest_dir = PathBuf::from(
@@ -9,7 +9,7 @@ fn main() {
     let out = manifest_dir.join("../src/gen");
     let governance_proto = manifest_dir.join("../proto");
     let base_types_proto = manifest_dir.join("../../../types/base_types/proto");
-    let ledger_proto = manifest_dir.join("../../../rosetta-api/icp_ledger/proto");
+    let ledger_proto = manifest_dir.join("../../../ledger_suite/icp/proto");
     let nervous_system_proto = manifest_dir.join("../../../nervous_system/proto/proto");
     let nns_common_proto = manifest_dir.join("../../common/proto");
     let sns_root_proto = manifest_dir.join("../../../sns/root/proto");
@@ -36,11 +36,4 @@ fn main() {
         },
         out.as_ref(),
     );
-    // Duplicate into API lib
-    let api_src_lib = manifest_dir.join("../api/src");
-    copy(
-        out.join("ic_nns_governance.pb.v1.rs").as_path(),
-        api_src_lib.join("ic_nns_governance.pb.v1.rs").as_path(),
-    )
-    .unwrap();
 }

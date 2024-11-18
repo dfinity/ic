@@ -1,6 +1,5 @@
 ---
-
-- name: destroy guests
+- name: Destroy guests
   shell: |
     set -euo pipefail
 
@@ -52,4 +51,4 @@
     executable: /bin/bash
   register: script_res
   changed_when: "'Destroying VM ' in (script_res.stdout | default('')) or 'Un-defining VM ' in (script_res.stdout | default(''))"
-  tags: [ "ic_guest" ]
+  tags: [ic_guest]

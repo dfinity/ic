@@ -4,6 +4,7 @@ package(default_visibility = [
     "//rs/bitcoin:__subpackages__",
     "//rs/p2p:__subpackages__",
     "//rs/replica:__subpackages__",
+    "//rs/state_machine_tests:__subpackages__",
 ])
 
 rust_library(
@@ -12,14 +13,16 @@ rust_library(
     crate_name = "ic_btc_adapter_client",
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "//rs/async_utils",
+        "//rs/bitcoin/replica_types",
         "//rs/bitcoin/service",
-        "//rs/bitcoin/types/internal",
         "//rs/config",
         "//rs/interfaces/adapter_client",
         "//rs/monitoring/adapter_metrics/client",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
+        "@crate_index//:hyper-util",
         "@crate_index//:prometheus",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
@@ -27,5 +30,6 @@ rust_library(
         "@crate_index//:tokio",
         "@crate_index//:tonic",
         "@crate_index//:tower",
+        "@crate_index//:tracing",
     ],
 )

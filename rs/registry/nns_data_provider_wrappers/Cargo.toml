@@ -11,5 +11,5 @@ ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-nns-data-provider = { path = "../nns_data_provider" }
 ic-types = { path = "../../types/types" }
 tokio = { workspace = true }
-url = { version = "2.1.1", features = ["serde"] }
+url = { workspace = true }
 

@@ -1,28 +1,20 @@
-use std::{
-    backtrace::Backtrace,
-    collections::HashMap,
-    ops::Range,
-    sync::{Arc, RwLock},
-    time::Duration,
-};
+use std::{backtrace::Backtrace, collections::HashMap, ops::Range, sync::Arc, time::Duration};
 
 use futures::StreamExt;
-use ic_interfaces::p2p::artifact_manager::JoinGuard;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
-use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
     consensus::{TestConsensus, U64Artifact},
-    fully_connected_localhost_subnet,
+    fully_connected_localhost_subnet, start_consensus_manager,
     turmoil::{
-        add_peer_manager_to_sim, add_transport_to_sim, run_simulation_for, start_test_processor,
-        wait_for, wait_for_timeout, waiter_fut, PeerManagerAction,
+        add_peer_manager_to_sim, add_transport_to_sim, run_simulation_for, wait_for,
+        wait_for_timeout, waiter_fut, PeerManagerAction,
     },
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{NodeId, RegistryVersion};
 use ic_types_test_utils::ids::{node_test_id, NODE_1, NODE_2, NODE_3};
 use rand::{rngs::ThreadRng, Rng};
-use tokio::{runtime::Handle, sync::Notify, task::JoinSet};
+use tokio::{sync::Notify, task::JoinSet};
 use tokio_util::time::DelayQueue;
 use turmoil::Builder;
 
@@ -33,7 +25,7 @@ fn test_artifact_sent_to_other_peer() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(20))
+            .simulation_duration(Duration::from_secs(60 * 60))
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -90,7 +82,7 @@ fn test_artifact_in_validated_pool_is_sent_to_peer_joining_subnet() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(20))
+            .simulation_duration(Duration::from_secs(60 * 60))
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -169,11 +161,11 @@ fn test_artifact_in_validated_pool_is_sent_to_peer_joining_subnet() {
 }
 
 #[test]
-fn test_flapping_connection_does_not_cause_duplicate_artifact_downloads() {
+fn test_flapping_connection_does_not_cause_duplicate_artifact_assemble() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(20))
+            .simulation_duration(Duration::from_secs(60 * 60))
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -239,33 +231,6 @@ fn test_flapping_connection_does_not_cause_duplicate_artifact_downloads() {
         exit_notify.notify_waiters();
         sim.run().unwrap();
     });
-}
-
-fn start_consensus_manager(
-    log: ReplicaLogger,
-    rt_handle: Handle,
-    processor: TestConsensus<U64Artifact>,
-) -> (
-    Box<dyn JoinGuard>,
-    ic_consensus_manager::ConsensusManagerBuilder,
-) {
-    let _enter = rt_handle.enter();
-    let pool = Arc::new(RwLock::new(processor));
-    let (artifact_processor_jh, artifact_manager_event_rx, artifact_sender) =
-        start_test_processor(pool.clone(), pool.clone().read().unwrap().clone());
-    let pfn_producer = Arc::new(pool.clone().read().unwrap().clone());
-    let mut cm1 = ic_consensus_manager::ConsensusManagerBuilder::new(
-        log,
-        rt_handle.clone(),
-        MetricsRegistry::default(),
-    );
-    cm1.add_client(
-        artifact_manager_event_rx,
-        pool,
-        pfn_producer,
-        artifact_sender,
-    );
-    (artifact_processor_jh, cm1)
 }
 
 async fn generate_consensus_events(
@@ -542,7 +507,7 @@ fn test_adverts_are_retransmitted_on_reconnection() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(60))
+            .simulation_duration(Duration::from_secs(60 * 60))
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -638,7 +603,7 @@ fn test_new_adverts_are_transmitted_on_reconnection() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(20))
+            .simulation_duration(Duration::from_secs(60 * 60))
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -731,7 +696,7 @@ fn test_large_msgs() {
         let mut sim = Builder::new()
             .max_message_latency(Duration::from_millis(0))
             .udp_capacity(1024 * 1024)
-            .simulation_duration(Duration::from_secs(30))
+            .simulation_duration(Duration::from_secs(20 * 60))
             .build();
 
         let exit_notify = Arc::new(Notify::new());

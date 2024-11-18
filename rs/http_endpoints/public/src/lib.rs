@@ -9,30 +9,28 @@ mod catch_up_package;
 mod common;
 mod dashboard;
 mod health_status_refresher;
+pub mod metrics;
 mod pprof;
 mod query;
 mod read_state;
 mod status;
-mod threads;
 mod tracing_flamegraph;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "fuzzing_code")] {
         pub mod call;
-        pub mod metrics;
     } else {
-        mod metrics;
         mod call;
     }
 }
 
-pub use call::{CallServiceV2, IngressValidatorBuilder};
+pub use call::{call_v2, call_v3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle};
 pub use common::cors_layer;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
+pub use read_state::subnet::SubnetReadStateServiceBuilder;
 
 use crate::{
-    call::ingress_watcher::IngressWatcher,
     catch_up_package::CatchUpPackageService,
     common::{
         get_root_threshold_public_key, make_plaintext_response, map_box_error_to_response,
@@ -46,7 +44,6 @@ use crate::{
         STATUS_SUCCESS,
     },
     pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
-    read_state::subnet::SubnetReadStateService,
     status::StatusService,
     tracing_flamegraph::TracingFlamegraphService,
 };
@@ -91,12 +88,11 @@ use ic_replicated_state::ReplicatedState;
 use ic_tracing::ReloadHandles;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
         HttpReadStateResponse, HttpRequestEnvelope, MessageId, QueryResponseHash,
-        ReplicaHealthStatus,
+        ReplicaHealthStatus, SignedIngress,
     },
     time::expiry_time_from_now,
     Height, NodeId, SubnetId,
@@ -114,8 +110,10 @@ use tempfile::NamedTempFile;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
-    sync::mpsc::{Receiver, UnboundedSender},
-    sync::watch,
+    sync::{
+        mpsc::{Receiver, UnboundedSender},
+        watch, OnceCell,
+    },
     time::{sleep, timeout, Instant},
 };
 use tokio_rustls::TlsConnector;
@@ -137,7 +135,7 @@ const ALPN_HTTP1_1: &[u8; 8] = b"http/1.1";
 /// Defined in RFC 5246 for TLS 1.2 and RFC 8446 for TLS 1.3
 const TLS_HANDHAKE_BYTES: u8 = 22;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct HttpError {
     pub status: StatusCode,
     pub message: String,
@@ -170,7 +168,7 @@ fn start_server_initialization(
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     rt_handle: tokio::runtime::Handle,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
@@ -211,7 +209,7 @@ fn start_server_initialization(
         )
         .await;
         if let Some(delegation) = loaded_delegation {
-            *delegation_from_nns.write().unwrap() = Some(delegation);
+            let _ = delegation_from_nns.set(delegation);
         }
         metrics
             .health_status_transitions_total
@@ -285,7 +283,7 @@ pub fn start_server(
     ingress_filter: IngressFilterService,
     query_execution_service: QueryExecutionService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
@@ -298,7 +296,7 @@ pub fn start_server(
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
-    delegation_from_nns: Option<CertificateDelegation>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     pprof_collector: Arc<dyn PprofCollector>,
     tracing_handle: ReloadHandles,
     certified_height_watcher: watch::Receiver<Height>,
@@ -307,25 +305,24 @@ pub fn start_server(
     let listen_addr = config.listen_addr;
     info!(log, "Starting HTTP server...");
 
-    let _enter = rt_handle.enter();
     // TODO(OR4-60): temporarily listen on [::] so that we accept both IPv4 and
     // IPv6 connections. This requires net.ipv6.bindv6only = 0. Revert this once
     // we have rolled out IPv6 in prometheus and ic_p8s_service_discovery.
     let mut addr = "[::]:8080".parse::<SocketAddr>().unwrap();
     addr.set_port(listen_addr.port());
-    let tcp_listener = start_tcp_listener(addr);
-
+    let tcp_listener = start_tcp_listener(addr, &rt_handle);
+    let _enter = rt_handle.enter();
     if !AtomicCell::<ReplicaHealthStatus>::is_lock_free() {
         error!(log, "Replica health status uses locks instead of atomics.");
     }
     let metrics = HttpHandlerMetrics::new(metrics_registry);
 
-    let delegation_from_nns = Arc::new(RwLock::new(delegation_from_nns));
     let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));
 
     let ingress_filter = Arc::new(Mutex::new(ingress_filter));
 
     let call_handler = IngressValidatorBuilder::builder(
+        log.clone(),
         node_id,
         subnet_id,
         registry_client.clone(),
@@ -334,11 +331,9 @@ pub fn start_server(
         ingress_throttler.clone(),
         ingress_tx.clone(),
     )
-    .with_logger(log.clone())
     .with_malicious_flags(malicious_flags.clone())
     .build();
 
-    let call_router = call::CallServiceV2::new_router(call_handler.clone());
     let (ingress_watcher_handle, _) = IngressWatcher::start(
         rt_handle.clone(),
         log.clone(),
@@ -348,7 +343,10 @@ pub fn start_server(
         CancellationToken::new(),
     );
 
-    let call_v3_router = call::CallServiceV3::new_router(
+    let call_router =
+        call_v2::new_router(call_handler.clone(), Some(ingress_watcher_handle.clone()));
+
+    let call_v3_router = call_v3::new_router(
         call_handler,
         ingress_watcher_handle,
         metrics.clone(),
@@ -358,6 +356,7 @@ pub fn start_server(
     );
 
     let query_router = QueryServiceBuilder::builder(
+        log.clone(),
         node_id,
         query_signer,
         registry_client.clone(),
@@ -365,27 +364,25 @@ pub fn start_server(
         delegation_from_nns.clone(),
         query_execution_service,
     )
-    .with_logger(log.clone())
     .with_health_status(health_status.clone())
     .with_malicious_flags(malicious_flags.clone())
     .build_router();
 
     let canister_read_state_router = CanisterReadStateServiceBuilder::builder(
+        log.clone(),
         state_reader.clone(),
         registry_client.clone(),
         ingress_verifier,
         delegation_from_nns.clone(),
     )
-    .with_logger(log.clone())
     .with_health_status(health_status.clone())
     .with_malicious_flags(malicious_flags)
     .build_router();
 
-    let subnet_read_state_router = SubnetReadStateService::new_router(
-        Arc::clone(&health_status),
-        Arc::clone(&delegation_from_nns),
-        state_reader.clone(),
-    );
+    let subnet_read_state_router =
+        SubnetReadStateServiceBuilder::builder(delegation_from_nns.clone(), state_reader.clone())
+            .with_health_status(health_status.clone())
+            .build_router();
     let status_router = StatusService::build_router(
         log.clone(),
         nns_subnet_id,
@@ -467,6 +464,7 @@ pub fn start_server(
 
             tokio::spawn(async move {
                 metrics.connections_total.inc();
+
                 let timer = Instant::now();
                 // Set `NODELAY`
                 if stream.set_nodelay(true).is_err() {
@@ -482,6 +480,7 @@ pub fn start_server(
                             .connection_setup_duration
                             .with_label_values(&[STATUS_ERROR, LABEL_IO_ERROR])
                             .observe(timer.elapsed().as_secs_f64());
+                        metrics.closed_connections_total.inc();
                         return;
                     }
                     Err(_) => {
@@ -489,6 +488,7 @@ pub fn start_server(
                             .connection_setup_duration
                             .with_label_values(&[STATUS_ERROR, LABEL_TIMEOUT_ERROR])
                             .observe(timer.elapsed().as_secs_f64());
+                        metrics.closed_connections_total.inc();
                         return;
                     }
                 }
@@ -501,17 +501,18 @@ pub fn start_server(
                         .connection_duration
                         .with_label_values(&[LABEL_SECURE])
                         .start_timer();
-                    let mut config = match tls_config
+                    let mut server_config = match tls_config
                         .server_config_without_client_auth(registry_client.get_latest_version())
                     {
                         Ok(c) => c,
                         Err(err) => {
                             warn!(log, "Failed to get server config from crypto {err}");
+                            metrics.closed_connections_total.inc();
                             return;
                         }
                     };
-                    config.alpn_protocols = vec![ALPN_HTTP2.to_vec(), ALPN_HTTP1_1.to_vec()];
-                    let tls_acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
+                    server_config.alpn_protocols = vec![ALPN_HTTP2.to_vec(), ALPN_HTTP1_1.to_vec()];
+                    let tls_acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
 
                     match tls_acceptor.accept(stream).await {
                         Ok(stream) => {
@@ -519,7 +520,9 @@ pub fn start_server(
                                 .connection_setup_duration
                                 .with_label_values(&[STATUS_SUCCESS, LABEL_SECURE])
                                 .observe(timer.elapsed().as_secs_f64());
-                            if let Err(err) = serve_http(stream, router).await {
+                            if let Err(err) =
+                                serve_http(stream, router, config.http_max_concurrent_streams).await
+                            {
                                 warn!(log, "failed to serve connection: {err}");
                             }
                         }
@@ -539,10 +542,14 @@ pub fn start_server(
                         .connection_setup_duration
                         .with_label_values(&[STATUS_SUCCESS, LABEL_INSECURE])
                         .observe(timer.elapsed().as_secs_f64());
-                    if let Err(err) = serve_http(stream, router).await {
+                    if let Err(err) =
+                        serve_http(stream, router, config.http_max_concurrent_streams).await
+                    {
                         warn!(log, "failed to serve connection: {err}");
                     }
                 };
+
+                metrics.closed_connections_total.inc();
             });
         }
     });
@@ -551,11 +558,14 @@ pub fn start_server(
 async fn serve_http<S: AsyncRead + AsyncWrite + Send + Unpin + 'static>(
     stream: S,
     router: Router,
+    max_concurrent_streams: u32,
 ) -> Result<(), BoxError> {
     let stream = TokioIo::new(stream);
     let hyper_service =
         hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
     hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
+        .http2()
+        .max_concurrent_streams(max_concurrent_streams)
         .serve_connection_with_upgrades(stream, hyper_service)
         .await
 }
@@ -1079,6 +1089,7 @@ async fn get_random_node_from_nns_subnet(
 
 #[cfg(test)]
 mod tests {
+    use crate::read_state::subnet::SubnetReadStateService;
     use bytes::Bytes;
     use futures_util::{future::select_all, stream::pending, FutureExt};
     use http::{
@@ -1112,10 +1123,8 @@ mod tests {
             "success".to_string()
         }
         let http_handler = HttpHandler {
-            call_router: Router::new()
-                .route(call::CallServiceV2::route(), axum::routing::post(dummy)),
-            call_v3_router: Router::new()
-                .route(call::CallServiceV3::route(), axum::routing::post(dummy)),
+            call_router: Router::new().route(call_v2::route(), axum::routing::post(dummy)),
+            call_v3_router: Router::new().route(call_v3::route(), axum::routing::post(dummy)),
             query_router: Router::new()
                 .route(QueryService::route(), axum::routing::post(dummy_cbor)),
             catchup_router: Router::new().route(

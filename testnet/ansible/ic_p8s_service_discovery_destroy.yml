@@ -1,11 +1,10 @@
 ---
 - hosts: localhost
-  any_errors_fatal: yes
+  any_errors_fatal: true
   gather_facts: false
   become: false
 
   tasks:
-    
     - name: Remove all service discovery scraping targets
       vars:
         ic: "{{ ic_deployment_name }}"
@@ -13,6 +12,8 @@
         url: "{{ multiservice_discovery_server }}/{{ ic }}"
         method: DELETE
         return_content: true
-        validate_certs: no
+        validate_certs: false
       register: delete_response
+      retries: 50  # 50 times
+      delay: 5  # every 5 secons
       failed_when: delete_response.status not in [200, 400, 404]

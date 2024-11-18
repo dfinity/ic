@@ -9,13 +9,13 @@ documentation.workspace = true
 [dependencies]
 hex = { workspace = true }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
-tokio = { workspace = true }
 lazy_static = { workspace = true }
 libc = { workspace = true }
 nix = { workspace = true }
-prost = { workspace = true }
-wsl = "0.1.0"
 phantom_newtype = { path = "../phantom_newtype" }
+prost = { workspace = true }
+tokio = { workspace = true }
+wsl = "0.1.0"
 
 [target.'cfg(target_family = "unix")'.dependencies]
 rand = { workspace = true }

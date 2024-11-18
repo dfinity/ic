@@ -1,5 +1,6 @@
 use crate::logs::P0;
 use crate::state::eventlog::{replay, Event};
+use crate::state::invariants::CheckInvariantsImpl;
 use crate::state::{replace_state, Mode};
 use crate::storage::{count_events, events, record_event};
 use candid::{CandidType, Deserialize};
@@ -7,7 +8,7 @@ use ic_base_types::CanisterId;
 use ic_canister_log::log;
 use serde::Serialize;
 
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct UpgradeArgs {
     /// Minimum amount of bitcoin that can be retrieved.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -32,6 +33,9 @@ pub struct UpgradeArgs {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kyt_principal: Option<CanisterId>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_kyt_principal: Option<CanisterId>,
 }
 
 pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
@@ -48,7 +52,7 @@ pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
 
     log!(P0, "[upgrade]: replaying {} events", count_events());
 
-    let state = replay(events()).unwrap_or_else(|e| {
+    let state = replay::<CheckInvariantsImpl>(events()).unwrap_or_else(|e| {
         ic_cdk::trap(&format!(
             "[upgrade]: failed to replay the event log: {:?}",
             e

@@ -86,8 +86,8 @@ proptest! {
 }
 
 mod validate_wasm_hashes {
-    use crate::state::{ArchiveWasm, GitCommitHash, IndexWasm, LedgerWasm, WasmHash};
-    use crate::storage::test_fixtures::empty_wasm_store;
+    use crate::state::{GitCommitHash, WasmHash};
+    use crate::storage::test_fixtures::{embedded_ledger_suite_version, empty_wasm_store};
     use crate::storage::{
         record_icrc1_ledger_suite_wasms, validate_wasm_hashes, WasmHashError, WasmStore,
     };
@@ -217,25 +217,22 @@ mod validate_wasm_hashes {
                 1_620_328_630_000_000_000,
                 GitCommitHash::default(),
             ),
-            Ok(())
+            Ok(embedded_ledger_suite_version())
         );
         store
     }
 
     fn valid_wasm_hashes() -> (String, String, String) {
-        let ledger_compressed_wasm_hash = LedgerWasm::from(crate::state::LEDGER_BYTECODE)
-            .hash()
-            .to_string();
-        let index_compressed_wasm_hash = IndexWasm::from(crate::state::INDEX_BYTECODE)
-            .hash()
-            .to_string();
-        let archive_compressed_wasm_hash = ArchiveWasm::from(crate::state::ARCHIVE_NODE_BYTECODE)
-            .hash()
-            .to_string();
-        (
+        use crate::storage::LedgerSuiteVersion;
+        let LedgerSuiteVersion {
             ledger_compressed_wasm_hash,
             index_compressed_wasm_hash,
             archive_compressed_wasm_hash,
+        } = embedded_ledger_suite_version();
+        (
+            ledger_compressed_wasm_hash.to_string(),
+            index_compressed_wasm_hash.to_string(),
+            archive_compressed_wasm_hash.to_string(),
         )
     }
 }

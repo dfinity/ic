@@ -1,12 +1,13 @@
 use super::*;
 
 use ic_management_canister_types::{
-    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
-    LogVisibility, IC_00,
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
 use ic_replicated_state::{
-    canister_state::system_state::CanisterHistory,
-    metadata_state::subnet_call_context_manager::InstallCodeCallId, page_map::Shard, NumWasmPages,
+    canister_state::system_state::{CanisterHistory, OnLowWasmMemoryHookStatus},
+    metadata_state::subnet_call_context_manager::InstallCodeCallId,
+    page_map::Shard,
+    NumWasmPages,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
@@ -30,6 +31,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         long_execution_mode: LongExecutionMode::default(),
         execution_state_bits: None,
         memory_allocation: MemoryAllocation::default(),
+        wasm_memory_threshold: NumBytes::new(0),
         freeze_threshold: NumSeconds::from(0),
         cycles_balance: Cycles::zero(),
         cycles_debit: Cycles::zero(),
@@ -53,10 +55,12 @@ fn default_canister_state_bits() -> CanisterStateBits {
         canister_history: CanisterHistory::default(),
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         total_query_stats: TotalQueryStats::default(),
-        log_visibility: LogVisibility::default(),
+        log_visibility: Default::default(),
         canister_log: Default::default(),
         wasm_memory_limit: None,
         next_snapshot_id: 0,
+        snapshots_memory_usage: NumBytes::from(0),
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus::default(),
     }
 }
 
@@ -210,9 +214,12 @@ fn test_canister_snapshots_decode() {
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         stable_memory_size: NumWasmPages::new(10),
         wasm_memory_size: NumWasmPages::new(10),
+        total_size: NumBytes::new(100),
+        exported_globals: vec![Global::I32(1), Global::I64(2), Global::F64(0.1)],
     };
 
-    let pb_bits = pb_canister_snapshot_bits::CanisterSnapshotBits::from(&canister_snapshot_bits);
+    let pb_bits =
+        pb_canister_snapshot_bits::CanisterSnapshotBits::from(canister_snapshot_bits.clone());
     let new_canister_snapshot_bits = CanisterSnapshotBits::try_from(pb_bits).unwrap();
 
     assert_eq!(canister_snapshot_bits, new_canister_snapshot_bits);
@@ -353,6 +360,55 @@ fn test_last_removal_panics_in_debug() {
 }
 
 #[test]
+fn test_can_remove_unverified_marker_file_twice() {
+    // Double removal of the marker file could happen when the state sync and `commit_and_certify` try to promote a scratchpad
+    // to the checkpoint folder at the same height.
+    // It should be fine that both threads are verifying the checkpoint and try to remove the marker file.
+    with_test_replica_logger(|log| {
+        let tempdir = tmpdir("state_layout");
+        let root_path = tempdir.path().to_path_buf();
+        let metrics_registry = ic_metrics::MetricsRegistry::new();
+        let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
+
+        let height = Height::new(1);
+        let state_sync_scratchpad = state_layout.state_sync_scratchpad(height).unwrap();
+        let scratchpad_layout =
+            CheckpointLayout::<RwPolicy<()>>::new_untracked(state_sync_scratchpad, height)
+                .expect("failed to create checkpoint layout");
+        // Create at least a file in the scratchpad layout. Otherwise, empty folders can be overridden without errors
+        // and calling "scratchpad_to_checkpoint" twice will not fail as expected.
+        File::create(scratchpad_layout.raw_path().join(SYSTEM_METADATA_FILE)).unwrap();
+
+        let tip_path = state_layout.tip_path();
+        let tip = CheckpointLayout::<RwPolicy<()>>::new_untracked(tip_path, height)
+            .expect("failed to create tip layout");
+        File::create(tip.raw_path().join(SYSTEM_METADATA_FILE)).unwrap();
+
+        // Create marker files in both the scratchpad and tip and try to promote them to a checkpoint.
+        scratchpad_layout
+            .create_unverified_checkpoint_marker()
+            .unwrap();
+        tip.create_unverified_checkpoint_marker().unwrap();
+
+        let checkpoint = state_layout
+            .scratchpad_to_checkpoint(scratchpad_layout, height, None)
+            .unwrap();
+        checkpoint.remove_unverified_checkpoint_marker().unwrap();
+
+        // The checkpoint already exists, therefore promoting the tip to checkpoint should fail.
+        // However, it can still access the checkpoint and try to remove the marker file again from its side.
+        let checkpoint_result = state_layout.scratchpad_to_checkpoint(tip, height, None);
+        assert!(checkpoint_result.is_err());
+
+        let res = state_layout
+            .checkpoint_in_verification(height)
+            .unwrap()
+            .remove_unverified_checkpoint_marker();
+        assert!(res.is_ok());
+    });
+}
+
+#[test]
 fn test_canister_id_from_path() {
     assert_eq!(
         Some(CanisterId::from_u64(1)),
@@ -387,16 +443,41 @@ fn random_sorted_unique_heights(max_length: usize) -> impl Strategy<Value = Vec<
     unsorted.prop_map(|heights| {
         let mut heights: Vec<Height> = heights.iter().map(|h| Height::new(*h)).collect();
         heights.sort();
-        heights.iter().unique().cloned().collect()
+        heights.into_iter().unique().collect()
     })
+}
+
+// A strategy to create random snapshot ids.
+fn random_unique_snapshot_ids(
+    max_length: usize,
+    canister_count: u64,
+    snapshots_per_canister_count: u64,
+) -> impl Strategy<Value = Vec<SnapshotId>> {
+    let canisters = prop::collection::vec(0..canister_count, max_length);
+    let local_ids = prop::collection::vec(0..snapshots_per_canister_count, max_length);
+    (canisters, local_ids)
+        .prop_map(|(canisters, local_ids)| {
+            let mut snapshot_ids: Vec<SnapshotId> = canisters
+                .into_iter()
+                .zip(local_ids)
+                .map(|(canister, local_id)| {
+                    let canister_id = canister_test_id(canister);
+                    (canister_id, local_id).into()
+                })
+                .collect();
+            snapshot_ids.sort();
+            snapshot_ids.into_iter().unique().collect()
+        })
+        .prop_shuffle()
 }
 
 #[test]
 fn overlay_height_test() {
     let page_map_layout = PageMapLayout::<WriteOnly> {
-        canister_root: PathBuf::new(),
+        root: PathBuf::new(),
         name_stem: "42".into(),
         permissions_tag: PhantomData,
+        _checkpoint: None,
     };
 
     assert_eq!(
@@ -413,7 +494,7 @@ fn overlay_height_test() {
     // Test that parsing is consistent with encoding.
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
-        CanisterLayout::new(tmp.path().to_owned()).unwrap();
+        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
     assert_eq!(
         page_map_layout
             .overlay_height(
@@ -429,9 +510,10 @@ fn overlay_height_test() {
 #[test]
 fn overlay_shard_test() {
     let page_map_layout = PageMapLayout::<WriteOnly> {
-        canister_root: PathBuf::new(),
+        root: PathBuf::new(),
         name_stem: "42".into(),
         permissions_tag: PhantomData,
+        _checkpoint: None,
     };
 
     assert_eq!(
@@ -450,7 +532,7 @@ fn overlay_shard_test() {
     // Test that parsing is consistent with encoding.
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
-        CanisterLayout::new(tmp.path().to_owned()).unwrap();
+        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
     assert_eq!(
         page_map_layout
             .overlay_shard(
@@ -463,12 +545,38 @@ fn overlay_shard_test() {
     );
 }
 
+#[test]
+fn test_all_existing_pagemaps() {
+    let tmp = tmpdir("checkpoint");
+    let checkpoint_layout: CheckpointLayout<RwPolicy<()>> =
+        CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
+    assert!(checkpoint_layout
+        .all_existing_pagemaps()
+        .unwrap()
+        .is_empty());
+    let canister_layout = checkpoint_layout.canister(&canister_test_id(123)).unwrap();
+    let canister_wasm_base = canister_layout.wasm_chunk_store().base();
+    File::create(&canister_wasm_base).unwrap();
+    let snapshot_layout = checkpoint_layout
+        .snapshot(&SnapshotId::from((canister_test_id(123), 4)))
+        .unwrap();
+    let snapshot_overlay = snapshot_layout.stable_memory().overlay(5.into(), 6.into());
+    File::create(&snapshot_overlay).unwrap();
+    let pagemaps = checkpoint_layout.all_existing_pagemaps().unwrap();
+    assert_eq!(pagemaps.len(), 2);
+    assert_eq!(pagemaps[0].base(), canister_wasm_base,);
+    assert_eq!(
+        pagemaps[1].existing_overlays().unwrap(),
+        vec![snapshot_overlay],
+    );
+}
+
 proptest! {
 #[test]
 fn read_back_wasm_memory_overlay_file_names(heights in random_sorted_unique_heights(10)) {
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
-        CanisterLayout::new(tmp.path().to_owned()).unwrap();
+        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
         .map(|h| canister_layout.vmemory_0().overlay(*h, Shard::new(0)))
@@ -495,7 +603,7 @@ fn read_back_wasm_memory_overlay_file_names(heights in random_sorted_unique_heig
 fn read_back_stable_memory_overlay_file_names(heights in random_sorted_unique_heights(10)) {
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
-        CanisterLayout::new(tmp.path().to_owned()).unwrap();
+        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
         .map(|h| canister_layout.stable_memory().overlay(*h, Shard::new(0)))
@@ -522,7 +630,7 @@ fn read_back_stable_memory_overlay_file_names(heights in random_sorted_unique_he
 fn read_back_wasm_chunk_store_overlay_file_names(heights in random_sorted_unique_heights(10)) {
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
-        CanisterLayout::new(tmp.path().to_owned()).unwrap();
+        CanisterLayout::new_untracked(tmp.path().to_owned()).unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
         .map(|h| canister_layout.wasm_chunk_store().overlay(*h, Shard::new(0)))
@@ -567,6 +675,53 @@ fn read_back_checkpoint_directory_names(heights in random_sorted_unique_heights(
         // We expect the list of heights to be the same including ordering.
         assert_eq!(heights, existing_heights);
     });
+}
+
+#[test]
+fn read_back_canister_snapshot_ids(mut snapshot_ids in random_unique_snapshot_ids(10, 10, 10)) {
+    let tmp = tmpdir("checkpoint");
+    let checkpoint_layout: CheckpointLayout<WriteOnly> =
+        CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
+    for snapshot_id in &snapshot_ids {
+        checkpoint_layout.snapshot(snapshot_id).unwrap(); // Creates the directory as side effect.
+    }
+
+    let actual_snapshot_ids = checkpoint_layout.snapshot_ids().unwrap();
+    snapshot_ids.sort();
+
+    prop_assert_eq!(snapshot_ids, actual_snapshot_ids);
+}
+
+#[test]
+fn can_add_and_delete_canister_snapshots(snapshot_ids in random_unique_snapshot_ids(10, 10, 10)) {
+    let tmp = tmpdir("checkpoint");
+    let checkpoint_layout: CheckpointLayout<WriteOnly> =
+        CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
+
+    fn check_snapshot_layout(checkpoint_layout: &CheckpointLayout<WriteOnly>, expected_snapshot_ids: &[SnapshotId]) {
+        let actual_snapshot_ids = checkpoint_layout.snapshot_ids().unwrap();
+        let mut expected_snapshot_ids = expected_snapshot_ids.to_vec();
+        expected_snapshot_ids.sort();
+
+        assert_eq!(expected_snapshot_ids, actual_snapshot_ids);
+
+        let num_unique_canisters = actual_snapshot_ids.iter().map(|snapshot_id| snapshot_id.get_canister_id()).unique().count();
+
+        let num_canister_directories = std::fs::read_dir(checkpoint_layout.raw_path().join(SNAPSHOTS_DIR)).unwrap().count();
+        assert_eq!(num_unique_canisters, num_canister_directories);
+    }
+
+    for i in 0..snapshot_ids.len() {
+        check_snapshot_layout(&checkpoint_layout, &snapshot_ids[..i]);
+        checkpoint_layout.snapshot(&snapshot_ids[i]).unwrap(); // Creates the directory as side effect.
+        check_snapshot_layout(&checkpoint_layout, &snapshot_ids[..(i+1)]);
+    }
+
+    for i in 0..snapshot_ids.len() {
+        check_snapshot_layout(&checkpoint_layout, &snapshot_ids[i..]);
+        checkpoint_layout.snapshot(&snapshot_ids[i]).unwrap().delete_dir().unwrap();
+        check_snapshot_layout(&checkpoint_layout, &snapshot_ids[(i+1)..]);
+    }
 }
 
 }

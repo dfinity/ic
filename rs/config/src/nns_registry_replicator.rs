@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 /// LocalStore is configured as the DataProvider.
 ///
 /// Eventually, the local store will replace all other data providers.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Config {
     /// The duration to

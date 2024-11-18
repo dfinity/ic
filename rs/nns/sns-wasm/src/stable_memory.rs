@@ -28,14 +28,14 @@ use prost::Message;
 use std::mem::size_of;
 
 /// The initial chunk of stable memory that is reserved for future use
-const RESERVED_INITIAL_STABLE_MEMORY_BYTES: usize = 1_000_000; // 1MB
+const RESERVED_INITIAL_STABLE_MEMORY_BYTES: u64 = 1_000_000; // 1MB
 
 /// Provides convenient access to stable memory to read/write WASMs and canister state. See
 /// the module comment for more details.
 #[derive(Clone)]
 pub struct SnsWasmStableMemory<M: StableMemory + Clone> {
     stable_memory: M,
-    reserved_bytes: usize,
+    reserved_bytes: u64,
 }
 
 impl<M: StableMemory + Clone + Default> Default for SnsWasmStableMemory<M> {
@@ -50,22 +50,22 @@ impl<M: StableMemory + Clone + Default> Default for SnsWasmStableMemory<M> {
 impl<M: StableMemory + Clone> SnsWasmStableMemory<M> {
     /// Initialize stable memory
     pub fn init(&self) -> Result<(), StableMemoryError> {
-        let wasms_start_offset = self.get_canister_state_size_offset() + size_of::<u64>();
+        let wasms_start_offset = self.get_canister_state_size_offset() + (size_of::<u64>() as u64);
         self.write_wasms_end_offset(wasms_start_offset as u32)
     }
 
     /// Return a `StableReader` constructed with the given offset
-    fn get_stable_reader(&self, offset: usize) -> StableReader<M> {
+    fn get_stable_reader(&self, offset: u64) -> StableReader<M> {
         StableReader::with_memory(self.stable_memory.clone(), offset)
     }
 
     /// Return a `StableWriter` constructed with the given offset
-    fn get_stable_writer(&self, offset: usize) -> StableWriter<M> {
+    fn get_stable_writer(&self, offset: u64) -> StableWriter<M> {
         StableWriter::with_memory(self.stable_memory.clone(), offset)
     }
 
     /// Read a `u32` at the given offset in stable memory
-    pub fn stable_read_u32(&self, offset: usize) -> Result<u32, StableMemoryError> {
+    pub fn stable_read_u32(&self, offset: u64) -> Result<u32, StableMemoryError> {
         let mut reader = self.get_stable_reader(offset);
         let mut u32_bytes = [0u8; 4];
         reader.read(&mut u32_bytes)?;
@@ -73,20 +73,20 @@ impl<M: StableMemory + Clone> SnsWasmStableMemory<M> {
     }
 
     /// Write `value` to the given offset in stable memory
-    pub fn stable_write_u32(&self, offset: usize, value: u32) -> Result<(), StableMemoryError> {
+    pub fn stable_write_u32(&self, offset: u64, value: u32) -> Result<(), StableMemoryError> {
         let mut writer = self.get_stable_writer(offset);
         writer.write(&value.to_be_bytes())?;
         Ok(())
     }
 
     /// Return the offset in stable memory where the WASMs-end offset can be read
-    fn get_wasms_end_offset_offset(&self) -> usize {
+    fn get_wasms_end_offset_offset(&self) -> u64 {
         self.reserved_bytes
     }
 
     /// Return the offset in stable memory where the canister state size can be read
-    fn get_canister_state_size_offset(&self) -> usize {
-        self.get_wasms_end_offset_offset() + size_of::<u64>()
+    fn get_canister_state_size_offset(&self) -> u64 {
+        self.get_wasms_end_offset_offset() + (size_of::<u64>() as u64)
     }
 
     /// Retrieve the offset in stable memory where the last WASM ends
@@ -119,7 +119,7 @@ impl<M: StableMemory + Clone> SnsWasmStableMemory<M> {
         state: StableCanisterState,
     ) -> Result<(), StableMemoryError> {
         let wasms_end_offset = self.read_wasms_end_offset()?;
-        let mut state_writer = self.get_stable_writer(wasms_end_offset as usize);
+        let mut state_writer = self.get_stable_writer(wasms_end_offset as u64);
         let bytes_written = state_writer.write(&state.encode_to_vec())?;
 
         self.write_canister_state_size(bytes_written as u32)?;
@@ -132,7 +132,7 @@ impl<M: StableMemory + Clone> SnsWasmStableMemory<M> {
         let wasms_end_offset = self.read_wasms_end_offset()?;
         let canister_state_size = self.read_canister_state_size()?;
 
-        let mut reader = self.get_stable_reader(wasms_end_offset as usize);
+        let mut reader = self.get_stable_reader(wasms_end_offset as u64);
         let mut bytes = vec![0; canister_state_size as usize];
         reader.read(&mut bytes)?;
 
@@ -143,7 +143,7 @@ impl<M: StableMemory + Clone> SnsWasmStableMemory<M> {
     /// WASM was written to and the size written
     pub fn write_wasm(&self, wasm: SnsWasm) -> Result<(u32, u32), StableMemoryError> {
         let wasms_end_offset = self.read_wasms_end_offset()?;
-        let mut writer = self.get_stable_writer(wasms_end_offset as usize);
+        let mut writer = self.get_stable_writer(wasms_end_offset as u64);
         let bytes_written = writer.write(&wasm.encode_to_vec())?;
         self.write_wasms_end_offset(wasms_end_offset + bytes_written as u32)?;
 
@@ -152,7 +152,7 @@ impl<M: StableMemory + Clone> SnsWasmStableMemory<M> {
 
     /// Read a WASM from stable memory at the given offset and with the given size
     pub fn read_wasm(&self, offset: u32, size: u32) -> Result<SnsWasm, StableMemoryError> {
-        let mut reader = self.get_stable_reader(offset as usize);
+        let mut reader = self.get_stable_reader(offset as u64);
         let mut bytes = vec![0; size as usize];
         reader.read(&mut bytes)?;
 
@@ -166,8 +166,8 @@ mod test {
     use crate::{
         canister_stable_memory::TestCanisterStableMemory,
         pb::v1::{
-            DeployedSns, SnsSpecificSnsUpgrade, SnsUpgrade, SnsVersion, SnsWasmStableIndex,
-            UpgradePath,
+            DeployedSns, MetadataSection as MetadataSectionPb, SnsSpecificSnsUpgrade, SnsUpgrade,
+            SnsVersion, SnsWasmStableIndex, UpgradePath,
         },
     };
     use ic_base_types::PrincipalId;
@@ -199,6 +199,11 @@ mod test {
             hash: vec![1, 3, 6],
             offset: 34811,
             size: 1200,
+            metadata: vec![MetadataSectionPb {
+                visibility: Some("icp:public".to_string()),
+                name: Some("foo".to_string()),
+                contents: Some(vec![1, 2, 3]),
+            }],
         }];
 
         let sns_subnet_ids = vec![PrincipalId::new_subnet_test_id(34)];

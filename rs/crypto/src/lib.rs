@@ -25,7 +25,6 @@ pub use sign::{
 
 use crate::sign::ThresholdSigDataStoreImpl;
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_internal_csp::api::CspPublicKeyStore;
 use ic_crypto_internal_csp::vault::vault_from_config;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
@@ -45,7 +44,7 @@ use std::sync::Arc;
 /// Defines the maximum number of entries contained in the
 /// `ThresholdSigDataStore` per tag, where tag is of type `NiDkgTag`.
 pub const THRESHOLD_SIG_DATA_STORE_CAPACITY_PER_TAG: usize =
-    ThresholdSigDataStoreImpl::CAPACITY_PER_TAG;
+    ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY;
 
 /// A type alias for `CryptoComponentImpl<Csp>`.
 /// See the Rust documentation of `CryptoComponentImpl`.
@@ -202,7 +201,7 @@ impl CryptoComponentImpl<Csp> {
             new_logger!(&logger),
             Arc::clone(&metrics),
         );
-        let node_pks = csp
+        let node_pks = vault
             .current_node_public_keys()
             .expect("Failed to retrieve node public keys");
         let node_signing_pk = node_pks

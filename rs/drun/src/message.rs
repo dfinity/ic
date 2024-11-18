@@ -19,7 +19,7 @@ use std::{
     string::FromUtf8Error,
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub(crate) enum Message {
     Ingress(SignedIngress),
     Query(Query),
@@ -281,15 +281,8 @@ fn parse_install(
         .canister_id(ic00::IC_00)
         .method_name(ic00::Method::InstallCode)
         .method_payload(
-            ic00::InstallCodeArgsV2::new(
-                install_mode,
-                canister_id,
-                wasm_data,
-                payload,
-                None,
-                Some(8 * 1024 * 1024 * 1024), // drun users dont care about memory limits
-            )
-            .encode(),
+            ic00::InstallCodeArgsV2::new(install_mode, canister_id, wasm_data, payload, None, None)
+                .encode(),
         )
         .nonce(nonce)
         .build();

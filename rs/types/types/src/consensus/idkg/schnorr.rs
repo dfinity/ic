@@ -12,15 +12,16 @@ use serde::{Deserialize, Serialize};
 use std::convert::{AsMut, AsRef, TryFrom, TryInto};
 use std::fmt;
 use std::hash::Hash;
+use std::sync::Arc;
 
 use super::{
-    EcdsaBlockReader, IDkgTranscriptParamsRef, RandomUnmaskedTranscriptParams,
+    IDkgBlockReader, IDkgTranscriptParamsRef, RandomUnmaskedTranscriptParams,
     ThresholdSchnorrPresignatureTranscriptCreationError, ThresholdSchnorrSigInputsCreationError,
     TranscriptLookupError, TranscriptRef, UnmaskedTranscript,
 };
 
 /// Schnorr pre-signature in creation.
-#[derive(Hash, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct TranscriptInCreation {
     pub key_id: SchnorrKeyId,
@@ -112,7 +113,7 @@ impl TryFrom<&pb::TranscriptInCreation> for TranscriptInCreation {
 
 /// Counterpart of PreSignatureTranscript that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct PreSignatureTranscriptRef {
     pub key_id: SchnorrKeyId,
@@ -142,7 +143,7 @@ impl PreSignatureTranscriptRef {
     /// Resolves the refs to get the PreSignatureTranscript.
     pub fn translate(
         &self,
-        resolver: &dyn EcdsaBlockReader,
+        resolver: &dyn IDkgBlockReader,
     ) -> Result<SchnorrPreSignatureTranscript, PreSignatureTranscriptError> {
         let blinder_unmasked = resolver
             .transcript(self.blinder_unmasked_ref.as_ref())
@@ -200,11 +201,11 @@ impl TryFrom<&pb::PreSignatureTranscriptRef> for PreSignatureTranscriptRef {
 
 /// Counterpart of ThresholdSchnorrSigInputs that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ThresholdSchnorrSigInputsRef {
     pub derivation_path: ExtendedDerivationPath,
-    pub message: Vec<u8>,
+    pub message: Arc<Vec<u8>>,
     pub nonce: Randomness,
     pub presig_transcript_ref: PreSignatureTranscriptRef,
 }
@@ -230,7 +231,7 @@ pub enum ThresholdSchnorrSigInputsError {
 impl ThresholdSchnorrSigInputsRef {
     pub fn new(
         derivation_path: ExtendedDerivationPath,
-        message: Vec<u8>,
+        message: Arc<Vec<u8>>,
         nonce: Randomness,
         presig_transcript_ref: PreSignatureTranscriptRef,
     ) -> Self {
@@ -242,10 +243,10 @@ impl ThresholdSchnorrSigInputsRef {
         }
     }
 
-    /// Resolves the refs to get the ThresholdEcdsaSigInputs.
+    /// Resolves the refs to get the ThresholdSchnorrSigInputs.
     pub fn translate(
         &self,
-        resolver: &dyn EcdsaBlockReader,
+        resolver: &dyn IDkgBlockReader,
     ) -> Result<ThresholdSchnorrSigInputs, ThresholdSchnorrSigInputsError> {
         let presig_transcript = self
             .presig_transcript_ref
@@ -257,6 +258,7 @@ impl ThresholdSchnorrSigInputsRef {
         ThresholdSchnorrSigInputs::new(
             &self.derivation_path,
             &self.message,
+            None, // TODO(CRP-2630)
             self.nonce,
             presig_transcript,
             key_transcript,

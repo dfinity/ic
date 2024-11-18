@@ -1,5 +1,6 @@
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
+use crate::state::invariants::CheckInvariants;
 use crate::state::{
     ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, Overdraft,
     RetrieveBtcRequest, SubmittedBtcTransaction, UtxoCheckStatus,
@@ -10,13 +11,13 @@ use ic_btc_interface::{Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 
-#[derive(candid::CandidType, Deserialize)]
+#[derive(Deserialize, candid::CandidType)]
 pub struct GetEventsArg {
     pub start: u64,
     pub length: u64,
 }
 
-#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub enum Event {
     /// Indicates the minter initialization with the specified arguments.  Must be
     /// the first event in the event log.
@@ -188,7 +189,9 @@ pub enum ReplayLogError {
 }
 
 /// Reconstructs the minter state from an event log.
-pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterState, ReplayLogError> {
+pub fn replay<I: CheckInvariants>(
+    mut events: impl Iterator<Item = Event>,
+) -> Result<CkBtcMinterState, ReplayLogError> {
     let mut state = match events.next() {
         Some(Event::Init(args)) => CkBtcMinterState::from(args),
         Some(evt) => {
@@ -208,7 +211,7 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
             Event::Upgrade(args) => state.upgrade(args),
             Event::ReceivedUtxos {
                 to_account, utxos, ..
-            } => state.add_utxos(to_account, utxos),
+            } => state.add_utxos::<I>(to_account, utxos),
             Event::AcceptedRetrieveBtcRequest(req) => {
                 if let Some(account) = req.reimbursement_account {
                     state

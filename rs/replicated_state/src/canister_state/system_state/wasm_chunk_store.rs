@@ -3,6 +3,8 @@ use std::{collections::BTreeMap, sync::Arc};
 use ic_protobuf::{proxy::ProxyDecodeError, state::canister_state_bits::v1 as pb};
 use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
 use ic_types::{NumBytes, NumOsPages};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 
 use crate::{page_map::PageAllocatorFileDescriptor, PageMap};
 
@@ -20,7 +22,7 @@ pub fn chunk_size() -> NumBytes {
     NumBytes::from(CHUNK_SIZE)
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct ChunkInfo {
     /// Corresponds to an index in the list of chunks. The starting byte in the
     /// `PageMap` can be calculated by multiplying the index by the fixed size of
@@ -34,8 +36,9 @@ struct ChunkInfo {
 
 /// Uploaded chunks which can be assembled to create a Wasm module.
 /// It is cheap to clone because the data is stored in a [`PageMap`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct WasmChunkStore {
+    #[validate_eq(Ignore)]
     data: PageMap,
     metadata: WasmChunkStoreMetadata,
 }
@@ -167,18 +170,22 @@ impl WasmChunkStore {
         Ok(hash)
     }
 
-    pub(crate) fn from_checkpoint(data: PageMap, metadata: WasmChunkStoreMetadata) -> Self {
+    pub fn from_checkpoint(data: PageMap, metadata: WasmChunkStoreMetadata) -> Self {
         Self { data, metadata }
     }
 
     fn page_index(chunk_index: u64) -> PageIndex {
         (chunk_index * PAGES_PER_CHUNK).into()
     }
+
+    pub(crate) fn heap_delta(&self) -> NumBytes {
+        NumBytes::from((self.data.num_delta_pages() * PAGE_SIZE) as u64)
+    }
 }
 
 /// Mapping from chunk hash to location in the store. It is cheap to clone
 /// because the size is limited to 100 entries.
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct WasmChunkStoreMetadata {
     /// Maps each chunk to its chunk index and length.
     chunks: BTreeMap<WasmChunkHash, ChunkInfo>,

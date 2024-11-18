@@ -8,6 +8,7 @@ rust_canister(
     proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     service_file = ":stable_structures.did",
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-stable-structures",

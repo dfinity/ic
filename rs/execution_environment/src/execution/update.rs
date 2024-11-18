@@ -57,6 +57,12 @@ pub fn execute_update(
                     .caller()
                     .map(|caller| canister.controllers().contains(&caller))
                     .unwrap_or_default();
+
+                let is_wasm64_execution = canister
+                    .execution_state
+                    .as_ref()
+                    .map_or(false, |es| es.is_wasm64);
+
                 let prepaid_execution_cycles =
                     match round.cycles_account_manager.prepay_execution_cycles(
                         &mut canister.system_state,
@@ -66,6 +72,7 @@ pub fn execute_update(
                         execution_parameters.instruction_limits.message(),
                         subnet_size,
                         reveal_top_up,
+                        is_wasm64_execution.into(),
                     ) {
                         Ok(cycles) => cycles,
                         Err(err) => {
@@ -146,6 +153,12 @@ pub fn execute_update(
         CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => ApiType::system_task(
             IC_00.get(),
             SystemMethod::CanisterGlobalTimer,
+            time,
+            helper.call_context_id(),
+        ),
+        CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => ApiType::system_task(
+            IC_00.get(),
+            SystemMethod::CanisterOnLowWasmMemory,
             time,
             helper.call_context_id(),
         ),
@@ -234,6 +247,11 @@ fn finish_err(
         round.counters.charging_from_balance_error,
     );
 
+    let is_wasm64_execution = canister
+        .execution_state
+        .as_ref()
+        .map_or(false, |es| es.is_wasm64);
+
     let instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(
         &mut canister.system_state,
@@ -242,6 +260,7 @@ fn finish_err(
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
+        is_wasm64_execution.into(),
         round.log,
     );
     let instructions_used = instruction_limit - instructions_left;
@@ -321,19 +340,20 @@ impl UpdateHelper {
 
         let call_context_id = canister
             .system_state
-            .call_context_manager_mut()
-            .unwrap()
             .new_call_context(
                 original.call_origin.clone(),
                 original.call_or_task.cycles(),
                 original.time,
                 original.request_metadata.clone(),
-            );
+            )
+            .unwrap();
 
         let initial_cycles_balance = canister.system_state.balance();
 
         match original.call_or_task {
-            CanisterCallOrTask::Call(_) | CanisterCallOrTask::Task(CanisterTask::Heartbeat) => {}
+            CanisterCallOrTask::Call(_)
+            | CanisterCallOrTask::Task(CanisterTask::Heartbeat)
+            | CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => {}
             CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => {
                 // The global timer is one-off.
                 canister.system_state.global_timer = CanisterTimer::Inactive;
@@ -467,14 +487,13 @@ impl UpdateHelper {
         let (action, call_context) = self
             .canister
             .system_state
-            .call_context_manager_mut()
-            .unwrap()
             .on_canister_result(
                 self.call_context_id,
                 None,
                 output.wasm_result,
                 instructions_used,
-            );
+            )
+            .unwrap();
 
         let response = action_to_response(
             &self.canister,
@@ -484,6 +503,13 @@ impl UpdateHelper {
             round.log,
             round.counters.ingress_with_cycles_error,
         );
+
+        let is_wasm64_execution = self
+            .canister
+            .execution_state
+            .as_ref()
+            .map_or(false, |es| es.is_wasm64);
+
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             output.num_instructions_left,
@@ -491,6 +517,7 @@ impl UpdateHelper {
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
+            is_wasm64_execution.into(),
             round.log,
         );
 
@@ -596,17 +623,19 @@ impl PausedExecution for PausedCallExecution {
                 }
             }
             WasmExecutionResult::Finished(slice, output, state_changes) => {
+                let instructions_consumed = self
+                    .original
+                    .execution_parameters
+                    .instruction_limits
+                    .message()
+                    - output.num_instructions_left;
                 info!(
                     round.log,
                     "[DTS] Finished {:?} execution of canister {} after {} / {} instructions.",
                     self.original.method,
                     clean_canister.canister_id(),
-                    slice.executed_instructions,
-                    self.original
-                        .execution_parameters
-                        .instruction_limits
-                        .message()
-                        - output.num_instructions_left,
+                    slice.executed_instructions.display(),
+                    instructions_consumed.display(),
                 );
                 update_round_limits(round_limits, &slice);
                 helper.finish(

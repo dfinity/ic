@@ -67,7 +67,7 @@ Distribution:
           vesting_period: 53 weeks
 
     InitialBalances:
-        governance: 60 tokens
+        treasury: 60 tokens
         swap: 40 tokens
 
     # Optional, but highly recommended. This is a literal
@@ -90,7 +90,7 @@ Swap:
         - CH
 
     VestingSchedule:
-        events: 83
+        events: 9
         interval: 17 days
 
     start_time: 12:00 UTC

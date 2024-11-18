@@ -1,9 +1,7 @@
 use crate::chain_key::{InitialChainKeyConfigInternal, KeyConfigRequestInternal};
 use crate::{
     common::LOG_PREFIX,
-    mutations::common::{
-        decode_registry_value, encode_or_panic, get_subnet_ids_from_subnet_list, has_duplicates,
-    },
+    mutations::common::{get_subnet_ids_from_subnet_list, has_duplicates},
     registry::{Registry, Version},
 };
 use candid::Encode;
@@ -16,7 +14,10 @@ use ic_management_canister_types::{
 };
 use ic_protobuf::registry::{
     crypto::v1::ChainKeySigningSubnetList,
-    subnet::v1::{CatchUpPackageContents, ChainKeyInitialization, SubnetListRecord, SubnetRecord},
+    subnet::v1::{
+        chain_key_initialization, CatchUpPackageContents, ChainKeyInitialization, SubnetListRecord,
+        SubnetRecord,
+    },
 };
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
@@ -74,7 +75,7 @@ impl Registry {
                 value,
                 version: _,
                 deletion_marker: _,
-            }) => decode_registry_value::<SubnetListRecord>(value.clone()),
+            }) => SubnetListRecord::decode(value.as_slice()).unwrap(),
             None => panic!(
                 "{}set_subnet_membership_mutation: subnet list record not found in the registry.",
                 LOG_PREFIX,
@@ -141,9 +142,7 @@ impl Registry {
             &cup_contents_key.into_bytes(),
             version.unwrap_or_else(|| self.latest_version()),
         ) {
-            Some(cup) => Ok(decode_registry_value::<CatchUpPackageContents>(
-                cup.value.clone(),
-            )),
+            Some(cup) => Ok(CatchUpPackageContents::decode(cup.value.as_slice()).unwrap()),
             None => Err(format!(
                 "{}CatchUpPackage not found for subnet: {}",
                 LOG_PREFIX, subnet_id
@@ -257,7 +256,9 @@ impl Registry {
 
         ChainKeyInitialization {
             key_id: Some((&dealing_request.key_id).into()),
-            dealings: Some(response.initial_dkg_dealings),
+            initialization: Some(chain_key_initialization::Initialization::Dealings(
+                response.initial_dkg_dealings,
+            )),
         }
     }
 
@@ -272,7 +273,7 @@ impl Registry {
             self.latest_version(),
         )
         .map(|registry_value| {
-            decode_registry_value::<ChainKeySigningSubnetList>(registry_value.value.to_vec())
+            ChainKeySigningSubnetList::decode(registry_value.value.as_slice()).unwrap()
         })
     }
 
@@ -305,7 +306,7 @@ impl Registry {
 
             mutations.push(upsert(
                 make_chain_key_signing_subnet_list_key(chain_key_id),
-                encode_or_panic(&chain_key_signing_list_for_key),
+                chain_key_signing_list_for_key.encode_to_vec(),
             ));
         }
         mutations

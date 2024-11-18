@@ -5,7 +5,7 @@ use std::{fmt, str};
 
 use crate::pb::v1::{
     registry_error::Code, registry_mutation::Type, Precondition, RegistryDelta, RegistryError,
-    RegistryMutation,
+    RegistryGetChangesSinceResponse, RegistryMutation,
 };
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 /// The possible errors in registry responses.
 /// Per key errors are associated with a particular
 /// key.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum Error {
     MalformedMessage(String),
     KeyNotPresent(Vec<u8>),
@@ -69,7 +69,7 @@ impl From<RegistryError> for Error {
             1 => Error::KeyNotPresent(error.key),
             2 => Error::KeyAlreadyPresent(error.key),
             3 => Error::VersionNotLatest(error.key),
-            _ => Error::UnknownError(error.reason),
+            _ => Error::UnknownError(format!("{}: {}", error.code, error.reason)),
         }
     }
 }
@@ -239,10 +239,22 @@ pub fn serialize_get_changes_since_request(version: u64) -> Result<Vec<u8>, Erro
 pub fn deserialize_get_changes_since_response(
     response: Vec<u8>,
 ) -> Result<(Vec<RegistryDelta>, u64), Error> {
-    match pb::v1::RegistryGetChangesSinceResponse::decode(&response[..]) {
-        Ok(response) => Ok((response.deltas, response.version)),
-        Err(error) => Err(Error::MalformedMessage(error.to_string())),
+    let response = match pb::v1::RegistryGetChangesSinceResponse::decode(&response[..]) {
+        Ok(ok) => ok,
+        Err(error) => return Err(Error::MalformedMessage(error.to_string())),
+    };
+
+    let RegistryGetChangesSinceResponse {
+        error,
+        version,
+        deltas,
+    } = response;
+
+    if let Some(error) = error {
+        return Err(Error::from(error));
     }
+
+    Ok((deltas, version))
 }
 
 /// Serializes the arguments for a request to the insert() function in the
@@ -445,5 +457,29 @@ mod tests {
             RegistryMutation { mutation_type: delete, key: someone is going to get offended if i put a real country here, value:  }], \
             preconditions on keys: [africa, asia] }"
         )
+    }
+
+    #[test]
+    fn test_deserialize_get_changes_since_response_with_error() {
+        let response = RegistryGetChangesSinceResponse {
+            error: Some(RegistryError {
+                code: Code::Authorization as i32,
+                reason: "You are not welcome here.".to_string(),
+                key: vec![],
+            }),
+            deltas: vec![],
+            version: 0,
+        };
+
+        let response = response.encode_to_vec();
+
+        let result = deserialize_get_changes_since_response(response);
+
+        assert_eq!(
+            result,
+            Err(Error::UnknownError(
+                "5: You are not welcome here.".to_string()
+            )),
+        );
     }
 }

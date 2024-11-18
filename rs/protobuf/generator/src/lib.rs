@@ -186,14 +186,6 @@ fn build_registry_proto(def: &Path, out: &Path) {
         "#[derive(Eq, Hash, PartialOrd, Ord)]",
     );
     config.type_attribute(
-        ".registry.crypto.v1.EcdsaCurve",
-        "#[derive(candid::CandidType)]",
-    );
-    config.type_attribute(
-        ".registry.crypto.v1.EcdsaKeyId",
-        "#[derive(candid::CandidType, Eq)]",
-    );
-    config.type_attribute(
         ".registry.node_operator",
         "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Eq, Hash)]",
     );
@@ -345,6 +337,13 @@ fn build_types_proto(def: &Path, out: &Path) {
         ".types.v1.SubnetId",
         ".types.v1.ThresholdSignature",
         ".types.v1.ThresholdSignatureShare",
+        ".types.v1.EcdsaKeyId",
+        ".types.v1.SchnorrKeyId",
+        ".types.v1.VetKdKeyId",
+        ".types.v1.EcdsaCurve",
+        ".types.v1.SchnorrAlgorithm",
+        ".types.v1.VetKdCurve",
+        ".types.v1.MasterPublicKeyId",
     ] {
         config.type_attribute(path, "#[derive(serde::Serialize, serde::Deserialize)]");
     }
@@ -352,8 +351,18 @@ fn build_types_proto(def: &Path, out: &Path) {
     config.type_attribute(".types.v1.SubnetId", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.NiDkgId", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.PrincipalId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.MasterPublicKeyId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.EcdsaKeyId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.SchnorrKeyId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.VetKdKeyId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.EcdsaCurve", "#[derive(candid::CandidType)]");
+    config.type_attribute(".types.v1.EcdsaKeyId", "#[derive(candid::CandidType)]");
     config.type_attribute(
         ".types.v1.ConsensusMessage",
+        "#[allow(clippy::large_enum_variant)]",
+    );
+    config.type_attribute(
+        ".types.v1.StrippedConsensusMessage",
         "#[allow(clippy::large_enum_variant)]",
     );
     config.type_attribute(

@@ -1,24 +1,24 @@
 use ic_base_types::PrincipalId;
 use ic_canonical_state::{
     encoding::{
-        old_types::{
-            RequestOrResponseV13, RequestOrResponseV17, RequestOrResponseV3, StreamHeaderV16,
-            StreamHeaderV6, SystemMetadataV9,
-        },
+        old_types::{RequestOrResponseV17, StreamHeaderV18},
         types::{
-            RequestOrResponse as RequestOrResponseV18, StreamHeader as StreamHeaderV17,
+            RequestOrResponse as RequestOrResponseV18, StreamHeader as StreamHeaderV19,
             SubnetMetrics as SubnetMetricsV15, SystemMetadata as SystemMetadataV10,
         },
         CborProxyDecoder, CborProxyEncoder,
     },
-    CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION,
+    CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
 };
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_replicated_state::{metadata_state::SubnetMetrics, SystemMetadata};
 use ic_test_utilities_state::{arb_stream_header, arb_subnet_metrics};
 use ic_test_utilities_types::arbitrary;
 use ic_types::{
-    crypto::CryptoHash, messages::RequestOrResponse, xnet::StreamHeader, CryptoHashOfPartialState,
+    crypto::CryptoHash,
+    messages::RequestOrResponse,
+    xnet::{RejectReason, StreamHeader},
+    CryptoHashOfPartialState,
 };
 use lazy_static::lazy_static;
 use proptest::prelude::*;
@@ -71,36 +71,35 @@ pub(crate) fn arb_valid_versioned_stream_header(
     max_signal_count: usize,
 ) -> impl Strategy<Value = (StreamHeader, RangeInclusive<CertificationVersion>)> {
     prop_oneof![
-        // Stream headers up to and including certification version 8 had no reject
-        // signals.
-        (
-            arb_stream_header(
-                /* min_signal_count */ 0,
-                /* max_signal_count */ 0,
-                /* with_responses_only_flag */ vec![false],
-            ),
-            Just(CertificationVersion::V0..=CertificationVersion::V8)
-        ),
-        // Stream headers may have reject signals starting with certification version
-        // 8.
+        // Stream headers up to version 18 may have reject signals for responses
+        // (`CanisterMigrating` only) and the `DeprecatedResponsesOnly` flag set.
         (
             arb_stream_header(
                 /* min_signal_count */ 0,
                 max_signal_count,
-                /* with_responses_only_flag */ vec![false],
+                /* with_reject_reasons */ vec![RejectReason::CanisterMigrating],
             ),
-            Just(CertificationVersion::V8..=CertificationVersion::V16)
+            Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V18)
         ),
-        // Stream headers may have the `StreamHeaderFlagBits::DeprecatedResponsesOnly` flag set
-        // starting with certification version 17.
+        // Stream headers may have flavours of reject signals other than `CanisterMigrating`
+        // starting from certification version 19.
         (
             arb_stream_header(
                 /* min_signal_count */ 0,
                 max_signal_count,
-                /* with_responses_only_flag */ vec![true, false],
+                /* with_reject_reasons */
+                vec![
+                    RejectReason::CanisterMigrating,
+                    RejectReason::CanisterNotFound,
+                    RejectReason::CanisterStopped,
+                    RejectReason::CanisterStopping,
+                    RejectReason::QueueFull,
+                    RejectReason::OutOfMemory,
+                    RejectReason::Unknown
+                ],
             ),
-            Just(CertificationVersion::V17..=MAX_SUPPORTED_CERTIFICATION_VERSION)
-        ),
+            Just(CertificationVersion::V19..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+        )
     ]
 }
 
@@ -109,25 +108,23 @@ pub(crate) fn arb_invalid_versioned_stream_header(
     max_signal_count: usize,
 ) -> impl Strategy<Value = (StreamHeader, RangeInclusive<CertificationVersion>)> {
     prop_oneof![
-        // Encoding a stream header with non-empty reject signals before certification
-        // version 8 should panic.
+        // Encoding a stream header with reject signal flavors other than `CanisterMigrating`
+        // before certification version 19 should panic.
         (
             arb_stream_header(
                 /* min_signal_count */ 1,
                 max_signal_count,
-                /* with_responses_only_flag */ vec![false],
+                /* with_reject_reasons */
+                vec![
+                    RejectReason::CanisterNotFound,
+                    RejectReason::CanisterStopped,
+                    RejectReason::CanisterStopping,
+                    RejectReason::QueueFull,
+                    RejectReason::OutOfMemory,
+                    RejectReason::Unknown,
+                ],
             ),
-            Just(CertificationVersion::V7..=CertificationVersion::V7)
-        ),
-        // Encoding a stream header with flags set before certification version 17
-        // should panic.
-        (
-            arb_stream_header(
-                /* min_signal_count */ 0,
-                max_signal_count,
-                /* with_responses_only_flags */ vec![true],
-            ),
-            Just(CertificationVersion::V16..=CertificationVersion::V16)
+            Just(CertificationVersion::V18..=CertificationVersion::V18)
         ),
     ]
 }
@@ -138,22 +135,16 @@ lazy_static! {
     static ref STREAM_HEADER_ENCODINGS: Vec<VersionedEncoding<StreamHeader>> = vec![
         #[allow(clippy::redundant_closure)]
         VersionedEncoding::new(
-            CertificationVersion::V0..=CertificationVersion::V6,
-            "StreamHeaderV6",
-            |v| StreamHeaderV6::proxy_encode(v),
-            |v| StreamHeaderV6::proxy_decode(v),
+            MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V18,
+            "StreamHeaderV18",
+            |v| StreamHeaderV18::proxy_encode(v),
+            |v| StreamHeaderV18::proxy_decode(v),
         ),
         VersionedEncoding::new(
-            CertificationVersion::V0..=CertificationVersion::V16,
-            "StreamHeaderV16",
-            |v| StreamHeaderV16::proxy_encode(v),
-            |v| StreamHeaderV16::proxy_decode(v),
-        ),
-        VersionedEncoding::new(
-            CertificationVersion::V0..=MAX_SUPPORTED_CERTIFICATION_VERSION,
+            MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "StreamHeader",
-            |v| StreamHeaderV17::proxy_encode(v),
-            |v| StreamHeaderV17::proxy_decode(v),
+            |v| StreamHeaderV19::proxy_encode(v),
+            |v| StreamHeaderV19::proxy_decode(v),
         ),
     ];
 }
@@ -233,18 +224,13 @@ pub(crate) fn arb_valid_versioned_message(
 ) -> impl Strategy<Value = (RequestOrResponse, RangeInclusive<CertificationVersion>)> {
     prop_oneof![
         (
-            // No `Request::metadata` populated for versions 13 and below.
-            arbitrary::request_or_response_with_config(false, false),
-            Just(CertificationVersion::V0..=MAX_SUPPORTED_CERTIFICATION_VERSION)
-        ),
-        (
-            // Optionally populate `Request::metadata` from version 14 on.
-            arbitrary::request_or_response_with_config(true, false),
-            Just(CertificationVersion::V14..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+            // No `deadline` before version 18.
+            arbitrary::request_or_response_with_config(false),
+            Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         ),
         (
             // Optionally populate `deadline` from version 18 on.
-            arbitrary::request_or_response_with_config(true, true),
+            arbitrary::request_or_response_with_config(true),
             Just(CertificationVersion::V18..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         ),
     ]
@@ -256,28 +242,13 @@ lazy_static! {
     static ref MESSAGE_ENCODINGS: Vec<VersionedEncoding<RequestOrResponse>> = vec![
         #[allow(clippy::redundant_closure)]
         VersionedEncoding::new(
-            CertificationVersion::V0..=CertificationVersion::V3,
-            "RequestOrResponseV3",
-            |v| RequestOrResponseV3::proxy_encode(v),
-            |v| RequestOrResponseV3::proxy_decode(v),
-        ),
-        #[allow(clippy::redundant_closure)]
-        VersionedEncoding::new(
-            CertificationVersion::V0..=CertificationVersion::V13,
-            "RequestOrResponseV13",
-            |v| RequestOrResponseV13::proxy_encode(v),
-            |v| RequestOrResponseV13::proxy_decode(v),
-        ),
-        #[allow(clippy::redundant_closure)]
-        VersionedEncoding::new(
-            CertificationVersion::V0..=CertificationVersion::V17,
+            MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V17,
             "RequestOrResponseV17",
             |v| RequestOrResponseV17::proxy_encode(v),
             |v| RequestOrResponseV17::proxy_decode(v),
         ),
-        #[allow(clippy::redundant_closure)]
         VersionedEncoding::new(
-            CertificationVersion::V0..=MAX_SUPPORTED_CERTIFICATION_VERSION,
+            MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "RequestOrResponse",
             |v| RequestOrResponseV18::proxy_encode(v),
             |v| RequestOrResponseV18::proxy_decode(v),
@@ -339,14 +310,7 @@ lazy_static! {
     static ref SYSTEM_METADATA_ENCODINGS: Vec<VersionedEncoding<SystemMetadata>> = vec![
         #[allow(clippy::redundant_closure)]
         VersionedEncoding::new(
-            CertificationVersion::V0..=CertificationVersion::V9,
-            "SystemMetadataV9",
-            |v| SystemMetadataV9::proxy_encode(v),
-            |_v| unimplemented!(),
-        ),
-        #[allow(clippy::redundant_closure)]
-        VersionedEncoding::new(
-            CertificationVersion::V0..=MAX_SUPPORTED_CERTIFICATION_VERSION,
+            MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "SystemMetadataV10",
             |v| SystemMetadataV10::proxy_encode(v),
             |_v| unimplemented!(),
@@ -377,16 +341,11 @@ prop_compose! {
 pub(crate) fn arb_valid_system_metadata(
 ) -> impl Strategy<Value = (SystemMetadata, RangeInclusive<CertificationVersion>)> {
     prop_oneof![
-        // `SystemMetadata` up to and including `V9` had a required `id_counter` field.
-        (
-            arb_system_metadata(),
-            Just(CertificationVersion::V0..=CertificationVersion::V9)
-        ),
         // `SystemMetadata` `V10` and later have an optional `id_counter` field for
         // backwards compatibility, but it is no longer populated.
         (
             arb_system_metadata(),
-            Just(CertificationVersion::V10..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+            Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         ),
     ]
 }
@@ -426,7 +385,7 @@ lazy_static! {
     static ref SUBNET_METRICS_ENCODINGS: Vec<VersionedEncoding<SubnetMetrics>> = vec![
         #[allow(clippy::redundant_closure)]
         VersionedEncoding::new(
-            CertificationVersion::V15..=MAX_SUPPORTED_CERTIFICATION_VERSION,
+            MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "SubnetMetricsV15",
             |v| SubnetMetricsV15::proxy_encode(v),
             |_v| unimplemented!(),
@@ -439,7 +398,7 @@ pub(crate) fn arb_valid_subnet_metrics(
 ) -> impl Strategy<Value = (SubnetMetrics, RangeInclusive<CertificationVersion>)> {
     prop_oneof![(
         arb_subnet_metrics(),
-        Just(CertificationVersion::V15..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+        Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
     )]
 }
 

@@ -7,6 +7,7 @@ package(default_visibility = ["//visibility:public"])
 # use dependencies that can be compiled to WebAssembly.
 ########################################################
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     "//rs/protobuf",
     "//rs/types/types",
@@ -18,9 +19,10 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
-    "//rs/crypto/test_utils/tls",
+    # Keep sorted.
     "//rs/crypto/test_utils/keys",
     "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/crypto/test_utils/tls",
     "@crate_index//:assert_matches",
     "@crate_index//:curve25519-dalek",
 ]

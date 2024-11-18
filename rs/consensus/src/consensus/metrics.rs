@@ -1,4 +1,4 @@
-use ic_consensus_utils::{get_block_hash_string, pool_reader::PoolReader};
+use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
 use ic_interfaces::ingress_manager::IngressSelector;
 use ic_metrics::{
@@ -8,7 +8,7 @@ use ic_metrics::{
 use ic_types::{
     batch::BatchPayload,
     consensus::{
-        idkg::{CompletedReshareRequest, CompletedSignature, EcdsaPayload, KeyTranscriptCreation},
+        idkg::{CompletedReshareRequest, CompletedSignature, IDkgPayload, KeyTranscriptCreation},
         Block, BlockPayload, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank,
     },
     CountBytes, Height,
@@ -18,9 +18,9 @@ use prometheus::{
 };
 use std::sync::RwLock;
 
-use crate::ecdsa::metrics::{
+use crate::idkg::metrics::{
     count_by_master_public_key_id, expected_keys, key_id_label, CounterPerMasterPublicKeyId,
-    ECDSA_KEY_ID_LABEL,
+    KEY_ID_LABEL,
 };
 
 // For certain metrics, we record metrics based on block's rank.
@@ -32,9 +32,10 @@ pub(crate) const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "consensus_payload_too
 pub(crate) const CRITICAL_ERROR_VALIDATION_NOT_PASSED: &str = "consensus_validation_not_passed";
 pub(crate) const CRITICAL_ERROR_SUBNET_RECORD_ISSUE: &str = "consensus_subnet_record_issue";
 
-pub struct BlockMakerMetrics {
-    pub get_payload_calls: IntCounterVec,
-    pub block_size_bytes_estimate: IntGaugeVec,
+pub(crate) struct BlockMakerMetrics {
+    pub(crate) get_payload_calls: IntCounterVec,
+    pub(crate) block_size_bytes_estimate: IntGaugeVec,
+    pub(crate) dynamic_delay_triggered: IntCounter,
 }
 
 impl BlockMakerMetrics {
@@ -48,7 +49,11 @@ impl BlockMakerMetrics {
             block_size_bytes_estimate: metrics_registry.int_gauge_vec(
                 "consensus_block_size_bytes_estimate",
                 "An estimate about the block size produced by the block maker.",
-                &["payload_type"])
+                &["payload_type"]),
+            dynamic_delay_triggered: metrics_registry.int_counter(
+                "consensus_block_maker_dynamic_delay_triggered",
+                "The number of times the dynamic delay has been triggered",
+                ),
         }
     }
 
@@ -91,7 +96,7 @@ impl ConsensusMetrics {
             ),
             on_state_change_change_set_size: metrics_registry.histogram_vec(
                 "consensus_on_state_change_change_set_size",
-                "The size of the ChangeSet returned by on_state_change()",
+                "The size of the Mutations returned by on_state_change()",
                 // 0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000
                 decimal_buckets_with_zero(0, 3),
                 &["sub_component"],
@@ -115,16 +120,16 @@ pub struct BlockStats {
     pub block_hash: String,
     pub block_height: u64,
     pub block_context_certified_height: u64,
-    pub ecdsa_stats: Option<EcdsaStats>,
+    pub idkg_stats: Option<IDkgStats>,
 }
 
 impl From<&Block> for BlockStats {
     fn from(block: &Block) -> Self {
         Self {
-            block_hash: get_block_hash_string(block),
+            block_hash: format!("{:?}", ic_types::crypto::crypto_hash(block)),
             block_height: block.height().get(),
             block_context_certified_height: block.context.certified_height.get(),
-            ecdsa_stats: block.payload.as_ref().as_ecdsa().map(EcdsaStats::from),
+            idkg_stats: block.payload.as_ref().as_idkg().map(IDkgStats::from),
         }
     }
 }
@@ -157,19 +162,19 @@ impl BatchStats {
     }
 }
 
-// Ecdsa payload stats
-pub struct EcdsaStats {
+// IDkg payload stats
+pub struct IDkgStats {
     pub signature_agreements: usize,
-    pub key_transcript_created: CounterPerMasterPublicKeyId,
-    pub available_quadruples: CounterPerMasterPublicKeyId,
-    pub quadruples_in_creation: CounterPerMasterPublicKeyId,
+    pub key_transcripts_created: CounterPerMasterPublicKeyId,
+    pub available_pre_signatures: CounterPerMasterPublicKeyId,
+    pub pre_signatures_in_creation: CounterPerMasterPublicKeyId,
     pub ongoing_xnet_reshares: CounterPerMasterPublicKeyId,
     pub xnet_reshare_agreements: CounterPerMasterPublicKeyId,
 }
 
-impl From<&EcdsaPayload> for EcdsaStats {
-    fn from(payload: &EcdsaPayload) -> Self {
-        let mut key_transcript_created = CounterPerMasterPublicKeyId::new();
+impl From<&IDkgPayload> for IDkgStats {
+    fn from(payload: &IDkgPayload) -> Self {
+        let mut key_transcripts_created = CounterPerMasterPublicKeyId::new();
 
         for (key_id, key_transcript) in &payload.key_transcripts {
             if let KeyTranscriptCreation::Created(transcript) = &key_transcript.next_in_creation {
@@ -181,7 +186,7 @@ impl From<&EcdsaPayload> for EcdsaStats {
                 if Some(transcript_id) != current_transcript_id
                     && payload.idkg_transcripts.contains_key(transcript_id)
                 {
-                    *key_transcript_created.entry(key_id.clone()).or_default() += 1;
+                    *key_transcripts_created.entry(key_id.clone()).or_default() += 1;
                 }
             }
         }
@@ -189,17 +194,17 @@ impl From<&EcdsaPayload> for EcdsaStats {
         let keys = expected_keys(payload);
 
         Self {
-            key_transcript_created,
+            key_transcripts_created,
             signature_agreements: payload
                 .signature_agreements
                 .values()
                 .filter(|status| matches!(status, CompletedSignature::Unreported(_)))
                 .count(),
-            available_quadruples: count_by_master_public_key_id(
+            available_pre_signatures: count_by_master_public_key_id(
                 payload.available_pre_signatures.values(),
                 &keys,
             ),
-            quadruples_in_creation: count_by_master_public_key_id(
+            pre_signatures_in_creation: count_by_master_public_key_id(
                 payload.pre_signatures_in_creation.values(),
                 &keys,
             ),
@@ -225,13 +230,13 @@ pub struct FinalizerMetrics {
     pub ingress_message_bytes_delivered: Histogram,
     pub xnet_bytes_delivered: Histogram,
     pub finalization_certified_state_difference: IntGauge,
-    // ecdsa payload related metrics
-    pub ecdsa_key_transcript_created: IntCounterVec,
-    pub ecdsa_signature_agreements: IntCounter,
-    pub ecdsa_available_quadruples: IntGaugeVec,
-    pub ecdsa_quadruples_in_creation: IntGaugeVec,
-    pub ecdsa_ongoing_xnet_reshares: IntGaugeVec,
-    pub ecdsa_xnet_reshare_agreements: IntCounterVec,
+    // idkg payload related metrics
+    pub master_key_transcripts_created: IntCounterVec,
+    pub threshold_signature_agreements: IntCounter,
+    pub idkg_available_pre_signatures: IntGaugeVec,
+    pub idkg_pre_signatures_in_creation: IntGaugeVec,
+    pub idkg_ongoing_xnet_reshares: IntGaugeVec,
+    pub idkg_xnet_reshare_agreements: IntCounterVec,
     // canister http payload metrics
     pub canister_http_success_delivered: IntCounter,
     pub canister_http_timeouts_delivered: IntCounter,
@@ -272,35 +277,35 @@ impl FinalizerMetrics {
                 // 0, 1, 2, 5, 10, 20, 50, 100, ..., 10MB, 20MB, 50MB
                 decimal_buckets_with_zero(0, 7),
             ),
-            // ecdsa payload related metrics
-            ecdsa_key_transcript_created: metrics_registry.int_counter_vec(
-                "consensus_ecdsa_key_transcript_created",
-                "The number of times ECDSA key transcript is created",
-                &[ECDSA_KEY_ID_LABEL],
+            // idkg payload related metrics
+            master_key_transcripts_created: metrics_registry.int_counter_vec(
+                "consensus_master_key_transcripts_created",
+                "The number of times a master key transcript is created",
+                &[KEY_ID_LABEL],
             ),
-            ecdsa_signature_agreements: metrics_registry.int_counter(
-                "consensus_ecdsa_signature_agreements",
-                "Total number of ECDSA signature agreements created",
+            threshold_signature_agreements: metrics_registry.int_counter(
+                "consensus_threshold_signature_agreements",
+                "Total number of threshold signature agreements created",
             ),
-            ecdsa_available_quadruples: metrics_registry.int_gauge_vec(
-                "consensus_ecdsa_available_quadruples",
-                "The number of available ECDSA quadruples",
-                &[ECDSA_KEY_ID_LABEL],
+            idkg_available_pre_signatures: metrics_registry.int_gauge_vec(
+                "consensus_idkg_available_pre_signatures",
+                "The number of available IDKG pre-signatures",
+                &[KEY_ID_LABEL],
             ),
-            ecdsa_quadruples_in_creation: metrics_registry.int_gauge_vec(
-                "consensus_ecdsa_quadruples_in_creation",
-                "The number of ECDSA quadruples in creation",
-                &[ECDSA_KEY_ID_LABEL],
+            idkg_pre_signatures_in_creation: metrics_registry.int_gauge_vec(
+                "consensus_idkg_pre_signatures_in_creation",
+                "The number of IDKG pre-signatures in creation",
+                &[KEY_ID_LABEL],
             ),
-            ecdsa_ongoing_xnet_reshares: metrics_registry.int_gauge_vec(
-                "consensus_ecdsa_ongoing_xnet_reshares",
-                "The number of ongoing ECDSA xnet reshares",
-                &[ECDSA_KEY_ID_LABEL],
+            idkg_ongoing_xnet_reshares: metrics_registry.int_gauge_vec(
+                "consensus_idkg_ongoing_xnet_reshares",
+                "The number of ongoing IDKG xnet reshares",
+                &[KEY_ID_LABEL],
             ),
-            ecdsa_xnet_reshare_agreements: metrics_registry.int_counter_vec(
-                "consensus_ecdsa_reshare_agreements",
-                "Total number of ECDSA reshare agreements created",
-                &[ECDSA_KEY_ID_LABEL],
+            idkg_xnet_reshare_agreements: metrics_registry.int_counter_vec(
+                "consensus_idkg_reshare_agreements",
+                "Total number of IDKG reshare agreements created",
+                &[KEY_ID_LABEL],
             ),
             // canister http payload metrics
             canister_http_success_delivered: metrics_registry.int_counter(
@@ -337,7 +342,7 @@ impl FinalizerMetrics {
         self.canister_http_divergences_delivered
             .inc_by(batch_stats.canister_http.divergence_responses as u64);
 
-        if let Some(ecdsa) = &block_stats.ecdsa_stats {
+        if let Some(idkg) = &block_stats.idkg_stats {
             let set = |metric: &IntGaugeVec, counts: &CounterPerMasterPublicKeyId| {
                 for (key_id, count) in counts.iter() {
                     metric
@@ -355,26 +360,26 @@ impl FinalizerMetrics {
             };
 
             inc_by(
-                &self.ecdsa_key_transcript_created,
-                &ecdsa.key_transcript_created,
+                &self.master_key_transcripts_created,
+                &idkg.key_transcripts_created,
             );
-            self.ecdsa_signature_agreements
-                .inc_by(ecdsa.signature_agreements as u64);
+            self.threshold_signature_agreements
+                .inc_by(idkg.signature_agreements as u64);
             set(
-                &self.ecdsa_available_quadruples,
-                &ecdsa.available_quadruples,
-            );
-            set(
-                &self.ecdsa_quadruples_in_creation,
-                &ecdsa.quadruples_in_creation,
+                &self.idkg_available_pre_signatures,
+                &idkg.available_pre_signatures,
             );
             set(
-                &self.ecdsa_ongoing_xnet_reshares,
-                &ecdsa.ongoing_xnet_reshares,
+                &self.idkg_pre_signatures_in_creation,
+                &idkg.pre_signatures_in_creation,
+            );
+            set(
+                &self.idkg_ongoing_xnet_reshares,
+                &idkg.ongoing_xnet_reshares,
             );
             inc_by(
-                &self.ecdsa_xnet_reshare_agreements,
-                &ecdsa.xnet_reshare_agreements,
+                &self.idkg_xnet_reshare_agreements,
+                &idkg.xnet_reshare_agreements,
             );
         }
     }
@@ -462,7 +467,7 @@ pub struct ValidatorMetrics {
     pub(crate) dkg_validator: IntCounterVec,
     // Used to sum the values within a single validator run
     dkg_time_per_validator_run: RwLock<f64>,
-    pub(crate) ecdsa_validation_duration: HistogramVec,
+    pub(crate) idkg_validation_duration: HistogramVec,
     pub(crate) validation_random_tape_shares_count: IntGauge,
     pub(crate) validation_random_beacon_shares_count: IntGauge,
     pub(crate) validation_share_batch_size: HistogramVec,
@@ -506,9 +511,9 @@ impl ValidatorMetrics {
                 &["type"],
             ),
             dkg_time_per_validator_run: RwLock::new(0.0),
-            ecdsa_validation_duration: metrics_registry.histogram_vec(
-                "consensus_ecdsa_validation_duration_seconds",
-                "Time to validate ECDSA component, in seconds",
+            idkg_validation_duration: metrics_registry.histogram_vec(
+                "consensus_idkg_validation_duration_seconds",
+                "Time to validate IDKG component, in seconds",
                 // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
                 // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
                 decimal_buckets(-4, 2),

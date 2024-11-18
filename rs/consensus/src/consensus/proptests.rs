@@ -145,7 +145,7 @@ fn wrap_batch_payload(height: u64, payload: BatchPayload) -> Payload {
         BlockPayload::Data(DataPayload {
             batch: payload,
             dealings: Dealings::new_empty(Height::from(height)),
-            ecdsa: None,
+            idkg: None,
         }),
     )
 }

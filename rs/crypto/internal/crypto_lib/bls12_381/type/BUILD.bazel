@@ -4,23 +4,26 @@ load("//bazel:defs.bzl", "rust_bench")
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
 DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:hex",
     "@crate_index//:ic_bls12_381",
     "@crate_index//:itertools",
-    "@crate_index//:hex",
     "@crate_index//:lazy_static",
     "@crate_index//:pairing",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
-    "@crate_index//:sha2_0_9_1",
+    "@crate_index//:sha2",
     "@crate_index//:subtle",
     "@crate_index//:zeroize",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:paste",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/test_utils/reproducible_rng",
     "@crate_index//:criterion",
 ]

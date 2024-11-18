@@ -22,7 +22,7 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError, CspDkgLoadPrivateKeyError,
     CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
 };
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
@@ -39,7 +39,7 @@ use ic_logger::{info, new_logger, warn, ReplicaLogger};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
-    IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
+    IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
     idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
@@ -471,7 +471,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     }
 
     // `ThresholdEcdsaSignerCspVault`-methods
-    async fn ecdsa_sign_share(
+    async fn create_ecdsa_sig_share(
         self,
         _: context::Context,
         derivation_path: ExtendedDerivationPath,
@@ -483,10 +483,10 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         kappa_times_lambda_raw: IDkgTranscriptInternalBytes,
         key_times_lambda_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
-    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
+    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaCreateSigShareError> {
         let vault = self.local_csp_vault;
         let job = move || {
-            vault.ecdsa_sign_share(
+            vault.create_ecdsa_sig_share(
                 derivation_path,
                 hashed_message.into_vec(),
                 nonce,
@@ -507,6 +507,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         _: context::Context,
         derivation_path: ExtendedDerivationPath,
         message: ByteBuf,
+        taproot_tree_root: Option<ByteBuf>,
         nonce: Randomness,
         key_raw: IDkgTranscriptInternalBytes,
         presig_raw: IDkgTranscriptInternalBytes,
@@ -517,6 +518,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
             vault.create_schnorr_sig_share(
                 derivation_path,
                 message.into_vec(),
+                taproot_tree_root.map(|v| v.into_vec()),
                 nonce,
                 key_raw,
                 presig_raw,

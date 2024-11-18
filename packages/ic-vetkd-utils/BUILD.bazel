@@ -2,15 +2,16 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 COMMON_DEPS = [
-    "@crate_index//:zeroize",
+    # Keep sorted.
+    "@crate_index//:ic_bls12_381",
+    "@crate_index//:lazy_static",
+    "@crate_index//:pairing",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
-    "@crate_index//:lazy_static",
-    "@crate_index//:ic_bls12_381",
-    "@crate_index//:sha2_0_9_1",
+    "@crate_index//:sha2",
     "@crate_index//:sha3",
-    "@crate_index//:pairing",
     "@crate_index//:subtle",
+    "@crate_index//:zeroize",
 ]
 
 package(default_visibility = ["//visibility:public"])

@@ -1,4 +1,3 @@
-use crate::mutations::common::encode_or_panic;
 use crate::mutations::do_create_subnet::CreateSubnetPayload;
 use crate::mutations::node_management::common::make_add_node_registry_mutations;
 use crate::mutations::node_management::do_add_node::connection_endpoint_from_string;
@@ -20,6 +19,7 @@ use ic_registry_transport::pb::v1::{
 };
 use ic_registry_transport::upsert;
 use ic_types::ReplicaVersion;
+use prost::Message;
 use std::collections::BTreeMap;
 
 pub fn invariant_compliant_registry(mutation_id: u8) -> Registry {
@@ -30,14 +30,15 @@ pub fn invariant_compliant_registry(mutation_id: u8) -> Registry {
 }
 
 pub fn empty_mutation() -> Vec<u8> {
-    encode_or_panic(&RegistryAtomicMutateRequest {
+    RegistryAtomicMutateRequest {
         mutations: vec![RegistryMutation {
             mutation_type: Type::Upsert as i32,
             key: "_".into(),
             value: "".into(),
         }],
         preconditions: vec![],
-    })
+    }
+    .encode_to_vec()
 }
 
 pub fn add_fake_subnet(
@@ -48,13 +49,13 @@ pub fn add_fake_subnet(
 ) -> Vec<RegistryMutation> {
     let new_subnet = upsert(
         make_subnet_record_key(subnet_id).into_bytes(),
-        encode_or_panic(&subnet_record),
+        subnet_record.encode_to_vec(),
     );
 
     subnet_list_record.subnets.push(subnet_id.get().into_vec());
     let subnet_list_mutation = upsert(
         make_subnet_list_record_key().into_bytes(),
-        encode_or_panic(subnet_list_record),
+        subnet_list_record.encode_to_vec(),
     );
 
     let mut subnet_threshold_pk_and_cup_mutations =

@@ -134,7 +134,7 @@ const FIREWALL_RULES_SCOPE_SUBNET_PREFIX: &str = "subnet";
 const FIREWALL_RULES_SCOPE_NODE_PREFIX: &str = "node";
 
 /// The scope for a firewall ruleset
-#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum FirewallRulesScope {
     Node(NodeId),
     Subnet(SubnetId),

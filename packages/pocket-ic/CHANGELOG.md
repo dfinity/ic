@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+
+## 6.0.0 - 2024-11-13
+
+### Added
+- The function `PocketIc::get_subnet_metrics` to retrieve metrics of a given subnet.
+- The function `PocketIcBuilder::with_bitcoind_addr` to specify the address and port at which a `bitcoind` process is listening.
+- The function `PocketIcBuilder::new_with_config` to specify a custom `ExtendedSubnetConfigSet`.
+- The function `PocketIcBuilder::with_subnet_state` to load subnet state from a state directory for an arbitrary subnet kind and subnet id.
+- The function `get_default_effective_canister_id` to retrieve a default effective canister id for canister creation on a PocketIC instance.
+- The function `PocketIc::get_controllers` to get the controllers of a canister.
+- Functions `PocketIc::take_canister_snapshot`, `PocketIc::load_canister_snapshot`, `PocketIc::list_canister_snapshots`, and `PocketIc::delete_canister_snapshot` to manage canister snapshots.
+- Functions `PocketIc::upload_chunk`, `PocketIc::stored_chunks`, and `PocketIc::clear_chunk_store` to manage the WASM chunk store of a canister.
+- The function `PocketIc::install_chunked_canister` to install a canister from WASM chunks in the WASM chunk store of a canister.
+- The function `PocketIc::fetch_canister_logs` to fetch canister logs via a query call to the management canister.
+- The function `Topology::get_subnet` to get a subnet to which a canister belongs independently of whether the canister exists.
+
+### Removed
+- Functions `PocketIc::from_config`, `PocketIc::from_config_and_max_request_time`, and `PocketIc::from_config_and_server_url`.
+  Use the `PocketIcBuilder` instead.
+- The enumeration `DtsFlag` and its associated builder patterns: DTS is always enabled in PocketIC.
+- The reexport `pocket_ic::CanisterSettings`: use `pocket_ic::management_canister::CanisterSettings` instead.
+
+### Changed
+- The type `Topology` becomes a struct with two fields: `subnet_configs` contains an association of subnet ids to their configurations
+  and `default_effective_canister_id` contains a default effective canister id for canister creation.
+- Management canister types are defined in a new `management_canister` module to avoid a dependency on `ic-cdk`.
+- Environment variable `POCKET_IC_MUTE_SERVER` now only mutes output when set to non-empty string (previously any value muted server).
+
+
+## 5.0.0 - 2024-09-12
+
+### Added
+- Support for verified application subnets: the library function `PocketIcBuilder::with_verified_application_subnet` adds a verified application subnet to the PocketIC instance;
+  the library function `PocketIc::get_verified_app_subnets` lists all verified application subnets of the PocketIC instance.
+- The function `PocketIcBuilder::with_log_level` to specify the replica log level of the PocketIC instance.
+
+
+
+## 4.0.0 - 2024-07-22
+
 ### Added
 - Module `nonblocking` with asynchronous PocketIc library. The asynchronous function `drop` must be called
   (e.g., `pic.drop().await`) to drop the PocketIc instance. It must be called manually
@@ -14,14 +55,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The library functions `PocketIc::install_canister`, `PocketIc::upgrade_canister`, and `PocketIc::reinstall_canister`
   support installing canisters with a large WASM as a sequence of chunks (transparently, i.e.,
   the user does not need to take any extra action).
-- The maximum duration (timeout) of a PocketIC operation is configurable and can be deactivated by specifying it as `None` (the default is a timeout of 5 minutes).
+- The maximum duration (timeout) of a PocketIC operation is configurable using `PocketIcBuilder::with_max_request_time_ms`
+  and can be deactivated by specifying it as `None` (the default is a timeout of 5 minutes).
+- The library function `PocketIc::create_canister_with_id` works for all IC mainnet canister IDs that do not belong to the NNS or II subnet.
 - The library function `PocketIc::uninstall_canister` to uninstall code of an existing canister.
+- The library function `PocketIc::update_canister_settings` to update settings (e.g., compute allocation) of an existing canister.
+- The library function `PocketIc::make_live_with_params` creates an HTTP gateway for this PocketIC instance listening on an optionally specified port (defaults to choosing
+  an arbitrary unassigned port) and optionally specified domains (default to `localhost`) and using an optionally specified TLS certificate (if provided,
+  an HTTPS gateway is created) and configures the PocketIC instance to make progress automatically, i.e., periodically update the time of the PocketIC instance to the real time
+  and execute rounds on the subnets.
+- The function `PocketIcBuilder::with_server_url` to specify the URL of the PocketIC server (if not used, then the URL of an already running PocketIC server
+  is derived or a new PocketIC server is started).
+- The function `PocketIcBuilder::with_state_dir` to specify a directory in which the state of the PocketIC instance can be preserved across the PocketIC instance lifetime
+  (that directory should be empty when specified as `state_dir` for the very first time).
+- The function `PocketIcBuilder::with_nonmainnet_features` to specify that non-mainnet features (e.g., best-effort responses) should be enabled for the PocketIC instance.
+- Support for canister HTTP outcalls: a function `PocketIc::get_canister_http` to retrieve pending canister HTTP outcalls
+  and a function `PocketIc::mock_canister_http_response` to mock a response for a pending canister HTTP outcall.
 
 ### Removed
 - Public field `instance_id` in the synchronous PocketIc library, use the function `instance_id` instead
 
 ### Changed
 - Deprecated `make_deterministic`, use `stop_live` instead
+- The topology contains a list of node IDs instead of subnet size which can be derived from the number of node IDs.
 
 
 

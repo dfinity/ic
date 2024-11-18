@@ -4,7 +4,7 @@ use crate::crypto::ErrorReproducibility;
 
 /// Validation error can either mean that the validated object is invalid or that the validation
 /// failed to establish the validity of the object.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum ValidationError<Reason, Failure> {
     /// The artifact was determined to be invalid.
     InvalidArtifact(Reason),

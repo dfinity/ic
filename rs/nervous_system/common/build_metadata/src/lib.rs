@@ -27,13 +27,13 @@ const BUILD_INFO_FORMAT: &str = r#"
 /// There are some unusual requirements. Basically, calling crates must be ready
 /// to use the build-info crate. More specifically, calling crates must do the
 /// following:
-///   1. List the following in the [dependencies] section of their Cargo.toml:
-///     a. build-info
-///     b. candid
-///     c. dfn_candid
-///     d. dfn_core
-///   2. List build-info-build in the [build-dependencies] section of their Cargo.toml.
-///   3. Have a ./build.rs where main calls build_info::build_script() (either directly or indirectly).
+/// 1. List the following in the [dependencies] section of their Cargo.toml:
+///     * build-info
+///     * candid
+///     * dfn_candid
+///     * dfn_core
+/// 2. List build-info-build in the [build-dependencies] section of their Cargo.toml.
+/// 3. Have a ./build.rs where main calls build_info::build_script() (either directly or indirectly).
 #[proc_macro]
 pub fn define_get_build_metadata_candid_method(_: TokenStream) -> TokenStream {
     format!(

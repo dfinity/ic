@@ -5,11 +5,13 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_test_vectors",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:strum_macros",
     ],
     version = "0.9.0",
     visibility = ["//rs/crypto:__subpackages__"],
     deps = [
+        # Keep sorted.
         "@crate_index//:hex",
         "@crate_index//:strum",
     ],

@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Subcommands for recovery procedures (application subnets, NNS with failover nodes, etc...)
-#[derive(Clone, Debug, PartialEq, Parser, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
 pub enum SubCommand {
     /// Application subnet recovery on same or failover nodes.
     AppSubnetRecovery(AppSubnetRecoveryArgs),
@@ -35,15 +35,15 @@ pub struct RecoveryToolArgs {
     pub nns_url: Url,
 
     /// replica version of ic-admin binary
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub replica_version: Option<ReplicaVersion>,
 
     /// The directory to perform recovery in
-    #[clap(long, parse(from_os_str), default_value = "/var/lib/ic/data")]
+    #[clap(long, default_value = "/var/lib/ic/data")]
     pub dir: PathBuf,
 
     /// The path to a private key to be considered for SSH connections
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     pub key_file: Option<PathBuf>,
 
     /// Flag to enter test mode

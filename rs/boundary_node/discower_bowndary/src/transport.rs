@@ -7,7 +7,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use url::Url;
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum TransportProviderError {
     #[error("Failed to get Transport: {0}")]
     UnableToGetTransport(String),

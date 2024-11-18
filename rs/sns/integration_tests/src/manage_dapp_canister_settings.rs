@@ -2,7 +2,8 @@ use candid::Encode;
 use canister_test::Wasm;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
-use ic_management_canister_types::{CanisterSettingsArgsBuilder, DefiniteCanisterSettingsArgs};
+use ic_management_canister_types::CanisterSettingsArgsBuilder;
+use ic_nervous_system_clients::canister_status::DefiniteCanisterSettingsArgs;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nns_test_utils::state_test_helpers::{
     create_canister, sns_claim_staked_neuron, sns_get_proposal, sns_make_proposal,
@@ -60,7 +61,7 @@ fn test_manage_dapp_canister_settings_successful() {
                 .with_memory_allocation(1 << 30)
                 .with_freezing_threshold(100_000)
                 .with_reserved_cycles_limit(1_000_000_000_000)
-                .with_log_visibility(ic_management_canister_types::LogVisibility::Public)
+                .with_log_visibility(ic_management_canister_types::LogVisibilityV2::Public)
                 .with_wasm_memory_limit(1_000_000_000)
                 .build(),
         ),
@@ -93,19 +94,17 @@ fn test_manage_dapp_canister_settings_successful() {
 
     // Step 1.6: Make sure the Dapp canister has the right settings.
     let status = state_machine
-        .canister_status_as(dapp_canister_id.get(), dapp_canister_id)
+        .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
+    let dapp_settings: DefiniteCanisterSettingsArgs = status.settings().into();
     assert_eq!(
-        status.settings(),
+        dapp_settings,
         DefiniteCanisterSettingsArgs::new(
-            canister_ids.root_canister_id.get(),
             vec![canister_ids.root_canister_id.get()],
             50,
             Some(1 << 30),
             100_000,
-            Some(1_000_000_000_000),
-            ic_management_canister_types::LogVisibility::Public,
             Some(1_000_000_000),
         ),
     );
@@ -146,19 +145,17 @@ fn test_manage_dapp_canister_settings_successful() {
 
     // Step 3: Verify that the Dapp canister settings have been changed.
     let status = state_machine
-        .canister_status_as(dapp_canister_id.get(), dapp_canister_id)
+        .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
+    let dapp_settings: DefiniteCanisterSettingsArgs = status.settings().into();
     assert_eq!(
-        status.settings(),
+        dapp_settings,
         DefiniteCanisterSettingsArgs::new(
-            canister_ids.root_canister_id.get(),
             vec![canister_ids.root_canister_id.get()],
             0,
             Some(0),
             0,
-            Some(0),
-            ic_management_canister_types::LogVisibility::Controllers,
             Some(2_000_000_000),
         ),
     );
@@ -199,7 +196,7 @@ fn test_manage_dapp_canister_settings_failure() {
                 .with_freezing_threshold(100_000)
                 .with_reserved_cycles_limit(1_000_000_000_000)
                 .with_wasm_memory_limit(1_000_000_000)
-                .with_log_visibility(ic_management_canister_types::LogVisibility::Public)
+                .with_log_visibility(ic_management_canister_types::LogVisibilityV2::Public)
                 .build(),
         ),
     );
@@ -223,19 +220,17 @@ fn test_manage_dapp_canister_settings_failure() {
 
     // Step 1.5: Make sure the Dapp canister has the right settings.
     let status = state_machine
-        .canister_status_as(dapp_canister_id.get(), dapp_canister_id)
+        .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
+    let dapp_settings: DefiniteCanisterSettingsArgs = status.settings().into();
     assert_eq!(
-        status.settings(),
+        dapp_settings,
         DefiniteCanisterSettingsArgs::new(
-            canister_ids.root_canister_id.get(),
             vec![canister_ids.root_canister_id.get()],
             50,
             Some(1 << 30),
             100_000,
-            Some(1_000_000_000_000),
-            ic_management_canister_types::LogVisibility::Public,
             Some(1_000_000_000),
         ),
     );
@@ -243,7 +238,7 @@ fn test_manage_dapp_canister_settings_failure() {
     // Step 1.6: Get the canister status of the ledger canister.
     let original_ledger_canister_status = state_machine
         .canister_status_as(
-            canister_ids.ledger_canister_id.get(),
+            canister_ids.root_canister_id.get(),
             canister_ids.ledger_canister_id,
         )
         .unwrap()
@@ -296,19 +291,17 @@ fn test_manage_dapp_canister_settings_failure() {
 
     // Step 3.2: Verify that the Dapp canister settings have not been changed.
     let dapp_canister_status = state_machine
-        .canister_status_as(dapp_canister_id.get(), dapp_canister_id)
+        .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
+    let dapp_settings: DefiniteCanisterSettingsArgs = dapp_canister_status.settings().into();
     assert_eq!(
-        dapp_canister_status.settings(),
+        dapp_settings,
         DefiniteCanisterSettingsArgs::new(
-            canister_ids.root_canister_id.get(),
             vec![canister_ids.root_canister_id.get()],
             50,
             Some(1 << 30),
             100_000,
-            Some(1_000_000_000_000),
-            ic_management_canister_types::LogVisibility::Public,
             Some(1_000_000_000),
         ),
     );
@@ -316,7 +309,7 @@ fn test_manage_dapp_canister_settings_failure() {
     // Step 3.3: Verify that the ledger canister settings have not been changed.
     let new_ledger_canister_status = state_machine
         .canister_status_as(
-            canister_ids.ledger_canister_id.get(),
+            canister_ids.root_canister_id.get(),
             canister_ids.ledger_canister_id,
         )
         .unwrap()

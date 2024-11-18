@@ -4,19 +4,15 @@
 from __future__ import annotations
 
 import argparse
-import atexit
 import os
 import shutil
-import subprocess
-import sys
-import tempfile
-import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional, TypeVar
+from typing import List, Optional, TypeVar
 
 import invoke
-from container_utils import (
+
+from toolchains.sysimage.container_utils import (
     generate_container_command,
     path_owned_by_root,
     process_temp_sys_dir_args,
@@ -36,26 +32,7 @@ class BaseImageOverride:
         assert self.image_file.exists()
 
 
-ReturnType = TypeVar('ReturnType') # https://docs.python.org/3/library/typing.html#generics
-def retry(func: Callable[[], ReturnType], num_retries: int = 3 ) -> ReturnType:
-    """
-    Call the given `func`. If an exception is raised, print, and retry `num_retries` times.
-    Back off retries by sleeping for at least 5 secs + an exponential increase.
-    Exception is not caught on the last try.
-    """
-    BASE_BACKOFF_WAIT_SECS = 5
-    for i in range(num_retries):
-        try:
-            return func()
-        except Exception as e:
-            print(f"Exception occurred: {e}", file=sys.stderr)
-            print(f"Retries left: {num_retries - i}", file=sys.stderr)
-            wait_time_secs = BASE_BACKOFF_WAIT_SECS + i**2
-            print(f"Waiting for next retry (secs): {wait_time_secs}")
-            time.sleep(wait_time_secs) # 5, 6, 9, 14, 21, etc.
-
-    # Let the final try actually throw
-    return func()
+ReturnType = TypeVar("ReturnType")  # https://docs.python.org/3/library/typing.html#generics
 
 
 def load_base_image_tar_file(container_cmd: str, tar_file: Path):
@@ -78,18 +55,20 @@ def arrange_component_files(context_dir, component_files):
         shutil.copy(source_file, install_target)
 
 
-def build_container(container_cmd: str,
-                    build_args: List[str],
-                    context_dir: str,
-                    dockerfile: str,
-                    image_tag: str,
-                    no_cache: bool,
-                    base_image_override: Optional[BaseImageOverride]) -> str:
+def build_container(
+    container_cmd: str,
+    build_args: List[str],
+    context_dir: str,
+    dockerfile: str,
+    image_tag: str,
+    no_cache: bool,
+    base_image_override: Optional[BaseImageOverride],
+) -> str:
     """Run container build command with given args. Return the given tag."""
     assert image_tag and context_dir, "Arguments can not be empty"
 
-    build_arg_strings = [f"--build-arg \"{v}\"" for v in build_args]
-    build_arg_strings_joined = ' '.join(build_arg_strings)
+    build_arg_strings = [f'--build-arg "{v}"' for v in build_args]
+    build_arg_strings_joined = " ".join(build_arg_strings)
 
     cmd = f"{container_cmd} "
     cmd += "build "
@@ -114,15 +93,12 @@ def build_container(container_cmd: str,
     # Context must go last
     cmd += f"{context_dir} "
     print(cmd)
-    def build_func():
-        invoke.run(cmd)   # Throws on failure
-    retry(build_func)
+
+    invoke.run(cmd)  # Throws on failure
     return image_tag
 
 
-def export_container_filesystem(container_cmd: str,
-                                image_tag: str,
-                                destination_tar_filename: str):
+def export_container_filesystem(container_cmd: str, image_tag: str, destination_tar_filename: str):
     """
     Export the filesystem from an image.
     Creates container - but does not start it, avoiding timestamp and other determinism issues.
@@ -135,8 +111,9 @@ def export_container_filesystem(container_cmd: str,
 
     destination_tar_path = Path(destination_tar_filename)
     # Using sudo w/ podman requires changing permissions on the output tar file (not the tar contents)
-    assert path_owned_by_root(destination_tar_path), \
-        f"'{destination_tar_path}' not owned by root. Remove this and the next line."
+    assert path_owned_by_root(
+        destination_tar_path
+    ), f"'{destination_tar_path}' not owned by root. Remove this and the next line."
     take_ownership_of_file(destination_tar_path)
 
 
@@ -150,7 +127,7 @@ def resolve_file_args(context_dir: str, file_build_args: List[str]) -> List[str]
 
         path = Path(context_dir) / pathname
 
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             value = f.readline().strip()
             result.append(f"{name}={value}")
 
@@ -162,31 +139,22 @@ def generate_image_tag(base: str) -> str:
     # See the (unwieldy) format spec:
     # https://github.com/opencontainers/distribution-spec/blob/main/spec.md#pulling-manifests
     # Replace disallowed chars with dashes
-    return base.translate(str.maketrans({'/': '-', '.':'-', ':':'-'}))
+    return base.translate(str.maketrans({"/": "-", ".": "-", ":": "-"}))
 
 
-def build_and_export(container_cmd: str,
-                     build_args: List[str],
-                     context_dir: str,
-                     dockerfile: str,
-                     image_tag: str,
-                     no_cache: bool,
-                     base_image_override: Optional[BaseImageOverride],
-                     destination_tar_filename: str) -> None:
+def build_and_export(
+    container_cmd: str,
+    build_args: List[str],
+    context_dir: str,
+    dockerfile: str,
+    image_tag: str,
+    no_cache: bool,
+    base_image_override: Optional[BaseImageOverride],
+    destination_tar_filename: str,
+) -> None:
+    build_container(container_cmd, build_args, context_dir, dockerfile, image_tag, no_cache, base_image_override)
 
-    build_container(container_cmd,
-                    build_args,
-                    context_dir,
-                    dockerfile,
-                    image_tag,
-                    no_cache,
-                    base_image_override)
-
-    export_container_filesystem(container_cmd,
-                                image_tag,
-                                destination_tar_filename)
-
-
+    export_container_filesystem(container_cmd, image_tag, destination_tar_filename)
 
 
 def get_args():
@@ -231,7 +199,7 @@ def get_args():
         type=str,
         action="append",
         help="Files to drop directly into the build context.",
-        required=True
+        required=True,
     )
 
     parser.add_argument(
@@ -240,14 +208,14 @@ def get_args():
         type=str,
         action="append",
         help="Files to include in rootfs; expects list of sourcefile:targetfile",
-        required=True
+        required=True,
     )
 
     parser.add_argument(
         "--no-cache",
         help="By default the container builds using the image layer cache. Turn this on to prevent using the cache. Cache usage causes instability with parallel builds. It can be mitigated by addressing at a layer above this.",
         default=False,
-        action="store_true"
+        action="store_true",
     )
 
     parser.add_argument(
@@ -260,14 +228,15 @@ def get_args():
         "--tmpfs-container-sys-dir",
         help="Create and mount a tmpfs to store its system files. It will be unmounted before exiting.",
         default=False,
-        action="store_true"
+        action="store_true",
     )
 
     parser.add_argument(
         "--base-image-tar-file",
         help="Override the base image used by 'podman build'. The 'FROM' line in the target Dockerfile will be ignored",
         default=None,
-        type=str)
+        type=str,
+    )
 
     # Need the image tag to identify the right image.
     # `podman load` puts the image into the local image registry directly and labels it with the image tag used during `podman build`
@@ -275,7 +244,8 @@ def get_args():
         "--base-image-tar-file-tag",
         help="Tag given to the container image during 'podman build'. Required if --base-image-tar-file is used.",
         default=None,
-        type=str)
+        type=str,
+    )
 
     return parser.parse_args()
 
@@ -293,8 +263,9 @@ def main():
     no_cache = args.no_cache
     temp_sys_dir = process_temp_sys_dir_args(args.temp_container_sys_dir, args.tmpfs_container_sys_dir)
 
-    context_dir = tempfile.mkdtemp(prefix="icosbuild")
-    atexit.register(lambda: subprocess.run(["rm", "-rf", context_dir], check=True))
+    context_dir = os.getenv("ICOS_TMPDIR")
+    if not context_dir:
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
     # Add all context files directly into dir
     for context_file in context_files:
@@ -309,26 +280,29 @@ def main():
         build_args.extend(resolved_file_args)
 
     # Override the base image with a local tar file?
-    def only_one_defined(a,b) -> bool:
+    def only_one_defined(a, b) -> bool:
         return (a and not b) or (b and not a)
-    assert not only_one_defined(args.base_image_tar_file, args.base_image_tar_file_tag), \
-        "Please specify BOTH --base-image-tar-file* flags"
+
+    assert not only_one_defined(
+        args.base_image_tar_file, args.base_image_tar_file_tag
+    ), "Please specify BOTH --base-image-tar-file* flags"
 
     base_image_override = None
     if args.base_image_tar_file:
-        base_image_override = BaseImageOverride(Path(args.base_image_tar_file),
-                                                args.base_image_tar_file_tag)
+        base_image_override = BaseImageOverride(Path(args.base_image_tar_file), args.base_image_tar_file_tag)
 
     container_cmd = generate_container_command("sudo podman ", temp_sys_dir)
-    build_and_export(container_cmd,
-                     build_args,
-                     context_dir,
-                     args.dockerfile,
-                     image_tag,
-                     no_cache,
-                     base_image_override,
-                     destination_tar_filename)
-    remove_image(container_cmd, image_tag) # No harm removing if in the tmp dir
+    build_and_export(
+        container_cmd,
+        build_args,
+        context_dir,
+        args.dockerfile,
+        image_tag,
+        no_cache,
+        base_image_override,
+        destination_tar_filename,
+    )
+    remove_image(container_cmd, image_tag)  # No harm removing if in the tmp dir
 
 
 if __name__ == "__main__":

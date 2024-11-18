@@ -24,12 +24,13 @@ fn test_neurons_fund_participation_anonymization() {
         nns_neuron_id: Some(id1),
         amount_icp_e8s: Some(amount_icp_e8s),
         maturity_equivalent_icp_e8s: Some(maturity_equivalent_icp_e8s),
-        hotkey_principal: Some(controller),
+        controller: Some(controller),
+        hotkeys: vec![],
         is_capped: Some(is_capped),
     };
     let n2 = NeuronsFundNeuronPortionPb {
         nns_neuron_id: Some(id2),
-        ..n1
+        ..n1.clone()
     };
     let neurons = vec![n1, n2];
     let snapshot = NeuronsFundSnapshotPb {
@@ -46,6 +47,7 @@ fn test_neurons_fund_participation_anonymization() {
                         one_third_participation_milestone_icp: dec!(100_000.0),
                         full_participation_milestone_icp: dec!(167_000.0),
                     },
+                    cfg!(not(test)),
                 )
                 .unwrap()
                 .serialize(),
@@ -103,12 +105,13 @@ fn test_neurons_fund_snapshot_anonymization() {
         nns_neuron_id: Some(id1),
         amount_icp_e8s: Some(amount_icp_e8s),
         maturity_equivalent_icp_e8s: Some(maturity_equivalent_icp_e8s),
-        hotkey_principal: Some(controller),
+        controller: Some(controller),
+        hotkeys: vec![],
         is_capped: Some(is_capped),
     };
     let n2 = NeuronsFundNeuronPortionPb {
         nns_neuron_id: Some(id2),
-        ..n1
+        ..n1.clone()
     };
     let neurons = vec![n1, n2];
     let snapshot = NeuronsFundSnapshotPb {
@@ -147,12 +150,15 @@ fn test_neurons_fund_neuron_portion_anonymization() {
     let amount_icp_e8s = 100_000_000_000;
     let maturity_equivalent_icp_e8s = 100_000_000_000;
     let controller = PrincipalId::default();
+    let hotkeys = Vec::new();
     let is_capped = false;
+
     let neuron: NeuronsFundNeuronPortionPb = NeuronsFundNeuronPortionPb {
         nns_neuron_id: Some(id),
         amount_icp_e8s: Some(amount_icp_e8s),
         maturity_equivalent_icp_e8s: Some(maturity_equivalent_icp_e8s),
-        hotkey_principal: Some(controller),
+        controller: Some(controller),
+        hotkeys: vec![],
         is_capped: Some(is_capped),
     };
     assert_eq!(
@@ -162,6 +168,7 @@ fn test_neurons_fund_neuron_portion_anonymization() {
             amount_icp_e8s,
             maturity_equivalent_icp_e8s,
             controller,
+            hotkeys,
             is_capped,
         })
     );

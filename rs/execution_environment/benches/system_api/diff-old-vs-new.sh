@@ -18,6 +18,7 @@ set -ue
 ##   | inspect/ic0_msg_method_name_size()     |       - |   1.28G |       - |     23.92s |
 
 ## To quickly assess the new changes, run benchmarks just once
+QUICK=${QUICK:-}
 if [ -n "${QUICK}" ]; then
     REPEAT="${REPEAT:=1}"
     NEW_BENCH_ARGS="${NEW_BENCH_ARGS:---warm-up-time 1  --measurement-time 1 --sample-size 10 --noplot}"
@@ -26,7 +27,7 @@ fi
 echo "Global script configuration:"
 echo
 printf "%20s %s\n" \
-    "OLD_REPO :=" "${OLD_REPO:=git@gitlab.com:dfinity-lab/public/ic.git}" \
+    "OLD_REPO :=" "${OLD_REPO:=git@github.com:dfinity/ic.git}" \
     "OLD_BRANCH :=" "${OLD_BRANCH:=master}" \
     "OLD_COMMIT :=" "${OLD_COMMIT:=}" \
     "" "" \
@@ -103,7 +104,7 @@ init_old() {
 ## This function is called to run remote (old) benchmarks
 run_old() {
     (
-        cd "${OLD_BENCHMARK_DIR}"
+        cd "${OLD_REPO_DIR}"
         bazel run //rs/execution_environment:execute_inspect_message_bench -- ${FILTER} ${OLD_BENCH_ARGS} \
             && bazel run //rs/execution_environment:execute_query_bench -- ${FILTER} ${OLD_BENCH_ARGS} \
             && bazel run //rs/execution_environment:execute_update_bench -- ${FILTER} ${OLD_BENCH_ARGS}

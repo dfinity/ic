@@ -1,6 +1,6 @@
 use backoff::{retry_notify, ExponentialBackoff};
 use candid::Principal;
-use ic_tests::driver::{boundary_node::BoundaryNodeVm, test_env::TestEnv};
+use ic_system_test_driver::driver::{boundary_node::BoundaryNodeVm, test_env::TestEnv};
 use slog::{error, info};
 use std::time::Duration;
 

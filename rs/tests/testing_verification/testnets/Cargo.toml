@@ -9,13 +9,21 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 candid = { workspace = true }
+ic_consensus_system_test_utils = { path = "../../consensus/utils" }
 ic-base-types = { path = "../../../types/base_types" }
+ic-mainnet-nns-recovery = { path = "../../nns/ic_mainnet_nns_recovery" }
 ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
-tests = { path = "../.." }
-ic-mainnet-nns-recovery = { path = "../../nns/ic_mainnet_nns_recovery" }
+ic-system-test-driver = { path = "../../driver" }
 ic-xrc-types = "1.0.0"
+nns_dapp = { path = "../../nns/nns_dapp" }
+os_qualification_utils = { path = "../../dre/utils" }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 slog = { workspace = true }
+tests = { path = "../.." }
+url = { workspace = true }
 xrc-mock = { path = "../../../rosetta-api/tvl/xrc_mock" }
 
 [[bin]]
@@ -47,9 +55,17 @@ name = "small"
 path = "small.rs"
 
 [[bin]]
+name = "small_high_perf"
+path = "small_high_perf.rs"
+
+[[bin]]
 name = "sns_testing"
 path = "sns_testing.rs"
 
 [[bin]]
 name = "src_testing"
 path = "src_testing.rs"
+
+[[bin]]
+name = "from_config"
+path = "from_config.rs"

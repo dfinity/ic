@@ -73,8 +73,9 @@ mod tests {
     use ic_registry_keys::{
         make_api_boundary_node_record_key, make_node_record_key, make_subnet_record_key,
     };
+    use prost::Message;
 
-    use crate::{invariants::common::RegistrySnapshot, mutations::common::encode_or_panic};
+    use crate::invariants::common::RegistrySnapshot;
 
     use super::check_node_assignment_invariants;
 
@@ -91,7 +92,7 @@ mod tests {
 
         snapshot.insert(
             make_node_record_key(node_id).into_bytes(), // key
-            encode_or_panic(&NodeRecord::default()),    // record
+            NodeRecord::default().encode_to_vec(),      // record
         );
 
         // Create Subnet
@@ -101,13 +102,13 @@ mod tests {
 
         snapshot.insert(
             make_subnet_record_key(subnet_id).into_bytes(), // key
-            encode_or_panic(&SubnetRecord::default()),      // record
+            SubnetRecord::default().encode_to_vec(),        // record
         );
 
         // Create ApiBoundaryNode
         snapshot.insert(
             make_api_boundary_node_record_key(node_id).into_bytes(), // key
-            encode_or_panic(&ApiBoundaryNodeRecord::default()),      // record
+            ApiBoundaryNodeRecord::default().encode_to_vec(),        // record
         );
 
         assert!(check_node_assignment_invariants(&snapshot).is_ok());
@@ -124,7 +125,7 @@ mod tests {
 
         snapshot.insert(
             make_node_record_key(node_id).into_bytes(), // key
-            encode_or_panic(&NodeRecord::default()),    // record
+            NodeRecord::default().encode_to_vec(),      // record
         );
 
         // Create Subnet
@@ -139,13 +140,13 @@ mod tests {
 
         snapshot.insert(
             make_subnet_record_key(subnet_id).into_bytes(), // key
-            encode_or_panic(&subnet),                       // record
+            subnet.encode_to_vec(),                         // record
         );
 
         // Create ApiBoundaryNode
         snapshot.insert(
             make_api_boundary_node_record_key(node_id).into_bytes(), // key
-            encode_or_panic(&ApiBoundaryNodeRecord::default()),      // record
+            ApiBoundaryNodeRecord::default().encode_to_vec(),        // record
         );
 
         assert!(check_node_assignment_invariants(&snapshot).is_err());

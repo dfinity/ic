@@ -12,5 +12,8 @@ icos_build(
     malicious = True,
     mode = "dev",
     upload_prefix = "guest-os",
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
 )

@@ -99,7 +99,7 @@ pub enum CanisterHttpChangeAction {
 
 pub type CanisterHttpChangeSet = Vec<CanisterHttpChangeAction>;
 
-/// Artifact pool for the ECDSA messages (query interface)
+/// Artifact pool for the Canister HTTP messages (query interface)
 pub trait CanisterHttpPool: Send + Sync {
     fn get_validated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_>;
     fn get_unvalidated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_>;

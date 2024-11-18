@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 const RECOVERY_STATE_FILE_NAME: &str = "recovery_state.json";
 
 /// State of the recovery, i.e. which step are we on right now + arguments.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct RecoveryState<T> {
     pub recovery_args: RecoveryArgs,
     pub subcommand_args: T,
@@ -130,6 +130,7 @@ mod tests {
     use std::{fs, str::FromStr};
 
     use crate::app_subnet_recovery::AppSubnetRecoveryArgs;
+    use crate::error::GracefulExpect;
 
     use super::*;
     use ic_base_types::{PrincipalId, SubnetId};
@@ -146,7 +147,7 @@ mod tests {
         assert!(tmp.path().join("recovery/recovery_state.json").exists());
 
         let deserialized_state =
-            RecoveryState::read(tmp.path()).expect("Failed to deserialize the state");
+            RecoveryState::read(tmp.path()).expect_graceful("Failed to deserialize the state");
 
         assert_eq!(deserialized_state, Some(state));
     }

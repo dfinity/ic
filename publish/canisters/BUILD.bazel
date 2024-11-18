@@ -1,83 +1,60 @@
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//bazel:defs.bzl", "gzip_compress")
-load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
-load(
-    "//rs/nervous_system:compressed_wasm_size_limits.bzl",
-    "NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES",
-    "SNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES",
-)
+load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 
+# The list of canisters that are being published/uploaded as artifacts to our CDN (download.dfinity.systems) include
+# 1. Officially released canisters that can be downloaded/verified by 3rd parties - https://github.com/dfinity/ic/blob/master/.github/workflows/tag-release.yml
+# 2. Mainnet canisters - https://github.com/dfinity/ic/blob/master/mainnet-canisters.bzl
+# 3. Canisters required for dfx - https://github.com/dfinity/dfx-extensions/tree/main/extensions-utils/src/dependencies/download_wasms
+# 4. Canisters required for test environments.
 CANISTERS = {
-    "candid-test-canister.wasm.gz": "//rs/rust_canisters/dfn_candid:candid-test-canister",
     "canister-creator-canister.wasm.gz": "//rs/rust_canisters/canister_creator:canister_creator_canister",
+    "load_simulator_canister.wasm.gz": "//rs/rust_canisters/load_simulator:load_simulator_canister",
     "cycles-minting-canister.wasm.gz": "//rs/nns/cmc:cycles-minting-canister",
     "genesis-token-canister.wasm.gz": "//rs/nns/gtc:genesis-token-canister",
     "governance-canister.wasm.gz": "//rs/nns/governance:governance-canister",
     "governance-canister_test.wasm.gz": "//rs/nns/governance:governance-canister-test",
-    "governance-mem-test-canister.wasm.gz": "//rs/nns/integration_tests:governance-mem-test-canister",
-    "http_counter.wasm.gz": "//rs/tests/test_canisters/http_counter:http_counter",
+    "ic-btc-kyt.wasm.gz": "//rs/bitcoin/kyt:btc_kyt_canister",
     "ic-ckbtc-minter.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter",
     "ic-ckbtc-minter_debug.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
     "ic-ckbtc-kyt.wasm.gz": "//rs/bitcoin/ckbtc/kyt:kyt_canister",
     "ic-cketh-minter.wasm.gz": "//rs/ethereum/cketh/minter:cketh_minter",
+    "ic-icrc1-index.wasm.gz": "//rs/ledger_suite/icrc1/index:index_canister",
+    "ic-icrc1-index-ng.wasm.gz": "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
+    "ic-icrc1-index-ng-u256.wasm.gz": "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256",
+    "ic-icrc1-ledger.wasm.gz": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+    "ic-icrc1-ledger-u256.wasm.gz": "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256",
+    "ic-icp-index-canister.wasm.gz": "//rs/ledger_suite/icp/index:ic-icp-index-canister",
     "ic-ledger-suite-orchestrator-canister.wasm.gz": "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister",
-    "ic-icrc1-index.wasm.gz": "//rs/rosetta-api/icrc1/index:index_canister",
-    "ic-icrc1-index-ng.wasm.gz": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister",
-    "ic-icrc1-index-ng-u256.wasm.gz": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256",
-    "ic-icrc1-ledger.wasm.gz": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
-    "ic-icrc1-ledger-u256.wasm.gz": "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256",
-    "ic-nervous-system-common-test-canister.wasm.gz": "//rs/nervous_system/common/test_canister:test_canister",
-    "ic-icp-index-canister.wasm.gz": "//rs/rosetta-api/icp_ledger/index:ic-icp-index-canister",
     "identity-canister.wasm.gz": "//rs/nns/identity:identity-canister",
-    "inter_canister_error_handling.wasm.gz": "//rs/rust_canisters/tests:inter_canister_error_handling",
-    "kv_store.wasm.gz": "//rs/tests/test_canisters/kv_store:kv_store",
-    "json.wasm.gz": "//rs/rust_canisters/tests:json",
-    "ledger-canister.wasm.gz": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
-    "ledger-canister_notify-method.wasm.gz": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+    "ledger-canister.wasm.gz": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
+    "ledger-canister_notify-method.wasm.gz": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
     "lifeline_canister.wasm.gz": "//rs/nns/handlers/lifeline/impl:lifeline_canister",
-    "mem-utils-test-canister.wasm.gz": "//rs/nns/integration_tests:mem-utils-test-canister",
-    "memory-test-canister.wasm.gz": "//rs/rust_canisters/memory_test:memory_test_canister",
-    "nan_canonicalized.wasm.gz": "//rs/rust_canisters/tests:nan_canonicalized",
     "nns-ui-canister.wasm.gz": "//rs/nns/nns-ui:nns-ui-canister",
-    "panics.wasm.gz": "//rs/rust_canisters/tests:panics",
-    "pmap_canister.wasm.gz": "//rs/rust_canisters/pmap:pmap_canister",
-    "proxy_canister.wasm.gz": "//rs/rust_canisters/proxy_canister:proxy_canister",
     "registry-canister.wasm.gz": "//rs/registry/canister:registry-canister",
-    "response-payload-test-canister.wasm.gz": "//rs/rust_canisters/response_payload_test:response-payload-test-canister",
     "root-canister.wasm.gz": "//rs/nns/handlers/root/impl:root-canister",
     "sns-governance-canister.wasm.gz": "//rs/sns/governance:sns-governance-canister",
     "sns-governance-canister_test.wasm.gz": "//rs/sns/governance:sns-governance-canister-test",
-    "sns-governance-mem-test-canister.wasm.gz": "//rs/sns/integration_tests:sns-governance-mem-test-canister",
     "sns-root-canister.wasm.gz": "//rs/sns/root:sns-root-canister",
     "sns-swap-canister.wasm.gz": "//rs/sns/swap:sns-swap-canister",
-    "sns-test-dapp-canister.wasm.gz": "//rs/sns/integration_tests:sns-test-dapp-canister",
     "sns-wasm-canister.wasm.gz": "//rs/nns/sns-wasm:sns-wasm-canister",
-    "stable.wasm.gz": "//rs/rust_canisters/tests:stable",
-    "statesync-test-canister.wasm.gz": "//rs/rust_canisters/statesync_test:statesync_test_canister",
-    "test-notified.wasm.gz": "//rs/rosetta-api/icp_ledger:test_notified_canister",
-    "time.wasm.gz": "//rs/rust_canisters/tests:time",
-    "upgrade-test-canister.wasm.gz": "//rs/nns/handlers/root/impl:upgrade-test-canister",
     "wasm.wasm.gz": "//rs/rust_canisters/dfn_core:wasm",
+    # Needed by DRE team for qualification
     "xnet-test-canister.wasm.gz": "//rs/rust_canisters/xnet_test:xnet-test-canister",
-    "cow_safety.wasm.gz": ":cow_safety.wasm.gz",
-    "counter.wat.gz": ":counter.wat.gz",
-    "xrc-mock-canister.wasm.gz": "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
+    # Used in snsdemo repo for NNS dapp test environment
     "bitcoin-mock-canister.wasm.gz": "//rs/bitcoin/mock:bitcoin_canister_mock",
+
+    # Boundary Nodes
+    "certificate-orchestrator.wasm.gz": "//rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator",
 }
 
-TESTONLY_CANISTERS = [
-    "mem-utils-test-canister.wasm.gz",
-    "governance-mem-test-canister.wasm.gz",
-]
+COMPRESSED_CANISTERS = {
+    "ic-btc-canister.wasm.gz": "@btc_canister//file",
+    "ic-icrc1-archive.wasm.gz": "//rs/ledger_suite/icrc1/archive:archive_canister.wasm.gz",
+    "ic-icrc1-archive-u256.wasm.gz": "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
+    "ledger-archive-node-canister.wasm.gz": "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm.wasm.gz",
+}
 
 DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = "21"
-
-CANISTERS_MAX_SIZE_E5_BYTES = {
-    "ic-ckbtc-minter.wasm": "19",
-    "ledger-canister.wasm": "19",
-    "ledger-canister_notify-method.wasm": "19",
-    "sns-canister.wasm": "15",
-}
 
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     # -- FI team --
@@ -86,44 +63,54 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     # but enough to get an alert in case of a spike in size.
     "ic-icrc1-ledger.wasm.gz": "7",
     "ic-icrc1-ledger-u256.wasm.gz": "7",
+    # Size when constraint addded: 841_234 bytes
+    "ledger-canister.wasm.gz": "9",
+    # Size when constraint addded: 847_186 bytes
+    "ledger-canister_notify-method.wasm.gz": "9",
 
     # -- XC team --
+    # Size when constraint addded: 447_593 bytes
+    "ic-btc-kyt.wasm.gz": "6",
+    # Size when constraint addded: 696_633 bytes
+    "ic-ckbtc-minter.wasm.gz": "8",
+    # Size when constraint addded: 1_230_630 bytes
+    "ic-cketh-minter.wasm.gz": "13",
     # The orchestrator needs to embed 3 wasms at compile time
     # (ICRC1 index, ICRC1 ledger, and ICRC1 archive) and size is
     # therefore strictly controlled.
-    "ic-ledger-suite-orchestrator-canister.wasm.gz": "16",
+    # Size when constraint addded: 1_655_752 bytes
+    "ic-ledger-suite-orchestrator-canister.wasm.gz": "17",
+}
+
+# How these limits were chosen:
+#
+#   1. Temporarily set value to "0".
+#   2. Run the test: bazel test //publish/canisters:all
+#   3. Fail message reports size it sees.
+#   4. Pick a number that gives at least 20% headroom.
+#
+# This way, there is some room to grow, but an alarm eventually gets triggered after a "significant"
+# amount of growth happens.
+
+NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
+    "cycles-minting-canister.wasm.gz": "5",
+    "genesis-token-canister.wasm.gz": "3",
+    "governance-canister.wasm.gz": "17",
+    "governance-canister_test.wasm.gz": "17",
+    "registry-canister.wasm.gz": "14",
+    "root-canister.wasm.gz": "4",
+}
+
+SNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
+    "sns-governance-canister.wasm.gz": "13",
+    "sns-governance-canister_test.wasm.gz": "13",
+    "sns-root-canister.wasm.gz": "4",
+    "sns-swap-canister.wasm.gz": "7",
 }
 
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES)
 
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(SNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES)
-
-gzip_compress(
-    name = "counter.wat.gz",
-    srcs = ["//rs/workload_generator:src/counter.wat"],
-)
-
-gzip_compress(
-    name = "cow_safety.wasm.gz",
-    srcs = ["//rs/tests:src/cow_safety.wasm"],
-)
-
-[
-    sh_test(
-        name = name + "_size_test",
-        srcs = ["file_size_test.sh"],
-        data = [target],
-        env = {
-            "FILE": "$(rootpath " + target + ")",
-            "MAX_SIZE": CANISTERS_MAX_SIZE_E5_BYTES.get(
-                name,
-                DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES,
-            ) + "0" * 5,
-        },
-    )
-    for (name, target) in CANISTERS.items()
-    if name not in CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES
-]
 
 [
     sh_test(
@@ -141,13 +128,6 @@ gzip_compress(
     for (name, size) in CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.items()
 ]
 
-COMPRESSED_CANISTERS = {
-    "ic-btc-canister.wasm.gz": "@btc_canister//file",
-    "ic-icrc1-archive.wasm.gz": "//rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz",
-    "ic-icrc1-archive-u256.wasm.gz": "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
-    "ledger-archive-node-canister.wasm.gz": "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm.wasm.gz",
-}
-
 # `bazel cquery --output=files` that is used by build-ic script does not show external sources of `filegroup` targets.
 [
     copy_file(
@@ -156,27 +136,13 @@ COMPRESSED_CANISTERS = {
         out = compressed_file_name,
     )
     for (compressed_file_name, target) in CANISTERS.items() + COMPRESSED_CANISTERS.items()
-    if compressed_file_name.endswith(".wasm.gz") and compressed_file_name !=
-                                                     "cow_safety.wasm.gz" and compressed_file_name not in TESTONLY_CANISTERS
-]
-
-[
-    copy_file(
-        name = "copy_" + compressed_file_name,
-        testonly = True,
-        src = target,
-        out = compressed_file_name,
-    )
-    for (compressed_file_name, target) in CANISTERS.items() + COMPRESSED_CANISTERS.items()
-    if compressed_file_name.endswith(".wasm.gz") and compressed_file_name !=
-                                                     "cow_safety.wasm.gz" and compressed_file_name in TESTONLY_CANISTERS
+    if compressed_file_name.endswith(".wasm.gz")
 ]
 
 filegroup(
     name = "canisters",
     srcs = [name for name in CANISTERS] +
            [name for name in COMPRESSED_CANISTERS],
-    visibility = ["//visibility:public"],
 )
 
 # the further targets are all testonly for simplicity because if a target was
@@ -192,7 +158,7 @@ filegroup(
     )
     for (name, target) in CANISTERS.items()
     if (
-        name.endswith(".wasm.gz") and name != "cow_safety.wasm.gz"
+        name.endswith(".wasm.gz")
     )
 ]
 
@@ -203,7 +169,7 @@ filegroup(
         n + "-did"
         for n, t in CANISTERS.items()
         if (
-            n.endswith(".wasm.gz") and n != "cow_safety.wasm.gz"
+            n.endswith(".wasm.gz")
         )
     ],
 )
@@ -213,5 +179,4 @@ upload_artifacts(
     testonly = True,
     inputs = [":canisters"] + [":canisters.did"],
     remote_subdir = "canisters",
-    visibility = ["//visibility:public"],
 )

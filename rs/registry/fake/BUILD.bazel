@@ -5,11 +5,13 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/interfaces/registry",
     "//rs/types/types",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/registry/keys",
 ]
 
@@ -28,6 +30,6 @@ rust_library(
 
 rust_test(
     name = "fake_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

@@ -9,8 +9,8 @@ documentation.workspace = true
 [dependencies]
 # add dependencies that only canister uses here
 dfn_core = { path = "../dfn_core" }
-dfn_macro = { path = "../dfn_macro" }
 dfn_json = { path = "../dfn_json" }
+dfn_macro = { path = "../dfn_macro" }
 
 [target.'cfg(not(target_os = "unknown"))'.dev-dependencies]
 # add dependencies that only test driver uses

@@ -31,7 +31,7 @@ pub type Pop = G1Projective;
 pub type CombinedSignature = G1Projective;
 
 /// Wrapper for a serialized secret key.
-#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKeyBytes(pub(crate) SecretArray<{ SecretKeyBytes::SIZE }>);
 impl SecretKeyBytes {
     pub const SIZE: usize = Scalar::BYTES;

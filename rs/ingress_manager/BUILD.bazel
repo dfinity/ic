@@ -4,12 +4,13 @@ load("//bazel:defs.bzl", "rust_ic_bench")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/interfaces/sig_verification",
-    "//rs/constants",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/registry/helpers",
@@ -26,6 +27,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/artifact_pool",
     "//rs/config",
     "//rs/interfaces/mocks",
@@ -82,14 +84,15 @@ rust_ic_bench(
     data = DATA,
     env = ENV,
     deps = [
+        # Keep sorted.
         ":ingress_manager",
         "//rs/artifact_pool",
-        "//rs/constants",
         "//rs/interfaces",
         "//rs/interfaces/mocks",
         "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",
         "//rs/interfaces/state_manager/mocks",
+        "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/registry/client",
@@ -104,6 +107,7 @@ rust_ic_bench(
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:criterion",
+        "@crate_index//:pprof",
         "@crate_index//:rand",
         "@crate_index//:tokio",
     ],
@@ -116,15 +120,16 @@ rust_ic_bench(
     data = DATA,
     env = ENV,
     deps = [
+        # Keep sorted.
         ":ingress_manager",
         "//rs/artifact_pool",
         "//rs/config",
-        "//rs/constants",
         "//rs/interfaces",
         "//rs/interfaces/mocks",
         "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",
         "//rs/interfaces/state_manager/mocks",
+        "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/registry/client",
@@ -140,6 +145,7 @@ rust_ic_bench(
         "//rs/test_utilities/types",
         "//rs/types/types",
         "@crate_index//:criterion",
+        "@crate_index//:pprof",
         "@crate_index//:rand",
         "@crate_index//:tokio",
     ],

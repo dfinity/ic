@@ -10,6 +10,8 @@ Before=systemd-networkd-wait-online.service
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/hostos_tool generate-network-config
+StandardOutput=journal+console
+StandardError=journal+console
 
 [Install]
 WantedBy=systemd-networkd.service

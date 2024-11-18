@@ -10,7 +10,7 @@ pub const UNBOUNDED: usize = usize::MAX;
 /// - number of elements
 /// - total data size in bytes
 /// - single element data size in bytes
-#[derive(CandidType, Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType)]
 pub struct BoundedVec<
     const MAX_ALLOWED_LEN: usize,
     const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,

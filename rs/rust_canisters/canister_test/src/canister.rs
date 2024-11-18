@@ -74,13 +74,25 @@ impl Wasm {
         eprintln!("looking up {} at {}", bin_name, var_name);
         match env::var(&var_name) {
             Ok(path) => {
+                let path = Path::new(&path);
+                // If the path to the WASM is relative we check for the optional environment variable
+                // RUNFILES which should point to the directory where bazel has stored the
+                // symlink tree of runtime dependencies including the WASM binaries. If that's defined
+                // the final path of the WASM is set to $RUNFILES/$path, if not we just use $path.
+                // We need this to find WASMs in system-tests where each test is executed in its
+                // own process and in its own dedicated working directory. Since the latter working directory
+                // is different than $RUNFILES we need the logic below to reference the actual WASMs.
+                let path = match env::var("RUNFILES") {
+                    Ok(runfiles) if path.is_relative() => Path::new(&runfiles).join(path),
+                    _ => path.to_path_buf(),
+                };
                 let wasm = Wasm::from_file(path.clone());
                 eprintln!(
                     "Using pre-built binary for {} with features: {:?} (size = {}, path = {})",
                     bin_name,
                     features,
                     wasm.0.len(),
-                    path,
+                    path.display(),
                 );
                 Some(wasm)
             }
@@ -413,6 +425,18 @@ impl<'a> Runtime {
         execute_with_retries(|| self.create_canister_at_id(specified_id))
             .await
             .map_err(|e| format!("Creation of a canister timed out. Last error was: {}", e))
+    }
+
+    pub async fn tick(&'a self) {
+        match self {
+            Runtime::Remote(_) | Runtime::Local(_) => {
+                tokio::time::sleep(Duration::from_millis(100)).await
+            }
+            Runtime::StateMachine(state_machine) => {
+                state_machine.tick();
+                state_machine.advance_time(Duration::from_millis(1000));
+            }
+        }
     }
 }
 
@@ -799,7 +823,8 @@ impl<'a> Canister<'a> {
 
     /// Tries to delete this canister.
     pub async fn delete(&self) -> Result<(), String> {
-        self.runtime
+        () = self
+            .runtime
             .get_management_canister_with_effective_canister_id(self.canister_id().into())
             .update_("delete_canister", candid_multi_arity, (self.as_record(),))
             .await?;

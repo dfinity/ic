@@ -3,7 +3,7 @@ use crate::{
         consent_given, print_height_info, read_optional, read_optional_node_ids,
         read_optional_subnet_id, read_optional_version, wait_for_confirmation,
     },
-    error::RecoveryError,
+    error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
     NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR,
@@ -19,7 +19,7 @@ use strum_macros::{EnumIter, EnumString};
 use url::Url;
 
 #[derive(
-    Debug, Copy, Clone, PartialEq, EnumIter, EnumString, Serialize, Deserialize, EnumMessage,
+    Copy, Clone, PartialEq, Debug, Deserialize, EnumIter, EnumMessage, EnumString, Serialize,
 )]
 pub enum StepType {
     /// Before we can start the recovery process, we need to prevent the subnet from attempting to
@@ -93,26 +93,26 @@ pub enum StepType {
     Cleanup,
 }
 
-#[derive(Debug, Clone, PartialEq, Parser, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
 #[clap(version = "1.0")]
 pub struct AppSubnetRecoveryArgs {
     /// Id of the broken subnet
-    #[clap(long, parse(try_from_str=crate::util::subnet_id_from_str))]
+    #[clap(long, value_parser=crate::util::subnet_id_from_str)]
     pub subnet_id: SubnetId,
 
     /// Replica version to upgrade the broken subnet to
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub upgrade_version: Option<ReplicaVersion>,
 
     /// URL of the upgrade image
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub upgrade_image_url: Option<Url>,
 
     /// SHA256 hash of the upgrade image
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub upgrade_image_hash: Option<String>,
 
-    #[clap(long, multiple_values(true), parse(try_from_str=crate::util::node_id_from_str))]
+    #[clap(long, num_args(1..), value_parser=crate::util::node_id_from_str)]
     /// Replace the members of the given subnet with these nodes
     pub replacement_nodes: Option<Vec<NodeId>>,
 
@@ -137,7 +137,7 @@ pub struct AppSubnetRecoveryArgs {
     pub upload_node: Option<IpAddr>,
 
     /// Id of the chain key subnet used for resharing chain keys to the subnet to be recovered
-    #[clap(long, parse(try_from_str=crate::util::subnet_id_from_str))]
+    #[clap(long, value_parser=crate::util::subnet_id_from_str)]
     pub chain_key_subnet_id: Option<SubnetId>,
 
     /// If present the tool will start execution for the provided step, skipping the initial ones
@@ -168,7 +168,7 @@ impl AppSubnetRecovery {
             recovery_args.nns_url.clone(),
             RegistryPollingStrategy::OnlyOnInit,
         )
-        .expect("Failed to init recovery");
+        .expect_graceful("Failed to init recovery");
 
         Self {
             step_iterator: StepType::iter().peekable(),
@@ -210,7 +210,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 if self.params.pub_key.is_none() {
                     self.params.pub_key = read_optional(
                         &self.logger,
-                        "Enter public key to add readonly SSH access to subnet: ",
+                        "Enter public key to add readonly SSH access to subnet. Ensure the right format.\n\
+                        Format:   ssh-ed25519 <pubkey> <identity>\n\
+                        Example:  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPwS/0S6xH0g/xLDV0Tz7VeMZE9AKPeSbLmCsq9bY3F1 foo@dfinity.org\n\
+                        Enter your key: ",
                     );
                 }
             }

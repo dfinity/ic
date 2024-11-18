@@ -37,6 +37,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::xnet::{StreamIndexedQueue, StreamSlice};
+use ic_types::ReplicaVersion;
 use ic_types::{
     batch::{Batch, BatchMessages},
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
@@ -97,7 +98,7 @@ mod notification {
     }
 
     /// The result of the `wait_with_timeout` call.
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
     pub enum WaitResult<T> {
         Notified(T),
         TimedOut,
@@ -261,7 +262,7 @@ fn message_routing_does_not_block() {
 
 /// Readable version of `SubnetRecordProto` holding only the relevant entries for
 /// `BatchProcessorImpl::try_to_read_registry()`.
-#[derive(Default, Debug, Clone)]
+#[derive(Clone, Debug, Default)]
 struct SubnetRecord<'a> {
     membership: &'a [NodeId],
     subnet_type: SubnetType,
@@ -289,7 +290,7 @@ impl<'a> From<SubnetRecord<'a>> for SubnetRecordProto {
 /// Wrapper around data to be written to the registry. `Valid(_)` represents data that can be
 /// written to the registry as is. `Corrupted` represents a registry record with corrupted data in
 /// it and `Missing` represents data that is missing.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 enum Integrity<T: Clone> {
     Valid(T),
     Corrupted,
@@ -1009,7 +1010,12 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         // state corresponds to the registry records written above.
         let (height, mut state) = state_manager.take_tip();
         state.metadata.own_subnet_id = own_subnet_id;
-        state_manager.commit_and_certify(state, height.increment(), CertificationScope::Metadata);
+        state_manager.commit_and_certify(
+            state,
+            height.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
 
         // Check `network_topology` and `subnet_features` are mapped into the new state correctly
         // by calling `BatchProcessorImpl::process_batch()` which will pass the `network_topology` and
@@ -1038,6 +1044,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            replica_version: ReplicaVersion::default(),
         });
         let latest_state = state_manager.get_latest_state().take();
         assert_eq!(network_topology, latest_state.metadata.network_topology);
@@ -1818,7 +1825,12 @@ fn process_batch_updates_subnet_metrics() {
             make_batch_processor(fixture.registry.clone(), log);
         let (height, mut state) = state_manager.take_tip();
         state.metadata.own_subnet_id = own_subnet_id;
-        state_manager.commit_and_certify(state, height.increment(), CertificationScope::Metadata);
+        state_manager.commit_and_certify(
+            state,
+            height.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
 
         batch_processor.process_batch(Batch {
             batch_number: height.increment().increment(),
@@ -1832,6 +1844,7 @@ fn process_batch_updates_subnet_metrics() {
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            replica_version: ReplicaVersion::default(),
         });
 
         let latest_state = state_manager.get_latest_state().take();
@@ -1907,7 +1920,7 @@ fn test_demux_delivers_certified_stream_slices() {
 
             // Commit state with modified streams.
             height.inc_assign();
-            src_state_manager.commit_and_certify(state, height, CertificationScope::Metadata);
+            src_state_manager.commit_and_certify(state, height, CertificationScope::Metadata, None);
 
             // Encode slice.
             src_state_manager

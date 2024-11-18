@@ -64,6 +64,7 @@ fn bench_create_sig_share<M: Measurement, R: RngCore + CryptoRng>(
                     &key_transcript,
                     &message,
                     seed,
+                    None,
                     &derivation_path,
                     test_case.alg,
                     rng,
@@ -103,6 +104,7 @@ fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
                     &key_transcript,
                     &message,
                     seed,
+                    None,
                     &derivation_path,
                     test_case.alg,
                     rng,
@@ -153,6 +155,7 @@ fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
                     &key_transcript,
                     &message,
                     seed,
+                    None,
                     &derivation_path,
                     test_case.alg,
                     rng,
@@ -194,6 +197,7 @@ fn bench_verify_combined_sig<M: Measurement, R: RngCore + CryptoRng>(
                     &key_transcript,
                     &message,
                     seed,
+                    None,
                     &derivation_path,
                     test_case.alg,
                     rng,
@@ -278,7 +282,7 @@ fn generate_test_cases(node_counts: &[usize]) -> Vec<TestCase> {
     test_cases
 }
 
-#[derive(strum_macros::EnumIter, PartialEq, Copy, Clone, Default)]
+#[derive(Copy, Clone, PartialEq, Default, strum_macros::EnumIter)]
 enum VaultType {
     Local,
     #[default]

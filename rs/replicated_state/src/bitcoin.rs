@@ -1,5 +1,5 @@
 use crate::{ReplicatedState, StateError};
-use ic_btc_types_internal::{
+use ic_btc_replica_types::{
     BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BlockBlob,
     GetSuccessorsResponseComplete, GetSuccessorsResponsePartial,
 };
@@ -103,7 +103,7 @@ pub fn push_response(
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 enum SplitError {
     NotOneBlock,
     ResponseTooLarge,

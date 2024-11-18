@@ -19,33 +19,29 @@ use std::{env, path::PathBuf, sync::Arc};
 pub fn parse_args() -> Result<ReplicaArgs, clap::Error> {
     let args_result = ReplicaArgs::try_parse_from(env::args());
 
-    args_result.map(|args| {
+    args_result.inspect(|args| {
         if args.print_sample_config {
             print!("{}", SAMPLE_CONFIG);
             std::process::exit(0);
         }
-        args
     })
 }
 
 /// Set the Replica version passed in via command-line
 pub fn set_replica_version(args: &Result<ReplicaArgs, clap::Error>, logger: &ReplicaLogger) {
-    match args {
-        Ok(args) => {
-            info!(
+    if let Ok(args) = args {
+        info!(
+            logger,
+            "Setting replica version to: {}",
+            args.replica_version.as_ref()
+        );
+        if ReplicaVersion::set_default_version(args.replica_version.clone()).is_err() {
+            warn!(
                 logger,
-                "Setting replica version to: {}",
-                args.replica_version.as_ref()
+                "Failed to set replica version, defaulting to: {}",
+                ReplicaVersion::default().as_ref()
             );
-            if ReplicaVersion::set_default_version(args.replica_version.clone()).is_err() {
-                warn!(
-                    logger,
-                    "Failed to set replica version, defaulting to: {}",
-                    ReplicaVersion::default().as_ref()
-                );
-            }
         }
-        Err(_) => (),
     }
 }
 

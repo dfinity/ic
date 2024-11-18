@@ -3,8 +3,8 @@ use crate::metadata_state::subnet_call_context_manager::{
     InstallCodeCall, RawRandContext, StopCanisterCall, SubnetCallContext, SubnetCallContextManager,
 };
 use assert_matches::assert_matches;
-use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, UserError};
+use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, IC_00};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities_types::{
@@ -170,29 +170,44 @@ fn streams_stats() {
     let mut streams = Streams::new();
     // Empty response size map.
     let mut expected_responses_size = Default::default();
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
 
     streams.push(SUBNET_1, req_a1);
     // Pushed a request, response size stats are unchanged.
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
 
     // Push response via `Streams::push()`.
     streams.push(SUBNET_1, rep_a1);
     // `rep_a1` is now accounted for against `local_a`.
     expected_responses_size.insert(local_a, rep_a1_size);
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
 
     // Push response via `StreamHandle::push()`.
     streams.get_mut(&SUBNET_1).unwrap().push(rep_b1);
     // `rep_b1` is accounted for against `local_b`.
     expected_responses_size.insert(local_b, rep_b1_size);
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
 
     // Push response via `StreamHandle::push()` after `get_mut_or_insert()`.
     streams.get_mut_or_insert(SUBNET_2).push(rep_b2);
     // `rep_b2` is accounted for against `local_b`.
     *expected_responses_size.get_mut(&local_b).unwrap() += rep_b2_size;
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
 
     // Discard `req_a1` and `rep_a1` from the stream for `SUBNET_1`.
     streams
@@ -201,12 +216,18 @@ fn streams_stats() {
         .discard_messages_before(2.into(), &Default::default());
     // No more responses from `local_a` in `streams`.
     *expected_responses_size.get_mut(&local_a).unwrap() = 0;
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
 
-    streams.prune_zero_responses_size_bytes();
+    streams.prune_zero_guaranteed_responses_size_bytes();
     // Zero valued entry for `local_a` pruned.
     expected_responses_size.remove(&local_a);
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
 
     // Discard `rep_b2` from the stream for `SUBNET_2`.
     streams
@@ -215,7 +236,104 @@ fn streams_stats() {
         .discard_messages_before(1.into(), &Default::default());
     // `rep_b2` is gone.
     *expected_responses_size.get_mut(&local_b).unwrap() -= rep_b2_size;
-    assert_eq!(streams.responses_size_bytes(), &expected_responses_size);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+}
+
+#[test]
+fn streams_stats_best_effort_messages() {
+    let local = canister_test_id(1);
+    let remote = canister_test_id(2);
+
+    let request = |sender: CanisterId, receiver: CanisterId| -> RequestOrResponse {
+        RequestBuilder::default()
+            .sender(sender)
+            .receiver(receiver)
+            .deadline(CoarseTime::from_secs_since_unix_epoch(1))
+            .build()
+            .into()
+    };
+    let response =
+        |respondent: CanisterId, originator: CanisterId, payload: &str| -> RequestOrResponse {
+            ResponseBuilder::default()
+                .respondent(respondent)
+                .originator(originator)
+                .response_payload(Payload::Data(payload.as_bytes().to_vec()))
+                .deadline(CoarseTime::from_secs_since_unix_epoch(1))
+                .build()
+                .into()
+        };
+
+    // A bunch of best-effort requests and responses from the local canister to the remote one.
+    let req = request(local, remote);
+    let rep_1 = response(local, remote, "a");
+    let rep_2 = response(local, remote, "bb");
+    let rep_3 = response(local, remote, "ccc");
+
+    let mut streams = Streams::new();
+
+    // Expecting no guaranteed responses throughout.
+    let expected_responses_size = BTreeMap::default();
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    streams.push(SUBNET_1, req);
+    // Pushed a request, response size stats are unchanged.
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    // Push response via `Streams::push()`.
+    streams.push(SUBNET_1, rep_1);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    // Push response via `StreamHandle::push()`.
+    streams.get_mut(&SUBNET_1).unwrap().push(rep_2);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    // Push response via `StreamHandle::push()` after `get_mut_or_insert()`.
+    streams.get_mut_or_insert(SUBNET_2).push(rep_3);
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    // Discard everything from the stream for `SUBNET_1`.
+    streams
+        .get_mut(&SUBNET_1)
+        .unwrap()
+        .discard_messages_before(3.into(), &Default::default());
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    streams.prune_zero_guaranteed_responses_size_bytes();
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
+
+    // Discard `rep_b2` from the stream for `SUBNET_2`.
+    streams
+        .get_mut(&SUBNET_2)
+        .unwrap()
+        .discard_messages_before(1.into(), &Default::default());
+    assert_eq!(
+        streams.guaranteed_responses_size_bytes(),
+        &expected_responses_size
+    );
 }
 
 #[test]
@@ -245,8 +363,10 @@ fn streams_stats_after_deserialization() {
     assert_eq!(system_metadata, deserialized_system_metadata);
     // Double-check that the stats match.
     assert_eq!(
-        system_metadata.streams.responses_size_bytes(),
-        deserialized_system_metadata.streams.responses_size_bytes()
+        system_metadata.streams.guaranteed_responses_size_bytes(),
+        deserialized_system_metadata
+            .streams
+            .guaranteed_responses_size_bytes()
     );
 }
 
@@ -566,7 +686,7 @@ fn system_metadata_split() {
 
     let streams = Streams {
         streams: btreemap! { SUBNET_C => Stream::new(StreamIndexedQueue::with_begin(13.into()), 14.into()) },
-        responses_size_bytes: btreemap! { CANISTER_1 => 169 },
+        guaranteed_responses_size_bytes: btreemap! { CANISTER_1 => 169 },
     };
 
     // Use uncommon `SubnetType::VerifiedApplication` to make it more likely to
@@ -896,52 +1016,26 @@ fn ingress_history_insert_beyond_limit_will_succeed() {
         let (inserted_message_id, inserted_status) = insert_status(&mut ingress_history, i, 1);
 
         assert_eq!(ingress_history.statuses().count(), i as usize);
-        if CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V8 {
-            assert_eq!(
-                ingress_history.get(&inserted_message_id).unwrap(),
-                &inserted_status
-            );
-            assert_eq!(
-                ingress_history
-                    .statuses()
-                    .filter(|(_, status)| matches!(
-                        status,
-                        IngressStatus::Known {
-                            state: IngressState::Completed(_),
-                            ..
-                        } | IngressStatus::Known {
-                            state: IngressState::Failed(_),
-                            ..
-                        }
-                    ))
-                    .count(),
-                1
-            );
-        } else {
-            assert_eq!(
-                ingress_history
-                    .statuses()
-                    .filter(|(_, status)| matches!(
-                        status,
-                        IngressStatus::Known {
-                            state: IngressState::Completed(_),
-                            ..
-                        } | IngressStatus::Known {
-                            state: IngressState::Failed(_),
-                            ..
-                        }
-                    ))
-                    .count(),
-                i as usize
-            );
-            assert!(!ingress_history.statuses().any(|(_, status)| matches!(
-                status,
-                IngressStatus::Known {
-                    state: IngressState::Done,
-                    ..
-                }
-            )));
-        }
+        assert_eq!(
+            ingress_history.get(&inserted_message_id).unwrap(),
+            &inserted_status
+        );
+        assert_eq!(
+            ingress_history
+                .statuses()
+                .filter(|(_, status)| matches!(
+                    status,
+                    IngressStatus::Known {
+                        state: IngressState::Completed(_),
+                        ..
+                    } | IngressStatus::Known {
+                        state: IngressState::Failed(_),
+                        ..
+                    }
+                ))
+                .count(),
+            1
+        );
     }
 
     // Inserting without available space will directly transition inserted status
@@ -950,53 +1044,27 @@ fn ingress_history_insert_beyond_limit_will_succeed() {
         let (inserted_message_id, _) = insert_status(&mut ingress_history, i, 0);
 
         assert_eq!(ingress_history.statuses().count(), i as usize);
-        if CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V8 {
-            assert_eq!(
-                ingress_history.get(&inserted_message_id).unwrap(),
-                &test_status_done(i),
-            );
+        assert_eq!(
+            ingress_history.get(&inserted_message_id).unwrap(),
+            &test_status_done(i),
+        );
 
-            assert_eq!(
-                ingress_history
-                    .statuses()
-                    .filter(|(_, status)| matches!(
-                        status,
-                        IngressStatus::Known {
-                            state: IngressState::Completed(_),
-                            ..
-                        } | IngressStatus::Known {
-                            state: IngressState::Failed(_),
-                            ..
-                        }
-                    ))
-                    .count(),
-                0
-            );
-        } else {
-            assert_eq!(
-                ingress_history
-                    .statuses()
-                    .filter(|(_, status)| matches!(
-                        status,
-                        IngressStatus::Known {
-                            state: IngressState::Completed(_),
-                            ..
-                        } | IngressStatus::Known {
-                            state: IngressState::Failed(_),
-                            ..
-                        }
-                    ))
-                    .count(),
-                i as usize
-            );
-            assert!(!ingress_history.statuses().any(|(_, status)| matches!(
-                status,
-                IngressStatus::Known {
-                    state: IngressState::Done,
-                    ..
-                }
-            )));
-        }
+        assert_eq!(
+            ingress_history
+                .statuses()
+                .filter(|(_, status)| matches!(
+                    status,
+                    IngressStatus::Known {
+                        state: IngressState::Completed(_),
+                        ..
+                    } | IngressStatus::Known {
+                        state: IngressState::Failed(_),
+                        ..
+                    }
+                ))
+                .count(),
+            0
+        );
     }
 }
 
@@ -1047,12 +1115,9 @@ fn ingress_history_forget_completed_does_not_touch_other_statuses() {
     // Forgetting terminal statuses when the ingress history only contains non-terminal
     // statuses should be a no-op.
     ingress_history_limit.forget_terminal_statuses(NumBytes::from(0));
-    // ... except that if current certification version >= 8, the next_terminal_time
-    // is updated to the first key in the pruning_times map
-    if CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V8 {
-        ingress_history_before.next_terminal_time =
-            *ingress_history_limit.pruning_times().next().unwrap().0;
-    }
+    // ... except the next_terminal_time is updated to the first key in the `pruning_times` map.
+    ingress_history_before.next_terminal_time =
+        *ingress_history_limit.pruning_times().next().unwrap().0;
 
     assert_eq!(ingress_history_before, ingress_history_limit);
 }
@@ -1104,13 +1169,8 @@ fn ingress_history_respects_limits() {
                 })
                 .count();
 
-            if CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V8 {
-                assert_eq!(terminal_count, i.min(max_num_terminal) as usize);
-                assert_eq!(done_count, i.saturating_sub(max_num_terminal) as usize);
-            } else {
-                assert_eq!(terminal_count, i as usize);
-                assert_eq!(done_count, 0);
-            }
+            assert_eq!(terminal_count, i.min(max_num_terminal) as usize);
+            assert_eq!(done_count, i.saturating_sub(max_num_terminal) as usize);
 
             assert_eq!(
                 terminal_count + done_count,
@@ -1127,10 +1187,6 @@ fn ingress_history_respects_limits() {
 
 #[test]
 fn ingress_history_insert_before_next_complete_time_resets_it() {
-    if CURRENT_CERTIFICATION_VERSION < CertificationVersion::V8 {
-        return;
-    }
-
     let mut ingress_history = IngressHistoryState::new();
 
     // Fill the ingress history with 10 terminal entries...
@@ -1192,10 +1248,6 @@ fn ingress_history_insert_before_next_complete_time_resets_it() {
 
 #[test]
 fn ingress_history_forget_behaves_the_same_with_reset_next_complete_time() {
-    if CURRENT_CERTIFICATION_VERSION < CertificationVersion::V8 {
-        return;
-    }
-
     let mut ingress_history = IngressHistoryState::new();
 
     // Fill the ingress history with 10 terminal entries...
@@ -1430,9 +1482,9 @@ fn stream_discard_messages_before_returns_expected_messages() {
     let slice_signals_end = 40.into();
     let slice_reject_signals: VecDeque<RejectSignal> = vec![
         RejectSignal::new(RejectReason::CanisterMigrating, 28.into()), // before the stream
-        RejectSignal::new(RejectReason::CanisterMigrating, 29.into()), // before the stream
-        RejectSignal::new(RejectReason::CanisterMigrating, 32.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 35.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 29.into()),  // before the stream
+        RejectSignal::new(RejectReason::QueueFull, 32.into()),
+        RejectSignal::new(RejectReason::Unknown, 35.into()),
     ]
     .into();
 
@@ -1445,11 +1497,11 @@ fn stream_discard_messages_before_returns_expected_messages() {
     );
     let expected_rejected_messages = vec![
         (
-            RejectReason::CanisterMigrating,
+            RejectReason::QueueFull,
             stream.messages().get(32.into()).unwrap().clone(),
         ),
         (
-            RejectReason::CanisterMigrating,
+            RejectReason::Unknown,
             stream.messages().get(35.into()).unwrap().clone(),
         ),
     ];
@@ -1475,8 +1527,8 @@ fn stream_discard_messages_before_removes_no_messages() {
     );
     let expected_stream = stream.clone();
     let slice_reject_signals = vec![
-        RejectSignal::new(RejectReason::CanisterMigrating, 28.into()), // before the stream
-        RejectSignal::new(RejectReason::CanisterMigrating, 29.into()), // before the stream
+        RejectSignal::new(RejectReason::CanisterStopped, 28.into()), // before the stream
+        RejectSignal::new(RejectReason::OutOfMemory, 29.into()),     // before the stream
     ]
     .into();
     let slice_signals_end = stream.messages_begin();
@@ -1524,9 +1576,9 @@ fn stream_discard_signals_before_drops_no_reject_signals() {
     );
     stream.reject_signals = vec![
         RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 139.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+        RejectSignal::new(RejectReason::CanisterStopped, 139.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 142.into()),
+        RejectSignal::new(RejectReason::Unknown, 145.into()),
     ]
     .into();
 
@@ -1549,9 +1601,9 @@ fn stream_discard_signals_before_drops_expected_signals() {
     );
     stream.reject_signals = vec![
         RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 139.into()),
+        RejectSignal::new(RejectReason::QueueFull, 139.into()),
         RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 145.into()),
     ]
     .into();
 
@@ -1560,7 +1612,7 @@ fn stream_discard_signals_before_drops_expected_signals() {
     let new_signals_begin = 140.into();
     let expected_reject_signals: VecDeque<RejectSignal> = [
         RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 145.into()),
     ]
     .into();
     stream.discard_signals_before(new_signals_begin);
@@ -1577,21 +1629,18 @@ fn stream_discard_signals_before_drops_expected_signals_for_existing_reject_sign
         SignalConfig { end: 153 },
     );
     stream.reject_signals = vec![
-        RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 139.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+        RejectSignal::new(RejectReason::QueueFull, 138.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 139.into()),
+        RejectSignal::new(RejectReason::Unknown, 142.into()),
+        RejectSignal::new(RejectReason::OutOfMemory, 145.into()),
     ]
     .into();
 
     // Check that `discard_signals_before()` drops the expected reject signals
     // for an existing reject signal `new_signals_begin`.
     let new_signals_begin = 145.into();
-    let expected_reject_signals: VecDeque<RejectSignal> = [RejectSignal::new(
-        RejectReason::CanisterMigrating,
-        145.into(),
-    )]
-    .into();
+    let expected_reject_signals: VecDeque<RejectSignal> =
+        [RejectSignal::new(RejectReason::OutOfMemory, 145.into())].into();
 
     stream.discard_signals_before(new_signals_begin);
     assert_eq!(stream.reject_signals(), &expected_reject_signals);
@@ -1607,10 +1656,10 @@ fn stream_discard_signals_before_drops_all_signals() {
         SignalConfig { end: 153 },
     );
     stream.reject_signals = vec![
-        RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+        RejectSignal::new(RejectReason::QueueFull, 138.into()),
         RejectSignal::new(RejectReason::CanisterMigrating, 139.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+        RejectSignal::new(RejectReason::CanisterStopped, 142.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 145.into()),
     ]
     .into();
 
@@ -1656,17 +1705,14 @@ fn stream_handle_pushing_signals_increments_signals_end() {
     );
     assert!(stream.reject_signals().is_empty());
 
-    let mut responses_size_bytes = BTreeMap::default();
-    let mut handle = StreamHandle::new(&mut stream, &mut responses_size_bytes);
+    let mut guaranteed_responses_size_bytes = BTreeMap::default();
+    let mut handle = StreamHandle::new(&mut stream, &mut guaranteed_responses_size_bytes);
 
     handle.push_accept_signal();
     assert_eq!(StreamIndex::new(31), handle.signals_end());
-    handle.push_reject_signal(RejectReason::CanisterMigrating);
+    handle.push_reject_signal(RejectReason::CanisterNotFound);
     assert_eq!(
-        &VecDeque::from([RejectSignal::new(
-            RejectReason::CanisterMigrating,
-            31.into()
-        ),]),
+        &VecDeque::from([RejectSignal::new(RejectReason::CanisterNotFound, 31.into()),]),
         handle.reject_signals()
     );
     assert_eq!(StreamIndex::new(32), handle.signals_end());
@@ -1730,50 +1776,9 @@ fn deserializing_stream_fails_for_bad_reject_signals() {
         messages_begin: 0,
         messages: Vec::new(),
         signals_end: 153,
-        deprecated_reject_signals: Vec::new(),
         reject_signals: Vec::new(),
         reverse_stream_flags: None,
     };
-
-    // TODO: [MR-577] remove this once all replicas have updated.
-    // Deserializing a stream with duplicate deprecated reject signals should fail.
-    let bad_stream = pb_queues::Stream {
-        deprecated_reject_signals: vec![1, 1],
-        ..stream.clone()
-    };
-    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
-    assert_matches!(
-        deserialized_result,
-        Err(ProxyDecodeError::Other(err_msg)) if err_msg == "reject signals not strictly sorted, received [1, 1]"
-    );
-
-    // TODO: [MR-577] remove this once all replicas have updated.
-    // Deserializing a stream with descending deprecated reject signals should fail.
-    let bad_stream = pb_queues::Stream {
-        deprecated_reject_signals: vec![1, 0],
-        ..stream.clone()
-    };
-    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
-    assert_matches!(
-        deserialized_result,
-        Err(ProxyDecodeError::Other(err_msg)) if err_msg == "reject signals not strictly sorted, received [1, 0]"
-    );
-
-    // TODO: [MR-577] remove this once all replicas have updated.
-    // Deserializing a stream with both deprecated and contemporary reject signals should fail.
-    let bad_stream = pb_queues::Stream {
-        deprecated_reject_signals: vec![0],
-        reject_signals: vec![pb_queues::RejectSignal {
-            reason: 1,
-            index: 0,
-        }],
-        ..stream.clone()
-    };
-    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
-    assert_matches!(
-        deserialized_result,
-        Err(ProxyDecodeError::Other(err_msg)) if err_msg == "both contemporary and deprecated signals are populated got `reject_signals` [RejectSignal { reason: CanisterMigrating, index: 0 }], `deprecated_reject_signals` [0]"
-    );
 
     // Deserializing a stream with duplicate reject signals (by index) should fail.
     let bad_stream = pb_queues::Stream {
@@ -1832,7 +1837,7 @@ fn compatibility_for_reject_reason() {
         RejectReason::iter()
             .map(|reason| reason as i32)
             .collect::<Vec<i32>>(),
-        [1]
+        [1, 2, 3, 4, 5, 6, 7]
     );
 }
 

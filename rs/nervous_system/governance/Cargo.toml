@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 ic-base-types = { path = "../../types/base_types" }
-ic_principal = { workspace = true }
 ic-stable-structures = { workspace = true }
+ic_principal = { workspace = true }
 maplit = "1.0.2"
 num-traits = { workspace = true }

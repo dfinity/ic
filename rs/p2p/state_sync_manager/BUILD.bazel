@@ -7,12 +7,13 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/async_utils",
     "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
-    "//rs/protobuf",
     "//rs/p2p/quic_transport",
+    "//rs/protobuf",
     "//rs/types/base_types",
     "@crate_index//:axum",
     "@crate_index//:bytes",
@@ -29,9 +30,10 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/p2p/memory_transport",
-    "//rs/state_manager",
     "//rs/p2p/test_utils",
+    "//rs/state_manager",
     "//rs/test_utilities/logger",
     "//rs/types/types",
     "//rs/types/types_test_utils",
@@ -40,6 +42,7 @@ DEV_DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 

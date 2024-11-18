@@ -4,7 +4,7 @@ use ic_types::{
     consensus::{
         dkg,
         hashed::Hashed,
-        idkg::{EcdsaComplaintContent, EcdsaOpeningContent},
+        idkg::{IDkgComplaintContent, IDkgOpeningContent},
         BlockMetadata, CatchUpContent, FinalizationContent, NotarizationContent,
         RandomBeaconContent, RandomTapeContent,
     },
@@ -199,7 +199,7 @@ impl<Message: Signable, C: ThresholdSigner<Message> + ThresholdSigVerifier<Messa
         signer: NodeId,
         dkg_id: NiDkgId,
     ) -> CryptoResult<ThresholdSignatureShare<Message>> {
-        self.sign_threshold(message, dkg_id)
+        self.sign_threshold(message, &dkg_id)
             .map(|signature| ThresholdSignatureShare { signature, signer })
     }
 
@@ -212,7 +212,7 @@ where {
         self.verify_threshold_sig_share(
             &message.signature.signature,
             &message.content,
-            dkg_id,
+            &dkg_id,
             message.signature.signer,
         )
     }
@@ -406,7 +406,7 @@ impl<Message: Signable, C: ThresholdSigner<Message> + ThresholdSigVerifier<Messa
                 .iter()
                 .map(|share| (share.signer, share.signature.clone()))
                 .collect(),
-            dkg_id,
+            &dkg_id,
         )
         .map(|signature| ThresholdSignature {
             signer: dkg_id,
@@ -422,7 +422,7 @@ impl<Message: Signable, C: ThresholdSigner<Message> + ThresholdSigVerifier<Messa
         self.verify_threshold_sig_combined(
             &message.signature.signature,
             &message.content,
-            message.signature.signer,
+            &message.signature.signer,
         )
     }
 }
@@ -436,8 +436,8 @@ pub trait ConsensusCrypto:
     + SignVerify<FinalizationContent, MultiSignatureShare<FinalizationContent>, RegistryVersion>
     + SignVerify<SignedIDkgDealing, BasicSignature<SignedIDkgDealing>, RegistryVersion>
     + SignVerify<IDkgDealing, BasicSignature<IDkgDealing>, RegistryVersion>
-    + SignVerify<EcdsaComplaintContent, BasicSignature<EcdsaComplaintContent>, RegistryVersion>
-    + SignVerify<EcdsaOpeningContent, BasicSignature<EcdsaOpeningContent>, RegistryVersion>
+    + SignVerify<IDkgComplaintContent, BasicSignature<IDkgComplaintContent>, RegistryVersion>
+    + SignVerify<IDkgOpeningContent, BasicSignature<IDkgOpeningContent>, RegistryVersion>
     + SignVerify<RandomBeaconContent, ThresholdSignatureShare<RandomBeaconContent>, NiDkgId>
     + SignVerify<RandomTapeContent, ThresholdSignatureShare<RandomTapeContent>, NiDkgId>
     + SignVerify<CatchUpContent, ThresholdSignatureShare<CatchUpContent>, NiDkgId>

@@ -31,7 +31,6 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    artifact_kind::CanisterHttpArtifact,
     batch::{CanisterHttpPayload, ValidationContext, MAX_CANISTER_HTTP_PAYLOAD_SIZE},
     canister_http::{
         CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponse,
@@ -882,7 +881,7 @@ fn test_response_and_metadata_full(
 }
 /// Replicates the behaviour of receiving and successfully validating a share over the network
 pub(crate) fn add_received_shares_to_pool(
-    pool: &mut dyn MutablePool<CanisterHttpArtifact, ChangeSet = CanisterHttpChangeSet>,
+    pool: &mut dyn MutablePool<CanisterHttpResponseShare, Mutations = CanisterHttpChangeSet>,
     shares: Vec<CanisterHttpResponseShare>,
 ) {
     for share in shares {
@@ -892,17 +891,17 @@ pub(crate) fn add_received_shares_to_pool(
             timestamp: UNIX_EPOCH,
         });
 
-        pool.apply_changes(vec![CanisterHttpChangeAction::MoveToValidated(share)]);
+        pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(share)]);
     }
 }
 
 /// Replicates the behaviour of adding your own share (and content) to the pool
 pub(crate) fn add_own_share_to_pool(
-    pool: &mut dyn MutablePool<CanisterHttpArtifact, ChangeSet = CanisterHttpChangeSet>,
+    pool: &mut dyn MutablePool<CanisterHttpResponseShare, Mutations = CanisterHttpChangeSet>,
     share: &CanisterHttpResponseShare,
     content: &CanisterHttpResponse,
 ) {
-    pool.apply_changes(vec![CanisterHttpChangeAction::AddToValidated(
+    pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
         share.clone(),
         content.clone(),
     )]);

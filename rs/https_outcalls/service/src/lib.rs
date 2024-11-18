@@ -1,1 +1,1 @@
-tonic::include_proto!("canister_http_service.v1");
+tonic::include_proto!("https_outcalls_service.v1");

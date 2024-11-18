@@ -15,7 +15,7 @@ const STORAGE_ENCODING_BYTES_RESERVED: u8 = 1;
 /// For forwards compatibility we write a magic byte to allow for the storage implementation to evolve.
 /// We keep the implementation private, and expose methods that take Memory and some payload.
 /// The currently exposed methods take protobuf.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 enum StorageEncoding {
     Unknown = 0,
     SizeAware = 1,
@@ -246,6 +246,7 @@ impl<'a, M: Memory> SizeAwareReader<'a, M> {
     /// Reserved bytes must be the same between the reader and writer in order for this to correctly
     /// read the size.
     pub fn new(memory: &'a M, buffer_size: u32, reserved_bytes: u64) -> Self {
+        assert!(buffer_size > 0);
         let mut reader = Self {
             memory,
             buffer: vec![
@@ -326,6 +327,9 @@ impl<'a, M: Memory> Buf for SizeAwareReader<'a, M> {
     }
 
     fn advance(&mut self, cnt: usize) {
+        if cnt == 0 {
+            return;
+        }
         let remaining = self.remaining();
         assert!(
             cnt <= remaining,
@@ -364,11 +368,21 @@ impl<'a, M: Memory> Buf for SizeAwareReader<'a, M> {
         // Doing the above-mentioned 2 things `num_buffers_to_advance` times will result in: (1)
         // calling read() `num_buffers_to_advance` times (2) set `self.buffer_offset =
         // self.buffer_offset + cnt - num_buffers_to_advance * buffer_size = new_buffer_offset`.
+        //
+        // Why `self.buffer.capacity()` is not 0: the buffer capacity is initialized to a non-zero
+        // value, and it only decreases to `self.stable_mem.len() - self.stable_mem_offset` (in
+        // `self.read()`) when the stable memory is exhausted, i.e. `self.remaining() == 0`.
+        // However, the code below is unreachable when `self.remaining() == 0` because `cnt <=
+        // self.remaining()`.
         let (num_buffers_to_advance, new_buffer_offset) = crate::checked_div_mod(
             self.buffer_offset
                 .checked_add(cnt)
                 .expect("Tried to advance buffer beyond maximum offset"),
             self.buffer.capacity(),
+        )
+        .expect(
+            "Something impossible happened: buffer capacity became 0 before reaching \
+             the end of the stable memory",
         );
 
         for _ in 0..num_buffers_to_advance {
@@ -389,7 +403,7 @@ mod test {
         },
     };
     use bytes::{Buf, BufMut};
-    use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};
+    use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
     use ic_stable_structures::{vec_mem::VectorMemory, Memory};
     use prost::Message;
 
@@ -569,16 +583,18 @@ mod test {
     }
 
     #[derive(::prost::Message)]
-    pub struct TestMessageWithoutSubMessage {
+    pub struct TestMessageWithFewerFields {
         #[prost(fixed32, repeated, tag = "1")]
         pub x: ::prost::alloc::vec::Vec<u32>,
     }
     #[derive(::prost::Message)]
-    pub struct TestMessageWithSubMessage {
+    pub struct TestMessage {
         #[prost(fixed32, repeated, tag = "1")]
         pub x: ::prost::alloc::vec::Vec<u32>,
         #[prost(message, optional, tag = "2")]
         pub sub: ::core::option::Option<TestSubMessage>,
+        #[prost(bool, tag = "3")]
+        pub b: bool,
     }
     #[derive(::prost::Message)]
     pub struct TestSubMessage {
@@ -589,17 +605,17 @@ mod test {
     #[test]
     fn test_store_and_load_protobuf_with_missing_field() {
         // The 'missing field' `sub` needs to be larger than 64KB, and 20000 * 4B > 64KB.
-        let m2 = TestMessageWithSubMessage {
+        let m2 = TestMessage {
             x: (0..1000).collect(),
             sub: Some(TestSubMessage {
                 y: (0..20000).collect(),
             }),
+            b: true,
         };
         let memory = VectorMemory::default();
 
         store_protobuf(&memory, &m2).expect("Storing failed in test");
-        let _: TestMessageWithoutSubMessage =
-            load_protobuf(&memory).expect("Loading failed in test");
+        let _: TestMessageWithFewerFields = load_protobuf(&memory).expect("Loading failed in test");
     }
 
     #[test]

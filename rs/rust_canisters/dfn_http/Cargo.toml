@@ -8,9 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-serde = { workspace = true }
 dfn_candid = { path = "../dfn_candid" }
 dfn_core = { path = "../dfn_core" }
+serde = { workspace = true }
 serde_bytes = { workspace = true }
 
 [[bin]]

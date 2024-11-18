@@ -15,28 +15,17 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
 
     config.type_attribute(".", "#[derive(serde::Serialize)]");
 
-    for message_name in ["CanisterId", "NeuronId", "PrincipalId", "ProposalId"] {
+    for message_name in ["NeuronId", "ProposalId"] {
         config.type_attribute(
             format!("ic_nns_common.pb.v1.{message_name}"),
             [
                 "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable, Eq)]",
+                "#[derive(PartialOrd, Ord, std::hash::Hash)]",
                 "#[self_describing]",
             ]
             .join(" "),
         );
     }
-
-    // Ideally, we'd get rid of these idiosyncracies, and just use the above loop for all our
-    // decorating needs.
-    config.type_attribute(
-        "ic_nns_common.pb.v1.NeuronId",
-        "#[derive(PartialOrd, Ord, Copy, std::hash::Hash)]",
-    );
-    config.type_attribute(
-        "ic_nns_common.pb.v1.PrincipalId",
-        "#[derive(PartialOrd, Ord, std::hash::Hash)]",
-    );
-    config.type_attribute("ic_nns_common.pb.v1.ProposalId", "#[derive(Copy)]");
 
     std::fs::create_dir_all(out).expect("failed to create output directory");
     config.out_dir(out);

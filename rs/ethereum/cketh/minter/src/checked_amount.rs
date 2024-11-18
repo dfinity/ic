@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use evm_rpc_client::Nat256;
 use minicbor;
 use rlp::RlpStream;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -43,6 +44,11 @@ use std::ops::Rem;
 /// // Ceiling checked division by scalar
 /// assert_eq!(three_apples.checked_div_ceil(0_u8), None);
 /// assert_eq!(three_apples.checked_div_ceil(2_u8), Some(Apples::TWO));
+///
+/// //Flooring checked division by scalar (Euclidean division)
+/// assert_eq!(three_apples.checked_div_floor(0_u8), None);
+/// assert_eq!(three_apples.checked_div_floor(2_u8), Some(Apples::ONE));
+/// assert_eq!(three_apples.checked_div_ceil(3_u8), Some(Apples::ONE));
 ///
 /// // (Floor) division by two
 /// assert_eq!(Apples::ONE.div_by_two(), Apples::ZERO);
@@ -128,6 +134,15 @@ impl<Unit> CheckedAmountOf<Unit> {
         }
     }
 
+    pub fn checked_div_floor<T: Into<ethnum::u256>>(self, rhs: T) -> Option<Self> {
+        let rhs = rhs.into();
+        if rhs == ethnum::u256::ZERO {
+            return None;
+        }
+        let quotient = self.0.div_euclid(rhs);
+        Some(Self::from_inner(quotient))
+    }
+
     pub fn div_by_two(self) -> Self {
         Self::from_inner(self.0 >> 1)
     }
@@ -177,6 +192,18 @@ impl<Unit> TryFrom<candid::Nat> for CheckedAmountOf<Unit> {
             return Err(format!("Nat does not fit in a U256: {}", value));
         }
         Ok(Self::from_inner(ethnum::u256::from_be_bytes(value_u256)))
+    }
+}
+
+impl<Unit> From<Nat256> for CheckedAmountOf<Unit> {
+    fn from(value: Nat256) -> Self {
+        Self::from_be_bytes(value.into_be_bytes())
+    }
+}
+
+impl<Unit> From<CheckedAmountOf<Unit>> for Nat256 {
+    fn from(value: CheckedAmountOf<Unit>) -> Self {
+        Nat256::from_be_bytes(value.to_be_bytes())
     }
 }
 

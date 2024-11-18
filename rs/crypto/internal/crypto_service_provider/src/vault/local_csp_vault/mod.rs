@@ -23,11 +23,13 @@ use crate::vault::api::ThresholdSchnorrCreateSigShareVaultError;
 use crate::{CspRwLock, KeyId};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_seed::Seed;
-use ic_crypto_internal_threshold_sig_ecdsa::{CombinedCommitment, CommitmentOpening};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    CombinedCommitment, CommitmentOpening,
+};
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_protobuf::registry::crypto::v1::PublicKey;
-use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaSignShareError;
+use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCreateSigShareError;
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
@@ -247,7 +249,7 @@ impl From<CombinedCommitmentOpeningFromSksError> for ThresholdSchnorrCreateSigSh
     }
 }
 
-impl From<CombinedCommitmentOpeningFromSksError> for ThresholdEcdsaSignShareError {
+impl From<CombinedCommitmentOpeningFromSksError> for ThresholdEcdsaCreateSigShareError {
     fn from(e: CombinedCommitmentOpeningFromSksError) -> Self {
         type F = CombinedCommitmentOpeningFromSksError;
         match e {

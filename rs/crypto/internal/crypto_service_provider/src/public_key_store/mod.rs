@@ -104,7 +104,7 @@ pub trait PublicKeyStore: Send + Sync {
     ///
     /// # Errors
     /// * [`PublicKeyRetainError::OldestPublicKeyNotFound`] if the given `oldest_public_key_to_keep` was not found.
-    /// No keys are deleted in that case.
+    ///   No keys are deleted in that case.
     /// * [`PublicKeyRetainError::Io`] if an I/O error occurred while writing the retained keys back to disk.
     fn retain_idkg_public_keys_since(
         &mut self,
@@ -137,7 +137,7 @@ pub trait PublicKeyStore: Send + Sync {
 }
 
 /// Timestamps of when public keys were generated.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct PublicKeyGenerationTimestamps {
     /// Timestamp of when the node signing public key was generated.
     pub node_signing_public_key: Option<Time>,

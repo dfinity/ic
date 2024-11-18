@@ -2,7 +2,7 @@ use crate::{
     config::{Config, IncomingSource},
     get_successors_handler::{GetSuccessorsRequest, GetSuccessorsResponse},
     metrics::{ServiceMetrics, LABEL_GET_SUCCESSOR, LABEL_SEND_TRANSACTION},
-    AdapterState, GetSuccessorsHandler, TransactionManagerRequest,
+    GetSuccessorsHandler, TransactionManagerRequest,
 };
 use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
 use ic_async_utils::{incoming_from_first_systemd_socket, incoming_from_path};
@@ -14,13 +14,15 @@ use ic_btc_service::{
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use std::convert::{TryFrom, TryInto};
-use tokio::sync::mpsc::Sender;
+use std::time::Instant;
+use tokio::sync::mpsc;
+use tokio::sync::watch;
 use tonic::{transport::Server, Request, Response, Status};
 
 struct BtcServiceImpl {
-    adapter_state: AdapterState,
+    last_received_tx: watch::Sender<Option<Instant>>,
     get_successors_handler: GetSuccessorsHandler,
-    transaction_manager_tx: Sender<TransactionManagerRequest>,
+    transaction_manager_tx: mpsc::Sender<TransactionManagerRequest>,
     logger: ReplicaLogger,
     metrics: ServiceMetrics,
 }
@@ -83,7 +85,7 @@ impl BtcService for BtcServiceImpl {
             .request_duration
             .with_label_values(&[LABEL_GET_SUCCESSOR])
             .start_timer();
-        self.adapter_state.received_now();
+        let _ = self.last_received_tx.send(Some(Instant::now()));
         let inner = request.into_inner();
         debug!(self.logger, "Received GetSuccessorsRequest: {:?}", inner);
         let request = inner.try_into()?;
@@ -108,7 +110,7 @@ impl BtcService for BtcServiceImpl {
             .request_duration
             .with_label_values(&[LABEL_SEND_TRANSACTION])
             .start_timer();
-        self.adapter_state.received_now();
+        let _ = self.last_received_tx.send(Some(Instant::now()));
         let transaction = request.into_inner().transaction;
         self.transaction_manager_tx
             .send(TransactionManagerRequest::SendTransaction(transaction))
@@ -120,42 +122,45 @@ impl BtcService for BtcServiceImpl {
     }
 }
 
-/// Spawns in a separate Tokio task the BTC adapter gRPC service.
+/// Blocks until the server binds to the socket
 pub fn start_grpc_server(
     config: Config,
     logger: ReplicaLogger,
-    adapter_state: AdapterState,
+    last_received_tx: watch::Sender<Option<Instant>>,
     get_successors_handler: GetSuccessorsHandler,
-    transaction_manager_tx: Sender<TransactionManagerRequest>,
+    transaction_manager_tx: mpsc::Sender<TransactionManagerRequest>,
     metrics_registry: &MetricsRegistry,
 ) {
     let btc_adapter_impl = BtcServiceImpl {
-        adapter_state,
+        last_received_tx,
         get_successors_handler,
         transaction_manager_tx,
         logger,
         metrics: ServiceMetrics::new(metrics_registry),
     };
-    tokio::spawn(async move {
-        match config.incoming_source {
-            IncomingSource::Path(uds_path) => {
-                Server::builder()
-                    .add_service(BtcServiceServer::new(btc_adapter_impl))
-                    .serve_with_incoming(incoming_from_path(uds_path))
-                    .await
-                    .expect("gRPC server crashed");
-            }
-            IncomingSource::Systemd => {
-                Server::builder()
-                    .add_service(BtcServiceServer::new(btc_adapter_impl))
-                    // SAFETY: The process is managed by systemd and is configured to start with at least one socket.
-                    // Additionally this function is only called once here.
-                    // Systemd Socket config: ic-btc-<testnet,mainnet>-adapter.socket
-                    // Systemd Service config: ic-btc-<testnet,mainnet>-adapter.service
-                    .serve_with_incoming(unsafe { incoming_from_first_systemd_socket() })
-                    .await
-                    .expect("gRPC server crashed");
-            }
-        };
-    });
+
+    match config.incoming_source {
+        IncomingSource::Path(uds_path) => {
+            let incoming = incoming_from_path(uds_path);
+            let server_fut = Server::builder()
+                .add_service(BtcServiceServer::new(btc_adapter_impl))
+                .serve_with_incoming(incoming);
+            tokio::spawn(async move {
+                server_fut.await.expect("gRPC server crashed");
+            });
+        }
+        IncomingSource::Systemd => {
+            let incoming = unsafe { incoming_from_first_systemd_socket() };
+            let server_fut = Server::builder()
+                .add_service(BtcServiceServer::new(btc_adapter_impl))
+                // SAFETY: The process is managed by systemd and is configured to start with at least one socket.
+                // Additionally this function is only called once here.
+                // Systemd Socket config: ic-btc-<testnet,mainnet>-adapter.socket
+                // Systemd Service config: ic-btc-<testnet,mainnet>-adapter.service
+                .serve_with_incoming(incoming);
+            tokio::spawn(async move {
+                server_fut.await.expect("gRPC server crashed");
+            });
+        }
+    };
 }

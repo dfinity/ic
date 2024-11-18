@@ -6,13 +6,13 @@ use crate::metrics::{
 };
 use ic_adapter_metrics_client::AdapterMetrics;
 use ic_async_utils::ExecuteOnTokioRuntime;
+use ic_btc_replica_types::{
+    BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
+    GetSuccessorsResponseComplete, SendTransactionRequest, SendTransactionResponse,
+};
 use ic_btc_service::{
     btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
     BtcServiceSendTransactionRequest,
-};
-use ic_btc_types_internal::{
-    BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
-    GetSuccessorsResponseComplete, SendTransactionRequest, SendTransactionResponse,
 };
 use ic_config::adapters::AdaptersConfig;
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError, RpcResult};
@@ -22,6 +22,7 @@ use std::{convert::TryFrom, path::PathBuf};
 use tokio::net::UnixStream;
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
+use tracing::instrument;
 
 fn convert_tonic_error(status: tonic::Status) -> RpcError {
     match status.code() {
@@ -51,6 +52,7 @@ impl BitcoinAdapterClientImpl {
 impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for BitcoinAdapterClientImpl {
     type Response = BitcoinAdapterResponseWrapper;
 
+    #[instrument(skip_all)]
     fn send_blocking(
         &self,
         request: BitcoinAdapterRequestWrapper,
@@ -182,8 +184,13 @@ fn setup_bitcoin_adapter_client(
                     let endpoint = endpoint.executor(ExecuteOnTokioRuntime(rt_handle.clone()));
                     let channel =
                         endpoint.connect_with_connector_lazy(service_fn(move |_: Uri| {
-                            // Connect to a Uds socket
-                            UnixStream::connect(uds_path.clone())
+                            let uds_path = uds_path.clone();
+                            async move {
+                                // Connect to a Uds socket
+                                Ok::<_, std::io::Error>(hyper_util::rt::TokioIo::new(
+                                    UnixStream::connect(uds_path).await?,
+                                ))
+                            }
                         }));
                     Box::new(BitcoinAdapterClientImpl::new(metrics, rt_handle, channel))
                 }

@@ -2,16 +2,14 @@ use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::{
     ingress_pool::{
-        ChangeSet, IngressPool, IngressPoolThrottler, PoolSection, UnvalidatedIngressArtifact,
+        IngressPool, IngressPoolThrottler, Mutations, PoolSection, UnvalidatedIngressArtifact,
         ValidatedIngressArtifact,
     },
-    p2p::consensus::{ChangeResult, MutablePool, UnvalidatedArtifact},
+    p2p::consensus::{ArtifactTransmits, MutablePool, UnvalidatedArtifact},
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_types::{
-    artifact::IngressMessageId, artifact_kind::IngressArtifact, messages::SignedIngress, NodeId,
-};
+use ic_types::{artifact::IngressMessageId, messages::SignedIngress, NodeId};
 
 pub struct TestIngressPool {
     pub pool: IngressPoolImpl,
@@ -38,6 +36,10 @@ impl IngressPool for TestIngressPool {
     fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact> {
         self.pool.unvalidated()
     }
+
+    fn exceeds_limit(&self, _peer_id: &NodeId) -> bool {
+        false
+    }
 }
 
 impl IngressPoolThrottler for TestIngressPool {
@@ -46,8 +48,8 @@ impl IngressPoolThrottler for TestIngressPool {
     }
 }
 
-impl MutablePool<IngressArtifact> for TestIngressPool {
-    type ChangeSet = ChangeSet;
+impl MutablePool<SignedIngress> for TestIngressPool {
+    type Mutations = Mutations;
 
     fn insert(&mut self, unvalidated_artifact: UnvalidatedArtifact<SignedIngress>) {
         self.pool.insert(unvalidated_artifact)
@@ -57,7 +59,7 @@ impl MutablePool<IngressArtifact> for TestIngressPool {
         self.pool.remove(id)
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<IngressArtifact> {
-        self.pool.apply_changes(change_set)
+    fn apply(&mut self, change_set: Mutations) -> ArtifactTransmits<SignedIngress> {
+        self.pool.apply(change_set)
     }
 }

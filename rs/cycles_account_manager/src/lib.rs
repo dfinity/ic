@@ -26,7 +26,8 @@ use ic_replicated_state::{
 use ic_types::{
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
     messages::{Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId,
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    PrincipalId, SubnetId,
 };
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
@@ -38,16 +39,14 @@ pub const CRITICAL_ERROR_RESPONSE_CYCLES_REFUND: &str =
 pub const CRITICAL_ERROR_EXECUTION_CYCLES_REFUND: &str =
     "cycles_account_manager_execution_cycles_refund_error";
 
-/// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
-const USE_COST_SCALING_FLAG: bool = true;
 const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
 
 /// Maximum payload size of a management call to update_settings
 /// overriding the canister's freezing threshold.
-const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 256;
+const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 267;
 
 /// Errors returned by the [`CyclesAccountManager`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CyclesAccountManagerError {
     /// One of the API contracts that the cycles account manager enforces was
     /// violated.
@@ -66,6 +65,24 @@ impl std::fmt::Display for CyclesAccountManagerError {
     }
 }
 
+/// Keeps track of how a canister is executing such that the `CyclesAccountManager`
+/// can charge cycles accordingly.
+#[derive(Debug, Copy, Clone)]
+pub enum WasmExecutionMode {
+    Wasm32,
+    Wasm64,
+}
+
+impl From<bool> for WasmExecutionMode {
+    fn from(is_wasm64: bool) -> Self {
+        if is_wasm64 {
+            WasmExecutionMode::Wasm64
+        } else {
+            WasmExecutionMode::Wasm32
+        }
+    }
+}
+
 /// Measures how much a resource such as compute or storage is being used.
 /// It will be used in resource reservation to scale reservation parameters
 /// depending on the resource usage.
@@ -76,7 +93,7 @@ impl std::fmt::Display for CyclesAccountManagerError {
 /// This struct maintains an invariant that `usage <= capacity` and
 /// `threshold <= capacity`.  There are no constraints between `usage` and
 /// `threshold`.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct ResourceSaturation {
     usage: u64,
     threshold: u64,
@@ -159,7 +176,7 @@ pub fn is_delayed_ingress_induction_cost(arg: &[u8]) -> bool {
 
 /// Handles any operation related to cycles accounting, such as charging (due to
 /// using system resources) or refunding unused cycles.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CyclesAccountManager {
     /// The maximum allowed instructions to be spent on a single message
     /// execution.
@@ -174,9 +191,6 @@ pub struct CyclesAccountManager {
     /// The configuration of this [`CyclesAccountManager`] controlling the fees
     /// that are charged for various operations.
     config: CyclesAccountManagerConfig,
-
-    /// [EXC-1168] Temporary development flag to enable cost scaling according to subnet size.
-    use_cost_scaling_flag: bool,
 }
 
 impl CyclesAccountManager {
@@ -193,18 +207,7 @@ impl CyclesAccountManager {
             own_subnet_type,
             own_subnet_id,
             config,
-            use_cost_scaling_flag: USE_COST_SCALING_FLAG,
         }
-    }
-
-    /// [EXC-1168] Helper function to set the flag to enable cost scaling according to subnet size.
-    pub fn set_using_cost_scaling(&mut self, use_cost_scaling_flag: bool) {
-        self.use_cost_scaling_flag = use_cost_scaling_flag;
-    }
-
-    /// [EXC-1168] Helper function to read the flag to enable cost scaling according to subnet size.
-    pub fn use_cost_scaling(&self) -> bool {
-        self.use_cost_scaling_flag
     }
 
     /// Returns the subnet type of this [`CyclesAccountManager`].
@@ -219,10 +222,7 @@ impl CyclesAccountManager {
 
     // Scale cycles cost according to a subnet size.
     fn scale_cost(&self, cycles: Cycles, subnet_size: usize) -> Cycles {
-        match self.use_cost_scaling_flag {
-            false => cycles,
-            true => (cycles * subnet_size) / self.config.reference_subnet_size,
-        }
+        (cycles * subnet_size) / self.config.reference_subnet_size
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -479,6 +479,33 @@ impl CyclesAccountManager {
         self.consume_with_threshold(system_state, cycles, threshold, use_case, reveal_top_up)
     }
 
+    /// Withdraws and consumes the cost of executing the given number of
+    /// instructions.
+    pub fn consume_cycles_for_instructions(
+        &self,
+        sender: &PrincipalId,
+        canister: &mut CanisterState,
+        amount: NumInstructions,
+        subnet_size: usize,
+        execution_mode: WasmExecutionMode,
+    ) -> Result<(), CanisterOutOfCyclesError> {
+        let memory_usage = canister.memory_usage();
+        let message_memory = canister.message_memory_usage();
+        let compute_allocation = canister.compute_allocation();
+        let cycles = self.execution_cost(amount, subnet_size, execution_mode);
+        let reveal_top_up = canister.controllers().contains(sender);
+        self.consume_cycles(
+            &mut canister.system_state,
+            memory_usage,
+            message_memory,
+            compute_allocation,
+            cycles,
+            subnet_size,
+            CyclesUseCase::Instructions,
+            reveal_top_up,
+        )
+    }
+
     /// Prepays the cost of executing a message with the given number of
     /// instructions. See the comment of `execution_cost()` for details
     /// about the execution cost.
@@ -498,8 +525,9 @@ impl CyclesAccountManager {
         num_instructions: NumInstructions,
         subnet_size: usize,
         reveal_top_up: bool,
+        execution_mode: WasmExecutionMode,
     ) -> Result<Cycles, CanisterOutOfCyclesError> {
-        let cost = self.execution_cost(num_instructions, subnet_size);
+        let cost = self.execution_cost(num_instructions, subnet_size, execution_mode);
         self.consume_with_threshold(
             system_state,
             cost,
@@ -528,6 +556,7 @@ impl CyclesAccountManager {
         prepaid_execution_cycles: Cycles,
         error_counter: &IntCounter,
         subnet_size: usize,
+        execution_mode: WasmExecutionMode,
         log: &ReplicaLogger,
     ) {
         debug_assert!(num_instructions <= num_instructions_initially_charged);
@@ -545,7 +574,7 @@ impl CyclesAccountManager {
             std::cmp::min(num_instructions, num_instructions_initially_charged);
         let cycles_to_refund = self
             .scale_cost(
-                self.convert_instructions_to_cycles(num_instructions_to_refund),
+                self.convert_instructions_to_cycles(num_instructions_to_refund, execution_mode),
                 subnet_size,
             )
             .min(prepaid_execution_cycles);
@@ -782,8 +811,12 @@ impl CyclesAccountManager {
 
     /// Returns the amount of cycles required for executing the longest-running
     /// response callback.
-    pub fn prepayment_for_response_execution(&self, subnet_size: usize) -> Cycles {
-        self.execution_cost(self.max_num_instructions, subnet_size)
+    pub fn prepayment_for_response_execution(
+        &self,
+        subnet_size: usize,
+        execution_mode: WasmExecutionMode,
+    ) -> Cycles {
+        self.execution_cost(self.max_num_instructions, subnet_size, execution_mode)
     }
 
     /// Returns the amount of cycles required for transmitting the largest
@@ -994,7 +1027,7 @@ impl CyclesAccountManager {
     /// 1. It burns no more cycles than the `amount_to_burn`.
     ///
     /// 2. It burns no more cycles than `balance` - `freezing_limit`, where `freezing_limit`
-    /// is the amount of idle cycles burned by the canister during its `freezing_threshold`.
+    ///    is the amount of idle cycles burned by the canister during its `freezing_threshold`.
     ///
     /// Returns the number of cycles that were burned.
     pub fn cycles_burn(
@@ -1032,8 +1065,16 @@ impl CyclesAccountManager {
     /// Note that this function is made public to facilitate some logistic in
     /// tests.
     #[doc(hidden)]
-    pub fn convert_instructions_to_cycles(&self, num_instructions: NumInstructions) -> Cycles {
-        let fee = self.config.ten_update_instructions_execution_fee;
+    pub fn convert_instructions_to_cycles(
+        &self,
+        num_instructions: NumInstructions,
+        execution_mode: WasmExecutionMode,
+    ) -> Cycles {
+        let fee = match execution_mode {
+            WasmExecutionMode::Wasm64 => self.config.ten_update_instructions_execution_fee_wasm64,
+            WasmExecutionMode::Wasm32 => self.config.ten_update_instructions_execution_fee,
+        };
+
         match fee.checked_mul(num_instructions.get()) {
             Some(value) => value / 10_u64,
             // The multiplication should never overflow, as the maximum number of instructions
@@ -1048,10 +1089,15 @@ impl CyclesAccountManager {
     /// instructions. The cost consists of:
     /// - the fixed fee to start executing a message.
     /// - the fee that depends on the number of instructions.
-    pub fn execution_cost(&self, num_instructions: NumInstructions, subnet_size: usize) -> Cycles {
+    pub fn execution_cost(
+        &self,
+        num_instructions: NumInstructions,
+        subnet_size: usize,
+        execution_mode: WasmExecutionMode,
+    ) -> Cycles {
         self.scale_cost(
             self.config.update_message_execution_fee
-                + self.convert_instructions_to_cycles(num_instructions),
+                + self.convert_instructions_to_cycles(num_instructions, execution_mode),
             subnet_size,
         )
     }
@@ -1123,7 +1169,7 @@ impl CyclesAccountManager {
 }
 
 /// Encapsulates the payer and cost of inducting an ingress messages.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum IngressInductionCost {
     /// Induction is free.
     Free,
@@ -1142,7 +1188,7 @@ impl IngressInductionCost {
 }
 
 /// Errors returned when computing the cost of receiving an ingress.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum IngressInductionCostError {
     /// The requested subnet method is not available.
     UnknownSubnetMethod,
@@ -1160,6 +1206,8 @@ mod tests {
     use ic_management_canister_types::{CanisterSettingsArgsBuilder, UpdateSettingsArgs};
     use ic_test_utilities_types::ids::subnet_test_id;
 
+    const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
+
     fn create_cycles_account_manager(reference_subnet_size: usize) -> CyclesAccountManager {
         let mut config = CyclesAccountManagerConfig::application_subnet();
         config.reference_subnet_size = reference_subnet_size;
@@ -1169,7 +1217,6 @@ mod tests {
             own_subnet_type: SubnetType::Application,
             own_subnet_id: subnet_test_id(0),
             config,
-            use_cost_scaling_flag: true,
         }
     }
 
@@ -1183,7 +1230,15 @@ mod tests {
                 .build(),
             sender_canister_version: None, // ingress messages are not supposed to set this field
         };
-        assert!(2 * Encode!(&payload).unwrap().len() <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE);
+
+        let payload_size = 2 * Encode!(&payload).unwrap().len();
+
+        assert!(
+            payload_size <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE,
+            "Payload size: {}, is greater than MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: {}.",
+            payload_size,
+            MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE
+        );
     }
 
     #[test]
@@ -1282,24 +1337,25 @@ mod tests {
         // Everything up to `u128::MAX / 4` should be converted as normal:
         // `(ten_update_instructions_execution_fee * num_instructions) / 10`
 
-        // `(4 * 0) / 10 == 0`
+        // `(10 * 0) / 10 == 0`
         assert_eq!(
-            cycles_account_manager.convert_instructions_to_cycles(0.into()),
+            cycles_account_manager.convert_instructions_to_cycles(0.into(), WASM_EXECUTION_MODE),
             0_u64.into()
         );
 
-        // `(4 * 9) / 10 == 3`
+        // `(10 * 9) / 10 == 9`
         assert_eq!(
-            cycles_account_manager.convert_instructions_to_cycles(9.into()),
-            ((4 * 9_u64) / 10).into()
+            cycles_account_manager.convert_instructions_to_cycles(9.into(), WASM_EXECUTION_MODE),
+            ((10 * 9_u64) / 10).into()
         );
 
         // As the maximum number of instructions is bounded by its type, i.e. `u64::MAX`,
         // the normal conversion is applied for the whole instructions range.
-        // `convert_instructions_to_cycles(u64::MAX) == (4 * u64::MAX) / 10`
-        let u64_max_cycles = cycles_account_manager.convert_instructions_to_cycles(u64::MAX.into());
-        assert_eq!(u64_max_cycles, ((4 * u128::from(u64::MAX)) / 10).into());
-        // `convert_instructions_to_cycles(u64::MAX) != 4 * (u64::MAX / 10)`
-        assert_ne!(u64_max_cycles, (4 * (u128::from(u64::MAX) / 10)).into());
+        // `convert_instructions_to_cycles(u64::MAX) == (10 * u64::MAX) / 10`
+        let u64_max_cycles = cycles_account_manager
+            .convert_instructions_to_cycles(u64::MAX.into(), WASM_EXECUTION_MODE);
+        assert_eq!(u64_max_cycles, ((10 * u128::from(u64::MAX)) / 10).into());
+        // `convert_instructions_to_cycles(u64::MAX) != 10 * (u64::MAX / 10)`
+        assert_ne!(u64_max_cycles, (10 * (u128::from(u64::MAX) / 10)).into());
     }
 }

@@ -11,7 +11,7 @@ use prometheus::{
 /// the metrics. Besides that, passing the registry around explicitly is useful
 /// for detecting the situation when two different versions of Prometheus are
 /// are used in different packages.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct MetricsRegistry {
     registry: prometheus::Registry,
     /// A collection of adapters (remote processes) that expose

@@ -1,7 +1,7 @@
 //! The execution environment public interface.
 mod errors;
 
-pub use errors::{CanisterOutOfCyclesError, HypervisorError, TrapCode};
+pub use errors::{CanisterBacktrace, CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
 use ic_management_canister_types::MasterPublicKeyId;
@@ -13,13 +13,15 @@ use ic_types::{
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressStatus, WasmResult},
     messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
-    CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, Time,
+    CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness,
+    ReplicaVersion, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{Infallible, TryFrom},
     fmt, ops,
+    sync::Arc,
 };
 use strum_macros::EnumIter;
 use thiserror::Error;
@@ -28,7 +30,7 @@ use tower::util::BoxCloneService;
 /// Instance execution statistics. The stats are cumulative and
 /// contain measurements from the point in time when the instance was
 /// created up until the moment they are requested.
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct InstanceStats {
     /// Total number of (host) OS pages (4KiB) accessed (read or written) by the instance
     /// and loaded into the linear memory.
@@ -123,7 +125,7 @@ pub enum PerformanceCounterType {
 }
 
 /// System API call ids to track their execution (in alphabetical order).
-#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, EnumIter)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter)]
 pub enum SystemApiCallId {
     /// Tracker for `ic0.accept_message())`
     AcceptMessage,
@@ -241,7 +243,7 @@ pub enum SystemApiCallId {
 
 /// System API call counters, i.e. how many times each tracked System API call
 /// was invoked.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct SystemApiCallCounters {
     /// Counter for `ic0.data_certificate_copy()`
     pub data_certificate_copy: usize,
@@ -277,7 +279,7 @@ impl SystemApiCallCounters {
 /// Note that there are situations where execution available memory is smaller than
 /// the wasm custom sections memory, i.e. when the memory is consumed by something
 /// other than wasm custom sections.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct SubnetAvailableMemory {
     /// The execution memory available on the subnet, i.e. the canister memory
     /// (Wasm binary, Wasm memory, stable memory) without message memory.
@@ -446,7 +448,7 @@ impl ops::Div<i64> for SubnetAvailableMemory {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum ExecutionMode {
     Replicated,
     NonReplicated,
@@ -479,7 +481,7 @@ pub type QueryExecutionService =
     BoxCloneService<(Query, Option<CertificateDelegation>), QueryExecutionResponse, Infallible>;
 
 /// Errors that can be returned when reading/writing from/to ingress history.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum IngressHistoryError {
     StateRemoved(Height),
     StateNotAvailableYet(Height),
@@ -510,13 +512,18 @@ pub trait IngressHistoryWriter: Send + Sync {
     // Note [Associated Types in Interfaces]
     type State;
 
-    /// Allows to set status on a message.
+    /// Sets the status of a message. Returns the message's previous status.
     ///
     /// The allowed status transitions are:
     /// * "None" -> {"Received", "Processing", "Completed", "Failed"}
     /// * "Received" -> {"Processing", "Completed", "Failed"}
     /// * "Processing" -> {"Processing", "Completed", "Failed"}
-    fn set_status(&self, state: &mut Self::State, message_id: MessageId, status: IngressStatus);
+    fn set_status(
+        &self,
+        state: &mut Self::State,
+        message_id: MessageId,
+        status: IngressStatus,
+    ) -> Arc<IngressStatus>;
 }
 
 /// A trait for handling `out_of_instructions()` calls from the Wasm module.
@@ -735,9 +742,9 @@ pub trait SystemApi {
         name_src: usize,
         name_len: usize,
         reply_fun: u32,
-        reply_env: u32,
+        reply_env: u64,
         reject_fun: u32,
-        reject_env: u32,
+        reject_env: u64,
         heap: &[u8],
     ) -> HypervisorResult<()>;
 
@@ -774,7 +781,7 @@ pub trait SystemApi {
     /// `ic0.call_perform`.
     ///
     /// See <https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-call>
-    fn ic0_call_on_cleanup(&mut self, fun: u32, env: u32) -> HypervisorResult<()>;
+    fn ic0_call_on_cleanup(&mut self, fun: u32, env: u64) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_call_cycles_add128` instead, as this API
     /// can only add a 64-bit value.
@@ -1153,7 +1160,7 @@ pub trait SystemApi {
     ) -> HypervisorResult<()>;
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 
 /// Indicate whether a checkpoint will be taken after the current round or not.
 pub enum ExecutionRoundType {
@@ -1162,7 +1169,7 @@ pub enum ExecutionRoundType {
 }
 
 /// Execution round properties collected form the last DKG summary block.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ExecutionRoundSummary {
     /// The next checkpoint round height.
     ///
@@ -1178,7 +1185,7 @@ pub struct ExecutionRoundSummary {
 }
 
 /// Configuration of execution that comes from the registry.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct RegistryExecutionSettings {
     pub max_number_of_canisters: u64,
     pub provisional_whitelist: ProvisionalWhitelist,
@@ -1187,7 +1194,7 @@ pub struct RegistryExecutionSettings {
 }
 
 /// Chain key configuration of execution that comes from the registry.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ChainKeySettings {
     pub max_queue_size: u32,
     pub pre_signatures_to_create_in_advance: u32,
@@ -1210,7 +1217,7 @@ pub trait Scheduler: Send {
     ///   use during an execution round.
     /// * `max_instructions_per_round`: max number of instructions a single
     ///   round on a single thread can
-    /// consume.
+    ///   consume.
     /// * `max_instructions_per_message`: max number of instructions a single
     ///   message execution can consume.
     ///
@@ -1249,6 +1256,7 @@ pub trait Scheduler: Send {
         randomness: Randomness,
         idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
         idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+        replica_version: &ReplicaVersion,
         current_round: ExecutionRound,
         round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,
@@ -1256,7 +1264,7 @@ pub trait Scheduler: Send {
     ) -> Self::State;
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct WasmExecutionOutput {
     pub wasm_result: Result<Option<WasmResult>, HypervisorError>,
     pub num_instructions_left: NumInstructions,

@@ -7,10 +7,10 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-types = { path = "../../types/types" }
 ic-protobuf = { path = "../../protobuf" }
+ic-types = { path = "../../types/types" }
+rustls = { workspace = true }
 serde = { workspace = true }
-rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
 thiserror = { workspace = true }
 x509-parser = { workspace = true }
 
@@ -18,5 +18,5 @@ x509-parser = { workspace = true }
 assert_matches = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
 ic-crypto-test-utils-tls = { path = "../test_utils/tls" }
-maplit = "1.0"
 json5 = "0.4.1"
+maplit = "1.0"

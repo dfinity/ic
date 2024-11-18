@@ -16,7 +16,7 @@ use std::{
 pub const EXPECTED_MESSAGE_ID_LENGTH: usize = 32;
 
 /// The ID used to uniquely identify a user's ingress message.
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct MessageId([u8; EXPECTED_MESSAGE_ID_LENGTH]);
 

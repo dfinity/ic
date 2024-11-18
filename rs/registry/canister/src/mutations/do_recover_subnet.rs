@@ -8,7 +8,7 @@
 use crate::chain_key::{InitialChainKeyConfigInternal, KeyConfigRequestInternal};
 use crate::{
     common::LOG_PREFIX,
-    mutations::{common::encode_or_panic, do_create_subnet::EcdsaInitialConfig},
+    mutations::do_create_subnet::EcdsaInitialConfig,
     registry::{Registry, Version},
 };
 use candid::{CandidType, Deserialize, Encode};
@@ -30,6 +30,7 @@ use ic_registry_transport::{
     upsert,
 };
 use on_wire::bytes;
+use prost::Message;
 use serde::Serialize;
 use std::convert::TryFrom;
 
@@ -155,7 +156,7 @@ impl Registry {
             // Push all of our subnet_record mutations
             mutations.push(upsert(
                 make_subnet_record_key(subnet_id),
-                encode_or_panic(&subnet_record),
+                subnet_record.encode_to_vec(),
             ));
 
             let post_call_registry_version = self.latest_version();
@@ -199,7 +200,7 @@ impl Registry {
             let new_subnet_threshold_signing_pubkey_mutation = RegistryMutation {
                 mutation_type: registry_mutation::Type::Update as i32,
                 key: make_crypto_threshold_signing_pubkey_key(subnet_id).into_bytes(),
-                value: encode_or_panic(&dkg_response.subnet_threshold_public_key),
+                value: dkg_response.subnet_threshold_public_key.encode_to_vec(),
             };
 
             mutations.push(new_subnet_threshold_signing_pubkey_mutation);
@@ -223,7 +224,7 @@ impl Registry {
         mutations.push(RegistryMutation {
             mutation_type: registry_mutation::Type::Update as i32,
             key: make_catch_up_package_contents_key(subnet_id).into_bytes(),
-            value: encode_or_panic(&cup_contents),
+            value: cup_contents.encode_to_vec(),
         });
 
         // Check invariants before applying mutations
@@ -279,7 +280,7 @@ impl Registry {
 }
 
 /// A payload used to recover a subnet that has stalled
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct RecoverSubnetPayload {
     /// The subnet ID to add the recovery CUP to
     pub subnet_id: PrincipalId,
@@ -307,7 +308,7 @@ pub struct RecoverSubnetPayload {
     pub chain_key_config: Option<InitialChainKeyConfig>,
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct InitialChainKeyConfig {
     pub key_configs: Vec<KeyConfigRequest>,
     pub signature_request_timeout_ns: Option<u64>,
@@ -373,13 +374,13 @@ impl TryFrom<InitialChainKeyConfig> for InitialChainKeyConfigInternal {
     }
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct KeyConfigRequest {
     pub key_config: Option<KeyConfig>,
     pub subnet_id: Option<PrincipalId>,
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct KeyConfig {
     pub key_id: Option<MasterPublicKeyId>,
     pub pre_signatures_to_create_in_advance: Option<u32>,

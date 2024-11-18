@@ -7,7 +7,7 @@ source "$NNS_TOOLS_DIR/lib/include.sh"
 help() {
     print_green "
 Usage: $0 <VERSION> <SNS_CANISTER_TYPE> (<SNS_CANISTER_TYPE>...)
-  VERSION: Version to test (generally git hash, could be build id.  Green checkmarks on gitlab commit list have assets)
+  VERSION: Version to test (generally git hash, could be build id.  Green checkmarks on GitHub commit list have assets)
   SNS_CANISTER_TYPE: Human readable SNS canister name (root, governance, ledger, swap, archive, index)
 
   This script will test upgrading the canisters to a particular version, and will test doing so
@@ -96,7 +96,7 @@ echo "$PERMUTATIONS" | while read -r ORDERING; do
         LEDGER_CANISTER_ID=$(sns_canister_id_for_sns_canister_type ledger)
 
         echo "Participate in Swap to commit it (this spawns the archive canister) ..." | tee -a $LOG_FILE
-        sns_quill_participate_in_sale "${NNS_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 300000
+        sns_quill_participate_in_swap "${NNS_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 300000
 
         echo "Wait for finalization to complete ..." | tee -a "${LOG_FILE}"
         if ! wait_for_sns_governance_to_be_in_normal_mode "${NNS_URL}" "${GOV_CANISTER_ID}"; then
@@ -144,7 +144,7 @@ echo "$PERMUTATIONS" | while read -r ORDERING; do
         LEDGER_CANISTER_ID=$(sns_canister_id_for_sns_canister_type ledger)
 
         echo "Participate in Swap to commit it (this spawns the archive canister) ..." | tee -a $LOG_FILE
-        sns_quill_participate_in_sale "${NNS_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 300000
+        sns_quill_participate_in_swap "${NNS_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 300000
 
         echo "Wait for finalization to complete ..." | tee -a "${LOG_FILE}"
         if ! wait_for_sns_governance_to_be_in_normal_mode "${NNS_URL}" "${GOV_CANISTER_ID}"; then

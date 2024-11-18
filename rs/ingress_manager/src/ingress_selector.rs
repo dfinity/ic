@@ -3,7 +3,6 @@
 //! messages of Consensus payloads and to keep track of finalized Ingress
 //! Messages to ensure that no message is added to a block more than once.
 use crate::{CustomRandomState, IngressManager};
-use ic_constants::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::IngressInductionCost;
 use ic_interfaces::{
     execution_environment::{IngressHistoryError, IngressHistoryReader},
@@ -14,6 +13,7 @@ use ic_interfaces::{
     ingress_pool::ValidatedIngressArtifact,
     validation::{ValidationError, ValidationResult},
 };
+use ic_limits::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::warn;
 use ic_management_canister_types::CanisterStatusType;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
@@ -549,7 +549,7 @@ impl IngressManager {
         ) {
             let message_id = MessageId::from(&ingress_id);
             return Err(ValidationError::InvalidArtifact(match err {
-                RequestValidationError::InvalidIngressExpiry(msg)
+                RequestValidationError::InvalidRequestExpiry(msg)
                 | RequestValidationError::InvalidDelegationExpiry(msg) => {
                     InvalidIngressPayloadReason::IngressExpired(message_id, msg)
                 }
@@ -779,6 +779,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time = UNIX_EPOCH;
                 let time_source = FastForwardTimeSource::new();
@@ -816,11 +817,7 @@ mod tests {
                             peer_id: node_test_id(0),
                             timestamp: time_source.get_relative_time(),
                         });
-                        ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                            message_id.clone(),
-                            node_test_id(0),
-                            m.count_bytes(),
-                        ))]);
+                        ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id.clone())]);
                         // check that message is indeed in the pool
                         assert!(ingress_pool.get(&message_id).is_some());
                     });
@@ -853,6 +850,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let mut time = UNIX_EPOCH;
                 let validation_context = ValidationContext {
@@ -979,6 +977,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
                 let validation_context = ValidationContext {
@@ -999,12 +998,7 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    let ingress_size1 = ingress_msg1.count_bytes();
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                        ingress_size1,
-                    ))]);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
                 });
 
                 // get ingress message in payload
@@ -1033,6 +1027,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
                 let validation_context = ValidationContext {
@@ -1053,12 +1048,7 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    let ingress_size1 = ingress_msg1.count_bytes();
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                        ingress_size1,
-                    ))]);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
                 });
 
                 // get ingress message in payload
@@ -1101,6 +1091,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
 
@@ -1124,11 +1115,7 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                        ingress_msg1.count_bytes(),
-                    ))]);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
 
                     let message_id = IngressMessageId::from(&ingress_msg2);
                     ingress_pool.insert(UnvalidatedArtifact {
@@ -1136,11 +1123,7 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                        ingress_msg2.count_bytes(),
-                    ))]);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
                 });
 
                 let validation_context = ValidationContext {
@@ -1177,6 +1160,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
 
@@ -1202,11 +1186,7 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                        ingress_msg1.count_bytes(),
-                    ))]);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
 
                     let message_id = IngressMessageId::from(&ingress_msg2);
                     ingress_pool.insert(UnvalidatedArtifact {
@@ -1214,11 +1194,7 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(0),
-                        ingress_msg2.count_bytes(),
-                    ))]);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id)]);
                 });
 
                 let validation_context = ValidationContext {
@@ -1256,6 +1232,7 @@ mod tests {
             None,
             None,
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let ingress_msg1 = SignedIngressBuilder::new()
                     .nonce(2)
@@ -1294,6 +1271,7 @@ mod tests {
             None,
             None,
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let ingress_msg1 = SignedIngressBuilder::new()
                     .nonce(2)
@@ -1362,6 +1340,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
                 let ingress_msg2 = SignedIngressBuilder::new()
@@ -1377,21 +1356,13 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id1,
-                        node_test_id(0),
-                        ingress_msg1.count_bytes(),
-                    ))]);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id1)]);
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg2.clone(),
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                        message_id2,
-                        node_test_id(0),
-                        ingress_msg2.count_bytes(),
-                    ))]);
+                    ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id2)]);
                 });
 
                 let validation_context = ValidationContext {
@@ -1428,6 +1399,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = expiry_time_from_now();
                 let ingress_message1 = SignedIngressBuilder::new()
@@ -1551,6 +1523,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let time_source = FastForwardTimeSource::new();
                 let validation_context = ValidationContext {
@@ -1569,11 +1542,7 @@ mod tests {
                             peer_id: node_test_id(0),
                             timestamp: time_source.get_relative_time(),
                         });
-                        ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                            message_id.clone(),
-                            node_test_id(0),
-                            m.count_bytes(),
-                        ))]);
+                        ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id.clone())]);
                         // check that message is indeed in the pool
                         assert!(ingress_pool.get(&message_id).is_some());
                     });
@@ -1612,6 +1581,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = UNIX_EPOCH;
                 let m1 = SignedIngressBuilder::new()
@@ -1656,6 +1626,7 @@ mod tests {
             Some((registry, subnet_id)),
             None,
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = UNIX_EPOCH;
                 // Canister 0 doesn't exist.
@@ -1698,6 +1669,7 @@ mod tests {
                     .with_subnet_id(subnet_id)
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = UNIX_EPOCH;
                 for sender in [IC_00, CanisterId::from(subnet_id)].iter() {
@@ -1750,6 +1722,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = UNIX_EPOCH;
                 for sender in [IC_00, CanisterId::from(subnet_id)].iter() {
@@ -1799,6 +1772,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = UNIX_EPOCH;
                 for sender in [IC_00, CanisterId::from(subnet_id)].iter() {
@@ -1990,6 +1964,7 @@ mod tests {
                     .with_subnet_id(subnet_id)
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = UNIX_EPOCH;
                 for sender in [IC_00, CanisterId::from(subnet_id)].iter() {
@@ -2075,6 +2050,7 @@ mod tests {
                     )
                     .build(),
             ),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let msg = SignedIngressBuilder::new()
                     .method_payload(vec![0; ALMOST_MAX_SIZE])
@@ -2092,11 +2068,7 @@ mod tests {
                 ingress_pool
                     .write()
                     .unwrap()
-                    .apply_changes(vec![ChangeAction::MoveToValidated((
-                        msg_id,
-                        node_test_id(0),
-                        0,
-                    ))]);
+                    .apply(vec![ChangeAction::MoveToValidated(msg_id)]);
 
                 let validation_context = ValidationContext {
                     registry_version: RegistryVersion::new(1),
@@ -2126,11 +2098,7 @@ mod tests {
                     peer_id: node_test_id(0),
                     timestamp,
                 });
-                ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
-                    message_id.clone(),
-                    node_test_id(0),
-                    m.count_bytes(),
-                ))]);
+                ingress_pool.apply(vec![ChangeAction::MoveToValidated(message_id.clone())]);
                 // check that message is indeed in the pool
                 assert!(ingress_pool.get(&message_id).is_some());
             });
@@ -2222,6 +2190,7 @@ mod tests {
             Some((registry, subnet_id)),
             None,
             Some(replicated_state.build()),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let validation_context = ValidationContext {
                     time,
@@ -2295,6 +2264,7 @@ mod tests {
             Some((registry, subnet_id)),
             None,
             Some(replicated_state.build()),
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let validation_context = ValidationContext {
                     time,

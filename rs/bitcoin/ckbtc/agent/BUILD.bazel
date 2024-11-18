@@ -3,9 +3,10 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/bitcoin/ckbtc/minter",
-    "//rs/rosetta-api/icrc1",
+    "//rs/ledger_suite/icrc1",
     "//rs/rust_canisters/http_types",
     "@crate_index//:candid",
     "@crate_index//:ic-agent",

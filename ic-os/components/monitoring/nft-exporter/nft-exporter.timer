@@ -1,0 +1,10 @@
+[Unit]
+Description=nft counter export timer
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=60s
+Unit=nft-exporter.service
+
+[Install]
+WantedBy=timers.target

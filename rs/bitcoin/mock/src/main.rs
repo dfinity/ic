@@ -15,7 +15,7 @@ const DEFAULT_TIP_HEIGHT: u32 = 12;
 
 fn main() {}
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 pub struct State {
     pub fee_percentiles: Vec<u64>,
     // The network used in the bitcoin canister.

@@ -6,18 +6,20 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/p2p/quic_transport",
     "//rs/phantom_newtype",
     "//rs/protobuf",
-    "//rs/p2p/quic_transport",
-    "//rs/types/types",
     "//rs/types/base_types",
+    "//rs/types/types",
     "@crate_index//:axum",
     "@crate_index//:backoff",
     "@crate_index//:bytes",
     "@crate_index//:prometheus",
+    "@crate_index//:prost",
     "@crate_index//:rand",
     "@crate_index//:slog",
     "@crate_index//:tokio",
@@ -26,6 +28,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/p2p/test_utils",
     "//rs/test_utilities/logger",
     "//rs/types/types_test_utils",

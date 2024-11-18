@@ -5,6 +5,7 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/temp_crypto",
     "//rs/interfaces",
     "//rs/registry/fake",

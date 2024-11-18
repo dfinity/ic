@@ -68,6 +68,11 @@ message NeuronId {
   bytes id = 1;
 }
 
+// A sequence of NeuronIds, which is used to get prost to generate a type isomorphic to Option<Vec<NeuronId>>.
+message NeuronIds {
+  repeated NeuronId neuron_ids = 1;
+}
+
 // The id of a specific proposal.
 message ProposalId {
   uint64 id = 1;
@@ -1043,10 +1048,9 @@ message VotingRewardsParameters {
   //
   // Must be > 0.
   //
-  // During such periods, proposals enter the ReadyToSettle state. Once the
-  // round is over, voting for those proposals entitle voters to voting
-  // rewards. Such rewards are calculated by the governance canister's
-  // heartbeat.
+  // During such periods, proposals enter the ReadyToSettle state. Once the round is over, voting
+  // for those proposals entitle voters to voting rewards. Such rewards are calculated in
+  // the governance canister's run_periodic_tasks function.
   //
   // This is a nominal amount. That is, the actual time between reward
   // calculations and distribution cannot be guaranteed to be perfectly
@@ -1160,8 +1164,8 @@ message RewardEvent {
   // reasons that rewards might not be distributed in a given round.
   //
   // 1. "Missed" rounds: there was a long period when we did calculate rewards
-  //    (longer than 1 round). (I.e. distribute_rewards was not called by
-  //    heartbeat for whatever reason, most likely some kind of bug.)
+  //    (longer than 1 round). (I.e. distribute_rewards was not called from
+  //    run_periodic_tasks, for whatever reason, most likely some kind of bug.)
   //
   // 2. Rollover: We tried to distribute rewards, but there were no proposals
   //    settled to distribute rewards for.
@@ -1403,11 +1407,15 @@ message Governance {
     bytes index_wasm_hash = 6;
   }
 
+  message Versions {
+    repeated Governance.Version versions = 1;
+  }
+
   // Current version that this SNS is running.
   Version deployed_version = 23;
 
   // An upgrade in progress, defined as a version target and a time at which it is considered failed.
-  message UpgradeInProgress {
+  message PendingVersion {
     // Version to  be upgraded to
     Version target_version = 1;
     // Seconds since UNIX epoch to mark this as a failed version if not in sync with current version
@@ -1416,13 +1424,14 @@ message Governance {
     // allowing us to fail in case we otherwise have gotten stuck.
     uint64 checking_upgrade_lock = 3;
     // The proposal that initiated this upgrade
-    uint64 proposal_id = 4;
+    optional uint64 proposal_id = 4;
   }
 
   // Version SNS is in process of upgrading to.
-  UpgradeInProgress pending_version = 24;
+  PendingVersion pending_version = 24;
+  Version target_version = 30;
 
-  // True if the heartbeat function is currently finalizing disburse maturity, meaning
+  // True if the run_periodic_tasks function is currently finalizing disburse maturity, meaning
   // that it should finish before being called again.
   optional bool is_finalizing_disburse_maturity = 25;
 
@@ -1441,6 +1450,31 @@ message Governance {
   }
 
   MaturityModulation maturity_modulation = 26;
+
+  reserved "migrated_root_wasm_memory_limit";
+  reserved 27;
+
+  // The sns's local cache of the upgrade steps recieved from SNS-W.
+  message CachedUpgradeSteps {
+    // The upgrade steps that have been returned from SNS-W the last time we
+    // called list_upgrade_steps.
+    Governance.Versions upgrade_steps = 1;
+    // The timestamp of the request we sent to list_upgrade_steps.
+    // It's possible that this is greater than the response_timestamp_seconds, because
+    // we update it as soon as we send the request, and only update the
+    // response_timestamp and the upgrade_steps when we receive the response.
+    // The primary use of this is that we can avoid calling list_upgrade_steps
+    // more frequently than necessary.
+    optional uint64 requested_timestamp_seconds = 2;
+    // The timestamp of the response we received from list_upgrade_steps (stored in upgrade_steps).
+    optional uint64 response_timestamp_seconds = 3;
+  }
+  CachedUpgradeSteps cached_upgrade_steps = 29;
+
+  // Information about the timers that perform periodic tasks of this Governance canister.
+  optional ic_nervous_system.pb.v1.Timers timers = 31;
+
+  UpgradeJournal upgrade_journal = 32;
 }
 
 // Request message for 'get_metadata'.
@@ -1467,11 +1501,25 @@ message GetRunningSnsVersionRequest {}
 
 // Response with the SNS's currently running version and any upgrades
 // that are in progress.
+// GetUpgradeJournal is a superior API to this one that should
 message GetRunningSnsVersionResponse {
   // The currently deployed version of the SNS.
   Governance.Version deployed_version = 1;
   // The upgrade in progress, if any.
-  Governance.UpgradeInProgress pending_version = 2;
+  UpgradeInProgress pending_version = 2;
+
+  // The same as PendingVersion (stored in the governance proto). They are separated to make it easy to change one without changing the other.
+  message UpgradeInProgress {
+    // Version to  be upgraded to
+    Governance.Version target_version = 1;
+    // Seconds since UNIX epoch to mark this as a failed version if not in sync with current version
+    uint64 mark_failed_at_seconds = 2;
+    // Lock to avoid checking over and over again.  Also, it is a counter for how many times we have attempted to check,
+    // allowing us to fail in case we otherwise have gotten stuck.
+    uint64 checking_upgrade_lock = 3;
+    // The proposal that initiated this upgrade
+    uint64 proposal_id = 4;
+  }
 }
 
 // Request to fail an upgrade proposal that is Adopted but not Executed or
@@ -1948,56 +1996,53 @@ message GetModeResponse {
 
 // The request for the `claim_swap_neurons` method.
 message ClaimSwapNeuronsRequest {
-  // NeuronParameters groups parameters for creating a neuron in the
-  // `claim_swap_neurons` method.
-  message NeuronParameters {
-    reserved "memo";
-    reserved 4;
+  // Replacement for NeuronParameters. Contains the information needed to set up
+  // a neuron for a swap participant.
+  message NeuronRecipe {
+    // The info that for a participant in the Neurons' Fund
+    message NeuronsFund {
+      // The neuron ID of the NNS neuron that participated in the Neurons' Fund.
+      optional uint64 nns_neuron_id = 1;
+      // The controller of the NNS neuron that participated in the Neurons' Fund.
+      optional ic_base_types.pb.v1.PrincipalId nns_neuron_controller = 2;
+      // The hotkeys of the NNS neuron that participated in the Neurons' Fund.
+      optional ic_nervous_system.pb.v1.Principals nns_neuron_hotkeys = 3;
+    }
 
-    // The PrincipalId that will have permissions when the neuron is created.
-    // The permissions that are granted are controlled my
-    // `NervousSystemParameters::neuron_claimer_permissions`. This field
-    // is required.
-    ic_base_types.pb.v1.PrincipalId controller = 1;
+    // The info that for a direct participant
+    message Direct {}
 
-    // For Community Fund participants, in addition to the controller (that is
-    // set to the NNS governance), this is another PrincipalId with permissions.
-    // Specifically, the PrincipalId who is the controller of the NNS neuron
-    // that invested in the decentralization sale via the Community Fund will
-    // be granted the following permissions:
-    //    - NeuronPermissionType::SubmitProposal
-    //    - NeuronPermissionType::Vote
-    // This field is not set for other types of participants, therefore it is optional.
-    ic_base_types.pb.v1.PrincipalId hotkey = 2;
+    // The principal that should be the controller of the SNS neuron
+    optional ic_base_types.pb.v1.PrincipalId controller = 1;
+    // The ID of the SNS neuron
+    optional NeuronId neuron_id = 2;
 
-    // The stake of the neuron in e8s (10E-8 of a token) that the neuron will be
-    // created with. This field is required.
+    // The SNS neuron's stake in e8s (10E-8 of a token)
     optional uint64 stake_e8s = 3;
 
-    // The duration in seconds that the neuron's dissolve delay will be set to. Neurons
-    // that are for Community Fund investors will be automatically set to dissolving,
-    // while direct investors will be automatically set to non-dissolving.
-    optional uint64 dissolve_delay_seconds = 5;
+    // The duration in seconds that the neuron's dissolve delay will be set to.
+    optional uint64 dissolve_delay_seconds = 4;
+    // The neurons this neuron should follow
+    optional NeuronIds followees = 5;
 
-    // The ID of the NNS neuron whose Community Fund participation resulted in the
-    // creation of this SNS neuron.
-    optional uint64 source_nns_neuron_id = 6;
+    oneof participant {
+      Direct direct = 6;
+      NeuronsFund neurons_fund = 7;
+    }
+  }
 
-    // The ID of the SNS Neuron to be created for the participant. If a Neuron with
-    // this NeuronId already exists in SNS Governance, the `ClaimSwapNeuronsResponse`
-    // will return a`ClaimedSwapNeuronStatus::AlreadyExists` for this NeuronId.
-    // This field is required.
-    optional NeuronId neuron_id = 7;
-
-    // The list of NeuronIds that the created Neuron will follow on all SNS Proposal
-    // Actions known to governance at the time. Additional followees and following
-    // relations can be added after neuron creation.
-    repeated NeuronId followees = 8;
+  // Needed to cause prost to generate a type isomorphic to
+  // Optional<Vec<NeuronRecipe>>.
+  message NeuronRecipes {
+    repeated NeuronRecipe neuron_recipes = 1;
   }
 
   // The set of parameters that define the neurons created in `claim_swap_neurons`. For
-  // each NeuronParameter, one neuron will be created.
-  repeated NeuronParameters neuron_parameters = 1;
+  // each NeuronRecipe, one neuron will be created.
+  optional NeuronRecipes neuron_recipes = 2;
+
+  reserved 1;
+  reserved "neuron_parameters";
 }
 
 // An enum for representing the various statuses a Neuron being claimed by the
@@ -2067,14 +2112,14 @@ message ClaimSwapNeuronsResponse {
 
   // The ok result from `claim_swap_neurons. For every requested neuron,
   // a SwapNeuron message is returned, and should equal the count of
-  // `ClaimSwapNeuronsRequest.neuron_parameters`.
+  // `ClaimSwapNeuronsRequest.neuron_recipes`.
   message ClaimedSwapNeurons {
     repeated SwapNeuron swap_neurons = 1;
   }
 
   // SwapNeuron associates the status of a neuron attempting to be
   // claimed with a NeuronId. The `id` field will correspond with a
-  // `ClaimSwapNeuronsRequest.neuron_parameters.neuron_id` field in
+  // `ClaimSwapNeuronsRequest.neuron_recipes.neuron_id` field in
   // the request object used in `claim_swap_neurons`.
   message SwapNeuron {
     NeuronId id = 1;
@@ -2101,6 +2146,94 @@ message AddMaturityRequest {
 // available when governance is compiled with the `test` feature enabled.
 message AddMaturityResponse {
   optional uint64 new_maturity_e8s = 1;
+}
+
+// A test-only API that advances the target version of the SNS.
+message AdvanceTargetVersionRequest {
+  optional Governance.Version target_version = 1;
+}
+
+// The response to a request to advance the target version of the SNS.
+message AdvanceTargetVersionResponse {}
+
+// Represents a single entry in the upgrade journal.
+message UpgradeJournalEntry {
+  oneof event {
+    UpgradeStepsRefreshed upgrade_steps_refreshed = 1;
+    UpgradeStepsReset upgrade_steps_reset = 7;
+    TargetVersionSet target_version_set = 2;
+    TargetVersionReset target_version_reset = 3;
+    UpgradeStarted upgrade_started = 4;
+    UpgradeOutcome upgrade_outcome = 5;
+  }
+  optional uint64 timestamp_seconds = 6;
+
+  message UpgradeStepsRefreshed {
+    optional Governance.Versions upgrade_steps = 2;
+  }
+
+  message UpgradeStepsReset {
+    optional string human_readable = 1;
+    optional Governance.Versions upgrade_steps = 2;
+  }
+
+  message TargetVersionSet {
+    optional Governance.Version old_target_version = 1;
+    optional Governance.Version new_target_version = 2;
+  }
+
+  message TargetVersionReset {
+    optional Governance.Version old_target_version = 1;
+    optional Governance.Version new_target_version = 2;
+    optional string human_readable = 3;
+  }
+
+  message UpgradeStarted {
+    optional Governance.Version current_version = 1;
+    optional Governance.Version expected_version = 2;
+    oneof reason {
+      ProposalId upgrade_sns_to_next_version_proposal = 3;
+      Empty behind_target_version = 4;
+    }
+  }
+
+  message UpgradeOutcome {
+    optional string human_readable = 1;
+
+    oneof status {
+      Empty success = 2;
+      Empty timeout = 3;
+      // The SNS ended up being upgraded to a version that was not the expected one.
+      InvalidState invalid_state = 4;
+      Empty external_failure = 5;
+    }
+
+    message InvalidState {
+      Governance.Version version = 1;
+    }
+  }
+}
+
+// Needed to cause prost to generate a type isomorphic to Option<Vec<UpgradeJournalEntry>>.
+message UpgradeJournal {
+  // The entries in the upgrade journal.
+  repeated UpgradeJournalEntry entries = 1;
+}
+
+// The upgrade journal contains all the information neede to audit previous SNS upgrades and understand its current state.
+// It is being implemented as part of the "effortless SNS upgrade" feature.
+message GetUpgradeJournalRequest {}
+
+message GetUpgradeJournalResponse {
+  Governance.Versions upgrade_steps = 1;
+  optional uint64 response_timestamp_seconds = 2;
+  // The target version that the SNS will be upgraded to.
+  // Currently, this field is always None, but in the "effortless SNS upgrade"
+  // feature, it reflect the version of the SNS that the community has decided to upgrade to.
+  Governance.Version target_version = 3;
+  Governance.Version deployed_version = 5;
+
+  UpgradeJournal upgrade_journal = 4;
 }
 
 // A request to mint tokens for a particular principal. The associated endpoint

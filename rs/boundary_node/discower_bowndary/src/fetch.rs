@@ -14,7 +14,7 @@ pub trait NodesFetcher: Sync + Send + Debug {
     async fn fetch(&self, url: Url) -> Result<Vec<Node>, NodeFetchError>;
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum NodeFetchError {
     #[error("Agent error occurred: {0}")]
     AgentError(#[from] AgentError),

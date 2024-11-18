@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//rs/crypto/tree_hash/fuzz:__subpackages__"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canonical_state/tree_hash",
     "//rs/canonical_state/tree_hash/test_utils",
     "//rs/crypto/test_utils/reproducible_rng",

@@ -1,8 +1,9 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat};
+use ic_base_types::CanisterId;
 use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
 use ic_nns_test_utils::state_test_helpers::setup_nns_canisters;
-use ic_state_machine_tests::{CanisterId, StateMachine};
+use ic_state_machine_tests::StateMachine;
 use ic_tvl_canister::types::{TvlArgs as TVLInitArgs, TvlResult, TvlResultError};
 use ic_tvl_canister::{
     multiply_e8s, FiatCurrency, TvlRequest, DEFAULT_UPDATE_PERIOD, ONE_DAY, OTHER_CURRENCIES,
@@ -88,8 +89,6 @@ impl TvlSetup {
 #[test]
 fn test_tvl() {
     let tvl = TvlSetup::new();
-
-    tvl.env.run_until_completion(10_000);
     tvl.env
         .advance_time(std::time::Duration::from_secs(DEFAULT_UPDATE_PERIOD));
     tvl.env.tick();
@@ -115,7 +114,6 @@ fn test_tvl() {
 #[test]
 fn test_multiple_currencies() {
     let tvl = TvlSetup::new();
-    tvl.env.run_until_completion(100);
     tvl.env
         .advance_time(std::time::Duration::from_secs(24 * 60 * 60));
     tvl.env.tick();
@@ -211,7 +209,6 @@ fn test_multiple_currencies() {
 #[test]
 fn test_fiat_updates() {
     let tvl = TvlSetup::new();
-    tvl.env.run_until_completion(100);
     tvl.env
         .advance_time(std::time::Duration::from_secs(24 * 60 * 60));
     tvl.env.tick();

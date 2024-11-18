@@ -9,7 +9,7 @@ use crate::vault::api::{
 };
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
@@ -23,7 +23,7 @@ use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
-    IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
+    IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
     idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
@@ -219,9 +219,9 @@ pub trait TarpcCspVault {
         opener_key_id: KeyId,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError>;
 
-    // Corresponds to `ThresholdEcdsaSignerCspVault.ecdsa_sign_share`
+    // Corresponds to `ThresholdEcdsaSignerCspVault.create_ecdsa_sig_share`
     #[allow(clippy::too_many_arguments)]
-    async fn ecdsa_sign_share(
+    async fn create_ecdsa_sig_share(
         derivation_path: ExtendedDerivationPath,
         hashed_message: ByteBuf,
         nonce: Randomness,
@@ -231,12 +231,13 @@ pub trait TarpcCspVault {
         kappa_times_lambda_raw: IDkgTranscriptInternalBytes,
         key_times_lambda_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
-    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
+    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaCreateSigShareError>;
 
     // Corresponds to `ThresholdSchnorrSignerCspVault.create_schnorr_sig_share`
     async fn create_schnorr_sig_share(
         derivation_path: ExtendedDerivationPath,
         message: ByteBuf,
+        taproot_tree_root: Option<ByteBuf>,
         nonce: Randomness,
         key_raw: IDkgTranscriptInternalBytes,
         presig_raw: IDkgTranscriptInternalBytes,

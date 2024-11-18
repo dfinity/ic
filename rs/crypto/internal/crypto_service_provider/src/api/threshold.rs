@@ -7,7 +7,6 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::{AlgorithmId, CryptoResult};
 use ic_types::{NodeIndex, NumberOfNodes};
 use serde::{Deserialize, Serialize};
@@ -166,7 +165,7 @@ pub trait NiDkgCspClient {
     /// # Errors
     /// This method SHALL return an error if:
     /// * the public key is not well formed. (`MalformedPublicKeyError`)
-    /// This method SHALL NOT return an error if:
+    ///   This method SHALL NOT return an error if:
     /// * the forward secure epoch is already higher than the epoch provided in
     ///   the method argument.  In this case the secret key is unchanged.
     fn update_forward_secure_epoch(
@@ -179,7 +178,6 @@ pub trait NiDkgCspClient {
     ///
     /// # Arguments
     /// * `algorithm_id` selects the algorithm suite to use for the scheme.
-    /// * `dkg_id` is the identifier for the distributed key being generated.
     /// * `dealer_index` the index associated with the dealer.
     /// * `threshold` is the minimum number of nodes required to generate a
     ///   valid threshold signature.
@@ -203,7 +201,6 @@ pub trait NiDkgCspClient {
     fn create_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -294,11 +291,9 @@ pub trait NiDkgCspClient {
     ///   error. (`InvalidDealingError`)
     /// * the number of receiver keys is unsupported by this machine.
     ///   (`SizeError`)
-    #[allow(clippy::too_many_arguments)]
     fn verify_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -349,11 +344,9 @@ pub trait NiDkgCspClient {
     ///   (`InvalidDealingError`)
     /// * the number of receiver keys is unsupported by this machine.
     ///   (`SizeError`)
-    #[allow(clippy::too_many_arguments)] // The arguments are per the spec.
     fn verify_resharing_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        dkg_id: NiDkgId,
         dealer_resharing_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -474,7 +467,6 @@ pub trait NiDkgCspClient {
     fn load_threshold_signing_key(
         &self,
         algorithm_id: AlgorithmId,
-        dkg_id: NiDkgId,
         epoch: Epoch,
         csp_transcript: CspNiDkgTranscript,
         receiver_index: NodeIndex,

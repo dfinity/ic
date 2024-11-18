@@ -15,7 +15,7 @@ type CborMap = std::collections::BTreeMap<serde_cbor::Value, serde_cbor::Value>;
 ///
 /// Each variant wraps the standard DER encoding of a key for that
 /// algorithm
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 enum CosePublicKey {
     EcdsaP256Sha256(Vec<u8>),
     RsaPkcs1v15Sha256(Vec<u8>),
@@ -45,7 +45,7 @@ const COSE_KTY_RSA: serde_cbor::Value = serde_cbor::Value::Integer(3);
 const COSE_PARAM_RSA_N: serde_cbor::Value = serde_cbor::Value::Integer(-1);
 const COSE_PARAM_RSA_E: serde_cbor::Value = serde_cbor::Value::Integer(-2);
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 /// An error that occurred while parsing the COSE key
 enum CosePublicKeyParseError {
     /// The key is malformed (not valid CBOR with COSE formatting)

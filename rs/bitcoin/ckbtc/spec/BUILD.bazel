@@ -9,6 +9,7 @@ tla_module(
     name = "spec",
     src = "Ck_BTC.tla",
     deps = [
+        # Keep sorted.
         ":tla_hash",
     ],
 )

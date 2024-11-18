@@ -10,6 +10,7 @@ rust_library(
     crate_name = "ic_bitcoin_canister_mock",
     proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:serde",
@@ -24,6 +25,7 @@ rust_canister(
     service_file = "bitcoin_mock.did",
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         ":mock",
         "//rs/bitcoin/ckbtc/minter",
         "@crate_index//:bech32",
@@ -50,19 +52,23 @@ rust_ic_test(
     srcs = ["tests/tests.rs"],
     data = [
         ":bitcoin_canister_mock",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/mock",
         "IC_BITCOIN_CANISTER_MOCK_WASM_PATH": "$(rootpath :bitcoin_canister_mock)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     deps = [
+        # Keep sorted.
         ":mock",
         "//rs/config",
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
+        "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:bitcoin",
         "@crate_index//:candid",

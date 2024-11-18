@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/iccsa",
     "//rs/crypto/internal/crypto_lib/basic_sig/cose",
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
@@ -16,6 +17,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/ecdsa_secp256r1",
     "//rs/crypto/internal/test_vectors",
     "//rs/crypto/test_utils/canister_sigs",

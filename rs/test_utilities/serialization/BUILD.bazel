@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/protobuf",
     "@crate_index//:assert_matches",
     "@crate_index//:prost",
@@ -13,6 +14,7 @@ DEPENDENCIES = [
 
 rust_library(
     name = "serialization",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_test_utilities_serialization",
     version = "0.9.0",

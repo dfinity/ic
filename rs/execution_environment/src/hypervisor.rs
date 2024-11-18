@@ -6,8 +6,11 @@ use ic_embedders::wasm_executor::{WasmExecutionResult, WasmExecutor};
 use ic_embedders::wasm_utils::decoding::decoded_wasm_size;
 use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, WasmtimeEmbedder};
 use ic_embedders::{CompilationCache, CompilationResult};
-use ic_interfaces::execution_environment::{HypervisorResult, WasmExecutionOutput};
+use ic_interfaces::execution_environment::{
+    HypervisorError, HypervisorResult, WasmExecutionOutput,
+};
 use ic_logger::ReplicaLogger;
+use ic_management_canister_types::LogVisibilityV2;
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
@@ -41,7 +44,6 @@ pub struct HypervisorMetrics {
     largest_function_instruction_count: Histogram,
     compile: Histogram,
     max_complexity: Histogram,
-    num_tables: Histogram,
     sigsegv_count: HistogramVec,
     mmap_count: HistogramVec,
     mprotect_count: HistogramVec,
@@ -95,11 +97,6 @@ impl HypervisorMetrics {
                 "hypervisor_wasm_max_function_complexity",
                 "The maximum function complexity in a wasm module.",
                 decimal_buckets_with_zero(1, 8), //10 - 100M.
-            ),
-            num_tables: metrics_registry.histogram(
-                "hypervisor_wasm_num_tables",
-                "The number of tables in a wasm module.",
-                decimal_buckets_with_zero(0, 0), // 0, 1, 2, 5
             ),
             sigsegv_count: metrics_registry.histogram_vec(
                 "hypervisor_sigsegv_count",
@@ -190,13 +187,11 @@ impl HypervisorMetrics {
             largest_function_instruction_count,
             compilation_time,
             max_complexity,
-            num_tables,
         } = compilation_result;
         self.largest_function_instruction_count
             .observe(largest_function_instruction_count.get() as f64);
         self.compile.observe(compilation_time.as_secs_f64());
         self.max_complexity.observe(*max_complexity as f64);
-        self.num_tables.observe(*num_tables as f64);
     }
 }
 
@@ -212,6 +207,7 @@ pub struct Hypervisor {
     deterministic_time_slicing: FlagStatus,
     cost_to_compile_wasm_instruction: NumInstructions,
     dirty_page_overhead: NumInstructions,
+    canister_guaranteed_callback_quota: usize,
 }
 
 impl Hypervisor {
@@ -321,6 +317,7 @@ impl Hypervisor {
                 .embedders_config
                 .cost_to_compile_wasm_instruction,
             dirty_page_overhead,
+            canister_guaranteed_callback_quota: config.canister_guaranteed_callback_quota,
         }
     }
 
@@ -335,6 +332,7 @@ impl Hypervisor {
         deterministic_time_slicing: FlagStatus,
         cost_to_compile_wasm_instruction: NumInstructions,
         dirty_page_overhead: NumInstructions,
+        canister_guaranteed_callback_quota: usize,
     ) -> Self {
         Self {
             wasm_executor,
@@ -347,6 +345,7 @@ impl Hypervisor {
             deterministic_time_slicing,
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,
+            canister_guaranteed_callback_quota,
         }
     }
 
@@ -442,18 +441,33 @@ impl Hypervisor {
                 execution_parameters.instruction_limits.slice()
             ),
         }
+        let caller = api_type.caller();
+        let subnet_available_callbacks = round_limits.subnet_available_callbacks.max(0) as u64;
+        let remaining_canister_callback_quota = system_state.call_context_manager().map_or(
+            // The default is never used (since we would never end up here with no
+            // `CallContextManager`) but preferrable to an `unwrap()`.
+            self.canister_guaranteed_callback_quota,
+            |ccm| {
+                self.canister_guaranteed_callback_quota
+                    .saturating_sub(ccm.callbacks().len())
+            },
+        ) as u64;
+        // Maximum between remaining canister quota and available subnet shared pool.
+        let available_callbacks = subnet_available_callbacks.max(remaining_canister_callback_quota);
         let static_system_state = SandboxSafeSystemState::new(
             system_state,
             *self.cycles_account_manager,
             network_topology,
             self.dirty_page_overhead,
             execution_parameters.compute_allocation,
+            available_callbacks,
             request_metadata,
             api_type.caller(),
             api_type.call_context_id(),
+            execution_state.is_wasm64,
         );
         let api_type_str = api_type.as_str();
-        let (compilation_result, execution_result) = Arc::clone(&self.wasm_executor).execute(
+        let (compilation_result, mut execution_result) = Arc::clone(&self.wasm_executor).execute(
             WasmExecutionInput {
                 api_type,
                 sandbox_safe_system_state: static_system_state,
@@ -471,6 +485,41 @@ impl Hypervisor {
                 .observe_compilation_metrics(&compilation_result);
         }
         self.metrics.observe(&execution_result, api_type_str);
+
+        // If the caller does not have permission to view this canister's logs,
+        // then it shouldn't get a backtrace either. So in that case we remove
+        // the backtrace from the error.
+        fn remove_backtrace(err: &mut HypervisorError) {
+            match err {
+                HypervisorError::Trapped { backtrace, .. }
+                | HypervisorError::CalledTrap { backtrace, .. } => *backtrace = None,
+                HypervisorError::Cleanup {
+                    callback_err,
+                    cleanup_err,
+                } => {
+                    remove_backtrace(callback_err);
+                    remove_backtrace(cleanup_err);
+                }
+                _ => {}
+            }
+        }
+        if let WasmExecutionResult::Finished(_, result, _) = &mut execution_result {
+            if let Err(err) = &mut result.wasm_result {
+                let can_view = match &system_state.log_visibility {
+                    LogVisibilityV2::Controllers => {
+                        caller.map_or(false, |c| system_state.controllers.contains(&c))
+                    }
+                    LogVisibilityV2::Public => true,
+                    LogVisibilityV2::AllowedViewers(allowed) => {
+                        caller.map_or(false, |c| allowed.get().contains(&c))
+                    }
+                };
+                if !can_view {
+                    remove_backtrace(err);
+                }
+            }
+        }
+
         execution_result
     }
 

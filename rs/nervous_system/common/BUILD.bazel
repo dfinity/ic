@@ -4,23 +4,23 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/nervous_system/runtime",
     "//rs/nns/constants",
-    "//rs/rosetta-api/icp_ledger",
-    "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/http_types",
-    "//rs/nervous_system/runtime",
     "//rs/types/base_types",
     "@crate_index//:base64",
     "@crate_index//:build-info",
-    "@crate_index//:bytes",
     "@crate_index//:by_address",
-    "@crate_index//:ic-stable-structures",
+    "@crate_index//:bytes",
     "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:ic-stable-structures",
     "@crate_index//:json5",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
@@ -34,16 +34,19 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
     "@crate_index//:rust_decimal_macros",
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:build-info-build",
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/nns/governance",
+    # Keep sorted.
+    "//rs/nns/governance/api",
     "@crate_index//:proptest",
     "@crate_index//:serde_bytes",
 ] + select({
@@ -68,7 +71,7 @@ cargo_build_script(
 
 rust_library(
     name = "common",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_nervous_system_common",
     proc_macro_deps = MACRO_DEPENDENCIES,

@@ -2,9 +2,9 @@
 
 use anyhow::Result;
 
-use ic_tests::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::ledger_tests::token_fault_tolerance::{config, test};
-use ic_tests::systest;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()

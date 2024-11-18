@@ -35,12 +35,13 @@ message Summary {
   repeated TaggedNiDkgTranscript next_transcripts = 6;
   repeated NiDkgConfig configs = 7;
   repeated InitialDkgAttemptCount initial_dkg_attempts = 9;
-  repeated CallbackIdedNiDkgTranscript transcripts_for_new_subnets_with_callback_ids = 10;
+  repeated CallbackIdedNiDkgTranscript transcripts_for_remote_subnets = 10;
 }
 
 message TaggedNiDkgTranscript {
   NiDkgTranscript transcript = 1;
   NiDkgTag tag = 2;
+  optional MasterPublicKeyId key_id = 3;
 }
 
 message CallbackIdedNiDkgTranscript {

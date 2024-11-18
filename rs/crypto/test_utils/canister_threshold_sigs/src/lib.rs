@@ -1,8 +1,10 @@
 //! Utilities for testing IDkg and canister threshold signature operations.
 
 use crate::node::{Node, Nodes};
-use ic_crypto_internal_threshold_sig_ecdsa::test_utils::{corrupt_dealing, ComplaintCorrupter};
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::{
+    corrupt_dealing, ComplaintCorrupter,
+};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     IDkgComplaintInternal, IDkgDealingInternal, NodeIndex, Seed,
 };
 use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
@@ -219,7 +221,6 @@ pub fn generate_ecdsa_presig_quadruple<R: RngCore + CryptoRng>(
     receivers: &IDkgReceivers,
     alg: AlgorithmId,
     key_transcript: &IDkgTranscript,
-    random_unmasked_kappa: bool,
     rng: &mut R,
 ) -> EcdsaPreSignatureQuadruple {
     let lambda_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
@@ -227,23 +228,8 @@ pub fn generate_ecdsa_presig_quadruple<R: RngCore + CryptoRng>(
         .nodes
         .run_idkg_and_create_and_verify_transcript(&lambda_params, rng);
 
-    let kappa_transcript = if random_unmasked_kappa {
+    let kappa_transcript = {
         let unmasked_kappa_params = setup_unmasked_random_params(env, alg, dealers, receivers, rng);
-        env.nodes
-            .run_idkg_and_create_and_verify_transcript(&unmasked_kappa_params, rng)
-    } else {
-        let masked_kappa_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
-
-        let masked_kappa_transcript = env
-            .nodes
-            .run_idkg_and_create_and_verify_transcript(&masked_kappa_params, rng);
-
-        let unmasked_kappa_params = build_params_from_previous(
-            masked_kappa_params,
-            IDkgTranscriptOperation::ReshareOfMasked(masked_kappa_transcript),
-            rng,
-        );
-
         env.nodes
             .run_idkg_and_create_and_verify_transcript(&unmasked_kappa_params, rng)
     };
@@ -322,7 +308,7 @@ pub mod node {
         IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
         IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
         IDkgVerifyInitialDealingsError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
-        ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+        ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
         ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
         ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
         ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
@@ -574,11 +560,11 @@ pub mod node {
     }
 
     impl ThresholdEcdsaSigner for Node {
-        fn sign_share(
+        fn create_sig_share(
             &self,
             inputs: &ThresholdEcdsaSigInputs,
-        ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
-            ThresholdEcdsaSigner::sign_share(self.crypto_component.as_ref(), inputs)
+        ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError> {
+            ThresholdEcdsaSigner::create_sig_share(&*self.crypto_component, inputs)
         }
     }
 
@@ -627,7 +613,7 @@ pub mod node {
             &self,
             inputs: &ThresholdSchnorrSigInputs,
         ) -> Result<ThresholdSchnorrSigShare, ThresholdSchnorrCreateSigShareError> {
-            ThresholdSchnorrSigner::create_sig_share(self.crypto_component.as_ref(), inputs)
+            ThresholdSchnorrSigner::create_sig_share(&*self.crypto_component, inputs)
         }
     }
 
@@ -775,7 +761,7 @@ pub mod node {
         }
     }
 
-    #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Default)]
     pub struct Nodes {
         nodes: BTreeSet<Node>,
     }
@@ -1186,6 +1172,7 @@ pub enum IDkgParticipants {
     /// Choose dealers and receivers randomly:
     /// - Choose a random subset with at least one node to be dealers.
     /// - Choose a random subset with at least one node to be receivers.
+    ///
     /// Both dealers and receivers are chosen independently of each other and it could be the case
     /// that some nodes are neither dealers nor receivers. It could also be the case that some
     /// nodes are both dealers and receivers.
@@ -1195,6 +1182,7 @@ pub enum IDkgParticipants {
     /// Choose dealers and receivers randomly:
     /// - Choose a random subset with at least `min_num_dealers` nodes to be dealers.
     /// - Choose a random subset with at least `min_num_receivers` nodes to be receivers.
+    ///
     /// Both dealers and receivers are chosen independently of each other and it could be the case
     /// that some nodes are neither dealers nor receivers. It could also be the case that some
     /// nodes are both dealers and receivers.
@@ -1499,7 +1487,7 @@ pub fn random_crypto_component_not_in_receivers<R: RngCore + CryptoRng>(
         .build()
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, EnumIter)]
 pub enum IDkgMode {
     RandomUnmasked,
     Random,
@@ -1545,7 +1533,7 @@ impl IDkgMode {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct IDkgModeTestContext {
     mode: IDkgMode,
     dealers: IDkgDealers,
@@ -1884,7 +1872,7 @@ pub fn corrupt_signed_idkg_dealing<R: CryptoRng + RngCore, T: BasicSigner<IDkgDe
         .build_with_signature(transcript_params, basic_signer, signer_id))
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CorruptSignedIDkgDealingError {
     SerializationError(String),
     FailedToCorruptDealing(String),
@@ -1900,18 +1888,10 @@ pub fn generate_tecdsa_protocol_inputs<R: RngCore + CryptoRng>(
     nonce: Randomness,
     derivation_path: &ExtendedDerivationPath,
     algorithm_id: AlgorithmId,
-    random_unmasked_kappa: bool,
     rng: &mut R,
 ) -> ThresholdEcdsaSigInputs {
-    let quadruple = generate_ecdsa_presig_quadruple(
-        env,
-        dealers,
-        receivers,
-        algorithm_id,
-        key_transcript,
-        random_unmasked_kappa,
-        rng,
-    );
+    let quadruple =
+        generate_ecdsa_presig_quadruple(env, dealers, receivers, algorithm_id, key_transcript, rng);
 
     ThresholdEcdsaSigInputs::new(
         derivation_path,
@@ -1966,6 +1946,7 @@ pub fn generate_tschnorr_protocol_inputs<R: RngCore + CryptoRng>(
     key_transcript: &IDkgTranscript,
     message: &[u8],
     nonce: Randomness,
+    taproot_tree_root: Option<&[u8]>,
     derivation_path: &ExtendedDerivationPath,
     alg: AlgorithmId,
     rng: &mut R,
@@ -1981,6 +1962,7 @@ pub fn generate_tschnorr_protocol_inputs<R: RngCore + CryptoRng>(
     ThresholdSchnorrSigInputs::new(
         derivation_path,
         message,
+        taproot_tree_root,
         nonce,
         presig,
         key_transcript.clone(),
@@ -2034,7 +2016,7 @@ pub fn ecdsa_sig_share_from_each_receiver(
         .filter_by_receivers(&inputs)
         .map(|receiver| {
             receiver.load_tecdsa_sig_transcripts(inputs);
-            let sig_share = ThresholdEcdsaSigner::sign_share(receiver, inputs)
+            let sig_share = ThresholdEcdsaSigner::create_sig_share(receiver, inputs)
                 .expect("failed to create sig share");
             (receiver.id(), sig_share)
         })
@@ -2484,6 +2466,7 @@ impl IntoBuilder for ThresholdEcdsaSigInputs {
 pub struct ThresholdSchnorrSigInputsBuilder {
     derivation_path: ExtendedDerivationPath,
     message: Vec<u8>,
+    taproot_tree_root: Option<Vec<u8>>,
     nonce: Randomness,
     presig_transcript: SchnorrPreSignatureTranscript,
     key_transcript: IDkgTranscript,
@@ -2494,6 +2477,7 @@ impl ThresholdSchnorrSigInputsBuilder {
         ThresholdSchnorrSigInputs::new(
             &self.derivation_path,
             &self.message,
+            self.taproot_tree_root.as_deref(),
             self.nonce,
             self.presig_transcript,
             self.key_transcript,
@@ -2519,6 +2503,7 @@ impl IntoBuilder for ThresholdSchnorrSigInputs {
         ThresholdSchnorrSigInputsBuilder {
             derivation_path: self.derivation_path().clone(),
             message: Vec::from(self.message()),
+            taproot_tree_root: self.taproot_tree_root().map(Vec::from),
             nonce: *self.nonce(),
             presig_transcript: self.presig_transcript().clone(),
             key_transcript: self.key_transcript().clone(),
@@ -2820,7 +2805,7 @@ fn corrupt_signed_dealing_for_one_receiver<R: Rng + CryptoRng>(
                 .expect("failed to deserialize internal dealing");
 
         let corrupted_internal_dealing =
-            ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing(
+            ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::corrupt_dealing(
                 &internal_dealing,
                 &[receiver_index],
                 Seed::from_rng(rng),
@@ -2912,7 +2897,6 @@ pub mod ecdsa {
     pub fn environment_with_sig_inputs<R, S>(
         subnet_size_range: S,
         alg: AlgorithmId,
-        use_random_unmasked_kappa: bool,
         rng: &mut R,
     ) -> (
         CanisterThresholdSigTestEnvironment,
@@ -2945,7 +2929,6 @@ pub mod ecdsa {
             seed,
             &derivation_path,
             alg,
-            use_random_unmasked_kappa,
             rng,
         );
         (env, inputs, dealers, receivers)
@@ -2995,6 +2978,21 @@ pub mod schnorr {
         rng.fill_bytes(&mut message);
         let seed = Randomness::from(rng.gen::<[u8; 32]>());
 
+        let taproot_tree_root = {
+            if alg == AlgorithmId::ThresholdSchnorrBip340 {
+                let choose = rng.gen::<u8>();
+                if choose <= 128 {
+                    None
+                } else if choose <= 192 {
+                    Some(vec![])
+                } else {
+                    Some(rng.gen::<[u8; 32]>().to_vec())
+                }
+            } else {
+                None
+            }
+        };
+
         let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
         let tsig_inputs = generate_tschnorr_protocol_inputs(
             &env,
@@ -3003,6 +3001,7 @@ pub mod schnorr {
             &key_transcript,
             &message,
             seed,
+            taproot_tree_root.as_deref(),
             &derivation_path,
             alg,
             rng,

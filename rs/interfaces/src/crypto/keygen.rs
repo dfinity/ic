@@ -20,11 +20,10 @@ pub trait KeyManager {
     /// 3. the secret key store contains all corresponding secret keys.
     ///
     /// Returns the status of the public keys as follows:
-    /// * [`AllKeysRegistered`]:
-    /// Registry contains all required public keys and
-    /// secret key store contains all corresponding secret keys.
+    /// * [`AllKeysRegistered`]: Registry contains all required public keys and
+    ///   secret key store contains all corresponding secret keys.
     ///
-    /// [`AllKeysRegistered`]: PublicKeyRegistrationStatus::AllKeysRegistered
+    /// * [`AllKeysRegistered`]: PublicKeyRegistrationStatus::AllKeysRegistered
     ///
     /// # Errors
     /// * [`CheckKeysWithRegistryError::PublicKeyNotFound`] in case a public key of the node was
@@ -73,7 +72,7 @@ pub trait KeyManager {
     ) -> Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError>;
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CheckKeysWithRegistryError {
     /// Public key for given (entity, purpose) pair not found at given registry
     /// version.
@@ -122,7 +121,7 @@ impl From<CryptoError> for CheckKeysWithRegistryError {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum KeyRotationOutcome {
     KeyRotated { new_key: PublicKeyProto },
     KeyNotRotated { existing_key: PublicKeyProto },
@@ -139,7 +138,7 @@ impl From<KeyRotationOutcome> for PublicKeyProto {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum IDkgKeyRotationResult {
     /// If no key rotation is necessary because the latest rotation was too recent
     LatestRotationTooRecent,

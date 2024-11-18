@@ -1,8 +1,10 @@
 mod manage_canister {
-    use crate::scheduler::test_fixtures::{usdc, usdc_metadata, usdt, usdt_metadata};
+    use crate::scheduler::test_fixtures::{
+        usdc, usdc_metadata, usdc_token_id, usdt, usdt_metadata, usdt_token_id,
+    };
     use crate::state::test_fixtures::{expect_panic_with_message, new_state};
     use crate::state::{
-        Canisters, Index, Ledger, ManageSingleCanister, ManagedCanisterStatus, WasmHash,
+        Canisters, Index, Ledger, ManageSingleCanister, ManagedCanisterStatus, TokenId, WasmHash,
     };
     use candid::Principal;
     use std::fmt::Debug;
@@ -14,7 +16,7 @@ mod manage_canister {
         let usdc_index_canister_id = Principal::from_slice(&[1_u8; 29]);
         state.record_created_canister::<Index>(&usdc(), usdc_index_canister_id);
         assert_eq!(
-            state.managed_status::<Index>(&usdc()),
+            state.managed_status::<Index>(&usdc_token_id()),
             Some(&ManagedCanisterStatus::Created {
                 canister_id: usdc_index_canister_id
             })
@@ -23,7 +25,7 @@ mod manage_canister {
         assert_ne!(usdc_index_canister_id, usdc_ledger_canister_id);
         state.record_created_canister::<Ledger>(&usdc(), usdc_ledger_canister_id);
         assert_eq!(
-            state.managed_status::<Ledger>(&usdc()),
+            state.managed_status::<Ledger>(&usdc_token_id()),
             Some(&ManagedCanisterStatus::Created {
                 canister_id: usdc_ledger_canister_id
             })
@@ -33,7 +35,7 @@ mod manage_canister {
         let usdt_ledger_canister_id = Principal::from_slice(&[3_u8; 29]);
         state.record_created_canister::<Ledger>(&usdt(), usdt_ledger_canister_id);
         assert_eq!(
-            state.managed_status::<Ledger>(&usdt()),
+            state.managed_status::<Ledger>(&usdt_token_id()),
             Some(&ManagedCanisterStatus::Created {
                 canister_id: usdt_ledger_canister_id
             })
@@ -41,7 +43,7 @@ mod manage_canister {
         let usdt_index_canister_id = Principal::from_slice(&[4_u8; 29]);
         state.record_created_canister::<Index>(&usdt(), usdt_index_canister_id);
         assert_eq!(
-            state.managed_status::<Index>(&usdt()),
+            state.managed_status::<Index>(&usdt_token_id()),
             Some(&ManagedCanisterStatus::Created {
                 canister_id: usdt_index_canister_id
             })
@@ -57,20 +59,21 @@ mod manage_canister {
             let mut state = new_state();
             let canister_id = Principal::from_slice(&[1_u8; 29]);
             let contract = usdc();
+            let token_id = TokenId::from(contract.clone());
 
-            assert_eq!(state.managed_status::<C>(&contract), None);
+            assert_eq!(state.managed_status::<C>(&token_id), None);
 
             state.record_new_erc20_token(contract.clone(), usdc_metadata());
             state.record_created_canister::<C>(&contract, canister_id);
             assert_eq!(
-                state.managed_status::<C>(&contract),
+                state.managed_status::<C>(&token_id),
                 Some(&ManagedCanisterStatus::Created { canister_id })
             );
 
             let wasm_hash = WasmHash::from([1_u8; 32]);
             state.record_installed_canister::<C>(&contract, wasm_hash.clone());
             assert_eq!(
-                state.managed_status::<C>(&contract),
+                state.managed_status::<C>(&token_id),
                 Some(&ManagedCanisterStatus::Installed {
                     canister_id,
                     installed_wasm_hash: wasm_hash,
@@ -153,6 +156,163 @@ mod manage_canister {
     }
 }
 
+mod installed_ledger_suite {
+    use crate::candid::InstalledLedgerSuite as CandidInstalledLedgerSuite;
+    use crate::scheduler::test_fixtures::{usdc, usdc_metadata, usdt, usdt_metadata};
+    use crate::state::test_fixtures::new_state;
+    use crate::state::{
+        Index, InstalledLedgerSuite, InvalidManageInstalledCanistersError, Ledger, State,
+        TokenSymbol,
+    };
+    use assert_matches::assert_matches;
+    use candid::Principal;
+    use maplit::btreeset;
+
+    #[test]
+    fn should_fail_when_same_wasm_hash() {
+        let state = new_state();
+        let mut cketh = cketh_installed_canisters();
+        cketh.index.installed_wasm_hash = cketh.ledger.installed_wasm_hash.clone();
+
+        let result = InstalledLedgerSuite::validate(&state, cketh);
+
+        assert_matches!(
+            result,
+            Err(InvalidManageInstalledCanistersError::WasmHashError(_))
+        )
+    }
+
+    #[test]
+    fn should_fail_when_token_symbol_already_managed() {
+        let mut state = new_state();
+        let registered_canisters = validated_cketh_canisters();
+        state.record_manage_other_canisters(registered_canisters.clone());
+        let cketh = cketh_installed_canisters();
+
+        let result = InstalledLedgerSuite::validate(&state, cketh);
+
+        assert_eq!(
+            result,
+            Err(InvalidManageInstalledCanistersError::TokenAlreadyManaged(
+                registered_canisters.token_symbol
+            ))
+        )
+    }
+
+    #[test]
+    fn should_fail_when_principal_already_managed() {
+        let mut state = new_state();
+        let [usdc_index_canister_id, usdc_ledger_canister_id] = add_usdc_ledger_suite(&mut state);
+        let [usdt_index_canister_id, usdt_ledger_canister_id] = add_usdt_ledger_suite(&mut state);
+
+        for id in [
+            usdc_index_canister_id,
+            usdc_ledger_canister_id,
+            usdt_index_canister_id,
+            usdt_ledger_canister_id,
+        ] {
+            let mut cketh = cketh_installed_canisters();
+            cketh.ledger.canister_id = id;
+            let result = InstalledLedgerSuite::validate(&state, cketh);
+            assert_eq!(
+                result,
+                Err(InvalidManageInstalledCanistersError::AlreadyManagedPrincipals(btreeset! {id}))
+            );
+
+            let mut cketh = cketh_installed_canisters();
+            cketh.index.canister_id = id;
+            let result = InstalledLedgerSuite::validate(&state, cketh);
+            assert_eq!(
+                result,
+                Err(InvalidManageInstalledCanistersError::AlreadyManagedPrincipals(btreeset! {id}))
+            );
+
+            let mut cketh = cketh_installed_canisters();
+            if let Some(archives) = &mut cketh.archives {
+                archives.push(id);
+            }
+            let result = InstalledLedgerSuite::validate(&state, cketh);
+            assert_eq!(
+                result,
+                Err(InvalidManageInstalledCanistersError::AlreadyManagedPrincipals(btreeset! {id}))
+            );
+        }
+    }
+
+    #[test]
+    fn should_validate() {
+        let mut state = new_state();
+        let cketh = cketh_installed_canisters();
+        let expected_cketh = validated_cketh_canisters();
+
+        assert_eq!(
+            InstalledLedgerSuite::validate(&state, cketh.clone()),
+            Ok(expected_cketh.clone())
+        );
+
+        add_usdc_ledger_suite(&mut state);
+        assert_eq!(
+            InstalledLedgerSuite::validate(&state, cketh.clone()),
+            Ok(expected_cketh.clone())
+        );
+
+        add_usdt_ledger_suite(&mut state);
+        assert_eq!(
+            InstalledLedgerSuite::validate(&state, cketh),
+            Ok(expected_cketh)
+        );
+    }
+
+    fn cketh_installed_canisters() -> CandidInstalledLedgerSuite {
+        use crate::candid::InstalledCanister;
+
+        CandidInstalledLedgerSuite {
+            token_symbol: "ckETH".to_string(),
+            ledger: InstalledCanister {
+                canister_id: "ss2fx-dyaaa-aaaar-qacoq-cai".parse().unwrap(),
+                installed_wasm_hash:
+                    "8457289d3b3179aa83977ea21bfa2fc85e402e1f64101ecb56a4b963ed33a1e6".to_string(),
+            },
+            index: InstalledCanister {
+                canister_id: "s3zol-vqaaa-aaaar-qacpa-cai".parse().unwrap(),
+                installed_wasm_hash:
+                    "eb3096906bf9a43996d2ca9ca9bfec333a402612f132876c8ed1b01b9844112a".to_string(),
+            },
+            archives: Some(vec!["xob7s-iqaaa-aaaar-qacra-cai".parse().unwrap()]),
+        }
+    }
+
+    fn validated_cketh_canisters() -> InstalledLedgerSuite {
+        let cketh = cketh_installed_canisters();
+        InstalledLedgerSuite {
+            token_symbol: TokenSymbol::from(cketh.token_symbol),
+            ledger: cketh.ledger.canister_id,
+            ledger_wasm_hash: cketh.ledger.installed_wasm_hash.parse().unwrap(),
+            index: cketh.index.canister_id,
+            index_wasm_hash: cketh.index.installed_wasm_hash.parse().unwrap(),
+            archives: cketh.archives.unwrap(),
+        }
+    }
+
+    fn add_usdc_ledger_suite(state: &mut State) -> [Principal; 2] {
+        state.record_new_erc20_token(usdc(), usdc_metadata());
+        let usdc_index_canister_id = Principal::from_slice(&[1_u8; 29]);
+        state.record_created_canister::<Index>(&usdc(), usdc_index_canister_id);
+        let usdc_ledger_canister_id = Principal::from_slice(&[2_u8; 29]);
+        state.record_created_canister::<Ledger>(&usdc(), usdc_ledger_canister_id);
+        [usdc_index_canister_id, usdc_ledger_canister_id]
+    }
+
+    fn add_usdt_ledger_suite(state: &mut State) -> [Principal; 2] {
+        state.record_new_erc20_token(usdt(), usdt_metadata());
+        let usdt_index_canister_id = Principal::from_slice(&[3_u8; 29]);
+        state.record_created_canister::<Index>(&usdt(), usdt_index_canister_id);
+        let usdt_ledger_canister_id = Principal::from_slice(&[4_u8; 29]);
+        state.record_created_canister::<Ledger>(&usdt(), usdt_ledger_canister_id);
+        [usdt_index_canister_id, usdt_ledger_canister_id]
+    }
+}
+
 mod wasm_hash {
     use crate::state::WasmHash;
     use assert_matches::assert_matches;
@@ -210,13 +370,11 @@ mod git_commit_hash {
 }
 
 mod validate_config {
-    use crate::candid::{CyclesManagement, InitArg};
+    use crate::candid::InitArg;
+    use crate::state::test_fixtures::{arb_init_arg, arb_principal};
     use crate::state::{InvalidStateError, State};
-    use candid::Principal;
-    use proptest::arbitrary::any;
-    use proptest::collection::{vec, SizeRange};
-    use proptest::prelude::Strategy;
-    use proptest::{option, proptest};
+    use proptest::collection::vec;
+    use proptest::proptest;
 
     proptest! {
         #[test]
@@ -239,44 +397,122 @@ mod validate_config {
            assert_eq!(result, Err(InvalidStateError::TooManyAdditionalControllers{max: 9, actual: additional_controllers.len()}));
         }
     }
+}
 
-    pub fn arb_init_arg(size: impl Into<SizeRange>) -> impl Strategy<Value = InitArg> {
-        // at most 10 principals, including the orchestrator's principal
-        (
-            vec(arb_principal(), size),
-            option::of(arb_principal()),
-            option::of(arb_cycles_management()),
-        )
-            .prop_map(
-                |(more_controller_ids, minter_id, cycles_management)| InitArg {
-                    more_controller_ids,
-                    minter_id,
-                    cycles_management,
-                },
-            )
+mod schema_upgrades {
+    use crate::candid::CyclesManagement;
+    use crate::scheduler::test_fixtures::{
+        cketh_ledger_suite, cketh_token_symbol, usdc, usdc_ledger_suite,
+    };
+    use crate::scheduler::Task;
+    use crate::state::test_fixtures::arb_state;
+    use crate::state::{
+        decode, encode, Canisters, CanistersMetadata, Erc20Token, IndexCanister, LedgerCanister,
+        LedgerSuiteVersion, ManagedCanisters, State,
+    };
+    use candid::{Deserialize, Principal};
+    use proptest::proptest;
+    use serde::Serialize;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    #[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
+    pub struct ManagedCanistersPreviousVersion {
+        canisters: BTreeMap<Erc20Token, CanistersPreviousVersion>,
     }
 
-    fn arb_principal() -> impl Strategy<Value = Principal> {
-        vec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
+    impl From<ManagedCanisters> for ManagedCanistersPreviousVersion {
+        fn from(value: ManagedCanisters) -> Self {
+            ManagedCanistersPreviousVersion {
+                canisters: value
+                    .canisters
+                    .into_iter()
+                    .map(|(k, v)| (k, v.into()))
+                    .collect(),
+            }
+        }
     }
 
-    fn arb_cycles_management() -> impl Strategy<Value = CyclesManagement> {
-        (arb_nat(), arb_nat(), arb_nat(), arb_nat()).prop_map(
-            |(
-                cycles_for_ledger_creation,
-                cycles_for_archive_creation,
-                cycles_for_index_creation,
-                cycles_top_up_increment,
-            )| CyclesManagement {
-                cycles_for_ledger_creation,
-                cycles_for_archive_creation,
-                cycles_for_index_creation,
-                cycles_top_up_increment,
-            },
-        )
+    #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+    pub struct CanistersPreviousVersion {
+        pub ledger: Option<LedgerCanister>,
+        pub index: Option<IndexCanister>,
+        pub archives: Vec<Principal>,
+        pub metadata: CanistersMetadataPreviousVersion,
     }
 
-    fn arb_nat() -> impl Strategy<Value = candid::Nat> {
-        any::<u64>().prop_map(candid::Nat::from)
+    impl From<Canisters> for CanistersPreviousVersion {
+        fn from(value: Canisters) -> Self {
+            CanistersPreviousVersion {
+                ledger: value.ledger,
+                index: value.index,
+                archives: value.archives,
+                metadata: value.metadata.into(),
+            }
+        }
+    }
+
+    #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+    pub struct CanistersMetadataPreviousVersion {
+        pub ckerc20_token_symbol: String,
+    }
+
+    impl From<CanistersMetadata> for CanistersMetadataPreviousVersion {
+        fn from(value: CanistersMetadata) -> Self {
+            CanistersMetadataPreviousVersion {
+                ckerc20_token_symbol: value.token_symbol,
+            }
+        }
+    }
+
+    #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+    pub struct StatePreviousVersion {
+        managed_canisters: ManagedCanistersPreviousVersion,
+        cycles_management: CyclesManagement,
+        more_controller_ids: Vec<Principal>,
+        minter_id: Option<Principal>,
+        /// Locks preventing concurrent execution timer tasks
+        pub active_tasks: BTreeSet<Task>,
+        #[serde(default)]
+        ledger_suite_version: Option<LedgerSuiteVersion>,
+    }
+
+    impl From<State> for StatePreviousVersion {
+        fn from(
+            State {
+                managed_canisters,
+                cycles_management,
+                more_controller_ids,
+                minter_id,
+                active_tasks,
+                ledger_suite_version,
+            }: State,
+        ) -> Self {
+            Self {
+                managed_canisters: managed_canisters.into(),
+                cycles_management,
+                more_controller_ids,
+                minter_id,
+                active_tasks,
+                ledger_suite_version,
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn should_be_able_to_upgrade_state(mut state in arb_state()) {
+            state.managed_canisters.canisters.insert(usdc(), usdc_ledger_suite());
+            state.managed_canisters.other_canisters.insert(cketh_token_symbol(), cketh_ledger_suite());
+            let state_before_upgrade: StatePreviousVersion = state.into();
+
+            let serialized_state_before_upgrade = encode(&state_before_upgrade);
+            let state_after_upgrade: State = decode(serialized_state_before_upgrade.as_slice());
+
+            assert_eq!(state_before_upgrade, state_after_upgrade.clone().into());
+            assert_eq!(
+                state_after_upgrade.ledger_suite_version,
+                None
+            );
+        }
     }
 }

@@ -5,7 +5,7 @@ use crate::canister_http::CanisterHttpResponseMetadata;
 use crate::consensus::{
     certification::CertificationContent,
     dkg::DealingContent,
-    idkg::{EcdsaComplaintContent, EcdsaOpeningContent},
+    idkg::{IDkgComplaintContent, IDkgOpeningContent},
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
     NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
@@ -61,8 +61,8 @@ mod private {
     impl SignatureDomainSeal for FinalizationContent {}
     impl SignatureDomainSeal for IDkgDealing {}
     impl SignatureDomainSeal for SignedIDkgDealing {}
-    impl SignatureDomainSeal for EcdsaComplaintContent {}
-    impl SignatureDomainSeal for EcdsaOpeningContent {}
+    impl SignatureDomainSeal for IDkgComplaintContent {}
+    impl SignatureDomainSeal for IDkgOpeningContent {}
     impl SignatureDomainSeal for WebAuthnEnvelope {}
     impl SignatureDomainSeal for Delegation {}
     impl SignatureDomainSeal for CanisterHttpResponseMetadata {}
@@ -120,15 +120,15 @@ impl SignatureDomain for SignedIDkgDealing {
     }
 }
 
-impl SignatureDomain for EcdsaComplaintContent {
+impl SignatureDomain for IDkgComplaintContent {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DomainSeparator::EcdsaComplaintContent.as_str())
+        domain_with_prepended_length(DomainSeparator::IDkgComplaintContent.as_str())
     }
 }
 
-impl SignatureDomain for EcdsaOpeningContent {
+impl SignatureDomain for IDkgOpeningContent {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DomainSeparator::EcdsaOpeningContent.as_str())
+        domain_with_prepended_length(DomainSeparator::IDkgOpeningContent.as_str())
     }
 }
 
@@ -219,7 +219,7 @@ fn domain_with_prepended_length(domain: &str) -> Vec<u8> {
 /// Ideally, this struct would be annotated with `#[cfg(test)]` so that it is
 /// only available in test code, however, then it would not be visible outside
 /// of this crate where it is needed.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct SignableMock {
     pub domain: Vec<u8>,
     pub signed_bytes_without_domain: Vec<u8>,

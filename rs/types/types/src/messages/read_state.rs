@@ -9,7 +9,7 @@ use ic_crypto_tree_hash::Path;
 use std::convert::TryFrom;
 
 /// A `read_state` request sent from the user.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ReadState {
     pub source: UserId,
     pub paths: Vec<Path>,

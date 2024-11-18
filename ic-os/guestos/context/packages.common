@@ -5,13 +5,14 @@
 # image only.
 
 # Need kernel to boot anything
-linux-image-virtual-hwe-20.04
+linux-image-virtual-hwe-24.04
 initramfs-tools
 
 # Need systemd for boot process
 systemd
 systemd-sysv
 systemd-journal-remote
+systemd-resolved
 
 # Third-party services we will be running
 chrony
@@ -49,6 +50,9 @@ udev
 usbutils
 xfsprogs
 zstd
+
+# Required for API boundary nodes to enable IPv4 HTTP outcalls
+dante-server
 
 # This is unclear -- why is this here? This should "probably" be dev tool.
 protobuf-compiler

@@ -1924,7 +1924,7 @@ impl_debug_using_serialize_for!(G2Affine);
 impl_debug_using_serialize_for!(G2Projective);
 
 /// An element of the group Gt
-#[derive(Clone, Debug, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Eq, PartialEq, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct Gt {
     value: ic_bls12_381::Gt,
 }

@@ -25,7 +25,7 @@ use std::time::Instant;
 pub const HEIGHT_CONSIDERED_BEHIND: Height = Height::new(20);
 
 /// Validated artifact
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct ValidatedArtifact<T> {
     pub msg: T,
     pub timestamp: Time,
@@ -37,11 +37,11 @@ impl<T> AsRef<T> for ValidatedArtifact<T> {
     }
 }
 
-pub type ChangeSet = Vec<ChangeAction>;
+pub type Mutations = Vec<ChangeAction>;
 
 /// Change actions applicable to the consensus pool.
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum ChangeAction {
     /// Add the given artifact to the validated section of the pool.
     AddToValidated(ValidatedConsensusArtifact),
@@ -66,13 +66,14 @@ pub enum ChangeAction {
 }
 
 /// A type of consensus artifact which can be selectively deleted from the consensus pool.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum PurgeableArtifactType {
     NotarizationShare,
     FinalizationShare,
+    EquivocationProof,
 }
 
-impl From<ChangeAction> for ChangeSet {
+impl From<ChangeAction> for Mutations {
     fn from(action: ChangeAction) -> Self {
         vec![action]
     }
@@ -83,13 +84,13 @@ pub trait ChangeSetOperation: Sized {
     /// Conditional composition when self is empty. Similar to Option::or_else.
     fn or_else<F: FnOnce() -> Self>(self, f: F) -> Self;
     /// Append a change action only when it is not a duplicate of what already
-    /// exists in the ChangeSet. Return the rejected action as error when it
+    /// exists in the Mutations. Return the rejected action as error when it
     /// is considered as duplicate.
     fn dedup_push(&mut self, action: ChangeAction) -> Result<(), ChangeAction>;
 }
 
-impl ChangeSetOperation for ChangeSet {
-    fn or_else<F: FnOnce() -> ChangeSet>(self, f: F) -> ChangeSet {
+impl ChangeSetOperation for Mutations {
+    fn or_else<F: FnOnce() -> Mutations>(self, f: F) -> Mutations {
         if self.is_empty() {
             f()
         } else {
@@ -166,7 +167,7 @@ impl TryFrom<pb::ValidatedConsensusArtifact> for ValidatedConsensusArtifact {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct HeightRange {
     pub min: Height,
     pub max: Height,
@@ -424,7 +425,7 @@ pub trait ConsensusBlockChain: Send + Sync {
     fn len(&self) -> usize;
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ConsensusBlockChainErr {
     BlockNotFound(Height),
 }

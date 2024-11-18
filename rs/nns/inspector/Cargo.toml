@@ -5,15 +5,15 @@ edition = "2021"
 
 
 [dependencies]
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 csv = "1.1"
 hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-nns-constants = { path = "../constants" }
-ic-nns-governance = { path = "../governance" }
+ic-nns-governance-api = { path = "../governance/api" }
 ic-nns-gtc = { path = "../gtc" }
-icp-ledger = { path = "../../rosetta-api/icp_ledger" }
-ledger-canister = { path = "../../rosetta-api/icp_ledger/ledger" }
+icp-ledger = { path = "../../ledger_suite/icp" }
+ledger-canister = { path = "../../ledger_suite/icp/ledger" }
 prost = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }

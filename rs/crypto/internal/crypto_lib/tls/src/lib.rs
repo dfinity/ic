@@ -29,7 +29,7 @@ pub struct TlsEd25519CertificateDerBytes {
 }
 
 /// The generation of a TLS key pair and X.509 certificate failed.
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum TlsKeyPairAndCertGenerationError {
     InvalidArguments(String),
     InternalError(String),

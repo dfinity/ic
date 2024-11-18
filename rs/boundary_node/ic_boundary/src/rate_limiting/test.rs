@@ -1,9 +1,9 @@
 use super::*;
+
 use anyhow::Error;
 use axum::{
     body::Body,
-    extract::ConnectInfo,
-    http::Request,
+    extract::Request,
     middleware::Next,
     middleware::{self},
     response::IntoResponse,
@@ -11,23 +11,33 @@ use axum::{
     Router,
 };
 use http::StatusCode;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use ic_bn_lib::http::ConnInfo;
+use ic_types::{
+    messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},
+    CanisterId,
+};
 use tower::Service;
 
-use crate::{routes::test::test_route_subnet_with_id, socket::TcpConnectInfo};
+use crate::{
+    routes::{test::test_route_subnet_with_id, ApiError},
+    test_utils::setup_test_router,
+};
 
 async fn dummy_call(_request: Request<Body>) -> Result<impl IntoResponse, ApiError> {
     Ok("foo".into_response())
 }
 
 async fn body_to_subnet_context(
-    request: Request<Body>,
-    next: Next<Body>,
+    request: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     let (parts, body) = request.into_parts();
-    let body_vec = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    let body_vec = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let subnet_id = String::from_utf8(body_vec.clone()).unwrap();
-    let mut request = Request::from_parts(parts, hyper::Body::from(body_vec));
+    let mut request = Request::from_parts(parts, axum::body::Body::from(body_vec));
     request
         .extensions_mut()
         .insert(Arc::new(test_route_subnet_with_id(subnet_id, 0)));
@@ -36,15 +46,12 @@ async fn body_to_subnet_context(
 }
 
 async fn add_ip_to_request(
-    mut request: Request<Body>,
-    next: Next<Body>,
+    mut request: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     request
         .extensions_mut()
-        .insert(ConnectInfo(TcpConnectInfo(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            8080,
-        ))));
+        .insert(Arc::new(ConnInfo::default()));
     let resp = next.run(request).await;
     Ok(resp)
 }
@@ -132,6 +139,114 @@ async fn test_subnet_rate_limit() -> Result<(), Error> {
     assert_eq!(response4.status(), StatusCode::OK);
     assert_eq!(response5.status(), StatusCode::TOO_MANY_REQUESTS);
     assert_eq!(response6.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_subnet_rate_limit_with_router() -> Result<(), Error> {
+    let (mut app, _) = setup_test_router(false, false, 10, 1, 1024, Some(1));
+
+    let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
+    let canister_id = CanisterId::from_u64(100);
+
+    let content = HttpCallContent::Call {
+        update: HttpCanisterUpdate {
+            canister_id: Blob(canister_id.get().as_slice().to_vec()),
+            method_name: "foobar".to_string(),
+            arg: Blob(vec![]),
+            sender: Blob(sender.as_slice().to_vec()),
+            nonce: None,
+            ingress_expiry: 1234,
+        },
+    };
+
+    let envelope = HttpRequestEnvelope::<HttpCallContent> {
+        content,
+        sender_delegation: None,
+        sender_pubkey: None,
+        sender_sig: None,
+    };
+
+    let body = serde_cbor::to_vec(&envelope).unwrap();
+
+    // Test call #1 (should work)
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!(
+            "http://localhost/api/v2/canister/{canister_id}/call"
+        ))
+        .body(Body::from(body.clone()))
+        .unwrap();
+
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+    // Test call #2 (should fail)
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!(
+            "http://localhost/api/v2/canister/{canister_id}/call"
+        ))
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_subnet_rate_limit_with_router_v3() -> Result<(), Error> {
+    let (mut app, _) = setup_test_router(false, false, 10, 1, 1024, Some(1));
+
+    let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
+    let canister_id = CanisterId::from_u64(100);
+
+    let content = HttpCallContent::Call {
+        update: HttpCanisterUpdate {
+            canister_id: Blob(canister_id.get().as_slice().to_vec()),
+            method_name: "foobar".to_string(),
+            arg: Blob(vec![]),
+            sender: Blob(sender.as_slice().to_vec()),
+            nonce: None,
+            ingress_expiry: 1234,
+        },
+    };
+
+    let envelope = HttpRequestEnvelope::<HttpCallContent> {
+        content,
+        sender_delegation: None,
+        sender_pubkey: None,
+        sender_sig: None,
+    };
+
+    let body = serde_cbor::to_vec(&envelope).unwrap();
+
+    // Test call #1 (should work)
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!(
+            "http://localhost/api/v3/canister/{canister_id}/call"
+        ))
+        .body(Body::from(body.clone()))
+        .unwrap();
+
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+    // Test call #2 (should fail)
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!(
+            "http://localhost/api/v3/canister/{canister_id}/call"
+        ))
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
 
     Ok(())
 }

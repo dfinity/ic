@@ -1,12 +1,13 @@
 use assert_matches::assert_matches;
 use candid::Encode;
+use ic_config::execution_environment::DEFAULT_WASM_MEMORY_LIMIT;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::Config;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types::{
     self as ic00, CanisterChange, CanisterIdRecord, CanisterInstallMode,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, EmptyBlob,
-    InstallCodeArgs, LogVisibility, Method, Payload, UpdateSettingsArgs, IC_00,
+    InstallCodeArgs, Method, Payload, UpdateSettingsArgs, IC_00,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replica_tests as utils;
@@ -712,14 +713,15 @@ fn can_get_canister_information() {
                 None,
                 2592000,
                 Some(5_000_000_000_000u128),
-                LogVisibility::default(),
+                Default::default(),
                 0u128,
                 0u128,
                 0u128,
                 0u128,
                 0u128,
                 0u128,
-                Some(0),
+                Some(DEFAULT_WASM_MEMORY_LIMIT.get()),
+                0u64,
             )
         );
 
@@ -759,7 +761,7 @@ fn can_get_canister_information() {
             Ok(WasmResult::Reply(res)) => assert_canister_status_result_equals(
                 CanisterStatusResultV2::new(
                     CanisterStatusType::Running,
-                    Some(ic_crypto_sha2::Sha256::hash(UNIVERSAL_CANISTER_WASM).to_vec()),
+                    Some(ic_crypto_sha2::Sha256::hash(&UNIVERSAL_CANISTER_WASM).to_vec()),
                     canister_a.get(),
                     vec![canister_a.get()],
                     // We don't assert a specific memory size since the universal canister's
@@ -770,14 +772,15 @@ fn can_get_canister_information() {
                     None,
                     259200,
                     None,
-                    LogVisibility::default(),
+                    Default::default(),
                     0u128,
                     0u128,
                     0u128,
                     0u128,
                     0u128,
                     0u128,
-                    Some(0)
+                    Some(DEFAULT_WASM_MEMORY_LIMIT.get()),
+                    0u64,
                 ),
                 CanisterStatusResultV2::decode(&res).unwrap(),
                 2 * BALANCE_EPSILON,
@@ -967,7 +970,7 @@ fn test_canister_skip_upgrade() {
         assert_matches!(
             canister.update(wasm().call(management::install_code(
                 canister_id,
-                UNIVERSAL_CANISTER_WASM
+                &*UNIVERSAL_CANISTER_WASM
             ))),
             Ok(WasmResult::Reply(_))
         );
@@ -985,7 +988,7 @@ fn test_canister_skip_upgrade() {
         // Upgrade without skipping pre_upgrade should fail.
         assert_matches!(
             canister.update(wasm().call(
-                management::install_code(canister_id, UNIVERSAL_CANISTER_WASM).with_mode(
+                management::install_code(canister_id, &*UNIVERSAL_CANISTER_WASM).with_mode(
                     management::InstallMode::Upgrade(Some(CanisterUpgradeOptions {
                         skip_pre_upgrade: Some(false),
                         wasm_memory_persistence: None,
@@ -998,7 +1001,7 @@ fn test_canister_skip_upgrade() {
         // Upgrade with skipping pre upgrade should succeed.
         assert_matches!(
             canister.update(wasm().call(
-                management::install_code(canister_id, UNIVERSAL_CANISTER_WASM).with_mode(
+                management::install_code(canister_id, &*UNIVERSAL_CANISTER_WASM).with_mode(
                     management::InstallMode::Upgrade(Some(CanisterUpgradeOptions {
                         skip_pre_upgrade: Some(true),
                         wasm_memory_persistence: None,
@@ -1012,7 +1015,7 @@ fn test_canister_skip_upgrade() {
         // and it should succeed since there's a no-op pre_ugprade method after the upgrade.
         assert_matches!(
             canister.update(wasm().call(
-                management::install_code(canister_id, UNIVERSAL_CANISTER_WASM).with_mode(
+                management::install_code(canister_id, &*UNIVERSAL_CANISTER_WASM).with_mode(
                     management::InstallMode::Upgrade(Some(CanisterUpgradeOptions {
                         skip_pre_upgrade: Some(false),
                         wasm_memory_persistence: None,

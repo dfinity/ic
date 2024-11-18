@@ -29,12 +29,12 @@ def image_deps(mode, _malicious = False):
         "bootfs": {},
         "rootfs": {
             # additional files to install
-            "//publish/binaries:vsock_host": "/opt/ic/bin/vsock_host:0755",
-            "//publish/binaries:hostos_tool": "/opt/ic/bin/hostos_tool:0755",
-            "//publish/binaries:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
+            "//rs/ic_os/release:vsock_host": "/opt/ic/bin/vsock_host:0755",
+            "//rs/ic_os/release:hostos_tool": "/opt/ic/bin/hostos_tool:0755",
+            "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
 
             # additional libraries to install
-            "//publish/binaries:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",
+            "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",
         },
 
         # Set various configuration values
@@ -76,6 +76,9 @@ def image_deps(mode, _malicious = False):
     }
 
     deps.update(image_variants[mode])
+
+    if "dev" in mode:
+        deps["rootfs"].update({"//ic-os/components:hostos-scripts/generate-guestos-config/dev-generate-guestos-config.sh": "/opt/ic/bin/generate-guestos-config.sh:0755"})
 
     return deps
 

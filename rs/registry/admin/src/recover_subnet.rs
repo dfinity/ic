@@ -19,7 +19,7 @@ use url::Url;
 
 /// Sub-command to submit a proposal to update the recovery CUP of a subnet.
 #[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
+#[derive(Parser, ProposalMetadata)]
 pub(crate) struct ProposeToUpdateRecoveryCupCmd {
     #[clap(long, required = true, alias = "subnet-index")]
     /// The targeted subnet.
@@ -37,7 +37,7 @@ pub(crate) struct ProposeToUpdateRecoveryCupCmd {
     /// The hash of the state
     pub state_hash: String,
 
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     /// Replace the members of the given subnet with these nodes
     pub replacement_nodes: Option<Vec<PrincipalId>>,
 

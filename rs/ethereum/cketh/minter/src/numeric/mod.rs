@@ -1,10 +1,13 @@
 //! Numeric types for Ethereum.
 
+mod range;
 #[cfg(test)]
 mod tests;
 
 use crate::checked_amount::CheckedAmountOf;
 use phantom_newtype::Id;
+
+pub use range::BlockRangeInclusive;
 
 pub enum WeiTag {}
 pub type Wei = CheckedAmountOf<WeiTag>;
@@ -59,6 +62,13 @@ pub type LedgerMintIndex = Id<MintIndexTag, u64>;
 impl WeiPerGas {
     pub fn transaction_cost(self, gas: GasAmount) -> Option<Wei> {
         self.checked_mul(gas.into_inner())
+            .map(|value| value.change_units())
+    }
+}
+
+impl Wei {
+    pub fn into_wei_per_gas(self, gas: GasAmount) -> Option<WeiPerGas> {
+        self.checked_div_floor(gas.into_inner())
             .map(|value| value.change_units())
     }
 }

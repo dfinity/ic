@@ -24,14 +24,13 @@ use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
 };
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::driver::{
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::{
     test_env::TestEnv,
-    test_env_api::{retry_async, READY_WAIT_TIMEOUT, RETRY_BACKOFF},
+    test_env_api::{READY_WAIT_TIMEOUT, RETRY_BACKOFF},
 };
-use ic_tests::retry_with_msg_async;
-use ic_tests::systest;
-use ic_tests::util::block_on;
+use ic_system_test_driver::systest;
+use ic_system_test_driver::util::block_on;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::{info, Logger};
 
@@ -63,7 +62,7 @@ pub fn test(env: TestEnv) {
 }
 
 async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger: Logger) {
-    retry_with_msg_async!(
+    ic_system_test_driver::retry_with_msg_async!(
         format!(
             "calling send_request of proxy canister {} with URL {}",
             proxy_canister.canister_id(),

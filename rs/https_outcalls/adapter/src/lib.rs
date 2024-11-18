@@ -13,89 +13,46 @@ mod metrics;
 
 pub use cli::Cli;
 pub use config::{Config, IncomingSource};
-use reqwest::{header::HeaderMap, redirect::Policy, Client, Proxy, Url};
-pub use rpc_server::CanisterHttp;
 
-use futures::{Future, Stream};
-use ic_https_outcalls_service::canister_http_service_server::CanisterHttpServiceServer;
+use futures::StreamExt;
+use ic_async_utils::{incoming_from_first_systemd_socket, incoming_from_path};
+use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
+use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
+use rpc_server::CanisterHttp;
 use std::time::Duration;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tonic::transport::{
-    server::{Connected, Router},
-    Server,
-};
-use tower::layer::util::Identity;
-use tracing::info;
+use tonic::transport::Server;
 
-pub struct AdapterServer(Router<Identity>);
+pub fn start_server(
+    log: &ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+    rt_handle: &tokio::runtime::Handle,
+    config: config::Config,
+) {
+    let log = log.clone();
+    let metrics_registry = metrics_registry.clone();
+    let canister_http = CanisterHttp::new(config.clone(), log, &metrics_registry);
 
-impl AdapterServer {
-    pub fn new(config: Config, metrics: &MetricsRegistry) -> Self {
-        let timeout = Duration::from_secs(config.http_connect_timeout_secs);
+    let server = Server::builder()
+        .timeout(Duration::from_secs(config.http_request_timeout_secs))
+        .add_service(HttpsOutcallsServiceServer::new(canister_http));
 
-        // TODO: NET-1703
-        let socks_client = match config.socks_proxy.parse::<Url>() {
-            Ok(socks_url) => match Proxy::https(socks_url) {
-                Ok(proxy) => {
-                    let client = Client::builder()
-                        .proxy(proxy)
-                        .use_rustls_tls()
-                        .https_only(true)
-                        .http1_only()
-                        .redirect(Policy::none())
-                        .referer(false)
-                        .default_headers(HeaderMap::new())
-                        .connect_timeout(timeout)
-                        .build();
+    let incoming = match config.incoming_source {
+        IncomingSource::Path(uds_path) => incoming_from_path(uds_path).boxed(),
 
-                    if client.is_err() {
-                        info!(
-                            "Socks Client not created: Reqwest client builder failed: {:?}", client
-                        );
-                    }
+        IncomingSource::Systemd =>
+        // SAFETY: We are manged by systemd that is configured to pass socket as FD(3).
+        // Additionally, this is the only call to connect with the systemd socket and
+        // therefore we are sole owner.
+        {
+            unsafe { incoming_from_first_systemd_socket() }.boxed()
+        }
+    };
 
-                    client.ok()
-                }
-                Err(err) => {
-                    info!(
-                        "Socks Client not created: Failed to create https proxy: {:?}", err
-                    );
-                    None
-                }
-            },
-            Err(err) => {
-                info!(
-                    "Socks Client not created: Failed to parse socks url: {:?}", err
-                );
-                None
-            }
-        };
-
-        let https_client = Client::builder()
-            .use_rustls_tls()
-            .https_only(true)
-            .http1_only()
-            .redirect(Policy::none())
-            .referer(false)
-            .default_headers(HeaderMap::new())
-            .connect_timeout(timeout)
-            .build()
-            .expect("Failed to create HTTPS client");
-
-        let canister_http = CanisterHttp::new(https_client, socks_client, metrics);
-
-        Self(
-            Server::builder()
-                .timeout(Duration::from_secs(config.http_request_timeout_secs))
-                .add_service(CanisterHttpServiceServer::new(canister_http)),
-        )
-    }
-
-    pub fn serve<S: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static>(
-        self,
-        stream: impl Stream<Item = Result<S, std::io::Error>>,
-    ) -> impl Future<Output = Result<(), tonic::transport::Error>> {
-        self.0.serve_with_incoming(stream)
-    }
+    rt_handle.spawn(async move {
+        server
+            .serve_with_incoming(incoming)
+            .await
+            .expect("gRPC server crashed")
+    });
 }

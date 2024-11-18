@@ -9,15 +9,32 @@ type AccountState = record {
   has_forwarded : bool;
   icpts : nat32;
 };
-type NeuronId = record { id : nat64 };
-type Result = variant { Ok : vec NeuronId; Err : text };
-type Result_1 = variant { Ok; Err : text };
-type Result_2 = variant { Ok : AccountState; Err : text };
+
+type NeuronId = record {
+  id : nat64
+};
+
+type Result = variant {
+  Ok : vec NeuronId;
+  Err : text
+};
+
+type Result_1 = variant {
+  Ok;
+  Err : text
+};
+
+type Result_2 = variant {
+  Ok : AccountState;
+  Err : text
+};
+
 type TransferredNeuron = record {
   error : opt text;
   timestamp_seconds : nat64;
   neuron_id : opt NeuronId;
 };
+
 service : {
   balance : (text) -> (nat32) query;
   claim_neurons : (text) -> (Result);

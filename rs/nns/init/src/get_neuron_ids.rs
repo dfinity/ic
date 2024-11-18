@@ -1,4 +1,4 @@
-use ic_nns_governance::pb::v1::Governance as GovernanceProto;
+use ic_nns_governance_api::pb::v1::Governance as GovernanceProto;
 use prost::Message;
 use std::fs;
 

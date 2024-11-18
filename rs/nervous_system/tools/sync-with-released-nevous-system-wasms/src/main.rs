@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use futures::{stream, StreamExt};
 use ic_agent::Agent;
 use ic_base_types::CanisterId;
+use ic_nervous_system_agent::nns::sns_wasm;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
@@ -9,10 +10,8 @@ use ic_nns_constants::{
 };
 use std::env;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
-
-mod sns_wasm_utils;
 
 pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 8] = [
     ("registry", REGISTRY_CANISTER_ID),
@@ -84,7 +83,7 @@ async fn main() -> Result<()> {
         .into_iter()
         .collect::<Result<Vec<CanisterUpdate>>>()?;
 
-    let sns_upgrade_steps = sns_wasm_utils::query_sns_upgrade_steps(&agent).await?;
+    let sns_upgrade_steps = sns_wasm::query_mainline_sns_upgrade_steps(&agent).await?;
     let latest_sns_version = &sns_upgrade_steps
         .steps
         .last()
@@ -131,8 +130,7 @@ async fn main() -> Result<()> {
             .then(|(canister_name, hash, new_sha256)| async {
                 let canister_name = canister_name.to_string();
                 let new_git_hash =
-                    sns_wasm_utils::get_git_version_for_sns_hash(&agent, &ic_wasm_path, hash)
-                        .await?;
+                    sns_wasm::get_git_version_for_sns_hash(&agent, &ic_wasm_path, hash).await?;
 
                 Ok(CanisterUpdate {
                     canister_name,
@@ -167,7 +165,7 @@ fn get_agent(ic_url: &str) -> Result<Agent> {
         .map_err(|e| anyhow!(e))
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct CanisterUpdate {
     canister_name: String,
     new_git_hash: String,
@@ -175,7 +173,7 @@ struct CanisterUpdate {
 }
 
 fn update_mainnet_canisters_bzl_file(
-    workspace_file_path: &Path,
+    canisters_json: &Path,
     updates: Vec<CanisterUpdate>,
 ) -> Result<()> {
     if updates.is_empty() {
@@ -184,53 +182,32 @@ fn update_mainnet_canisters_bzl_file(
     }
 
     // Read the existing content of the file
-    let file = File::open(workspace_file_path)?;
+    let file = File::open(canisters_json)?;
     let reader = BufReader::new(file);
+    let orig: serde_json::Value =
+        serde_json::from_reader(reader).expect("Could not read canister data");
 
-    let mut new_content = Vec::new();
+    // The map containing canister data
+    let mut m = match orig {
+        serde_json::Value::Object(m) => m.clone(),
+        _ => panic!("Expected canister data to be a JSON map"),
+    };
 
-    let max_canister_name_len = updates
-        .iter()
-        .map(|update| update.canister_name.len())
-        .max()
-        .unwrap();
-
-    for line in reader.lines() {
-        let mut line = line?;
-
-        for update in &updates {
-            if line.contains(&format!(r#"    "{name}": "#, name = update.canister_name)) {
-                // If the canister_name matches, we store the context of what we'll update in the following lines
-                let new_line = format!(
-                    r#"    "{name}": ("{git_hash}", "{sha256}"),"#,
-                    name = update.canister_name,
-                    git_hash = update.new_git_hash,
-                    sha256 = update.new_sha256
-                );
-                if line != new_line {
-                    println!(
-                        "{name:>max_canister_name_len$} | updated",
-                        name = update.canister_name
-                    );
-                } else {
-                    println!(
-                        "{name:>max_canister_name_len$} | nothing to update",
-                        name = update.canister_name
-                    );
-                }
-                line = new_line;
-                break;
-            }
-        }
-
-        new_content.push(line);
+    // For each update, insert the new canister values into the map. Note that this
+    // does not remove e.g. outdated canisters.
+    for canister in &updates {
+        let rev = serde_json::Value::String(canister.new_git_hash.clone());
+        let sha256 = serde_json::Value::String(canister.new_sha256.clone());
+        let mut entry = serde_json::Map::new();
+        let _ = entry.insert("rev".to_string(), rev);
+        let _ = entry.insert("sha256".to_string(), sha256);
+        let entry = serde_json::Value::Object(entry);
+        let _prev = m.insert(canister.canister_name.clone(), entry);
     }
 
     // Write the new content back to the file
-    let mut file = File::create(workspace_file_path)?;
-    for line in &new_content {
-        writeln!(file, "{}", line)?;
-    }
+    let file = File::create(canisters_json)?;
+    serde_json::to_writer_pretty(file, &m).unwrap();
 
     Ok(())
 }

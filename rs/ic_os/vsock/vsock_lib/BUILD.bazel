@@ -1,17 +1,18 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:anyhow",
+    "@crate_index//:regex",
+    "@crate_index//:reqwest",
     "@crate_index//:rusb",
-    "@crate_index//:serde_json",
     "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:sha2",
     "@crate_index//:tempfile",
     "@crate_index//:vsock",
-    "@crate_index//:sha2",
-    "@crate_index//:reqwest",
-    "@crate_index//:regex",
-    "@crate_index//:anyhow",
 ]
 
 MACRO_DEPENDENCIES = []

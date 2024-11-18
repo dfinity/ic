@@ -3,12 +3,13 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-client:icrc_ledger_client",
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/ledger_suite/common/ledger_core",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proxied_canister_calls_tracker",
     "//rs/nervous_system/runtime",
-    "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
@@ -27,12 +28,13 @@ DEV_DEPENDENCIES = DEPENDENCIES + [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
 rust_library(
     name = "clients",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_nervous_system_clients",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.0.1",

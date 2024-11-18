@@ -7,9 +7,11 @@ package(default_visibility = [
     "//rs/http_endpoints:__subpackages__",
     "//rs/pocket_ic_server:__subpackages__",
     "//rs/replica:__subpackages__",
+    "//rs/state_machine_tests:__subpackages__",
 ])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/async_utils",
     "//rs/certification",
     "//rs/config",
@@ -33,8 +35,8 @@ DEPENDENCIES = [
     "//rs/validator",
     "@crate_index//:askama",
     "@crate_index//:axum",
-    "@crate_index//:bytes",
     "@crate_index//:byte-unit",
+    "@crate_index//:bytes",
     "@crate_index//:cfg-if",
     "@crate_index//:crossbeam",
     "@crate_index//:futures",
@@ -56,27 +58,24 @@ DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:tokio-io-timeout",
-    "@crate_index//:tokio_rustls_0_24_1",
+    "@crate_index//:tokio-rustls",
     "@crate_index//:tokio-util",
     "@crate_index//:tower",
     "@crate_index//:tower-http",
     "@crate_index//:tracing",
     "@crate_index//:tracing-flame",
     "@crate_index//:tracing-subscriber",
-] + select({
-    "@rules_rust//rust/platform:linux": [
-        "//rs/monitoring/backtrace",
-    ],
-    "//conditions:default": [],
-})
+]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
 BUILD_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client",
     "//rs/canister_client/sender",
     "//rs/canonical_state",
@@ -96,11 +95,11 @@ DEV_DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
+    "@crate_index//:reqwest",
     "@crate_index//:rstest",
-    "@crate_index//:rustls_0_21_12",
+    "@crate_index//:rustls",
     "@crate_index//:serde_bytes",
     "@crate_index//:tower-test",
-    "@crate_index//:reqwest",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

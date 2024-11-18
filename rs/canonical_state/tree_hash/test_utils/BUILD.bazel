@@ -4,6 +4,7 @@ load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canonical_state/tree_hash",
     "//rs/crypto/tree_hash",
     "//rs/crypto/tree_hash/test_utils",

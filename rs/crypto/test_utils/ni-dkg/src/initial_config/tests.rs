@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use super::*;
 use ic_crypto_internal_bls12_381_type::{verify_bls_signature, G1Affine, G2Affine};
 use ic_crypto_test_utils::{map_of, set_of};
@@ -43,11 +41,17 @@ fn should_correctly_create_initial_dkg_config_for_single_node() {
     let dkg_tag = NiDkgTag::LowThreshold;
     let target_id = target_id();
 
-    let config = InitialNiDkgConfig::new(&nodes_set, dealer_subnet, dkg_tag, target_id, REG_V1);
+    let config = InitialNiDkgConfig::new(
+        &nodes_set,
+        dealer_subnet,
+        dkg_tag.clone(),
+        target_id,
+        REG_V1,
+    );
 
     assert_eq!(
         config.get().dkg_id(),
-        NiDkgId {
+        &NiDkgId {
             start_block_height: Height::new(0),
             dealer_subnet,
             dkg_tag,
@@ -76,11 +80,17 @@ fn should_correctly_create_initial_dkg_config() {
     let dkg_tag = NiDkgTag::LowThreshold;
     let target_id = target_id();
 
-    let config = InitialNiDkgConfig::new(&nodes_set, dealer_subnet, dkg_tag, target_id, REG_V1);
+    let config = InitialNiDkgConfig::new(
+        &nodes_set,
+        dealer_subnet,
+        dkg_tag.clone(),
+        target_id,
+        REG_V1,
+    );
 
     assert_eq!(
         config.get().dkg_id(),
-        NiDkgId {
+        &NiDkgId {
             start_block_height: Height::new(0),
             dealer_subnet,
             dkg_tag,
@@ -133,8 +143,8 @@ fn should_have_stable_internal_csp_transcript_cbor_serialization() {
 fn should_correctly_retrieve_initial_low_threshold_ni_dkg_transcript_from_registry() {
     let mut transcript = transcript();
     let dkg_tag = NiDkgTag::LowThreshold;
-    transcript.dkg_id.dkg_tag = dkg_tag;
-    let registry = registry_with_ni_dkg_transcript(
+    transcript.dkg_id.dkg_tag = dkg_tag.clone();
+    let registry = registry_with_initial_ni_dkg_transcript(
         InitialNiDkgTranscriptRecord::from(transcript.clone()),
         dkg_tag,
         SUBNET_1,
@@ -156,8 +166,8 @@ fn should_correctly_retrieve_initial_low_threshold_ni_dkg_transcript_from_regist
 fn should_correctly_retrieve_initial_high_threshold_ni_dkg_transcript_from_registry() {
     let mut transcript = transcript();
     let dkg_tag = NiDkgTag::HighThreshold;
-    transcript.dkg_id.dkg_tag = dkg_tag;
-    let registry = registry_with_ni_dkg_transcript(
+    transcript.dkg_id.dkg_tag = dkg_tag.clone();
+    let registry = registry_with_initial_ni_dkg_transcript(
         InitialNiDkgTranscriptRecord::from(transcript.clone()),
         dkg_tag,
         SUBNET_1,
@@ -265,7 +275,7 @@ fn transcript() -> NiDkgTranscript {
     transcript_without_empty_or_default_data()
 }
 
-fn registry_with_ni_dkg_transcript(
+fn registry_with_initial_ni_dkg_transcript(
     transcript_record: InitialNiDkgTranscriptRecord,
     dkg_tag: NiDkgTag,
     subnet_id: SubnetId,
@@ -283,6 +293,9 @@ fn registry_with_ni_dkg_transcript(
             cup_contents.initial_ni_dkg_transcript_high_threshold = Some(transcript_record);
             cup_contents.initial_ni_dkg_transcript_low_threshold =
                 Some(InitialNiDkgTranscriptRecord::from(transcript()));
+        }
+        NiDkgTag::HighThresholdForKey(_master_public_key_id) => {
+            unimplemented!("not an initial NI-DKG transcript tag")
         }
     }
     let registry_data = ProtoRegistryDataProvider::new();

@@ -44,7 +44,7 @@ mod tests;
 ///   that is, the certificate is correctly self-signed
 ///
 /// [RFC 5280 (section 4.1.2.5)]: https://tools.ietf.org/html/rfc5280#section-4.1.2.5
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct ValidTlsCertificate {
     certificate: X509PublicKeyCert,
 }
@@ -261,7 +261,7 @@ fn invalid_tls_certificate_error<S: Into<String>>(internal_error: S) -> TlsCertV
 }
 
 /// A TLS cert validation error.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct TlsCertValidationError {
     pub error: String,
 }

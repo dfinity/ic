@@ -72,7 +72,7 @@ pub enum QueryExecutionType {
 /// This enum indicates whether execution of a non-replicated query
 /// should keep track of the state or not.
 #[doc(hidden)]
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum NonReplicatedQueryKind {
     Stateful { call_origin: CallOrigin },
     Pure { caller: PrincipalId },
@@ -135,17 +135,19 @@ impl ExecutionServices {
             metrics_registry,
             own_subnet_id,
             own_subnet_type,
-            SchedulerImpl::compute_capacity_percent(scheduler_config.scheduler_cores),
+            RoundSchedule::compute_capacity_percent(scheduler_config.scheduler_cores),
             config.clone(),
             Arc::clone(&cycles_account_manager),
             scheduler_config.scheduler_cores,
             Arc::clone(&fd_factory),
             scheduler_config.heap_delta_rate_limit,
             scheduler_config.upload_wasm_chunk_instructions,
+            scheduler_config.canister_snapshot_baseline_instructions,
         ));
         let sync_query_handler = Arc::new(InternalHttpQueryHandler::new(
             logger.clone(),
             hypervisor,
+            own_subnet_id,
             own_subnet_type,
             config.clone(),
             metrics_registry,

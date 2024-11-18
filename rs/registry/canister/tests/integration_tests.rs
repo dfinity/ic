@@ -3,7 +3,6 @@ mod common;
 use candid::Encode;
 use canister_test::{Canister, Project, Runtime};
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, MixedHashTree};
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, set_up_universal_canister,
@@ -21,6 +20,7 @@ use ic_registry_transport::{
     },
     update,
 };
+use prost::Message;
 use registry_canister::{
     init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder},
     proto_on_wire::protobuf,
@@ -105,7 +105,7 @@ async fn registry(runtime: &Runtime, upgrade_scenario: UpgradeTestingScenario) {
             &fake_governance_canister,
             &canister,
             "atomic_mutate",
-            encode_or_panic(&mutation_request)
+            mutation_request.encode_to_vec()
         )
         .await
     );
@@ -143,10 +143,11 @@ async fn registry(runtime: &Runtime, upgrade_scenario: UpgradeTestingScenario) {
             &fake_governance_canister,
             &canister,
             "atomic_mutate",
-            encode_or_panic(&RegistryAtomicMutateRequest {
+            RegistryAtomicMutateRequest {
                 mutations: vec![update("zurich", "die Schweiz")],
                 preconditions: vec![],
-            })
+            }
+            .encode_to_vec()
         )
         .await
     );
@@ -230,7 +231,7 @@ async fn get_latest_version_certified(runtime: &Runtime, upgrade_scenario: Upgra
             &fake_governance_canister,
             &canister,
             "atomic_mutate",
-            encode_or_panic(&mutation_request)
+            mutation_request.encode_to_vec()
         )
         .await
     );

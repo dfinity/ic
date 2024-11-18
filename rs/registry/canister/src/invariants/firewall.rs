@@ -284,10 +284,11 @@ fn get_firewall_rules(snapshot: &RegistrySnapshot, record_key: String) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_nns_common::registry::encode_or_panic;
-    use ic_protobuf::registry::subnet::v1::SubnetListRecord;
-    use ic_protobuf::registry::{firewall::v1::FirewallRuleDirection, node::v1::NodeRecord};
+    use ic_protobuf::registry::{
+        firewall::v1::FirewallRuleDirection, node::v1::NodeRecord, subnet::v1::SubnetListRecord,
+    };
     use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key};
+    use prost::Message;
 
     // helper function that returns a generic firewall rule for use in the tests.
     fn firewall_rule_builder() -> FirewallRule {
@@ -339,6 +340,7 @@ mod tests {
             chip_id: None,
             public_ipv4_config: None,
             domain: None,
+            node_reward_type: None,
         }
     }
 
@@ -571,11 +573,11 @@ mod tests {
 
         snapshot.insert(
             make_node_record_key(node_id).into_bytes(),
-            encode_or_panic::<NodeRecord>(&node_record_builder()),
+            node_record_builder().encode_to_vec(),
         );
         snapshot.insert(
             make_firewall_rules_record_key(&FirewallRulesScope::Node(node_id)).into_bytes(),
-            encode_or_panic::<FirewallRuleSet>(&firewall_ruleset_builder()),
+            firewall_ruleset_builder().encode_to_vec(),
         );
 
         assert!(validate_firewall_rule_principals(&snapshot).is_ok());
@@ -588,11 +590,11 @@ mod tests {
 
         snapshot.insert(
             make_node_record_key(node_id).into_bytes(),
-            encode_or_panic::<NodeRecord>(&node_record_builder()),
+            node_record_builder().encode_to_vec(),
         );
         snapshot.insert(
             make_firewall_rules_record_key(&FirewallRulesScope::Node(node_id)).into_bytes(),
-            encode_or_panic::<FirewallRuleSet>(&FirewallRuleSet { entries: vec![] }),
+            FirewallRuleSet { entries: vec![] }.encode_to_vec(),
         );
 
         assert!(validate_firewall_rule_principals(&snapshot).is_ok());
@@ -605,7 +607,7 @@ mod tests {
 
         snapshot.insert(
             make_node_record_key(node_id).into_bytes(),
-            encode_or_panic::<NodeRecord>(&node_record_builder()),
+            node_record_builder().encode_to_vec(),
         );
 
         assert!(validate_firewall_rule_principals(&snapshot).is_ok());
@@ -618,7 +620,7 @@ mod tests {
 
         snapshot.insert(
             make_firewall_rules_record_key(&FirewallRulesScope::Node(node_id)).into_bytes(),
-            encode_or_panic::<FirewallRuleSet>(&firewall_ruleset_builder()),
+            firewall_ruleset_builder().encode_to_vec(),
         );
 
         let actual_error = validate_firewall_rule_principals(&snapshot)
@@ -638,13 +640,14 @@ mod tests {
 
         snapshot.insert(
             make_subnet_list_record_key().into_bytes(),
-            encode_or_panic::<SubnetListRecord>(&SubnetListRecord {
+            SubnetListRecord {
                 subnets: vec![subnet_id.get().to_vec()],
-            }),
+            }
+            .encode_to_vec(),
         );
         snapshot.insert(
             make_firewall_rules_record_key(&FirewallRulesScope::Subnet(subnet_id)).into_bytes(),
-            encode_or_panic::<FirewallRuleSet>(&firewall_ruleset_builder()),
+            firewall_ruleset_builder().encode_to_vec(),
         );
 
         assert!(validate_firewall_rule_principals(&snapshot).is_ok());
@@ -657,13 +660,14 @@ mod tests {
 
         snapshot.insert(
             make_subnet_list_record_key().into_bytes(),
-            encode_or_panic::<SubnetListRecord>(&SubnetListRecord {
+            SubnetListRecord {
                 subnets: vec![subnet_id.get().to_vec()],
-            }),
+            }
+            .encode_to_vec(),
         );
         snapshot.insert(
             make_firewall_rules_record_key(&FirewallRulesScope::Subnet(subnet_id)).into_bytes(),
-            encode_or_panic::<FirewallRuleSet>(&FirewallRuleSet { entries: vec![] }),
+            FirewallRuleSet { entries: vec![] }.encode_to_vec(),
         );
 
         assert!(validate_firewall_rule_principals(&snapshot).is_ok());
@@ -676,9 +680,10 @@ mod tests {
 
         snapshot.insert(
             make_subnet_list_record_key().into_bytes(),
-            encode_or_panic::<SubnetListRecord>(&SubnetListRecord {
+            SubnetListRecord {
                 subnets: vec![subnet_id.get().to_vec()],
-            }),
+            }
+            .encode_to_vec(),
         );
 
         assert!(validate_firewall_rule_principals(&snapshot).is_ok());
@@ -691,7 +696,7 @@ mod tests {
 
         snapshot.insert(
             make_firewall_rules_record_key(&FirewallRulesScope::Subnet(subnet_id)).into_bytes(),
-            encode_or_panic::<FirewallRuleSet>(&firewall_ruleset_builder()),
+            firewall_ruleset_builder().encode_to_vec(),
         );
 
         let actual_error = validate_firewall_rule_principals(&snapshot)

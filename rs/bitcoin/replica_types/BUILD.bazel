@@ -1,0 +1,24 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "replica_types",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_btc_replica_types",
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        "//rs/protobuf",
+        "//rs/types/error_types",
+        "@crate_index//:candid",
+        "@crate_index//:ic-btc-interface",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+    ],
+)
+
+rust_test(
+    name = "replica_types_test",
+    crate = ":replica_types",
+)

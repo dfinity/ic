@@ -1,6 +1,6 @@
 ---
 - hosts: physical_hosts
   become: true
-  gather_facts: no
+  gather_facts: false
   roles:
     - role: ic_guest

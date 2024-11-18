@@ -9,6 +9,7 @@ rust_library(
     crate_name = "ic_nns_common_protobuf_generator",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/utils/rustfmt",
         "@crate_index//:prost-build",
     ],

@@ -1,8 +1,9 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/ic_os/vsock/vsock_lib:vsock_lib",
 ]
 

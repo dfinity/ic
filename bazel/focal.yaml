@@ -1,0 +1,37 @@
+# Packages used by our ubuntu base, adapted from:
+#  https://github.com/GoogleContainerTools/rules_distroless/blob/2ce7b477def75579c49bab25266f953f30275c88/examples/ubuntu_snapshot/BUILD.bazel
+#
+#  Anytime this file is changed, the lockfile needs to be regenerated. See WORKSPACE
+#  for instructions.
+version: 1
+
+# Various channels used to pull packages from
+sources:
+  - channel: focal main
+    url: https://snapshot.ubuntu.com/ubuntu/20240301T030400Z
+  - channel: focal universe
+    url: https://snapshot.ubuntu.com/ubuntu/20240301T030400Z
+  - channel: focal-security main
+    url: https://snapshot.ubuntu.com/ubuntu/20240301T030400Z
+  - channel: focal-updates main
+    url: https://snapshot.ubuntu.com/ubuntu/20240301T030400Z
+
+archs:
+  - "amd64"
+
+packages:
+  - "ca-certificates"
+  - "coreutils" # for chmod
+  - "gawk" # for build-bootstrap-config-image
+  - "dosfstools"
+  - "libssl1.1"
+  - "libunwind8"
+  - "mtools"
+  - "openssh-client" # used to SSH into image
+  - "rsync"
+  - "zstd"
+  - "dpkg" # for apt list --installed
+  - "gzip" # for tar-ing up ic regsitry store in systests
+  - "apt"
+  - "bash"
+  - "perl"

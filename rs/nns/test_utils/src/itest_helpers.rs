@@ -22,17 +22,16 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
 };
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::{
     init::LifelineCanisterInitPayload,
     types::{NeuronId, ProposalId},
 };
 use ic_nns_constants::*;
-use ic_nns_governance::{
-    governance::TimeWarp,
-    init::TEST_NEURON_1_ID,
+use ic_nns_governance_api::{
     pb::v1::{Governance, NnsFunction, ProposalStatus},
+    test_api::TimeWarp,
 };
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
@@ -625,7 +624,7 @@ pub async fn set_up_universal_canister_with_cycles(
 }
 
 async fn install_universal_canister(canister: &mut Canister<'_>) {
-    Wasm::from_bytes(UNIVERSAL_CANISTER_WASM)
+    Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec())
         .install_with_retries_onto_canister(canister, None, None)
         .await
         .unwrap();
@@ -704,7 +703,7 @@ where
 }
 
 /// Encapsulates different test scenarios, with different upgrade modes.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum UpgradeTestingScenario {
     Never,
     Always,

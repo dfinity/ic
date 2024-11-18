@@ -9,6 +9,7 @@ rust_library(
     crate_name = "ic_btc_service",
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         ":build_script",
         "@crate_index//:prost",
         "@crate_index//:tonic",
@@ -29,6 +30,7 @@ cargo_build_script(
         "@rules_rust//rust/toolchain:current_rustfmt_files",
     ],
     deps = [
+        # Keep sorted.
         "@crate_index//:prost-build",
         "@crate_index//:tonic-build",
     ],

@@ -6,7 +6,7 @@ source "$NNS_TOOLS_DIR/lib/include.sh"
 
 help() {
     print_green "
-Usage: $0 (<COMMIT_ID>)
+Usage: $0 <COMMIT_ID>
     COMMIT_ID: The commit ID to compare to
 
     Prints unreleased canister git logs. This indicates which canisters should be
@@ -19,37 +19,102 @@ Usage: $0 (<COMMIT_ID>)
     exit 1
 }
 
-if [ $# -gt 1 ]; then
-    help
+RELEASE_CANDIDATE_COMMIT_ID="${1:-GARBAGE}"
+
+AUTO_COMMIT_ID=false
+if [[ "${RELEASE_CANDIDATE_COMMIT_ID}" == 'GARBAGE' ]]; then
+    RELEASE_CANDIDATE_COMMIT_ID=$(latest_commit_with_prebuilt_artifacts 2>/dev/null)
+    AUTO_COMMIT_ID=true
+
+    COMMIT_DESCRIPTION=$(git show -s --format="%h (%cd)" --date=relative "${RELEASE_CANDIDATE_COMMIT_ID}")
+    echo
+    print_yellow "⚠️  Using the latest commit with prebuilt artifacts: ${COMMIT_DESCRIPTION}"
 fi
 
-LATEST_ARTIFACTS_COMMIT=$(latest_commit_with_prebuilt_artifacts 2>/dev/null)
+NETWORK=ic
 
-RELEASE_CANDIDATE_COMMIT_ID=${1:-$LATEST_ARTIFACTS_COMMIT}
-echo "Listing commits from:" "$RELEASE_CANDIDATE_COMMIT_ID"
+list_new_canister_commits() {
+    CANISTER_NAME="${1}"
+    # Notice plural. Multiple values are separated by space. Because bash.
+    CODE_DIRECTORIES="${2}"
+    LATEST_RELEASED_COMMIT_ID="${3}"
 
-echo NNS
-echo =====
+    RANGE="${LATEST_RELEASED_COMMIT_ID}..${RELEASE_CANDIDATE_COMMIT_ID}"
+    NEW_COMMITS=$(
+        git \
+            --no-pager \
+            log \
+            --format="%C(auto) %h %s" \
+            "${RANGE}" \
+            -- \
+            ${CODE_DIRECTORIES} # No quote here is necessary, because plural.
+    )
 
-for canister_name in "${NNS_CANISTERS[@]}"; do
+    INTERESTING_COMMITS=$(
+        grep -v -E ' [0-9a-z]{10,12} (chore|refactor|test)\b' <<<"$NEW_COMMITS" \
+            || true
+    )
+
+    COMMIT_COUNT=$(grep . <<<"$NEW_COMMITS" | wc -l || true)
+    INTERESTING_COMMIT_COUNT=$(grep . <<<"$INTERESTING_COMMITS" | wc -l || true)
+
+    # Compose heading for canister.
+    HEADING=$(printf "%-14s" "${CANISTER_NAME}") # Add space padding on right of canister name.
+    HEADING="${HEADING} ${COMMIT_COUNT} new commits"
+    if [[ "${COMMIT_COUNT}" -gt 0 ]]; then
+        if [[ "${INTERESTING_COMMIT_COUNT}" -eq 0 ]]; then
+            INTERESTING=NONE
+        else
+            INTERESTING="${INTERESTING_COMMIT_COUNT}"
+        fi
+        HEADING="${HEADING}, ${INTERESTING} interesting"
+    fi
+
+    # Print heading.
     echo
-    echo Canister: "$canister_name"
+    if [[ "${INTERESTING_COMMIT_COUNT}" -gt 0 || "${COMMIT_COUNT}" -ge 5 ]]; then
+        print_green "${HEADING}"
+    else
+        print_light_gray "${HEADING}"
+    fi
 
-    network=ic
-    released_commit_id=$(nns_canister_git_version "$network" "$canister_name" 2>/dev/null)
-    root=$(get_nns_canister_code_location "$canister_name")
-    git --no-pager log --format="%C(auto) %h %s" "$released_commit_id".."$RELEASE_CANDIDATE_COMMIT_ID" -- $root
+    while IFS= read -r COMMIT_MESSAGE; do
+        if echo "$COMMIT_MESSAGE" | grep -v -E ' [0-9a-z]{10,12} (chore|refactor|test)\b' >/dev/null; then
+            print_green "${COMMIT_MESSAGE}"
+        else
+            print_light_gray "${COMMIT_MESSAGE}"
+        fi
+    done <<<"${NEW_COMMITS}"
+
+}
+
+# Begin main.
+
+echo
+print_purple NNS
+print_purple =====
+
+for CANISTER_NAME in "${NNS_CANISTERS[@]}"; do
+    LATEST_RELEASED_COMMIT_ID=$(nns_canister_git_version "${NETWORK}" "${CANISTER_NAME}" 2>/dev/null)
+    CODE_DIRECTORIES=$(get_nns_canister_code_location "${CANISTER_NAME}")
+
+    list_new_canister_commits "${CANISTER_NAME}" "${CODE_DIRECTORIES}" "${LATEST_RELEASED_COMMIT_ID}"
 done
 
-echo SNS
-echo =====
+echo
+echo
+print_purple SNS
+print_purple =====
 
-for canister_name in "${SNS_CANISTERS[@]}"; do
-    echo
-    echo Canister: "$canister_name"
+for CANISTER_NAME in "${SNS_CANISTERS[@]}"; do
+    LATEST_RELEASED_COMMIT_ID=$(sns_mainnet_git_commit_id "${CANISTER_NAME}")
+    CODE_DIRECTORIES=$(get_sns_canister_code_location "${CANISTER_NAME}")
 
-    network=ic
-    released_commit_id=$(sns_mainnet_git_commit_id "$canister_name")
-    root=$(get_sns_canister_code_location "$canister_name")
-    git --no-pager log --format="%C(auto) %h %s" "$released_commit_id".."$RELEASE_CANDIDATE_COMMIT_ID" -- $root
+    list_new_canister_commits "${CANISTER_NAME}" "${CODE_DIRECTORIES}" "${LATEST_RELEASED_COMMIT_ID}"
 done
+
+if [[ "${AUTO_COMMIT_ID}" == true ]]; then
+    echo
+    echo
+    print_yellow "⚠️  Used the latest commit with prebuilt artifacts: ${RELEASE_CANDIDATE_COMMIT_ID}"
+fi

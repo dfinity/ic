@@ -37,7 +37,7 @@ const EVENT_DATA_ID: MemoryId = MemoryId::new(1);
 type RestrictedMemory = RM<DefaultMemoryImpl>;
 type VirtualMemory = VM<RestrictedMemory>;
 
-#[derive(Default, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Default)]
 struct Cbor<T>(pub T);
 
 impl<T> std::ops::Deref for Cbor<T> {
@@ -83,7 +83,7 @@ fn default_kyt_mode() -> KytMode {
     KytMode::Normal
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
 struct Config {
     api_keys: BTreeMap<Principal, String>,
     minter_id: Principal,
@@ -107,7 +107,7 @@ impl Default for Config {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
 pub struct Event {
     #[serde(rename = "ts")]
     pub timestamp: u64,
@@ -165,7 +165,7 @@ impl Event {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
 pub enum EventKind {
     #[serde(rename = "utxo_check")]
     UtxoCheck {
@@ -613,7 +613,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
         writer
             .encode_gauge(
                 "stable_memory_bytes",
-                ic_cdk::api::stable::stable64_size() as f64 * 65536.0,
+                ic_cdk::api::stable::stable_size() as f64 * 65536.0,
                 "Size of the stable memory allocated by this canister.",
             )
             .unwrap();

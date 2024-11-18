@@ -8,20 +8,23 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/node_key_validation",
     "//rs/crypto/sha2",
     "//rs/crypto/utils/basic_sig",
     "//rs/crypto/utils/ni_dkg",
     "//rs/nervous_system/common",
-    "//rs/nns/cmc",
+    "//rs/nervous_system/string",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/protobuf",
+    "//rs/registry/canister/api",
     "//rs/registry/keys",
+    "//rs/registry/node_provider_rewards",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
@@ -39,8 +42,9 @@ DEPENDENCIES = [
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-certified-map",
     "@crate_index//:ic-metrics-encoder",
-    "@crate_index//:lazy_static",
+    "@crate_index//:idna",
     "@crate_index//:ipnet",
+    "@crate_index//:lazy_static",
     "@crate_index//:leb128",
     "@crate_index//:prost",
     "@crate_index//:serde",
@@ -48,16 +52,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "@crate_index//:assert_matches",
-    "@crate_index//:candid_parser",
-    "@crate_index//:itertools",
-    "@crate_index//:maplit",
-    "@crate_index//:rand",
-    "@crate_index//:rand_distr",
-    "@crate_index//:serde_json",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-    "//rs/rust_canisters/canister_test",
+    # Keep sorted.
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto/node_key_generation",
@@ -67,29 +62,50 @@ DEV_DEPENDENCIES = [
     "//rs/interfaces/registry",
     "//rs/nervous_system/common/test_keys",
     "//rs/nns/test_utils",
-    "//rs/replica_tests",
     "//rs/registry/fake",
     "//rs/registry/nns_data_provider",
     "//rs/registry/proto_data_provider",
+    "//rs/replica_tests",
+    "//rs/rust_canisters/canister_test",
     "//rs/test_utilities",
     "//rs/test_utilities/compare_dirs",
     "//rs/test_utilities/types",
     "//rs/types/types_test_utils",
+    "@crate_index//:assert_matches",
+    "@crate_index//:candid_parser",
+    "@crate_index//:itertools",
+    "@crate_index//:maplit",
+    "@crate_index//:rand",
+    "@crate_index//:rand_distr",
+    "@crate_index//:serde_json",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
 ]
 
 DEV_MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nns/test_utils_macros",
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:build-info-build",
 ]
 
 ALIASES = {}
+
+LIB_SRCS = glob(
+    [
+        "gen/**/*.rs",
+        "src/**/*.rs",
+    ],
+    exclude = ["**/*tests*/**"],
+)
 
 cargo_build_script(
     name = "build_script",
@@ -102,10 +118,7 @@ cargo_build_script(
 
 rust_library(
     name = "canister",
-    srcs = glob([
-        "src/**",
-        "gen/**",
-    ]),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_name = "registry_canister",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -118,31 +131,32 @@ rust_canister(
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/registry.did"],
-    opt = "z",  # TODO: undo once dfx-extensions do not ungzip canister modules
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/registry.did",
-    deps = DEPENDENCIES + [":canister"] + [":build_script"],
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":canister",
+    ],
 )
 
 rust_ic_test(
     name = "registry_canister_canister_test",
     srcs = glob(["canister/*.rs"]),
+    compile_data = ["canister/registry.did"],
     crate_root = "canister/canister.rs",
-    data = [
-        "canister/registry.did",
-        ":registry-canister",
-        "//rs/nns/cmc:cycles-minting-canister",
-    ],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/registry/canister",
-    },
     proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
-    deps = DEV_DEPENDENCIES + DEPENDENCIES + [":canister"] + [":build_script"],
+    deps = DEV_DEPENDENCIES + DEPENDENCIES + [
+        ":build_script",
+        ":canister",
+    ],
 )
 
 rust_test(
     name = "registry_canister_test",
-    crate = ":canister",
+    srcs = glob([
+        "gen/**",
+        "src/**",
+    ]),
     proc_macro_deps = DEV_MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -152,18 +166,23 @@ rust_ic_test_suite_with_extra_srcs(
     srcs = glob(
         ["tests/*.rs"],
         exclude = [
-            "tests/mod.rs",
+            # Keep sorted.
             "tests/check_generated_files.rs",
+            "tests/mod.rs",
         ],
     ),
     data = [
+        # Keep sorted.
         ":registry-canister",
         "//rs/nns/cmc:cycles-minting-canister",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
+        # Keep sorted.
         "CARGO_MANIFEST_DIR": "rs/registry/canister",
         "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath :registry-canister)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     extra_srcs = glob(["tests/common/*.rs"]),
     proc_macro_deps = DEV_MACRO_DEPENDENCIES,
@@ -174,6 +193,7 @@ generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
     data = [
+        # Keep sorted.
         ":protos",
         "//rs/nns/common:protos",
         "//rs/protobuf:protos",
@@ -182,6 +202,7 @@ generated_files_check(
     ] + glob(["src/gen/**"]),
     manifest_dir = "rs/registry/canister",
     deps = [
+        # Keep sorted.
         "//rs/registry/canister/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",

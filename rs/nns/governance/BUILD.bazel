@@ -1,50 +1,75 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
+load(":feature_flags.bzl", "test_with_tla")
 
 package(default_visibility = ["//visibility:public"])
 
 exports_files(["canister/governance.did"])
 
+# Allows temporarily disabling TLA checks from the command line;
+# just pass `--define tla_disabled=true` to your Bazel command
+# See feature_flags.bzl for how to disable TLA checks permanently
+# (in the CI)
+config_setting(
+    name = "tla_disabled",
+    values = {
+        "define": "tla_disabled=true",
+    },
+)
+
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 # See rs/nervous_system/feature_test.md
-BASE_DEPENDENCIES = [
+DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/sha2",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/governance",
+    "//rs/nervous_system/linear_map",
     "//rs/nervous_system/neurons_fund",
     "//rs/nervous_system/proto",
-    "//rs/nns/cmc",
-    "//rs/nns/common",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
-    "//rs/nervous_system/governance",
+    "//rs/nervous_system/temporary",
+    "//rs/nns/cmc",
+    "//rs/nns/common",
+    "//rs/nns/constants",
+    "//rs/nns/governance/api",
+    "//rs/nns/governance/init",
     "//rs/nns/gtc_accounts",
+    "//rs/nns/handlers/root/interface",
+    "//rs/nns/sns-wasm",
     "//rs/protobuf",
     "//rs/registry/canister",
-    "//rs/rosetta-api/ledger_core",
-    "//rs/rosetta-api/icp_ledger",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_http_metrics",
-    "//rs/rust_canisters/dfn_protobuf",
+    "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
+    "//rs/sns/init",
     "//rs/sns/root",
+    "//rs/sns/swap",
     "//rs/types/base_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
+    "//rs/utils",
     "@crate_index//:build-info",
     "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:dyn-clone",
+    "@crate_index//:futures",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:itertools",
@@ -64,45 +89,37 @@ BASE_DEPENDENCIES = [
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
-        "@crate_index//:csv",
+        # Keep sorted.
         "//rs/nervous_system/common/test_keys",
+        "@crate_index//:csv",
     ],
 })
 
-# Each target declared in this file may choose either these (release-ready)
-# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
-DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nns/constants",
-    "//rs/nns/sns-wasm",
-    "//rs/sns/init",
-    "//rs/sns/swap",
-]
-
-DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nns/constants:constants--test_feature",
-    "//rs/nns/sns-wasm:sns-wasm--test_feature",
-    "//rs/sns/init:init--test_feature",
-    "//rs/sns/swap:swap--test_feature",
-]
-
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
+    "@crate_index//:ic-cdk-macros",
     "@crate_index//:rust_decimal_macros",
     "@crate_index//:strum_macros",
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:build-info-build",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/nervous_system/common/test_utils",
     "//rs/nns/governance/protobuf_generator:lib",
     "//rs/sns/swap/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
-    "@crate_index//:futures",
+    "//rs/tla_instrumentation",
+    "//rs/tla_instrumentation:local_key",
+    "@crate_index//:candid_parser",
+    "@crate_index//:prometheus-parse",
     "@crate_index//:proptest",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
@@ -114,9 +131,17 @@ DEV_DEPENDENCIES = [
     ],
 })
 
-MACRO_DEV_DEPENDENCIES = []
+MACRO_DEV_DEPENDENCIES = ["//rs/tla_instrumentation:proc_macros"]
 
 ALIASES = {}
+
+LIB_SRCS = glob(
+    ["src/**/*.rs"],
+    exclude = [
+        "**/*tests.rs",
+        "**/tests/**",
+    ],
+)
 
 cargo_build_script(
     name = "build_script",
@@ -129,10 +154,7 @@ cargo_build_script(
 
 rust_library(
     name = "governance",
-    srcs = glob(
-        ["src/**/*.rs"],
-        exclude = ["**/*tests.rs"],
-    ),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_name = "ic_nns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -144,26 +166,24 @@ rust_library(
 
 rust_library(
     name = "governance--test_feature",
-    srcs = glob(
-        ["src/**/*.rs"],
-        exclude = ["**/*tests.rs"],
-    ),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
-    crate_features = ["test"],
+    crate_features = test_with_tla(),
     crate_name = "ic_nns_governance",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES + [
+        "//rs/tla_instrumentation:proc_macros",
+    ],
     version = "0.9.0",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + [
+    deps = DEPENDENCIES + [
         ":build_script",
+        "//rs/tla_instrumentation",
+        "//rs/tla_instrumentation:local_key",
     ],
 )
 
 rust_library(
     name = "governance--canbench_feature",
-    srcs = glob(
-        ["src/**/*.rs"],
-        exclude = ["**/*tests.rs"],
-    ),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_features = ["canbench-rs"],
     crate_name = "ic_nns_governance",
@@ -171,7 +191,6 @@ rust_library(
     version = "0.9.0",
     deps = DEPENDENCIES + [
         "@crate_index//:canbench-rs",
-        "@crate_index//:ic-cdk",
     ],
 )
 
@@ -188,30 +207,8 @@ rust_canbench(
     srcs = ["canbench/main.rs"],
     results_file = "canbench/canbench_results.yml",
     deps = [
+        # Keep sorted.
         ":governance--canbench_feature",
-    ],
-)
-
-rust_binary(
-    name = "generate_did",
-    srcs = ["canister/canister.rs"],
-    compile_data = ["canister/governance.did"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
-        ":build_script",
-        ":governance",
-    ],
-)
-
-rust_binary(
-    name = "generate_test_did",
-    srcs = ["canister/canister.rs"],
-    compile_data = ["canister/governance_test.did"],
-    crate_features = ["test"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + [
-        ":build_script",
-        ":governance--test_feature",
     ],
 )
 
@@ -220,27 +217,32 @@ rust_canister(
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
-    opt = "z",  # TODO: undo once dfx-extensions do not ungzip canister modules
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance.did",
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance",
+        "//rs/nervous_system/canisters",
     ],
 )
 
 rust_canister(
     name = "governance-canister-test",
-    srcs = ["canister/canister.rs"],
+    srcs = [
+        "canister/canister.rs",
+        "canister/tla_ledger.rs",
+    ],
     aliases = ALIASES,
     compile_data = ["canister/governance_test.did"],
-    crate_features = ["test"],
-    opt = "z",  # TODO: undo once dfx-extensions do not ungzip canister modules
+    crate_features = test_with_tla(),
+    crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance_test.did",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + [
+    deps = DEPENDENCIES + [
         ":build_script",
         ":governance--test_feature",
+        "//rs/nervous_system/canisters",
+        "//rs/tla_instrumentation",
     ],
 )
 
@@ -249,16 +251,16 @@ generated_files_check(
     srcs = ["tests/check_generated_files.rs"],
     data = glob(["src/gen/**/*.rs"]) + [
         ":protos",
+        "//rs/ledger_suite/icp:protos",
         "//rs/nervous_system/proto:protos",
         "//rs/nns/common:protos",
-        "//rs/nns/governance/api:src",
-        "//rs/rosetta-api/icp_ledger:protos",
         "//rs/sns/root:protos",
         "//rs/sns/swap:protos",
         "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/nns/governance",
     deps = [
+        # Keep sorted.
         "//rs/nns/governance/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
@@ -267,23 +269,29 @@ generated_files_check(
 
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_governance-canister",
-    data = ["canister/governance.did"],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/nns/governance",
-    },
+    srcs = glob(["canister/**/*.rs"]),
+    compile_data = ["canister/governance.did"],
+    crate_root = "canister/canister.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":governance",
+        "//rs/nervous_system/canisters",
+    ],
 )
 
 rust_test(
     name = "canister_test_unit_test",
-    crate = ":_wasm_governance-canister-test",
-    crate_features = ["test"],
-    data = ["canister/governance_test.did"],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/nns/governance",
-    },
+    srcs = glob(["canister/**/*.rs"]),
+    compile_data = ["canister/governance_test.did"],
+    crate_features = test_with_tla(),
+    crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":governance--test_feature",
+        "//rs/nervous_system/canisters",
+    ],
 )
 
 rust_test(
@@ -300,10 +308,11 @@ rust_test(
     name = "governance_test-test_feature",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
-    crate_features = ["test"],
+    crate_features = test_with_tla(),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
+        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -312,15 +321,23 @@ rust_bench(
     srcs = ["benches/scale.rs"],
     proc_macro_deps = ["@crate_index//:async-trait"],
     deps = [
+        # Keep sorted.
         ":governance",
+        "//rs/ledger_suite/icp:icp_ledger",
         "//rs/nervous_system/common",
         "//rs/nns/common",
-        "//rs/rosetta-api/icp_ledger",
         "//rs/types/base_types",
         "@crate_index//:criterion",
         "@crate_index//:futures",
         "@crate_index//:tokio-test",
     ],
+)
+
+# all TLA models
+# NOTE: the test runner assumes unique basenames
+filegroup(
+    name = "tla_models",
+    srcs = glob(["tla/*.tla"]),
 )
 
 rust_test_suite_with_extra_srcs(
@@ -330,21 +347,30 @@ rust_test_suite_with_extra_srcs(
         exclude = [
             # fake.rs is a module dependency, not a test
             "tests/fake.rs",
-            # check generated files is handed in the generated_files_check rule above
+            # check generated files is handled in the generated_files_check rule above
             "tests/check_generated_files.rs",
         ],
     ),
     aliases = ALIASES,
-    crate_features = ["test"],
-    data = ["tests/neurons.csv"],
+    crate_features = test_with_tla(),
+    data = [
+        "tests/neurons.csv",
+        ":tla_models",
+        "@bazel_tools//tools/jdk:current_java_runtime",
+        "@tla_apalache//:bin/apalache-mc",
+    ],
     env = {
         "NEURON_CSV_PATH": "rs/nns/governance/tests/neurons.csv",
+        "JAVABASE": "$(JAVABASE)",
+        "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
+        "TLA_MODULES": "$(locations :tla_models)",
     },
     extra_srcs = glob([
         "tests/*/*.rs",
     ]) + ["tests/fake.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":governance--test_feature"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
+    toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
+    deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
     ],
 )

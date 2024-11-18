@@ -33,13 +33,14 @@ use crate::{
     execution_environment::{log_dirty_pages, RoundContext},
     CompilationCostHandling, RoundLimits,
 };
+use ic_cycles_account_manager::WasmExecutionMode;
 
 #[cfg(test)]
 mod tests;
 
 /// Indicates whether the memory is kept or replaced with new (initial) memory.
 /// Applicable to both the stable memory and the main memory of a canister.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub(crate) enum MemoryHandling {
     /// Retain the memory.
     Keep,
@@ -55,7 +56,7 @@ pub(crate) enum MemoryHandling {
 ///     Retain both the main memory and the stable memory.
 ///   - For all other canisters:
 ///     Retain only the stable memory and erase the main memory.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub(crate) struct CanisterMemoryHandling {
     pub stable_memory_handling: MemoryHandling,
     pub main_memory_handling: MemoryHandling,
@@ -257,6 +258,12 @@ impl InstallCodeHelper {
             self.canister.system_state.balance()
         );
 
+        let instructions_used = NumInstructions::from(
+            message_instruction_limit
+                .get()
+                .saturating_sub(instructions_left.get()),
+        );
+
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             instructions_left,
@@ -264,6 +271,7 @@ impl InstallCodeHelper {
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
+            original.wasm_execution_mode,
             round.log,
         );
 
@@ -453,12 +461,6 @@ impl InstallCodeHelper {
             self.canister.scheduler_state.install_code_debit += self.instructions_consumed();
         }
 
-        let instructions_used = NumInstructions::from(
-            message_instruction_limit
-                .get()
-                .saturating_sub(instructions_left.get()),
-        );
-
         let old_wasm_hash = get_wasm_hash(&clean_canister);
         let new_wasm_hash = get_wasm_hash(&self.canister);
 
@@ -505,10 +507,10 @@ impl InstallCodeHelper {
 
         validate_canister_settings(
             CanisterSettings {
-                controller: None,
                 controllers: None,
                 compute_allocation: original.requested_compute_allocation,
                 memory_allocation: original.requested_memory_allocation,
+                wasm_memory_threshold: None,
                 freezing_threshold: None,
                 reserved_cycles_limit: None,
                 log_visibility: None,
@@ -874,6 +876,7 @@ pub(crate) struct OriginalContext {
     pub sender: PrincipalId,
     pub canister_id: CanisterId,
     pub log_dirty_pages: FlagStatus,
+    pub wasm_execution_mode: WasmExecutionMode,
 }
 
 pub(crate) fn validate_controller(
@@ -934,6 +937,7 @@ pub(crate) fn finish_err(
         );
 
     let message_instruction_limit = original.execution_parameters.instruction_limits.message();
+
     round.cycles_account_manager.refund_unused_execution_cycles(
         &mut new_canister.system_state,
         instructions_left,
@@ -941,6 +945,7 @@ pub(crate) fn finish_err(
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
+        original.wasm_execution_mode,
         round.log,
     );
 

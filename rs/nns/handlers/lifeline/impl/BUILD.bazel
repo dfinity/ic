@@ -36,6 +36,7 @@ motoko_canister(
     name = "lifeline_canister",
     entry = "lifeline.mo",
     deps = [
+        # Keep sorted.
         ":governance",
         ":root",
     ],
@@ -61,6 +62,7 @@ rust_test(
     compile_data = [":lifeline_canister.wasm"],
     crate = ":lifeline",
     deps = [
+        # Keep sorted.
         "@crate_index//:flate2",
         "@crate_index//:wasmprinter",
     ],

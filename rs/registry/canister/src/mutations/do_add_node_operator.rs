@@ -1,4 +1,4 @@
-use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
 
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
@@ -25,7 +25,7 @@ impl Registry {
         let mutations = vec![RegistryMutation {
             mutation_type: registry_mutation::Type::Insert as i32,
             key: node_operator_record_key,
-            value: encode_or_panic(&node_operator_record),
+            value: node_operator_record.encode_to_vec(),
         }];
 
         // Check invariants before applying mutations
@@ -36,7 +36,7 @@ impl Registry {
 /// The payload of a proposal to add a new Node Operator
 ///
 /// See /rs/protobuf/def/registry/node_operator/v1/node_operator.proto
-#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Message)]
+#[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Message, Serialize)]
 pub struct AddNodeOperatorPayload {
     /// The principal id of the node operator. This principal is the entity that
     /// is able to add and remove nodes.

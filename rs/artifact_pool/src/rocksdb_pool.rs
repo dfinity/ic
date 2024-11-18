@@ -432,7 +432,7 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
                                     BlockPayload::Data(DataPayload {
                                         batch: BatchPayload::default(),
                                         dealings: Dealings::new_empty(start_height),
-                                        ecdsa: None,
+                                        idkg: None,
                                     })
                                 }),
                             );
@@ -773,7 +773,7 @@ fn make_compaction_filter_fn(watermark: Watermark) -> impl CompactionFilterFn + 
 
 /// Encapsulates the information needed to build a ColumnFamilyDescriptor,
 /// per type.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct ArtifactCFInfo {
     name: &'static str,
 }

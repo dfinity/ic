@@ -1,4 +1,3 @@
-use crate::sns_upgrade::get_proposal_id_that_added_wasm;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     governance::{
@@ -24,13 +23,12 @@ use crate::{
         RegisterDappCanisters, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
         UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
     },
-    sns_upgrade::{get_upgrade_params, UpgradeSnsParams},
+    sns_upgrade::{get_proposal_id_that_added_wasm, get_upgrade_params, UpgradeSnsParams},
     types::Environment,
     validate_chars_count, validate_len, validate_required_field,
 };
 use candid::Principal;
-use dfn_core::api::CanisterId;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
@@ -1056,21 +1054,33 @@ fn validate_and_render_upgrade_sns_controlled_canister(
         ));
     }
 
-    let mut state = Sha256::new();
-    state.write(new_canister_wasm);
-    let sha = state.finish();
+    let canister_wasm_sha256 = {
+        let mut state = Sha256::new();
+        state.write(new_canister_wasm);
+        let sha = state.finish();
+        hex::encode(sha)
+    };
+
+    let upgrade_args_sha_256 = canister_upgrade_arg
+        .as_ref()
+        .map(|arg| {
+            let mut state = Sha256::new();
+            state.write(arg);
+            let sha = state.finish();
+            format!("Upgrade arg sha256: {}", hex::encode(sha))
+        })
+        .unwrap_or_else(|| "No upgrade arg".to_string());
 
     Ok(format!(
         r"# Proposal to upgrade SNS controlled canister:
 
-## Canister id: {:?}
+## Canister id: {canister_id:?}
 
-## Canister wasm sha256: {}
+## Canister wasm sha256: {canister_wasm_sha256}
 
-## Mode: {:?}",
-        canister_id,
-        hex::encode(sha),
-        mode
+## Mode: {mode:?}
+
+## {upgrade_args_sha_256}",
     ))
 }
 
@@ -1877,7 +1887,7 @@ impl ProposalData {
 
         // Every time the tally changes, (possibly) update the wait-for-quiet
         // dynamic deadline.
-        if let Some(old_tally) = self.latest_tally.clone() {
+        if let Some(old_tally) = self.latest_tally {
             if new_tally.yes == old_tally.yes
                 && new_tally.no == old_tally.no
                 && new_tally.total == old_tally.total
@@ -2033,6 +2043,7 @@ impl ProposalData {
     /// - 'no': Amount of voting power voting 'no'.
     /// - 'total': Total voting power.
     /// - 'percentage_of_total_required': The minimum percentage of the total voting power required for a decision.
+    ///
     /// The function returns a `Vote`:
     /// - `Vote::Yes` if the amount of voting power voting 'yes' votes exceeds `percentage_of_total_required` of the total.
     /// - `Vote::No` if the amount of voting power voting 'no' votes is equal to or exceeds `1-percentage_of_total_required` of the total.
@@ -2155,7 +2166,7 @@ impl ProposalData {
         let limited_ballots: BTreeMap<_, _> = ballots
             .iter()
             .filter(|(neuron_id, _)| caller_neurons_set.contains(*neuron_id))
-            .map(|(neuron_id, ballot)| (neuron_id.clone(), ballot.clone()))
+            .map(|(neuron_id, ballot)| (neuron_id.clone(), *ballot))
             .take(MAX_NUMBER_OF_BALLOTS_IN_LIST_PROPOSALS_RESPONSE)
             .collect();
 
@@ -2165,13 +2176,13 @@ impl ProposalData {
             proposer: proposer.clone(),
             reject_cost_e8s: *reject_cost_e8s,
             proposal_creation_timestamp_seconds: *proposal_creation_timestamp_seconds,
-            latest_tally: latest_tally.clone(),
+            latest_tally: *latest_tally,
             decided_timestamp_seconds: *decided_timestamp_seconds,
             executed_timestamp_seconds: *executed_timestamp_seconds,
             failed_timestamp_seconds: *failed_timestamp_seconds,
             failure_reason: failure_reason.clone(),
             reward_event_round: *reward_event_round,
-            wait_for_quiet_state: wait_for_quiet_state.clone(),
+            wait_for_quiet_state: *wait_for_quiet_state,
             is_eligible_for_rewards: *is_eligible_for_rewards,
             initial_voting_period_seconds: *initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds: *wait_for_quiet_deadline_increase_seconds,
@@ -2185,6 +2196,30 @@ impl ProposalData {
             proposal: proposal.as_ref().map(Proposal::limited_for_list_proposals),
             ballots: limited_ballots,
         }
+    }
+
+    /// "Upgrade proposals" are those that upgrade the SNS or a canister it controls.
+    pub(crate) fn is_upgrade_proposal(&self) -> bool {
+        let action_is_upgrade = matches!(
+            self.proposal,
+            Some(Proposal {
+                action: Some(
+                    Action::UpgradeSnsControlledCanister(_)
+                        | Action::UpgradeSnsToNextVersion(_)
+                        | Action::ManageLedgerParameters(_)
+                ),
+                ..
+            })
+        );
+        // In production, the above condition is exactly what we want. However, in some tests, we only set the action_id
+        // and not the action.
+        let upgrade_action_ids: [u64; 3] = [
+            (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into(),
+            (&Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default())).into(),
+            (&Action::ManageLedgerParameters(ManageLedgerParameters::default())).into(),
+        ];
+        let action_id_is_upgrade = upgrade_action_ids.contains(&self.action);
+        action_is_upgrade || action_id_is_upgrade
     }
 }
 
@@ -2476,6 +2511,10 @@ mod tests {
             pending_version: None,
             is_finalizing_disburse_maturity: None,
             maturity_modulation: None,
+            cached_upgrade_steps: None,
+            target_version: None,
+            timers: None,
+            upgrade_journal: None,
         }
     }
 
@@ -2646,7 +2685,34 @@ mod tests {
 
 ## Canister wasm sha256: 93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
 
-## Mode: Upgrade"#
+## Mode: Upgrade
+
+## No upgrade arg"#
+                .to_string()
+        );
+    }
+
+    #[test]
+    fn render_upgrade_sns_controlled_canister_proposal_with_upgrade_args() {
+        let upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_principal_id()),
+            new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            canister_upgrade_arg: Some(vec![10, 20, 30, 40, 50, 60, 70, 80]),
+            mode: Some(CanisterInstallModeProto::Upgrade.into()),
+        };
+        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap();
+
+        assert_eq!(
+            text,
+            r#"# Proposal to upgrade SNS controlled canister:
+
+## Canister id: bg4sm-wzk
+
+## Canister wasm sha256: 93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
+
+## Mode: Upgrade
+
+## Upgrade arg sha256: 73f1171adc7e49b09423da2515a1077e3cc63e3fabcb9846cac437d044ac57ec"#
                 .to_string()
         );
     }
@@ -3062,6 +3128,7 @@ mod tests {
             0,
             0,
             Some(0),
+            0,
             0,
             0,
         )

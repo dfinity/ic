@@ -39,9 +39,9 @@
 //! is deployed to each subnet before proceeding with the second stage.
 //!
 //!  * If you are removing a variant, in the first stage remove all
-//!   uses of said variant from production code (except its definition and any
-//!   conversion logic); only once this change has been deployed to all subnets,
-//!   in the second phase, remove the variant and update this test.
+//!    uses of said variant from production code (except its definition and any
+//!    conversion logic); only once this change has been deployed to all subnets,
+//!    in the second phase, remove the variant and update this test.
 //!
 //!  * If you are adding a variant, in the first stage define the
 //!    variant and the necessary conversion logic, without using it anywhere (and
@@ -80,7 +80,7 @@ pub use metadata_state::{
     IngressHistoryState, NetworkTopology, Stream, SubnetTopology, SystemMetadata,
 };
 pub use page_map::{PageIndex, PageMap};
-pub use replicated_state::{InputQueueType, NextInputQueue, ReplicatedState, StateError};
+pub use replicated_state::{InputQueueType, InputSource, ReplicatedState, StateError};
 
 /// Encapsulates metrics related to errors that can occur on checkpoint loading.
 /// The intention is to pass an implementation of this trait along with the actual

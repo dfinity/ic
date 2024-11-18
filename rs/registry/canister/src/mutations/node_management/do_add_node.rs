@@ -1,8 +1,8 @@
-use crate::{common::LOG_PREFIX, mutations::common::is_valid_domain, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
+use std::fmt::Display;
 
 use std::net::SocketAddr;
 
-use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
@@ -11,22 +11,19 @@ use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord},
+    node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord, NodeRewardType},
 };
+use idna::domain_to_ascii_strict;
 
-use crate::mutations::{
-    common::check_ipv4_config,
-    node_management::{
-        common::{
-            get_node_operator_record, make_add_node_registry_mutations,
-            make_update_node_operator_mutation, node_exists_with_ipv4, scan_for_nodes_by_ip,
-        },
-        do_remove_node_directly::RemoveNodeDirectlyPayload,
-        do_update_node_ipv4_config_directly::IPv4Config,
+use crate::mutations::node_management::{
+    common::{
+        get_node_operator_record, make_add_node_registry_mutations,
+        make_update_node_operator_mutation, node_exists_with_ipv4, scan_for_nodes_by_ip,
     },
+    do_remove_node_directly::RemoveNodeDirectlyPayload,
 };
-use ic_types::crypto::CurrentNodePublicKeys;
-use ic_types::time::Time;
+use ic_registry_canister_api::AddNodePayload;
+use ic_types::{crypto::CurrentNodePublicKeys, time::Time};
 use prost::Message;
 
 impl Registry {
@@ -79,16 +76,31 @@ impl Registry {
             ));
         }
 
-        // 3. Validate keys and get the node id
+        // 3. Get valid type if type is in request
+        let node_reward_type = payload
+            .node_reward_type
+            .as_ref()
+            .map(|t| {
+                validate_str_as_node_reward_type(t).map_err(|e| {
+                    format!(
+                        "{}do_add_node: Error parsing node type from payload: {}",
+                        LOG_PREFIX, e
+                    )
+                })
+            })
+            .transpose()?
+            .map(|node_reward_type| node_reward_type as i32);
+
+        // 4. Validate keys and get the node id
         let (node_id, valid_pks) = valid_keys_from_payload(&payload)
             .map_err(|err| format!("{}do_add_node: {}", LOG_PREFIX, err))?;
 
-        // 4. Validate the domain is valid
+        // 5. Validate the domain is valid
         let domain: Option<String> = payload
             .domain
             .as_ref()
             .map(|domain| {
-                if !is_valid_domain(domain) {
+                if !domain_to_ascii_strict(domain).is_ok_and(|s| s == *domain) {
                     return Err(format!(
                         "{LOG_PREFIX}do_add_node: Domain name `{domain}` has invalid format"
                     ));
@@ -97,11 +109,15 @@ impl Registry {
             })
             .transpose()?;
 
-        // 5. If there is an IPv4 config, make sure that the IPv4 is not used by anyone else
-        let ipv4_intf_config = payload
-            .public_ipv4_config
-            .clone()
-            .map(make_valid_node_ivp4_config_or_panic);
+        // 6. If there is an IPv4 config, make sure that the IPv4 is not used by anyone else
+        let ipv4_intf_config = payload.public_ipv4_config.clone().map(|ipv4_config| {
+            ipv4_config.panic_on_invalid();
+            IPv4InterfaceConfig {
+                ip_addr: ipv4_config.ip_addr().to_string(),
+                gateway_ip_addr: vec![ipv4_config.gateway_ip_addr().to_string()],
+                prefix_length: ipv4_config.prefix_length(),
+            }
+        });
         if let Some(ipv4_config) = ipv4_intf_config.clone() {
             if node_exists_with_ipv4(self, &ipv4_config.ip_addr) {
                 return Err(format!(
@@ -113,7 +129,7 @@ impl Registry {
 
         println!("{}do_add_node: The node id is {:?}", LOG_PREFIX, node_id);
 
-        // 6. Create the Node Record
+        // 7. Create the Node Record
         let node_record = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
@@ -122,12 +138,13 @@ impl Registry {
             chip_id: payload.chip_id.clone(),
             public_ipv4_config: ipv4_intf_config,
             domain,
+            node_reward_type,
         };
 
-        // 7. Insert node, public keys, and crypto keys
+        // 8. Insert node, public keys, and crypto keys
         let mut mutations = make_add_node_registry_mutations(node_id, node_record, valid_pks);
 
-        // 8. Update the Node Operator record
+        // 9. Update the Node Operator record
         node_operator_record.node_allowance -= 1;
 
         let update_node_operator_record =
@@ -135,7 +152,7 @@ impl Registry {
 
         mutations.push(update_node_operator_record);
 
-        // 9. Check invariants before applying mutations
+        // 10. Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
 
         println!("{}do_add_node finished: {:?}", LOG_PREFIX, payload);
@@ -144,29 +161,20 @@ impl Registry {
     }
 }
 
-/// The payload of an update request to add a new node.
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct AddNodePayload {
-    // Raw bytes of the protobuf, but these should be PublicKey
-    pub node_signing_pk: Vec<u8>,
-    pub committee_signing_pk: Vec<u8>,
-    pub ni_dkg_dealing_encryption_pk: Vec<u8>,
-    // Raw bytes of the protobuf, but these should be X509PublicKeyCert
-    pub transport_tls_cert: Vec<u8>,
-    // Raw bytes of the protobuf, but these should be PublicKey
-    pub idkg_dealing_encryption_pk: Option<Vec<u8>>,
-
-    pub xnet_endpoint: String,
-    pub http_endpoint: String,
-
-    pub chip_id: Option<Vec<u8>>,
-
-    pub public_ipv4_config: Option<IPv4Config>,
-    pub domain: Option<String>,
-
-    // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
-    pub p2p_flow_endpoints: Vec<String>,
-    pub prometheus_metrics_endpoint: String,
+// try to convert input string into NodeRewardType enum
+// If a type is no longer supported for newly registered nodes, it should be removed from this function
+fn validate_str_as_node_reward_type<T: AsRef<str> + Display>(
+    type_string: T,
+) -> Result<NodeRewardType, String> {
+    Ok(match type_string.as_ref() {
+        "type0" => NodeRewardType::Type0,
+        "type1" => NodeRewardType::Type1,
+        "type2" => NodeRewardType::Type2,
+        "type3" => NodeRewardType::Type3,
+        "type3.1" => NodeRewardType::Type3dot1,
+        "type1.1" => NodeRewardType::Type1dot1,
+        _ => return Err(format!("Invalid node type: {}", type_string)),
+    })
 }
 
 /// Parses the ConnectionEndpoint string
@@ -277,37 +285,23 @@ fn now() -> Result<Time, String> {
     Ok(Time::from_nanos_since_unix_epoch(nanos))
 }
 
-fn make_valid_node_ivp4_config_or_panic(ipv4_config: IPv4Config) -> IPv4InterfaceConfig {
-    check_ipv4_config(
-        ipv4_config.ip_addr.to_string(),
-        vec![ipv4_config.gateway_ip_addr.to_string()],
-        ipv4_config.prefix_length,
-    )
-    .expect("Invalid IPv4 config");
-
-    IPv4InterfaceConfig {
-        ip_addr: ipv4_config.ip_addr,
-        gateway_ip_addr: vec![ipv4_config.gateway_ip_addr],
-        prefix_length: ipv4_config.prefix_length,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
     use crate::{
-        common::test_helpers::invariant_compliant_registry,
-        mutations::common::{encode_or_panic, test::TEST_NODE_ID},
+        common::test_helpers::invariant_compliant_registry, mutations::common::test::TEST_NODE_ID,
     };
 
     use super::*;
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
     use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
+    use ic_registry_canister_api::IPv4Config;
     use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
     use ic_registry_transport::insert;
     use lazy_static::lazy_static;
+    use prost::Message;
 
     /// Prepares the payload to add a new node, for tests.
     pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePublicKeys) {
@@ -316,13 +310,15 @@ mod tests {
         let node_public_keys =
             generate_node_keys_once(&config, None).expect("error generating node public keys");
         // Create payload message
-        let node_signing_pk = encode_or_panic(node_public_keys.node_signing_key());
-        let committee_signing_pk = encode_or_panic(node_public_keys.committee_signing_key());
-        let ni_dkg_dealing_encryption_pk =
-            encode_or_panic(node_public_keys.dkg_dealing_encryption_key());
-        let transport_tls_cert = encode_or_panic(node_public_keys.tls_certificate());
-        let idkg_dealing_encryption_pk =
-            encode_or_panic(node_public_keys.idkg_dealing_encryption_key());
+        let node_signing_pk = node_public_keys.node_signing_key().encode_to_vec();
+        let committee_signing_pk = node_public_keys.committee_signing_key().encode_to_vec();
+        let ni_dkg_dealing_encryption_pk = node_public_keys
+            .dkg_dealing_encryption_key()
+            .encode_to_vec();
+        let transport_tls_cert = node_public_keys.tls_certificate().encode_to_vec();
+        let idkg_dealing_encryption_pk = node_public_keys
+            .idkg_dealing_encryption_key()
+            .encode_to_vec();
         // Create the payload
         let payload = AddNodePayload {
             node_signing_pk,
@@ -338,6 +334,7 @@ mod tests {
             // Unused section follows
             p2p_flow_endpoints: Default::default(),
             prometheus_metrics_endpoint: Default::default(),
+            node_reward_type: None,
         };
 
         (payload, node_public_keys)
@@ -376,6 +373,7 @@ mod tests {
             // Unused section follows
             p2p_flow_endpoints: Default::default(),
             prometheus_metrics_endpoint: Default::default(),
+            node_reward_type: None,
         };
     }
 
@@ -388,7 +386,7 @@ mod tests {
     #[test]
     fn empty_committee_signing_key_is_detected() {
         let mut payload = PAYLOAD.clone();
-        let node_signing_pubkey = encode_or_panic(TEST_DATA.node_pks.node_signing_key());
+        let node_signing_pubkey = TEST_DATA.node_pks.node_signing_key().encode_to_vec();
         payload.node_signing_pk = node_signing_pubkey;
         assert!(valid_keys_from_payload(&payload).is_err());
     }
@@ -396,8 +394,8 @@ mod tests {
     #[test]
     fn empty_dkg_dealing_key_is_detected() {
         let mut payload = PAYLOAD.clone();
-        let node_signing_pubkey = encode_or_panic(TEST_DATA.node_pks.node_signing_key());
-        let committee_signing_pubkey = encode_or_panic(TEST_DATA.node_pks.committee_signing_key());
+        let node_signing_pubkey = TEST_DATA.node_pks.node_signing_key().encode_to_vec();
+        let committee_signing_pubkey = TEST_DATA.node_pks.committee_signing_key().encode_to_vec();
         payload.node_signing_pk = node_signing_pubkey;
         payload.committee_signing_pk = committee_signing_pubkey;
         assert!(valid_keys_from_payload(&payload).is_err());
@@ -406,10 +404,12 @@ mod tests {
     #[test]
     fn empty_tls_cert_is_detected() {
         let mut payload = PAYLOAD.clone();
-        let node_signing_pubkey = encode_or_panic(TEST_DATA.node_pks.node_signing_key());
-        let committee_signing_pubkey = encode_or_panic(TEST_DATA.node_pks.committee_signing_key());
-        let ni_dkg_dealing_encryption_pubkey =
-            encode_or_panic(TEST_DATA.node_pks.dkg_dealing_encryption_key());
+        let node_signing_pubkey = TEST_DATA.node_pks.node_signing_key().encode_to_vec();
+        let committee_signing_pubkey = TEST_DATA.node_pks.committee_signing_key().encode_to_vec();
+        let ni_dkg_dealing_encryption_pubkey = TEST_DATA
+            .node_pks
+            .dkg_dealing_encryption_key()
+            .encode_to_vec();
         payload.node_signing_pk = node_signing_pubkey;
         payload.committee_signing_pk = committee_signing_pubkey;
         payload.ni_dkg_dealing_encryption_pk = ni_dkg_dealing_encryption_pubkey;
@@ -419,11 +419,13 @@ mod tests {
     #[test]
     fn empty_idkg_key_is_detected() {
         let mut payload = PAYLOAD.clone();
-        let node_signing_pubkey = encode_or_panic(TEST_DATA.node_pks.node_signing_key());
-        let committee_signing_pubkey = encode_or_panic(TEST_DATA.node_pks.committee_signing_key());
-        let ni_dkg_dealing_encryption_pubkey =
-            encode_or_panic(TEST_DATA.node_pks.dkg_dealing_encryption_key());
-        let tls_certificate = encode_or_panic(TEST_DATA.node_pks.tls_certificate());
+        let node_signing_pubkey = TEST_DATA.node_pks.node_signing_key().encode_to_vec();
+        let committee_signing_pubkey = TEST_DATA.node_pks.committee_signing_key().encode_to_vec();
+        let ni_dkg_dealing_encryption_pubkey = TEST_DATA
+            .node_pks
+            .dkg_dealing_encryption_key()
+            .encode_to_vec();
+        let tls_certificate = TEST_DATA.node_pks.tls_certificate().encode_to_vec();
         payload.node_signing_pk = node_signing_pubkey;
         payload.committee_signing_pk = committee_signing_pubkey;
         payload.ni_dkg_dealing_encryption_pk = ni_dkg_dealing_encryption_pubkey;
@@ -490,37 +492,6 @@ mod tests {
     }
 
     #[test]
-    fn should_succeed_if_ipv4_config_is_valid() {
-        let ipv4_config_raw = IPv4Config {
-            ip_addr: "204.153.51.58".to_string(),
-            gateway_ip_addr: "204.153.51.1".to_string(),
-            prefix_length: 24,
-        };
-
-        let ipv4_config = IPv4InterfaceConfig {
-            ip_addr: "204.153.51.58".to_string(),
-            gateway_ip_addr: vec!["204.153.51.1".to_string()],
-            prefix_length: 24,
-        };
-
-        assert_eq!(
-            make_valid_node_ivp4_config_or_panic(ipv4_config_raw),
-            ipv4_config
-        );
-    }
-
-    #[test]
-    #[should_panic]
-    fn should_panic_if_ipv4_config_is_invalid() {
-        let ipv4_config_raw = IPv4Config {
-            ip_addr: "204.153.51.58".to_string(),
-            gateway_ip_addr: "204.153.49.1".to_string(),
-            prefix_length: 24,
-        };
-        make_valid_node_ivp4_config_or_panic(ipv4_config_raw);
-    }
-
-    #[test]
     fn should_fail_if_domain_name_is_invalid() {
         // Arrange
         let mut registry = invariant_compliant_registry(0);
@@ -532,7 +503,7 @@ mod tests {
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
-            encode_or_panic(&node_operator_record),
+            node_operator_record.encode_to_vec(),
         )]);
         let (mut payload, _) = prepare_add_node_payload(1);
         // Set an invalid domain name
@@ -558,7 +529,7 @@ mod tests {
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
-            encode_or_panic(&node_operator_record),
+            node_operator_record.encode_to_vec(),
         )]);
         let (payload, _) = prepare_add_node_payload(1);
         // Act
@@ -597,7 +568,7 @@ mod tests {
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
-            encode_or_panic(&node_operator_record),
+            node_operator_record.encode_to_vec(),
         )]);
         let (payload, _) = prepare_add_node_payload(1);
         // Act
@@ -632,7 +603,7 @@ mod tests {
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
-            encode_or_panic(&node_operator_record),
+            node_operator_record.encode_to_vec(),
         )]);
         let (payload_1, _) = prepare_add_node_payload(1);
         // Set a different IP for the second node
@@ -683,7 +654,7 @@ mod tests {
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
-            encode_or_panic(&node_operator_record),
+            node_operator_record.encode_to_vec(),
         )]);
         // Use payloads with the same IPs
         let (payload_1, _) = prepare_add_node_payload(1);
@@ -742,15 +713,15 @@ mod tests {
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
-            encode_or_panic(&node_operator_record),
+            node_operator_record.encode_to_vec(),
         )]);
 
         // create an IPv4 config
-        let ipv4_config = Some(IPv4Config {
-            ip_addr: "204.153.51.58".to_string(),
-            gateway_ip_addr: "204.153.51.1".to_string(),
-            prefix_length: 24,
-        });
+        let ipv4_config = Some(IPv4Config::maybe_invalid_new(
+            "204.153.51.58".to_string(),
+            "204.153.51.1".to_string(),
+            24,
+        ));
 
         // create two node payloads with the same IPv4 config
         let (mut payload_1, _) = prepare_add_node_payload(1);

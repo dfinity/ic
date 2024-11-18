@@ -2,20 +2,20 @@
 mod tests;
 
 use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus, WithdrawalStatus};
+use crate::eth_logs::LedgerSubaccount;
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::lifecycle::EthereumNetwork;
 use crate::map::MultiKeyMap;
 use crate::numeric::{
-    CkTokenAmount, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
+    CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
     TransactionNonce, Wei,
 };
 use crate::state::event::EventType;
 use crate::tx::{
     Eip1559TransactionRequest, FinalizedEip1559Transaction, GasFeeEstimate, ResubmissionStrategy,
-    SignedEip1559TransactionRequest, SignedTransactionRequest, TransactionPrice,
-    TransactionRequest,
+    SignedEip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
 };
 use candid::Principal;
 use ic_ethereum_types::Address;
@@ -76,10 +76,10 @@ impl WithdrawalRequest {
         }
     }
 
-    pub fn from_subaccount(&self) -> &Option<Subaccount> {
+    pub fn from_subaccount(&self) -> Option<&LedgerSubaccount> {
         match self {
-            WithdrawalRequest::CkEth(request) => &request.from_subaccount,
-            WithdrawalRequest::CkErc20(request) => &request.from_subaccount,
+            WithdrawalRequest::CkEth(request) => request.from_subaccount.as_ref(),
+            WithdrawalRequest::CkErc20(request) => request.from_subaccount.as_ref(),
         }
     }
 
@@ -98,7 +98,9 @@ impl WithdrawalRequest {
             ByWithdrawalId(index) => &self.cketh_ledger_burn_index() == index,
             ByRecipient(address) => &self.payee() == address,
             BySenderAccount(Account { owner, subaccount }) => {
-                &self.from() == owner && self.from_subaccount() == &subaccount.map(Subaccount)
+                &self.from() == owner
+                    && self.from_subaccount()
+                        == subaccount.and_then(LedgerSubaccount::from_bytes).as_ref()
             }
         }
     }
@@ -117,7 +119,7 @@ impl From<Erc20WithdrawalRequest> for WithdrawalRequest {
 }
 
 /// Ethereum withdrawal request issued by the user.
-#[derive(Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Decode, Encode)]
 pub struct EthWithdrawalRequest {
     /// The ETH amount that the receiver will get, not accounting for the Ethereum transaction fees.
     #[n(0)]
@@ -133,14 +135,14 @@ pub struct EthWithdrawalRequest {
     pub from: Principal,
     /// The subaccount from which the minter burned ckETH.
     #[n(4)]
-    pub from_subaccount: Option<Subaccount>,
+    pub from_subaccount: Option<LedgerSubaccount>,
     /// The IC time at which the withdrawal request arrived.
     #[n(5)]
     pub created_at: Option<u64>,
 }
 
 /// ERC-20 withdrawal request issued by the user.
-#[derive(Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Decode, Encode)]
 pub struct Erc20WithdrawalRequest {
     /// Amount of burn ckETH that can be used to pay for the Ethereum transaction fees.
     #[n(0)]
@@ -168,13 +170,13 @@ pub struct Erc20WithdrawalRequest {
     pub from: Principal,
     /// The subaccount from which the minter burned ckETH.
     #[n(8)]
-    pub from_subaccount: Option<Subaccount>,
+    pub from_subaccount: Option<LedgerSubaccount>,
     /// The IC time at which the withdrawal request arrived.
     #[n(9)]
     pub created_at: u64,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
 pub enum ReimbursementIndex {
     #[n(0)]
     CkEth {
@@ -231,7 +233,7 @@ impl ReimbursementIndex {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct ReimbursementRequest {
     /// Burn index on the ledger that should be reimbursed.
     #[cbor(n(0), with = "crate::cbor::id")]
@@ -242,7 +244,7 @@ pub struct ReimbursementRequest {
     #[cbor(n(2), with = "crate::cbor::principal")]
     pub to: Principal,
     #[n(3)]
-    pub to_subaccount: Option<Subaccount>,
+    pub to_subaccount: Option<LedgerSubaccount>,
     /// Transaction hash of the failed ETH transaction.
     /// We use this hash to link the mint reimbursement transaction
     /// on the ledger with the failed ETH transaction.
@@ -250,7 +252,7 @@ pub struct ReimbursementRequest {
     pub transaction_hash: Option<Hash>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct Reimbursed {
     #[cbor(n(0), with = "crate::cbor::id")]
     pub reimbursed_in_block: LedgerMintIndex,
@@ -265,7 +267,7 @@ pub struct Reimbursed {
 
 pub type ReimbursedResult = Result<Reimbursed, ReimbursedError>;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ReimbursedError {
     /// Whether reimbursement was minted or not is unknown,
     /// most likely because there was an unexpected panic in the callback.
@@ -274,21 +276,14 @@ pub enum ReimbursedError {
     Quarantined,
 }
 
-#[derive(Clone, Eq, PartialEq, Encode, Decode)]
-#[cbor(transparent)]
-pub struct Subaccount(#[cbor(n(0), with = "minicbor::bytes")] pub [u8; 32]);
+struct DisplayOption<'a, T>(&'a Option<T>);
 
-impl fmt::Debug for Subaccount {
+impl<T: fmt::Display> fmt::Display for DisplayOption<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(f, "{}", hex::encode(self.0))
-    }
-}
-
-struct DebugPrincipal<'a>(&'a Principal);
-
-impl fmt::Debug for DebugPrincipal<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(f, "{}", self.0)
+        match self.0 {
+            Some(t) => write!(f, "Some({})", t),
+            None => write!(f, "None"),
+        }
     }
 }
 
@@ -306,8 +301,11 @@ impl fmt::Debug for EthWithdrawalRequest {
             .field("withdrawal_amount", withdrawal_amount)
             .field("destination", destination)
             .field("ledger_burn_index", ledger_burn_index)
-            .field("from", &DebugPrincipal(from))
-            .field("from_subaccount", from_subaccount)
+            .field("from", &format_args!("{}", from))
+            .field(
+                "from_subaccount",
+                &format_args!("{}", DisplayOption(from_subaccount)),
+            )
             .field("created_at", created_at)
             .finish()
     }
@@ -333,10 +331,13 @@ impl fmt::Debug for Erc20WithdrawalRequest {
             .field("erc20_contract_address", erc20_contract_address)
             .field("destination", destination)
             .field("cketh_ledger_burn_index", cketh_ledger_burn_index)
-            .field("ckerc20_ledger_id", &DebugPrincipal(ckerc20_ledger_id))
+            .field("ckerc20_ledger_id", &format_args!("{}", ckerc20_ledger_id))
             .field("ckerc20_ledger_burn_index", ckerc20_ledger_burn_index)
-            .field("from", &DebugPrincipal(from))
-            .field("from_subaccount", from_subaccount)
+            .field("from", &format_args!("{}", from))
+            .field(
+                "from_subaccount",
+                &format_args!("{}", DisplayOption(from_subaccount)),
+            )
             .field("created_at", created_at)
             .finish()
     }
@@ -356,7 +357,7 @@ impl fmt::Debug for Erc20WithdrawalRequest {
 ///    The others sent transactions for that nonce were never mined and can be discarded.
 /// 6. If a given transaction fails the minter will reimburse the user who requested the
 ///    withdrawal with the corresponding amount minus fees.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct EthTransactions {
     pub(in crate::state) pending_withdrawal_requests: VecDeque<WithdrawalRequest>,
     // Processed withdrawal requests (transaction created, sent, or finalized).
@@ -375,7 +376,7 @@ pub struct EthTransactions {
     pub(in crate::state) reimbursed: BTreeMap<ReimbursementIndex, ReimbursedResult>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CreateTransactionError {
     InsufficientTransactionFee {
         cketh_ledger_burn_index: LedgerBurnIndex,
@@ -384,7 +385,7 @@ pub enum CreateTransactionError {
     },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ResubmitTransactionError {
     InsufficientTransactionFee {
         ledger_burn_index: LedgerBurnIndex,
@@ -584,6 +585,7 @@ impl EthTransactions {
     /// with nonces greater than the latest mined transaction nonce:
     /// * the resubmitted transaction will need to be re-signed if its transaction fee was increased
     /// * the resubmitted transaction can be resent as is if its transaction fee was not increased
+    ///
     /// We stop on the first error since if a transaction with nonce n could not be resubmitted
     /// (e.g., the transaction amount does not cover the new fees),
     /// then the next transactions with nonces n+1, n+2, ... are blocked anyway
@@ -998,6 +1000,13 @@ impl EthTransactions {
         self.finalized_tx.get_alt(burn_index)
     }
 
+    pub fn get_processed_withdrawal_request(
+        &self,
+        burn_index: &LedgerBurnIndex,
+    ) -> Option<&WithdrawalRequest> {
+        self.processed_withdrawal_requests.get(burn_index)
+    }
+
     pub fn finalized_transactions_iter(
         &self,
     ) -> impl Iterator<
@@ -1092,11 +1101,17 @@ impl EthTransactions {
 pub fn create_transaction(
     withdrawal_request: &WithdrawalRequest,
     nonce: TransactionNonce,
-    transaction_price: TransactionPrice,
+    gas_fee_estimate: GasFeeEstimate,
+    gas_limit: GasAmount,
     ethereum_network: EthereumNetwork,
 ) -> Result<Eip1559TransactionRequest, CreateTransactionError> {
+    assert!(
+        gas_limit > GasAmount::ZERO,
+        "BUG: gas limit should be non-zero"
+    );
     match withdrawal_request {
         WithdrawalRequest::CkEth(request) => {
+            let transaction_price = gas_fee_estimate.to_price(gas_limit);
             let max_transaction_fee = transaction_price.max_transaction_fee();
             let tx_amount = match request.withdrawal_amount.checked_sub(max_transaction_fee) {
                 Some(tx_amount) => tx_amount,
@@ -1121,20 +1136,33 @@ pub fn create_transaction(
             })
         }
         WithdrawalRequest::CkErc20(request) => {
-            let actual_max_transaction_fee = transaction_price.max_transaction_fee();
-            if actual_max_transaction_fee > request.max_transaction_fee {
+            // The transaction fee is already paid and must be at most
+            // the `max_transaction_fee` in the withdrawal request, which, given a gas limit, gives us an upper bound on
+            // the `max_fee_per_gas`. We allocate the maximum from the beginning to minimize
+            // transaction resubmissions: even if the `base_fee_per_gas` increases considerably,
+            // the transaction could still make it as long as `transaction.max_fee_per_gas >=  block.base_fee_per_gas`,
+            // since the `priority_fee_per_gas` received by the miner is capped to (see https://eips.ethereum.org/EIPS/eip-1559)
+            // min(transaction.max_priority_fee_per_gas, transaction.max_fee_per_gas - block.base_fee_per_gas).
+            let request_max_fee_per_gas = request
+                .max_transaction_fee
+                .into_wei_per_gas(gas_limit)
+                .expect("BUG: gas_limit should be non-zero");
+            let actual_min_max_fee_per_gas = gas_fee_estimate.min_max_fee_per_gas();
+            if actual_min_max_fee_per_gas > request_max_fee_per_gas {
                 return Err(CreateTransactionError::InsufficientTransactionFee {
                     cketh_ledger_burn_index: request.cketh_ledger_burn_index,
                     allowed_max_transaction_fee: request.max_transaction_fee,
-                    actual_max_transaction_fee,
+                    actual_max_transaction_fee: actual_min_max_fee_per_gas
+                        .transaction_cost(gas_limit)
+                        .unwrap_or(Wei::MAX),
                 });
             }
             Ok(Eip1559TransactionRequest {
                 chain_id: ethereum_network.chain_id(),
                 nonce,
-                max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
-                max_fee_per_gas: transaction_price.max_fee_per_gas,
-                gas_limit: transaction_price.gas_limit,
+                max_priority_fee_per_gas: gas_fee_estimate.max_priority_fee_per_gas,
+                max_fee_per_gas: request_max_fee_per_gas,
+                gas_limit,
                 destination: request.erc20_contract_address,
                 amount: Wei::ZERO,
                 data: TransactionCallData::Erc20Transfer {
@@ -1151,7 +1179,7 @@ pub fn create_transaction(
 // First 4 bytes of keccak256(transfer(address,uint256))
 const ERC_20_TRANSFER_FUNCTION_SELECTOR: [u8; 4] = hex_literal::hex!("a9059cbb");
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum TransactionCallData {
     Erc20Transfer { to: Address, value: Erc20Value },
 }

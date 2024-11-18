@@ -101,17 +101,20 @@ sh_binary(
 )
 
 sh_test(
-    name = "shfmt-lint",
+    name = "shfmt-check",
     size = "small",
-    srcs = ["shfmt-lint.sh"],
+    srcs = ["shfmt-format.sh"],
+    args = ["$(rootpath //:WORKSPACE.bazel)"],
     data = [
         "//:WORKSPACE.bazel",
         "@shfmt",
     ],
     env = {
-        # Hack to escape the sandbox and grep on the actual repository
+        # Hack to get a path to the actual checkout
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
         "shfmt_path": "$(rootpath @shfmt//:shfmt)",
+        # read by our script to differentiate between write & check
+        "SHFMT_CHECK": "1",
     },
     tags = [
         "external",  # force test to be unconditionally executed.
@@ -128,13 +131,12 @@ sh_binary(
         "@shfmt",
     ],
     env = {
-        # Hack to escape the sandbox and grep on the actual repository
+        # Hack to get a path to the actual checkout
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
         "shfmt_path": "$(rootpath @shfmt//:shfmt)",
     },
     tags = [
         "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-        "smoke",  # it should be run before committing code changes into the version control system.
     ],
     visibility = ["//visibility:public"],
 )
@@ -211,6 +213,34 @@ sh_binary(
         "external",  # force test to be unconditionally executed.
         "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
         "smoke",  # it should be run before committing code changes into the version control system.
+    ],
+    visibility = ["//visibility:public"],
+)
+
+sh_test(
+    name = "buf-breaking",
+    size = "small",
+    srcs = ["check-incompatibilities.sh"],
+    data = [
+        "//:WORKSPACE.bazel",
+        "//:buf.yaml",
+        "@buf",
+    ],
+    env = {
+        # Hack to escape the sandbox and grep on the actual repository
+        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "buf_config": "$(rootpath //:buf.yaml)",
+        "buf_path": "$(rootpath @buf//:buf)",
+    },
+    env_inherit = [
+        "MERGE_BASE_SHA",
+        "CI_OVERRIDE_BUF_BREAKING",
+    ],
+    tags = [
+        # tags copied from other pre-commit tests, but unclear if they are required
+        "external",
+        "local",
+        "smoke",
     ],
     visibility = ["//visibility:public"],
 )

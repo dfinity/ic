@@ -26,13 +26,17 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
 use ic_replicated_state::{EmbedderCache, ExecutionState};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
 use ic_system_api::{ExecutionParameters, ModificationTracking, SystemApiImpl};
+use ic_types::ExecutionRound;
 use ic_types::{CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::{BinaryEncodedWasm, CanisterModule};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 // Please enable only for debugging.
 // If enabled, will collect and log checksums of execution results.
@@ -103,7 +107,7 @@ impl WasmExecutorMetrics {
 }
 
 /// Contains information about execution of the current slice.
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SliceExecutionOutput {
     /// The number of instructions executed by the slice.
     pub executed_instructions: NumInstructions,
@@ -298,18 +302,22 @@ impl WasmExecutor for WasmExecutorImpl {
         )?;
 
         // Create the execution state.
-        let execution_state = ExecutionState::new(
+        let execution_state = ExecutionState {
             canister_root,
             wasm_binary,
-            ExportedFunctions::new(exported_functions),
-            Memory::new(wasm_page_map, wasm_memory_size),
-            Memory::new(
+            exports: ExportedFunctions::new(exported_functions),
+            wasm_memory: Memory::new(wasm_page_map, wasm_memory_size),
+            stable_memory: Memory::new(
                 stable_memory_page_map,
                 ic_replicated_state::NumWasmPages::from(0),
             ),
-            globals,
-            wasm_metadata,
-        );
+            exported_globals: globals,
+            metadata: wasm_metadata,
+            last_executed_round: ExecutionRound::from(0),
+            next_scheduled_method: NextScheduledMethod::default(),
+            is_wasm64: serialized_module.is_wasm64,
+        };
+
         Ok((
             execution_state,
             serialized_module.compilation_cost,
@@ -592,8 +600,10 @@ pub fn process(
         execution_parameters.clone(),
         subnet_available_memory,
         embedder.config().feature_flags.wasm_native_stable_memory,
+        embedder.config().feature_flags.canister_backtrace,
         embedder.config().max_sum_exported_function_name_lengths,
         stable_memory.clone(),
+        wasm_memory.size,
         out_of_instructions_handler,
         logger,
     );
@@ -706,12 +716,17 @@ pub fn process(
     // returning cycles from a request that wasn't sent.
     let mut wasm_result = system_api.take_execution_result(run_result.as_ref().err());
 
-    let wasm_heap_size_after = instance.heap_size(CanisterMemoryType::Heap);
-    let wasm_heap_limit =
-        NumWasmPages::from(wasmtime_environ::WASM32_MAX_PAGES as usize) - wasm_reserved_pages;
+    // The error below can only happen for Wasm32.
+    if instance.is_wasm32() {
+        let wasm_heap_size_after = instance.heap_size(CanisterMemoryType::Heap);
+        let wasm32_max_pages = NumWasmPages::from(
+            wasmtime_environ::WASM32_MAX_SIZE as usize / WASM_PAGE_SIZE as usize,
+        );
+        let wasm_heap_limit = wasm32_max_pages - wasm_reserved_pages;
 
-    if wasm_heap_size_after > wasm_heap_limit {
-        wasm_result = Err(HypervisorError::ReservedPagesForOldMotoko);
+        if wasm_heap_size_after > wasm_heap_limit {
+            wasm_result = Err(HypervisorError::ReservedPagesForOldMotoko);
+        }
     }
 
     let mut allocated_bytes = NumBytes::from(0);
@@ -765,18 +780,27 @@ pub fn process(
         }
         Err(err) => {
             if let Some(log_message) = match err {
-                HypervisorError::Trapped(trap_code) => Some(format!("[TRAP]: {}", trap_code)),
-                HypervisorError::CalledTrap(text) if text.is_empty() => {
-                    Some("[TRAP]: (no message)".to_string())
+                HypervisorError::Trapped {
+                    trap_code,
+                    backtrace,
+                } => match backtrace {
+                    Some(bt) => Some(format!("[TRAP]: {}\n{}", trap_code, bt)),
+                    None => Some(format!("[TRAP]: {}", trap_code)),
+                },
+                HypervisorError::CalledTrap { message, backtrace } => {
+                    let message = if message.is_empty() {
+                        "(no message)"
+                    } else {
+                        &message
+                    };
+                    match backtrace {
+                        Some(bt) => Some(format!("[TRAP]: {}\n{}", message, bt)),
+                        None => Some(format!("[TRAP]: {}", message)),
+                    }
                 }
-                HypervisorError::CalledTrap(text) => Some(format!("[TRAP]: {}", text)),
                 _ => None,
             } {
-                canister_log.add_record(
-                    embedder.config().feature_flags.canister_logging == FlagStatus::Enabled,
-                    timestamp_nanos,
-                    log_message.into_bytes(),
-                );
+                canister_log.add_record(timestamp_nanos, log_message.into_bytes());
             }
             None
         }

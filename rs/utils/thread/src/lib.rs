@@ -5,7 +5,7 @@ use std::thread;
 ///
 /// Note that Rust destroys fields in the order of their declaration:
 ///
-/// > The fields of a struct, tuple or enum variant are dropped in declaration
+/// The fields of a struct, tuple or enum variant are dropped in declaration
 /// order.
 ///
 /// See:

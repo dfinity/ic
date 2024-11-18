@@ -1,6 +1,7 @@
+#![cfg_attr(feature = "fuzzing_code", allow(dead_code, unused_imports))]
 use std::{
     collections::BTreeMap,
-    fs::File,
+    fs::{File, OpenOptions},
     io::Write,
     os::{fd::FromRawFd, unix::prelude::FileExt},
     path::{Path, PathBuf},
@@ -8,11 +9,11 @@ use std::{
 
 use crate::page_map::{
     storage::{
-        Checkpoint, FileIndex, MergeCandidate, MergeDestination, OverlayFile, PageIndexRange,
-        Shard, Storage, StorageLayout, CURRENT_OVERLAY_VERSION, PAGE_INDEX_RANGE_NUM_BYTES,
-        SIZE_NUM_BYTES, VERSION_NUM_BYTES,
+        verify, Checkpoint, FileIndex, MergeCandidate, MergeDestination, OverlayFile,
+        PageIndexRange, Shard, Storage, StorageLayout, CURRENT_OVERLAY_VERSION,
+        PAGE_INDEX_RANGE_NUM_BYTES, SIZE_NUM_BYTES, VERSION_NUM_BYTES,
     },
-    test_utils::{ShardedTestStorageLayout, TestStorageLayout},
+    test_utils::{base_only_storage_layout, ShardedTestStorageLayout, TestStorageLayout},
     FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocator, PageDelta, PageMap,
     PersistenceError, StorageMetrics, MAX_NUMBER_OF_FILES,
 };
@@ -325,7 +326,7 @@ fn storage_as_buffer(storage: &Storage) -> Vec<u8> {
     result
 }
 
-#[derive(Eq, Clone, Debug, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct StorageFiles {
     base: Option<PathBuf>,
     overlays: Vec<PathBuf>,
@@ -356,12 +357,12 @@ fn storage_files(dir: &Path) -> StorageFiles {
 
 /// Verify that the storage in the `dir` directory is equivalent to `expected`.
 fn verify_storage(dir: &Path, expected: &PageDelta) {
-    let storage = Storage::load(&ShardedTestStorageLayout {
+    let storage_layout = ShardedTestStorageLayout {
         dir_path: dir.to_path_buf(),
         base: dir.join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
-    })
-    .unwrap();
+    };
+    let storage = Storage::lazy_load(Box::new(storage_layout.clone())).unwrap();
 
     let expected_num_pages = if let Some(max) = expected.max_page_index() {
         max.get() + 1
@@ -372,6 +373,12 @@ fn verify_storage(dir: &Path, expected: &PageDelta) {
 
     // Verify `num_logical_pages`.
     assert_eq!(expected_num_pages, storage.num_logical_pages() as u64);
+    assert_eq!(
+        expected_num_pages as usize,
+        (&storage_layout as &dyn StorageLayout)
+            .memory_size_pages()
+            .unwrap()
+    );
 
     // Verify every single page in the range.
     for index in 0..storage.num_logical_pages() as u64 {
@@ -439,7 +446,7 @@ fn merge_assert_num_files(
 }
 
 /// An instruction to modify a storage.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 #[cfg_attr(feature = "fuzzing_code", derive(Arbitrary))]
 pub enum Instruction {
     /// Create an overlay file with provided list of `PageIndex` to write.
@@ -551,8 +558,7 @@ fn write_overlays_and_verify_with_tempdir(
                 let mut page_map = PageMap::new_for_testing();
                 let num_pages = combined_delta
                     .max_page_index()
-                    .map(|index| index.get() + 1)
-                    .unwrap_or(0);
+                    .map_or(0, |index| index.get() + 1);
                 page_map.update(
                     combined_delta
                         .iter()
@@ -1365,7 +1371,7 @@ fn overlapping_shards_is_an_error() {
             tempdir.path().join("000000_010_vmemory_0.overlay"),
         ]
     );
-    assert!(Storage::load(&ShardedTestStorageLayout {
+    assert!(verify(&ShardedTestStorageLayout {
         dir_path: tempdir.path().to_path_buf(),
         base: tempdir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
@@ -1376,13 +1382,42 @@ fn overlapping_shards_is_an_error() {
         tempdir.path().join("000000_011_vmemory_0.overlay"),
     )
     .unwrap();
-    assert!(Storage::load(&ShardedTestStorageLayout {
+    assert!(verify(&ShardedTestStorageLayout {
         dir_path: tempdir.path().to_path_buf(),
         base: tempdir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
     })
     .is_err());
 }
+
+#[test]
+fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
+    use std::io::Write;
+
+    let tmp = tempfile::Builder::new()
+        .prefix("checkpoints")
+        .tempdir()
+        .unwrap();
+    let heap_file = tmp.path().join("heap");
+    OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&heap_file)
+        .unwrap()
+        .write_all(&vec![1; PAGE_SIZE / 2])
+        .unwrap();
+
+    match verify(&base_only_storage_layout(heap_file.to_path_buf())) {
+        Err(err) => assert!(
+            err.is_invalid_heap_file(),
+            "Expected invalid heap file error, got {:?}",
+            err
+        ),
+        Ok(_) => panic!("Expected a invalid heap file error, got Ok(_)"),
+    }
+}
+
 #[test]
 fn sharded_base_file() {
     // Base only files; expect get_base_memory_instructions to be exhaustive
@@ -1392,11 +1427,11 @@ fn sharded_base_file() {
         &lsmt_config_sharded(),
         &dir,
     );
-    let storage = Storage::load(&ShardedTestStorageLayout {
+    let storage = Storage::lazy_load(Box::new(ShardedTestStorageLayout {
         dir_path: dir.path().to_path_buf(),
         base: dir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
-    })
+    }))
     .unwrap();
     let full_range = PageIndex::new(0)..PageIndex::new(11);
     let filter = BitVec::from_elem(
@@ -1425,11 +1460,11 @@ fn sharded_base_file() {
         &lsmt_config_sharded(),
         &dir,
     );
-    let storage = Storage::load(&ShardedTestStorageLayout {
+    let storage = Storage::lazy_load(Box::new(ShardedTestStorageLayout {
         dir_path: dir.path().to_path_buf(),
         base: dir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
-    })
+    }))
     .unwrap();
     assert!(!storage
         .get_memory_instructions(full_range, &mut filter.clone())
@@ -1484,6 +1519,7 @@ fn overlapping_page_ranges() {
     );
 }
 
+#[cfg(not(feature = "fuzzing_code"))]
 mod proptest_tests {
     use super::*;
     use proptest::collection::vec as prop_vec;

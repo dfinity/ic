@@ -7,7 +7,7 @@ use ic_nervous_system_proto::pb::v1::{
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     create_service_nervous_system::{
         governance_parameters::VotingRewardParameters,
         initial_token_distribution::{
@@ -17,9 +17,7 @@ use ic_nns_governance::pb::v1::{
         swap_parameters::NeuronBasketConstructionParameters,
         GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
     },
-    manage_neuron_response,
-    proposal::Action,
-    CreateServiceNervousSystem, Proposal,
+    manage_neuron_response, CreateServiceNervousSystem, MakeProposalRequest, ProposalActionRequest,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -46,8 +44,10 @@ use ic_state_machine_tests::StateMachine;
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use lazy_static::lazy_static;
 use maplit::hashmap;
-use std::collections::BTreeSet;
-use std::{collections::HashMap, time::UNIX_EPOCH};
+use std::{
+    collections::{BTreeSet, HashMap},
+    time::UNIX_EPOCH,
+};
 
 // Valid images to be used in the CreateServiceNervousSystem proposal.
 pub const IMAGE_1: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC";
@@ -98,13 +98,13 @@ lazy_static! {
                 }),
             }),
             swap_parameters: Some(SwapParameters {
-                minimum_participants: Some(5),
+                minimum_participants: Some(4),
                 minimum_direct_participation_icp: Some(Tokens::from_tokens(499_900)),
-                maximum_direct_participation_icp: Some(Tokens::from_tokens(749_900)),
-                minimum_participant_icp: Some(Tokens::from_tokens(1)),
+                maximum_direct_participation_icp: Some(Tokens::from_tokens(549_900)),
+                minimum_participant_icp: Some(Tokens::from_tokens(20)),
                 maximum_participant_icp: Some(Tokens::from_tokens(500_000)),
                 neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: Some(5),
+                    count: Some(3),
                     dissolve_delay_interval: Some(Duration::from_secs(7_890_000)), // 3 months
                 }),
                 confirmation_text: None,
@@ -233,11 +233,11 @@ impl SnsInitializationFlowTestSetup {
         neuron_id: NeuronId,
         create_service_nervous_system: &CreateServiceNervousSystem,
     ) -> ProposalId {
-        let proposal = Proposal {
+        let proposal = MakeProposalRequest {
             title: Some("Proposal to create the SNS-2 ServiceNervousSystem".to_string()),
             summary: "Please do this, if anything just so that the test can pass.".to_string(),
             url: "".to_string(),
-            action: Some(Action::CreateServiceNervousSystem(
+            action: Some(ProposalActionRequest::CreateServiceNervousSystem(
                 create_service_nervous_system.clone(),
             )),
         };
@@ -448,6 +448,9 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
     sns_initialization_flow_test.advance_time_to_open_swap(test_sns.swap_canister_id.unwrap());
 
     // Make sure the opening can occur in the heartbeat
+    sns_initialization_flow_test
+        .state_machine
+        .advance_time(std::time::Duration::from_secs(100));
     sns_initialization_flow_test.state_machine.tick();
     let get_lifecycle_response = get_lifecycle(
         &sns_initialization_flow_test.state_machine,
@@ -480,7 +483,10 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
         direct_participant_amounts.insert(participant, response.icp_accepted_participation_e8s);
     }
 
-    // Assert the Swap lifecycle transitions to Committed in a heartbeat message
+    // Assert the Swap lifecycle transitions to Committed after the next periodic task ran.
+    sns_initialization_flow_test
+        .state_machine
+        .advance_time(std::time::Duration::from_secs(100));
     sns_initialization_flow_test.state_machine.tick();
     let get_lifecycle_response = get_lifecycle(
         &sns_initialization_flow_test.state_machine,
@@ -565,7 +571,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
 
     let cf_participants_principals = cf_participants
         .iter()
-        .map(|cf_participant| cf_participant.hotkey_principal.clone())
+        .map(|cf_participant| cf_participant.try_get_controller().unwrap())
         .collect::<Vec<_>>();
     let neurons = sns_governance_list_neurons(
         &sns_initialization_flow_test.state_machine,
@@ -578,7 +584,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
         if neuron.is_neurons_fund_controlled() {
             at_least_one_sns_neuron_is_nf_controlled = true;
             let from_neurons_fund = neuron.permissions.iter().any(|permission| {
-                cf_participants_principals.contains(&permission.principal.unwrap().to_string())
+                cf_participants_principals.contains(&permission.principal.unwrap())
             });
             assert!(
                 from_neurons_fund,
@@ -750,6 +756,9 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
     sns_initialization_flow_test.advance_time_to_open_swap(test_sns.swap_canister_id.unwrap());
 
     // Make sure the opening can occur in the heartbeat
+    sns_initialization_flow_test
+        .state_machine
+        .advance_time(std::time::Duration::from_secs(100));
     sns_initialization_flow_test.state_machine.tick();
     let get_lifecycle_response = get_lifecycle(
         &sns_initialization_flow_test.state_machine,
@@ -782,7 +791,10 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
         direct_participant_amounts.insert(participant, response.icp_accepted_participation_e8s);
     }
 
-    // Assert the Swap lifecycle transitions to Committed in a heartbeat message
+    // Assert the Swap lifecycle transitions to Committed after the next periodic task ran.
+    sns_initialization_flow_test
+        .state_machine
+        .advance_time(std::time::Duration::from_secs(100));
     sns_initialization_flow_test.state_machine.tick();
     let get_lifecycle_response = get_lifecycle(
         &sns_initialization_flow_test.state_machine,
@@ -1113,7 +1125,10 @@ fn test_one_proposal_sns_initialization_failed_swap_returns_neurons_fund_and_dap
         direct_participant_amounts.insert(participant, response.icp_accepted_participation_e8s);
     }
 
-    // Assert the Swap lifecycle transitions to Committed in a heartbeat message
+    // Assert the Swap lifecycle transitions to Committed after the next periodic task ran.
+    sns_initialization_flow_test
+        .state_machine
+        .advance_time(std::time::Duration::from_secs(100));
     sns_initialization_flow_test.state_machine.tick();
     let get_lifecycle_response = get_lifecycle(
         &sns_initialization_flow_test.state_machine,
@@ -1215,7 +1230,7 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
     // Step 3: Advance time to open the swap for participation
     sns_initialization_flow_test.advance_time_to_open_swap(test_sns_1.swap_canister_id.unwrap());
 
-    // Make sure the opening can occur in the heartbeat
+    // Make sure the opening can occur after the next periodic task ran.
     sns_initialization_flow_test.state_machine.tick();
     let get_lifecycle_response = get_lifecycle(
         &sns_initialization_flow_test.state_machine,
@@ -1229,10 +1244,10 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
         &sns_initialization_flow_test.state_machine,
         canister_id_or_panic(test_sns_1.swap_canister_id),
         participant,
-        ExplosiveTokens::from_e8s(E8),
+        ExplosiveTokens::from_e8s(20 * E8),
     );
 
-    assert_eq!(response.icp_accepted_participation_e8s, E8);
+    assert_eq!(response.icp_accepted_participation_e8s, 20 * E8);
 
     // Submit a copy of the same proposal. This should succeed since there is no deduping mechanism
     // for SNS content
@@ -1285,8 +1300,8 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
         &sns_initialization_flow_test.state_machine,
         canister_id_or_panic(test_sns_2.swap_canister_id),
         participant,
-        ExplosiveTokens::from_e8s(E8),
+        ExplosiveTokens::from_e8s(20 * E8),
     );
 
-    assert_eq!(response.icp_accepted_participation_e8s, E8);
+    assert_eq!(response.icp_accepted_participation_e8s, 20 * E8);
 }

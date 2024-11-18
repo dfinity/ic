@@ -12,10 +12,12 @@ rust_library(
     }),
     crate_name = "ic_state_manager",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:strum_macros",
     ],
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/canonical_state",
         "//rs/canonical_state/tree_hash",
         "//rs/config",
@@ -38,6 +40,7 @@ rust_library(
         "//rs/types/types",
         "//rs/utils",
         "//rs/utils/thread",
+        "//rs/utils/validate_eq",
         "@crate_index//:bit-vec",
         "@crate_index//:crossbeam-channel",
         "@crate_index//:hex",
@@ -62,6 +65,7 @@ rust_test(
     timeout = "long",
     crate = ":state_manager",
     deps = [
+        # Keep sorted.
         "//rs/registry/routing_table",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
@@ -91,6 +95,7 @@ rust_ic_test(
     ],
     crate_root = "tests/state_manager.rs",
     deps = [
+        # Keep sorted.
         ":state_manager",
         "//rs/canonical_state/certification_version",
         "//rs/config",
@@ -132,6 +137,7 @@ rust_bench(
     name = "traversal_bench",
     srcs = ["benches/bench_traversal.rs"],
     deps = [
+        # Keep sorted.
         ":state_manager",
         "//rs/canonical_state",
         "//rs/canonical_state/certification_version",

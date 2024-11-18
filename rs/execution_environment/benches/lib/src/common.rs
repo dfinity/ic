@@ -2,11 +2,12 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
-use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
-use ic_config::execution_environment::Config;
+use ic_config::embedders::{Config as EmbeddersConfig, FeatureFlags};
+use ic_config::execution_environment::{
+    Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, SUBNET_CALLBACK_SOFT_LIMIT,
+};
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::RejectCode;
 use ic_execution_environment::{
@@ -16,6 +17,7 @@ use ic_execution_environment::{
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
@@ -47,6 +49,13 @@ pub const USER_ID: u64 = 0;
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX;
 
+/// Enables Wasm64 benchmarks.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Wasm64 {
+    Enabled,
+    Disabled,
+}
+
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
         SUBNET_MEMORY_CAPACITY,
@@ -65,6 +74,7 @@ pub struct BenchmarkArgs {
     pub network_topology: Arc<NetworkTopology>,
     pub execution_parameters: ExecutionParameters,
     pub subnet_available_memory: SubnetAvailableMemory,
+    pub subnet_available_callbacks: i64,
     pub call_origin: CallOrigin,
     pub callback: Callback,
 }
@@ -87,6 +97,7 @@ where
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(MAX_NUM_INSTRUCTIONS),
         subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,
+        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: 0,
     };
     let execution_state = hypervisor
@@ -112,14 +123,13 @@ where
     );
     let call_context_id = canister_state
         .system_state
-        .call_context_manager_mut()
-        .unwrap()
         .new_call_context(
             call_origin.clone(),
             Cycles::new(10),
             UNIX_EPOCH,
             RequestMetadata::new(0, UNIX_EPOCH),
-        );
+        )
+        .unwrap();
     let callback = Callback::new(
         call_context_id,
         canister_test_id(LOCAL_CANISTER_ID),
@@ -155,6 +165,7 @@ where
         canister_memory_limit: canister_state.memory_limit(NumBytes::new(u64::MAX)),
         wasm_memory_limit: None,
         memory_allocation: canister_state.memory_allocation(),
+        canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA as u64,
         compute_allocation: canister_state.compute_allocation(),
         subnet_type: hypervisor.subnet_type(),
         execution_mode: ExecutionMode::Replicated,
@@ -179,6 +190,7 @@ where
         network_topology,
         execution_parameters,
         subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,
+        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         call_origin,
         callback,
     }
@@ -260,11 +272,20 @@ where
         own_subnet_id,
         subnet_configs.cycles_account_manager_config,
     ));
-    let config = Config {
-        embedders_config: EmbeddersConfig {
-            metering_type: MeteringType::New,
-            ..EmbeddersConfig::default()
+    let mut embedders_config = EmbeddersConfig {
+        feature_flags: FeatureFlags {
+            best_effort_responses: FlagStatus::Enabled,
+            wasm64: FlagStatus::Enabled,
+            ..FeatureFlags::default()
         },
+        ..EmbeddersConfig::default()
+    };
+
+    // Set up larger heap, of 8GB for the Wasm64 feature.
+    embedders_config.max_wasm_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);
+
+    let config = Config {
+        embedders_config,
         ..Default::default()
     };
 
@@ -306,6 +327,9 @@ where
         subnet_configs
             .scheduler_config
             .upload_wasm_chunk_instructions,
+        subnet_configs
+            .scheduler_config
+            .canister_snapshot_baseline_instructions,
     );
     for Benchmark(id, wat, expected_ops) in benchmarks {
         run_benchmark(

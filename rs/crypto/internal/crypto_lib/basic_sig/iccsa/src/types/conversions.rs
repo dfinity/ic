@@ -35,7 +35,7 @@ impl TryFrom<&PublicKeyBytes> for PublicKey {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum PublicKeyFromBytesError {
     Malformed,
     MissingCanisterIdLengthByte,

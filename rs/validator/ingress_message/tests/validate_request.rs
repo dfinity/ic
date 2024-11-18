@@ -9,10 +9,10 @@ use ic_validator_http_request_test_utils::DirectAuthenticationScheme::{
     CanisterSignature, UserKeyPair,
 };
 use ic_validator_http_request_test_utils::{
-    all_authentication_schemes, canister_signature, hard_coded_root_of_trust, random_user_key_pair,
-    AuthenticationScheme, CanisterSigner, DirectAuthenticationScheme, HttpRequestBuilder,
-    HttpRequestEnvelopeContent, RootOfTrust, CANISTER_ID_SIGNER, CANISTER_SIGNATURE_SEED,
-    CURRENT_TIME,
+    all_authentication_schemes, all_authentication_schemes_except, canister_signature,
+    hard_coded_root_of_trust, random_user_key_pair, AuthenticationScheme, CanisterSigner,
+    DirectAuthenticationScheme, HttpRequestBuilder, HttpRequestEnvelopeContent, RootOfTrust,
+    CANISTER_ID_SIGNER, CANISTER_SIGNATURE_SEED, CURRENT_TIME,
 };
 use ic_validator_ingress_message::AuthenticationError;
 use ic_validator_ingress_message::AuthenticationError::DelegationContainsCyclesError;
@@ -150,6 +150,8 @@ mod ingress_expiry {
                 HttpRequestBuilder::new_update_call(),
                 scheme.clone(),
             );
+        }
+        for scheme in all_authentication_schemes_except(AuthenticationScheme::Anonymous, rng) {
             test(&verifier, HttpRequestBuilder::new_query(), scheme.clone());
             test(&verifier, HttpRequestBuilder::new_read_state(), scheme);
         }
@@ -189,6 +191,8 @@ mod ingress_expiry {
                 HttpRequestBuilder::new_update_call(),
                 scheme.clone(),
             );
+        }
+        for scheme in all_authentication_schemes_except(AuthenticationScheme::Anonymous, rng) {
             test(&verifier, HttpRequestBuilder::new_query(), scheme.clone());
             test(&verifier, HttpRequestBuilder::new_read_state(), scheme);
         }
@@ -272,6 +276,32 @@ mod ingress_expiry {
 
             assert_matches!(result, Ok(()), "Test with {builder_info} failed");
         }
+    }
+
+    #[test]
+    fn should_not_error_when_anonymous_read_state_request_expired() {
+        let verifier = verifier_at_time(CURRENT_TIME).build();
+        let request = HttpRequestBuilder::new_read_state()
+            .with_authentication(AuthenticationScheme::Anonymous)
+            .with_ingress_expiry_at(CURRENT_TIME.saturating_sub(Duration::from_nanos(1)))
+            .build();
+
+        let result = verifier.validate_request(&request);
+
+        assert_matches!(result, Ok(()));
+    }
+
+    #[test]
+    fn should_not_error_when_anonymous_query_expired() {
+        let verifier = verifier_at_time(CURRENT_TIME).build();
+        let request = HttpRequestBuilder::new_query()
+            .with_authentication(AuthenticationScheme::Anonymous)
+            .with_ingress_expiry_at(CURRENT_TIME.saturating_sub(Duration::from_nanos(1)))
+            .build();
+
+        let result = verifier.validate_request(&request);
+
+        assert_matches!(result, Ok(()));
     }
 }
 
@@ -1873,7 +1903,7 @@ fn random_user_key_pairs<R: Rng + CryptoRng>(
 }
 
 fn max_ingress_expiry_at(current_time: Time) -> Time {
-    use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
+    use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
     current_time + MAX_INGRESS_TTL + PERMITTED_DRIFT_AT_VALIDATOR
 }
 

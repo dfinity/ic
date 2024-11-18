@@ -1,13 +1,14 @@
 //! Message Routing public interfaces.
-use crate::validation::ValidationError;
+use crate::{execution_environment::CanisterOutOfCyclesError, validation::ValidationError};
+use ic_error_types::ErrorCode;
 use ic_types::{
     batch::{Batch, ValidationContext, XNetPayload},
     consensus::Payload,
-    Height, NumBytes, Time,
+    CanisterId, Height, NumBytes, Time,
 };
 
 /// Errors that `MessageRouting` may return.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum MessageRoutingError {
     /// The batch was not delivered because the batch queue is full.
     QueueIsFull,
@@ -97,5 +98,117 @@ pub trait XNetPayloadBuilder: Send + Sync {
                 }
             })
             .collect()
+    }
+}
+
+pub const LABEL_VALUE_CANISTER_NOT_FOUND: &str = "CanisterNotFound";
+pub const LABEL_VALUE_CANISTER_STOPPED: &str = "CanisterStopped";
+pub const LABEL_VALUE_CANISTER_STOPPING: &str = "CanisterStopping";
+pub const LABEL_VALUE_CANISTER_OUT_OF_CYCLES: &str = "CanisterOutOfCycles";
+pub const LABEL_VALUE_CANISTER_METHOD_NOT_FOUND: &str = "CanisterMethodNotFound";
+pub const LABEL_VALUE_SUBNET_METHOD_NOT_ALLOWED: &str = "SubnetMethodNotAllowed";
+pub const LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD: &str = "InvalidManagementPayload";
+pub const LABEL_VALUE_INGRESS_HISTORY_FULL: &str = "IngressHistoryFull";
+
+#[derive(Eq, PartialEq, Debug)]
+pub enum IngressInductionError {
+    /// Message enqueuing failed due to no matching canister ID.
+    CanisterNotFound(CanisterId),
+
+    /// Canister is stopped, not accepting any messages.
+    CanisterStopped(CanisterId),
+
+    /// Canister is stopping, only accepting responses.
+    CanisterStopping(CanisterId),
+
+    /// Canister is out of cycles.
+    CanisterOutOfCycles(CanisterOutOfCyclesError),
+
+    /// Message enqueuing failed due to calling an unknown subnet method.
+    CanisterMethodNotFound(String),
+
+    /// Message enqueuing failed due to calling a subnet method that is not
+    /// allowed to be called via ingress messages.
+    SubnetMethodNotAllowed(String),
+
+    /// Message enqueuing failed due to calling a subnet method with
+    /// an invalid payload.
+    InvalidManagementPayload,
+
+    /// Message enqueuing failed due to full ingress history.
+    IngressHistoryFull { capacity: usize },
+}
+
+impl IngressInductionError {
+    /// Returns a string representation of the `IngressInductionError` variant name to be
+    /// used as a metric label value (e.g. `"InvalidSubnetPayload"`).
+    pub fn to_label_value(&self) -> &'static str {
+        match self {
+            IngressInductionError::CanisterNotFound(_) => LABEL_VALUE_CANISTER_NOT_FOUND,
+            IngressInductionError::CanisterStopped(_) => LABEL_VALUE_CANISTER_STOPPED,
+            IngressInductionError::CanisterStopping(_) => LABEL_VALUE_CANISTER_STOPPING,
+            IngressInductionError::CanisterOutOfCycles(_) => LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
+            IngressInductionError::CanisterMethodNotFound(_) => {
+                LABEL_VALUE_CANISTER_METHOD_NOT_FOUND
+            }
+            IngressInductionError::SubnetMethodNotAllowed(_) => {
+                LABEL_VALUE_SUBNET_METHOD_NOT_ALLOWED
+            }
+            IngressInductionError::InvalidManagementPayload => {
+                LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD
+            }
+            IngressInductionError::IngressHistoryFull { .. } => LABEL_VALUE_INGRESS_HISTORY_FULL,
+        }
+    }
+}
+
+impl std::error::Error for IngressInductionError {}
+
+impl std::fmt::Display for IngressInductionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IngressInductionError::CanisterNotFound(canister_id) => {
+                write!(f, "Canister {} not found", canister_id)
+            }
+            IngressInductionError::CanisterStopped(canister_id) => {
+                write!(f, "Canister {} is stopped", canister_id)
+            }
+            IngressInductionError::CanisterStopping(canister_id) => {
+                write!(f, "Canister {} is stopping", canister_id)
+            }
+            IngressInductionError::CanisterOutOfCycles(err) => write!(f, "{}", err),
+            IngressInductionError::CanisterMethodNotFound(method) => write!(
+                f,
+                "Cannot enqueue management message because {} method is unknown.",
+                method
+            ),
+            IngressInductionError::SubnetMethodNotAllowed(method) => write!(
+                f,
+                "Cannot enqueue management message because {} method is not allowed to be called via ingress messages.",
+                method
+            ),
+            IngressInductionError::InvalidManagementPayload => write!(
+                f,
+                "Cannot enqueue management message because its Candid payload is invalid."
+            ),
+            IngressInductionError::IngressHistoryFull { capacity } => {
+                write!(f, "Maximum ingress history capacity {} reached", capacity)
+            }
+        }
+    }
+}
+
+impl From<&IngressInductionError> for ErrorCode {
+    fn from(err: &IngressInductionError) -> Self {
+        match err {
+            IngressInductionError::CanisterNotFound(_) => ErrorCode::CanisterNotFound,
+            IngressInductionError::CanisterStopped(_) => ErrorCode::CanisterStopped,
+            IngressInductionError::CanisterStopping(_) => ErrorCode::CanisterStopping,
+            IngressInductionError::CanisterOutOfCycles { .. } => ErrorCode::CanisterOutOfCycles,
+            IngressInductionError::CanisterMethodNotFound(_) => ErrorCode::CanisterMethodNotFound,
+            IngressInductionError::SubnetMethodNotAllowed(_) => ErrorCode::CanisterRejectedMessage,
+            IngressInductionError::InvalidManagementPayload => ErrorCode::InvalidManagementPayload,
+            IngressInductionError::IngressHistoryFull { .. } => ErrorCode::IngressHistoryFull,
+        }
     }
 }

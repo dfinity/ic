@@ -3,7 +3,6 @@ use crate::{
     state_machine::{StateMachine, StateMachineImpl},
 };
 use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKeySettings};
 use ic_interfaces::{
@@ -13,6 +12,7 @@ use ic_interfaces::{
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager, StateManagerError};
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
@@ -51,12 +51,11 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::thread::sleep;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
-    time::Instant,
-};
-use std::{
     convert::TryFrom,
     net::{Ipv4Addr, Ipv6Addr},
+    time::Instant,
 };
+use tracing::instrument;
 
 #[cfg(test)]
 mod tests;
@@ -81,9 +80,13 @@ const STATUS_SUCCESS: &str = "success";
 const PHASE_LOAD_STATE: &str = "load_state";
 const PHASE_COMMIT: &str = "commit";
 
+const METRIC_RECEIVE_BATCH_LATENCY: &str = "mr_receive_batch_latency_seconds";
 const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_duration_seconds";
-const METRIC_TIMED_OUT_REQUESTS_TOTAL: &str = "mr_timed_out_requests_total";
+const METRIC_TIMED_OUT_MESSAGES_TOTAL: &str = "mr_timed_out_messages_total";
+const METRIC_TIMED_OUT_CALLBACKS_TOTAL: &str = "mr_timed_out_callbacks_total";
+const METRIC_SHED_MESSAGES_TOTAL: &str = "mr_shed_messages_total";
+const METRIC_SHED_MESSAGE_BYTES_TOTAL: &str = "mr_shed_message_bytes_total";
 const METRIC_SUBNET_SPLIT_HEIGHT: &str = "mr_subnet_split_height";
 const BLOCKS_PROPOSED_TOTAL: &str = "mr_blocks_proposed_total";
 const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
@@ -103,6 +106,7 @@ const CRITICAL_ERROR_MISSING_OR_INVALID_API_BOUNDARY_NODES: &str =
 const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_allocation_range";
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
 pub const CRITICAL_ERROR_NON_INCREASING_BATCH_TIME: &str = "mr_non_increasing_batch_time";
+pub const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
 
 /// Records the timestamp when all messages before the given index (down to the
 /// previous `MessageTime`) were first added to / learned about in a stream.
@@ -265,14 +269,22 @@ pub(crate) struct MessageRoutingMetrics {
     expected_batch_height: IntGauge,
     /// Registry version referenced in the most recently executed batch.
     registry_version: IntGauge,
+    /// How long Message Routing had to wait to receive the next batch.
+    receive_batch_latency: Histogram,
     /// Batch processing durations.
     process_batch_duration: Histogram,
     /// Most recently seen certified height, per remote subnet
     pub(crate) remote_certified_heights: IntGaugeVec,
     /// Batch processing phase durations, by phase.
     pub(crate) process_batch_phase_duration: HistogramVec,
-    /// Number of timed out requests.
-    pub(crate) timed_out_requests_total: IntCounter,
+    /// Number of timed out messages.
+    pub(crate) timed_out_messages_total: IntCounter,
+    /// Number of timed out callbacks.
+    pub(crate) timed_out_callbacks_total: IntCounter,
+    /// Number of shed best-effort messages.
+    pub(crate) shed_messages_total: IntCounter,
+    /// Byte size of shed best-effort messages.
+    pub(crate) shed_message_bytes_total: IntCounter,
     /// Height at which the subnet last split (if during the lifetime of this
     /// replica process; otherwise zero).
     pub(crate) subnet_split_height: IntGaugeVec,
@@ -314,6 +326,9 @@ pub(crate) struct MessageRoutingMetrics {
     /// Critical error: the batch times of successive batches were not strictly
     /// monotonically increasing.
     critical_error_non_increasing_batch_time: IntCounter,
+    /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
+    /// failures to induct responses.
+    pub critical_error_induct_response_failed: IntCounter,
 
     /// Metrics for query stats aggregator
     pub query_stats_metrics: QueryStatsAggregatorMetrics,
@@ -348,6 +363,12 @@ impl MessageRoutingMetrics {
                 METRIC_REGISTRY_VERSION,
                 "Registry version referenced in the most recently executed batch.",
             ),
+            receive_batch_latency: metrics_registry.histogram(
+                METRIC_RECEIVE_BATCH_LATENCY,
+                "How long Message Routing had to wait to receive the next batch.",
+                // 0.1ms - 5s
+                decimal_buckets(-4, 0),
+            ),
             process_batch_phase_duration: metrics_registry.histogram_vec(
                 METRIC_PROCESS_BATCH_PHASE_DURATION,
                 "Batch processing phase durations, by phase.",
@@ -360,9 +381,21 @@ impl MessageRoutingMetrics {
                 "Most recently observed remote subnet certified heights.",
                 &[LABEL_REMOTE],
             ),
-            timed_out_requests_total: metrics_registry.int_counter(
-                METRIC_TIMED_OUT_REQUESTS_TOTAL,
-                "Count of timed out requests.",
+            timed_out_messages_total: metrics_registry.int_counter(
+                METRIC_TIMED_OUT_MESSAGES_TOTAL,
+                "Count of timed out messages.",
+            ),
+            timed_out_callbacks_total: metrics_registry.int_counter(
+                METRIC_TIMED_OUT_CALLBACKS_TOTAL,
+                "Count of expired best-effort callbacks.",
+            ),
+            shed_messages_total: metrics_registry.int_counter(
+                METRIC_SHED_MESSAGES_TOTAL,
+                "Count of shed messages.",
+            ),
+            shed_message_bytes_total: metrics_registry.int_counter(
+                METRIC_SHED_MESSAGE_BYTES_TOTAL,
+                "Total byte size of shed messages.",
             ),
             subnet_split_height: metrics_registry.int_gauge_vec(
                 METRIC_SUBNET_SPLIT_HEIGHT,
@@ -408,6 +441,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_FAILED_TO_READ_REGISTRY),
             critical_error_non_increasing_batch_time: metrics_registry
                 .error_counter(CRITICAL_ERROR_NON_INCREASING_BATCH_TIME),
+            critical_error_induct_response_failed: metrics_registry
+                .error_counter(CRITICAL_ERROR_INDUCT_RESPONSE_FAILED),
 
             query_stats_metrics: QueryStatsAggregatorMetrics::new(metrics_registry),
 
@@ -551,6 +586,7 @@ impl BatchProcessorImpl {
             subnet_id,
             hypervisor_config.clone(),
             metrics_registry,
+            &metrics,
             Arc::clone(&time_in_stream_metrics),
             log.clone(),
         ));
@@ -571,6 +607,7 @@ impl BatchProcessorImpl {
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
             subnet_id,
             metrics_registry,
+            &metrics,
             time_in_stream_metrics,
             log.clone(),
         ));
@@ -578,6 +615,7 @@ impl BatchProcessorImpl {
             scheduler,
             demux,
             stream_builder,
+            hypervisor_config.clone(),
             log.clone(),
             metrics.clone(),
         ));
@@ -1078,6 +1116,7 @@ impl BatchProcessorImpl {
 }
 
 impl BatchProcessor for BatchProcessorImpl {
+    #[instrument(skip_all)]
     fn process_batch(&self, batch: Batch) {
         let _process_batch_start = Instant::now();
         let since = Instant::now();
@@ -1159,6 +1198,8 @@ impl BatchProcessor for BatchProcessorImpl {
             .blockmaker_metrics_time_series
             .observe(batch.time, &batch.blockmaker_metrics);
 
+        let batch_summary = batch.batch_summary.clone();
+
         let mut state_after_round = self.state_machine.execute_round(
             state,
             network_topology,
@@ -1189,6 +1230,7 @@ impl BatchProcessor for BatchProcessorImpl {
             state_after_round,
             commit_height,
             certification_scope,
+            batch_summary,
         );
         self.observe_phase_duration(PHASE_COMMIT, &phase_since);
 
@@ -1295,6 +1337,7 @@ impl BatchProcessor for FakeBatchProcessorImpl {
             state_after_stream_builder,
             commit_height,
             certification_scope,
+            batch.batch_summary,
         );
     }
 }
@@ -1308,12 +1351,18 @@ impl MessageRoutingImpl {
     ) -> Self {
         let (batch_sender, batch_receiver) = sync_channel(BATCH_QUEUE_BUFFER_SIZE);
 
+        let receive_batch_latency = metrics.receive_batch_latency.clone();
         let _batch_processor_handle = JoinOnDrop::new(
             std::thread::Builder::new()
                 .name("MR Batch Processor".to_string())
                 .spawn(move || {
+                    let mut since = Instant::now();
                     while let Ok(batch) = batch_receiver.recv() {
+                        receive_batch_latency.observe(since.elapsed().as_secs_f64());
+
                         batch_processor.process_batch(batch);
+
+                        since = Instant::now();
                     }
                 })
                 .expect("Can spawn a batch processing thread in MR"),
@@ -1376,6 +1425,7 @@ impl MessageRoutingImpl {
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
             subnet_id,
             metrics_registry,
+            &MessageRoutingMetrics::new(metrics_registry),
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
                 metrics_registry,
             ))),
@@ -1402,6 +1452,7 @@ impl MessageRoutingImpl {
 }
 
 impl MessageRouting for MessageRoutingImpl {
+    #[instrument(skip_all)]
     fn deliver_batch(&self, batch: Batch) -> Result<(), MessageRoutingError> {
         let batch_number = batch.batch_number;
         let expected_number = self.expected_batch_height();
