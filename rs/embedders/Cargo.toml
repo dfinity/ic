@@ -8,6 +8,7 @@ version.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+bincode = { workspace = true }
 ic-config = { path = "../config" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-interfaces = { path = "../interfaces" }
@@ -34,6 +35,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
 slog-term = { workspace = true }
+tempfile = { workspace = true }
 wasm-encoder = { workspace = true }
 wasmparser = { workspace = true }
 wasmtime = { version = "26.0.0", default-features = false, features = [
