@@ -3233,7 +3233,7 @@ fn reshare_chain_key_api_is_disabled() {
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
         .build();
-    let method = Method::VetKdDeriveEncryptedKey;
+    let method = Method::ReshareChainKey;
     test.inject_call_to_ic00(
         method,
         ic00::ReshareChainKeyArgs::new(
@@ -3249,6 +3249,6 @@ fn reshare_chain_key_api_is_disabled() {
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        "vet_kd_derive_encrypted_key API is not yet implemented.",
+        "reshare_chain_key API is not yet implemented.",
     )
 }
