@@ -11,6 +11,7 @@ use crate::{
     temporarily_enable_active_neurons_in_stable_memory,
     temporarily_enable_stable_memory_following_index,
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+    voting::cast_vote_and_cascade_follow,
 };
 use canbench_rs::{bench, bench_fn, BenchResult};
 use ic_base_types::PrincipalId;
@@ -307,7 +308,7 @@ fn cast_vote_cascade_helper(strategy: SetUpStrategy, topic: Topic) -> BenchResul
 
     let proposal_id = ProposalId { id: 1 };
     bench_fn(|| {
-        Governance::cast_vote_and_cascade_follow(
+        cast_vote_and_cascade_follow(
             &proposal_id,
             &mut ballots,
             &neuron_id.into(),
