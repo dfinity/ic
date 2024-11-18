@@ -9,7 +9,7 @@ rust_library(
     version = "0.9.0",
     deps = [
         "//rs/config",
-        "//rs/types/types",
+        "//rs/types/base_types",
         "@crate_index//:tracing",
         "@crate_index//:tracing-appender",
         "@crate_index//:tracing-subscriber",

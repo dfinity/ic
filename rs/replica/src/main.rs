@@ -1,16 +1,15 @@
 //! Replica -- Internet Computer
 
 use ic_async_utils::{abort_on_panic, shutdown_signal};
-use ic_config::logger::LogFormat;
-use ic_config::{logger::Config as LoggingConfig, Config};
+use ic_config::Config;
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_logger::{info, new_replica_logger_from_config};
+use ic_logging::get_logging_layer;
 use ic_metrics::MetricsRegistry;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
 use ic_tracing::ReloadHandles;
-use ic_types::NodeId;
 use ic_types::{
     consensus::CatchUpPackage, replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion,
     SubnetId,
@@ -21,9 +20,7 @@ use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{trace, Resource};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{signal, SignalKind};
-use tracing::Level;
-use tracing_subscriber::{fmt, fmt::writer::MakeWriterExt, layer::SubscriberExt, Layer};
-use tracing_subscriber::fmt::format::Format;
+use tracing_subscriber::{layer::SubscriberExt, Layer};
 
 #[cfg(target_os = "linux")]
 mod jemalloc_metrics;
@@ -238,31 +235,10 @@ fn main() -> io::Result<()> {
     //   2. Layers for generating flamegraphs
     //   3. Jeager exporter if enabled
 
-    //let log_formatter = LogFormatter::new(config.logger.format);
+    let (logging_layer, _logging_drop_guard) =
+        get_logging_layer(&config.logger, node_id, subnet_id);
 
-    let log_formatter = fmt::format::format()
-        .json()
-        .with_timer(fmt::time::UtcTime::rfc_3339())
-        .with_level(true)
-        .with_file(true)
-        .with_line_number(true);
-
-    let (non_blocking_log_writer, _log_writer_guard) =
-        tracing_appender::non_blocking(std::io::stdout());
-    let non_blocking_log_writer = non_blocking_log_writer.with_max_level(Level::INFO);
-
-    let fmt_layer = fmt::Layer::new()
-        .with_timer(fmt::time::UtcTime::rfc_3339())
-        .with_span_events(fmt::format::FmtSpan::NONE)
-        .with_level(true)
-        .with_file(true)
-        .with_line_number(true)
-        .with_writer(non_blocking_log_writer)
-        .event_format(log_formatter)
-        .json()
-        .boxed();
-
-    let mut tracing_layers = vec![fmt_layer];
+    let mut tracing_layers = vec![logging_layer];
 
     let (reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(vec![]);
     let tracing_handle = ReloadHandles::new(reload_handle);

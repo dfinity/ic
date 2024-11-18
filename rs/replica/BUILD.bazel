@@ -24,6 +24,7 @@ DEPENDENCIES = [
     "//rs/interfaces/state_manager",
     "//rs/messaging",
     "//rs/monitoring/logger",
+    "//rs/monitoring/logging",
     "//rs/monitoring/metrics",
     "//rs/monitoring/pprof",
     "//rs/monitoring/tracing",
