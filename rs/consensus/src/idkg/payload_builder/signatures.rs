@@ -41,7 +41,8 @@ pub(crate) fn update_signature_agreements(
 ) {
     let all_random_ids = all_requests
         .iter()
-        .map(|(_, context)| context.pseudo_random_id)
+        .filter(|(_, ctxt)| ctxt.is_idkg())
+        .map(|(_, ctxt)| ctxt.pseudo_random_id)
         .collect::<BTreeSet<_>>();
 
     // We first clean up the existing signature_agreements by keeping those
@@ -57,6 +58,9 @@ pub(crate) fn update_signature_agreements(
 
     // Then we collect new signatures into the signature_agreements
     for (callback_id, context) in all_requests {
+        if !context.is_idkg() {
+            continue;
+        }
         if payload
             .signature_agreements
             .contains_key(&context.pseudo_random_id)
@@ -159,8 +163,8 @@ mod tests {
         create_available_pre_signature, empty_idkg_payload_with_key_ids, empty_response,
         fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
         fake_signature_request_context, fake_signature_request_context_from_id,
-        fake_signature_request_context_with_pre_sig, request_id, set_up_idkg_payload,
-        TestThresholdSignatureBuilder,
+        fake_signature_request_context_with_pre_sig, fake_vet_kd_master_public_key_id, request_id,
+        set_up_idkg_payload, TestThresholdSignatureBuilder,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -195,7 +199,7 @@ mod tests {
         for (index, pseudo_random_id) in pseudo_random_ids.into_iter().enumerate() {
             contexts.insert(
                 CallbackId::from(index as u64),
-                fake_signature_request_context(key_id.clone(), pseudo_random_id),
+                fake_signature_request_context(key_id.clone().into(), pseudo_random_id),
             );
         }
 
@@ -350,5 +354,75 @@ mod tests {
             ic_types::messages::Payload::Reject(context)
             if context.message().contains("matched to non-existent pre-signature")
         );
+    }
+
+    #[test]
+    fn test_update_signature_agreements_ignores_vet_kd_contexts() {
+        let subnet_id = subnet_test_id(0);
+        let ecdsa_key_id = fake_ecdsa_idkg_master_public_key_id();
+        let vet_key_id = fake_vet_kd_master_public_key_id();
+        let mut idkg_payload =
+            empty_idkg_payload_with_key_ids(subnet_id, vec![ecdsa_key_id.clone()]);
+        let valid_keys = BTreeSet::from_iter([ecdsa_key_id.clone()]);
+        let pre_sig_ids = (0..2)
+            .map(|i| {
+                create_available_pre_signature(&mut idkg_payload, ecdsa_key_id.clone(), i as u8)
+            })
+            .collect::<Vec<_>>();
+        let ids = (0..2)
+            .map(|i| request_id(i, Height::from(0)))
+            .collect::<Vec<_>>();
+
+        let vet_kd_random_id = [2; 32];
+
+        let contexts = BTreeMap::from([
+            // insert ecdsa request to be completed
+            fake_signature_request_context_from_id(ecdsa_key_id.clone(), pre_sig_ids[0], ids[0]),
+            // insert vet kd request to be ignored
+            (
+                ids[1].callback_id,
+                fake_signature_request_context(vet_key_id.clone(), vet_kd_random_id),
+            ),
+        ]);
+
+        let mut signature_builder = TestThresholdSignatureBuilder::new();
+        // insert ecdsa signature to be returned
+        signature_builder.signatures.insert(
+            ids[0],
+            CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
+                signature: vec![0; 32],
+            }),
+        );
+        // insert vet kd response to be ignored
+        signature_builder.signatures.insert(
+            ids[1],
+            CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
+                signature: vec![1; 32],
+            }),
+        );
+
+        // Only the ecdsa request with available pre-signature should be completed
+        update_signature_agreements(
+            &contexts,
+            &signature_builder,
+            None,
+            &mut idkg_payload,
+            &valid_keys,
+            None,
+        );
+
+        // Only the pre-signature for the completed request should be removed
+        assert_eq!(idkg_payload.available_pre_signatures.len(), 1);
+        assert!(!idkg_payload
+            .available_pre_signatures
+            .contains_key(&pre_sig_ids[0]));
+
+        assert_eq!(idkg_payload.signature_agreements.len(), 1);
+        let Some(idkg::CompletedSignature::Unreported(response_1)) =
+            idkg_payload.signature_agreements.get(&[0; 32])
+        else {
+            panic!("Request 1 should have a response");
+        };
+        assert_matches!(&response_1.payload, ic_types::messages::Payload::Data(_));
     }
 }

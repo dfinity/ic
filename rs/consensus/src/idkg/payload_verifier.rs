@@ -551,7 +551,7 @@ fn validate_new_signature_agreements(
     let contexts = state.signature_request_contexts();
     let context_map = contexts
         .iter()
-        .filter(|(_, ctxt)| ctxt.is_ecdsa() || ctxt.is_schnorr())
+        .filter(|(_, ctxt)| ctxt.is_idkg())
         .map(|(id, c)| (c.pseudo_random_id, (id, c)))
         .collect::<BTreeMap<_, _>>();
     for (random_id, completed) in curr_payload.signature_agreements.iter() {
@@ -1050,7 +1050,7 @@ mod test {
         let snapshot =
             fake_state_with_signature_requests(height, signature_request_contexts.clone());
 
-        let fake_context = fake_signature_request_context(key_id.clone(), [4; 32]);
+        let fake_context = fake_signature_request_context(key_id.clone().into(), [4; 32]);
         let fake_response =
             CompletedSignature::Unreported(ic_types::batch::ConsensusResponse::new(
                 CallbackId::from(0),
@@ -1135,6 +1135,55 @@ mod test {
             snapshot.get_state(),
             &prev_payload,
             &idkg_payload_missing_context,
+        );
+        assert_matches!(
+            res,
+            Err(ValidationError::InvalidArtifact(
+                InvalidIDkgPayloadReason::NewSignatureMissingContext(_)
+            ))
+        );
+    }
+
+    #[test]
+    fn test_reject_new_signature_agreement_for_vet_kd() {
+        let height = Height::from(0);
+        let subnet_id = subnet_test_id(0);
+        let crypto = &CryptoReturningOk::default();
+        let block_reader = TestIDkgBlockReader::new();
+        let ecdsa_key_id = fake_ecdsa_idkg_master_public_key_id();
+        let prev_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![ecdsa_key_id.clone()]);
+
+        let callback_id = CallbackId::from(1);
+
+        let vet_kd_key_id = fake_vet_kd_master_public_key_id();
+        let pseudo_random_id = [1; 32];
+        let signature_request_contexts = BTreeMap::from_iter([(
+            callback_id,
+            fake_signature_request_context(vet_kd_key_id, pseudo_random_id),
+        )]);
+        let snapshot =
+            fake_state_with_signature_requests(height, signature_request_contexts.clone());
+
+        let fake_response =
+            CompletedSignature::Unreported(ic_types::batch::ConsensusResponse::new(
+                callback_id,
+                ic_types::messages::Payload::Data(
+                    SignWithSchnorrReply { signature: vec![] }.encode(),
+                ),
+            ));
+
+        // Insert agreement for unknown context
+        let mut idkg_payload_vet_kd_context =
+            empty_idkg_payload_with_key_ids(subnet_id, vec![ecdsa_key_id]);
+        idkg_payload_vet_kd_context
+            .signature_agreements
+            .insert(pseudo_random_id, fake_response);
+        let res = validate_new_signature_agreements(
+            crypto,
+            &block_reader,
+            snapshot.get_state(),
+            &prev_payload,
+            &idkg_payload_vet_kd_context,
         );
         assert_matches!(
             res,

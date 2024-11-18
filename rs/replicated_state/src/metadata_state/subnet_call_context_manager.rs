@@ -933,6 +933,14 @@ impl SignWithThresholdContext {
         matches!(&self.args, ThresholdArguments::VetKd(_))
     }
 
+    /// Returns true if arguments are for a context handled by IDKG.
+    pub fn is_idkg(&self) -> bool {
+        match &self.args {
+            ThresholdArguments::Ecdsa(_) | ThresholdArguments::Schnorr(_) => true,
+            ThresholdArguments::VetKd(_) => false,
+        }
+    }
+
     /// Returns ECDSA arguments.
     /// Panics if arguments are not for ECDSA.
     /// Should only be called if `is_ecdsa` returns true.
