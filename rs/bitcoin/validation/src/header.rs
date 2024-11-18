@@ -284,7 +284,6 @@ fn compute_next_difficulty(
     // readjust the difficulty target so that the expected time taken for the next
     // 2016 blocks is again 2 weeks.
     let actual_interval = (prev_header.time as i64) - (last_adjustment_time as i64);
-    let mut adjusted_interval = actual_interval;
 
     // The target_adjustment_interval_time is 2 weeks of time expressed in seconds
     let target_adjustment_interval_time: i64 =
@@ -292,14 +291,16 @@ fn compute_next_difficulty(
 
     // Adjusting the actual_interval to [0.5 week, 8 week] range in case the
     // actual_interval deviates too much from the expected 2 weeks.
-    adjusted_interval = i64::max(adjusted_interval, target_adjustment_interval_time / 4);
-    adjusted_interval = i64::min(adjusted_interval, target_adjustment_interval_time * 4);
+    let adjusted_interval = actual_interval.clamp(
+        target_adjustment_interval_time / 4,
+        target_adjustment_interval_time * 4,
+    ) as u32;
 
     // Computing new difficulty target.
     // new difficulty target = old difficult target * (adjusted_interval /
     // 2_weeks);
     let mut target = prev_header.target();
-    target = target.mul_u32(adjusted_interval as u32); // at this point adjusted_interval is between 0.5 week and 8 weeks so it's safe to cast to u32.
+    target = target.mul_u32(adjusted_interval);
     target = target / Uint256::from_u64(target_adjustment_interval_time as u64).unwrap();
 
     // Adjusting the newly computed difficulty target so that it doesn't exceed the
