@@ -2691,6 +2691,7 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
         }
         get_proposal_response::Result::Proposal(proposal) => proposal,
     };
+
     assert_eq!(proposal_data.failed_timestamp_seconds, 0);
     assert_eq!(proposal_data.failure_reason, None);
 
