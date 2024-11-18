@@ -23,6 +23,7 @@ DEPENDENCIES = [
     "@crate_index//:bytes",
     "@crate_index//:futures",
     "@crate_index//:http",
+    "@crate_index//:http-body-util",
     "@crate_index//:prometheus",
     "@crate_index//:prost",
     "@crate_index//:quinn",
