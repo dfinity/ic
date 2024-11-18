@@ -88,9 +88,7 @@ pub fn update_guestos_config() -> Result<()> {
             config_json_path.display()
         );
     } else {
-        println!(
-            "No action taken. Either both config.json and network.conf exist, or neither exists."
-        );
+        println!("No update-config action taken.");
     }
 
     Ok(())
