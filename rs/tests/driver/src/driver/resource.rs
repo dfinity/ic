@@ -20,7 +20,6 @@ use crate::driver::universal_vm::UniversalVm;
 use crate::k8s::tnet::TNet;
 use crate::util::block_on;
 use anyhow::{self, bail};
-//use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn};
 use std::collections::BTreeMap;
