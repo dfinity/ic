@@ -898,6 +898,47 @@ impl TryFrom<pb_metadata::ThresholdArguments> for ThresholdArguments {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
+pub struct IDkgSignWithThresholdContext<'a>(&'a SignWithThresholdContext);
+
+impl<'a> TryFrom<&'a SignWithThresholdContext> for IDkgSignWithThresholdContext<'a> {
+    type Error = ();
+
+    fn try_from(val: &'a SignWithThresholdContext) -> Result<Self, Self::Error> {
+        if !val.is_idkg() {
+            Err(())
+        } else {
+            Ok(Self(val))
+        }
+    }
+}
+
+impl<'a> From<IDkgSignWithThresholdContext<'a>> for &'a SignWithThresholdContext {
+    fn from(val: IDkgSignWithThresholdContext<'a>) -> Self {
+        val.0
+    }
+}
+
+impl IDkgSignWithThresholdContext<'_> {
+    pub fn inner(&self) -> &SignWithThresholdContext {
+        self.0
+    }
+}
+
+impl std::ops::Deref for IDkgSignWithThresholdContext<'_> {
+    type Target = SignWithThresholdContext;
+
+    fn deref(&self) -> &<Self as std::ops::Deref>::Target {
+        self.inner()
+    }
+}
+
+impl std::borrow::Borrow<SignWithThresholdContext> for IDkgSignWithThresholdContext<'_> {
+    fn borrow(&self) -> &SignWithThresholdContext {
+        self.inner()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SignWithThresholdContext {
     pub request: Request,
     pub args: ThresholdArguments,

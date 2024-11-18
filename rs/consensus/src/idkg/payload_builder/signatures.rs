@@ -1,6 +1,6 @@
 use ic_error_types::RejectCode;
 use ic_management_canister_types::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
-use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext;
 use ic_types::{
     consensus::idkg::{self, common::CombinedSignature, IDkgMasterPublicKeyId},
     messages::{CallbackId, RejectContext},
@@ -32,7 +32,7 @@ fn reject_response(
 /// - rejecting signature contexts that are expired or request an invalid key.
 /// - adding new agreements as "Unreported" by combining shares in the IDKG pool.
 pub(crate) fn update_signature_agreements(
-    all_requests: &BTreeMap<CallbackId, SignWithThresholdContext>,
+    all_requests: &BTreeMap<CallbackId, IDkgSignWithThresholdContext<'_>>,
     signature_builder: &dyn ThresholdSignatureBuilder,
     request_expiry_time: Option<Time>,
     payload: &mut idkg::IDkgPayload,
@@ -41,7 +41,6 @@ pub(crate) fn update_signature_agreements(
 ) {
     let all_random_ids = all_requests
         .iter()
-        .filter(|(_, ctxt)| ctxt.is_idkg())
         .map(|(_, ctxt)| ctxt.pseudo_random_id)
         .collect::<BTreeSet<_>>();
 
@@ -57,10 +56,7 @@ pub(crate) fn update_signature_agreements(
         .collect();
 
     // Then we collect new signatures into the signature_agreements
-    for (callback_id, context) in all_requests {
-        if !context.is_idkg() {
-            continue;
-        }
+    for (&callback_id, context) in all_requests {
         if payload
             .signature_agreements
             .contains_key(&context.pseudo_random_id)
@@ -73,7 +69,7 @@ pub(crate) fn update_signature_agreements(
             payload.signature_agreements.insert(
                 context.pseudo_random_id,
                 idkg::CompletedSignature::Unreported(reject_response(
-                    *callback_id,
+                    callback_id,
                     RejectCode::CanisterReject,
                     format!(
                         "Invalid key_id in signature request: {:?}",
@@ -99,7 +95,7 @@ pub(crate) fn update_signature_agreements(
             payload.signature_agreements.insert(
                 context.pseudo_random_id,
                 idkg::CompletedSignature::Unreported(reject_response(
-                    *callback_id,
+                    callback_id,
                     RejectCode::CanisterError,
                     "Signature request expired",
                 )),
@@ -120,7 +116,7 @@ pub(crate) fn update_signature_agreements(
             payload.signature_agreements.insert(
                 context.pseudo_random_id,
                 idkg::CompletedSignature::Unreported(reject_response(
-                    *callback_id,
+                    callback_id,
                     RejectCode::CanisterError,
                     "Signature request was matched to non-existent pre-signature.",
                 )),
@@ -133,7 +129,7 @@ pub(crate) fn update_signature_agreements(
             continue;
         }
 
-        let signature = match signature_builder.get_completed_signature(*callback_id, context) {
+        let signature = match signature_builder.get_completed_signature(callback_id, context) {
             Some(CombinedSignature::Ecdsa(signature)) => SignWithECDSAReply {
                 signature: signature.signature.clone(),
             }
@@ -146,7 +142,7 @@ pub(crate) fn update_signature_agreements(
         };
 
         let response = ic_types::batch::ConsensusResponse::new(
-            *callback_id,
+            callback_id,
             ic_types::messages::Payload::Data(signature),
         );
         payload.signature_agreements.insert(
@@ -163,12 +159,13 @@ mod tests {
         create_available_pre_signature, empty_idkg_payload_with_key_ids, empty_response,
         fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
         fake_signature_request_context, fake_signature_request_context_from_id,
-        fake_signature_request_context_with_pre_sig, fake_vet_kd_master_public_key_id, request_id,
-        set_up_idkg_payload, TestThresholdSignatureBuilder,
+        fake_signature_request_context_with_pre_sig, fake_vet_kd_master_public_key_id,
+        into_idkg_contexts, request_id, set_up_idkg_payload, TestThresholdSignatureBuilder,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_management_canister_types::MasterPublicKeyId;
+    use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         consensus::idkg::IDkgPayload,
@@ -221,6 +218,8 @@ mod tests {
             vec![old_pseudo_random_id, new_pseudo_random_id],
             key_id.clone(),
         );
+        let contexts = into_idkg_contexts(&contexts);
+
         idkg_payload.signature_agreements.insert(
             delivered_pseudo_random_id,
             idkg::CompletedSignature::Unreported(empty_response()),
@@ -287,6 +286,7 @@ mod tests {
                 Some(missing_pre_signature),
             ),
         ]);
+        let contexts = into_idkg_contexts(&contexts);
 
         // insert agreement for completed request
         let pseudo_random_id = contexts.get(&ids[2].callback_id).unwrap().pseudo_random_id;
@@ -384,6 +384,7 @@ mod tests {
                 fake_signature_request_context(vet_key_id.clone(), vet_kd_random_id),
             ),
         ]);
+        let contexts = into_idkg_contexts(&contexts);
 
         let mut signature_builder = TestThresholdSignatureBuilder::new();
         // insert ecdsa signature to be returned

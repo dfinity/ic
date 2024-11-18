@@ -533,7 +533,12 @@ pub(crate) fn create_data_payload_helper(
 
     let receivers = get_subnet_nodes(registry_client, next_interval_registry_version, subnet_id)?;
     let state = state_manager.get_state_at(context.certified_height)?;
-    let all_signing_requests = state.get_ref().signature_request_contexts();
+    let all_signing_requests = state
+        .get_ref()
+        .signature_request_contexts()
+        .iter()
+        .flat_map(|(id, ctxt)| IDkgSignWithThresholdContext::try_from(ctxt).map(|ctxt| (*id, ctxt)))
+        .collect();
     let idkg_dealings_contexts = state.get_ref().idkg_dealings_contexts();
 
     let certified_height = if context.certified_height >= summary_block.height() {
@@ -573,7 +578,7 @@ pub(crate) fn create_data_payload_helper_2(
     next_interval_registry_version: RegistryVersion,
     certified_height: CertifiedHeight,
     receivers: &[NodeId],
-    all_signing_requests: &BTreeMap<CallbackId, SignWithThresholdContext>,
+    all_signing_requests: BTreeMap<CallbackId, IDkgSignWithThresholdContext<'_>>,
     idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
@@ -596,7 +601,7 @@ pub(crate) fn create_data_payload_helper_2(
         .and_then(|timeout| context_time.checked_sub(Duration::from_nanos(timeout)));
 
     signatures::update_signature_agreements(
-        all_signing_requests,
+        &all_signing_requests,
         signature_builder,
         request_expiry_time,
         idkg_payload,
@@ -605,7 +610,7 @@ pub(crate) fn create_data_payload_helper_2(
     );
 
     if matches!(certified_height, CertifiedHeight::ReachedSummaryHeight) {
-        pre_signatures::purge_old_key_pre_signatures(idkg_payload, all_signing_requests);
+        pre_signatures::purge_old_key_pre_signatures(idkg_payload, &all_signing_requests);
     }
 
     // We count the number of pre-signatures in the payload that were already matched,
@@ -876,6 +881,7 @@ mod tests {
                 Some(non_existent_pre_sig_for_valid_key),
             ),
         ]);
+        let contexts = into_idkg_contexts(&contexts);
 
         let chain_key_config = ChainKeyConfig {
             key_configs: vec![KeyConfig {
@@ -898,7 +904,7 @@ mod tests {
             RegistryVersion::from(9),
             CertifiedHeight::ReachedSummaryHeight,
             &[node_test_id(0)],
-            &contexts,
+            contexts,
             &BTreeMap::default(),
             &TestIDkgBlockReader::new(),
             &TestIDkgTranscriptBuilder::new(),
@@ -955,6 +961,7 @@ mod tests {
                 Some(matched_pre_sig_id),
             ),
         ]);
+        let contexts = into_idkg_contexts(&contexts);
 
         assert_eq!(idkg_payload.signature_agreements.len(), 0);
         assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
@@ -1017,6 +1024,7 @@ mod tests {
             // One unmatched context with invalid key
             (invalid_key_id.clone(), 3, UNIX_EPOCH, None),
         ]);
+        let contexts = into_idkg_contexts(&contexts);
 
         assert_eq!(idkg_payload.signature_agreements.len(), 0);
         assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
@@ -1074,6 +1082,7 @@ mod tests {
         let context =
             fake_signature_request_context_from_id(key_id.clone(), pre_sig_id, request_id);
         let signature_request_contexts = BTreeMap::from([context.clone()]);
+        let signature_request_contexts = into_idkg_contexts(&signature_request_contexts);
 
         let valid_keys = BTreeSet::from([key_id.clone()]);
 
@@ -1108,7 +1117,7 @@ mod tests {
             RegistryVersion::from(9),
             CertifiedHeight::ReachedSummaryHeight,
             &[node_test_id(0)],
-            &signature_request_contexts,
+            signature_request_contexts.clone(),
             &BTreeMap::default(),
             &block_reader,
             &transcript_builder,
@@ -1132,7 +1141,7 @@ mod tests {
             RegistryVersion::from(9),
             CertifiedHeight::ReachedSummaryHeight,
             &[node_test_id(0)],
-            &signature_request_contexts,
+            signature_request_contexts,
             &BTreeMap::default(),
             &block_reader,
             &transcript_builder,
@@ -2145,7 +2154,7 @@ mod tests {
                 // Referenced certified height is still below the summary
                 CertifiedHeight::BelowSummaryHeight,
                 &node_ids,
-                &BTreeMap::default(),
+                BTreeMap::default(),
                 &BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
@@ -2173,7 +2182,7 @@ mod tests {
                 next_key_transcript.registry_version(),
                 CertifiedHeight::ReachedSummaryHeight,
                 &node_ids,
-                &BTreeMap::default(),
+                BTreeMap::default(),
                 &BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
@@ -2263,7 +2272,7 @@ mod tests {
                 registry_version,
                 CertifiedHeight::ReachedSummaryHeight,
                 &node_ids,
-                &BTreeMap::default(),
+                BTreeMap::default(),
                 &BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
@@ -2438,7 +2447,7 @@ mod tests {
                 registry_version,
                 CertifiedHeight::ReachedSummaryHeight,
                 &node_ids,
-                &BTreeMap::default(),
+                BTreeMap::default(),
                 &BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
@@ -2467,7 +2476,7 @@ mod tests {
                 registry_version,
                 CertifiedHeight::ReachedSummaryHeight,
                 &node_ids,
-                &BTreeMap::default(),
+                BTreeMap::default(),
                 &BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
@@ -2494,7 +2503,7 @@ mod tests {
                 registry_version,
                 CertifiedHeight::ReachedSummaryHeight,
                 &node_ids,
-                &BTreeMap::default(),
+                BTreeMap::default(),
                 &BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,

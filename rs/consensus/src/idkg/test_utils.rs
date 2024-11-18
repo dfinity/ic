@@ -22,8 +22,8 @@ use ic_management_canister_types::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    EcdsaArguments, IDkgDealingsContext, SchnorrArguments, SignWithThresholdContext,
-    ThresholdArguments, VetKdArguments,
+    EcdsaArguments, IDkgDealingsContext, IDkgSignWithThresholdContext, SchnorrArguments,
+    SignWithThresholdContext, ThresholdArguments, VetKdArguments,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
@@ -187,6 +187,15 @@ where
         height,
         state: Arc::new(state),
     }
+}
+
+pub fn into_idkg_contexts<'a>(
+    contexts: &'a BTreeMap<CallbackId, SignWithThresholdContext>,
+) -> BTreeMap<CallbackId, IDkgSignWithThresholdContext<'a>> {
+    contexts
+        .iter()
+        .flat_map(|(id, ctxt)| IDkgSignWithThresholdContext::try_from(ctxt).map(|ctxt| (*id, ctxt)))
+        .collect()
 }
 
 pub fn insert_test_sig_inputs<T>(
