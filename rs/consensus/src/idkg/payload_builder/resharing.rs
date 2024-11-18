@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use ic_logger::{warn, ReplicaLogger};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgDealingsContext;
 use ic_types::{
-    consensus::idkg::{self, HasMasterPublicKeyId, IDkgBlockReader, IDkgReshareRequest},
+    consensus::idkg::{self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgReshareRequest},
     crypto::canister_threshold_sig::{
         error::InitialIDkgDealingsValidationError, idkg::InitialIDkgDealings,
     },
@@ -185,21 +185,22 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::{ComputeInitialIDkgDealingsResponse, MasterPublicKeyId};
+    use ic_management_canister_types::ComputeInitialIDkgDealingsResponse;
     use ic_test_utilities_types::ids::subnet_test_id;
+    use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
     use ic_types::consensus::idkg::IDkgPayload;
 
     use crate::idkg::{
         test_utils::{
             create_reshare_request, dealings_context_from_reshare_request,
-            fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+            fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
             set_up_idkg_payload, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
         },
         utils::algorithm_for_key_id,
     };
 
     fn set_up(
-        key_ids: Vec<MasterPublicKeyId>,
+        key_ids: Vec<IDkgMasterPublicKeyId>,
         should_create_key_transcript: bool,
     ) -> (IDkgPayload, TestIDkgBlockReader) {
         let mut rng = reproducible_rng();
@@ -275,7 +276,7 @@ mod tests {
             assert_eq!(initial_dealings.get(&i).unwrap(), &dealings);
         }
 
-        let fake_key = fake_ecdsa_master_public_key_id();
+        let fake_key = fake_ecdsa_idkg_master_public_key_id();
         assert_eq!(
             make_reshare_dealings_response(
                 &create_reshare_request(fake_key, 10, 10),
@@ -385,7 +386,7 @@ mod tests {
         }
     }
 
-    fn test_ecdsa_update_completed_reshare_requests(key_id: MasterPublicKeyId) {
+    fn test_ecdsa_update_completed_reshare_requests(key_id: IDkgMasterPublicKeyId) {
         let (mut payload, block_reader) = set_up(
             vec![key_id.clone()],
             /*should_create_key_transcript=*/ true,

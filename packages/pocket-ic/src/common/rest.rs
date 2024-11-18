@@ -666,6 +666,13 @@ pub struct CanisterIdRange {
     pub end: RawCanisterId,
 }
 
+impl CanisterIdRange {
+    fn contains(&self, canister_id: Principal) -> bool {
+        Principal::from_slice(&self.start.canister_id) <= canister_id
+            && canister_id <= Principal::from_slice(&self.end.canister_id)
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
 pub struct Topology {
     pub subnet_configs: BTreeMap<SubnetId, SubnetConfig>,
@@ -673,6 +680,19 @@ pub struct Topology {
 }
 
 impl Topology {
+    pub fn get_subnet(&self, canister_id: Principal) -> Option<SubnetId> {
+        self.subnet_configs
+            .iter()
+            .find(|(_, config)| {
+                config
+                    .canister_ranges
+                    .iter()
+                    .any(|r| r.contains(canister_id))
+            })
+            .map(|(subnet_id, _)| subnet_id)
+            .copied()
+    }
+
     pub fn get_app_subnets(&self) -> Vec<SubnetId> {
         self.find_subnets(SubnetKind::Application, None)
     }
