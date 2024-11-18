@@ -65,7 +65,6 @@ impl NnsCanisterUpgrade {
         } else if nns_canister_name == "nns-dapp" {
           let arg_path = env::var("NNS_DAPP_ARG_PATH")
             .unwrap_or_else(|err| panic!("{}: NNS_DAPP_ARG_PATH", err,));
-          ic_cdk::println!("\n\n\ndskloet arg_path {:?}\n\n\n", arg_path);
           fs::read(&arg_path).expect(&arg_path)
         } else {
             Encode!(&()).unwrap()
