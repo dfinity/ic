@@ -12,7 +12,7 @@ kind: DataVolume
 metadata:
   name: {name}
   annotations:
-    cdi.kubevirt.io/storage.usePopulator: "false"
+    cdi.kubevirt.io/storage.usePopulator: "true"
 spec:
   contentType: {type}
   pvc:
@@ -33,7 +33,7 @@ kind: DataVolume
 metadata:
   name: {name}
   annotations:
-    cdi.kubevirt.io/storage.usePopulator: "false"
+    cdi.kubevirt.io/storage.usePopulator: "true"
 spec:
   contentType: {type}
   pvc:

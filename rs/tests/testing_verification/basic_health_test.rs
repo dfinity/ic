@@ -60,15 +60,15 @@ pub fn setup(env: TestEnv) {
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_random_height()
-                .add_nodes(4),
+                .add_nodes(2),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_random_height()
-                .add_nodes(4),
+                .add_nodes(2),
         )
         .setup_and_start(&env)
-        .expect("failed to setup IC under test");
+        .expect("failed to setup IC under test!");
     //env.sync_with_prometheus();
 }
 

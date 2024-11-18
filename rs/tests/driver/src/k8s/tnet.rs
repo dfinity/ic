@@ -142,6 +142,10 @@ impl TNode {
         start_vm(&self.name.clone().expect("name missing")).await
     }
 
+    pub async fn restart(&self) -> Result<()> {
+        restart_vm(&self.name.clone().expect("name missing")).await
+    }
+
     pub async fn stop(&self) -> Result<()> {
         stop_vm(&self.name.clone().expect("name missing")).await
     }
@@ -374,6 +378,38 @@ impl TNet {
             self.deploy_image(&pvc_name, url.as_ref()).await?;
         }
 
+//        let mut tmp_pod: Pod = serde_yaml::from_str(&format!(
+//            r#"
+//apiVersion: v1
+//kind: Pod
+//metadata:
+//  name: {name}-tmp
+//spec:
+//  containers:
+//    - name: nginx
+//      image: registry.k8s.io/pause:3.8
+//      volumeMounts:
+//      - mountPath: /usr/share/nginx/html
+//        name: my-pvc-volume
+//  volumes:
+//  - name: my-pvc-volume
+//    persistentVolumeClaim:
+//      claimName: {claim_name}
+//"#,
+//            name = vm_name,
+//            claim_name = pvc_name,
+//        ))?;
+//        tmp_pod.metadata.owner_references = vec![self.owner_reference()].into();
+//
+//        (|| async {
+//            k8s_client
+//                .api_pod
+//                .create(&PostParams::default(), &tmp_pod)
+//                .await
+//        })
+//        .retry(&ExponentialBuilder::default())
+//        .await?;
+//
         let mut ipam_pod: Pod = serde_yaml::from_str(&format!(
             r#"
 apiVersion: v1
