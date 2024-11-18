@@ -10,7 +10,7 @@ use ic_protobuf::registry::{
 use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
-use ic_registry_node_provider_rewards::v0_rewards::calculate_rewards;
+use ic_registry_node_provider_rewards::calculate_rewards_v0;
 use prost::Message;
 use std::collections::BTreeMap;
 
@@ -37,7 +37,7 @@ impl Registry {
         let data_centers = get_key_family_iter::<DataCenterRecord>(self, DATA_CENTER_KEY_PREFIX)
             .collect::<BTreeMap<String, DataCenterRecord>>();
 
-        let reward_values = calculate_rewards(&rewards_table, &node_operators, &data_centers)?;
+        let reward_values = calculate_rewards_v0(&rewards_table, &node_operators, &data_centers)?;
 
         rewards.rewards = reward_values
             .rewards_per_node_provider
