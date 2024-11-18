@@ -130,7 +130,7 @@ pub const SCHNORR_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 /// second, that would come to  26k SDR per month if we spent the whole time
 /// creating key derivations. At 13 nodes and 2k SDR per node per month this would
 /// cover the cost of the subnet.
-pub const VET_KD_FEE: Cycles = Cycles::new(10 * B as u128);
+pub const VETKD_FEE: Cycles = Cycles::new(10 * B as u128);
 
 /// Default subnet size which is used to scale cycles cost according to a subnet replication factor.
 ///
@@ -414,7 +414,7 @@ pub struct CyclesAccountManagerConfig {
     pub schnorr_signature_fee: Cycles,
 
     /// Amount to charge for vet KD.
-    pub vet_kd_fee: Cycles,
+    pub vetkd_fee: Cycles,
 
     /// A linear factor of the baseline cost to be charged for HTTP requests per node.
     /// The cost of an HTTP request is represented by a quadratic function due to the communication complexity of the subnet.
@@ -465,7 +465,7 @@ impl CyclesAccountManagerConfig {
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
-            vet_kd_fee: VET_KD_FEE,
+            vetkd_fee: VETKD_FEE,
             http_request_linear_baseline_fee: Cycles::new(3_000_000),
             http_request_quadratic_baseline_fee: Cycles::new(60_000),
             http_request_per_byte_fee: Cycles::new(400),
@@ -504,7 +504,7 @@ impl CyclesAccountManagerConfig {
             // - non-zero cost if called from any other subnet which is not NNS subnet
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
-            vet_kd_fee: VET_KD_FEE,
+            vetkd_fee: VETKD_FEE,
             http_request_linear_baseline_fee: Cycles::new(0),
             http_request_quadratic_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),

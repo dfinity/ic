@@ -125,7 +125,7 @@ pub mod threshold_arguments {
         #[prost(message, tag = "2")]
         Schnorr(super::SchnorrArguments),
         #[prost(message, tag = "3")]
-        VetKd(super::VetKdArguments),
+        Vetkd(super::VetKdArguments),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]

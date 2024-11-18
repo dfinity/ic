@@ -159,7 +159,7 @@ mod tests {
         create_available_pre_signature, empty_idkg_payload_with_key_ids, empty_response,
         fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
         fake_signature_request_context, fake_signature_request_context_from_id,
-        fake_signature_request_context_with_pre_sig, fake_vet_kd_master_public_key_id,
+        fake_signature_request_context_with_pre_sig, fake_vetkd_master_public_key_id,
         into_idkg_contexts, request_id, set_up_idkg_payload, TestThresholdSignatureBuilder,
     };
     use assert_matches::assert_matches;
@@ -357,10 +357,10 @@ mod tests {
     }
 
     #[test]
-    fn test_update_signature_agreements_ignores_vet_kd_contexts() {
+    fn test_update_signature_agreements_ignores_vetkd_contexts() {
         let subnet_id = subnet_test_id(0);
         let ecdsa_key_id = fake_ecdsa_idkg_master_public_key_id();
-        let vet_key_id = fake_vet_kd_master_public_key_id();
+        let vet_key_id = fake_vetkd_master_public_key_id();
         let mut idkg_payload =
             empty_idkg_payload_with_key_ids(subnet_id, vec![ecdsa_key_id.clone()]);
         let valid_keys = BTreeSet::from_iter([ecdsa_key_id.clone()]);
@@ -373,7 +373,7 @@ mod tests {
             .map(|i| request_id(i, Height::from(0)))
             .collect::<Vec<_>>();
 
-        let vet_kd_random_id = [2; 32];
+        let vetkd_random_id = [2; 32];
 
         let contexts = BTreeMap::from([
             // insert ecdsa request to be completed
@@ -381,7 +381,7 @@ mod tests {
             // insert vet kd request to be ignored
             (
                 ids[1].callback_id,
-                fake_signature_request_context(vet_key_id.clone(), vet_kd_random_id),
+                fake_signature_request_context(vet_key_id.clone(), vetkd_random_id),
             ),
         ]);
         let contexts = into_idkg_contexts(&contexts);

@@ -2627,7 +2627,7 @@ impl ExecutionEnvironment {
         match args {
             ThresholdArguments::Ecdsa(_) => cam.ecdsa_signature_fee(subnet_size),
             ThresholdArguments::Schnorr(_) => cam.schnorr_signature_fee(subnet_size),
-            ThresholdArguments::VetKd(_) => cam.vet_kd_fee(subnet_size),
+            ThresholdArguments::VetKd(_) => cam.vetkd_fee(subnet_size),
         }
     }
 

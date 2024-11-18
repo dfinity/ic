@@ -90,7 +90,7 @@ message ThresholdArguments {
   oneof threshold_scheme {
     EcdsaArguments ecdsa = 1;
     SchnorrArguments schnorr = 2;
-    VetKdArguments vet_kd = 3;
+    VetKdArguments vetkd = 3;
   }
 }
 

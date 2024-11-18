@@ -1150,7 +1150,7 @@ mod test {
     }
 
     #[test]
-    fn test_reject_new_signature_agreement_for_vet_kd() {
+    fn test_reject_new_signature_agreement_for_vetkd() {
         let height = Height::from(0);
         let subnet_id = subnet_test_id(0);
         let crypto = &CryptoReturningOk::default();
@@ -1160,11 +1160,11 @@ mod test {
 
         let callback_id = CallbackId::from(1);
 
-        let vet_kd_key_id = fake_vet_kd_master_public_key_id();
+        let vetkd_key_id = fake_vetkd_master_public_key_id();
         let pseudo_random_id = [1; 32];
         let signature_request_contexts = BTreeMap::from_iter([(
             callback_id,
-            fake_signature_request_context(vet_kd_key_id, pseudo_random_id),
+            fake_signature_request_context(vetkd_key_id, pseudo_random_id),
         )]);
         let snapshot =
             fake_state_with_signature_requests(height, signature_request_contexts.clone());
@@ -1178,9 +1178,9 @@ mod test {
             ));
 
         // Insert agreement for unknown context
-        let mut idkg_payload_vet_kd_context =
+        let mut idkg_payload_vetkd_context =
             empty_idkg_payload_with_key_ids(subnet_id, vec![ecdsa_key_id]);
-        idkg_payload_vet_kd_context
+        idkg_payload_vetkd_context
             .signature_agreements
             .insert(pseudo_random_id, fake_response);
         let res = validate_new_signature_agreements(
@@ -1188,7 +1188,7 @@ mod test {
             &block_reader,
             snapshot.get_state(),
             &prev_payload,
-            &idkg_payload_vet_kd_context,
+            &idkg_payload_vetkd_context,
         );
         assert_matches!(
             res,
