@@ -1,7 +1,11 @@
+use crate::certification::certify_assets;
 use crate::{
     state::CanisterApi,
     types::{DiscloseRulesArg, DiscloseRulesArgError, IncidentId, RuleId, Timestamp},
 };
+use ic_asset_certification::Asset;
+use rate_limits_api::HttpRuleContent;
+use serde_json::to_vec;
 use strum::AsRefStr;
 use thiserror::Error;
 
@@ -83,7 +87,14 @@ fn disclose_rules(
     for (rule_id, mut metadata) in rules {
         if metadata.disclosed_at.is_none() {
             metadata.disclosed_at = Some(time);
-            let _ = canister_api.upsert_rule(*rule_id, metadata);
+            let _ = canister_api.upsert_rule(*rule_id, metadata.clone());
+            // When a rule is disclosed, we can certify it and serve as an asset via `http_request``.
+            // NOTE: rule's field `removed_in_version` may change later. Once it happens we'll need to re-certify this asset.
+            // Both conversion/serialization can't fail, as data has been validated in add_config() call.
+            let rule_content = HttpRuleContent::try_from(metadata).expect("Failed to convert");
+            let json_bytes = to_vec(&rule_content).expect("Failed to serialize");
+            let asset = Asset::new(format!("/rules/{rule_id}"), json_bytes);
+            certify_assets(vec![asset]);
         }
     }
 
@@ -114,7 +125,12 @@ fn disclose_incidents(
             let rule_ids: Vec<RuleId> = metadata.rule_ids.iter().cloned().collect();
             disclose_rules(canister_api, time, &rule_ids)?;
             metadata.is_disclosed = true;
-            let _ = canister_api.upsert_incident(incident_id, metadata);
+            let _ = canister_api.upsert_incident(incident_id, metadata.clone());
+            // As incident's metadata has changed, we need to re-certify this asset for serving via http_request.
+            // Serialization can't fail, as data has already been validated.
+            let json_bytes = to_vec(&metadata).expect("Failed to serialize");
+            let asset = Asset::new(format!("/incidents/{}", incident_id.0), json_bytes);
+            certify_assets(vec![asset]);
         }
     }
 

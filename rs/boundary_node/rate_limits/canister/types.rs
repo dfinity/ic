@@ -1,7 +1,8 @@
-use std::fmt;
-
+use crate::storage::{StorableConfig, StorableIncidentMetadata, StorableRuleMetadata};
+use rate_limits_api::{HttpConfigContent, HttpIncidentContent, HttpRuleContent};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::fmt;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -157,6 +158,41 @@ impl From<OutputRuleMetadata> for rate_limits_api::OutputRuleMetadata {
             disclosed_at: value.disclosed_at,
             added_in_version: value.added_in_version,
             removed_in_version: value.removed_in_version,
+        }
+    }
+}
+
+impl TryFrom<StorableRuleMetadata> for HttpRuleContent {
+    type Error = String;
+
+    fn try_from(value: StorableRuleMetadata) -> Result<Self, Self::Error> {
+        let rule_raw =
+            String::from_utf8(value.rule_raw.clone()).map_err(|_| "Invalid UTF-8".to_string())?;
+
+        Ok(Self {
+            incident_id: value.incident_id.0.to_string(),
+            rule_raw,
+            description: value.description,
+            disclosed_at: value.disclosed_at,
+            added_in_version: value.added_in_version,
+            removed_in_version: value.removed_in_version,
+        })
+    }
+}
+
+impl From<StorableConfig> for HttpConfigContent {
+    fn from(value: StorableConfig) -> Self {
+        Self {
+            schema_version: value.schema_version,
+            rule_ids: value.rule_ids.iter().map(|id| id.0.to_string()).collect(),
+        }
+    }
+}
+
+impl From<StorableIncidentMetadata> for HttpIncidentContent {
+    fn from(value: StorableIncidentMetadata) -> Self {
+        Self {
+            rule_ids: value.rule_ids.iter().map(|id| id.0.to_string()).collect(),
         }
     }
 }

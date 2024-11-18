@@ -1,9 +1,13 @@
+use crate::certification::certify_assets;
 use crate::{
     storage::StorableIncidentMetadata,
     types::{self, IncidentId, InputConfigError, Timestamp},
 };
 use anyhow::Context;
 use getrandom::getrandom;
+use ic_asset_certification::Asset;
+use rate_limits_api::{HttpConfigContent, HttpIncidentContent, HttpRuleContent};
+use serde_json::to_vec;
 use std::collections::{HashMap, HashSet};
 use strum::AsRefStr;
 use thiserror::Error;
@@ -190,7 +194,7 @@ impl<A: CanisterApi> AddsConfig for ConfigAdder<A> {
             rule_ids,
         };
 
-        commit_changes(
+        commit_changes_and_certify_assets(
             &self.canister_api,
             next_version,
             storable_config,
@@ -219,7 +223,7 @@ fn generate_random_uuid() -> Result<Uuid, anyhow::Error> {
     Ok(uuid)
 }
 
-fn commit_changes(
+fn commit_changes_and_certify_assets(
     canister_api: &impl CanisterApi,
     next_version: u64,
     storable_config: StorableConfig,
@@ -227,6 +231,10 @@ fn commit_changes(
     new_rules_metadata: Vec<(RuleId, StorableRuleMetadata)>,
     incidents_map: HashMap<IncidentId, HashSet<RuleId>>,
 ) {
+    // Assemble all assets (served via `http_request` interface) for certification into this vector.
+    // Config needs to be certified only once, while rules and incidents could be re-certified, as their metadata can be updated.
+    let mut assets: Vec<Asset> = vec![];
+
     // Update metadata of the removed rules
     for rule_id in removed_rules {
         let mut rule_metadata = canister_api
@@ -236,20 +244,35 @@ fn commit_changes(
         rule_metadata.removed_in_version = Some(next_version);
 
         assert!(
-            canister_api.upsert_rule(rule_id, rule_metadata).is_some(),
+            canister_api
+                .upsert_rule(rule_id, rule_metadata.clone())
+                .is_some(),
             "Rule with rule_id = {rule_id} not found, failed to update"
         );
+
+        // Add rule to assets for certification only if it was already disclosed.
+        if rule_metadata.disclosed_at.is_some() {
+            // Conversion/serialization can't fail at this point, as all rules have already been validated.
+            let rule_content = HttpRuleContent::try_from(rule_metadata).expect("Failed to convert");
+            let json_bytes = to_vec(&rule_content).expect("Failed to serialize");
+            assets.push(Asset::new(format!("/rules/{rule_id}"), json_bytes));
+        }
     }
 
-    // Add new rules
+    // Store new rules in the stable memory.
+    // NOTE: newly added rules shouldn't be certified and served via `http_request`, as they are initially confidential.
+    // Rules are first served via `http_request` only when disclosed.
     for (rule_id, rule_metadata) in new_rules_metadata {
         assert!(
-            canister_api.upsert_rule(rule_id, rule_metadata).is_none(),
+            canister_api
+                .upsert_rule(rule_id, rule_metadata.clone())
+                .is_none(),
             "Rule with rule_id = {rule_id} already exists, failed to add"
         );
     }
 
-    // Upsert incidents, some of the incidents can be new, some already existed before
+    // Insert or update incidents in stable memory.
+    // New incidents are added, while existing ones are updated with the provided data.
     for (incident_id, rule_ids) in incidents_map {
         let incident_metadata = canister_api
             .get_incident(&incident_id)
@@ -261,16 +284,31 @@ fn commit_changes(
                 is_disclosed: false,
                 rule_ids: rule_ids.clone(),
             });
+        let _ = canister_api.upsert_incident(incident_id, incident_metadata.clone());
 
-        let _ = canister_api.upsert_incident(incident_id, incident_metadata);
+        // Add all incidents to assets for certification, to be served via `http_request`.
+        let incident_content = HttpIncidentContent::from(incident_metadata);
+        let json_bytes = to_vec(&incident_content).expect("Failed to serialize");
+        assets.push(Asset::new(
+            format!("/incidents/{}", incident_id.0),
+            json_bytes,
+        ));
     }
 
+    // Store config in the stable memory.
     assert!(
         canister_api
-            .upsert_config(next_version, storable_config)
+            .upsert_config(next_version, storable_config.clone())
             .is_none(),
         "Failed to add config for version {next_version}, config already exists"
     );
+
+    // Add config to assets for certification.
+    let config_content = HttpConfigContent::from(storable_config);
+    let json_bytes = to_vec(&config_content).expect("Failed to serialize");
+    assets.push(Asset::new(format!("/configs/{next_version}"), json_bytes));
+
+    certify_assets(assets);
 }
 
 #[cfg(test)]

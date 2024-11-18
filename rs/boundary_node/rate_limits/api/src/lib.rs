@@ -144,3 +144,27 @@ impl std::fmt::Display for OutputRuleMetadata {
         Ok(())
     }
 }
+
+// HTTP types representing certified assets, designed to be served via the `http_request` interface.
+// These structures encapsulate rate-limit configuration, rules, and incidents.
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HttpRuleContent {
+    pub incident_id: IncidentId,
+    pub rule_raw: String,
+    pub description: String,
+    pub disclosed_at: Option<Timestamp>,
+    pub added_in_version: Version,
+    pub removed_in_version: Option<Version>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HttpIncidentContent {
+    pub rule_ids: Vec<RuleId>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HttpConfigContent {
+    pub schema_version: Version,
+    pub rule_ids: Vec<RuleId>,
+}

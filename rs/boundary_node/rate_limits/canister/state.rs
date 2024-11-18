@@ -1,5 +1,8 @@
+use crate::certification::certify_assets;
 use candid::Principal;
+use ic_asset_certification::Asset;
 use mockall::automock;
+use serde_json::to_vec;
 use std::collections::HashSet;
 
 use crate::{
@@ -178,9 +181,16 @@ pub fn init_version_and_config(time: Timestamp, canister_api: impl CanisterApi) 
         rule_ids: vec![],
     };
     assert!(
-        canister_api.upsert_config(INIT_VERSION, config).is_none(),
+        canister_api
+            .upsert_config(INIT_VERSION, config.clone())
+            .is_none(),
         "Config for version={INIT_VERSION} already exists!"
     );
+    // Certify config for serving it as an asset via `http_request`.
+    // This config will never change, it doesn't need to be re-certified.
+    let json_bytes = to_vec(&config).expect("Failed to serialize");
+    let asset = Asset::new(format!("/configs/{INIT_VERSION}"), json_bytes);
+    certify_assets(vec![asset]);
 }
 
 pub fn with_canister_state<R>(f: impl FnOnce(CanisterState) -> R) -> R {
