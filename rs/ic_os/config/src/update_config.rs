@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use url::Url;
 
 use crate::types::*;
@@ -14,7 +14,7 @@ use crate::types::*;
 pub static CONFIG_ROOT: &str = "/boot/config";
 pub static STATE_ROOT: &str = "/var/lib/ic/data";
 
-pub fn update_guestos_config(output_file: PathBuf) -> Result<()> {
+pub fn update_guestos_config() -> Result<()> {
     let config_dir = Path::new(CONFIG_ROOT);
     log_directory_structure(config_dir)?;
     let state_root = Path::new(STATE_ROOT);
@@ -66,11 +66,11 @@ pub fn update_guestos_config(output_file: PathBuf) -> Result<()> {
 
         println!("New GuestOSConfig: {:?}", guestos_config);
 
-        serialize_and_write_config(&output_file, &guestos_config)?;
+        serialize_and_write_config(&config_json_path, &guestos_config)?;
 
         println!(
             "New GuestOSConfig has been written to {}",
-            output_file.display()
+            config_json_path.display()
         );
     } else if config_json_exists && !network_conf_exists {
         // Read config.json and generate old configuration files

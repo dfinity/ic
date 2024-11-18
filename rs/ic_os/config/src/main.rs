@@ -56,10 +56,7 @@ pub enum Commands {
     /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
     /// Creates a GuestOSConfig object from existing guestos configuration files
-    UpdateGuestosConfig {
-        #[arg(long, default_value = config::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "output_file")]
-        output_file: PathBuf,
-    },
+    UpdateGuestosConfig,
     UpdateHostosConfig {
         #[arg(long, default_value = config::DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH, value_name = "config.ini")]
         config_ini_path: PathBuf,
@@ -393,7 +390,7 @@ pub fn main() -> Result<()> {
             generate_testnet_config(args, clap_args.guestos_config_json_path)
         }
         // TODO(NODE-1519): delete UpdateGuestosConfig and UpdateHostosConfig after moved to new config format
-        Some(Commands::UpdateGuestosConfig { output_file }) => update_guestos_config(output_file),
+        Some(Commands::UpdateGuestosConfig) => update_guestos_config(),
         Some(Commands::UpdateHostosConfig {
             config_ini_path,
             deployment_json_path,
