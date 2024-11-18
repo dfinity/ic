@@ -409,7 +409,6 @@ pub fn main() -> Result<()> {
                 return Ok(());
             }
 
-            // get config.ini settings
             let ConfigIniSettings {
                 ipv6_prefix,
                 ipv6_prefix_length,
@@ -422,7 +421,6 @@ pub fn main() -> Result<()> {
                 node_reward_type,
             } = get_config_ini_settings(&config_ini_path)?;
 
-            // create NetworkSettings
             let deterministic_config = DeterministicIpv6Config {
                 prefix: ipv6_prefix,
                 prefix_length: ipv6_prefix_length,
@@ -448,7 +446,6 @@ pub fn main() -> Result<()> {
                 domain_name,
             };
 
-            // get deployment.json variables
             let deployment_json_settings = get_deployment_settings(&deployment_json_path)?;
 
             let logging = Logging {
