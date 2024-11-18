@@ -1,4 +1,3 @@
-use crate::mutations::node_management::common::{get_existing_records, get_subnet_list_record};
 use crate::{
     mutations::node_management::common::{get_key_family, get_key_family_iter},
     pb::v1::NodeProvidersMonthlyXdrRewards,
@@ -7,23 +6,18 @@ use crate::{
 use chrono::{TimeZone, Utc};
 use futures::FutureExt;
 use ic_base_types::PrincipalId;
-use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryResponse};
 use ic_protobuf::registry::{
-    dc::v1::DataCenterRecord, node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord,
+    dc::v1::DataCenterRecord, node_operator::v1::NodeOperatorRecord,
     node_rewards::v2::NodeRewardsTable,
 };
 use ic_registry_keys::{
     make_node_operator_record_key, DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX,
-    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
+    NODE_REWARDS_TABLE_KEY,
 };
 use ic_registry_node_provider_rewards::v0_rewards::calculate_rewards_v0;
 use ic_registry_node_provider_rewards::v1_rewards::calculate_rewards_v1;
-use ic_registry_node_provider_rewards::v1_types::{
-    AHashMap, DailyNodeMetrics, NodesMetricsHistory, RewardableNode,
-};
 use itertools::Itertools;
 use prost::Message;
-use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
@@ -63,173 +57,35 @@ impl Registry {
         Ok(rewards)
     }
 
-    async fn fetch_nodes_metrics(
-        &self,
-        from_ts: u64,
-    ) -> Result<AHashMap<PrincipalId, Vec<DailyNodeMetrics>>, String> {
-        let subnets = get_subnet_list_record(self)
-            .subnets
-            .into_iter()
-            .map(|subnet_id| PrincipalId::try_from(subnet_id).unwrap())
-            .collect_vec();
-
-        let subnets_metrics = subnets
-            .into_iter()
-            .map(|subnet_id| {
-                let contract = NodeMetricsHistoryArgs {
-                    subnet_id,
-                    start_at_timestamp_nanos: from_ts,
-                };
-
-               ic_cdk::api::call::call_with_payment128::<_, (Vec<NodeMetricsHistoryResponse>,)>(
-                    candid::Principal::management_canister(),
-                    "node_metrics_history",
-                    (contract,),
-                    0_u128,
-                )
-                .map(move |result| {
-                    result
-                        .map_err(|(code, msg)| {
-                            format!(
-                                "Error when calling management canister for subnet {}:\n Code:{:?}\nMsg:{}",
-                                subnet_id,
-                                code,
-                                msg)
-                        })
-                        .map(|(node_metrics,)| node_metrics)
-                })
-            });
-
-        let subnets_metrics = futures::future::try_join_all(subnets_metrics)
-            .await?
-            .into_iter()
-            .flatten()
-            .collect_vec();
-
-        Ok(NodesMetricsHistory(subnets_metrics).into())
-    }
-
     pub async fn get_node_providers_monthly_xdr_rewards_v1(
         &self,
         from_ts: u64,
         registry_version_start: u64,
     ) -> Result<NodeProvidersMonthlyXdrRewards, String> {
         let now = ic_cdk::api::time();
-        // Timedelta is
-        let start_date = Utc
-            .timestamp_nanos(from_ts as i64)
-            .date_naive()
-            .and_hms_opt(0, 0, 0)
-            .unwrap();
-
-        let end_date = Utc
-            .timestamp_nanos(now as i64)
-            .date_naive()
-            .and_hms_opt(0, 0, 0)
-            .unwrap();
-
-        let days_in_period = (start_date - end_date).num_days() as u64;
-
         let mut rewards = NodeProvidersMonthlyXdrRewards::default();
 
-        let mut nodes_in_period = Vec::new();
-        let mut rewardable_nodes = BTreeMap::new();
+        let start_dt = Utc.timestamp_nanos(from_ts as i64).date_naive();
+        let end_dt = Utc.timestamp_nanos(now as i64).date_naive();
+
+        let start_ts_metrics = start_dt
+            // 10 min delay is given to the request to avoid getting metrics from previous day
+            .and_hms_opt(0, 10, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp_nanos_opt()
+            .unwrap() as u64;
+        let nodes_in_period = self
+            .get_rewardable_nodes(start_ts_metrics, registry_version_start)
+            .await?;
 
         let rewards_table_bytes = self
             .get(NODE_REWARDS_TABLE_KEY.as_bytes(), self.latest_version())
             .ok_or_else(|| "Node Rewards Table was not found in the Registry".to_string())?
             .value
             .clone();
-
         let rewards_table = NodeRewardsTable::decode(rewards_table_bytes.as_slice()).unwrap();
-
-        let mut nodes_metrics = self.fetch_nodes_metrics(from_ts).await?;
-
-        let node_records = get_existing_records::<NodeRecord>(
-            self,
-            NODE_RECORD_KEY_PREFIX,
-            &registry_version_start,
-        )
-        .collect_vec();
-
-        let node_operators = get_existing_records::<NodeOperatorRecord>(
-            self,
-            NODE_OPERATOR_RECORD_KEY_PREFIX,
-            &registry_version_start,
-        )
-        .collect::<BTreeMap<String, NodeOperatorRecord>>();
-
-        let data_center_records = get_existing_records::<DataCenterRecord>(
-            self,
-            DATA_CENTER_KEY_PREFIX,
-            &registry_version_start,
-        )
-        .collect::<BTreeMap<String, DataCenterRecord>>();
-
-        for (p, node_record) in node_records {
-            let principal = PrincipalId::from_str(p.as_str()).map_err(|e| e.to_string())?;
-
-            let node_operator_id: String = node_record.node_operator_id.try_into().unwrap();
-            let node_operator_record = node_operators.get(&node_operator_id).ok_or_else(|| {
-                format!(
-                    "Node Operator with id '{}' \
-                        not found in the Registry",
-                    node_operator_id
-                )
-            })?;
-            let data_center_record = data_center_records
-                .get(&node_operator_record.dc_id)
-                .ok_or_else(|| {
-                    format!(
-                        "DataCenter with id '{}' \
-                        not found in the Registry",
-                        node_operator_id
-                    )
-                })?;
-            let node_provider_id: PrincipalId = node_operator_record
-                .node_provider_principal_id
-                .clone()
-                .try_into()
-                .unwrap();
-
-            if let Entry::Vacant(rewardables) = rewardable_nodes.entry(node_operator_id) {
-                rewardables.insert(node_operator_record.rewardable_nodes.clone());
-            }
-
-            nodes_in_period.push(RewardableNode {
-                node_id: principal,
-                node_provider_id,
-                region: data_center_record.region.clone(),
-                node_type: match rewardable_nodes.get_mut(&node_operator_id) {
-                    Some(rewardable_nodes) => {
-                        if rewardable_nodes.is_empty() {
-                            "unknown:no_rewardable_nodes_found".to_string()
-                        } else {
-                            let (k, mut v) = loop {
-                                let (k, v) = match rewardable_nodes.pop_first() {
-                                    Some(kv) => kv,
-                                    None => {
-                                        break ("unknown:rewardable_nodes_used_up".to_string(), 0)
-                                    }
-                                };
-                                if v != 0 {
-                                    break (k, v);
-                                }
-                            };
-                            v = v.saturating_sub(1);
-                            if v != 0 {
-                                rewardable_nodes.insert(k.clone(), v);
-                            }
-                            k
-                        }
-                    }
-
-                    None => "unknown".to_string(),
-                },
-                node_metrics: nodes_metrics.remove(&principal),
-            });
-        }
-
+        let days_in_period = (start_dt - end_dt).num_days() as u64;
         let reward_values = calculate_rewards_v1(days_in_period, &rewards_table, &nodes_in_period);
 
         rewards.rewards = reward_values

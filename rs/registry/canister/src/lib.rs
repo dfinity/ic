@@ -3,6 +3,7 @@ pub mod chain_key;
 pub mod common;
 pub mod get_node_operators_and_dcs_of_node_provider;
 pub mod get_node_providers_monthly_xdr_rewards;
+pub mod get_rewardable_nodes;
 pub mod init;
 mod invariants;
 pub mod mutations;
