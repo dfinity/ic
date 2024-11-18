@@ -890,7 +890,7 @@ impl TryFrom<pb_metadata::ThresholdArguments> for ThresholdArguments {
             pb_metadata::threshold_arguments::ThresholdScheme::Schnorr(args) => Ok(
                 ThresholdArguments::Schnorr(SchnorrArguments::try_from(args)?),
             ),
-            pb_metadata::threshold_arguments::ThresholdScheme::VetKd(args) => {
+            pb_metadata::threshold_arguments::ThresholdScheme::Vetkd(args) => {
                 Ok(ThresholdArguments::VetKd(VetKdArguments::try_from(args)?))
             }
         }
