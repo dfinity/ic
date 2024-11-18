@@ -17,7 +17,7 @@ on:
       targets:
         description: 'System Tests / Bazel Targets'
         required: false
-        default: '//rs/tests/testing_verification:basic_health_test'
+        default: '//rs/tests/nns:node_removal_from_registry_test'
       jobs:
         description: 'Concurrent Bazel Jobs'
         required: false
@@ -27,7 +27,7 @@ env:
   TARGETS: |
     ${{ github.event_name == 'schedule' && '//...' ||
     github.event_name == 'workflow_dispatch' && github.event.inputs.targets ||
-    '//rs/tests/testing_verification:basic_health_test' }}
+    '//rs/tests/nns:node_removal_from_registry_test' }}
   JOBS: |
     ${{ github.event_name == 'schedule' && '14' ||
     github.event_name == 'workflow_dispatch' && github.event.inputs.jobs ||
