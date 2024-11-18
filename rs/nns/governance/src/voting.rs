@@ -13,7 +13,7 @@ thread_local! {
     static VOTING_STATE_MACHINES: RefCell<VotingStateMachines> = RefCell::new(VotingStateMachines::new());
 }
 impl Governance {
-    pub fn cast_vote_and_cascade_follow(
+    pub async fn cast_vote_and_cascade_follow(
         &mut self,
         proposal_id: ProposalId,
         voting_neuron_id: NeuronId,
@@ -304,10 +304,10 @@ mod test {
         assert!(state_machine.is_done());
 
         state_machine
-            .followers_to_collect
+            .neurons_to_check_followers
             .insert(NeuronId { id: 0 });
         assert!(!state_machine.is_done());
-        state_machine.followers_to_collect.clear();
+        state_machine.neurons_to_check_followers.clear();
 
         state_machine.followers_to_check.insert(NeuronId { id: 0 });
         assert!(!state_machine.is_done());
