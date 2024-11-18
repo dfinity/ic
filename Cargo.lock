@@ -363,24 +363,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
 
 [[package]]
-name = "anonymization-backend"
-version = "0.1.0"
-dependencies = [
- "anonymization-interface",
- "anyhow",
- "async-trait",
- "candid",
- "ic-cdk 0.16.0",
- "ic-cdk-timers",
- "ic-nns-constants",
- "ic-stable-structures",
- "lazy_static",
- "prometheus",
- "serde",
- "thiserror 2.0.3",
-]
-
-[[package]]
 name = "anonymization-client"
 version = "0.1.0"
 dependencies = [
@@ -403,6 +385,24 @@ dependencies = [
  "candid",
  "serde",
  "serde_bytes",
+]
+
+[[package]]
+name = "anonymization_backend"
+version = "0.1.0"
+dependencies = [
+ "anonymization-interface",
+ "anyhow",
+ "async-trait",
+ "candid",
+ "ic-cdk 0.16.0",
+ "ic-cdk-timers",
+ "ic-nns-constants",
+ "ic-stable-structures",
+ "lazy_static",
+ "prometheus",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]

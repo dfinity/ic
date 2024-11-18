@@ -1,0 +1,10 @@
+{
+    "canisters": {
+        "backend": {
+            "candid": "rs/boundary_node/anonymization/backend/interface.did",
+            "package": "anonymization_backend",
+            "type": "rust"
+        }
+    },
+    "version": 1
+}
