@@ -1168,6 +1168,8 @@ impl SandboxedExecutionController {
     ) {
         loop {
             let sandbox_processes = get_sandbox_process_stats(&backends);
+            println!("XXX MONITOR THREAD processes:{}", sandbox_processes.len());
+
             #[allow(unused_mut)] // for MacOS
             let mut sandbox_processes_rss = Vec::with_capacity(sandbox_processes.len());
 
@@ -1785,6 +1787,10 @@ fn evict_sandbox_processes(
     max_sandboxes_rss: NumBytes,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) {
+    println!(
+        "XXX EVICT SANDBOXES len:{} max active:{max_active_sandboxes} max RSS:{max_sandboxes_rss}",
+        backends.len()
+    );
     // Remove the already terminated processes.
     backends.retain(|_id, backend| match backend {
         Backend::Active { .. } => true,
@@ -1818,6 +1824,7 @@ fn evict_sandbox_processes(
             Backend::Evicted { .. } | Backend::Empty => None,
         })
         .collect();
+    println!("XXX   candidates:{}", candidates.len());
 
     let last_used_threshold = match Instant::now().checked_sub(max_sandbox_idle_time) {
         Some(threshold) => threshold,

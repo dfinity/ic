@@ -113,7 +113,8 @@ fn run_load_simulator_canisters(total_canisters: usize, rounds: u64, c: &mut Cri
                 bench.iter_batched(
                     || setup_env(total_canisters),
                     |env| {
-                        for _ in 1..=rounds {
+                        for r in 1..=rounds {
+                            println!("XXX ==> Round:{r}");
                             env.advance_time(Duration::from_secs(1));
                             env.tick();
                         }
