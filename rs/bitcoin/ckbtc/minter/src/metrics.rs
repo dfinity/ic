@@ -156,18 +156,7 @@ pub fn encode_metrics(
 
     metrics.encode_gauge(
         "ckbtc_minter_btc_balance",
-        state::read_state(|s| {
-            s.available_utxos.iter().map(|u| u.value).sum::<u64>()
-                + s.submitted_transactions
-                    .iter()
-                    .map(|tx| {
-                        tx.change_output
-                            .as_ref()
-                            .map(|out| out.value)
-                            .unwrap_or_default()
-                    })
-                    .sum::<u64>()
-        }) as f64,
+        state::read_state(|s| s.get_total_btc_managed()) as f64,
         "Total BTC amount locked in available UTXOs.",
     )?;
 

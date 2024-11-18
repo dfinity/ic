@@ -20,7 +20,7 @@ use ic_system_test_driver::{
 };
 use ic_tests_ckbtc::{
     activate_ecdsa_signature, create_canister_at_id, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, set_kyt_api_key, setup, subnet_sys,
+    install_ledger, install_minter, install_new_kyt, set_kyt_api_key, setup, subnet_sys,
     utils::{
         ensure_wallet, generate_blocks, get_btc_address, get_btc_client, retrieve_btc,
         send_to_btc_address, wait_for_finalization_no_new_blocks, wait_for_mempool_change,
@@ -74,6 +74,7 @@ pub fn test_batching(env: TestEnv) {
     let minter_id = CanisterId::from_u64(200);
     let ledger_id = CanisterId::from_u64(201);
     let kyt_id = CanisterId::from_u64(202);
+    let new_kyt_id = CanisterId::from_u64(203);
 
     block_on(async {
         let runtime = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
@@ -82,6 +83,7 @@ pub fn test_batching(env: TestEnv) {
         let mut ledger_canister = create_canister_at_id(&runtime, ledger_id.get()).await;
         let mut minter_canister = create_canister_at_id(&runtime, minter_id.get()).await;
         let mut kyt_canister = create_canister_at_id(&runtime, kyt_id.get()).await;
+        let mut new_kyt_canister = create_canister_at_id(&runtime, new_kyt_id.get()).await;
 
         let minting_user = minter_canister.canister_id().get();
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
@@ -94,6 +96,7 @@ pub fn test_batching(env: TestEnv) {
         )
         .await;
         set_kyt_api_key(&agent, &kyt_id.get().0, "fake key".to_string()).await;
+        let new_kyt_id = install_new_kyt(&mut new_kyt_canister, &env).await;
 
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
 
@@ -107,6 +110,7 @@ pub fn test_batching(env: TestEnv) {
             &logger,
             five_hours_nanos,
             kyt_id,
+            new_kyt_id,
         )
         .await;
 
@@ -312,15 +316,12 @@ pub fn test_batching(env: TestEnv) {
                 * (RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64 + 1)
             + ic_ckbtc_minter::MINTER_FEE_CONSTANT;
 
-        let kyts_fee = RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64 * KYT_FEE;
-
         // We can check that the destination address has received all the bitcoin
         assert_eq!(
             destination_balance,
             (RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64) * retrieve_amount
                 - EXPECTED_FEE
                 - minters_fee
-                - kyts_fee
         );
 
         // We also check that the destination address have received 20 utxos

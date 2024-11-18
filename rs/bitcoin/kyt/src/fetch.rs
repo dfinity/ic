@@ -58,7 +58,6 @@ pub trait FetchEnv {
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError>;
     fn cycles_accept(&self, cycles: u128) -> u128;
-    fn cycles_available(&self) -> u128;
 
     /// Try to fetch a transaction given its txid:
     /// - If it is already available, return `Fetched`.
@@ -202,6 +201,8 @@ pub trait FetchEnv {
 
         let mut futures = vec![];
         let mut jobs = vec![];
+        let mut high_load = false;
+        let mut not_enough_cycles = false;
         for (index, input) in fetched.tx.inputs.iter().enumerate() {
             if fetched.input_addresses[index].is_none() {
                 use TryFetchResult::*;
@@ -225,17 +226,22 @@ pub trait FetchEnv {
                             .into();
                         }
                     }
-                    Pending => continue,
-                    HighLoad | NotEnoughCycles => break,
+                    Pending => {}
+                    HighLoad => {
+                        high_load = true;
+                    }
+                    NotEnoughCycles => {
+                        not_enough_cycles = true;
+                    }
                 }
             }
         }
 
         if futures.is_empty() {
-            // Return NotEnoughCycles if we have deducted all available cycles
-            if self.cycles_available() == 0 {
+            if not_enough_cycles {
                 return CheckTransactionStatus::NotEnoughCycles.into();
-            } else {
+            }
+            if high_load {
                 return CheckTransactionRetriable::HighLoad.into();
             }
         }

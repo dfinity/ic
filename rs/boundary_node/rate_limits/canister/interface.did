@@ -72,7 +72,7 @@ type DiscloseRulesArg = variant {
 };
 
 type GetRulesByIncidentIdResponse = variant {
-  Ok: vec RuleId;
+  Ok: vec OutputRuleMetadata;
   Err: text;
 };
 
@@ -116,7 +116,7 @@ service : (InitArg) -> {
   // Fetch the rule with metadata by its ID
   get_rule_by_id: (RuleId) -> (GetRuleByIdResponse) query;
 
-  // Fetch all rules IDs related to an ID of the incident
+  // Fetch all rules with metadata related to an ID of the incident
   get_rules_by_incident_id: (IncidentId) -> (GetRulesByIncidentIdResponse) query;
 
   // Canister metrics (Http Interface)
