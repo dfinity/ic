@@ -117,8 +117,7 @@ async fn handle_bi_stream(
     let response = tokio::select! {
         response = svc => response.expect("Infallible"),
         stopped = stopped_fut => {
-
-            return Ok(stopped.map(|_| ()).inspect_err(|err|observe_stopped_error(err, "stopped", &metrics.request_handle_errors_total))?);
+            return Ok(stopped.map(|_| ()).inspect_err(|err| observe_stopped_error(err, "request_handler", &metrics.request_handle_errors_total))?);
         }
     };
 
