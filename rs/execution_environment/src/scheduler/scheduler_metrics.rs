@@ -201,7 +201,7 @@ impl SchedulerMetrics {
             ),
             canister_ingress_queue_latencies: metrics_registry.histogram(
                 "scheduler_canister_ingress_queue_latencies_seconds",
-                "Per-canister mean time spent by messages in the ingress queue.",
+                "Per-canister mean IC clock duration spent by messages in the ingress queue.",
                 // 10ms, 20ms, 50ms, …, 100s, 200s, 500s
                 decimal_buckets(-2, 2),
             ),
