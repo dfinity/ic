@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 
 use crate::info::NetworkInfo;
 use crate::interfaces::{get_interfaces, has_ipv6_connectivity, Interface};
+use mac_address::mac_address::FormattedMacAddress;
 
 pub static DEFAULT_SYSTEMD_NETWORK_DIR: &str = "/run/systemd/network";
 
@@ -35,14 +36,20 @@ Bridge=br6
     )
 }
 
-static BRIDGE6_NETDEV_CONTENT: &str = "
+fn generate_bridge6_netdev_content(mac_line: &str) -> String {
+    format!(
+        "
 [NetDev]
 Name=br6
 Kind=bridge
+{mac_line}
 
 [Bridge]
 ForwardDelaySec=0
-STP=false";
+STP=false
+"
+    )
+}
 
 fn generate_bridge6_network_content(
     ipv6_address: &str,
@@ -75,6 +82,7 @@ pub fn restart_systemd_networkd() {
 fn generate_and_write_systemd_files(
     output_directory: &Path,
     interface: &Interface,
+    generated_mac: Option<&FormattedMacAddress>,
     ipv6_address: &str,
     ipv6_gateway: &str,
 ) -> Result<()> {
@@ -89,8 +97,13 @@ fn generate_and_write_systemd_files(
 
     let bridge6_netdev_filename = "20-br6.netdev";
     let bridge6_netdev_path = output_directory.join(bridge6_netdev_filename);
+    let mac_line = match generated_mac {
+        Some(mac) => format!("MACAddress={}", mac.get()),
+        None => String::new(),
+    };
+    let bridge6_netdev_content = generate_bridge6_netdev_content(&mac_line);
     eprintln!("Writing {}", bridge6_netdev_path.to_string_lossy());
-    write(bridge6_netdev_path, BRIDGE6_NETDEV_CONTENT)?;
+    write(bridge6_netdev_path, bridge6_netdev_content)?;
 
     let bridge6_filename = "20-br6.network";
     let bridge6_path = output_directory.join(bridge6_filename);
@@ -109,6 +122,7 @@ fn generate_and_write_systemd_files(
 pub fn generate_systemd_config_files(
     output_directory: &Path,
     network_info: &NetworkInfo,
+    generated_mac: Option<&FormattedMacAddress>,
     ipv6_address: &Ipv6Addr,
 ) -> Result<()> {
     let mut interfaces = get_interfaces()?;
@@ -143,11 +157,12 @@ pub fn generate_systemd_config_files(
     generate_and_write_systemd_files(
         output_directory,
         fastest_interface,
+        generated_mac,
         &ipv6_address,
         &network_info.ipv6_gateway.to_string(),
     )?;
 
-    print!("Restarting systemd networkd");
+    println!("Restarting systemd networkd");
     restart_systemd_networkd();
 
     Ok(())
