@@ -61,7 +61,7 @@ use crate::{
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
     Shutdown, SubnetTopology,
 };
-use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
+use crate::{metrics::QuicTransportMetrics, request_handler::start_stream_acceptor};
 
 /// The value of 25MB is chosen from experiments and the BDP product shown below to support
 /// around 2Gb/s.
@@ -539,7 +539,7 @@ impl ConnectionManager {
                 );
                 self.active_connections.spawn_on(
                     peer_id,
-                    run_stream_acceptor(
+                    start_stream_acceptor(
                         self.log.clone(),
                         peer_id,
                         connection_handle,

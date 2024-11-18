@@ -12,11 +12,10 @@
 //!
 use std::time::Duration;
 
-use anyhow::{anyhow, Context};
-use axum::Router;
+use anyhow::Context;
+use axum::{body::Body, Router}; // TODO: try to remove the axum dep here
 use bytes::Bytes;
 use http::{Method, Request, Response, Version};
-use http_body_util::{BodyExt, Limited};
 use ic_base_types::NodeId;
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::transport::v1 as pb;
@@ -36,7 +35,7 @@ use crate::{
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
 
 // The event loop is cancel-safe.
-pub async fn run_stream_acceptor(
+pub async fn start_stream_acceptor(
     log: ReplicaLogger,
     peer_id: NodeId,
     conn_handle: ConnectionHandle,
@@ -198,13 +197,11 @@ async fn read_request(
 
 async fn to_response_bytes(response: Response<Body>) -> Result<Vec<u8>, anyhow::Error> {
     let (parts, body) = response.into_parts();
-
-    let body = Limited::new(body, MAX_MESSAGE_SIZE_BYTES)
-        .collect()
+    // Check for axum error in body
+    // TODO: Think about this. What is the error that can happen here?
+    let body = axum::body::to_bytes(body, MAX_MESSAGE_SIZE_BYTES)
         .await
-        .map(|col| col.to_bytes())
-        .map_err(|err| anyhow!(err))?;
-
+        .with_context(|| "Failed to read response from body.")?;
     let response_proto = pb::HttpResponse {
         status_code: parts.status.as_u16().into(),
         headers: parts
