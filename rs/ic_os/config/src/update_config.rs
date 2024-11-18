@@ -26,7 +26,7 @@ pub fn update_guestos_config() -> Result<()> {
     let network_conf_exists = network_conf_path.exists();
     let config_json_exists = config_json_path.exists();
 
-    if network_conf_exists && !config_json_exists {
+    if network_conf_exists {
         // Read existing configuration files and generate new config.json
         let network_config_result = read_network_conf(config_dir)?;
         let network_settings = network_config_result.network_settings;
