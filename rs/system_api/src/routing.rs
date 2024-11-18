@@ -13,7 +13,7 @@ use ic_management_canister_types::{
     Payload, ProvisionalTopUpCanisterArgs, ReshareChainKeyArgs, SchnorrPublicKeyArgs,
     SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs,
     TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
-    VetKdDeriveEncryptedKeyArgs, VetKdPublicKeyArgs,
+    VetKdEncryptedKeyArgs, VetKdPublicKeyArgs,
 };
 use ic_replicated_state::NetworkTopology;
 use itertools::Itertools;
@@ -242,8 +242,8 @@ pub(super) fn resolve_destination(
                 IDkgSubnetKind::OnlyHoldsKey,
             )
         }
-        Ok(Ic00Method::VetKdDeriveEncryptedKey) => {
-            let args = VetKdDeriveEncryptedKeyArgs::decode(payload)?;
+        Ok(Ic00Method::VetKdEncryptedKey) => {
+            let args = VetKdEncryptedKeyArgs::decode(payload)?;
             route_idkg_message(
                 &MasterPublicKeyId::VetKd(args.key_id),
                 network_topology,

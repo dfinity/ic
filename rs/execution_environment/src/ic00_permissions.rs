@@ -123,7 +123,7 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
-            Ic00Method::VetKdDeriveEncryptedKey => Self {
+            Ic00Method::VetKdEncryptedKey => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,

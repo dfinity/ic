@@ -173,7 +173,7 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
             key_id: into_inner_schnorr(key_id),
         }
         .encode(),
-        Method::VetKdDeriveEncryptedKey => ic00::VetKdDeriveEncryptedKeyArgs {
+        Method::VetKdEncryptedKey => ic00::VetKdEncryptedKeyArgs {
             derivation_id: vec![],
             encryption_public_key: vec![],
             public_key_derivation_path: DerivationPath::new(vec![]),
@@ -3198,7 +3198,7 @@ fn test_vet_kd_public_key_api_is_disabled() {
 }
 
 #[test]
-fn test_vet_kd_derive_encrypted_key_api_is_disabled() {
+fn test_vet_kd_encrypted_key_api_is_disabled() {
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
     let nns_canister = canister_test_id(0x10);
@@ -3207,7 +3207,7 @@ fn test_vet_kd_derive_encrypted_key_api_is_disabled() {
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
         .build();
-    let method = Method::VetKdDeriveEncryptedKey;
+    let method = Method::VetKdEncryptedKey;
     test.inject_call_to_ic00(
         method,
         sign_with_threshold_key_payload(method, make_vet_kd_key("some_key")),
@@ -3217,7 +3217,7 @@ fn test_vet_kd_derive_encrypted_key_api_is_disabled() {
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        "vet_kd_derive_encrypted_key API is not yet implemented.",
+        "vet_kd_encrypted_key API is not yet implemented.",
     )
 }
 

@@ -2207,7 +2207,7 @@ fn can_execute_subnet_msg(
         | Ic00Method::SchnorrPublicKey
         | Ic00Method::SignWithSchnorr
         | Ic00Method::VetKdPublicKey
-        | Ic00Method::VetKdDeriveEncryptedKey
+        | Ic00Method::VetKdEncryptedKey
         | Ic00Method::BitcoinGetBalance
         | Ic00Method::BitcoinGetUtxos
         | Ic00Method::BitcoinGetBlockHeaders
@@ -2270,7 +2270,7 @@ fn get_instructions_limits_for_subnet_message(
             | SchnorrPublicKey
             | SignWithSchnorr
             | VetKdPublicKey
-            | VetKdDeriveEncryptedKey
+            | VetKdEncryptedKey
             | StartCanister
             | StopCanister
             | UninstallCode

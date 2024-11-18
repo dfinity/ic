@@ -217,7 +217,7 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::HttpRequest
                     | ic00::Method::SignWithECDSA
                     | ic00::Method::SignWithSchnorr
-                    | ic00::Method::VetKdDeriveEncryptedKey
+                    | ic00::Method::VetKdEncryptedKey
                     | ic00::Method::ComputeInitialIDkgDealings
                     | ic00::Method::ReshareChainKey
                     | ic00::Method::BitcoinSendTransactionInternal

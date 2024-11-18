@@ -253,7 +253,7 @@ impl SystemStateChanges {
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
             | Ok(Ic00Method::VetKdPublicKey)
-            | Ok(Ic00Method::VetKdDeriveEncryptedKey)
+            | Ok(Ic00Method::VetKdEncryptedKey)
             | Ok(Ic00Method::ProvisionalTopUpCanister)
             | Ok(Ic00Method::BitcoinSendTransactionInternal)
             | Ok(Ic00Method::BitcoinGetSuccessors)

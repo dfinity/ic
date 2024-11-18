@@ -91,7 +91,7 @@ pub enum Method {
 
     // VetKd interface.
     VetKdPublicKey,
-    VetKdDeriveEncryptedKey,
+    VetKdEncryptedKey,
 
     // Bitcoin Interface.
     BitcoinGetBalance,
@@ -2802,7 +2802,7 @@ impl ComputeInitialIDkgDealingsResponse {
     }
 }
 
-// Represents the argument of the vet_kd_derive_encrypted_key API.
+// Represents the argument of the vet_kd_encrypted_key API.
 /// ```text
 /// (record {
 ///   public_key_derivation_path : vec blob;
@@ -2812,7 +2812,7 @@ impl ComputeInitialIDkgDealingsResponse {
 /// })
 /// ```
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
-pub struct VetKdDeriveEncryptedKeyArgs {
+pub struct VetKdEncryptedKeyArgs {
     pub public_key_derivation_path: DerivationPath,
     #[serde(with = "serde_bytes")]
     pub derivation_id: Vec<u8>,
@@ -2821,16 +2821,16 @@ pub struct VetKdDeriveEncryptedKeyArgs {
     pub encryption_public_key: Vec<u8>,
 }
 
-impl Payload<'_> for VetKdDeriveEncryptedKeyArgs {}
+impl Payload<'_> for VetKdEncryptedKeyArgs {}
 
 /// Struct used to return vet KD result.
 #[derive(Debug, CandidType, Deserialize)]
-pub struct VetKdDeriveEncryptedKeyResult {
+pub struct VetKdEncryptedKeyResult {
     #[serde(with = "serde_bytes")]
     pub encrypted_key: Vec<u8>,
 }
 
-impl Payload<'_> for VetKdDeriveEncryptedKeyResult {}
+impl Payload<'_> for VetKdEncryptedKeyResult {}
 
 /// Represents the argument of the vet_kd_public_key API.
 /// ```text
