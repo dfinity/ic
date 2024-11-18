@@ -12,7 +12,6 @@
 //!
 use std::time::Duration;
 
-use anyhow::Context;
 use axum::{body::Body, Router}; // TODO: try to remove the axum dep here
 use bytes::Bytes;
 use http::{Method, Request, Response, Version};
@@ -190,18 +189,14 @@ async fn read_request(
     }
     // This consumes the body without requiring allocation or cloning the whole content.
     let body_bytes = Bytes::from(request_proto.body);
-    request_builder
-        .body(Body::from(body_bytes))
-        .with_context(|| "Failed to build request.")
+    Ok(request_builder.body(Body::from(body_bytes))?)
 }
 
 async fn to_response_bytes(response: Response<Body>) -> Result<Vec<u8>, anyhow::Error> {
     let (parts, body) = response.into_parts();
     // Check for axum error in body
     // TODO: Think about this. What is the error that can happen here?
-    let body = axum::body::to_bytes(body, MAX_MESSAGE_SIZE_BYTES)
-        .await
-        .with_context(|| "Failed to read response from body.")?;
+    let body = axum::body::to_bytes(body, MAX_MESSAGE_SIZE_BYTES).await?;
     let response_proto = pb::HttpResponse {
         status_code: parts.status.as_u16().into(),
         headers: parts
