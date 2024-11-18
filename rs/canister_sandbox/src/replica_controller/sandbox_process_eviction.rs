@@ -24,11 +24,12 @@ pub(crate) fn evict(
     last_used_threshold: Instant,
     max_sandboxes_rss: NumBytes,
 ) -> Vec<EvictionCandidate> {
-    println!("XXX EVICT total RSS:{total_rss}");
+    println!("XXX     EVICT total RSS:{}M", total_rss / 1024 / 1024);
     let evict_at_least: usize = candidates.len().saturating_sub(max_count_threshold);
 
     if evict_at_least == 0 && total_rss <= max_sandboxes_rss {
         // No need to evict any candidate.
+        println!("XXX       no need");
         return vec![];
     }
 
@@ -61,7 +62,11 @@ pub(crate) fn evict(
             break;
         }
     }
-    println!("XXX   evicted:{}", evicted.len());
+    println!(
+        "XXX   evicted len:{} RSS:{}M",
+        evicted.len(),
+        evicted_rss / 1024 / 1024
+    );
 
     evicted
 }
