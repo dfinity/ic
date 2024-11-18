@@ -349,15 +349,13 @@ impl Icrc1Agent {
         };
 
         fn convert_block_hash(block_hash: Vec<u8>) -> Result<Hash, Icrc1AgentError> {
-            match block_hash.clone().try_into() {
-                Ok(last_block_hash) => Ok(last_block_hash),
-                Err(_) => {
-                    Err(Icrc1AgentError::VerificationFailed(format!(
-                    "DataCertificate last_block_hash bytes: {}, cannot be decoded as last_block_hash",
-                    hex::encode(block_hash)
-                )))
-                }
-            }
+            block_hash
+                .clone()
+                .try_into()
+                .or(Err(Icrc1AgentError::VerificationFailed(format!(
+                "DataCertificate last_block_hash bytes: {}, cannot be decoded as last_block_hash",
+                hex::encode(block_hash)
+            ))))
         }
 
         // We use two different decoding strategies depending on the presence of the tip_hash in the hash_tree.
