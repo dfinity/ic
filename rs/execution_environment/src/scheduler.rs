@@ -37,11 +37,13 @@ use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, Response, NO_DEADLINE},
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
-    NumInstructions, NumSlices, Randomness, ReplicaVersion, SubnetId, Time,
+    NumInstructions, NumSlices, PrincipalId, Randomness, ReplicaVersion, SubnetId, Time,
     MAX_WASM_MEMORY_IN_BYTES,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
+use more_asserts::{debug_assert_ge, debug_assert_le};
 use num_rational::Ratio;
+use prometheus::Histogram;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
@@ -92,6 +94,10 @@ struct SchedulerRoundLimits {
     /// - Wasm execution pushes a new request to the output queue.
     subnet_available_memory: SubnetAvailableMemory,
 
+    /// Keeps track of the number of outgoing calls that can still be made across
+    /// the subnet before canisters are limited to their own callback quota only.
+    subnet_available_callbacks: i64,
+
     // Keeps track of the compute allocation limit.
     compute_allocation_used: u64,
 }
@@ -101,6 +107,7 @@ impl SchedulerRoundLimits {
         RoundLimits {
             instructions: self.subnet_instructions,
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used: self.compute_allocation_used,
         }
     }
@@ -109,6 +116,7 @@ impl SchedulerRoundLimits {
         RoundLimits {
             instructions: self.instructions,
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used: self.compute_allocation_used,
         }
     }
@@ -116,12 +124,14 @@ impl SchedulerRoundLimits {
     fn update_subnet_round_limits(&mut self, round_limits: &RoundLimits) {
         self.subnet_instructions = round_limits.instructions;
         self.subnet_available_memory = round_limits.subnet_available_memory;
+        self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.compute_allocation_used = round_limits.compute_allocation_used;
     }
 
     pub fn update_canister_round_limits(&mut self, round_limits: &RoundLimits) {
         self.instructions = round_limits.instructions;
         self.subnet_available_memory = round_limits.subnet_available_memory;
+        self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.compute_allocation_used = round_limits.compute_allocation_used;
     }
 }
@@ -401,6 +411,7 @@ impl SchedulerImpl {
         round_schedule: &RoundSchedule,
         current_round: ExecutionRound,
         root_measurement_scope: &MeasurementScope<'a>,
+        canister_ingress_latencies: &mut CanisterIngressQueueLatencies,
         scheduler_round_limits: &mut SchedulerRoundLimits,
         registry_settings: &RegistryExecutionSettings,
         replica_version: &ReplicaVersion,
@@ -539,6 +550,11 @@ impl SchedulerImpl {
                     * state.num_canisters() as u64,
             );
             scheduler_round_limits.update_canister_round_limits(&round_limits);
+            debug_assert_le!(
+                scheduler_round_limits.subnet_available_callbacks,
+                self.exec_env.subnet_available_callbacks(&state),
+                "`subnet_available_callbacks` is a lower bound estimate for the number of available callbacks"
+            );
 
             if instructions_consumed == RoundInstructions::from(0) {
                 break state;
@@ -608,8 +624,10 @@ impl SchedulerImpl {
         }
 
         for (message_id, status) in ingress_execution_results {
-            self.ingress_history_writer
+            let old_status = self
+                .ingress_history_writer
                 .set_status(&mut state, message_id, status);
+            canister_ingress_latencies.on_ingress_status_changed(old_status);
         }
         self.metrics
             .executable_canisters_per_round
@@ -683,6 +701,10 @@ impl SchedulerImpl {
             instructions: round_limits.instructions,
             subnet_available_memory: (round_limits.subnet_available_memory
                 / self.config.scheduler_cores as i64),
+            // This is a soft cap, it is unnecessary to strictly divide the pool among
+            // the threads. If it is exceeded, canisters can still rely on their guaranteed
+            // callback quota.
+            subnet_available_callbacks: round_limits.subnet_available_callbacks,
             compute_allocation_used: round_limits.compute_allocation_used,
         };
         // Run canisters in parallel. The results will be stored in `results_by_thread`.
@@ -701,11 +723,7 @@ impl SchedulerImpl {
                 let logger = new_logger!(self.log; messaging.round => round_id.get());
                 let rate_limiting_of_heap_delta = self.rate_limiting_of_heap_delta;
                 let deterministic_time_slicing = self.deterministic_time_slicing;
-                let round_limits = RoundLimits {
-                    instructions: round_limits.instructions,
-                    subnet_available_memory: round_limits_per_thread.subnet_available_memory,
-                    compute_allocation_used: round_limits.compute_allocation_used,
-                };
+                let round_limits = round_limits_per_thread.clone();
                 let config = &self.config;
                 scope.execute(move || {
                     *result = execute_canisters_on_thread(
@@ -736,6 +754,7 @@ impl SchedulerImpl {
         let mut total_instructions_executed = NumInstructions::from(0);
         let mut max_instructions_executed_per_thread = NumInstructions::from(0);
         let mut heap_delta = NumBytes::from(0);
+        let mut callbacks_created = 0;
         for mut result in results_by_thread.into_iter() {
             canisters.append(&mut result.canisters);
             executed_canister_ids.extend(result.executed_canister_ids);
@@ -761,11 +780,20 @@ impl SchedulerImpl {
                 result.messages_executed,
             );
             heap_delta += result.heap_delta;
+
+            debug_assert_ge!(
+                round_limits_per_thread.subnet_available_callbacks,
+                result.round_limits.subnet_available_callbacks,
+            );
+            callbacks_created += round_limits_per_thread.subnet_available_callbacks
+                - result.round_limits.subnet_available_callbacks;
         }
 
         // Since there are multiple threads, we update the global limit using
         // the thread that executed the most instructions.
         round_limits.instructions -= as_round_instructions(max_instructions_executed_per_thread);
+
+        round_limits.subnet_available_callbacks -= callbacks_created;
 
         self.metrics
             .instructions_consumed_per_round
@@ -779,7 +807,11 @@ impl SchedulerImpl {
         )
     }
 
-    fn purge_expired_ingress_messages(&self, state: &mut ReplicatedState) {
+    fn purge_expired_ingress_messages(
+        &self,
+        state: &mut ReplicatedState,
+        canister_ingress_latencies: &mut CanisterIngressQueueLatencies,
+    ) {
         let current_time = state.time();
         let not_expired_yet = |ingress: &Arc<Ingress>| ingress.expiry_time >= current_time;
         let mut expired_ingress_messages =
@@ -801,7 +833,7 @@ impl SchedulerImpl {
                     ingress.message_id
                 ),
             );
-            self.ingress_history_writer.set_status(
+            let old_status = self.ingress_history_writer.set_status(
                 state,
                 ingress.message_id.clone(),
                 IngressStatus::Known {
@@ -811,6 +843,7 @@ impl SchedulerImpl {
                     state: IngressState::Failed(error),
                 },
             );
+            canister_ingress_latencies.on_ingress_status_changed(old_status);
         }
         state.put_canister_states(canisters);
     }
@@ -1184,6 +1217,10 @@ impl Scheduler for SchedulerImpl {
         let round_log;
         let mut csprng;
         let long_running_canister_ids: BTreeSet<_>;
+        let mut canister_ingress_latencies = CanisterIngressQueueLatencies::new(
+            state.time(),
+            self.metrics.canister_ingress_queue_latencies.clone(),
+        );
 
         // Round preparation.
         let mut scheduler_round_limits = {
@@ -1240,7 +1277,7 @@ impl Scheduler for SchedulerImpl {
 
             {
                 let _timer = self.metrics.round_preparation_ingress.start_timer();
-                self.purge_expired_ingress_messages(&mut state);
+                self.purge_expired_ingress_messages(&mut state, &mut canister_ingress_latencies);
             }
 
             // In the future, subnet messages might be executed in threads. In
@@ -1291,6 +1328,7 @@ impl Scheduler for SchedulerImpl {
                     self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
                 ),
                 subnet_available_memory: self.exec_env.subnet_available_memory(&state),
+                subnet_available_callbacks: self.exec_env.subnet_available_callbacks(&state),
                 compute_allocation_used: state.total_compute_allocation(),
             }
         };
@@ -1444,6 +1482,7 @@ impl Scheduler for SchedulerImpl {
             &round_schedule,
             current_round,
             &root_measurement_scope,
+            &mut canister_ingress_latencies,
             &mut scheduler_round_limits,
             registry_settings,
             replica_version,
@@ -2174,6 +2213,7 @@ fn can_execute_subnet_msg(
         | Ic00Method::BitcoinSendTransactionInternal
         | Ic00Method::BitcoinGetSuccessors
         | Ic00Method::NodeMetricsHistory
+        | Ic00Method::SubnetInfo
         | Ic00Method::FetchCanisterLogs
         | Ic00Method::ProvisionalCreateCanisterWithCycles
         | Ic00Method::ProvisionalTopUpCanister
@@ -2237,6 +2277,7 @@ fn get_instructions_limits_for_subnet_message(
             | BitcoinGetCurrentFeePercentiles
             | BitcoinGetSuccessors
             | NodeMetricsHistory
+            | SubnetInfo
             | FetchCanisterLogs
             | ProvisionalCreateCanisterWithCycles
             | ProvisionalTopUpCanister
@@ -2375,4 +2416,50 @@ fn scheduled_heap_delta_limit(
         .get()
         .saturating_sub(remaining_heap_delta_reserve)
         .into()
+}
+
+/// Aggregator and observer of per-canister ingress queue latencies.
+struct CanisterIngressQueueLatencies {
+    /// Per canister observed ingress message latency sum and count.
+    latencies: BTreeMap<PrincipalId, (f64, usize)>,
+    /// Current block time.
+    time: Time,
+    /// Histogram to observe the latencies.
+    histogram: Histogram,
+}
+
+impl CanisterIngressQueueLatencies {
+    fn new(time: Time, histogram: Histogram) -> Self {
+        Self {
+            latencies: BTreeMap::new(),
+            time,
+            histogram,
+        }
+    }
+
+    /// Records the ingress queue latency of a message iff it is transitioning from
+    /// `Received` to some other state (i.e. when popped from the ingress queue).
+    fn on_ingress_status_changed(&mut self, old_status: Arc<IngressStatus>) {
+        if let IngressStatus::Known {
+            receiver,
+            user_id: _,
+            time,
+            state: IngressState::Received,
+        } = &*old_status
+        {
+            let (latency, count) = self.latencies.entry(*receiver).or_default();
+            *latency += self.time.saturating_duration_since(*time).as_secs_f64();
+            *count += 1;
+        }
+    }
+}
+
+impl Drop for CanisterIngressQueueLatencies {
+    /// Observes the average ingress queue latency of each canister at the end of
+    /// the round.
+    fn drop(&mut self) {
+        for (latency, count) in self.latencies.values() {
+            self.histogram.observe(*latency / *count as f64);
+        }
+    }
 }

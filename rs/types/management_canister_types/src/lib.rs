@@ -35,7 +35,7 @@ use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::mem::size_of;
 use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt, slice::Iter, str::FromStr};
-use strum_macros::{Display, EnumIter, EnumString};
+use strum_macros::{Display, EnumCount, EnumIter, EnumString};
 
 /// The id of the management canister.
 pub const IC_00: CanisterId = CanisterId::ic_00();
@@ -98,7 +98,9 @@ pub enum Method {
     BitcoinSendTransactionInternal, // API for sending transactions to the network.
     BitcoinGetSuccessors,           // API for fetching blocks from the network.
 
+    // Subnet information
     NodeMetricsHistory,
+    SubnetInfo,
 
     FetchCanisterLogs,
 
@@ -2388,7 +2390,17 @@ impl FromStr for VetKdKeyId {
 /// (variant { EcdsaKeyId; SchnorrKeyId })
 /// ```
 #[derive(
-    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    CandidType,
+    Deserialize,
+    EnumCount,
+    Serialize,
 )]
 pub enum MasterPublicKeyId {
     Ecdsa(EcdsaKeyId),
@@ -2443,6 +2455,16 @@ impl std::fmt::Display for MasterPublicKeyId {
                 write!(f, "vetkd:")?;
                 vetkd_key_id.fmt(f)
             }
+        }
+    }
+}
+
+impl MasterPublicKeyId {
+    /// Check whether this type of [`MasterPublicKeyId`] requires to run on the IDKG protocol
+    pub fn is_idkg_key(&self) -> bool {
+        match self {
+            Self::Ecdsa(_) | Self::Schnorr(_) => true,
+            Self::VetKd(_) => false,
         }
     }
 }
@@ -2724,6 +2746,32 @@ impl Payload<'_> for BitcoinSendTransactionInternalArgs {}
 pub enum QueryMethod {
     FetchCanisterLogs,
 }
+
+/// `CandidType` for `SubnetInfoArgs`
+/// ```text
+/// record {
+///     subnet_id: principal;
+/// }
+/// ```
+#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+pub struct SubnetInfoArgs {
+    pub subnet_id: PrincipalId,
+}
+
+impl Payload<'_> for SubnetInfoArgs {}
+
+/// `CandidType` for `SubnetInfoResponse`
+/// ```text
+/// record {
+///     replica_version: text;
+/// }
+/// ```
+#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+pub struct SubnetInfoResponse {
+    pub replica_version: String,
+}
+
+impl Payload<'_> for SubnetInfoResponse {}
 
 /// `CandidType` for `NodeMetricsHistoryArgs`
 /// ```text

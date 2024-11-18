@@ -525,12 +525,11 @@ impl ReplicatedState {
         &self.metadata
     }
 
-    pub fn get_ingress_status(&self, message_id: &MessageId) -> IngressStatus {
+    pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {
         self.metadata
             .ingress_history
             .get(message_id)
-            .cloned()
-            .unwrap_or(IngressStatus::Unknown)
+            .unwrap_or(&IngressStatus::Unknown)
     }
 
     pub fn get_ingress_history(&self) -> &IngressHistoryState {
@@ -543,18 +542,20 @@ impl ReplicatedState {
     /// by transitioning `Completed` and `Failed` statuses to `Done` from
     /// oldest to newest in case inserting `status` pushes the memory
     /// consumption over the bound.
+    ///
+    /// Returns the previous status associated with `message_id`.
     pub fn set_ingress_status(
         &mut self,
         message_id: MessageId,
         status: IngressStatus,
         ingress_memory_capacity: NumBytes,
-    ) {
+    ) -> Arc<IngressStatus> {
         self.metadata.ingress_history.insert(
             message_id,
             status,
             self.time(),
             ingress_memory_capacity,
-        );
+        )
     }
 
     /// Prunes ingress history statuses with a pruning time older than
@@ -683,6 +684,18 @@ impl ReplicatedState {
     /// Returns the total memory taken by the ingress history in bytes.
     pub fn total_ingress_memory_taken(&self) -> NumBytes {
         self.metadata.ingress_history.memory_usage()
+    }
+
+    /// Returns the total number of callbacks across all canisters.
+    pub fn callback_count(&self) -> usize {
+        self.canisters_iter()
+            .map(|canister| {
+                canister
+                    .system_state
+                    .call_context_manager()
+                    .map_or(0, |ccm| ccm.callbacks().len())
+            })
+            .sum()
     }
 
     /// Returns the `SubnetId` hosting the given `principal_id` (canister or

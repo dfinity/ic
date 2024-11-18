@@ -261,14 +261,46 @@ function verify_deployment_path() {
     fi
 }
 
+# TODO(NODE-1477): delete in configuration revamp integration
+CONFIG="${CONFIG:=/var/ic/config/config.ini}"
+
+function read_variables() {
+    # Read limited set of keys. Be extra-careful quoting values as it could
+    # otherwise lead to executing arbitrary shell code!
+    while IFS="=" read -r key value; do
+        case "$key" in
+            "node_reward_type") node_reward_type="${value}" ;;
+        esac
+    done <"${CONFIG}"
+}
+
+function validate_node_reward() {
+    read_variables
+    if [[ -z "$node_reward_type" ]]; then
+        log_and_halt_installation_on_error 1 "Configuration error: node_reward_type is not set"
+    fi
+
+    if [[ ! "$node_reward_type" =~ ^type[0-9]+(\.[0-9])?$ ]]; then
+        log_and_halt_installation_on_error 1 "Configuration error: node_reward_type is invalid: ${node_reward_type}"
+    fi
+
+    echo "Valid node reward type: ${node_reward_type}"
+}
+
 # Establish run order
 main() {
     log_start "$(basename $0)"
-    check_generation
-    verify_cpu
-    verify_memory
-    verify_disks
-    verify_deployment_path
+    if kernel_cmdline_bool_default_true ic.setupos.check_hardware; then
+        check_generation
+        verify_cpu
+        verify_memory
+        verify_disks
+        verify_deployment_path
+        validate_node_reward
+    else
+        echo "* Hardware checks skipped by request via kernel command line"
+        GENERATION=2
+    fi
     log_end "$(basename $0)"
 }
 

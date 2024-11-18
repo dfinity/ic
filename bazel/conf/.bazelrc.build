@@ -118,7 +118,13 @@ build:afl --action_env="LLVM_CONFIG=llvm-config-18"
 build:afl --action_env="RANLIB=llvm-ranlib-18"
 build:afl --config=fuzzing
 build:afl --build_tag_filters=afl
-build:afl --run_under="/ic/bin/afl_wrapper.sh"
+run:afl --run_under="//bin:afl_wrapper"
+
+# Fuzzing w/ Canister Sandbox configuration
+# NOTE: This is only for --config=fuzzing
+# AFL handles this differently in afl_wrapper.sh
+build:sandbox_fuzzing --config=fuzzing
+run:sandbox_fuzzing --run_under="ASAN_OPTIONS=detect_leaks=0:allow_user_segv_handler=1:handle_segv=1:handle_sigfpe=1:handle_sigill=0:quarantine_size_mb=16 LSAN_OPTIONS=handle_sigill=0 RUST_MIN_STACK=8192000"
 
 # Suppress all additional output to make it more convenient in scripts
 query --ui_event_filters=-info,-debug --noshow_progress

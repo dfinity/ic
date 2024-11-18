@@ -6,8 +6,8 @@ use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{
     adapters::AdaptersConfig,
     bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig,
-    execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
-    state_manager::LsmtConfig, subnet_config::SubnetConfig,
+    execution_environment::Config as HypervisorConfig, state_manager::LsmtConfig,
+    subnet_config::SubnetConfig,
 };
 use ic_consensus::{
     consensus::payload_builder::PayloadBuilderImpl,
@@ -923,7 +923,6 @@ pub struct StateMachineBuilder {
     is_root_subnet: bool,
     seed: [u8; 32],
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
-    dts: bool,
     log_level: Option<Level>,
     bitcoin_testnet_uds_path: Option<PathBuf>,
 }
@@ -956,7 +955,6 @@ impl StateMachineBuilder {
             is_root_subnet: false,
             seed: [42; 32],
             with_extra_canister_range: None,
-            dts: true,
             log_level: None,
             bitcoin_testnet_uds_path: None,
         }
@@ -1128,11 +1126,6 @@ impl StateMachineBuilder {
         }
     }
 
-    /// Only use from pocket-ic-server binary.
-    pub fn no_dts(self) -> Self {
-        Self { dts: false, ..self }
-    }
-
     pub fn with_log_level(self, log_level: Option<Level>) -> Self {
         Self { log_level, ..self }
     }
@@ -1170,7 +1163,6 @@ impl StateMachineBuilder {
             self.lsmt_override,
             self.is_root_subnet,
             self.seed,
-            self.dts,
             self.log_level,
         )
     }
@@ -1466,7 +1458,6 @@ impl StateMachine {
         lsmt_override: Option<LsmtConfig>,
         is_root_subnet: bool,
         seed: [u8; 32],
-        dts: bool,
         log_level: Option<Level>,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
@@ -1477,7 +1468,7 @@ impl StateMachine {
 
         let metrics_registry = MetricsRegistry::new();
 
-        let (mut subnet_config, mut hypervisor_config) = match config {
+        let (mut subnet_config, hypervisor_config) = match config {
             Some(config) => (config.subnet_config, config.hypervisor_config),
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
@@ -1517,10 +1508,6 @@ impl StateMachine {
         let mut sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
         if let Some(lsmt_override) = lsmt_override {
             sm_config.lsmt_config = lsmt_override;
-        }
-
-        if !dts {
-            hypervisor_config.deterministic_time_slicing = FlagStatus::Disabled;
         }
 
         // We are not interested in ingress signature validation.
@@ -2718,6 +2705,14 @@ impl StateMachine {
         ))
     }
 
+    /// Returns the controllers of a canister or `None` if the canister does not exist.
+    pub fn get_controllers(&self, canister_id: CanisterId) -> Option<Vec<PrincipalId>> {
+        let state = self.state_manager.get_latest_state().take();
+        state
+            .canister_state(&canister_id)
+            .map(|s| s.controllers().iter().cloned().collect())
+    }
+
     pub fn install_wasm_in_mode(
         &self,
         canister_id: CanisterId,
@@ -2725,11 +2720,15 @@ impl StateMachine {
         wasm: Vec<u8>,
         payload: Vec<u8>,
     ) -> Result<(), UserError> {
-        let state = self.state_manager.get_latest_state().take();
-        let sender = state
-            .canister_state(&canister_id)
-            .and_then(|s| s.controllers().iter().next().cloned())
-            .unwrap_or_else(PrincipalId::new_anonymous);
+        let sender = self
+            .get_controllers(canister_id)
+            .map(|controllers| {
+                controllers
+                    .into_iter()
+                    .next()
+                    .unwrap_or(PrincipalId::new_anonymous())
+            })
+            .unwrap_or(PrincipalId::new_anonymous());
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
@@ -3021,6 +3020,17 @@ impl StateMachine {
             .take()
             .canister_states
             .contains_key(&canister)
+    }
+
+    /// Returns true if the canister with the specified id exists and is not empty.
+    pub fn canister_not_empty(&self, canister: CanisterId) -> bool {
+        self.state_manager
+            .get_latest_state()
+            .take()
+            .canister_states
+            .get(&canister)
+            .map(|canister| canister.execution_state.is_some())
+            .unwrap_or_default()
     }
 
     /// Queries the canister with the specified ID using the anonymous principal.

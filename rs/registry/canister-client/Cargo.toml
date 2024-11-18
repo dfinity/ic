@@ -1,0 +1,15 @@
+[package]
+name = "ic-registry-canister-client"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-types = { path = "../../types/types" }
+ic-cdk = { workspace = true }
+
+[dev-dependencies]
+ic-registry-keys = { path = "../keys" }
