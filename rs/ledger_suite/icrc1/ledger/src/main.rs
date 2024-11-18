@@ -16,8 +16,7 @@ use ic_icrc1::{
     Operation, Transaction,
 };
 use ic_icrc1_ledger::{
-    is_ready, ledger_state, migration_timer_id, panic_if_not_ready, set_ledger_state,
-    set_migration_timer_id, LEDGER_VERSION, UPGRADES_MEMORY,
+    is_ready, ledger_state, panic_if_not_ready, set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_ledger_canister_core::ledger::{
@@ -244,12 +243,6 @@ fn post_upgrade(args: Option<LedgerArgument>) {
     migrate_next_part(
         MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
     );
-    if !is_ready() {
-        let timer_id = ic_cdk_timers::set_timer_interval(Duration::from_secs(1), || {
-            migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
-        });
-        set_migration_timer_id(Some(timer_id));
-    }
 
     let end = ic_cdk::api::instruction_counter();
     let instructions_consumed = end - start;
@@ -293,16 +286,14 @@ fn migrate_next_part(instruction_limit: u64) {
         let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations}. Migration step instructions: {instructions_mingration}, total instructions used in message: {}." ,
             instruction_counter());
         if !is_ready() {
-            log_message(format!("Migration partially done. {msg}").as_str());
+            log_message(
+                format!("Migration partially done. Scheduling the next part. {msg}").as_str(),
+            );
+            ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+                migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
+            });
         } else {
             log_message(format!("Migration completed! {msg}").as_str());
-            if let Some(timer_id) = migration_timer_id() {
-                log_message(format!("Canceling timer with timer_id {:?}", timer_id).as_str());
-                ic_cdk_timers::clear_timer(timer_id);
-                set_migration_timer_id(None);
-            } else {
-                log_message("Migration timer was not scheduled.");
-            }
         }
     });
 }

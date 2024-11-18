@@ -10,7 +10,6 @@ use candid::{
 };
 use ic_base_types::PrincipalId;
 use ic_canister_log::{log, Sink};
-use ic_cdk_timers::TimerId;
 use ic_crypto_tree_hash::{Label, MixedHashTree};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerAllowances, LedgerBalances, Transaction};
@@ -360,10 +359,7 @@ thread_local! {
     pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
         RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
 
-    pub static MIGRATION_STATE: RefCell<MigrationState> = const { RefCell::new(MigrationState {
-        ledger_state: LedgerState::Ready,
-        timer_id: None,
-    }) };
+    pub static LEDGER_STATE: RefCell<LedgerState> = const { RefCell::new(LedgerState::Ready) };
 
     // (from, spender) -> allowance - map storing ledger allowances.
     #[allow(clippy::type_complexity)]
@@ -376,13 +372,13 @@ thread_local! {
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_EXPIRATIONS_MEMORY_ID))));
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
 pub enum LedgerField {
     Allowances,
     AllowancesExpirations,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
 pub enum LedgerState {
     Migrating(LedgerField),
     Ready,
@@ -391,20 +387,6 @@ pub enum LedgerState {
 impl Default for LedgerState {
     fn default() -> Self {
         Self::Ready
-    }
-}
-
-pub struct MigrationState {
-    ledger_state: LedgerState,
-    timer_id: Option<TimerId>,
-}
-
-impl Default for MigrationState {
-    fn default() -> Self {
-        Self {
-            ledger_state: LedgerState::default(),
-            timer_id: None,
-        }
     }
 }
 
@@ -976,7 +958,7 @@ impl Ledger {
 }
 
 pub fn is_ready() -> bool {
-    MIGRATION_STATE.with(|s| matches!((*s.borrow()).ledger_state, LedgerState::Ready))
+    LEDGER_STATE.with(|s| matches!(*s.borrow(), LedgerState::Ready))
 }
 
 pub fn panic_if_not_ready() {
@@ -986,19 +968,11 @@ pub fn panic_if_not_ready() {
 }
 
 pub fn ledger_state() -> LedgerState {
-    MIGRATION_STATE.with(|s| (*s.borrow()).ledger_state)
+    LEDGER_STATE.with(|s| *s.borrow())
 }
 
 pub fn set_ledger_state(ledger_state: LedgerState) {
-    MIGRATION_STATE.with(|s| (*s.borrow_mut()).ledger_state = ledger_state);
-}
-
-pub fn migration_timer_id() -> Option<TimerId> {
-    MIGRATION_STATE.with(|s| (*s.borrow()).timer_id)
-}
-
-pub fn set_migration_timer_id(timer_id: Option<TimerId>) {
-    MIGRATION_STATE.with(|s| (*s.borrow_mut()).timer_id = timer_id);
+    LEDGER_STATE.with(|s| *s.borrow_mut() = ledger_state);
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
