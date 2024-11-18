@@ -6,7 +6,7 @@ use ic_nervous_system_clients::canister_status::CanisterStatusType;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID, NNS_UI_CANISTER_ID,
 };
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
@@ -45,6 +45,7 @@ impl NnsCanisterUpgrade {
             "registry"       => (REGISTRY_CANISTER_ID, "REGISTRY_CANISTER_WASM_PATH"),
             "root"           => (ROOT_CANISTER_ID, "ROOT_CANISTER_WASM_PATH"),
             "sns-wasm"       => (SNS_WASM_CANISTER_ID, "SNS_WASM_CANISTER_WASM_PATH"),
+            "nns-dapp"       => (NNS_UI_CANISTER_ID, "NNS_DAPP_WASM_PATH"),
 
             _ => panic!("Not a known NNS canister type: {}", nns_canister_name,),
         };
@@ -61,6 +62,11 @@ impl NnsCanisterUpgrade {
                 }))
             )
             .unwrap()
+        } else if nns_canister_name == "nns-dapp" {
+          let arg_path = env::var("NNS_DAPP_ARG_PATH")
+            .unwrap_or_else(|err| panic!("{}: NNS_DAPP_ARG_PATH", err,));
+          ic_cdk::println!("\n\n\ndskloet arg_path {:?}\n\n\n", arg_path);
+          fs::read(&arg_path).expect(&arg_path)
         } else {
             Encode!(&()).unwrap()
         };
