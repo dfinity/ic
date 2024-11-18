@@ -453,7 +453,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         s.spawn(async move {
             tracker
                 .track(|value| {
-                    println!("{:?}", &value[..8]);
+                    salt.store(Some(Arc::new(value)));
                 })
                 .await
         });
