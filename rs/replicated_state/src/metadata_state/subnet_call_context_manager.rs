@@ -867,7 +867,7 @@ impl From<&ThresholdArguments> for pb_metadata::ThresholdArguments {
                 pb_metadata::threshold_arguments::ThresholdScheme::Schnorr(args.into())
             }
             ThresholdArguments::VetKd(args) => {
-                pb_metadata::threshold_arguments::ThresholdScheme::VetKd(args.into())
+                pb_metadata::threshold_arguments::ThresholdScheme::Vetkd(args.into())
             }
         };
         Self {
