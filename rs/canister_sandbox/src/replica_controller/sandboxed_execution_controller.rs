@@ -672,6 +672,7 @@ pub struct SandboxedExecutionController {
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     stop_monitoring_thread: std::sync::mpsc::Sender<bool>,
+    evict_sandboxes_thread: std::sync::mpsc::Sender<bool>,
 }
 
 impl Drop for SandboxedExecutionController {
@@ -1101,15 +1102,25 @@ impl SandboxedExecutionController {
 
         let backends_copy = Arc::clone(&backends);
         let metrics_copy = Arc::clone(&metrics);
-        let state_reader_copy = Arc::clone(&state_reader);
         let logger_copy = logger.clone();
-        let (tx, rx) = std::sync::mpsc::channel();
+        let (tx_monitor, rx) = std::sync::mpsc::channel();
 
         std::thread::spawn(move || {
-            SandboxedExecutionController::monitor_and_evict_sandbox_processes(
+            SandboxedExecutionController::monitor_sandboxes_thread(
                 logger_copy,
                 backends_copy,
                 metrics_copy,
+                rx,
+            );
+        });
+
+        let backends_copy = Arc::clone(&backends);
+        let (tx_evict, rx) = std::sync::mpsc::channel();
+        let state_reader_copy = Arc::clone(&state_reader);
+
+        std::thread::spawn(move || {
+            SandboxedExecutionController::evict_sandboxes_thread(
+                backends_copy,
                 max_sandbox_count,
                 max_sandbox_idle_time,
                 rx,
@@ -1148,7 +1159,8 @@ impl SandboxedExecutionController {
             metrics,
             launcher_service,
             fd_factory: Arc::clone(&fd_factory),
-            stop_monitoring_thread: tx,
+            stop_monitoring_thread: tx_monitor,
+            evict_sandboxes_thread: tx_evict,
             state_reader: Arc::clone(&state_reader),
         })
     }
@@ -1156,15 +1168,12 @@ impl SandboxedExecutionController {
     // Periodically walk through all the backend processes and:
     // - evict inactive processes,
     // - update memory usage metrics.
-    fn monitor_and_evict_sandbox_processes(
+    fn monitor_sandboxes_thread(
         // `logger` isn't used on MacOS.
         #[allow(unused_variables)] logger: ReplicaLogger,
         backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
         metrics: Arc<SandboxedExecutionMetrics>,
-        max_sandbox_count: usize,
-        max_sandbox_idle_time: Duration,
         stop_request: Receiver<bool>,
-        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) {
         loop {
             let sandbox_processes = get_sandbox_process_stats(&backends);
@@ -1263,6 +1272,30 @@ impl SandboxedExecutionController {
             {
                 let mut guard = backends.lock().unwrap();
                 update_sandbox_processes_rss(&mut guard, sandbox_processes_rss);
+            }
+
+            // Collect metrics sufficiently infrequently that it does not use
+            // excessive compute resources. It might be sensible to scale this
+            // based on the time measured to perform the collection and e.g.
+            // ensure that we are 99% idle instead of using a static duration
+            // here.
+            if let Ok(true) = stop_request.recv_timeout(SANDBOX_PROCESS_UPDATE_INTERVAL) {
+                break;
+            }
+        }
+    }
+
+    fn evict_sandboxes_thread(
+        backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
+        max_sandbox_count: usize,
+        max_sandbox_idle_time: Duration,
+        stop_or_evict_request: Receiver<bool>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    ) {
+        loop {
+            {
+                let mut guard = backends.lock().unwrap();
+                println!("XXX EVICT THREAD len:{}", guard.len());
 
                 // Trigger eviction of idle sandboxes, as there may be no canister executions
                 // to trigger sync eviction.
@@ -1277,12 +1310,7 @@ impl SandboxedExecutionController {
                 );
             }
 
-            // Collect metrics sufficiently infrequently that it does not use
-            // excessive compute resources. It might be sensible to scale this
-            // based on the time measured to perform the collection and e.g.
-            // ensure that we are 99% idle instead of using a static duration
-            // here.
-            if let Ok(true) = stop_request.recv_timeout(SANDBOX_PROCESS_UPDATE_INTERVAL) {
+            if let Ok(true) = stop_or_evict_request.recv_timeout(SANDBOX_PROCESS_UPDATE_INTERVAL) {
                 break;
             }
         }
@@ -1299,7 +1327,7 @@ impl SandboxedExecutionController {
         if active_sandboxes > self.max_sandbox_count {
             // The number of sandboxes is exceeded.
             // Reduce the number of active sandboxes regardless of their RSS.
-            let max_active_sandboxes = active_sandboxes.saturating_sub(SANDBOX_PROCESSES_TO_EVICT);
+            let max_active_sandboxes = active_sandboxes.saturating_sub(1);
             let max_sandboxes_rss = u64::MAX.into();
 
             evict_sandbox_processes(
@@ -1333,6 +1361,7 @@ impl SandboxedExecutionController {
                 );
             }
         };
+        let _ = self.evict_sandboxes_thread.send(false);
     }
 
     pub fn available_memory_wrapper() -> Option<NumBytes> {
