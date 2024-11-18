@@ -17,9 +17,8 @@ Each IC-OS node must have a unique but deterministic MAC address. To solve this,
 
 === Schema
 
-* *The first 8-bits:*
-** IPv4 interfaces: 4a
-** IPv6 interfaces: 6a
+* *The first 8-bits: 6a*
+** Indicates an IPv6 interface.
 
 * *The second 8-bits:*
 ** We reserve the following hexadecimal numbers for each IC-OS:
@@ -28,20 +27,15 @@ Each IC-OS node must have a unique but deterministic MAC address. To solve this,
 *** GuestOS: 01
 *** Boundary-GuestOS: 02
 
-** Note: any additional virtual machine on the same physical machine gets the next higher hexadecimal number.
-
 * *The remaining 32-bits:*
 ** Deterministically generated
 
 === Example MAC addresses
 
-* SetupOS: `{4a,6a}:0f:<deterministically-generated-part>`
-* HostOS: `{4a,6a}:00:<deterministically-generated-part>`
-* GuestOS: `{4a,6a}:01:<deterministically-generated-part>`
-* BoundaryOS: `{4a,6a}:02:<deterministically-generated-part>`
-* Next Virtual Machine: `{4a,6a}:03:<deterministically-generated-part>`
-
-Note that the MAC address is expected to be lower-case and to contain colons between the octets.
+* SetupOS: `6a:0f:<deterministically-generated-part>`
+* HostOS: `6a:00:<deterministically-generated-part>`
+* GuestOS: `6a:01:<deterministically-generated-part>`
+* BoundaryOS: `6a:02:<deterministically-generated-part>`
 
 === Deterministically Generated Part
 
