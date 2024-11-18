@@ -5527,16 +5527,16 @@ impl Governance {
             // If we have an upgrade_in_progress with no target_version, we are in an unexpected
             // situation. We recover to workable state by marking upgrade as failed.
 
-            let msg = "No target_version set for upgrade_in_progress. This should be impossible. \
+            let message = "No target_version set for upgrade_in_progress. This should be impossible. \
                 Clearing upgrade_in_progress state and marking proposal failed to unblock further upgrades.";
 
             self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::invalid_state(
-                msg.to_string(),
+                message.to_string(),
                 None,
             ));
             self.fail_sns_upgrade_to_next_version_proposal(
                 upgrade_in_progress.proposal_id,
-                GovernanceError::new_with_message(ErrorType::PreconditionFailed, msg),
+                GovernanceError::new_with_message(ErrorType::PreconditionFailed, message),
             );
 
             return;
@@ -5562,16 +5562,16 @@ impl Governance {
             .checking_upgrade_lock;
 
         if lock > 1000 {
-            let error =
+            let message =
                 "Too many attempts to check upgrade without success.  Marking upgrade failed.";
 
             self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::timeout(
-                error.to_string(),
+                message.to_string(),
             ));
 
             self.fail_sns_upgrade_to_next_version_proposal(
                 proposal_id,
-                GovernanceError::new_with_message(ErrorType::External, error),
+                GovernanceError::new_with_message(ErrorType::External, message),
             );
             return;
         }
@@ -5599,20 +5599,19 @@ impl Governance {
                 log!(ERROR, "Could not get running version of SNS: {}", message);
 
                 if self.env.now() > mark_failed_at {
-                    let error = format!(
+                    let message = format!(
                         "Upgrade marked as failed at {} seconds from unix epoch. \
                              Governance could not determine running version from root: {}. \
                              Setting upgrade to failed to unblock retry.",
                         self.env.now(),
                         message,
                     );
-
                     self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::timeout(
-                        error.to_string(),
+                        message.to_string(),
                     ));
                     self.fail_sns_upgrade_to_next_version_proposal(
                         proposal_id,
-                        GovernanceError::new_with_message(ErrorType::External, error),
+                        GovernanceError::new_with_message(ErrorType::External, message),
                     );
                 }
                 return;
@@ -5635,9 +5634,8 @@ impl Governance {
                     self.env.now(),
                     running_version,
                 );
-
                 self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset::new(
-                    message.to_string(),
+                    message,
                     vec![running_version.clone()],
                 ));
 
@@ -5676,13 +5674,13 @@ impl Governance {
             return;
         }
 
-        log!(
-            INFO,
+        let message = format!(
             "Upgrade marked successful at timestamp {} seconds, new {:?}",
             self.env.now(),
-            target_version
+            target_version,
         );
-        self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::success(None));
+        self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::success(message));
+
         if let Some(proposal_id) = proposal_id {
             self.set_proposal_execution_status(proposal_id, Ok(()));
         }

@@ -1834,7 +1834,7 @@ fn test_distribute_rewards_does_not_block_upgrades() {
             timestamp_seconds: _,
             event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
                 upgrade_journal_entry::UpgradeOutcome {
-                    human_readable: None,
+                    human_readable: Some(_),
                     status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
                         Empty {}
                     )),
@@ -2045,7 +2045,7 @@ fn test_check_upgrade_status_succeeds() {
     assert!(governance.proto.pending_version.is_none());
     assert_eq!(
         governance.proto.deployed_version.clone().unwrap(),
-        next_version.into()
+        next_version.clone().into()
     );
     // Assert proposal executed
     let proposal = governance.get_proposal(&GetProposal {
@@ -2068,7 +2068,11 @@ fn test_check_upgrade_status_succeeds() {
             timestamp_seconds: Some(now),
             event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
                 upgrade_journal_entry::UpgradeOutcome {
-                    human_readable: None,
+                    human_readable: Some(format!(
+                        "Upgrade marked successful at timestamp {} seconds, new {:?}",
+                        governance.env.now(),
+                        Version::from(next_version),
+                    )),
                     status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
                         Empty {}
                     )),
@@ -2554,7 +2558,7 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
         SNS_WASM_CANISTER_ID,
         "list_upgrade_steps",
         Encode!(&ListUpgradeStepsRequest {
-            starting_at: Some(running_version.clone().into()),
+            starting_at: Some(running_version.clone()),
             sns_governance_canister_id: Some(governance_canister_id.into()),
             limit: 0,
         })

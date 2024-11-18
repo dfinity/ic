@@ -73,9 +73,9 @@ impl upgrade_journal_entry::UpgradeStarted {
 
 impl upgrade_journal_entry::UpgradeOutcome {
     /// Creates a new successful upgrade outcome
-    pub fn success(message: Option<String>) -> Self {
+    pub fn success(message: String) -> Self {
         Self {
-            human_readable: message,
+            human_readable: Some(message),
             status: Some(upgrade_outcome::Status::Success(Empty {})),
         }
     }
