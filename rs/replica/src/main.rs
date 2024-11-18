@@ -61,7 +61,6 @@ fn get_replica_binary_hash() -> Result<(PathBuf, String), String> {
     Ok((replica_binary_path, hex::encode(hasher.finish())))
 }
 
-
 fn main() -> io::Result<()> {
     // We do not support 32 bits architectures and probably never will.
     #[cfg(not(target_pointer_width = "64"))]
