@@ -17,7 +17,8 @@ use crate::{
     sns_upgrade::{
         CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
         GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
-        GetWasmResponse, SnsCanisterType, SnsVersion, SnsWasm,
+        GetWasmResponse, ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
+        SnsCanisterType, SnsVersion, SnsWasm,
     },
     types::test_helpers::NativeEnvironment,
 };
@@ -2512,18 +2513,6 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
         index_wasm_hash: vec![9, 9, 9],
     };
 
-    let mut env = NativeEnvironment::new(Some(governance_canister_id));
-    // We set a status that matches our pending version
-    env.set_call_canister_response(
-        root_canister_id,
-        "get_sns_canisters_summary",
-        Encode!(&GetSnsCanistersSummaryRequest {
-            update_canister_list: Some(true)
-        })
-        .unwrap(),
-        Ok(Encode!(&std_sns_canisters_summary_response()).unwrap()),
-    );
-
     // This is set to the version returned by std_sns_canisters_summary_response()
     // But is different from next_version so we can assert the right result below
     let running_version = {
@@ -2531,6 +2520,57 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
         version.index_wasm_hash = vec![6, 7, 8];
         version
     };
+
+    let mut env = NativeEnvironment::new(Some(governance_canister_id));
+
+    let first_get_sns_canisters_summary_response = std_sns_canisters_summary_response();
+
+    let second_get_sns_canisters_summary_response = {
+        let mut response = first_get_sns_canisters_summary_response.clone();
+        let index = {
+            let mut index = response.index.clone().unwrap();
+            let status = {
+                let mut status = index.status.clone().unwrap();
+                status.module_hash = Some(vec![9, 9, 9]);
+                status
+            };
+            index.status = Some(status);
+            index
+        };
+        response.index = Some(index);
+        response
+    };
+
+    env.set_call_canister_response(
+        root_canister_id,
+        "get_sns_canisters_summary",
+        Encode!(&GetSnsCanistersSummaryRequest {
+            update_canister_list: Some(true)
+        })
+        .unwrap(),
+        Ok(Encode!(&first_get_sns_canisters_summary_response).unwrap()),
+    );
+    env.set_call_canister_response(
+        SNS_WASM_CANISTER_ID,
+        "list_upgrade_steps",
+        Encode!(&ListUpgradeStepsRequest {
+            starting_at: Some(running_version.clone().into()),
+            sns_governance_canister_id: Some(governance_canister_id.into()),
+            limit: 0,
+        })
+        .unwrap(),
+        Ok(Encode!(&ListUpgradeStepsResponse {
+            steps: vec![
+                ListUpgradeStep {
+                    version: Some(running_version.clone())
+                },
+                ListUpgradeStep {
+                    version: Some(next_version.clone())
+                },
+            ]
+        })
+        .unwrap()),
+    );
 
     let now = env.now();
     let proposal_id = 12;
@@ -2583,28 +2623,61 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
         Box::new(FakeCmc::new()),
     );
 
-    assert_eq!(
-        governance.proto.pending_version.clone().unwrap(),
-        PendingVersion {
-            target_version: Some(next_version.into()),
-            mark_failed_at_seconds: now + 5 * 60,
-            checking_upgrade_lock: 0,
-            proposal_id: Some(proposal_id),
-        }
-    );
+    let expected_running_version_before_upgrade = Some(running_version.clone().into());
+    let expected_running_version_after_upgrade = Some(next_version.clone().into());
+    let expected_pending_version = Some(PendingVersion {
+        target_version: expected_running_version_after_upgrade.clone(),
+        mark_failed_at_seconds: now + 5 * 60,
+        checking_upgrade_lock: 0,
+        proposal_id: Some(proposal_id),
+    });
 
+    // Preconditions
     assert_eq!(governance.proto.deployed_version, None);
-    // After we run our periodic tasks, the version should be marked as successful
-    governance.run_periodic_tasks().now_or_never();
+    assert_eq!(governance.proto.pending_version, expected_pending_version);
 
-    assert!(governance.proto.pending_version.is_none());
-    // This is set to the running version to avoid non-recoverable state
-    assert_eq!(
-        governance.proto.deployed_version.clone().unwrap(),
-        running_version.into()
-    );
+    // After the 1st run of periodic tasks, deployed_version should be recovered, but the upgrade
+    // does not succeed yet (as the target version wasn't reached).
+    {
+        governance.run_periodic_tasks().now_or_never();
+        assert_eq!(
+            governance.proto.deployed_version,
+            expected_running_version_before_upgrade
+        );
+        assert_eq!(governance.proto.pending_version, expected_pending_version);
+    }
 
-    // Assert proposal failed
+    // Modify the environment to enable calling `get_sns_canisters_summary` again.
+    // Due to the limitations of this testing framework, we can't add this call spec upfront,
+    // as it needs to be hashed by the same key as the first call.
+    {
+        let mut env = NativeEnvironment::new(Some(governance_canister_id));
+        env.set_call_canister_response(
+            root_canister_id,
+            "get_sns_canisters_summary",
+            Encode!(&GetSnsCanistersSummaryRequest {
+                update_canister_list: Some(true)
+            })
+            .unwrap(),
+            Ok(Encode!(&second_get_sns_canisters_summary_response).unwrap()),
+        );
+        governance.env = Box::new(env);
+    }
+
+    // After the 2nd run of periodic tasks, the upgrade is expected to succeed,
+    // consuming `pending_version`.
+    {
+        governance.run_periodic_tasks().now_or_never();
+
+        println!("upgrade_journal = {:#?}", governance.proto.upgrade_journal); // DO NOT MERGE
+        assert_eq!(governance.proto.pending_version, None);
+        assert_eq!(
+            governance.proto.deployed_version,
+            expected_running_version_after_upgrade
+        );
+    }
+
+    // Assert proposal succeeded.
     let proposal = governance.get_proposal(&GetProposal {
         proposal_id: Some(ProposalId { id: proposal_id }),
     });
@@ -2614,38 +2687,57 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
         }
         get_proposal_response::Result::Proposal(proposal) => proposal,
     };
-    assert_ne!(proposal_data.failed_timestamp_seconds, 0);
+    assert_eq!(proposal_data.failed_timestamp_seconds, 0);
+    assert_eq!(proposal_data.failure_reason, None);
 
-    assert_eq!(
-        proposal_data.failure_reason.unwrap(),
-        GovernanceError::new_with_message(
-            ErrorType::PreconditionFailed,
-            format!(
-                "Upgrade marked as failed at {} seconds from genesis. \
-            Governance had no recorded deployed_version.  \
-            Setting it to currently running version and failing upgrade.",
-                now
-            )
-        )
+    // Check that the upgrade journal reflects the succeeded upgrade.
+    let upgrade_journal = governance.proto.upgrade_journal.clone().unwrap();
+    let (reset_upgrade_steps, refreshed_versions) = assert_matches!(
+        &upgrade_journal.entries[..],
+        [
+            UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                    upgrade_journal_entry::UpgradeStepsReset {
+                        human_readable: Some(_),
+                        upgrade_steps: Some(reset_upgrade_steps),
+                    },
+                )),
+            },
+            UpgradeJournalEntry {
+                timestamp_seconds: Some(_),
+                event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
+                    upgrade_journal_entry::UpgradeStepsRefreshed {
+                        upgrade_steps: Some(
+                            Versions {
+                                versions: refreshed_versions,
+                            },
+                        ),
+                    },
+                )),
+            },
+            UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                    upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: Some(_),
+                        status: Some(
+                            upgrade_journal_entry::upgrade_outcome::Status::Success(Empty {})
+                        ),
+                    }
+                )),
+            }
+        ] => (reset_upgrade_steps, refreshed_versions)
     );
 
-    // Check that the upgrade journal reflects the failed upgrade attempt
-    assert_matches!(
-        &governance.proto.upgrade_journal.clone().unwrap().entries[..],
-        [UpgradeJournalEntry {
-            timestamp_seconds: _,
-            event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
-                upgrade_journal_entry::UpgradeOutcome {
-                    human_readable: Some(_),
-                    status: Some(
-                        upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
-                            upgrade_journal_entry::upgrade_outcome::InvalidState { version: None }
-                        )
-                    ),
-                }
-            )),
-        }]
-    )
+    assert_eq!(
+        reset_upgrade_steps.versions,
+        vec![Version::from(running_version.clone())]
+    );
+    assert_eq!(
+        &refreshed_versions[..],
+        [Version::from(running_version), Version::from(next_version)]
+    );
 }
 
 #[test]

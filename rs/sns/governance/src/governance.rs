@@ -5589,6 +5589,7 @@ impl Governance {
             .as_mut()
             .unwrap()
             .checking_upgrade_lock = 0;
+
         // We cannot panic or we will get stuck with "checking_upgrade_lock" set to true.  We log
         // the issue and return so the next check can be performed.
         let mut running_version = match running_version {
@@ -5626,7 +5627,7 @@ impl Governance {
                 .clone_from(&target_version.archive_wasm_hash);
         }
 
-        let deployed_version = match self.proto.deployed_version.clone() {
+        let deployed_version = match self.proto.deployed_version.as_ref() {
             None => {
                 let message = format!(
                     "SNS Governance had no recorded deployed_version at timestamp {} seconds. \
@@ -5635,14 +5636,14 @@ impl Governance {
                     running_version,
                 );
 
-                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::invalid_state(
+                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset::new(
                     message.to_string(),
-                    None,
+                    vec![running_version.clone()],
                 ));
 
                 self.proto.deployed_version = Some(running_version.clone());
 
-                running_version.clone()
+                &running_version
             }
             Some(version) => version,
         };
