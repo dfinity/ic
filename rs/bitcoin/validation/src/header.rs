@@ -287,7 +287,7 @@ fn compute_next_difficulty(
 
     // The target_adjustment_interval_time is 2 weeks of time expressed in seconds
     let target_adjustment_interval_time: i64 =
-        (DIFFICULTY_ADJUSTMENT_INTERVAL * TEN_MINUTES) as i64; //Number of seconds in 2 weeks
+        (DIFFICULTY_ADJUSTMENT_INTERVAL * TEN_MINUTES) as i64;
 
     // Adjusting the actual_interval to [0.5 week, 8 week] range in case the
     // actual_interval deviates too much from the expected 2 weeks.
@@ -418,6 +418,17 @@ mod test {
             headers.push(header);
         }
         headers
+    }
+
+    fn genesis_header(bits: u32) -> BlockHeader {
+        BlockHeader {
+            version: 1,
+            prev_blockhash: Default::default(),
+            merkle_root: Default::default(),
+            time: 1296688602,
+            bits,
+            nonce: 0,
+        }
     }
 
     #[test]
@@ -653,59 +664,30 @@ mod test {
     }
 
     #[test]
-    fn test_compute_next_difficulty_underflow() {
-        // This test sets up a chain where the next block has timestamp less than the block 2015 blocks ago.
+    fn test_compute_next_difficulty_for_backdated_blocks() {
+        // Arrange: Set up the test network and parameters
+        let network = Network::Testnet;
+        let chain_length = DIFFICULTY_ADJUSTMENT_INTERVAL - 1; // To trigger the difficulty adjustment.
+        let genesis_difficulty = 486604799;
 
-        // Set up a chain of length DIFFICULTY_ADJUSTMENT_INTERVAL (2016 blocks)
-        let network = Network::Bitcoin;
-
-        // Create a store with the initial header (genesis block)
-        let mut store = SimpleHeaderStore::new(
-            BlockHeader {
-                version: 0,
-                prev_blockhash: BlockHash::default(),
-                merkle_root: TxMerkleNode::default(),
-                time: 2000, // Time of the genesis block (height 0)
-                bits: 0,
-                nonce: 0,
-            },
-            0,
-        );
-
-        let mut prev_header = store.headers.get(&store.initial_hash).unwrap().header;
-        let mut prev_hash = prev_header.block_hash();
-        let mut prev_height = 0;
-
-        // Build up to height DIFFICULTY_ADJUSTMENT_INTERVAL - 1 (2015)
-        for height in 1..DIFFICULTY_ADJUSTMENT_INTERVAL {
-            let header = BlockHeader {
-                version: 0,
-                prev_blockhash: prev_hash,
-                merkle_root: TxMerkleNode::default(),
-                time: 2000 + height, // Increment time normally
-                bits: 0,
-                nonce: 0,
+        // Create the genesis header and initialize the header store
+        let genesis_header = genesis_header(genesis_difficulty);
+        let mut store = SimpleHeaderStore::new(genesis_header, 0);
+        let mut last_header = genesis_header;
+        for _ in 1..chain_length {
+            let new_header = BlockHeader {
+                prev_blockhash: last_header.block_hash(),
+                time: last_header.time - 1, // Each new block is 1 second earlier
+                ..last_header
             };
-            store.add(header);
-            prev_hash = header.block_hash();
-            prev_header = header;
-            prev_height = height;
+            store.add(new_header);
+            last_header = new_header;
         }
 
-        // Now, prev_height = 2015 (DIFFICULTY_ADJUSTMENT_INTERVAL - 1)
-        // Modify prev_header.time to be less than last_adjustment_time (2000)
-        prev_header.time = 1000; // Set time less than genesis block time
+        // Act.
+        let difficulty = compute_next_difficulty(&network, &store, &last_header, chain_length);
 
-        // Update the store with the modified prev_header
-        store.headers.insert(
-            prev_hash,
-            StoredHeader {
-                header: prev_header,
-                height: prev_height,
-            },
-        );
-
-        // Call compute_next_difficulty, which should not panic
-        compute_next_difficulty(&network, &store, &prev_header, prev_height);
+        // Assert.
+        assert_eq!(difficulty, 473956288);
     }
 }
