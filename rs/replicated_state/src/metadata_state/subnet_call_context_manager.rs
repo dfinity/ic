@@ -433,8 +433,8 @@ impl SubnetCallContextManager {
                 (MasterPublicKeyId::Schnorr(schnorr_key_id), ThresholdArguments::Schnorr(args)) => {
                     args.key_id == *schnorr_key_id
                 }
-                (MasterPublicKeyId::VetKd(schnorr_key_id), ThresholdArguments::VetKd(args)) => {
-                    args.key_id == *schnorr_key_id
+                (MasterPublicKeyId::VetKd(vet_kd_key_id), ThresholdArguments::VetKd(args)) => {
+                    args.key_id == *vet_kd_key_id
                 }
                 _ => false,
             })
