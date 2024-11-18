@@ -2982,3 +2982,13 @@ message ArchivedMonthlyNodeProviderRewards {
     ic_nns_governance.pb.v1.MonthlyNodeProviderRewards rewards = 1;
   }
 }
+
+// Internal type to allow ProposalVotingStateMachine to be stored
+// in stable memory.
+message ProposalVotingStateMachine {
+  ic_nns_common.pb.v1.ProposalId proposal_id = 1;
+  Topic topic = 2;
+  repeated ic_nns_common.pb.v1.NeuronId neurons_to_check_followers = 3;
+  repeated ic_nns_common.pb.v1.NeuronId followers_to_check = 4;
+  map<uint64, Vote> recent_neuron_ballots_to_record = 5;
+}

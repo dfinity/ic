@@ -467,21 +467,6 @@ fn centralized_following_all_stable() -> BenchResult {
     )
 }
 
-/// Benchmark the `cascading_vote` function with stable neurons and a heap index.
-/// Before we do the migration of the ballots function to be more efficient:
-/// Benchmark: compute_ballots_for_new_proposal_with_stable_neurons (new)
-//   total:
-//     instructions: 78.49 M (new)
-//     heap_increase: 0 pages (new)
-//     stable_memory_increase: 0 pages (new)
-//
-// After we migrate to be more efficient:
-// Benchmark: compute_ballots_for_new_proposal_with_stable_neurons (new)
-//   total:
-//     instructions: 1.50 M (new)
-//     heap_increase: 0 pages (new)
-//     stable_memory_increase: 0 pages (new)
-//
 #[bench(raw)]
 fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
     let now_seconds = 1732817584;

@@ -122,6 +122,7 @@ fn build_neuron(rng: &mut impl RngCore, location: NeuronLocation, size: NeuronSi
             vote: Vote::Yes as i32,
         })
         .collect();
+    neuron.recent_ballots_next_entry_index = Some(0);
 
     neuron
 }

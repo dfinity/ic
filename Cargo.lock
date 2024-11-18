@@ -10034,6 +10034,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-long-message"
+version = "0.0.1"
+dependencies = [
+ "candid",
+ "canister-test",
+ "dfn_candid",
+ "ic-cdk 0.16.0",
+ "ic-cdk-timers",
+ "ic-config",
+ "ic-nervous-system-temporary",
+ "ic-nns-test-utils",
+ "ic-registry-subnet-type",
+ "ic-state-machine-tests",
+ "ic-types",
+ "serde",
+]
+
+[[package]]
 name = "ic-nervous-system-proto"
 version = "0.9.0"
 dependencies = [
@@ -10241,6 +10259,7 @@ dependencies = [
  "ic-nervous-system-common-test-utils",
  "ic-nervous-system-governance",
  "ic-nervous-system-linear-map",
+ "ic-nervous-system-long-message",
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
