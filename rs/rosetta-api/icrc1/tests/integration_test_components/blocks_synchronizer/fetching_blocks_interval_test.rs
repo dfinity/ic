@@ -208,7 +208,10 @@ proptest! {
             assert_eq!(tip_block.get_block_hash(),hash);
         }
 
-
+        // We are only interested in the szenario when there are blocks to be fetched
+        if transfer_args.len() == 0 {
+            return Ok(());
+        }
         rt.block_on(async {
             let agent = Arc::new(Icrc1Agent {
                 agent: local_replica::get_testing_agent(port).await,
