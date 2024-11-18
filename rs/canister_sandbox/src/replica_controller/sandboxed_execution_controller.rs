@@ -1333,6 +1333,15 @@ impl SandboxedExecutionController {
         };
     }
 
+    pub fn available_memory_wrapper() -> Option<NumBytes> {
+        #[cfg(target_os = "linux")]
+        let res = process_os_metrics::available_memory();
+        #[cfg(not(target_os = "linux"))]
+        let res = None;
+
+        res
+    }
+
     fn get_sandbox_process(&self, canister_id: CanisterId) -> Arc<SandboxProcess> {
         let mut guard = self.backends.lock().unwrap();
 
@@ -1369,13 +1378,13 @@ impl SandboxedExecutionController {
                     };
                 }
                 // The number of active sandboxes is increasing, so trigger the eviction.
-                self.trigger_sandbox_eviction(&mut guard, process_os_metrics::available_memory);
+                self.trigger_sandbox_eviction(&mut guard, Self::available_memory_wrapper);
                 return sandbox_process;
             }
         }
 
         let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
-        self.trigger_sandbox_eviction(&mut guard, process_os_metrics::available_memory);
+        self.trigger_sandbox_eviction(&mut guard, Self::available_memory_wrapper);
 
         // No sandbox process found for this canister. Start a new one and register it.
         let reg = Arc::new(ActiveExecutionStateRegistry::new());
