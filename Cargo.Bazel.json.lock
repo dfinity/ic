@@ -1,5 +1,5 @@
 {
-  "checksum": "3ae1d8f974c70715eb6c96b5461fb094433a0ac382617ef84fa0efbfb2a8feef",
+  "checksum": "ce1d8efc0f765dda5293531947a959f7307874f34dec4f62835a0df314b1693f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1469,6 +1469,8 @@
         ],
         "crate_features": {
           "common": [
+            "compile-time-rng",
+            "const-random",
             "default",
             "getrandom",
             "runtime-rng",
@@ -1485,6 +1487,10 @@
             {
               "id": "cfg-if 1.0.0",
               "target": "cfg_if"
+            },
+            {
+              "id": "const-random 0.1.18",
+              "target": "const_random"
             },
             {
               "id": "getrandom 0.2.10",
@@ -13467,6 +13473,110 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "const-random 0.1.18": {
+      "name": "const-random",
+      "version": "0.1.18",
+      "package_url": "https://github.com/tkaitchuck/constrandom",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/const-random/0.1.18/download",
+          "sha256": "87e00182fe74b066627d63b85fd550ac2998d4b0bd86bfed477a0ae4c7c71359"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "const_random",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "const_random",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "const-random-macro 0.1.16",
+              "target": "const_random_macro"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.1.18"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "const-random-macro 0.1.16": {
+      "name": "const-random-macro",
+      "version": "0.1.16",
+      "package_url": "https://github.com/tkaitchuck/constrandom",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/const-random-macro/0.1.16/download",
+          "sha256": "f9d839f2a20b0aee515dc581a6172f2321f96cab76c1a38a4c584a194955390e"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "const_random_macro",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "const_random_macro",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "getrandom 0.2.10",
+              "target": "getrandom"
+            },
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "tiny-keccak 2.0.2",
+              "target": "tiny_keccak"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.1.16"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "convert_case 0.4.0": {
       "name": "convert_case",
       "version": "0.4.0",
@@ -18115,6 +18225,10 @@
             {
               "id": "addr 0.15.6",
               "target": "addr"
+            },
+            {
+              "id": "ahash 0.8.11",
+              "target": "ahash"
             },
             {
               "id": "aide 0.13.4",
@@ -53064,6 +53178,12 @@
                 "target": "libc"
               }
             ],
+            "aarch64-pc-windows-msvc": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
             "aarch64-unknown-linux-gnu": [
               {
                 "id": "libc 0.2.158",
@@ -53112,6 +53232,12 @@
                 "target": "libc"
               }
             ],
+            "i686-pc-windows-msvc": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
             "i686-unknown-freebsd": [
               {
                 "id": "libc 0.2.158",
@@ -53155,6 +53281,12 @@
               }
             ],
             "x86_64-linux-android": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "x86_64-pc-windows-msvc": [
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
@@ -60125,6 +60257,11 @@
               "time",
               "use-libc-auxv"
             ],
+            "aarch64-pc-windows-msvc": [
+              "default",
+              "termios",
+              "use-libc-auxv"
+            ],
             "aarch64-unknown-linux-gnu": [
               "default",
               "event",
@@ -60215,6 +60352,11 @@
               "process",
               "termios",
               "time",
+              "use-libc-auxv"
+            ],
+            "i686-pc-windows-msvc": [
+              "default",
+              "termios",
               "use-libc-auxv"
             ],
             "i686-unknown-freebsd": [
@@ -60329,6 +60471,11 @@
               "process",
               "termios",
               "time",
+              "use-libc-auxv"
+            ],
+            "x86_64-pc-windows-msvc": [
+              "default",
+              "termios",
               "use-libc-auxv"
             ],
             "x86_64-unknown-freebsd": [
@@ -60446,9 +60593,46 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "aarch64-unknown-nixos-gnu": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "aarch64-unknown-nto-qnx710": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "arm-unknown-linux-gnueabi": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -60531,9 +60715,24 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "i686-unknown-freebsd": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "i686-unknown-linux-gnu": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -60681,9 +60880,35 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "x86_64-unknown-nixos-gnu": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -71517,46 +71742,60 @@
           ],
           "selects": {
             "aarch64-apple-darwin": [
-              "sha3"
+              "sha3",
+              "shake"
             ],
             "aarch64-pc-windows-msvc": [
-              "sha3"
+              "sha3",
+              "shake"
             ],
             "aarch64-unknown-linux-gnu": [
-              "sha3"
+              "sha3",
+              "shake"
             ],
             "aarch64-unknown-nixos-gnu": [
-              "sha3"
+              "sha3",
+              "shake"
             ],
             "arm-unknown-linux-gnueabi": [
-              "sha3"
+              "sha3",
+              "shake"
             ],
             "i686-pc-windows-msvc": [
-              "sha3"
+              "sha3",
+              "shake"
             ],
             "i686-unknown-linux-gnu": [
-              "sha3"
+              "sha3",
+              "shake"
             ],
             "powerpc-unknown-linux-gnu": [
-              "sha3"
+              "sha3",
+              "shake"
             ],
             "s390x-unknown-linux-gnu": [
-              "sha3"
+              "sha3",
+              "shake"
             ],
             "x86_64-apple-darwin": [
-              "sha3"
+              "sha3",
+              "shake"
             ],
             "x86_64-pc-windows-msvc": [
-              "sha3"
+              "sha3",
+              "shake"
             ],
             "x86_64-unknown-freebsd": [
-              "sha3"
+              "sha3",
+              "shake"
             ],
             "x86_64-unknown-linux-gnu": [
-              "sha3"
+              "sha3",
+              "shake"
             ],
             "x86_64-unknown-nixos-gnu": [
-              "sha3"
+              "sha3",
+              "shake"
             ]
           }
         },
@@ -86137,6 +86376,7 @@
     "actix-rt 2.10.0",
     "actix-web 4.9.0",
     "addr 0.15.6",
+    "ahash 0.8.11",
     "aide 0.13.4",
     "anyhow 1.0.93",
     "arbitrary 1.3.2",

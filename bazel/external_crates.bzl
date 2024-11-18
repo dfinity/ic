@@ -171,6 +171,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "idna",
                 ],
             ),
+            "ahash": crate.spec(
+                version = "^0.8.11",
+                default_features = False,
+                features = [
+                    "compile-time-rng",
+                ],
+            ),
             "aide": crate.spec(
                 version = "^0.13.4",
                 features = [
