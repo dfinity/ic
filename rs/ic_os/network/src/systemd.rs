@@ -18,7 +18,7 @@ DNS=2001:4860:4860::8888
 DNS=2001:4860:4860::8844
 "#;
 
-fn generate_network_interface_content(interface_name: &str) -> String {
+fn generate_network_interface_content(interface_name: &str, mac_line: &str) -> String {
     format!(
         "
 [Match]
@@ -27,6 +27,7 @@ Name={interface_name}
 [Link]
 RequiredForOnline=no
 MTUBytes=1500
+{mac_line}
 
 [Network]
 LLDP=true
@@ -36,20 +37,14 @@ Bridge=br6
     )
 }
 
-fn generate_bridge6_netdev_content(mac_line: &str) -> String {
-    format!(
-        "
+static BRIDGE6_NETDEV_CONTENT: &str = "
 [NetDev]
 Name=br6
 Kind=bridge
-{mac_line}
 
 [Bridge]
 ForwardDelaySec=0
-STP=false
-"
-    )
-}
+STP=false";
 
 fn generate_bridge6_network_content(
     ipv6_address: &str,
@@ -89,25 +84,24 @@ fn generate_and_write_systemd_files(
     eprintln!("Creating directory: {}", output_directory.to_string_lossy());
     create_dir_all(output_directory)?;
 
+    let mac_line = match generated_mac {
+        Some(mac) => format!("MACAddress={}", mac.get()),
+        None => String::new(),
+    };
+
     let interface_filename = format!("20-{}.network", interface.name);
     let interface_path = output_directory.join(interface_filename);
-    let interface_content = generate_network_interface_content(&interface.name);
+    let interface_content = generate_network_interface_content(&interface.name, &mac_line);
     eprintln!("Writing {}", interface_path.to_string_lossy());
     write(interface_path, interface_content)?;
 
     let bridge6_netdev_filename = "20-br6.netdev";
     let bridge6_netdev_path = output_directory.join(bridge6_netdev_filename);
-    let mac_line = match generated_mac {
-        Some(mac) => format!("MACAddress={}", mac.get()),
-        None => String::new(),
-    };
-    let bridge6_netdev_content = generate_bridge6_netdev_content(&mac_line);
     eprintln!("Writing {}", bridge6_netdev_path.to_string_lossy());
-    write(bridge6_netdev_path, bridge6_netdev_content)?;
+    write(bridge6_netdev_path, BRIDGE6_NETDEV_CONTENT)?;
 
     let bridge6_filename = "20-br6.network";
     let bridge6_path = output_directory.join(bridge6_filename);
-
     let bridge6_content = generate_bridge6_network_content(
         ipv6_address,
         ipv6_gateway,
