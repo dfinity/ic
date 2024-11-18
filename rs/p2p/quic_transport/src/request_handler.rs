@@ -113,11 +113,12 @@ async fn handle_bi_stream(
 
     let send_stream = &mut send_stream_guard.send_stream;
     let svc = router.oneshot(request);
-    let stopped = send_stream.stopped();
+    let stopped_fut = send_stream.stopped();
     let response = tokio::select! {
         response = svc => response.expect("Infallible"),
-        stopped_res = stopped => {
-            return stopped_res.map(|_| ()).with_context(|| "stopped.");
+        stopped = stopped_fut => {
+
+            return Ok(stopped.map(|_| ()).inspect_err(|err|observe_stopped_error(err, "stopped", &metrics.request_handle_errors_total))?);
         }
     };
 
