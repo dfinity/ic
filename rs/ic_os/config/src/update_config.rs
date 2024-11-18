@@ -34,7 +34,6 @@ pub fn update_guestos_config(output_file: PathBuf) -> Result<()> {
 
         let logging = read_filebeat_conf(config_dir)?;
         let nns_urls = read_nns_conf(config_dir)?;
-        let node_reward_type = read_reward_conf(config_dir)?;
 
         let nns_public_key_exists = state_root.join("nns_public_key.pem").exists();
         let node_operator_private_key_exists =
@@ -45,7 +44,7 @@ pub fn update_guestos_config(output_file: PathBuf) -> Result<()> {
         let deployment_environment = "mainnet".to_string();
 
         let icos_settings = ICOSSettings {
-            node_reward_type,
+            node_reward_type: None,
             mgmt_mac,
             deployment_environment,
             logging,
@@ -304,15 +303,6 @@ fn read_nns_conf(config_dir: &Path) -> Result<Vec<Url>> {
     }
 
     Ok(nns_urls)
-}
-
-fn read_reward_conf(config_dir: &Path) -> Result<Option<String>> {
-    let reward_conf_path = config_dir.join("reward.conf");
-    let conf_map = read_conf_file(&reward_conf_path)?;
-
-    let node_reward_type = conf_map.get("node_reward_type").cloned();
-
-    Ok(node_reward_type)
 }
 
 fn derive_mgmt_mac_from_hostname(hostname: Option<&str>) -> Result<FormattedMacAddress> {
