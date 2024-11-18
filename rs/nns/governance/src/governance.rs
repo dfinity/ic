@@ -5562,7 +5562,7 @@ impl Governance {
         };
 
         // Create the proposal.
-        let mut proposal_data = ProposalData {
+        let proposal_data = ProposalData {
             id: Some(proposal_id),
             proposer: Some(*proposer_id),
             reject_cost_e8s,

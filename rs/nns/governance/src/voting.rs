@@ -1,9 +1,7 @@
 use crate::{
     governance::Governance,
     neuron_store::NeuronStore,
-    pb::v1::{
-        governance_error::ErrorType, Ballot, GovernanceError, Topic, Topic::NeuronManagement, Vote,
-    },
+    pb::v1::{Ballot, Topic, Topic::NeuronManagement, Vote},
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use std::{

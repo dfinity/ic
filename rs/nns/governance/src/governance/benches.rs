@@ -19,7 +19,7 @@ use ic_nns_common::{
     types::NeuronId,
 };
 use icp_ledger::Subaccount;
-use maplit::{btreemap, hashmap};
+use maplit::hashmap;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::collections::{BTreeMap, HashMap};
