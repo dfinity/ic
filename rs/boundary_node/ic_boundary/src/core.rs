@@ -47,6 +47,7 @@ use ic_types::{
     crypto::{threshold_sig::ThresholdSigPublicKey, Signable},
     messages::MessageId,
 };
+use lazy_static::lazy_static;
 use nix::unistd::{getpgid, setpgid, Pid};
 use prometheus::Registry;
 use rand::{rngs::StdRng, SeedableRng};
@@ -91,6 +92,13 @@ pub const SECOND: Duration = Duration::from_secs(1);
 
 const KB: usize = 1024;
 const MB: usize = 1024 * KB;
+
+// Log Anonymization
+
+lazy_static! {
+    static ref LOG_ANONYMIZATION_CID: Principal =
+        Principal::from_text("usv67-saaaa-aaaah-qpwlq-cai").unwrap();
+}
 
 pub const MAX_REQUEST_BODY_SIZE: usize = 4 * MB;
 const METRICS_CACHE_CAPACITY: usize = 15 * MB;
@@ -261,15 +269,28 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     };
 
     // Agent
+    let (proto, port) = [
+        // HTTP
+        cli.listen.listen_http_port.map(|p| ("http", p)),
+        // HTTPS
+        #[cfg(feature = "tls")]
+        cli.listen.listen_https_port.map(|p| ("https", p)),
+    ]
+    .into_iter()
+    // Choose first non-none option
+    .flatten()
+    .next()
+    .ok_or(anyhow!("missing http and https listen ports"))?;
+
     let ag = Agent::new(
-        "http://localhost:9000".try_into()?, // url
-        s,                                   // sender
+        format!("{proto}://localhost:{port}").parse()?, // url
+        s,                                              // sender
     );
 
     // Canister
     let c = AnonymizationCanister::new(
-        ag,                                                   // agent
-        Principal::from_text("bd3sg-teaaa-aaaaa-qaaba-cai")?, // canister_id
+        ag,                     // agent
+        *LOG_ANONYMIZATION_CID, // canister_id
     );
 
     // Rng

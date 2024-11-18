@@ -27,7 +27,7 @@ use prometheus::{
 use tikv_jemalloc_ctl::{epoch, stats};
 use tokio::sync::RwLock;
 use tower_http::request_id::RequestId;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::{
     cache::{Cache, CacheStatus},
