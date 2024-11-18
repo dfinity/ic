@@ -6917,6 +6917,7 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-interfaces-registry-mocks",
  "ic-logger",
+ "ic-management-canister-types",
  "ic-metrics",
  "ic-protobuf",
  "ic-registry-client",
@@ -7258,6 +7259,7 @@ dependencies = [
  "ic-crypto-utils-basic-sig",
  "ic-interfaces",
  "ic-logger",
+ "ic-management-canister-types",
  "ic-metrics",
  "ic-protobuf",
  "ic-sys",
@@ -9464,6 +9466,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-types",
  "ic-universal-canister",
+ "icp-ledger",
  "icrc-ledger-types",
  "icrc1-test-env",
  "icrc1-test-suite",
@@ -11846,6 +11849,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-protobuf",
  "ic-sns-governance",
+ "ic-sns-governance-api",
  "ic-sns-governance-proposal-criticality",
  "ic-sns-governance-proposals-amount-total-limit",
  "ic-sns-governance-protobuf-generator",
@@ -11876,6 +11880,29 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-test",
+]
+
+[[package]]
+name = "ic-sns-governance-api"
+version = "0.9.0"
+dependencies = [
+ "bytes",
+ "candid",
+ "clap 4.5.20",
+ "comparable",
+ "ic-base-types",
+ "ic-nervous-system-proto",
+ "ic-nns-common",
+ "ic-protobuf",
+ "ic-types",
+ "ic-utils 0.9.0",
+ "icp-ledger",
+ "itertools 0.12.1",
+ "prost 0.13.3",
+ "serde",
+ "serde_bytes",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
@@ -19759,6 +19786,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "sns_system_test_lib"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-agent",
+ "ic-base-types",
+ "ic-canister-client",
+ "ic-canister-client-sender",
+ "ic-icrc1-test-utils",
+ "ic-ledger-core",
+ "ic-nervous-system-common",
+ "ic-nervous-system-common-test-keys",
+ "ic-nervous-system-proto",
+ "ic-nns-common",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic-registry-subnet-type",
+ "ic-rosetta-test-utils",
+ "ic-sns-governance",
+ "ic-sns-swap",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic-universal-canister",
+ "ic-utils 0.37.0",
+ "ic_consensus_system_test_utils",
+ "icp-ledger",
+ "icrc-ledger-agent",
+ "icrc-ledger-types",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "rosetta-core",
+ "serde",
+ "serde_json",
+ "slog",
+ "tokio",
+]
+
+[[package]]
 name = "sns_tests"
 version = "0.9.0"
 dependencies = [
@@ -19769,6 +19835,7 @@ dependencies = [
  "ic-system-test-driver",
  "rust_decimal",
  "slog",
+ "sns_system_test_lib",
  "tests",
 ]
 
