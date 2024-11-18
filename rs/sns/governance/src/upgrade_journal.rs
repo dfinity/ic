@@ -164,7 +164,7 @@ impl From<upgrade_journal_entry::TargetVersionReset> for upgrade_journal_entry::
 impl upgrade_journal_entry::Event {
     /// Useful for specifying expected states of the SNS upgrade journal in a way that isn't
     /// overly fragile.
-    pub fn redact_human_readable(self: Self) -> Self {
+    pub fn redact_human_readable(self) -> Self {
         match self {
             Self::UpgradeOutcome(upgrade_outcome) => {
                 Self::UpgradeOutcome(upgrade_journal_entry::UpgradeOutcome {
