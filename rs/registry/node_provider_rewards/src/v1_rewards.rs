@@ -389,11 +389,11 @@ fn node_providers_rewardables(
 pub fn calculate_rewards_v1(
     days_in_period: u64,
     rewards_table: &NodeRewardsTable,
-    nodes_in_period: &[RewardableNode],
+    rewardable_nodes: &[RewardableNode],
 ) -> RewardsPerNodeProvider {
     let mut rewards_per_node_provider = AHashMap::default();
     let mut rewards_log_per_node_provider = AHashMap::default();
-    let node_provider_rewardables = node_providers_rewardables(nodes_in_period);
+    let node_provider_rewardables = node_providers_rewardables(rewardable_nodes);
 
     for (node_provider_id, (rewardable_nodes, assigned_nodes_metrics)) in node_provider_rewardables
     {
