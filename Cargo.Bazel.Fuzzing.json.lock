@@ -1,9 +1,5 @@
 {
-<<<<<<< HEAD
-  "checksum": "186d1d12f8d3c7dea911a190120fdf086d62f91b05eed83b368085b646b90f29",
-=======
-  "checksum": "12851c6ba4c9f6ac1c749cc7ff0dbfe30e4f2dda7951663e4a4cc64d29fdee95",
->>>>>>> origin/master
+  "checksum": "414c59430cedfabfe7fe7d9bb2491ca84a45637ed6dcb644603eb019aa5f992a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -38943,8 +38939,6 @@
         ],
         "crate_features": {
           "common": [
-            "elf",
-            "errno",
             "general",
             "if_ether",
             "ioctl",
@@ -38956,25 +38950,6 @@
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
-<<<<<<< HEAD
-              "prctl",
-              "system"
-            ],
-            "aarch64-unknown-nixos-gnu": [
-              "prctl",
-              "system"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "prctl",
-              "system"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "prctl",
-              "system"
-            ],
-            "i686-unknown-linux-gnu": [
-              "prctl",
-=======
               "elf",
               "errno",
               "system"
@@ -38997,7 +38972,6 @@
             "i686-unknown-linux-gnu": [
               "elf",
               "errno",
->>>>>>> origin/master
               "system"
             ],
             "powerpc-unknown-linux-gnu": [
@@ -39007,13 +38981,6 @@
               "system"
             ],
             "x86_64-unknown-linux-gnu": [
-<<<<<<< HEAD
-              "prctl",
-              "system"
-            ],
-            "x86_64-unknown-nixos-gnu": [
-              "prctl",
-=======
               "elf",
               "errno",
               "system"
@@ -39021,7 +38988,6 @@
             "x86_64-unknown-nixos-gnu": [
               "elf",
               "errno",
->>>>>>> origin/master
               "system"
             ]
           }
