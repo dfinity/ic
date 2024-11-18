@@ -42,8 +42,13 @@ use pocket_ic::common::rest::{
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::atomic::AtomicU64, sync::Arc,
-    time::Duration,
+    collections::HashMap,
+    fmt,
+    path::PathBuf,
+    str::FromStr,
+    sync::atomic::AtomicU64,
+    sync::Arc,
+    time::{Duration, SystemTime},
 };
 use tokio::{
     sync::mpsc::error::TryRecvError,
@@ -1103,11 +1108,11 @@ impl ApiState {
             let (tx, mut rx) = mpsc::channel::<()>(1);
             let handle = spawn(async move {
                 debug!("Starting auto progress for instance {}.", instance_id);
-                let mut now = Instant::now();
+                let mut now = SystemTime::now();
                 loop {
                     let start = Instant::now();
-                    let old = std::mem::replace(&mut now, Instant::now());
-                    let op = AdvanceTimeAndTick(now.duration_since(old));
+                    let old = std::mem::replace(&mut now, SystemTime::now());
+                    let op = AdvanceTimeAndTick(now.duration_since(old).unwrap_or_default());
                     if Self::execute_operation(
                         instances_clone.clone(),
                         graph.clone(),
