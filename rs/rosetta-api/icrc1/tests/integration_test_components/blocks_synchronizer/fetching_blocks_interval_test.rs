@@ -209,7 +209,7 @@ proptest! {
         }
 
         // We are only interested in the szenario when there are blocks to be fetched
-        if transfer_args.len() == 0 {
+        if transfer_args.is_empty() {
             return Ok(());
         }
         rt.block_on(async {
