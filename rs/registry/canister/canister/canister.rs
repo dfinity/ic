@@ -21,7 +21,7 @@ use ic_registry_transport::{
         registry_error::Code, CertifiedResponse, RegistryAtomicMutateResponse, RegistryError,
         RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
         RegistryGetLatestVersionResponse, RegistryGetValueResponse,
-    }, serialize_atomic_mutate_response, serialize_get_changes_since_response, serialize_get_value_response
+    }, serialize_atomic_mutate_response, serialize_get_changes_since_response, serialize_get_value_response,
 };
 use prost::Message;
 use registry_canister::{
@@ -895,13 +895,13 @@ fn get_node_providers_monthly_xdr_rewards_() -> Result<NodeProvidersMonthlyXdrRe
 #[export_name = "canister_query get_node_providers_monthly_xdr_rewards_v1"]
 fn get_node_providers_monthly_xdr_rewards_v1() {
     check_caller_is_governance_and_log("get_node_providers_monthly_xdr_rewards_v1");
-    over(
+    over_async(
         candid_one,
-        |()| -> Result<NodeProvidersMonthlyXdrRewards, String> {
+        |()| -> Result<NodeProvidersMonthlyXdrRewards, String> async {
             let (from_ts, from_registry_version) = deserialize_node_providers_rewards_request(arg_data())
-            .map_err(|err| err.to_string())?;
-    
-            Ok(registry().get_node_providers_monthly_xdr_rewards_v1(from_ts, from_registry_version))
+                .map_err(|err| err.to_string())?;
+
+            registry().get_node_providers_monthly_xdr_rewards_v1(from_ts, from_registry_version).await
         },
     )
 }
