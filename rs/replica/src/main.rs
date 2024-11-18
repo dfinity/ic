@@ -15,6 +15,7 @@ use ic_types::{
 };
 use nix::unistd::{setpgid, Pid};
 use opentelemetry::{trace::TracerProvider, KeyValue};
+use opentelemetry_otlp::SpanExporter;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{trace, Resource};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
@@ -238,13 +239,12 @@ fn main() -> io::Result<()> {
         Some(jaeger_collector_addr) if !jaeger_collector_addr.is_empty() => {
             let _rt_guard = rt_main.enter();
 
-            let span_exporter = opentelemetry_otlp::new_exporter()
-                .tonic()
+            let span_exporter = SpanExporter::builder()
+                .with_tonic()
                 .with_endpoint(jaeger_collector_addr)
                 .with_protocol(opentelemetry_otlp::Protocol::Grpc);
 
-            match opentelemetry_otlp::new_pipeline()
-                .tracing()
+             let otel_layer = TracerProvider::builder()
                 .with_trace_config(
                     trace::Config::default()
                         .with_sampler(opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(0.01))
@@ -254,7 +254,7 @@ fn main() -> io::Result<()> {
                         )])),
                 )
                 .with_exporter(span_exporter)
-                .install_batch(opentelemetry_sdk::runtime::Tokio)
+                .install_batch(opentelemetry_sdk::runtime::Tokio);
             {
                 Ok(tracer) => {
                     let otel_layer =
