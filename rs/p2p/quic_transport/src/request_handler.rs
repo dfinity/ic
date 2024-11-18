@@ -34,7 +34,7 @@ use crate::{
 
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
 
-// The event loop is cancel-safe.
+/// Note: The event loop is cancel-safe.
 pub async fn start_stream_acceptor(
     log: ReplicaLogger,
     peer_id: NodeId,
