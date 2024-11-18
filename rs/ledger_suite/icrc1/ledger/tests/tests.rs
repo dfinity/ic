@@ -471,6 +471,15 @@ fn icrc1_test_incomplete_migration() {
 }
 
 #[test]
+fn icrc1_test_migration_resumes_from_frozen() {
+    ic_ledger_suite_state_machine_tests::test_migration_resumes_from_frozen(
+        ledger_mainnet_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn icrc1_test_metrics_while_migrating() {
     ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
         ledger_mainnet_wasm(),

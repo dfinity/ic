@@ -1,9 +1,11 @@
 use crate::in_memory_ledger::{verify_ledger_state, InMemoryLedger};
 use crate::metrics::{parse_metric, retrieve_metrics};
+use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_agent::identity::{BasicIdentity, Identity};
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
+use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::UserError;
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
@@ -13,11 +15,13 @@ use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_hash_of::HashOf;
+use ic_management_canister_types::CanisterSettingsArgsBuilder;
 use ic_management_canister_types::{
     self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
 };
+use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_test_utils::test_http_request_decoding_quota;
-use ic_state_machine_tests::{ErrorCode, StateMachine, WasmResult};
+use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig, WasmResult};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
@@ -2804,6 +2808,104 @@ pub fn test_incomplete_migration<T>(
     .unwrap();
 
     // All approvals should still be in UPGRADES_MEMORY and downgrade should succeed.
+    check_approvals();
+}
+
+pub fn test_migration_resumes_from_frozen<T>(
+    ledger_wasm_mainnet: Vec<u8>,
+    ledger_wasm_current_lowinstructionlimits: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let account = Account::from(PrincipalId::new_user_test_id(1).0);
+    let initial_balances = vec![(account, 100_000_000u64)];
+
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config.clone(),
+        HypervisorConfig::default(),
+    ));
+
+    let args = encode_init_args(init_args(initial_balances));
+    let args = Encode!(&args).unwrap();
+    let canister_id = env
+        .install_canister_with_cycles(
+            ledger_wasm_mainnet,
+            args,
+            None,
+            Cycles::new(1_000_000_000_000),
+        )
+        .unwrap();
+
+    const APPROVE_AMOUNT: u64 = 150_000;
+    const NUM_APPROVALS: u64 = 20;
+
+    let send_approvals = || {
+        for i in 2..2 + NUM_APPROVALS {
+            let spender = Account::from(PrincipalId::new_user_test_id(i).0);
+            let approve_args = default_approve_args(spender, APPROVE_AMOUNT);
+            send_approval(&env, canister_id, account.owner, &approve_args)
+                .expect("approval failed");
+        }
+    };
+
+    send_approvals();
+
+    let check_approvals = || {
+        for i in 2..2 + NUM_APPROVALS {
+            let allowance = get_allowance(
+                &env,
+                canister_id,
+                account,
+                Account::from(PrincipalId::new_user_test_id(i).0),
+            );
+            assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+        }
+    };
+
+    check_approvals();
+
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_current_lowinstructionlimits,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .unwrap();
+
+    let is_ledger_ready = || {
+        Decode!(
+            &env.query(canister_id, "is_ledger_ready", Encode!().unwrap())
+                .expect("failed to call is_ledger_ready")
+                .bytes(),
+            bool
+        )
+        .expect("failed to decode is_ledger_ready response")
+    };
+    assert!(!is_ledger_ready());
+
+    let freeze = |env: &StateMachine, canister_id: CanisterId| {
+        let args = CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1 << 62)
+            .build();
+        let result = env.update_settings(&canister_id, args);
+        assert_matches!(result, Ok(_));
+    };
+    let unfreeze = |env: &StateMachine, canister_id: CanisterId| {
+        let args = CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(0)
+            .build();
+        let result = env.update_settings(&canister_id, args);
+        assert_matches!(result, Ok(_));
+    };
+
+    freeze(&env, canister_id);
+    env.advance_time(Duration::from_secs(1000));
+    env.tick();
+    unfreeze(&env, canister_id);
+    // even though 1000s passed, the ledger did not migrate when it was frozen
+    assert!(!is_ledger_ready());
+    wait_ledger_ready(&env, canister_id, 20);
     check_approvals();
 }
 
