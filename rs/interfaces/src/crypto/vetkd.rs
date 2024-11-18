@@ -6,6 +6,7 @@ use ic_types::NodeId;
 use std::collections::BTreeMap;
 
 pub trait VetKdProtocol {
+    #[allow(clippy::result_large_err)]
     fn create_encrypted_key_share(
         &self,
         args: VetKdArgs,
