@@ -1658,12 +1658,12 @@ pub(crate) fn schnorr_algorithm(algorithm: AlgorithmId) -> SchnorrAlgorithm {
     }
 }
 
-pub(crate) fn fake_vet_kd_key_id() -> VetKdKeyId {
+pub(crate) fn fake_vetkd_key_id() -> VetKdKeyId {
     VetKdKeyId::from_str("bls12_381_g2:some_key").unwrap()
 }
 
-pub(crate) fn fake_vet_kd_master_public_key_id() -> MasterPublicKeyId {
-    MasterPublicKeyId::VetKd(fake_vet_kd_key_id())
+pub(crate) fn fake_vetkd_master_public_key_id() -> MasterPublicKeyId {
+    MasterPublicKeyId::VetKd(fake_vetkd_key_id())
 }
 
 pub(crate) fn fake_dkg_id(key_id: VetKdKeyId) -> NiDkgId {

@@ -433,8 +433,8 @@ impl SubnetCallContextManager {
                 (MasterPublicKeyId::Schnorr(schnorr_key_id), ThresholdArguments::Schnorr(args)) => {
                     args.key_id == *schnorr_key_id
                 }
-                (MasterPublicKeyId::VetKd(vet_kd_key_id), ThresholdArguments::VetKd(args)) => {
-                    args.key_id == *vet_kd_key_id
+                (MasterPublicKeyId::VetKd(vetkd_key_id), ThresholdArguments::VetKd(args)) => {
+                    args.key_id == *vetkd_key_id
                 }
                 _ => false,
             })
@@ -970,7 +970,7 @@ impl SignWithThresholdContext {
     }
 
     /// Returns true if arguments are for VetKd.
-    pub fn is_vet_kd(&self) -> bool {
+    pub fn is_vetkd(&self) -> bool {
         matches!(&self.args, ThresholdArguments::VetKd(_))
     }
 
@@ -1004,8 +1004,8 @@ impl SignWithThresholdContext {
 
     /// Returns Vetkdguments.
     /// Panics if arguments are not for VetKd
-    /// Should only be called if `is_vet_kd` returns true.
-    pub fn vet_kd_args(&self) -> &VetKdArguments {
+    /// Should only be called if `is_vetkd` returns true.
+    pub fn vetkd_args(&self) -> &VetKdArguments {
         match &self.args {
             ThresholdArguments::VetKd(args) => args,
             _ => panic!("VetKd arguments not found."),
