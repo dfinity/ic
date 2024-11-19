@@ -18,7 +18,7 @@ pub type GetRuleByIdResponse = Result<OutputRuleMetadata, String>;
 pub type DiscloseRulesResponse = Result<(), String>;
 pub type GetRulesByIncidentIdResponse = Result<Vec<OutputRuleMetadata>, String>;
 
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(CandidType, Deserialize, Debug, Clone)]
 pub enum DiscloseRulesArg {
     RuleIds(Vec<RuleId>),
     IncidentIds(Vec<IncidentId>),
