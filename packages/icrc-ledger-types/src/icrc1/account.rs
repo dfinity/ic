@@ -198,7 +198,7 @@ mod tests {
 
     use candid::Principal;
 
-    use crate::icrc1::account::{Account, ICRC1TextReprError, DEFAULT_SUBACCOUNT};
+    use crate::icrc1::account::{Account, ICRC1TextReprError};
 
     pub fn principal_strategy() -> impl Strategy<Value = Principal> {
         let bytes_strategy = prop::collection::vec(0..=255u8, 29);
