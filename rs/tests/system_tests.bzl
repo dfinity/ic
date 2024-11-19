@@ -185,7 +185,7 @@ def system_test(
             uses_guestos_dev = True
             break
 
-    # Environment variables names to targets (targets are resolved)
+    # Environment variable names to targets (targets are resolved)
     _env_deps = {}
 
     _guestos = "//ic-os/guestos/envs/dev:"
