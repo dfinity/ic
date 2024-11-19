@@ -248,3 +248,166 @@ impl OnDiskSerializedModule {
             .expect("Error parsing initial state data file")
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use ic_replicated_state::canister_state::execution_state::{CustomSection, CustomSectionType};
+    use ic_types::methods::SystemMethod;
+    use proptest::prelude::*;
+    use std::path::PathBuf;
+
+    fn map_file_to_vec(file: &File) -> Vec<u8> {
+        let mmap_size = file.metadata().unwrap().size() as usize;
+        let mmap_ptr = unsafe {
+            mmap(
+                std::ptr::null_mut(),
+                mmap_size,
+                ProtFlags::PROT_READ,
+                MapFlags::MAP_PRIVATE,
+                file.as_raw_fd(),
+                0,
+            )
+        }
+        .unwrap_or_else(|err| panic!("Reading OnDiskSerializedModule failed: {:?}", err))
+            as *mut u8;
+        unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) }.to_vec()
+    }
+
+    fn wasm_method() -> impl Strategy<Value = WasmMethod> {
+        prop_oneof![
+            (".*").prop_map(WasmMethod::Update),
+            (".*").prop_map(WasmMethod::Query),
+            (".*").prop_map(WasmMethod::CompositeQuery),
+            Just(WasmMethod::System(SystemMethod::CanisterStart)),
+            Just(WasmMethod::System(SystemMethod::CanisterInit)),
+            Just(WasmMethod::System(SystemMethod::CanisterPreUpgrade)),
+        ]
+    }
+
+    fn data_segment() -> impl Strategy<Value = (usize, Vec<u8>)> {
+        let vec = prop::collection::vec(any::<u8>(), 0..4096 * 10);
+        (any::<usize>(), vec)
+    }
+
+    prop_compose! {
+        fn custom_section()(
+            content in prop::collection::vec(any::<u8>(), 4096 * 10),
+            visibility in prop_oneof![Just(CustomSectionType::Public), Just(CustomSectionType::Private)],
+        ) -> CustomSection {
+            CustomSection::new(visibility, content)
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn round_trip(
+            bytes in prop::collection::vec(any::<u8>(), 0..4096 * 10),
+            exported_functions in prop::collection::btree_set(wasm_method(), 0..100),
+            data_segments in prop::collection::vec(data_segment(), 0..100),
+            wasm_metadata in prop::collection::btree_map(".*", custom_section(), 30),
+            num_instructions in 0..=u64::MAX,
+            imports_call_cycles_add: bool,
+            imports_canister_cycle_balance: bool,
+            imports_msg_cycles_available: bool,
+            imports_msg_cycles_refunded: bool,
+            imports_msg_cycles_accept: bool,
+            imports_mint_cycles: bool,
+            is_wasm64: bool,
+        ) {
+            let bytes = Arc::new(SerializedModuleBytes(bytes));
+            let data_segments = data_segments.into_iter().collect();
+            let wasm_metadata = WasmMetadata::new(wasm_metadata);
+            let compilation_cost = NumInstructions::from(num_instructions);
+            let imports_details = WasmImportsDetails {
+                imports_call_cycles_add,
+                imports_canister_cycle_balance,
+                imports_msg_cycles_available,
+                imports_msg_cycles_refunded,
+                imports_msg_cycles_accept,
+                imports_mint_cycles,
+            };
+            let module = SerializedModule {
+                bytes,
+                exported_functions,
+                data_segments,
+                wasm_metadata,
+                compilation_cost,
+                imports_details,
+                is_wasm64,
+            };
+
+            let dir = tempfile::tempdir().unwrap();
+            let mut bytes_path: PathBuf = dir.path().into();
+            let mut data_path: PathBuf = dir.path().into();
+            bytes_path.push("bytes");
+            data_path.push("data");
+
+            let on_disk = OnDiskSerializedModule::from_serialized_module(module.clone(), &bytes_path, &data_path);
+
+            let bytes_round_trip = map_file_to_vec(&on_disk.bytes);
+            assert_eq!(module.bytes.0, bytes_round_trip);
+
+            let initial_state_data = on_disk.initial_state_data();
+            assert_eq!(module.exported_functions, initial_state_data.exported_functions);
+
+            assert_eq!(module.data_segments, initial_state_data.data_segments);
+            assert_eq!(module.wasm_metadata, initial_state_data.wasm_metadata);
+            assert_eq!(module.compilation_cost, on_disk.compilation_cost);
+            assert_eq!(module.imports_details, on_disk.imports_details);
+            assert_eq!(module.is_wasm64, on_disk.is_wasm64);
+        }
+
+        fn read_in_parallel(
+            bytes in prop::collection::vec(any::<u8>(), 0..4096 * 10),
+            exported_functions in prop::collection::btree_set(wasm_method(), 0..100),
+            data_segments in prop::collection::vec(data_segment(), 0..100),
+            wasm_metadata in prop::collection::btree_map(".*", custom_section(), 30),
+        ) {
+            let bytes = Arc::new(SerializedModuleBytes(bytes));
+            let data_segments = data_segments.into_iter().collect();
+            let wasm_metadata = WasmMetadata::new(wasm_metadata);
+            let compilation_cost = NumInstructions::from(0);
+            let imports_details = WasmImportsDetails {
+                imports_call_cycles_add: false,
+                imports_canister_cycle_balance: false,
+                imports_msg_cycles_available: false,
+                imports_msg_cycles_refunded: false,
+                imports_msg_cycles_accept: false,
+                imports_mint_cycles: false,
+            };
+            let module = SerializedModule {
+                bytes,
+                exported_functions,
+                data_segments,
+                wasm_metadata,
+                compilation_cost,
+                imports_details,
+                is_wasm64: false,
+            };
+
+            let dir = tempfile::tempdir().unwrap();
+            let mut bytes_path: PathBuf = dir.path().into();
+            let mut data_path: PathBuf = dir.path().into();
+            bytes_path.push("bytes");
+            data_path.push("data");
+
+            let on_disk = OnDiskSerializedModule::from_serialized_module(module.clone(), &bytes_path, &data_path);
+
+            std::thread::scope(|s| {
+                let mut threads = vec![];
+                for _ in 0..10 {
+                    threads.push(s.spawn(|| {
+                        (map_file_to_vec(&on_disk.bytes), on_disk.initial_state_data())
+                    }));
+                }
+                let results: Vec<_> = threads.into_iter().map(|t| t.join().unwrap()).collect();
+                let (first_bytes, first_initial) = results[0].clone();
+                for (bytes, initial) in results {
+                    assert_eq!(first_bytes, bytes);
+                    assert_eq!(first_initial, initial);
+                }
+            });
+        }
+    }
+}
