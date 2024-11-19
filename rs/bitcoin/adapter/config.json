@@ -1,0 +1,25 @@
+{
+    "network": "testnet",
+    "dns_seeds": [
+      "testnet-seed.bitcoin.jonasschnelli.ch",
+      "seed.tbtc.petertodd.org",
+      "testnet-seed.bluematt.me",
+      "testnet-seed.bitcoin.schildbach.de"
+    ],
+    "nodes": [],
+    "socks_proxy": null,
+    "idle_seconds": 300,
+    "ipv6_only": true,
+    "logger": {
+      "level": "debug",
+      "format": "text_full",
+      "log_destination": {
+        "File": "bitcoin_adapter.log"
+      },
+      "block_on_overflow": true
+    },
+    "incoming_source": {
+        "Path": "bitcoin_adapter.sock"
+    }
+  }
+  

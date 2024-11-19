@@ -202,7 +202,8 @@ pub fn start_server(
     metrics_registry: &MetricsRegistry,
     rt_handle: &tokio::runtime::Handle,
     config: config::Config,
-) {
+) { 
+    println!("debuggg 1");
     let _enter = rt_handle.enter();
 
     let (adapter_state, tx) = AdapterState::new(config.idle_seconds);
@@ -219,6 +220,7 @@ pub fn start_server(
     );
 
     let (transaction_manager_tx, transaction_manager_rx) = channel(100);
+    println!("debuggg 2");
 
     start_grpc_server(
         config.clone(),
@@ -228,6 +230,7 @@ pub fn start_server(
         transaction_manager_tx,
         metrics_registry,
     );
+    println!("debuggg 3");
 
     start_main_event_loop(
         &config,

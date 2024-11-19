@@ -11,6 +11,7 @@ use serde_json::to_string_pretty;
 
 #[tokio::main]
 pub async fn main() {
+    println!("debuggg start");
     // We abort the whole program with a core dump if a single thread panics.
     // This way we can capture all the context if a critical error
     // happens.
@@ -30,7 +31,7 @@ pub async fn main() {
         "Starting the adapter with config: {}",
         to_string_pretty(&config).unwrap()
     );
-    let metrics_registry = MetricsRegistry::global();
+    let metrics_registry = MetricsRegistry::new();
 
     // Metrics server should only be started if we are managed by systemd and receive the
     // metrics socket as FD(4).
@@ -38,10 +39,11 @@ pub async fn main() {
     // Additionally this function is only called once here.
     // Systemd Socket config: ic-https-outcalls-adapter.socket
     // Systemd Service config: ic-https-outcalls-adapter.service
-    if config.incoming_source == IncomingSource::Systemd {
+    if config.incoming_source == IncomingSource::Systemd && false{
         let stream = unsafe { incoming_from_nth_systemd_socket(2) };
         start_metrics_grpc(metrics_registry.clone(), log.clone(), stream);
     }
+    println!("debuggg 0");
 
     start_server(
         &log,
