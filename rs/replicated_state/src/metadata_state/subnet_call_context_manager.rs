@@ -1002,7 +1002,7 @@ impl SignWithThresholdContext {
         }
     }
 
-    /// Returns Vetkdguments.
+    /// Returns VetKd arguments.
     /// Panics if arguments are not for VetKd
     /// Should only be called if `is_vetkd` returns true.
     pub fn vetkd_args(&self) -> &VetKdArguments {
