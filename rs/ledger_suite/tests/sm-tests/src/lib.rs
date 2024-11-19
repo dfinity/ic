@@ -2901,7 +2901,10 @@ pub fn test_migration_resumes_from_frozen<T>(
 
     freeze(&env, canister_id);
     env.advance_time(Duration::from_secs(1000));
-    env.tick();
+    // Make sure the timer was attempted to be scheduled.
+    for _ in 0..10 {
+        env.tick();
+    }
     unfreeze(&env, canister_id);
     // even though 1000s passed, the ledger did not migrate when it was frozen
     assert!(!is_ledger_ready());
