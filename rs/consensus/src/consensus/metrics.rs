@@ -59,14 +59,12 @@ impl BlockMakerMetrics {
 
     /// Reports byte estimate metrics.
     pub fn report_byte_estimate_metrics(&self, xnet_bytes: usize, ingress_bytes: usize) {
-        let _ = self
-            .block_size_bytes_estimate
-            .get_metric_with_label_values(&["xnet"])
-            .map(|gauge| gauge.set(xnet_bytes as i64));
-        let _ = self
-            .block_size_bytes_estimate
-            .get_metric_with_label_values(&["ingress"])
-            .map(|gauge| gauge.set(ingress_bytes as i64));
+        self.block_size_bytes_estimate
+            .with_label_values(&["xnet"])
+            .set(xnet_bytes as i64);
+        self.block_size_bytes_estimate
+            .with_label_values(&["ingress"])
+            .set(ingress_bytes as i64);
     }
 }
 
@@ -226,6 +224,7 @@ impl From<&IDkgPayload> for IDkgStats {
 pub struct FinalizerMetrics {
     pub batches_delivered: IntCounterVec,
     pub batch_height: IntGauge,
+    pub batch_delivery_interval: Histogram,
     pub ingress_messages_delivered: Histogram,
     pub ingress_message_bytes_delivered: Histogram,
     pub xnet_bytes_delivered: Histogram,
@@ -254,6 +253,12 @@ impl FinalizerMetrics {
             batch_height: metrics_registry.int_gauge(
                 "consensus_batch_height",
                 "The height of batches sent to Message Routing",
+            ),
+            batch_delivery_interval: metrics_registry.histogram(
+                "consensus_batch_delivery_interval_seconds",
+                "Time elapsed since the delivery of the previous batch, in seconds",
+                // 1ms, 2ms, 5ms, ..., 10s, 20s, 50s
+                decimal_buckets(-3, 1),
             ),
             finalization_certified_state_difference: metrics_registry.int_gauge(
                 "consensus_finalization_certified_state_difference",
@@ -416,6 +421,8 @@ pub struct PayloadBuilderMetrics {
     pub get_payload_duration: Histogram,
     pub validate_payload_duration: Histogram,
     pub past_payloads_length: Histogram,
+    pub payload_size_bytes: Histogram,
+    pub payload_section_size_bytes: HistogramVec,
 
     /// Critical error for payloads above the maximum supported size
     pub critical_error_payload_too_large: IntCounter,
@@ -448,6 +455,17 @@ impl PayloadBuilderMetrics {
                 "consensus_past_payloads_length",
                 "The length of past_payloads in payload selection",
                 linear_buckets(0.0, 1.0, 6),
+            ),
+            payload_size_bytes: metrics_registry.histogram(
+                "consensus_payload_size_bytes",
+                "Consensus block payload size, in bytes.",
+                decimal_buckets(0, 6),
+            ),
+            payload_section_size_bytes: metrics_registry.histogram_vec(
+                "consensus_payload_section_size_bytes",
+                "Consensus payload section (ingress, XNet, etc.) size, in bytes.",
+                decimal_buckets(0, 6),
+                &["section"],
             ),
             critical_error_payload_too_large: metrics_registry
                 .error_counter(CRITICAL_ERROR_PAYLOAD_TOO_LARGE),
