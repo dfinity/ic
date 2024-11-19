@@ -5681,7 +5681,7 @@ impl Governance {
 
     /// This method resets the state to unblock further upgrade proposals.
     ///
-    /// This function un-sets `pending_version` and adds an upgrade journal entry.
+    /// Specifically, it un-sets `pending_version` and adds an upgrade journal entry.
     ///
     /// Other actions may be performed depending on the args.
     ///
