@@ -2881,9 +2881,6 @@ impl TryFrom<&CachedUpgradeStepsPb> for CachedUpgradeSteps {
     }
 }
 
-// let Some(cached_upgrade_steps) = &self.cached_upgrade_steps else {
-//     return Err("Governance.cached_upgrade_steps is not specified.".to_string());
-// };
 impl CachedUpgradeSteps {
     pub fn last(&self) -> Version {
         let Some(last) = self.tail.last() else {
