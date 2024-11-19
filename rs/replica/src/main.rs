@@ -242,10 +242,12 @@ fn main() -> io::Result<()> {
             let span_exporter = SpanExporter::builder()
                 .with_tonic()
                 .with_endpoint(jaeger_collector_addr)
-                .with_protocol(opentelemetry_otlp::Protocol::Grpc);
+                .with_protocol(opentelemetry_otlp::Protocol::Grpc)
+                .build()
+                .unwrap();
 
-             let otel_layer = TracerProvider::builder()
-                .with_trace_config(
+            let tracer = opentelemetry_sdk::trace::TracerProvider::builder()
+                .with_config(
                     trace::Config::default()
                         .with_sampler(opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(0.01))
                         .with_resource(Resource::new(vec![KeyValue::new(
@@ -253,18 +255,12 @@ fn main() -> io::Result<()> {
                             "replica",
                         )])),
                 )
-                .with_exporter(span_exporter)
-                .install_batch(opentelemetry_sdk::runtime::Tokio);
-            {
-                Ok(tracer) => {
-                    let otel_layer =
-                        tracing_opentelemetry::OpenTelemetryLayer::new(tracer.tracer("jaeger"));
-                    tracing_layers.push(otel_layer.boxed());
-                }
-                Err(err) => {
-                    tracing::warn!("Failed to create the opentelemetry tracer: {:#?}", err);
-                }
-            }
+                .with_batch_exporter(span_exporter, opentelemetry_sdk::runtime::Tokio)
+                .build();
+
+            let otel_layer =
+                tracing_opentelemetry::OpenTelemetryLayer::new(tracer.tracer("jaeger"));
+            tracing_layers.push(otel_layer.boxed());
         }
         _ => {}
     }
