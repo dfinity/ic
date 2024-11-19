@@ -539,7 +539,7 @@ fn canonical_encoding_request_v18_plus() {
 ///         payment: Funds::new(Cycles::new(123456789012345678901234567890)),
 ///         method_name: "test".to_string(),
 ///         method_payload: vec![6],
-///         metadata: None,
+///         metadata: Default::default(),
 ///         deadline: NO_DEADLINE,
 ///     }
 /// )
@@ -550,7 +550,7 @@ fn canonical_encoding_request_v18_plus() {
 /// ```text
 /// A1                            # map(1)
 ///    00                         # field_index(RequestOrResponse::request)
-///    A6                         # map(6)
+///    A7                         # map(7)
 ///       00                      # field_index(Request::receiver)
 ///       4A                      # bytes(10)
 ///          00000000000000010101 # "\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01"
@@ -573,6 +573,8 @@ fn canonical_encoding_request_v18_plus() {
 ///       05                      # field_index(Request::method_payload)
 ///       41                      # bytes(1)
 ///          06                   # "\x06"
+///       07                        # unsigned(7)
+///       A2                        # map(2)
 /// ```
 /// Used http://cbor.me/ for printing the human friendly output.
 #[test]
@@ -591,7 +593,7 @@ fn canonical_encoding_request_with_u128_cycles() {
         .into();
 
         assert_eq!(
-            "A1 00 A7 00 4A 00 00 00 00 00 00 00 01 01 01 01 4A 00 00 00 00 00 00 00 02 01 01 02 03 03 A1 00 A2 00 1B C3 73 E0 EE 4E 3F 0A D2 01 1B 00 00 00 01 8E E9 0F F6 04 64 74 65 73 74 05 41 06 07 A2 00 00 01 00",
+            "A1 00 A7 00 4A 00 00 00 00 00 00 00 01 01 01 01 4A 00 00 00 00 00 00 00 02 01 01 02 03 03 A1 00 A2 00 1B C3 73 E0 EE 4E 3F 0A D2 01 1B 00 00 00 01 8E E9 0F F6 04 64 74 65 73 74 05 41 06 07 A0",
             as_hex(&encode_message(&request, certification_version))
         );
     }
