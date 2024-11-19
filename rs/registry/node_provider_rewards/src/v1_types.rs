@@ -3,12 +3,12 @@ use std::{
     hash::BuildHasherDefault,
 };
 
+use crate::v1_logs::RewardsLog;
 use candid::CandidType;
 use ic_base_types::PrincipalId;
 use ic_management_canister_types::{NodeMetrics, NodeMetricsHistoryResponse};
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use serde::Deserialize;
-
-use crate::v1_logs::RewardsLog;
 
 pub type NodeMultiplierStats = (PrincipalId, MultiplierStats);
 pub type RewardablesWithNodesMetrics = (
@@ -25,7 +25,7 @@ pub struct RewardableNode {
     pub node_id: PrincipalId,
     pub node_provider_id: PrincipalId,
     pub region: String,
-    pub node_type: String,
+    pub node_type: NodeRewardType,
     pub node_metrics: Option<Vec<DailyNodeMetrics>>,
 }
 

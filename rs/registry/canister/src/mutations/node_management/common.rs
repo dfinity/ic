@@ -5,10 +5,13 @@ use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_interfaces_registry::RegistryVersionedRecord;
 use ic_protobuf::registry::{
-    dc::v1::DataCenterRecord, node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord
+    dc::v1::DataCenterRecord, node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord,
+    subnet::v1::SubnetListRecord,
 };
 use ic_registry_keys::{
-    make_crypto_node_key, make_crypto_tls_cert_key, make_data_center_record_key, make_firewall_rules_record_key, make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key, FirewallRulesScope, NODE_RECORD_KEY_PREFIX
+    make_crypto_node_key, make_crypto_tls_cert_key, make_data_center_record_key,
+    make_firewall_rules_record_key, make_node_operator_record_key, make_node_record_key,
+    make_subnet_list_record_key, FirewallRulesScope, NODE_RECORD_KEY_PREFIX,
 };
 use ic_registry_transport::{
     delete, insert,
@@ -305,7 +308,7 @@ pub(crate) fn get_key_family_versioned_iter<'a, T: prost::Message + Default>(
         })
 }
 
-pub fn get_existing_records<'a, T: prost::Message + Default>(
+pub fn get_last_seen_records<'a, T: prost::Message + Default>(
     registry: &'a Registry,
     prefix: &'a str,
     after_registry_version: &'a u64,
@@ -316,7 +319,8 @@ pub fn get_existing_records<'a, T: prost::Message + Default>(
         .map(|(key, record)| {
             if record.is_none() {
                 let previous_version = record.version.get().saturating_sub(1);
-                let valid_record = T::decode(registry.get(record.key.as_bytes(), previous_version).ok()?)?;
+                let valid_record =
+                    T::decode(registry.get(record.key.as_bytes(), previous_version).ok()?)?;
                 (key, valid_record)
             } else {
                 (key, record)

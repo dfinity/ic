@@ -1,4 +1,4 @@
-use crate::mutations::node_management::common::{get_existing_records, get_subnet_list_record};
+use crate::mutations::node_management::common::{get_last_seen_records, get_subnet_list_record};
 use crate::registry::Registry;
 use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryResponse};
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
@@ -17,14 +17,14 @@ use std::convert::TryFrom;
 use std::str::FromStr;
 
 impl Registry {
-    async fn get_nodes_metrics(
+    async fn get_nodes_metrics_history(
         &self,
         from_ts: u64,
     ) -> Result<AHashMap<PrincipalId, Vec<DailyNodeMetrics>>, String> {
         let subnets = get_subnet_list_record(self)
             .subnets
             .into_iter()
-            .map(|subnet_id| PrincipalId::try_from(subnet_id).unwrap())
+            .map(|subnet_id| PrincipalId::try_from(subnet_id)?)
             .collect_vec();
 
         let subnets_metrics = subnets
@@ -71,23 +71,23 @@ impl Registry {
         let mut nodes_in_period = Vec::new();
         let mut rewardable_nodes = BTreeMap::new();
 
-        let mut nodes_metrics = self.get_nodes_metrics(from_ts).await?;
+        let mut nodes_metrics = self.get_nodes_metrics_history(from_ts).await?;
 
-        let node_records = get_existing_records::<NodeRecord>(
+        let node_records = get_last_seen_records::<NodeRecord>(
             self,
             NODE_RECORD_KEY_PREFIX,
             &from_registry_version,
         )
         .collect_vec();
 
-        let node_operators = get_existing_records::<NodeOperatorRecord>(
+        let node_operators = get_last_seen_records::<NodeOperatorRecord>(
             self,
             NODE_OPERATOR_RECORD_KEY_PREFIX,
             &from_registry_version,
         )
         .collect::<BTreeMap<String, NodeOperatorRecord>>();
 
-        let data_center_records = get_existing_records::<DataCenterRecord>(
+        let data_center_records = get_last_seen_records::<DataCenterRecord>(
             self,
             DATA_CENTER_KEY_PREFIX,
             &from_registry_version,
@@ -100,8 +100,7 @@ impl Registry {
             let node_operator_id: String = node_record.node_operator_id.try_into().unwrap();
             let node_operator_record = node_operators.get(&node_operator_id).ok_or_else(|| {
                 format!(
-                    "Node Operator with id '{}' \
-                        not found in the Registry",
+                    "Node Operator with id '{}' not found in the Registry",
                     node_operator_id
                 )
             })?;
@@ -109,8 +108,7 @@ impl Registry {
                 .get(&node_operator_record.dc_id)
                 .ok_or_else(|| {
                     format!(
-                        "DataCenter with id '{}' \
-                        not found in the Registry",
+                        "DataCenter with id '{}' not found in the Registry",
                         node_operator_id
                     )
                 })?;
@@ -128,32 +126,7 @@ impl Registry {
                 node_id: principal,
                 node_provider_id,
                 region: data_center_record.region.clone(),
-                node_type: match rewardable_nodes.get_mut(&node_operator_id) {
-                    Some(rewardable_nodes) => {
-                        if rewardable_nodes.is_empty() {
-                            "unknown:no_rewardable_nodes_found".to_string()
-                        } else {
-                            let (k, mut v) = loop {
-                                let (k, v) = match rewardable_nodes.pop_first() {
-                                    Some(kv) => kv,
-                                    None => {
-                                        break ("unknown:rewardable_nodes_used_up".to_string(), 0)
-                                    }
-                                };
-                                if v != 0 {
-                                    break (k, v);
-                                }
-                            };
-                            v = v.saturating_sub(1);
-                            if v != 0 {
-                                rewardable_nodes.insert(k.clone(), v);
-                            }
-                            k
-                        }
-                    }
-
-                    None => "unknown".to_string(),
-                },
+                node_type: node_record.node_reward_type(),
                 node_metrics: nodes_metrics.remove(&principal),
             });
         }
