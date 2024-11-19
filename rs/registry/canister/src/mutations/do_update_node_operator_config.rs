@@ -27,7 +27,6 @@ impl Registry {
             value: node_operator_record_vec,
             version: _,
             deletion_marker: _,
-            timestamp: _,
         } = self
             .get(&node_operator_record_key, self.latest_version())
             .unwrap_or_else(|| {

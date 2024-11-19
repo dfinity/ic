@@ -221,14 +221,11 @@ impl Registry {
         };
         self.changelog_insert(version, &req);
 
-        let timestamp = ic_cdk::api::time();
-
         for mutation in req.mutations {
             (*self.store.entry(mutation.key).or_default()).push_back(RegistryValue {
                 version,
                 value: mutation.value,
                 deletion_marker: mutation.mutation_type == Type::Delete as i32,
-                timestamp: Some(timestamp),
             });
         }
     }
@@ -1049,8 +1046,7 @@ mod tests {
             Some(&RegistryValue {
                 value: max_value,
                 version,
-                deletion_marker: false,
-                timestamp: Some(0)
+                deletion_marker: false
             })
         );
     }

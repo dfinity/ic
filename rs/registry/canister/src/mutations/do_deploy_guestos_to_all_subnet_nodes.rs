@@ -31,7 +31,6 @@ impl Registry {
                 value: subnet_record_vec,
                 version: _,
                 deletion_marker: _,
-                timestamp: _,
             }) => {
                 let mut subnet_record = SubnetRecord::decode(subnet_record_vec.as_slice()).unwrap();
                 subnet_record.replica_version_id = payload.replica_version_id;
