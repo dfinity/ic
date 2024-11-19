@@ -192,6 +192,21 @@ impl ActionAuxiliary {
             )),
         }
     }
+
+    pub fn unwrap_advance_sns_target_version_or_err(self) -> Result<Version, GovernanceError> {
+        match self {
+            Self::AdvanceSnsTargetVersion(new_target) => Ok(new_target),
+
+            wrong => Err(GovernanceError::new_with_message(
+                ErrorType::InconsistentInternalData,
+                format!(
+                    "Missing supporting information. Specifically, \
+                     no new target version: {:#?}",
+                    wrong,
+                ),
+            )),
+        }
+    }
 }
 
 /// Most proposal actions have no auxiliary data. In those cases, we would have
