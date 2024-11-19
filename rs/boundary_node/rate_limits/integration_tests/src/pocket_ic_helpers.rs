@@ -7,7 +7,9 @@ use ic_nns_test_utils::common::{
     build_mainnet_registry_wasm, build_registry_wasm, NnsInitPayloadsBuilder,
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use pocket_ic::{nonblocking::PocketIc, CanisterSettings, PocketIcBuilder, WasmResult};
+use pocket_ic::{
+    management_canister::CanisterSettings, nonblocking::PocketIc, PocketIcBuilder, WasmResult,
+};
 use rate_limits_api::InitArg;
 use serde::de::DeserializeOwned;
 
@@ -96,18 +98,26 @@ pub async fn get_installed_wasm_hash(pocket_ic: &PocketIc, canister_id: Principa
 pub async fn canister_call<R: DeserializeOwned + CandidType>(
     pocket_ic: &PocketIc,
     method: &str,
+    method_type: &str,
     canister_id: Principal,
     sender: Principal,
     payload: Vec<u8>,
 ) -> Result<R, String> {
-    let result = pocket_ic
-        .update_call(canister_id, sender, method, payload)
-        .await
-        .map_err(|err| err.to_string())?;
+    let result = match method_type {
+        "query" => pocket_ic
+            .query_call(canister_id, sender, method, payload)
+            .await
+            .map_err(|err| err.to_string())?,
+        "update" => pocket_ic
+            .update_call(canister_id, sender, method, payload)
+            .await
+            .map_err(|err| err.to_string())?,
+        _ => panic!("{method_type} is not allowed"),
+    };
 
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to add_config failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to {method} failed: {:#?}", s),
     };
 
     let decoded: R = Decode!(&result, R).unwrap();

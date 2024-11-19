@@ -3,7 +3,7 @@ use crate::logs::{P0, P1};
 use crate::memo::Status;
 use crate::queries::WithdrawalFee;
 use crate::state::ReimbursementReason;
-use crate::tasks::schedule_after;
+use async_trait::async_trait;
 use candid::{CandidType, Deserialize};
 use ic_btc_interface::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo};
 use ic_canister_log::log;
@@ -18,7 +18,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 pub mod address;
-pub mod blocklist;
 pub mod dashboard;
 pub mod guard;
 pub mod lifecycle;
@@ -34,6 +33,8 @@ pub mod tasks;
 pub mod tx;
 pub mod updates;
 
+#[cfg(test)]
+pub mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
@@ -67,6 +68,8 @@ pub const CKBTC_LEDGER_MEMO_SIZE: u16 = 80;
 /// trying to match the number of outputs with the number of inputs
 /// when building transactions.
 pub const UTXOS_COUNT_THRESHOLD: usize = 1_000;
+
+pub const IC_CANISTER_RUNTIME: IcCanisterRuntime = IcCanisterRuntime {};
 
 #[derive(Clone, Debug, Deserialize, serde::Serialize)]
 pub enum Priority {
@@ -166,18 +169,13 @@ async fn fetch_main_utxos(main_account: &Account, main_address: &BitcoinAddress)
 /// Returns the minimum withdrawal amount based on the current median fee rate (in millisatoshi per byte).
 /// The returned amount is in satoshi.
 fn compute_min_withdrawal_amount(
-    btc_network: Network,
     median_fee_rate_e3s: MillisatoshiPerByte,
+    min_withdrawal_amount: u64,
 ) -> u64 {
     const PER_REQUEST_RBF_BOUND: u64 = 22_100;
     const PER_REQUEST_VSIZE_BOUND: u64 = 221;
     const PER_REQUEST_MINTER_FEE_BOUND: u64 = 305;
     const PER_REQUEST_KYT_FEE: u64 = 2_000;
-
-    let min_withdrawal_amount = match btc_network {
-        Network::Testnet | Network::Regtest => 10_000,
-        Network::Mainnet => 100_000,
-    };
 
     let median_fee_rate = median_fee_rate_e3s / 1_000;
     ((PER_REQUEST_RBF_BOUND
@@ -206,8 +204,8 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
             if fees.len() >= 100 {
                 state::mutate_state(|s| {
                     s.last_fee_per_vbyte.clone_from(&fees);
-                    s.retrieve_btc_min_amount =
-                        compute_min_withdrawal_amount(s.btc_network, fees[50]);
+                    s.fee_based_retrieve_btc_min_amount =
+                        compute_min_withdrawal_amount(fees[50], s.retrieve_btc_min_amount);
                 });
                 Some(fees[50])
             } else {
@@ -1174,64 +1172,11 @@ pub async fn distribute_kyt_fees() {
     }
 }
 
-pub fn timer() {
-    use tasks::{pop_if_ready, TaskType};
+pub fn timer<R: CanisterRuntime + 'static>(runtime: R) {
+    use tasks::{pop_if_ready, run_task};
 
-    const INTERVAL_PROCESSING: Duration = Duration::from_secs(5);
-
-    let task = match pop_if_ready() {
-        Some(task) => task,
-        None => return,
-    };
-
-    match task.task_type {
-        TaskType::ProcessLogic => {
-            ic_cdk::spawn(async {
-                let _guard = match crate::guard::TimerLogicGuard::new() {
-                    Some(guard) => guard,
-                    None => return,
-                };
-
-                let _enqueue_followup_guard = guard((), |_| {
-                    schedule_after(INTERVAL_PROCESSING, TaskType::ProcessLogic)
-                });
-
-                submit_pending_requests().await;
-                finalize_requests().await;
-                reimburse_failed_kyt().await;
-            });
-        }
-        TaskType::RefreshFeePercentiles => {
-            ic_cdk::spawn(async {
-                const FEE_ESTIMATE_DELAY: Duration = Duration::from_secs(60 * 60);
-                let _ = estimate_fee_per_vbyte().await;
-                schedule_after(FEE_ESTIMATE_DELAY, TaskType::RefreshFeePercentiles);
-            });
-        }
-        TaskType::DistributeKytFee => {
-            ic_cdk::spawn(async {
-                let _guard = match crate::guard::DistributeKytFeeGuard::new() {
-                    Some(guard) => guard,
-                    None => return,
-                };
-
-                const MAINNET_KYT_FEE_DISTRIBUTION_PERIOD: Duration =
-                    Duration::from_secs(24 * 60 * 60);
-
-                match crate::state::read_state(|s| s.btc_network) {
-                    Network::Mainnet | Network::Testnet => {
-                        distribute_kyt_fees().await;
-                        schedule_after(
-                            MAINNET_KYT_FEE_DISTRIBUTION_PERIOD,
-                            TaskType::DistributeKytFee,
-                        );
-                    }
-                    // We use a debug canister build exposing an endpoint
-                    // triggering the fee distribution in tests.
-                    Network::Regtest => {}
-                }
-            });
-        }
+    if let Some(task) = pop_if_ready(&runtime) {
+        ic_cdk::spawn(run_task(task, runtime));
     }
 }
 
@@ -1255,11 +1200,10 @@ pub fn tx_vsize_estimate(input_count: u64, output_count: u64) -> u64 {
 ///   * `available_utxos` - the list of UTXOs available to the minter.
 ///   * `maybe_amount` - the withdrawal amount.
 ///   * `median_fee_millisatoshi_per_vbyte` - the median network fee, in millisatoshi per vbyte.
-pub fn estimate_fee(
+pub fn estimate_retrieve_btc_fee(
     available_utxos: &BTreeSet<Utxo>,
     maybe_amount: Option<u64>,
     median_fee_millisatoshi_per_vbyte: u64,
-    kyt_fee: u64,
 ) -> WithdrawalFee {
     const DEFAULT_INPUT_COUNT: u64 = 2;
     // One output for the caller and one for the change.
@@ -1293,7 +1237,31 @@ pub fn estimate_fee(
         vsize * median_fee_millisatoshi_per_vbyte / 1000 / (DEFAULT_OUTPUT_COUNT - 1).max(1);
     let minter_fee = minter_fee / (DEFAULT_OUTPUT_COUNT - 1).max(1);
     WithdrawalFee {
-        minter_fee: kyt_fee + minter_fee,
+        minter_fee,
         bitcoin_fee,
+    }
+}
+
+#[async_trait]
+pub trait CanisterRuntime {
+    /// Gets current timestamp, in nanoseconds since the epoch (1970-01-01)
+    fn time(&self) -> u64;
+
+    /// Set a global timer to make the system schedule a call to the exported `canister_global_timer` Wasm method after the specified time.
+    /// The time must be provided as nanoseconds since 1970-01-01.
+    /// See the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#global-timer-1).
+    fn global_timer_set(&self, timestamp: u64);
+}
+
+#[derive(Copy, Clone)]
+pub struct IcCanisterRuntime {}
+
+impl CanisterRuntime for IcCanisterRuntime {
+    fn time(&self) -> u64 {
+        ic_cdk::api::time()
+    }
+
+    fn global_timer_set(&self, timestamp: u64) {
+        ic_cdk::api::set_global_timer(timestamp);
     }
 }

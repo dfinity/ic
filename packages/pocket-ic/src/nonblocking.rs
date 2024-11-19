@@ -9,11 +9,11 @@ use crate::common::rest::{
 };
 use crate::management_canister::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterInstallModeUpgradeInner,
-    CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner, CanisterSettings,
-    CanisterStatusResult, ChunkHash, DeleteCanisterSnapshotArgs, InstallChunkedCodeArgs,
-    InstallCodeArgs, LoadCanisterSnapshotArgs, ProvisionalCreateCanisterWithCyclesArgs, Snapshot,
-    StoredChunksResult, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
-    UploadChunkResult,
+    CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner, CanisterLogRecord, CanisterSettings,
+    CanisterStatusResult, ChunkHash, DeleteCanisterSnapshotArgs, FetchCanisterLogsResult,
+    InstallChunkedCodeArgs, InstallCodeArgs, LoadCanisterSnapshotArgs,
+    ProvisionalCreateCanisterWithCyclesArgs, Snapshot, StoredChunksResult,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkResult,
 };
 pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
@@ -515,7 +515,7 @@ impl PocketIc {
     ) -> Result<RawMessageId, UserError> {
         self.submit_call_with_effective_principal(
             canister_id,
-            RawEffectivePrincipal::None,
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
             sender,
             method,
             payload,
@@ -588,16 +588,57 @@ impl PocketIc {
         method: &str,
         payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
+        self.query_call_with_effective_principal(
+            canister_id,
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender,
+            method,
+            payload,
+        )
+        .await
+    }
+
+    pub(crate) async fn query_call_with_effective_principal(
+        &self,
+        canister_id: CanisterId,
+        effective_principal: RawEffectivePrincipal,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+    ) -> Result<WasmResult, UserError> {
         let endpoint = "read/query";
         self.canister_call(
             endpoint,
-            RawEffectivePrincipal::None,
+            effective_principal,
             canister_id,
             sender,
             method,
             payload,
         )
         .await
+    }
+
+    /// Fetch canister logs via a query call to the management canister.
+    pub async fn fetch_canister_logs(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+    ) -> Result<Vec<CanisterLogRecord>, CallError> {
+        with_candid::<_, (FetchCanisterLogsResult,), _>(
+            (CanisterIdRecord { canister_id },),
+            |payload| async {
+                self.query_call_with_effective_principal(
+                    Principal::management_canister(),
+                    RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+                    sender,
+                    "fetch_canister_logs",
+                    payload,
+                )
+                .await
+            },
+        )
+        .await
+        .map(|responses| responses.0.canister_log_records)
     }
 
     /// Request a canister's status.

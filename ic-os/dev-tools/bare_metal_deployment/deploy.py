@@ -72,6 +72,9 @@ class Args:
     """
 
     # If present - decompress `upload_img` and inject this into config.ini
+    inject_image_node_reward_type: Optional[str] = None
+
+    # If present - decompress `upload_img` and inject this into config.ini
     inject_image_ipv6_prefix: Optional[str] = None
 
     # If present - decompress `upload_img` and inject this into config.ini
@@ -543,6 +546,7 @@ def inject_config_into_image(
     setupos_inject_configuration_path: Path,
     working_dir: Path,
     compressed_image_path: Path,
+    node_reward_type: str,
     ipv6_prefix: str,
     ipv6_gateway: str,
     ipv4_args: Optional[Ipv4Args],
@@ -572,6 +576,7 @@ def inject_config_into_image(
     assert img_path.exists()
 
     image_part = f"--image-path {quote(str(img_path))}"
+    reward_part = f"--node-reward-type {quote(node_reward_type)}"
     prefix_part = f"--ipv6-prefix {quote(ipv6_prefix)}"
     gateway_part = f"--ipv6-gateway {quote(ipv6_gateway)}"
     ipv4_part = ""
@@ -587,7 +592,7 @@ def inject_config_into_image(
     admin_key_part = "" if not pub_key else f"--public-keys {quote(pub_key)}"
 
     invoke.run(
-        f"{setupos_inject_configuration_path} {image_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part} {admin_key_part} {firewall_json_part}",
+        f"{setupos_inject_configuration_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part} {admin_key_part} {firewall_json_part}",
         echo=True,
     )
 
@@ -651,6 +656,7 @@ def main():
                 Path(args.inject_configuration_tool),
                 Path(tmpdir),
                 Path(args.upload_img),
+                args.inject_image_node_reward_type,
                 args.inject_image_ipv6_prefix,
                 args.inject_image_ipv6_gateway,
                 ipv4_args,

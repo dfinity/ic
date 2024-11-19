@@ -1,23 +1,12 @@
 //! Defines errors that may occur in the context of canister threshold
 //! signatures.
+use crate::crypto::impl_display_using_debug;
 use crate::crypto::{AlgorithmId, CryptoError};
 use crate::registry::RegistryClientError;
 use crate::{Height, NodeId, RegistryVersion};
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use serde::{Deserialize, Serialize};
-
-macro_rules! impl_display_using_debug {
-    ($t:ty) => {
-        impl std::fmt::Display for $t {
-            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(f, "{:?}", self)
-            }
-        }
-    };
-}
-
-pub(crate) use impl_display_using_debug;
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum IDkgTranscriptIdError {

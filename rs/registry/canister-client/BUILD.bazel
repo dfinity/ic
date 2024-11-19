@@ -1,0 +1,34 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/interfaces/registry",
+    "//rs/types/types",
+    "@crate_index//:ic-cdk",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/registry/keys",
+]
+
+SRCS = glob(
+    ["src/**"],
+    exclude = ["**/*tests.rs"],
+)
+
+rust_library(
+    name = "client",
+    srcs = SRCS,
+    crate_name = "ic_registry_canister_client",
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "client_test",
+    srcs = glob(["src/**/*.rs"]),
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

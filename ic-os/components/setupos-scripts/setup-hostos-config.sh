@@ -75,12 +75,14 @@ function insert_hsm_if_necessary() {
             let retry=retry+1
             if [ ${retry} -ge 3600 ]; then
                 log_and_halt_installation_on_error "1" "Nitrokey HSM USB device could not be detected, giving up."
-                break
             else
                 echo "* Please insert Nitrokey HSM USB device..."
                 sleep 3
             fi
         done
+        echo "HSM successfully detected."
+    else
+        echo "node_operator_private_key.pem found."
     fi
 }
 

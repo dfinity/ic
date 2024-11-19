@@ -209,6 +209,7 @@ go_deps.bzl               @dfinity/idx
 /rs/rust_canisters/stable_structures/                   @dfinity/execution
 /rs/rust_canisters/stable_memory_integrity              @dfinity/execution
 /rs/rust_canisters/canister_creator                     @dfinity/execution
+/rs/rust_canisters/load_simulator                       @dfinity/execution
 /rs/rust_canisters/xnet_test/                           @dfinity/ic-message-routing-owners
 /rs/rust_canisters/downstream_calls_test/               @dfinity/ic-message-routing-owners
 /rs/rust_canisters/random_traffic_test/                 @dfinity/ic-message-routing-owners
@@ -241,6 +242,7 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/boundary_nodes/                               @dfinity/boundary-node @dfinity/idx
 /rs/tests/ckbtc/                                        @dfinity/cross-chain-team @dfinity/idx
 /rs/tests/consensus/                                    @dfinity/consensus @dfinity/idx
+/rs/tests/cross_chain/                                  @dfinity/cross-chain-team @dfinity/idx
 /rs/tests/crypto/                                       @dfinity/crypto-team @dfinity/idx
 /rs/tests/dre/                                          @dfinity/dre @dfinity/idx
 /rs/tests/execution/                                    @dfinity/execution @dfinity/idx
