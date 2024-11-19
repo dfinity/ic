@@ -5,12 +5,11 @@ use crate::crypto::canister_threshold_sig::idkg::{
 };
 use crate::crypto::impl_display_using_debug;
 use crate::crypto::AlgorithmId;
+use crate::crypto::ExtendedDerivationPath;
 use crate::{NumberOfNodes, Randomness};
 use core::fmt;
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::NodeId;
 use ic_crypto_internal_types::NodeIndex;
-#[cfg(test)]
-use ic_exhaustive_derive::ExhaustiveSet;
 use serde::{Deserialize, Serialize};
 use std::fmt::Formatter;
 
@@ -271,34 +270,6 @@ impl EcdsaPreSignatureQuadruple {
                 format!("`key_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked(_,{:?})`, but found transcript of type {:?}", lambda_masked.transcript_id, key_times_lambda.transcript_type))
             ),
         }
-    }
-}
-
-/// Metadata used to derive a specific ECDSA keypair.
-#[serde_with::serde_as]
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct ExtendedDerivationPath {
-    pub caller: PrincipalId,
-    #[serde_as(as = "Vec<serde_with::Bytes>")]
-    pub derivation_path: Vec<Vec<u8>>,
-}
-
-impl fmt::Debug for ExtendedDerivationPath {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "ExtendedDerivationPath {{ caller: {:?}", self.caller)?;
-        write!(f, ", derivation_path: {{ ")?;
-        let mut first_path = true;
-        for path in &self.derivation_path {
-            if !first_path {
-                write!(f, ", ")?;
-                first_path = false;
-            }
-            write!(f, "{}", hex::encode(path))?;
-        }
-        write!(f, " }}")?;
-        write!(f, " }}")?;
-        Ok(())
     }
 }
 
