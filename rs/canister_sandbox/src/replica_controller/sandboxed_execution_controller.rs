@@ -69,7 +69,7 @@ const SANDBOX_PROCESS_EVICT_INTERVAL: Duration = Duration::from_secs(3);
 /// of many sandboxes and increased system load. The number was chosen
 /// based on the assumption of 800 canister executions per round
 /// distributed across 4 execution cores.
-const SANDBOX_PROCESSES_TO_EVICT: usize = 200;
+const SANDBOX_PROCESSES_TO_EVICT: usize = 0;
 
 /// The RSS to evict in one go in order to amortize for the eviction cost (1 GiB).
 const SANDBOX_PROCESSES_RSS_TO_EVICT: NumBytes = NumBytes::new(1024 * 1024 * 1024);
