@@ -1268,6 +1268,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "tikv-jemallocator": crate.spec(
                 version = "^0.5",
+                features = [
+                    "profiling",
+                ],
             ),
             "time": crate.spec(
                 version = "^0.3.36",
