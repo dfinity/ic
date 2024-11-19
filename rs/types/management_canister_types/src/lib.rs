@@ -83,10 +83,17 @@ pub enum Method {
     UninstallCode,
     UpdateSettings,
     ComputeInitialIDkgDealings,
+    ReshareChainKey,
 
     // Schnorr interface.
     SchnorrPublicKey,
     SignWithSchnorr,
+
+    // VetKd interface.
+    #[strum(serialize = "vetkd_public_key")]
+    VetKdPublicKey,
+    #[strum(serialize = "vetkd_derive_encrypted_key")]
+    VetKdDeriveEncryptedKey,
 
     // Bitcoin Interface.
     BitcoinGetBalance,
@@ -2622,6 +2629,88 @@ impl ComputeInitialIDkgDealingsArgs {
     }
 }
 
+/// Argument of the reshare_chain_key API.
+/// `(record {
+///     key_id: master_public_key_id;
+///     subnet_id: principal;
+///     nodes: vec principal;
+///     registry_version: nat64;
+/// })`
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct ReshareChainKeyArgs {
+    pub key_id: MasterPublicKeyId,
+    pub subnet_id: SubnetId,
+    nodes: BoundedNodes,
+    registry_version: u64,
+}
+
+impl Payload<'_> for ReshareChainKeyArgs {}
+
+impl ReshareChainKeyArgs {
+    pub fn new(
+        key_id: MasterPublicKeyId,
+        subnet_id: SubnetId,
+        nodes: BTreeSet<NodeId>,
+        registry_version: RegistryVersion,
+    ) -> Self {
+        Self {
+            key_id,
+            subnet_id,
+            nodes: BoundedNodes::new(nodes.iter().map(|id| id.get()).collect()),
+            registry_version: registry_version.get(),
+        }
+    }
+
+    pub fn get_set_of_nodes(&self) -> Result<BTreeSet<NodeId>, UserError> {
+        let mut set = BTreeSet::<NodeId>::new();
+        for node_id in self.nodes.get().iter() {
+            if !set.insert(NodeId::new(*node_id)) {
+                return Err(UserError::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!(
+                        "Expected a set of NodeIds. The NodeId {} is repeated",
+                        node_id
+                    ),
+                ));
+            }
+        }
+        Ok(set)
+    }
+
+    pub fn get_registry_version(&self) -> RegistryVersion {
+        RegistryVersion::new(self.registry_version)
+    }
+}
+
+/// Struct used to return the chain key resharing.
+#[derive(Debug, Deserialize, Serialize)]
+pub enum ReshareChainKeyResponse {
+    IDkg(InitialIDkgDealings),
+    NiDkg(InitialNiDkgTranscriptRecord),
+}
+
+impl ReshareChainKeyResponse {
+    pub fn encode(&self) -> Vec<u8> {
+        let serde_encoded_bytes = self.encode_with_serde_cbor();
+        Encode!(&serde_encoded_bytes).unwrap()
+    }
+
+    fn encode_with_serde_cbor(&self) -> Vec<u8> {
+        serde_cbor::to_vec(self).unwrap()
+    }
+
+    pub fn decode(blob: &[u8]) -> Result<Self, UserError> {
+        let serde_encoded_bytes =
+            Decode!([decoder_config()]; blob, Vec<u8>).map_err(candid_error_to_user_error)?;
+        serde_cbor::from_slice::<Self>(&serde_encoded_bytes).map_err(|err| {
+            UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                format!("Payload deserialization error: '{}'", err),
+            )
+        })
+    }
+}
+
 /// Represents the argument of the sign_with_schnorr API.
 /// ```text
 /// (record {
@@ -2714,6 +2803,72 @@ impl ComputeInitialIDkgDealingsResponse {
         }
     }
 }
+
+// Represents the argument of the vetkd_derive_encrypted_key API.
+/// ```text
+/// (record {
+///   derivation_id: blob;
+///   derivation_path : vec blob;
+///   key_id : record { curve : vetkd_curve; name : text };
+///   encryption_public_key: blob;
+/// })
+/// ```
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct VetKdDeriveEncryptedKeyArgs {
+    pub derivation_path: DerivationPath,
+    #[serde(with = "serde_bytes")]
+    pub derivation_id: Vec<u8>,
+    pub key_id: VetKdKeyId,
+    #[serde(with = "serde_bytes")]
+    pub encryption_public_key: Vec<u8>,
+}
+
+impl Payload<'_> for VetKdDeriveEncryptedKeyArgs {}
+
+/// Struct used to return vet KD result.
+/// ```text
+/// (record {
+///   encrypted_key : blob;
+/// })
+/// ```
+#[derive(Debug, CandidType, Deserialize)]
+pub struct VetKdDeriveEncryptedKeyResult {
+    #[serde(with = "serde_bytes")]
+    pub encrypted_key: Vec<u8>,
+}
+
+impl Payload<'_> for VetKdDeriveEncryptedKeyResult {}
+
+/// Represents the argument of the vetkd_public_key API.
+/// ```text
+/// (record {
+///   canister_id : opt canister_id;
+///   derivation_path : vec blob;
+///   key_id : record { curve : vetkd_curve; name : text };
+/// })
+/// ```
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct VetKdPublicKeyArgs {
+    pub canister_id: Option<CanisterId>,
+    pub derivation_path: DerivationPath,
+    pub key_id: VetKdKeyId,
+}
+
+impl Payload<'_> for VetKdPublicKeyArgs {}
+
+/// Represents the response of the vetkd_public_key API.
+/// ```text
+/// (record {
+///   public_key : blob;
+/// })
+/// ```
+#[derive(Debug, CandidType, Deserialize)]
+pub struct VetKdPublicKeyResult {
+    #[serde(with = "serde_bytes")]
+    pub public_key: Vec<u8>,
+}
+
+impl Payload<'_> for VetKdPublicKeyResult {}
 
 // Export the bitcoin types.
 pub use ic_btc_interface::{

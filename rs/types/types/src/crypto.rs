@@ -1,6 +1,8 @@
 //! Defines crypto component types.
 pub mod canister_threshold_sig;
 
+pub mod vetkd;
+
 mod hash;
 
 pub use hash::crypto_hash;
@@ -35,6 +37,34 @@ use strum_macros::{Display, EnumIter};
 
 #[cfg(test)]
 mod tests;
+
+macro_rules! impl_display_using_debug {
+    ($t:ty) => {
+        impl std::fmt::Display for $t {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                std::fmt::Debug::fmt(self, f)
+            }
+        }
+    };
+}
+pub(crate) use impl_display_using_debug;
+
+pub struct HexEncoding<'a> {
+    pub bytes: &'a [u8],
+}
+
+impl fmt::Debug for HexEncoding<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "0x{}", hex::encode(self.bytes))?;
+        Ok(())
+    }
+}
+
+impl<'a> From<&'a Vec<u8>> for HexEncoding<'a> {
+    fn from(bytes: &'a Vec<u8>) -> Self {
+        HexEncoding { bytes }
+    }
+}
 
 /// A cryptographic hash.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
