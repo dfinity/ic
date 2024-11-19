@@ -391,9 +391,9 @@ impl From<&(Account, Account)> for AccountSpender {
     }
 }
 
-impl Into<(Account, Account)> for AccountSpender {
-    fn into(self) -> (Account, Account) {
-        (self.account, self.spender)
+impl From<AccountSpender> for (Account, Account) {
+    fn from(val: AccountSpender) -> Self {
+        (val.account, val.spender)
     }
 }
 
