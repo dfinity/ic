@@ -1435,7 +1435,7 @@ impl SandboxedExecutionController {
                     };
                 }
                 // The number of active sandboxes is increasing, so trigger the eviction.
-                // self.trigger_sandbox_eviction(&mut guard, Self::available_memory_wrapper);
+                self.trigger_sandbox_eviction(&mut guard, Self::available_memory_wrapper);
                 return sandbox_process;
             }
         }
