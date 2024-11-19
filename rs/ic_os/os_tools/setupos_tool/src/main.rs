@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 use config::config_ini::config_map_from_path;
 use config::deployment_json::get_deployment_settings;
 use config::{DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH};
-use mac_address::mac_address::{generate_mac_address, derive_mgmt_mac, FormattedMacAddress};
+use mac_address::mac_address::{derive_mgmt_mac, generate_mac_address, FormattedMacAddress};
 use mac_address::node_type::NodeType;
 use network::generate_network_config;
 use network::info::NetworkInfo;
@@ -67,7 +67,7 @@ pub fn main() -> Result<()> {
                 ))?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
-            let mgmt_mac = derive_mgmt_mac(match deployment_settings.deployment.mgmt_mac)?;
+            let mgmt_mac = derive_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
             let generated_mac = generate_mac_address(
                 &mgmt_mac,
                 deployment_settings.deployment.name.as_str(),
@@ -95,7 +95,7 @@ pub fn main() -> Result<()> {
             eprintln!("Deployment config: {:?}", deployment_settings);
 
             let node_type = node_type.parse::<NodeType>()?;
-            let mgmt_mac = derive_mgmt_mac(match deployment_settings.deployment.mgmt_mac)?;
+            let mgmt_mac = derive_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
             let generated_mac = generate_mac_address(
                 &mgmt_mac,
                 deployment_settings.deployment.name.as_str(),
