@@ -245,6 +245,10 @@ async fn start(runtime: Arc<Runtime>) {
     info!("The PocketIC server is listening on port {}", real_port);
 
     main_task.await.unwrap();
+
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    debug!("main function exiting");
 }
 
 async fn terminate(
