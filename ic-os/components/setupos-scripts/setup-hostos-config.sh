@@ -21,7 +21,7 @@ function mount_config_partition() {
 }
 
 function copy_config_files() {
-    # TODO(NODE-1519): delete config.ini copying after switch to new icos config
+    # TODO(NODE-1518): delete config.ini copying after switch to new icos config
     echo "* Copying 'config.ini' to hostOS config partition..."
     if [ -f "${CONFIG_DIR}/config.ini" ]; then
         cp ${CONFIG_DIR}/config.ini /media/
@@ -30,7 +30,7 @@ function copy_config_files() {
         log_and_halt_installation_on_error "1" "Configuration file 'config.ini' does not exist."
     fi
 
-    # TODO(NODE-1519): delete deployment.json copying after switch to new icos config
+    # TODO(NODE-1518): delete deployment.json copying after switch to new icos config
     echo "* Copying deployment.json to config partition..."
     cp /data/deployment.json /media/
     log_and_halt_installation_on_error "${?}" "Unable to copy deployment.json to hostOS config partition."
