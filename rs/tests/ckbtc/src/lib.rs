@@ -60,7 +60,7 @@ use std::{
 
 pub mod utils;
 
-pub const TEST_KEY_LOCAL: &str = "dfx_test_key";
+pub const TEST_KEY_LOCAL: &str = "an_arbitrary_key_id";
 
 pub const ADDRESS_LENGTH: usize = 44;
 
@@ -395,10 +395,7 @@ pub async fn install_minter(
     info!(&logger, "Installing minter ...");
     let args = CkbtcMinterInitArgs {
         btc_network: Network::Regtest.into(),
-        // The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
-        // a testing key for testnet and mainnet
         ecdsa_key_name: TEST_KEY_LOCAL.parse().unwrap(),
-        // ecdsa_key_name: "test_key_1".parse().unwrap(),
         retrieve_btc_min_amount: RETRIEVE_BTC_MIN_AMOUNT,
         ledger_id,
         max_time_in_queue_nanos,
