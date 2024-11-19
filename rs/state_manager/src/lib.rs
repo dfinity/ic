@@ -2243,6 +2243,18 @@ impl StateManagerImpl {
         #[cfg(debug_assertions)]
         let latest_state_height = self.latest_state_height();
 
+        // Practically, Consensus does not ask state manager to keep states which are already removed.
+        // However, in debug builds, we filter `extra_inmemory_heights_to_keep` and store `existing_extra_inmemory_heights_to_keep`
+        // so that we can verify later that they are all retained.
+        #[cfg(debug_assertions)]
+        let state_heights = self.list_state_heights(ic_interfaces_state_manager::CERT_ANY);
+        #[cfg(debug_assertions)]
+        let existing_extra_inmemory_heights_to_keep: Vec<Height> = extra_inmemory_heights_to_keep
+            .iter()
+            .filter(|h| state_heights.contains(h))
+            .copied()
+            .collect();
+
         let heights_to_remove = std::ops::Range {
             start: Height::new(1),
             end: last_height_to_keep,
@@ -2286,7 +2298,7 @@ impl StateManagerImpl {
             .chain(latest_manifest_height)
             .collect();
 
-        let extra_inmemory_heights_to_keep = std::iter::once(latest_certified_height)
+        let inmemory_heights_to_keep = std::iter::once(latest_certified_height)
             .chain(extra_inmemory_heights_to_keep.iter().copied())
             .collect::<BTreeSet<_>>();
 
@@ -2303,7 +2315,7 @@ impl StateManagerImpl {
 
         let (removed, retained) = states.snapshots.drain(0..).partition(|snapshot| {
             heights_to_remove.contains(&snapshot.height)
-                && !extra_inmemory_heights_to_keep.contains(&snapshot.height)
+                && !inmemory_heights_to_keep.contains(&snapshot.height)
         });
         states.snapshots = retained;
 
@@ -2352,7 +2364,7 @@ impl StateManagerImpl {
             .certifications_metadata
             .split_off(&last_height_to_keep);
 
-        for h in extra_inmemory_heights_to_keep.iter() {
+        for h in inmemory_heights_to_keep.iter() {
             if let Some(cert_metadata) = states.certifications_metadata.remove(h) {
                 certifications_metadata.insert(*h, cert_metadata);
             }
@@ -2409,7 +2421,6 @@ impl StateManagerImpl {
 
         #[cfg(debug_assertions)]
         {
-            use ic_interfaces_state_manager::{CERT_ANY, CERT_CERTIFIED};
             let unfiltered_checkpoint_heights = self
                 .state_layout
                 .unfiltered_checkpoint_heights()
@@ -2421,20 +2432,15 @@ impl StateManagerImpl {
                     )
                 });
 
-            let state_heights = self.list_state_heights(CERT_ANY);
+            let state_heights = self.list_state_heights(ic_interfaces_state_manager::CERT_ANY);
 
+            // All checkpoints to keep should exist on disk.
             debug_assert!(checkpoint_heights_to_keep
                 .iter()
                 .all(|h| unfiltered_checkpoint_heights.contains(h)));
 
-            info!(
-                self.log,
-                "extra_inmemory_heights_to_keep: {:?}, state_heights: {:?}",
-                extra_inmemory_heights_to_keep,
-                state_heights
-            );
-
-            debug_assert!(extra_inmemory_heights_to_keep
+            // If the in-memory states that Consensus ask to keep exist in the beginning, they should be all retained.
+            debug_assert!(existing_extra_inmemory_heights_to_keep
                 .iter()
                 .all(|h| state_heights.contains(h)));
 
