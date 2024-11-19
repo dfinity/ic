@@ -2672,8 +2672,6 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
     // consuming `pending_version`.
     {
         governance.run_periodic_tasks().now_or_never();
-
-        println!("upgrade_journal = {:#?}", governance.proto.upgrade_journal); // DO NOT MERGE
         assert_eq!(governance.proto.pending_version, None);
         assert_eq!(
             governance.proto.deployed_version,
