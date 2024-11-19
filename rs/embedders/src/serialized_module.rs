@@ -358,6 +358,8 @@ mod test {
             assert_eq!(module.is_wasm64, on_disk.is_wasm64);
         }
 
+        // Check that multiple threads reading from an on disk serialized module
+        // don't corrupt each other's data.
         fn read_in_parallel(
             bytes in prop::collection::vec(any::<u8>(), 0..4096 * 10),
             exported_functions in prop::collection::btree_set(wasm_method(), 0..100),
