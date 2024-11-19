@@ -20,6 +20,7 @@ for argument in "${@}"; do
         -h | --help)
             echo 'Usage:
 Fetch Configuration Property
+
 Arguments:
   -c=, --config=        mandatory: specify the configuration file to read from
   -h, --help            show this help message and exit

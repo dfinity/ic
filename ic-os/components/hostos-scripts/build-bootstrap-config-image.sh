@@ -93,6 +93,7 @@ options may be specified:
   --malicious_behavior malicious_behavior
     A JSON-object that describes the malicious behavior activated on
     the node. This is only used for testing.
+
     The Json-object corresponds to this Rust-structure:
       ic_types::malicious_behaviour::MaliciousBehaviour
 
