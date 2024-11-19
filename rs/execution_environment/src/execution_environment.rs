@@ -60,8 +60,9 @@ use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
     crypto::{
-        canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey, PublicKey},
+        canister_threshold_sig::{MasterPublicKey, PublicKey},
         threshold_sig::ni_dkg::NiDkgTargetId,
+        ExtendedDerivationPath,
     },
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{

@@ -30,8 +30,8 @@ use ic_types::consensus::{
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
 };
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey};
-use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
+use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::messages::CallbackId;
 use ic_types::registry::RegistryClientError;
 use ic_types::{Height, RegistryVersion, SubnetId};
