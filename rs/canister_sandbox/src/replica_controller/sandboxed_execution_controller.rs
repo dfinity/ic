@@ -673,7 +673,7 @@ pub struct SandboxedExecutionController {
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     stop_monitoring_thread: std::sync::mpsc::Sender<bool>,
-    evict_sandboxes_thread: std::sync::mpsc::Sender<bool>,
+    evict_sandboxes_thread: std::sync::mpsc::SyncSender<bool>,
 }
 
 impl Drop for SandboxedExecutionController {
@@ -1116,7 +1116,7 @@ impl SandboxedExecutionController {
         });
 
         let backends_copy = Arc::clone(&backends);
-        let (tx_evict, rx) = std::sync::mpsc::channel();
+        let (tx_evict, rx) = std::sync::mpsc::sync_channel(0);
         let state_reader_copy = Arc::clone(&state_reader);
 
         std::thread::spawn(move || {
@@ -1349,7 +1349,7 @@ impl SandboxedExecutionController {
             //     max_sandboxes_rss,
             //     Arc::clone(&self.state_reader),
             // );
-            // let _ = self.evict_sandboxes_thread.send(false);
+            let _ = self.evict_sandboxes_thread.send(false);
         } else {
             // The total RSS is mostly an estimation at this point, so we use
             // the available memory to confirm the eviction.
