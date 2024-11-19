@@ -34,6 +34,7 @@ pub struct ConfigResponse {
 #[derive(CandidType, Deserialize, Debug)]
 pub struct OutputConfig {
     pub schema_version: SchemaVersion,
+    pub is_redacted: bool,
     pub rules: Vec<OutputRule>,
 }
 
@@ -99,6 +100,7 @@ impl std::fmt::Display for ConfigResponse {
 impl std::fmt::Display for OutputConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Schema version: {}", self.schema_version)?;
+        writeln!(f, "{INDENT}Is redacted: {}", self.is_redacted)?;
         for (i, rule) in self.rules.iter().enumerate() {
             writeln!(f, "{DOUBLE_INDENT}Rule {}:", i + 1)?;
             writeln!(f, "{DOUBLE_INDENT}ID: {}", rule.id)?;

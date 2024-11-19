@@ -22,6 +22,7 @@ pub struct GenerateTestnetConfigArgs {
     pub domain_name: Option<String>,
 
     // ICOSSettings arguments
+    pub node_reward_type: Option<String>,
     pub mgmt_mac: Option<String>,
     pub deployment_environment: Option<String>,
     pub elasticsearch_hosts: Option<String>,
@@ -69,6 +70,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         ipv4_gateway,
         ipv4_prefix_length,
         domain_name,
+        node_reward_type,
         mgmt_mac,
         deployment_environment,
         elasticsearch_hosts,
@@ -159,6 +161,8 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
     };
 
     // Construct ICOSSettings
+    let node_reward_type = node_reward_type.unwrap_or_else(|| "type3.1".to_string());
+
     let mgmt_mac = match mgmt_mac {
         Some(mac_str) => FormattedMacAddress::try_from(mac_str.as_str())?,
         None => {
@@ -189,6 +193,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
     let use_ssh_authorized_keys = use_ssh_authorized_keys.unwrap_or(true);
 
     let icos_settings = ICOSSettings {
+        node_reward_type: Some(node_reward_type),
         mgmt_mac,
         deployment_environment,
         logging,

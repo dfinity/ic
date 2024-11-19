@@ -1,9 +1,9 @@
 //! Defines canister threshold signature types.
-use crate::crypto::canister_threshold_sig::error::impl_display_using_debug;
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptType,
     IDkgUnmaskedTranscriptOrigin,
 };
+use crate::crypto::impl_display_using_debug;
 use crate::crypto::AlgorithmId;
 use crate::{NumberOfNodes, Randomness};
 use core::fmt;

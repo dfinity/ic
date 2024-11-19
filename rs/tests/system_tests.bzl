@@ -197,13 +197,10 @@ def system_test(
 
     if uses_guestos_dev:
         _env_deps[_guestos + "disk-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL"
-        _env_deps[_guestos + "disk-img.tar.zst.sha256"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256"
         _env_deps[_guestos + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL"
-        _env_deps[_guestos + "update-img.tar.zst.sha256"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256"
 
     if uses_hostos_dev_test:
         _env_deps[_hostos + "update-img-test.tar.zst.cas-url"] = "ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"
-        _env_deps[_hostos + "update-img-test.tar.zst.sha256"] = "ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_SHA256"
 
     if uses_setupos_dev:
         _env_deps[_setupos + "disk-img.tar.zst"] = "ENV_DEPS__DEV_SETUPOS_IMG_TAR_ZST"
@@ -212,15 +209,12 @@ def system_test(
 
     if uses_guestos_dev_test:
         _env_deps[_guestos + "update-img-test.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"
-        _env_deps[_guestos + "update-img-test.tar.zst.sha256"] = "ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_SHA256"
 
     if malicious:
         _guestos_malicous = "//ic-os/guestos/envs/dev-malicious:"
 
         _env_deps[_guestos_malicous + "disk-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL"
-        _env_deps[_guestos_malicous + "disk-img.tar.zst.sha256"] = "ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_SHA256"
         _env_deps[_guestos_malicous + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL"
-        _env_deps[_guestos_malicous + "update-img.tar.zst.sha256"] = "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_SHA256"
 
     run_system_test(
         name = name,
