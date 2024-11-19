@@ -6582,6 +6582,7 @@ dependencies = [
  "lazy_static",
  "minicbor",
  "minicbor-derive",
+ "mockall",
  "num-traits",
  "proptest",
  "ripemd",

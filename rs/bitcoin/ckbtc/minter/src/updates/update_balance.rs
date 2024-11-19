@@ -21,6 +21,7 @@ use crate::{
     state,
     tx::{DisplayAmount, DisplayOutpoint},
     updates::get_btc_address,
+    IC_CANISTER_RUNTIME,
 };
 
 /// The argument of the [update_balance] endpoint.
@@ -279,7 +280,7 @@ pub async fn update_balance(
         }
     }
 
-    schedule_now(TaskType::ProcessLogic);
+    schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
     Ok(utxo_statuses)
 }
 
