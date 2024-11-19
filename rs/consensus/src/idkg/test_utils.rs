@@ -106,7 +106,7 @@ fn fake_signature_request_args(key_id: MasterPublicKeyId) -> ThresholdArguments 
         MasterPublicKeyId::VetKd(key_id) => ThresholdArguments::VetKd(VetKdArguments {
             key_id: key_id.clone(),
             derivation_id: vec![1; 32],
-            encryption_key: vec![1; 32],
+            encryption_public_key: vec![1; 32],
             ni_dkg_id: fake_dkg_id(key_id),
             height: Height::from(0),
         }),
