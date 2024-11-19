@@ -5533,9 +5533,7 @@ impl Governance {
                 .to_string();
 
             let status = upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
-                upgrade_journal_entry::upgrade_outcome::InvalidState {
-                    version: None, // DO NOT MERGE -- Andre, do you remember why this field is here?
-                },
+                upgrade_journal_entry::upgrade_outcome::InvalidState { version: None },
             );
 
             self.complete_sns_upgrade_to_next_version(
