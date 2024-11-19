@@ -38,6 +38,7 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:ic-cdk",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
+            "@crate_index//:minicbor",
             "@crate_index//:serde",
             "@crate_index//:serde_bytes",
         ] + extra_deps,

@@ -30,6 +30,7 @@ use ic_ledger_core::{
 };
 use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
 use icrc_ledger_types::icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse};
@@ -45,6 +46,7 @@ use icrc_ledger_types::{
         blocks::{ArchivedBlocks, GetBlocksRequest, GetBlocksResult},
     },
 };
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::borrow::Cow;
@@ -339,6 +341,95 @@ pub struct UpgradeArgs {
     pub change_archive_options: Option<ChangeArchiveOptions>,
 }
 
+#[derive(Clone, Eq, PartialEq, Debug, Encode, Decode)]
+struct AccountSpender {
+    #[n(0)]
+    account: Account,
+    #[n(1)]
+    spender: Account,
+}
+
+impl std::cmp::PartialOrd for AccountSpender {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl std::cmp::Ord for AccountSpender {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.account
+            .cmp(&other.account)
+            .then_with(|| self.spender.cmp(&other.spender))
+    }
+}
+
+impl Storable for AccountSpender {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let mut buf = vec![];
+        minicbor::encode(self, &mut buf).expect("AccountSpender encoding should always succeed");
+        Cow::Owned(buf)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        minicbor::decode(bytes.as_ref())
+            .unwrap_or_else(|e| panic!("failed to decode AccountSpender bytes {}: {e}", hex::encode(bytes)))
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+impl From<&(Account, Account)> for AccountSpender {
+    fn from(pair: &(Account, Account)) -> Self {
+        Self {
+            account: pair.0,
+            spender: pair.1,
+        }
+    }
+}
+
+impl Into<(Account, Account)> for AccountSpender {
+    fn into(self) -> (Account, Account) {
+        (self.account, self.spender)
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Encode, Decode)]
+struct Expiration {
+    #[n(0)]
+    timestamp: TimeStamp,
+    #[n(1)]
+    account_spender: AccountSpender,
+}
+
+impl std::cmp::PartialOrd for Expiration {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl std::cmp::Ord for Expiration {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.timestamp
+            .cmp(&other.timestamp)
+            .then_with(|| self.account_spender.cmp(&other.account_spender))
+    }
+}
+
+impl Storable for Expiration {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let mut buf = vec![];
+        minicbor::encode(self, &mut buf).expect("Expiration encoding should always succeed");
+        Cow::Owned(buf)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        minicbor::decode(bytes.as_ref())
+            .unwrap_or_else(|e| panic!("failed to decode Expiration bytes {}: {e}", hex::encode(bytes)))
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 #[allow(clippy::large_enum_variant)]
 pub enum LedgerArgument {
@@ -363,12 +454,12 @@ thread_local! {
 
     // (from, spender) -> allowance - map storing ledger allowances.
     #[allow(clippy::type_complexity)]
-    pub static ALLOWANCES_MEMORY: RefCell<StableBTreeMap<(Account, Account), Allowance<Tokens>, VirtualMemory<DefaultMemoryImpl>>> =
+    pub static ALLOWANCES_MEMORY: RefCell<StableBTreeMap<AccountSpender, Allowance<Tokens>, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_MEMORY_ID))));
 
     // (timestamp, (from, spender)) - expiration set used for removing expired allowances.
     #[allow(clippy::type_complexity)]
-    pub static ALLOWANCES_EXPIRATIONS_MEMORY: RefCell<StableBTreeMap<(TimeStamp, (Account, Account)), (), VirtualMemory<DefaultMemoryImpl>>> =
+    pub static ALLOWANCES_EXPIRATIONS_MEMORY: RefCell<StableBTreeMap<Expiration, (), VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_EXPIRATIONS_MEMORY_ID))));
 }
 
@@ -986,7 +1077,8 @@ impl AllowancesData for StableAllowancesData {
         &self,
         account_spender: &(Self::AccountId, Self::AccountId),
     ) -> Option<Allowance<Self::Tokens>> {
-        ALLOWANCES_MEMORY.with_borrow(|allowances| allowances.get(account_spender))
+        let account_spender = account_spender.into();
+        ALLOWANCES_MEMORY.with_borrow(|allowances| allowances.get(&account_spender))
     }
 
     fn set_allowance(
@@ -994,12 +1086,14 @@ impl AllowancesData for StableAllowancesData {
         account_spender: (Self::AccountId, Self::AccountId),
         allowance: Allowance<Self::Tokens>,
     ) {
+        let account_spender = (&account_spender).into();
         ALLOWANCES_MEMORY
             .with_borrow_mut(|allowances| allowances.insert(account_spender, allowance));
     }
 
     fn remove_allowance(&mut self, account_spender: &(Self::AccountId, Self::AccountId)) {
-        ALLOWANCES_MEMORY.with_borrow_mut(|allowances| allowances.remove(account_spender));
+        let account_spender = account_spender.into();
+        ALLOWANCES_MEMORY.with_borrow_mut(|allowances| allowances.remove(&account_spender));
     }
 
     fn insert_expiry(
@@ -1007,8 +1101,13 @@ impl AllowancesData for StableAllowancesData {
         timestamp: TimeStamp,
         account_spender: (Self::AccountId, Self::AccountId),
     ) {
+        let account_spender = (&account_spender).into();
+        let expiration = Expiration {
+            timestamp,
+            account_spender,
+        };
         ALLOWANCES_EXPIRATIONS_MEMORY.with_borrow_mut(|expirations| {
-            expirations.insert((timestamp, account_spender), ());
+            expirations.insert(expiration, ());
         });
     }
 
@@ -1017,8 +1116,13 @@ impl AllowancesData for StableAllowancesData {
         timestamp: TimeStamp,
         account_spender: (Self::AccountId, Self::AccountId),
     ) {
+        let account_spender = (&account_spender).into();
+        let expiration = Expiration {
+            timestamp,
+            account_spender,
+        };
         ALLOWANCES_EXPIRATIONS_MEMORY.with_borrow_mut(|expirations| {
-            expirations.remove(&(timestamp, account_spender));
+            expirations.remove(&expiration);
         });
     }
 
@@ -1039,8 +1143,9 @@ impl AllowancesData for StableAllowancesData {
     }
 
     fn first_expiry(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
-        ALLOWANCES_EXPIRATIONS_MEMORY
-            .with_borrow(|expirations| expirations.first_key_value().map(|kv| kv.0))
+        let result = ALLOWANCES_EXPIRATIONS_MEMORY
+            .with_borrow(|expirations| expirations.first_key_value().map(|kv| kv.0));
+        result.map(|e| (e.timestamp, e.account_spender.into()))
     }
 
     fn oldest_arrivals(&self, _n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
@@ -1049,8 +1154,9 @@ impl AllowancesData for StableAllowancesData {
     }
 
     fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
-        ALLOWANCES_EXPIRATIONS_MEMORY
-            .with_borrow_mut(|expirations| expirations.pop_first().map(|kv| kv.0))
+        let result = ALLOWANCES_EXPIRATIONS_MEMORY
+            .with_borrow_mut(|expirations| expirations.pop_first().map(|kv| kv.0));
+        result.map(|e| (e.timestamp, e.account_spender.into()))
     }
 
     fn pop_first_allowance(

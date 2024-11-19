@@ -1,5 +1,6 @@
 use candid::CandidType;
 use ic_stable_structures::{storable::Bound, Storable};
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::convert::TryInto;
@@ -10,9 +11,22 @@ use std::time::{Duration, SystemTime};
 mod tests;
 
 #[derive(
-    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    CandidType,
+    Deserialize,
+    Serialize,
+    Encode,
+    Decode,
 )]
 pub struct TimeStamp {
+    #[n(0)]
     timestamp_nanos: u64,
 }
 
