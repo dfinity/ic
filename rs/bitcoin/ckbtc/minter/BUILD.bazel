@@ -111,6 +111,7 @@ rust_test(
     deps = [
         # Keep sorted.
         "@crate_index//:bitcoin",
+        "@crate_index//:maplit",
         "@crate_index//:mockall",
         "@crate_index//:proptest",
         "@crate_index//:simple_asn1",

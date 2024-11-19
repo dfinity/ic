@@ -3,6 +3,9 @@
 //! The state is stored in the global thread-level variable `__STATE`.
 //! This module provides utility functions to manage the state. Most
 //! code should use those functions instead of touching `__STATE` directly.
+#[cfg(test)]
+mod tests;
+
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -969,6 +972,7 @@ impl CkBtcMinterState {
                     .unwrap_or(false)
         };
         let mut new_utxos = BTreeSet::new();
+        //TODO XC-230: only re-evaluate the ignored and quarantined utxos at most once a day
         let mut previously_ignored_utxos = BTreeSet::new();
         let mut previously_quarantined_utxos = BTreeSet::new();
 
@@ -981,6 +985,21 @@ impl CkBtcMinterState {
                 new_utxos.insert(utxo);
             }
         }
+
+        debug_assert_eq!(
+            new_utxos.intersection(&previously_ignored_utxos).next(),
+            None
+        );
+        debug_assert_eq!(
+            new_utxos.intersection(&previously_quarantined_utxos).next(),
+            None
+        );
+        debug_assert_eq!(
+            previously_ignored_utxos
+                .intersection(&previously_quarantined_utxos)
+                .next(),
+            None
+        );
 
         ProcessableUtxos {
             new_utxos,
@@ -1206,6 +1225,7 @@ impl CkBtcMinterState {
     }
 }
 
+#[derive(Eq, PartialEq, Debug, Default)]
 pub struct ProcessableUtxos {
     new_utxos: BTreeSet<Utxo>,
     previously_ignored_utxos: BTreeSet<Utxo>,

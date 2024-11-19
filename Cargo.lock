@@ -6580,6 +6580,7 @@ dependencies = [
  "icrc-ledger-client-cdk",
  "icrc-ledger-types",
  "lazy_static",
+ "maplit",
  "minicbor",
  "minicbor-derive",
  "mockall",
