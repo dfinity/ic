@@ -125,6 +125,7 @@ impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputConfig>, A: Reso
 
         let mut config = OutputConfig {
             schema_version: stored_config.schema_version,
+            is_redacted: false,
             rules,
         };
 
@@ -134,6 +135,7 @@ impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputConfig>, A: Reso
 
         if !is_authorized_viewer {
             config = self.formatter.format(&config);
+            config.is_redacted = true;
         }
 
         let config = rate_limits_api::ConfigResponse {
@@ -276,6 +278,7 @@ mod tests {
         mock_formatter.expect_format().returning(|_| OutputConfig {
             schema_version: 1,
             rules: vec![],
+            is_redacted: false,
         });
 
         let mut mock_canister_api = MockCanisterApi::new();
