@@ -69,7 +69,7 @@ const SANDBOX_PROCESS_EVICT_INTERVAL: Duration = Duration::from_secs(3);
 /// of many sandboxes and increased system load. The number was chosen
 /// based on the assumption of 800 canister executions per round
 /// distributed across 4 execution cores.
-const SANDBOX_PROCESSES_TO_EVICT: usize = 50;
+const SANDBOX_PROCESSES_TO_EVICT: usize = 25;
 
 /// The RSS to evict in one go in order to amortize for the eviction cost (1 GiB).
 const SANDBOX_PROCESSES_RSS_TO_EVICT: NumBytes = NumBytes::new(1024 * 1024 * 1024);
@@ -1338,7 +1338,8 @@ impl SandboxedExecutionController {
         &self,
         backends: &mut HashMap<CanisterId, Backend>,
         available_memory: F,
-    ) where
+    ) -> bool
+    where
         F: Fn() -> Option<NumBytes>,
     {
         let active_sandboxes = total_active_sandboxes(backends);
@@ -1360,7 +1361,7 @@ impl SandboxedExecutionController {
             //     max_sandboxes_rss,
             //     Arc::clone(&self.state_reader),
             // );
-            let _ = self.evict_sandboxes_thread.send(false);
+            true
         } else {
             // The total RSS is mostly an estimation at this point, so we use
             // the available memory to confirm the eviction.
@@ -1386,8 +1387,11 @@ impl SandboxedExecutionController {
                     max_sandboxes_rss,
                     Arc::clone(&self.state_reader),
                 );
+                true
+            } else {
+                false
             }
-        };
+        }
     }
 
     pub fn available_memory_wrapper() -> Option<NumBytes> {
@@ -1435,13 +1439,18 @@ impl SandboxedExecutionController {
                     };
                 }
                 // The number of active sandboxes is increasing, so trigger the eviction.
-                self.trigger_sandbox_eviction(&mut guard, Self::available_memory_wrapper);
+                let trigger =
+                    self.trigger_sandbox_eviction(&mut guard, Self::available_memory_wrapper);
+                drop(guard);
+                if trigger {
+                    let _ = self.evict_sandboxes_thread.send(false);
+                }
                 return sandbox_process;
             }
         }
 
         let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
-        self.trigger_sandbox_eviction(&mut guard, Self::available_memory_wrapper);
+        let trigger = self.trigger_sandbox_eviction(&mut guard, Self::available_memory_wrapper);
 
         // No sandbox process found for this canister. Start a new one and register it.
         let reg = Arc::new(ActiveExecutionStateRegistry::new());
@@ -1471,6 +1480,10 @@ impl SandboxedExecutionController {
             },
         };
         (*guard).insert(canister_id, backend);
+        drop(guard);
+        if trigger {
+            let _ = self.evict_sandboxes_thread.send(false);
+        }
 
         sandbox_process
     }
