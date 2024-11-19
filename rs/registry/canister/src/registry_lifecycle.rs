@@ -58,7 +58,7 @@ mod test {
     use super::*;
     use crate::{
         common::test_helpers::{empty_mutation, invariant_compliant_registry},
-        registry::{EncodedVersion, Version},
+        registry::{EncodedKey, Version},
         registry_lifecycle::Registry,
     };
 
@@ -137,7 +137,7 @@ mod test {
         let mut registry = invariant_compliant_registry(0);
         registry
             .changelog
-            .insert(EncodedVersion::from(7), empty_mutation());
+            .insert(EncodedKey::from((7, 0)), empty_mutation());
         let stable_storage_bytes = stable_storage_from_registry(&registry, Some(7u64));
 
         let mut new_registry = Registry::new();
@@ -147,7 +147,7 @@ mod test {
         let mut sorted_changelog_versions = new_registry
             .changelog()
             .iter()
-            .map(|(encoded_version, _)| encoded_version.as_version())
+            .map(|(encoded_version, _)| encoded_version.version())
             .collect::<Vec<u64>>();
         sorted_changelog_versions.sort_unstable();
         // we expect all intermediate versions to be present

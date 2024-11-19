@@ -41,6 +41,7 @@ pub fn get_subnet_list_record(registry: &Registry) -> SubnetListRecord {
         value: subnet_list_record_vec,
         version: _,
         deletion_marker: _,
+        timestamp: _
     } = registry
         .get(
             make_subnet_list_record_key().as_bytes(),

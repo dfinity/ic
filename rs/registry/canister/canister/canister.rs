@@ -76,7 +76,7 @@ use registry_canister::{
         NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage, SubnetForCanister,
     },
     proto_on_wire::protobuf,
-    registry::{EncodedVersion, Registry, MAX_REGISTRY_DELTAS_SIZE},
+    registry::{EncodedKey, Registry, MAX_REGISTRY_DELTAS_SIZE},
     registry_lifecycle,
 };
 use std::ptr::addr_of_mut;
@@ -237,13 +237,13 @@ fn get_certified_changes_since() {
         |req: RegistryGetChangesSinceRequest| -> CertifiedResponse {
             use ic_certified_map::{fork, labeled, labeled_hash};
             let latest_version = registry().latest_version();
-            let from_version = EncodedVersion::from(req.version.saturating_add(1));
+            let from_version = EncodedKey::from(req.version.saturating_add(1));
 
             let max_versions = registry()
                 .count_fitting_deltas(req.version, MAX_REGISTRY_DELTAS_SIZE)
                 .min(MAX_VERSIONS_PER_QUERY);
 
-            let to_version = EncodedVersion::from(req.version.saturating_add(max_versions as u64));
+            let to_version = EncodedKey::from(req.version.saturating_add(max_versions as u64));
             let delta_tree = registry()
                 .changelog()
                 .value_range(from_version.as_ref(), to_version.as_ref());

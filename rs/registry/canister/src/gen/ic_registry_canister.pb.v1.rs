@@ -4,6 +4,7 @@ pub struct ChangelogEntry {
     /// The version that this mutation produced.
     #[prost(uint64, tag = "1")]
     pub version: u64,
+
     /// Serialized value of
     /// ic_registry_transport.pb.v1.RegistryAtomicMutateRequest, with all
     /// preconditions removed (as they had been checked already).
@@ -14,6 +15,9 @@ pub struct ChangelogEntry {
     /// present in old entries is removed from the proto schema.
     #[prost(bytes = "vec", tag = "2")]
     pub encoded_mutation: ::prost::alloc::vec::Vec<u8>,
+
+    #[prost(uint64, optional, tag = "3")]
+    pub timestamp: ::core::option::Option<u64>,
 }
 /// Just a container for a set of RegistryDelta that can be used to
 /// serialize/deserialize the content of the registry.
