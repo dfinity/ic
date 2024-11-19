@@ -798,7 +798,7 @@ fn update_repeated_field<Element, Memory>(
     new_elements: Vec<Element>,
     map: &mut StableBTreeMap<(NeuronId, /* index */ u64), Element, Memory>,
 ) where
-    Element: Storable,
+    Element: Storable + PartialEq,
     Memory: ic_stable_structures::Memory,
 {
     let new_entries = new_elements
@@ -823,27 +823,30 @@ fn update_repeated_field<Element, Memory>(
 // TODO(NNS1-2513): To avoid the caller passing an incorrect range (e.g. too
 // small, or to big), derive range from NeuronId.
 fn update_range<Key, Value, Memory>(
-    new_entries: HeapBTreeMap<Key, Value>,
+    mut new_entries: HeapBTreeMap<Key, Value>,
     range: impl RangeBounds<Key>,
     map: &mut StableBTreeMap<Key, Value, Memory>,
 ) where
     Key: Storable + Ord + Clone,
-    Value: Storable,
+    Value: Storable + PartialEq,
     Memory: ic_stable_structures::Memory,
 {
     let new_keys = new_entries.keys().cloned().collect::<HeapBTreeSet<Key>>();
+
+    let mut to_remove = vec![];
+    for (key, value) in map.range(range) {
+        if !new_keys.contains(&key) {
+            to_remove.push(key.clone());
+        } else if new_entries.get(&key).expect("We just checked it's there") == &value {
+            new_entries.remove(&key);
+        }
+    }
 
     for (new_key, new_value) in new_entries {
         map.insert(new_key, new_value);
     }
 
-    let obsolete_keys = map
-        .range(range)
-        .filter(|(key, _value)| !new_keys.contains(key))
-        .map(|(key, _value)| key)
-        .collect::<Vec<_>>();
-
-    for obsolete_key in obsolete_keys {
+    for obsolete_key in to_remove {
         map.remove(&obsolete_key);
     }
 }
