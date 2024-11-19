@@ -13141,6 +13141,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-tracing-jaeger-exporter"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "opentelemetry 0.27.0",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk 0.27.0",
+ "tokio",
+ "tracing-opentelemetry 0.28.0",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "ic-transport-types"
 version = "0.37.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
