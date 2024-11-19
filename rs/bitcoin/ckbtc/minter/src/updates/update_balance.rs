@@ -234,9 +234,12 @@ pub async fn update_balance(
         mutate_state(|s| {
             crate::state::audit::mark_utxo_checked(s, &utxo, None, status, None);
         });
-        if status == UtxoCheckStatus::Tainted {
-            utxo_statuses.push(UtxoStatus::Tainted(utxo.clone()));
-            continue;
+        match status {
+            UtxoCheckStatus::Tainted => {
+                utxo_statuses.push(UtxoStatus::Tainted(utxo.clone()));
+                continue;
+            }
+            UtxoCheckStatus::Clean => {}
         }
         let amount = utxo.value - kyt_fee;
         let memo = MintMemo::Convert {
