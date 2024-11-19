@@ -78,6 +78,12 @@ const SANDBOX_PROCESSES_RSS_TO_EVICT: NumBytes = NumBytes::new(1024 * 1024 * 102
 /// See `monitor_and_evict_sandbox_processes`
 const DEFAULT_SANDBOX_PROCESS_RSS: NumBytes = NumBytes::new(50 * 1024 * 1024);
 
+/// To speedup synchronous operations, the sandbox RSS-based eviction
+/// is triggered only when the system's available memory falls below
+/// the specified byte threshold.
+pub(crate) const DEFAULT_MIN_MEM_AVAILABLE_TO_EVICT_SANDBOXES: NumBytes =
+    NumBytes::new(250 * 1024 * 1024 * 1024);
+
 const SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE: &str = "sandboxed_execution_invalid_memory_size";
 
 // Metric labels for the different outcomes of a wasm cache lookup. Stored in
@@ -1747,7 +1753,11 @@ fn evict_sandbox_processes(
 
     // We have the same if statement in `sandbox_process_eviction::evict`, but
     // if we return here we will skip the creation of `candidates` vector.
-    if active_count <= max_active_sandboxes && total_sandboxes_rss <= max_sandboxes_rss {
+    if active_count <= max_active_sandboxes
+        && (total_sandboxes_rss <= max_sandboxes_rss
+            || available_memory_wrapper().unwrap_or_default()
+                >= DEFAULT_MIN_MEM_AVAILABLE_TO_EVICT_SANDBOXES)
+    {
         return;
     }
 
@@ -1784,13 +1794,25 @@ fn evict_sandbox_processes(
         }
     };
 
-    let evicted = sandbox_process_eviction::evict(
-        candidates,
-        total_sandboxes_rss,
-        max_active_sandboxes,
-        last_used_threshold,
-        max_sandboxes_rss,
-    );
+    let evicted = if available_memory_wrapper().unwrap_or_default()
+        >= DEFAULT_MIN_MEM_AVAILABLE_TO_EVICT_SANDBOXES
+    {
+        sandbox_process_eviction::evict(
+            candidates,
+            total_sandboxes_rss,
+            max_active_sandboxes,
+            last_used_threshold,
+            total_sandboxes_rss,
+        )
+    } else {
+        sandbox_process_eviction::evict(
+            candidates,
+            total_sandboxes_rss,
+            max_active_sandboxes,
+            last_used_threshold,
+            max_sandboxes_rss,
+        )
+    };
 
     // Actually evict all the selected eviction candidates.
     for EvictionCandidate { id, .. } in evicted.iter() {
@@ -1809,6 +1831,15 @@ fn evict_sandbox_processes(
             *backend = new;
         }
     }
+}
+
+pub fn available_memory_wrapper() -> Option<NumBytes> {
+    #[cfg(target_os = "linux")]
+    let res = process_os_metrics::available_memory();
+    #[cfg(not(target_os = "linux"))]
+    let res = None;
+
+    res
 }
 
 // Returns all processes that are still alive.
