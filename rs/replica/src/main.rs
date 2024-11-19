@@ -17,7 +17,7 @@ use ic_types::{
 };
 use nix::unistd::{setpgid, Pid};
 use opentelemetry::{trace::TracerProvider, KeyValue};
-use opentelemetry_otlp::{SpanExporter. WithExportConfig};
+use opentelemetry_otlp::{SpanExporter, WithExportConfig};
 use opentelemetry_sdk::{trace, Resource};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{signal, SignalKind};
@@ -42,12 +42,10 @@ use std::fs::File;
 #[cfg(feature = "profiler")]
 use std::io::Write;
 
-pub type BoxedRegistryLayer = Box<dyn Layer<Registry> + Send + Sync>;
-
-fn layer_for_exporting_spans_to_jaeger(
+fn jaeger_exporter(
     config: &Config,
     rt_handle: &tokio::runtime::Handle,
-) -> Result<BoxedRegistryLayer, anyhow::Error> {
+) -> Result<impl Layer<Registry> + Send + Sync, anyhow::Error> {
     // TODO: the replica config has empty string instead of a None value for the 'jaeger_addr'. It needs to be fixed.
     let jager_addr = config
         .tracing
@@ -284,9 +282,8 @@ fn main() -> io::Result<()> {
     let tracing_handle = ReloadHandles::new(reload_handle);
     tracing_layers.push(reload_layer.boxed());
 
-    if let Ok(jager_exporter_layer) = layer_for_exporting_spans_to_jaeger(&config, rt_main.handle())
-    {
-        tracing_layers.push(jager_exporter_layer);
+    if let Ok(jager_exporter_layer) = jaeger_exporter(&config, rt_main.handle()) {
+        tracing_layers.push(jager_exporter_layer.boxed());
     }
 
     let subscriber = tracing_subscriber::registry().with(tracing_layers);
