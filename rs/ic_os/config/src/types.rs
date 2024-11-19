@@ -61,6 +61,8 @@ pub struct GuestOSConfig {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct ICOSSettings {
+    /// The node reward type determines node rewards
+    pub node_reward_type: Option<String>,
     /// In nested testing, mgmt_mac is set in deployment.json.template,
     /// else found dynamically in call to config tool CreateSetuposConfig
     pub mgmt_mac: FormattedMacAddress,
@@ -200,6 +202,7 @@ mod tests {
                 domain_name: None,
             },
             icos_settings: ICOSSettings {
+                node_reward_type: Some(String::new()),
                 mgmt_mac: FormattedMacAddress::try_from("00:00:00:00:00:00")?,
                 deployment_environment: String::new(),
                 logging: Logging {

@@ -1242,6 +1242,16 @@ impl ExecutionEnvironment {
                 }
             },
 
+            Ok(Ic00Method::ReshareChainKey)
+            | Ok(Ic00Method::VetKdPublicKey)
+            | Ok(Ic00Method::VetKdDeriveEncryptedKey) => ExecuteSubnetMessageResult::Finished {
+                response: Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!("{} API is not yet implemented.", msg.method_name()),
+                )),
+                refund: msg.take_cycles(),
+            },
+
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
                 let res =
                     ProvisionalCreateCanisterWithCyclesArgs::decode(payload).and_then(|args| {
@@ -2737,12 +2747,18 @@ impl ExecutionEnvironment {
     ) -> Result<(), UserError> {
         let nodes = args.get_set_of_nodes()?;
         let registry_version = args.get_registry_version();
+
+        let key_id = args
+            .key_id
+            .try_into()
+            .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, err))?;
+
         state
             .metadata
             .subnet_call_context_manager
             .push_context(SubnetCallContext::IDkgDealings(IDkgDealingsContext {
                 request: request.clone(),
-                key_id: args.key_id,
+                key_id,
                 nodes,
                 registry_version,
                 time: state.time(),

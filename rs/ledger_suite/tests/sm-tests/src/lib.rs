@@ -11,6 +11,7 @@ use ic_icrc1_test_utils::{valid_transactions_strategy, ArgWithCaller, LedgerEndp
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType};
 use ic_ledger_core::timestamp::TimeStamp;
+use ic_ledger_core::tokens::TokensType;
 use ic_ledger_hash_of::HashOf;
 use ic_management_canister_types::{
     self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
@@ -19,6 +20,7 @@ use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::{ErrorCode, StateMachine, WasmResult};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use icp_ledger::{AccountIdentifier, IcpAllowanceArgs};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -81,12 +83,6 @@ pub const NAT_META_KEY: &str = "test:nat";
 pub const NAT_META_VALUE: u128 = u128::MAX;
 pub const INT_META_KEY: &str = "test:int";
 pub const INT_META_VALUE: i128 = i128::MIN;
-
-#[cfg(not(feature = "u256-tokens"))]
-type Tokens = ic_icrc1_tokens_u64::U64;
-
-#[cfg(feature = "u256-tokens")]
-type Tokens = ic_icrc1_tokens_u256::U256;
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub struct InitArgs {
@@ -289,7 +285,7 @@ fn icrc21_consent_message(
     .expect("failed to decode icrc21_canister_call_consent_message response")
 }
 
-pub fn get_all_ledger_and_archive_blocks(
+pub fn get_all_ledger_and_archive_blocks<Tokens: TokensType>(
     state_machine: &StateMachine,
     ledger_id: CanisterId,
     start_index: Option<u64>,
@@ -638,26 +634,58 @@ pub fn send_transfer_from(
     .map(|n| n.0.to_u64().unwrap())
 }
 
-pub fn get_allowance(
-    env: &StateMachine,
-    ledger: CanisterId,
-    account: impl Into<Account>,
-    spender: impl Into<Account>,
-) -> Allowance {
-    let arg = AllowanceArgs {
-        account: account.into(),
-        spender: spender.into(),
-    };
-    Decode!(
-        &env.query(ledger, "icrc2_allowance", Encode!(&arg).unwrap())
-            .expect("failed to guery the allowance")
-            .bytes(),
-        Allowance
-    )
-    .expect("failed to decode allowance response")
+pub trait AllowanceProvider: Sized {
+    fn get_allowance(
+        env: &StateMachine,
+        ledger: CanisterId,
+        account: impl Into<Self>,
+        spender: impl Into<Self>,
+    ) -> Allowance;
 }
 
-fn arb_amount() -> impl Strategy<Value = Tokens> {
+impl AllowanceProvider for Account {
+    fn get_allowance(
+        env: &StateMachine,
+        ledger: CanisterId,
+        account: impl Into<Account>,
+        spender: impl Into<Account>,
+    ) -> Allowance {
+        let arg = AllowanceArgs {
+            account: account.into(),
+            spender: spender.into(),
+        };
+        Decode!(
+            &env.query(ledger, "icrc2_allowance", Encode!(&arg).unwrap())
+                .expect("failed to guery the allowance")
+                .bytes(),
+            Allowance
+        )
+        .expect("failed to decode allowance response")
+    }
+}
+
+impl AllowanceProvider for AccountIdentifier {
+    fn get_allowance(
+        env: &StateMachine,
+        ledger: CanisterId,
+        account: impl Into<AccountIdentifier>,
+        spender: impl Into<AccountIdentifier>,
+    ) -> Allowance {
+        let arg = IcpAllowanceArgs {
+            account: account.into(),
+            spender: spender.into(),
+        };
+        Decode!(
+            &env.query(ledger, "allowance", Encode!(&arg).unwrap())
+                .expect("failed to guery the allowance")
+                .bytes(),
+            Allowance
+        )
+        .expect("failed to decode allowance response")
+    }
+}
+
+fn arb_amount<Tokens: TokensType>() -> impl Strategy<Value = Tokens> {
     any::<u64>().prop_map(|n| Tokens::try_from(Nat::from(n)).unwrap())
 }
 
@@ -675,7 +703,7 @@ fn arb_account() -> impl Strategy<Value = Account> {
         })
 }
 
-fn arb_transfer() -> impl Strategy<Value = Operation<Tokens>> {
+fn arb_transfer<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
     (
         arb_account(),
         arb_account(),
@@ -692,7 +720,7 @@ fn arb_transfer() -> impl Strategy<Value = Operation<Tokens>> {
         })
 }
 
-fn arb_approve() -> impl Strategy<Value = Operation<Tokens>> {
+fn arb_approve<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
     (
         arb_account(),
         arb_account(),
@@ -713,11 +741,11 @@ fn arb_approve() -> impl Strategy<Value = Operation<Tokens>> {
         )
 }
 
-fn arb_mint() -> impl Strategy<Value = Operation<Tokens>> {
+fn arb_mint<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
     (arb_account(), arb_amount()).prop_map(|(to, amount)| Operation::Mint { to, amount })
 }
 
-fn arb_burn() -> impl Strategy<Value = Operation<Tokens>> {
+fn arb_burn<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
     (
         arb_account(),
         proptest::option::of(arb_account()),
@@ -730,11 +758,11 @@ fn arb_burn() -> impl Strategy<Value = Operation<Tokens>> {
         })
 }
 
-fn arb_operation() -> impl Strategy<Value = Operation<Tokens>> {
+fn arb_operation<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
     prop_oneof![arb_transfer(), arb_mint(), arb_burn(), arb_approve()]
 }
 
-fn arb_transaction() -> impl Strategy<Value = Transaction<Tokens>> {
+fn arb_transaction<Tokens: TokensType>() -> impl Strategy<Value = Transaction<Tokens>> {
     (
         arb_operation(),
         any::<Option<u64>>(),
@@ -747,7 +775,7 @@ fn arb_transaction() -> impl Strategy<Value = Transaction<Tokens>> {
         })
 }
 
-fn arb_block() -> impl Strategy<Value = Block<Tokens>> {
+fn arb_block<Tokens: TokensType>() -> impl Strategy<Value = Block<Tokens>> {
     (
         any::<Option<[u8; 32]>>(),
         arb_transaction(),
@@ -1901,7 +1929,7 @@ where
 }
 
 // Generate random blocks and check that their CBOR encoding complies with the CDDL spec.
-pub fn block_encoding_agrees_with_the_schema() {
+pub fn block_encoding_agrees_with_the_schema<Tokens: TokensType>() {
     use std::path::PathBuf;
 
     let block_cddl_path =
@@ -1912,7 +1940,7 @@ pub fn block_encoding_agrees_with_the_schema() {
 
     let mut runner = TestRunner::default();
     runner
-        .run(&arb_block(), |block| {
+        .run(&arb_block::<Tokens>(), |block| {
             let cbor_bytes = block.encode().into_vec();
             cddl::validate_cbor_from_slice(&block_cddl, &cbor_bytes, None).map_err(|e| {
                 TestCaseError::fail(format!(
@@ -1925,13 +1953,13 @@ pub fn block_encoding_agrees_with_the_schema() {
         .unwrap();
 }
 
-pub fn block_encoding_agreed_with_the_icrc3_schema() {
+pub fn block_encoding_agreed_with_the_icrc3_schema<Tokens: TokensType>() {
     let mut runner = TestRunner::new(TestRunnerConfig {
         max_shrink_iters: 0,
         ..Default::default()
     });
     runner
-        .run(&arb_block(), |block| {
+        .run(&arb_block::<Tokens>(), |block| {
             let encoded_block = block.encode();
             let generic_block = encoded_block_to_generic_block(&encoded_block);
             if let Err(errors) = icrc3::schema::validate(&generic_block) {
@@ -1943,24 +1971,27 @@ pub fn block_encoding_agreed_with_the_icrc3_schema() {
 }
 
 // Check that different blocks produce different hashes.
-pub fn transaction_hashes_are_unique() {
+pub fn transaction_hashes_are_unique<Tokens: TokensType>() {
     let mut runner = TestRunner::default();
     runner
-        .run(&(arb_transaction(), arb_transaction()), |(lhs, rhs)| {
-            use ic_ledger_canister_core::ledger::LedgerTransaction;
+        .run(
+            &(arb_transaction::<Tokens>(), arb_transaction::<Tokens>()),
+            |(lhs, rhs)| {
+                use ic_ledger_canister_core::ledger::LedgerTransaction;
 
-            prop_assume!(lhs != rhs);
-            prop_assert_ne!(lhs.hash(), rhs.hash());
+                prop_assume!(lhs != rhs);
+                prop_assert_ne!(lhs.hash(), rhs.hash());
 
-            Ok(())
-        })
+                Ok(())
+            },
+        )
         .unwrap();
 }
 
-pub fn block_hashes_are_unique() {
+pub fn block_hashes_are_unique<Tokens: TokensType>() {
     let mut runner = TestRunner::default();
     runner
-        .run(&(arb_block(), arb_block()), |(lhs, rhs)| {
+        .run(&(arb_block::<Tokens>(), arb_block()), |(lhs, rhs)| {
             prop_assume!(lhs != rhs);
 
             let lhs_hash = Block::<Tokens>::block_hash(&lhs.encode());
@@ -1973,10 +2004,10 @@ pub fn block_hashes_are_unique() {
 }
 
 // Generate random blocks and check that the block hash is stable.
-pub fn block_hashes_are_stable() {
+pub fn block_hashes_are_stable<Tokens: TokensType>() {
     let mut runner = TestRunner::default();
     runner
-        .run(&arb_block(), |block| {
+        .run(&arb_block::<Tokens>(), |block| {
             let encoded_block = block.encode();
             let hash1 = Block::<Tokens>::block_hash(&encoded_block);
             let decoded = Block::<Tokens>::decode(encoded_block).unwrap();
@@ -2230,12 +2261,13 @@ fn equivalent_values(lhs: &GenericValue, rhs: &GenericValue) -> bool {
     }
 }
 
-pub fn icrc1_test_block_transformation<T>(
+pub fn icrc1_test_block_transformation<T, Tokens>(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
 ) where
     T: CandidType,
+    Tokens: TokensType,
 {
     let p1 = PrincipalId::new_user_test_id(1);
     let p2 = PrincipalId::new_user_test_id(2);
@@ -2338,14 +2370,16 @@ fn apply_arg_with_caller(
     }
 }
 
-pub fn test_upgrade_serialization(
+pub fn test_upgrade_serialization<Tokens>(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current: Vec<u8>,
     init_args: Vec<u8>,
     upgrade_args: Vec<u8>,
     minter: Arc<BasicIdentity>,
     verify_blocks: bool,
-) {
+) where
+    Tokens: TokensType + Default + std::fmt::Display + From<u64>,
+{
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
     let minter_principal: Principal = minter.sender().unwrap();
@@ -2362,7 +2396,7 @@ pub fn test_upgrade_serialization(
                     .install_canister(ledger_wasm_mainnet.clone(), init_args.clone(), None)
                     .unwrap();
 
-                let mut in_memory_ledger = InMemoryLedger::default();
+                let mut in_memory_ledger = InMemoryLedger::<Account, Tokens>::default();
 
                 let mut tx_index = 0;
                 let mut tx_index_target = INITIAL_TX_BATCH_SIZE;
@@ -2405,7 +2439,7 @@ pub fn test_upgrade_serialization(
                     // This will also verify the ledger blocks.
                     // The current implementation of the InMemoryLedger cannot get blocks
                     // for the ICP ledger. This part of the test runs only for the ICRC1 ledger.
-                    verify_ledger_state(&env, ledger_id, None);
+                    verify_ledger_state::<Tokens>(&env, ledger_id, None);
                 }
 
                 Ok(())
@@ -2465,14 +2499,24 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
             approve_args.from_subaccount = accounts[i].subaccount;
             send_approval(&env, canister_id, accounts[i].owner, &approve_args)
                 .expect("approval failed");
-            expected_allowances.push(get_allowance(&env, canister_id, accounts[i], accounts[j]));
+            expected_allowances.push(Account::get_allowance(
+                &env,
+                canister_id,
+                accounts[i],
+                accounts[j],
+            ));
 
             let mut approve_args = default_approve_args(accounts[i], APPROVE_AMOUNT);
             approve_args.expires_at = Some(expiration);
             approve_args.from_subaccount = accounts[j].subaccount;
             send_approval(&env, canister_id, accounts[j].owner, &approve_args)
                 .expect("approval failed");
-            expected_allowances.push(get_allowance(&env, canister_id, accounts[j], accounts[i]));
+            expected_allowances.push(Account::get_allowance(
+                &env,
+                canister_id,
+                accounts[j],
+                accounts[i],
+            ));
         }
     }
     let mut balances = BTreeMap::new();
@@ -2491,10 +2535,10 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
         let mut allowances = vec![];
         for i in 0..accounts.len() {
             for j in i + 1..accounts.len() {
-                let allowance = get_allowance(&env, canister_id, accounts[i], accounts[j]);
+                let allowance = Account::get_allowance(&env, canister_id, accounts[i], accounts[j]);
                 assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
                 allowances.push(allowance);
-                let allowance = get_allowance(&env, canister_id, accounts[j], accounts[i]);
+                let allowance = Account::get_allowance(&env, canister_id, accounts[j], accounts[i]);
                 assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
                 allowances.push(allowance);
             }
@@ -2533,11 +2577,11 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     // See if the additional approvals are there
     for a1 in &accounts {
         for a2 in &additional_accounts {
-            let allowance = get_allowance(&env, canister_id, *a1, *a2);
+            let allowance = Account::get_allowance(&env, canister_id, *a1, *a2);
             assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
             assert_eq!(allowance.expires_at, None);
 
-            let allowance = get_allowance(&env, canister_id, *a2, *a1);
+            let allowance = Account::get_allowance(&env, canister_id, *a2, *a1);
             assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
             assert_eq!(allowance.expires_at, Some(expiration));
         }
@@ -2661,7 +2705,7 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 2);
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
     assert_eq!(allowance.expires_at, None);
     assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
@@ -2673,8 +2717,8 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 3);
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
-    let allowance_sub_1 = get_allowance(&env, canister_id, from_sub_1, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance_sub_1 = Account::get_allowance(&env, canister_id, from_sub_1, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
     assert_eq!(allowance.expires_at, None);
     assert_eq!(allowance_sub_1.allowance.0.to_u64().unwrap(), 1_000_000);
@@ -2708,7 +2752,7 @@ where
             ledger_time: system_time_to_nanos(env.time())
         })
     );
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 0);
     assert_eq!(allowance.expires_at, None);
     assert_eq!(balance_of(&env, canister_id, from.0), 100_000);
@@ -2721,7 +2765,7 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 1);
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
     assert_eq!(allowance.expires_at, Some(expiration));
     assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
@@ -2734,7 +2778,7 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 2);
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 40_000);
     assert_eq!(allowance.expires_at, Some(new_expiration));
     assert_eq!(balance_of(&env, canister_id, from.0), 80_000);
@@ -2747,7 +2791,7 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 3);
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 300_000);
     assert_eq!(allowance.expires_at, Some(new_expiration));
     assert_eq!(balance_of(&env, canister_id, from.0), 70_000);
@@ -2783,7 +2827,7 @@ where
         ErrorCode::CanisterCalledTrap,
         "self approval is not allowed",
     );
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 0);
     assert_eq!(allowance.expires_at, None);
     assert_eq!(balance_of(&env, canister_id, from.0), 100_000);
@@ -2817,7 +2861,7 @@ where
             current_allowance: Nat::from(150_000u32)
         })
     );
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
     assert_eq!(allowance.expires_at, None);
     assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
@@ -2833,7 +2877,7 @@ where
             current_allowance: Nat::from(150_000u32)
         })
     );
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
     assert_eq!(allowance.expires_at, None);
     assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
@@ -2845,7 +2889,7 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 2);
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 400_000);
     assert_eq!(allowance.expires_at, None);
     assert_eq!(balance_of(&env, canister_id, from.0), 80_000);
@@ -2875,16 +2919,17 @@ where
             balance: Nat::from(5_000u32)
         })
     );
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 0);
     assert_eq!(allowance.expires_at, None);
     assert_eq!(balance_of(&env, canister_id, from.0), 5_000);
     assert_eq!(balance_of(&env, canister_id, spender.0), 0);
 }
 
-pub fn test_approve_cap<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+pub fn test_approve_cap<T, Tokens>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,
+    Tokens: TokensType,
 {
     let from = PrincipalId::new_user_test_id(1);
     let spender = PrincipalId::new_user_test_id(2);
@@ -2897,12 +2942,12 @@ where
 
     let mut approve_args = default_approve_args(spender.0, 150_000);
 
-    approve_args.amount = Nat::from(Tokens::MAX) * 2u8;
+    approve_args.amount = Tokens::max_value().into() * 2u8;
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 1);
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
-    assert_eq!(allowance.allowance, Nat::from(Tokens::MAX));
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
+    assert_eq!(allowance.allowance, Tokens::max_value().into());
     assert_eq!(allowance.expires_at, None);
     assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
     assert_eq!(balance_of(&env, canister_id, spender.0), 0);
@@ -2935,7 +2980,7 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 2);
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
     assert_eq!(allowance.expires_at, expiration);
     assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
@@ -2951,8 +2996,8 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 3);
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
-    let allowance_sub_1 = get_allowance(&env, canister_id, from_sub_1, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance_sub_1 = Account::get_allowance(&env, canister_id, from_sub_1, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 0);
     assert_eq!(allowance.expires_at, None);
     assert_eq!(allowance_sub_1.allowance.0.to_u64().unwrap(), 100_000);
@@ -3110,12 +3155,12 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 1);
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
     let block_index = send_transfer_from(&env, canister_id, spender.0, &transfer_from_args)
         .expect("transfer_from failed");
     assert_eq!(block_index, 2);
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 130_000);
     assert_eq!(balance_of(&env, canister_id, from.0), 70_000);
     assert_eq!(balance_of(&env, canister_id, to.0), 10_000);
@@ -3164,9 +3209,9 @@ where
     assert_eq!(balance_of(&env, canister_id, from_sub_1), 90_000);
     assert_eq!(balance_of(&env, canister_id, to.0), 30_000);
     assert_eq!(balance_of(&env, canister_id, spender.0), 0);
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 110_000);
-    let allowance = get_allowance(&env, canister_id, from_sub_1, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from_sub_1, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 50_000);
 
     let transfer_from_args = default_transfer_from_args(from_sub_1, to.0, 30_000);
@@ -3178,9 +3223,9 @@ where
     assert_eq!(balance_of(&env, canister_id, from_sub_1), 50_000);
     assert_eq!(balance_of(&env, canister_id, to.0), 60_000);
     assert_eq!(balance_of(&env, canister_id, spender.0), 0);
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 110_000);
-    let allowance = get_allowance(&env, canister_id, from_sub_1, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from_sub_1, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 10_000);
 
     let transfer_from_args = default_transfer_from_args(from.0, to.0, 60_000);
@@ -3393,7 +3438,7 @@ where
     fn total_allowance(env: &StateMachine, canister_id: CanisterId, num_approvals: u64) -> Nat {
         let mut allowance = Nat::from(0_u8);
         for i in 0..num_approvals {
-            allowance += get_allowance(
+            allowance += Account::get_allowance(
                 env,
                 canister_id,
                 PrincipalId::new_user_test_id(3).0,
@@ -4159,7 +4204,7 @@ pub fn generate_transactions(
     for i in 0..params.num_transactions_per_type {
         let from = accounts[i];
         let spender = accounts[(i + 1) % params.num_transactions_per_type];
-        let current_allowance = get_allowance(state_machine, canister_id, from, spender);
+        let current_allowance = Account::get_allowance(state_machine, canister_id, from, spender);
         let expires_at = state_machine
             .time()
             .checked_add(std::time::Duration::from_secs(3600))
