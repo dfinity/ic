@@ -46,6 +46,8 @@ use ic_types::{
 };
 use std::{sync::Arc, time::Duration};
 
+use super::status;
+
 /// The acceptable gap between the finalized height and the certified height. If
 /// the actual gap is greater than this, consensus starts slowing down the block
 /// rate.
@@ -257,7 +259,9 @@ fn get_adjusted_notary_delay(
         ),
         pool,
         state_manager,
+        membership,
         rank,
+        log,
     ) {
         NotaryDelay::CanNotarizeAfter(duration) => Some(duration),
         NotaryDelay::ReachedMaxNotarizationCertificationGap {
@@ -297,7 +301,9 @@ fn get_adjusted_notary_delay_from_settings(
     settings: NotarizationDelaySettings,
     pool: &PoolReader<'_>,
     state_manager: &dyn StateManager<State = ReplicatedState>,
+    membership: &Membership,
     rank: Rank,
+    logger: &ReplicaLogger,
 ) -> NotaryDelay {
     let NotarizationDelaySettings {
         unit_delay,
@@ -327,7 +333,7 @@ fn get_adjusted_notary_delay_from_settings(
     let finalized_height = pool.get_finalized_height().get();
     let initial_delay = initial_notary_delay.as_millis() as f32;
     let ranked_delay = unit_delay.as_millis() as f32 * rank.0 as f32;
-    let finality_gap = (pool.get_notarized_height().get() - finalized_height) as i32;
+    let finality_gap = (notarized_height.get() - finalized_height) as i32;
     let finality_adjusted_delay =
         (initial_delay + ranked_delay * 1.5_f32.powi(finality_gap)) as u64;
 
@@ -339,11 +345,28 @@ fn get_adjusted_notary_delay_from_settings(
     let certified_gap =
         finalized_height.saturating_sub(state_manager.latest_certified_height().get());
 
-    let certified_adjusted_delay = if certified_gap <= ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP {
-        finality_adjusted_delay
-    } else {
-        finality_adjusted_delay + BACKLOG_DELAY_MILLIS * certified_gap
+    // Determine if we are currently in the process of halting at the next CUP height, i.e.
+    // due to a pending upgrade or registry flag. In this case, we should not adjust the
+    // notary delay based on the certified-finalized gap. During an upgrade, execution will
+    // halt at the CUP height by design while consensus continues to deliver empty blocks.
+    // This will naturally increase the gap between certified and finalized height, and
+    // slowing down the block rate would only delay the upgrade.
+    let halting = || {
+        status::should_halt(
+            notarized_height,
+            membership.registry_client.as_ref(),
+            membership.subnet_id,
+            pool,
+            logger,
+        ) == Some(true)
     };
+
+    let certified_adjusted_delay =
+        if certified_gap <= ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP || halting() {
+            finality_adjusted_delay
+        } else {
+            finality_adjusted_delay + BACKLOG_DELAY_MILLIS * certified_gap
+        };
 
     // We bound the gap between the next CUP height and the current notarization
     // height by ACCEPTABLE_NOTARIZATION_CUP_GAP.
