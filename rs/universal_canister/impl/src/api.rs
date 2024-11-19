@@ -71,7 +71,7 @@ mod ic0 {
         pub fn canister_version() -> u64;
 
         pub fn mint_cycles(amount: u64) -> u64;
-        // TODO?
+        pub fn mint_cycles128(amount_high: u64, amount_low: u64, dst: u32) -> ();
 
         pub fn is_controller(src: u32, size: u32) -> u32;
         pub fn in_replicated_execution() -> u32;
@@ -403,6 +403,13 @@ pub fn trap_with(message: &str) -> ! {
 /// Mint cycles (only works on CMC).
 pub fn mint_cycles(amount: u64) -> u64 {
     unsafe { ic0::mint_cycles(amount) }
+}
+
+/// Mint cycles (only works on CMC).
+pub fn mint_cycles128(amount_high: u64, amount_low: u64) -> Vec<u8> {
+    let mut result_bytes = vec![0u8; CYCLES_SIZE];
+    unsafe { ic0::mint_cycles128(amount_high, amount_low, result_bytes.as_mut_ptr() as u32) }
+    result_bytes
 }
 
 pub fn is_controller(data: &[u8]) -> u32 {
