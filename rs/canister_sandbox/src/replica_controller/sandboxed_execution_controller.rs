@@ -1116,7 +1116,7 @@ impl SandboxedExecutionController {
         });
 
         let backends_copy = Arc::clone(&backends);
-        let (tx_evict, rx) = std::sync::mpsc::sync_channel(0);
+        let (tx_evict, rx) = std::sync::mpsc::sync_channel(1);
         let state_reader_copy = Arc::clone(&state_reader);
 
         std::thread::spawn(move || {
@@ -1832,9 +1832,9 @@ fn evict_sandbox_processes(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) {
     println!(
-        "XXX   EVICT SANDBOXES len:{} max active:{max_active_sandboxes} max RSS:{}M",
+        "XXX   EVICT SANDBOXES len:{} max active:{max_active_sandboxes} max RSS:{}G",
         backends.len(),
-        max_sandboxes_rss / 1024 / 1024
+        max_sandboxes_rss / 1024 / 1024 / 1024
     );
     // Remove the already terminated processes.
     backends.retain(|_id, backend| match backend {
