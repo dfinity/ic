@@ -357,37 +357,29 @@ fn read_conf_file(path: &Path) -> Result<HashMap<String, String>> {
 
 fn log_directory_structure(path: &Path) -> Result<()> {
     println!("Listing directory structure of {}", path.display());
-    log_directory_structure_internal(path, 0)
-}
 
-fn log_directory_structure_internal(path: &Path, depth: usize) -> Result<()> {
-    let indent = "  ".repeat(depth);
     if path.is_dir() {
-        if depth == 0 {
-            println!("{}{}/", indent, path.display());
-        } else {
-            println!(
-                "{}{}/",
-                indent,
-                path.file_name()
-                    .unwrap_or_else(|| OsStr::new(""))
-                    .to_string_lossy()
-            );
-        }
+        println!("{}/", path.display());
+
         for entry in fs::read_dir(path)? {
             let entry = entry?;
-            let path = entry.path();
-            log_directory_structure_internal(&path, depth + 1)?;
+            let entry_path = entry.path();
+
+            let file_name = entry_path
+                .file_name()
+                .unwrap_or_else(|| OsStr::new(""))
+                .to_string_lossy();
+
+            if entry_path.is_dir() {
+                println!("  {}/", file_name);
+            } else {
+                println!("  {}", file_name);
+            }
         }
     } else {
-        println!(
-            "{}{}",
-            indent,
-            path.file_name()
-                .unwrap_or_else(|| OsStr::new(""))
-                .to_string_lossy()
-        );
+        println!("{} is not a directory", path.display());
     }
+
     Ok(())
 }
 
