@@ -673,6 +673,7 @@ mod tests {
     #[test]
     fn test_get_adjusted_notary_delay_cup_delay() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let logger = no_op_logger();
             let settings = NotarizationDelaySettings {
                 unit_delay: Duration::from_secs(1),
                 initial_notary_delay: Duration::from_secs(0),
@@ -686,6 +687,7 @@ mod tests {
             let Dependencies {
                 mut pool,
                 state_manager,
+                membership,
                 ..
             } = dependencies_with_subnet_params(pool_config, subnet_test_id(0), vec![(1, record)]);
             let last_cup_dkg_info = PoolReader::new(&pool)
@@ -722,7 +724,9 @@ mod tests {
                     settings.clone(),
                     &PoolReader::new(&pool),
                     state_manager.as_ref(),
+                    membership.as_ref(),
                     Rank(0),
+                    &logger,
                 ),
                 NotaryDelay::ReachedMaxNotarizationCertificationGap { .. }
             );
@@ -738,7 +742,9 @@ mod tests {
                     settings.clone(),
                     &PoolReader::new(&pool),
                     state_manager.as_ref(),
+                    membership.as_ref(),
                     Rank(0),
+                    &logger,
                 ),
                 NotaryDelay::CanNotarizeAfter(Duration::from_secs(0))
             );
@@ -756,7 +762,9 @@ mod tests {
                     settings,
                     &PoolReader::new(&pool),
                     state_manager.as_ref(),
+                    membership.as_ref(),
                     Rank(0),
+                    &logger,
                 ),
                 NotaryDelay::ReachedMaxNotarizationCUPGap { .. }
             );
