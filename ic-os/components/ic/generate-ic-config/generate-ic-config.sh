@@ -228,12 +228,16 @@ QUERY_STATS_EPOCH_LENGTH="${query_stats_epoch_length:-600}"
 # TODO: If the Jaeger address is not specified the config file will contain Some(""). This needs to be fixed.
 JAEGER_ADDR="${jaeger_addr:-}"
 
+# TODO: Should pass prefix directly
+IPV6_PREFIX=$(echo "${IPV6_ADDRESS}" | sed -E -e 's/:/#/4' -e 's/#.*/::\/64/')
+
 if [ "${IPV6_ADDRESS}" == "" ]; then
     echo "Cannot determine an IPv6 address, aborting"
     exit 1
 fi
 
 sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
+    -e "s@{{ ipv6_prefix }}@${IPV6_PREFIX}@" \
     -e "s@{{ ipv4_address }}@${IPV4_ADDRESS}@" \
     -e "s@{{ ipv4_gateway }}@${IPV4_GATEWAY}@" \
     -e "s@{{ domain }}@${DOMAIN}@" \

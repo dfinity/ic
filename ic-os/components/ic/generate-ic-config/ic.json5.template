@@ -256,6 +256,8 @@ table ip6 filter {\n\
     icmpv6 type nd-router-advert accept\n\
     icmpv6 type nd-neighbor-solicit accept\n\
     icmpv6 type nd-neighbor-advert accept\n\
+    ip6 saddr { {{ ipv6_prefix }} } ct state { new } tcp dport { 9100, 19531, 19100 } accept\n\
+    ip6 saddr { {{ ipv6_prefix }} } udp dport { 9100, 19531, 19100 } accept\n\
     ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS.\n\
     <<IPv6_TCP_RULES>>\n\
     <<IPv6_UDP_RULES>>\n\
