@@ -291,8 +291,8 @@ async fn kyt_check_utxo(utxo: &Utxo) -> Result<UtxoCheckStatus, UpdateBalanceErr
             .into()
     });
 
-    if let Some((_, status, _)) = read_state(|s| s.checked_utxos.get(utxo).cloned()) {
-        return Ok(status);
+    if let Some(checked_utxo) = read_state(|s| s.checked_utxos.get(utxo).cloned()) {
+        return Ok(checked_utxo.status);
     }
 
     match check_transaction(new_kyt_principal, utxo)

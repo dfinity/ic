@@ -259,6 +259,16 @@ impl UtxoCheckStatus {
     }
 }
 
+/// Relevant data for a checked UTXO. The uuid and kyt_provider are kept
+/// backward compatibility reasons. They should be set to `None` since
+/// we dont use KYT providers any more.
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, serde::Deserialize)]
+pub struct CheckedUtxo {
+    pub(crate) status: UtxoCheckStatus,
+    uuid: Option<String>,
+    kyt_provider: Option<Principal>,
+}
+
 /// Indicates that fee distribution overdrafted.
 #[derive(Copy, Clone, Debug)]
 pub struct Overdraft(pub u64);
@@ -379,7 +389,7 @@ pub struct CkBtcMinterState {
     pub owed_kyt_amount: BTreeMap<Principal, u64>,
 
     /// A cache of UTXO KYT check statuses.
-    pub checked_utxos: BTreeMap<Utxo, (Option<String>, UtxoCheckStatus, Option<Principal>)>,
+    pub checked_utxos: BTreeMap<Utxo, CheckedUtxo>,
 
     /// UTXOs whose values are too small to pay the KYT check fee.
     pub ignored_utxos: BTreeSet<Utxo>,
@@ -964,7 +974,14 @@ impl CkBtcMinterState {
             UtxoCheckStatus::Clean => {
                 if self
                     .checked_utxos
-                    .insert(utxo, (uuid, status, kyt_provider))
+                    .insert(
+                        utxo,
+                        CheckedUtxo {
+                            uuid,
+                            status,
+                            kyt_provider,
+                        },
+                    )
                     .is_none()
                 {
                     // Updated the owed amount only if it's the first time we mark this UTXO as
