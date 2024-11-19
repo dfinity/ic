@@ -134,11 +134,13 @@ impl CanisterHttp {
         }
     }
 
+    // This happens extremely rarely, only when there are changes to the api boundary nodes.
     fn update_socks_clients(&self, api_bn_ips: Vec<String>) {
-        let new_clients = self.generate_socks_clients(api_bn_ips);
+        let new_clients = self.generate_socks_clients(api_bn_ips.clone());
         self.socks_clients.store(Arc::new(new_clients));
+        self.current_socks_ips.store(Arc::new(api_bn_ips));
     }
-
+    
     fn get_next_socks_client(&self) -> Option<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>> {
         let socks_clients = self.socks_clients.load();
         let socks_clients_ref = &*socks_clients;

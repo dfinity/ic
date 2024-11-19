@@ -184,11 +184,20 @@ impl CanisterHttpPoolManagerImpl {
             .collect();
 
         //TODO(mihailjianu): handle errors.
-        let api_bn_ids = self.registry_client.get_api_boundary_node_ids(self.registry_client.get_latest_version()).unwrap();
-        let api_bn_ips = api_bn_ids.iter().map(|id| {
-            let record = self.registry_client.get_node_record(*id, self.registry_client.get_latest_version()).unwrap();
-            record.unwrap().http.unwrap().ip_addr
-        }).collect::<Vec<String>>();
+        let api_bn_ids = self
+            .registry_client
+            .get_api_boundary_node_ids(self.registry_client.get_latest_version())
+            .unwrap();
+        let api_bn_ips = api_bn_ids
+            .iter()
+            .map(|id| {
+                let record = self
+                    .registry_client
+                    .get_node_record(*id, self.registry_client.get_latest_version())
+                    .unwrap();
+                record.unwrap().http.unwrap().ip_addr
+            })
+            .collect::<Vec<String>>();
 
         for (id, context) in http_requests {
             if !request_ids_already_made.contains(&id) {
