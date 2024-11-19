@@ -24,14 +24,8 @@ pub enum Commands {
         #[arg(long, default_value = config::DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH, value_name = "deployment.json")]
         deployment_json_path: PathBuf,
 
-        #[arg(long, default_value_t = true)]
-        nns_public_key_exists: bool,
-
         #[arg(long, default_value_t = false)]
         use_ssh_authorized_keys: bool,
-
-        #[arg(long, default_value_t = true)]
-        node_operator_private_key_exists: bool,
 
         #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         setupos_config_json_path: PathBuf,
@@ -98,11 +92,7 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub elasticsearch_tags: Option<String>,
     #[arg(long)]
-    pub nns_public_key_exists: Option<bool>,
-    #[arg(long)]
     pub nns_urls: Option<Vec<String>>,
-    #[arg(long)]
-    pub node_operator_private_key_exists: Option<bool>,
     #[arg(long)]
     pub use_ssh_authorized_keys: Option<bool>,
 
@@ -146,9 +136,7 @@ pub fn main() -> Result<()> {
         Some(Commands::CreateSetuposConfig {
             config_ini_path,
             deployment_json_path,
-            nns_public_key_exists,
             use_ssh_authorized_keys,
-            node_operator_private_key_exists,
             setupos_config_json_path,
         }) => {
             // get config.ini settings
@@ -225,9 +213,7 @@ pub fn main() -> Result<()> {
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name,
                 logging,
-                nns_public_key_exists,
                 nns_urls: deployment_json_settings.nns.url.clone(),
-                node_operator_private_key_exists,
                 use_ssh_authorized_keys,
                 icos_dev_settings: ICOSDevSettings::default(),
             };
@@ -356,9 +342,7 @@ pub fn main() -> Result<()> {
                 deployment_environment: clap_args.deployment_environment,
                 elasticsearch_hosts: clap_args.elasticsearch_hosts,
                 elasticsearch_tags: clap_args.elasticsearch_tags,
-                nns_public_key_exists: clap_args.nns_public_key_exists,
                 nns_urls: clap_args.nns_urls,
-                node_operator_private_key_exists: clap_args.node_operator_private_key_exists,
                 use_ssh_authorized_keys: clap_args.use_ssh_authorized_keys,
                 inject_ic_crypto: clap_args.inject_ic_crypto,
                 inject_ic_state: clap_args.inject_ic_state,
