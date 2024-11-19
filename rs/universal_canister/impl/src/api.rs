@@ -71,6 +71,7 @@ mod ic0 {
         pub fn canister_version() -> u64;
 
         pub fn mint_cycles(amount: u64) -> u64;
+        // TODO?
 
         pub fn is_controller(src: u32, size: u32) -> u32;
         pub fn in_replicated_execution() -> u32;
