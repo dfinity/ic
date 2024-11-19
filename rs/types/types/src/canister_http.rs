@@ -457,7 +457,8 @@ pub struct CanisterHttpRequest {
     pub id: CanisterHttpRequestId,
     /// The context of the request which captures all the metadata about this request
     pub context: CanisterHttpRequestContext,
-    /// The api boundary nodes that should be used as a socks proxy in the case of a request to an IPv4 address.
+    /// The most up to date api boundary nodes that should be used as a socks proxy in the case of a request to an IPv4 address.
+    /// The adapter does not guarantee that the request will be sent through these nodes.
     pub api_bn_ips: Vec<String>,
 }
 
