@@ -711,9 +711,9 @@ mod tests {
         BlockPayload, BlockProposal, DataPayload, HashedBlock, Payload, Rank, SummaryPayload,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
-    use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
     use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaCombinedSignature;
     use ic_types::crypto::canister_threshold_sig::ThresholdSchnorrCombinedSignature;
+    use ic_types::crypto::ExtendedDerivationPath;
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
     use ic_types::time::UNIX_EPOCH;
     use ic_types::Randomness;

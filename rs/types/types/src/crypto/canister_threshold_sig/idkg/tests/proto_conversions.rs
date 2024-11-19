@@ -2,7 +2,7 @@ use crate::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscriptId, IDkgTranscriptOperation,
     InitialIDkgDealings, SignedIDkgDealing,
 };
-use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
+use crate::crypto::ExtendedDerivationPath;
 use crate::{Height, NodeId, PrincipalId};
 
 use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::{

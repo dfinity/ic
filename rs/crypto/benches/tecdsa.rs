@@ -12,10 +12,9 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::{ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
 use ic_types::crypto::canister_threshold_sig::{
-    ExtendedDerivationPath, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
-    ThresholdEcdsaSigShare,
+    ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
 };
-use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::Randomness;
 use rand::{CryptoRng, Rng, RngCore};
 use std::collections::BTreeMap;
