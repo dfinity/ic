@@ -1312,7 +1312,7 @@ impl SandboxedExecutionController {
                         Arc::clone(&state_reader),
                     );
                     // Exhaust the communication channel.
-                    while stop_or_evict_request.try_recv().is_ok() {}
+                    // while stop_or_evict_request.try_recv().is_ok() {}
                 }
             }
 
