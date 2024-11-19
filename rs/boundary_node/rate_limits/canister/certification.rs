@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use ic_asset_certification::{Asset, AssetConfig, AssetEncoding, AssetRouter};
+use ic_asset_certification::{Asset, AssetConfig, AssetEncoding, AssetFallbackConfig, AssetRouter};
 use ic_cdk::api::{data_certificate, set_certified_data};
 use ic_http_certification::{HeaderField, HttpCertificationTree, HttpRequest, HttpResponse};
 
@@ -105,14 +105,48 @@ pub fn certify_assets(assets: Vec<Asset<'static, 'static>>) {
             aliased_by: vec![],
             encodings: encodings.clone(),
         },
+        AssetConfig::File {
+            path: "/404".to_string(),
+            content_type: Some("text/plain".to_string()),
+            headers: get_asset_headers(vec![(
+                "cache-control".to_string(),
+                "public, no-cache, no-store".to_string(),
+            )]),
+            fallback_for: vec![AssetFallbackConfig {
+                scope: "/".to_string(),
+            }],
+            aliased_by: vec![],
+            encodings: encodings.clone(),
+        },
+        AssetConfig::File {
+            path: "/403".to_string(),
+            content_type: Some("text/plain".to_string()),
+            headers: get_asset_headers(vec![(
+                "cache-control".to_string(),
+                "public, no-cache, no-store".to_string(),
+            )]),
+            fallback_for: vec![AssetFallbackConfig {
+                scope: "/rules".to_string(),
+            }],
+            aliased_by: vec![],
+            encodings: encodings.clone(),
+        },
     ];
 
-    // Add `NOT Found` to assets
+    // Add 404 and 403 paths to assets
     let mut assets = assets;
-    assets.push(Asset::new("/", "404 Not Found".as_bytes().to_owned()));
+    assets.push(Asset::new("/404", "404 Not Found".as_bytes().to_owned()));
+    assets.push(Asset::new("/403", "403 Forbidden".as_bytes().to_owned()));
 
+    // We need to keep only one response for each asset, hence we:
+    // - first delete all assets
+    // - certify all assets
     ASSET_ROUTER.with_borrow_mut(|asset_router| {
-        // Certify the assets using the `certify_assets` function from the `ic-asset-certification` crate.
+        let _ = asset_router.delete_assets(assets.clone(), asset_configs.clone());
+    });
+
+    // Certify all the assets
+    ASSET_ROUTER.with_borrow_mut(|asset_router| {
         if let Err(err) = asset_router.certify_assets(assets, asset_configs) {
             ic_cdk::trap(&format!("Failed to certify assets: {}", err));
         }
