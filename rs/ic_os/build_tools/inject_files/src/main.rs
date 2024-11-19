@@ -124,7 +124,7 @@ async fn main() -> Result<()> {
 
     let mut cmd = Command::new("zstd");
     let _ = cmd
-        .arg("-q")
+        .arg("-qf")
         .arg("--threads=0")
         .arg(&temp_tar)
         .arg("-o")

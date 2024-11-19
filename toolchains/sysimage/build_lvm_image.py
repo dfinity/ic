@@ -97,7 +97,7 @@ def main():
     subprocess.run(
         [
             "zstd",
-            "-q",
+            "-qf",
             "--threads=0",
             temp_tar,
             "-o",
