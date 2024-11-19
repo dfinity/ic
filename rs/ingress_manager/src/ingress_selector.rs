@@ -92,9 +92,7 @@ impl IngressSelector for IngressManager {
 
         // Select valid ingress messages and stop once the total size
         // becomes greater than byte_limit.
-        let mut accumulated_size = 0;
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
-        let mut num_messages = 0;
 
         let ingress_pool = self.ingress_pool.read().unwrap();
 
@@ -146,7 +144,7 @@ impl IngressSelector for IngressManager {
             canister_count => byte_limit.get() as usize / canister_count,
         };
 
-        let mut messages_in_payload = vec![];
+        let mut payload = IngressPayload::default();
 
         let mut canisters: Vec<_> = canister_queues.keys().cloned().collect();
 
@@ -164,13 +162,13 @@ impl IngressSelector for IngressManager {
                 while let Some(msg) = queue.msgs.last() {
                     let ingress = &msg.msg.signed_ingress;
                     let result = self.validate_ingress(
-                        IngressMessageId::from(ingress),
+                        &IngressMessageId::from(ingress),
                         ingress,
                         &state,
                         context,
                         &settings,
                         &past_ingress_set,
-                        num_messages,
+                        payload.message_count(),
                         &mut cycles_needed,
                     );
                     // Any message that generates validation errors gets removed from
@@ -189,7 +187,7 @@ impl IngressSelector for IngressManager {
                     let ingress_size = ingress.count_bytes();
 
                     // Break criterion #1: global byte limit
-                    if (accumulated_size + ingress_size) as u64 > byte_limit.get() {
+                    if (payload.count_bytes() + ingress_size) as u64 > byte_limit.get() {
                         break 'outer;
                     }
 
@@ -207,14 +205,12 @@ impl IngressSelector for IngressManager {
                         break;
                     }
 
-                    num_messages += 1;
-                    accumulated_size += ingress_size;
                     queue.msgs_included += 1;
                     queue.bytes_included += ingress_size;
                     // The quota is not a hard limit. We always include the first message
                     // of each canister. This is why we check the third break criterion
                     // after this line.
-                    messages_in_payload.push(ingress.clone());
+                    payload.push(ingress);
                     queue.msgs.pop();
                 }
 
@@ -227,7 +223,7 @@ impl IngressSelector for IngressManager {
                 }
             }
 
-            if byte_limit.get() as usize <= accumulated_size {
+            if byte_limit.get() as usize <= payload.count_bytes() {
                 // No remaining quota means the block is full. No more iterations needed.
                 break;
             } else {
@@ -235,40 +231,30 @@ impl IngressSelector for IngressManager {
                 match canisters.len() {
                     0 => break,
                     canister_count => {
-                        quota += (byte_limit.get() as usize - accumulated_size) / canister_count;
+                        quota +=
+                            (byte_limit.get() as usize - payload.count_bytes()) / canister_count;
                     }
                 };
             }
         }
-        // Relevant ingress was cloned, and no references are held, so we drop the lock.
-        drop(ingress_pool);
 
         // NOTE: Since the `Vec<SignedIngress>` is deserialized and slightly smaller than the
         // serialized `IngressPayload`, we need to check the size of the latter.
         // In the improbable case, that the deserialized form fits the size limit but the
         // serialized form does not, we need to remove some `SignedIngress` and try again.
-        let payload = loop {
-            let payload = IngressPayload::from(messages_in_payload.clone());
-            let payload_size = payload.count_bytes();
-            if payload_size < byte_limit.get() as usize {
-                break payload;
-            }
-
+        while !payload.is_empty() && payload.count_bytes() > byte_limit.get() as usize {
             warn!(
                 self.log,
                 "Serialized form of ingress (was {} bytes) did not pass \
                 size restriction ({} bytes), reducing ingress and trying again",
-                payload_size,
+                payload.count_bytes(),
                 byte_limit.get()
             );
-            messages_in_payload.pop();
-            if messages_in_payload.is_empty() {
-                break IngressPayload::default();
-            }
-        };
 
-        let payload_size = payload.count_bytes();
-        debug_assert!(payload_size <= byte_limit.get() as usize);
+            payload.pop();
+        }
+
+        debug_assert!(payload.count_bytes() <= byte_limit.get() as usize);
 
         payload
     }
@@ -340,7 +326,7 @@ impl IngressSelector for IngressManager {
                 .map_err(InvalidIngressPayloadReason::IngressPayloadError)?;
 
             self.validate_ingress(
-                ingress_id.clone(),
+                &ingress_id,
                 &ingress,
                 &state,
                 context,
@@ -429,7 +415,7 @@ impl IngressManager {
     #[allow(clippy::too_many_arguments)]
     fn validate_ingress(
         &self,
-        ingress_id: IngressMessageId,
+        ingress_id: &IngressMessageId,
         signed_ingress: &SignedIngress,
         state: &ReplicatedState,
         context: &ValidationContext,
@@ -438,6 +424,7 @@ impl IngressManager {
         num_messages: usize,
         cycles_needed: &mut BTreeMap<CanisterId, Cycles>,
     ) -> ValidationResult<IngressPayloadValidationError> {
+        let message_id = MessageId::from(ingress_id);
         let ingress_message_size = signed_ingress.count_bytes();
         // The message is invalid if its size is larger than the configured maximum.
         if ingress_message_size > settings.max_ingress_bytes_per_message {
@@ -459,8 +446,7 @@ impl IngressManager {
         }
 
         // Do not include the message if it's a duplicate.
-        if past_ingress_set.contains(&ingress_id) {
-            let message_id = MessageId::from(&ingress_id);
+        if past_ingress_set.contains(ingress_id) {
             return Err(ValidationError::InvalidArtifact(
                 InvalidIngressPayloadReason::DuplicatedIngressMessage(message_id),
             ));
@@ -547,7 +533,6 @@ impl IngressManager {
             context.time,
             &self.registry_root_of_trust_provider(context.registry_version),
         ) {
-            let message_id = MessageId::from(&ingress_id);
             return Err(ValidationError::InvalidArtifact(match err {
                 RequestValidationError::InvalidRequestExpiry(msg)
                 | RequestValidationError::InvalidDelegationExpiry(msg) => {
