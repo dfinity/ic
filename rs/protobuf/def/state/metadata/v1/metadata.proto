@@ -81,7 +81,7 @@ message SchnorrArguments {
 message VetKdArguments {
   types.v1.VetKdKeyId key_id = 1;
   bytes derivation_id = 2;
-  bytes encryption_key = 3;
+  bytes encryption_public_key = 3;
   types.v1.NiDkgId ni_dkg_id = 4;
   uint64 height = 5;
 }

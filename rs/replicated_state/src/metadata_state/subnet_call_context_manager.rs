@@ -809,7 +809,7 @@ impl TryFrom<pb_metadata::SchnorrArguments> for SchnorrArguments {
 pub struct VetKdArguments {
     pub key_id: VetKdKeyId,
     pub derivation_id: Vec<u8>,
-    pub encryption_key: Vec<u8>,
+    pub encryption_public_key: Vec<u8>,
     pub ni_dkg_id: NiDkgId,
     pub height: Height,
 }
@@ -819,7 +819,7 @@ impl From<&VetKdArguments> for pb_metadata::VetKdArguments {
         Self {
             key_id: Some((&args.key_id).into()),
             derivation_id: args.derivation_id.to_vec(),
-            encryption_key: args.encryption_key.to_vec(),
+            encryption_public_key: args.encryption_public_key.to_vec(),
             ni_dkg_id: Some((args.ni_dkg_id.clone()).into()),
             height: args.height.get(),
         }
@@ -832,7 +832,7 @@ impl TryFrom<pb_metadata::VetKdArguments> for VetKdArguments {
         Ok(VetKdArguments {
             key_id: try_from_option_field(context.key_id, "VetKdArguments::key_id")?,
             derivation_id: context.derivation_id.to_vec(),
-            encryption_key: context.encryption_key.to_vec(),
+            encryption_public_key: context.encryption_public_key.to_vec(),
             ni_dkg_id: try_from_option_field(context.ni_dkg_id, "VetKdArguments::ni_dkg_id")?,
             height: Height::from(context.height),
         })
