@@ -613,6 +613,47 @@ pub struct ManageDappCanisterSettings {
     #[prost(uint64, optional, tag = "7")]
     pub wasm_memory_limit: ::core::option::Option<u64>,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SnsVersion {
+    /// The hash of the Governance canister WASM.
+    #[prost(bytes = "vec", optional, tag = "1")]
+    pub governance_wasm_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// The hash of the Swap canister WASM.
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub swap_wasm_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// The hash of the Root canister WASM.
+    #[prost(bytes = "vec", optional, tag = "3")]
+    pub root_wasm_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// The hash of the Index canister WASM.
+    #[prost(bytes = "vec", optional, tag = "4")]
+    pub index_wasm_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// The hash of the Ledger canister WASM.
+    #[prost(bytes = "vec", optional, tag = "5")]
+    pub ledger_wasm_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// The hash of the Ledger Archive canister WASM.
+    #[prost(bytes = "vec", optional, tag = "6")]
+    pub archive_wasm_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AdvanceSnsTargetVersion {
+    /// If not specified, the target will advance to the latest SNS version known to this SNS.
+    #[prost(message, optional, tag = "1")]
+    pub new_target: ::core::option::Option<SnsVersion>,
+}
 /// A proposal is the immutable input of a proposal submission.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[compare_default]
@@ -641,7 +682,7 @@ pub struct Proposal {
     /// of this mapping.
     #[prost(
         oneof = "proposal::Action",
-        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18"
+        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -704,7 +745,7 @@ pub mod proposal {
         RemoveGenericNervousSystemFunction(u64),
         /// Execute a method outside the SNS canisters.
         ///
-        /// Id = \[1000-u64::MAX\].
+        /// Ids \in \[1000, u64::MAX\].
         #[prost(message, tag = "10")]
         ExecuteGenericNervousSystemFunction(super::ExecuteGenericNervousSystemFunction),
         /// Execute an upgrade to next version on the blessed SNS upgrade path.
@@ -714,7 +755,7 @@ pub mod proposal {
         UpgradeSnsToNextVersion(super::UpgradeSnsToNextVersion),
         /// Modify values of SnsMetadata.
         ///
-        /// Id = 8
+        /// Id = 8.
         #[prost(message, tag = "12")]
         ManageSnsMetadata(super::ManageSnsMetadata),
         /// Transfer SNS treasury funds (ICP or SNS token) to an account.
@@ -738,7 +779,7 @@ pub mod proposal {
         MintSnsTokens(super::MintSnsTokens),
         /// Change some parameters on the ledger.
         ///
-        /// Id = 13
+        /// Id = 13.
         #[prost(message, tag = "17")]
         ManageLedgerParameters(super::ManageLedgerParameters),
         /// Change canister settings for one or more dapp canister(s).
@@ -746,6 +787,11 @@ pub mod proposal {
         /// Id = 14.
         #[prost(message, tag = "18")]
         ManageDappCanisterSettings(super::ManageDappCanisterSettings),
+        /// Advance SNS target version.
+        ///
+        /// Id = 15.
+        #[prost(message, tag = "19")]
+        AdvanceSnsTargetVersion(super::AdvanceSnsTargetVersion),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -977,6 +1023,8 @@ pub struct ProposalData {
     /// Id 8 - ManageSnsMetadata proposals.
     /// Id 9 - TransferSnsTreasuryFunds proposals.
     /// Id 13 - ManageLedgerParameters proposals.
+    /// Id 14 - ManageDappCanisterSettings proposals.
+    /// Id 15 - AdvanceSnsTargetVersion proposals.
     #[prost(uint64, tag = "1")]
     pub action: u64,
     /// This is stored here temporarily. It is also stored on the map
@@ -1100,7 +1148,7 @@ pub struct ProposalData {
         ::core::option::Option<::ic_nervous_system_proto::pb::v1::Percentage>,
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
-    #[prost(oneof = "proposal_data::ActionAuxiliary", tags = "22, 23")]
+    #[prost(oneof = "proposal_data::ActionAuxiliary", tags = "22, 23, 24")]
     pub action_auxiliary: ::core::option::Option<proposal_data::ActionAuxiliary>,
 }
 /// Nested message and enum types in `ProposalData`.
@@ -1129,6 +1177,20 @@ pub mod proposal_data {
         #[prost(message, optional, tag = "1")]
         pub valuation: ::core::option::Option<super::Valuation>,
     }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct AdvanceSnsTargetVersionActionAuxiliary {
+        /// Corresponds to the Some(target_version) from an AdvanceSnsTargetVersion proposal, or
+        /// to the last SNS version known to this SNS at the time of AdvanceSnsTargetVersion creation.
+        #[prost(message, optional, tag = "1")]
+        pub target_version: ::core::option::Option<super::SnsVersion>,
+    }
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
     #[derive(
@@ -1144,6 +1206,8 @@ pub mod proposal_data {
         TransferSnsTreasuryFunds(TransferSnsTreasuryFundsActionAuxiliary),
         #[prost(message, tag = "23")]
         MintSnsTokens(MintSnsTokensActionAuxiliary),
+        #[prost(message, tag = "24")]
+        AdvanceSnsTargetVersion(AdvanceSnsTargetVersionActionAuxiliary),
     }
 }
 #[derive(
