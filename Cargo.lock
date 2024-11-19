@@ -11315,7 +11315,6 @@ dependencies = [
 name = "ic-replica"
 version = "0.9.0"
 dependencies = [
- "anyhow",
  "assert_cmd",
  "canister-test",
  "clap 4.5.20",
@@ -11356,14 +11355,12 @@ dependencies = [
  "ic-sys",
  "ic-test-utilities",
  "ic-tracing",
+ "ic-tracing-jaeger-exporter",
  "ic-types",
  "ic-xnet-payload-builder",
  "libc",
  "nix 0.24.3",
  "num_cpus",
- "opentelemetry 0.27.0",
- "opentelemetry-otlp",
- "opentelemetry_sdk 0.27.0",
  "pprof",
  "predicates",
  "prometheus",
@@ -11376,7 +11373,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-flame",
- "tracing-opentelemetry 0.28.0",
  "tracing-subscriber",
  "wat",
 ]
