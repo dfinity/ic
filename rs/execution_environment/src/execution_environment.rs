@@ -20,7 +20,9 @@ use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
-use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
+use ic_crypto_utils_canister_threshold_sig::{
+    derive_threshold_public_key, derive_vetkd_public_key,
+};
 use ic_cycles_account_manager::{
     is_delayed_ingress_induction_cost, CyclesAccountManager, IngressInductionCost,
     ResourceSaturation,
@@ -41,7 +43,7 @@ use ic_management_canister_types::{
     SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
     SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
     TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
-    VetKdPublicKeyArgs, IC_00,
+    VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1260,21 +1262,12 @@ impl ExecutionEnvironment {
                                         Some(id) => id.into(),
                                         None => *msg.sender(),
                                     };
-                                    // TODO: Implement the function
-
-                                    todo!()
-                                    // self.get_threshold_public_key(
-                                    //     pubkey,
-                                    //     canister_id,
-                                    //     args.derivation_path.into_inner(),
-                                    // )
-                                    // .map(|res| {
-                                    //     ECDSAPublicKeyResponse {
-                                    //         public_key: res.public_key,
-                                    //         chain_code: res.chain_key,
-                                    //     }
-                                    //     .encode()
-                                    // })
+                                    self.get_vetkd_public_key(
+                                        pubkey,
+                                        canister_id,
+                                        args.derivation_path.into_inner(),
+                                    )
+                                    .map(|public_key| VetKdPublicKeyResult { public_key }.encode())
                                 }
                             },
                         };
@@ -2669,6 +2662,22 @@ impl ExecutionEnvironment {
         derivation_path: Vec<Vec<u8>>,
     ) -> Result<PublicKey, UserError> {
         derive_threshold_public_key(
+            subnet_public_key,
+            &ExtendedDerivationPath {
+                caller,
+                derivation_path,
+            },
+        )
+        .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, format!("{}", err)))
+    }
+
+    fn get_vetkd_public_key(
+        &self,
+        subnet_public_key: &MasterPublicKey,
+        caller: PrincipalId,
+        derivation_path: Vec<Vec<u8>>,
+    ) -> Result<Vec<u8>, UserError> {
+        derive_vetkd_public_key(
             subnet_public_key,
             &ExtendedDerivationPath {
                 caller,
