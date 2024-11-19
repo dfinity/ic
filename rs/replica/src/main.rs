@@ -63,8 +63,7 @@ fn layer_for_exporting_spans_to_jeager(
         .with_tonic()
         .with_endpoint(jager_addr)
         .with_protocol(opentelemetry_otlp::Protocol::Grpc)
-        .build()
-        .unwrap();
+        .build()?;
 
     let tracer = opentelemetry_sdk::trace::TracerProvider::builder()
         .with_config(
