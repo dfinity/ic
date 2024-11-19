@@ -27,8 +27,7 @@ pub(super) enum ResolveDestinationError {
     MethodNotFound(String),
     SubnetNotFound(CanisterId, Ic00Method),
     AlreadyResolved(PrincipalId),
-    EcdsaKeyError(String),
-    IDkgKeyError(String),
+    ChainKeyError(String),
 }
 
 impl From<UserError> for ResolveDestinationError {
@@ -329,7 +328,7 @@ fn route_chain_key_message(
 
     match requested_subnet {
         Some(subnet_id) => match network_topology.subnets.get(subnet_id) {
-            None => Err(ResolveDestinationError::IDkgKeyError(format!(
+            None => Err(ResolveDestinationError::ChainKeyError(format!(
                 "Requested threshold key {} from unknown subnet {}",
                 key_id, subnet_id
             ))),
@@ -343,7 +342,7 @@ fn route_chain_key_message(
                             {
                                 Ok((*subnet_id).get())
                             } else {
-                                Err(ResolveDestinationError::IDkgKeyError(format!(
+                                Err(ResolveDestinationError::ChainKeyError(format!(
                                     "Subnet {} is not enabled to sign with threshold key {}",
                                     subnet_id, key_id,
                                 )))
@@ -352,7 +351,7 @@ fn route_chain_key_message(
                         ChainKeySubnetKind::OnlyHoldsKey => Ok((*subnet_id).get()),
                     }
                 } else {
-                    Err(ResolveDestinationError::IDkgKeyError(format!(
+                    Err(ResolveDestinationError::ChainKeyError(format!(
                         "Requested unknown threshold key {} on subnet {}, subnet has keys: {}",
                         key_id,
                         subnet_id,
@@ -371,7 +370,7 @@ fn route_chain_key_message(
             match chain_key_subnet_kind {
                 ChainKeySubnetKind::HoldsAndSignWithKey => {
                     let keys = format_keys(network_topology.idkg_signing_subnets.keys());
-                    Err(ResolveDestinationError::IDkgKeyError(format!(
+                    Err(ResolveDestinationError::ChainKeyError(format!(
                         "Requested unknown or signing disabled threshold key: {}, existing keys with signing enabled: {}",
                         key_id, keys
                     )))
@@ -385,7 +384,7 @@ fn route_chain_key_message(
                         keys.extend(topology.idkg_keys_held.iter().cloned());
                     }
                     let keys = format_keys(keys.iter());
-                    Err(ResolveDestinationError::IDkgKeyError(format!(
+                    Err(ResolveDestinationError::ChainKeyError(format!(
                         "Requested unknown threshold key: {}, existing keys: {}",
                         key_id, keys
                     )))
@@ -625,7 +624,7 @@ mod tests {
                     subnet_test_id(2),
                 )
                 .unwrap_err(),
-                ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
+                ResolveDestinationError::ChainKeyError(err) => assert_eq!(
                     err,
                     format!(
                         "Requested unknown threshold key {} on subnet {}, subnet has keys: []",
@@ -652,7 +651,7 @@ mod tests {
                     subnet_test_id(2),
                 )
                 .unwrap_err(),
-                ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
+                ResolveDestinationError::ChainKeyError(err) => assert_eq!(
                     err,
                     format!(
                         "Requested threshold key {} from unknown subnet {}",
@@ -680,7 +679,7 @@ mod tests {
                         subnet_test_id(2),
                     )
                     .unwrap_err(),
-                    ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
+                    ResolveDestinationError::ChainKeyError(err) => assert_eq!(
                         err,
                         format!(
                             "Requested unknown threshold key {} on subnet {}, subnet has keys: []",
@@ -708,7 +707,7 @@ mod tests {
                     subnet_test_id(2),
                 )
                 .unwrap_err(),
-                ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
+                ResolveDestinationError::ChainKeyError(err) => assert_eq!(
                     err,
                     format!(
                         "Requested threshold key {} from unknown subnet {}",
@@ -753,7 +752,7 @@ mod tests {
                     subnet_test_id(2),
                 )
                 .unwrap_err(),
-                ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
+                ResolveDestinationError::ChainKeyError(err) => assert_eq!(
                     err,
                     format!(
                         "Requested unknown threshold key {} on subnet {}, subnet has keys: []",
@@ -779,7 +778,7 @@ mod tests {
                     subnet_test_id(2),
                 )
                 .unwrap_err(),
-                ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
+                ResolveDestinationError::ChainKeyError(err) => assert_eq!(
                     err,
                     format!(
                         "Requested threshold key {} from unknown subnet {}",
@@ -806,7 +805,7 @@ mod tests {
                         subnet_test_id(2),
                     )
                     .unwrap_err(),
-                    ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
+                    ResolveDestinationError::ChainKeyError(err) => assert_eq!(
                         err,
                         format!(
                             "Requested unknown threshold key {} on subnet {}, subnet has keys: []",
@@ -833,7 +832,7 @@ mod tests {
                     subnet_test_id(2),
                 )
                 .unwrap_err(),
-                ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
+                ResolveDestinationError::ChainKeyError(err) => assert_eq!(
                     err,
                     format!(
                         "Requested threshold key {} from unknown subnet {}",
@@ -903,7 +902,7 @@ mod tests {
                 subnet_test_id(1),
             )
             .unwrap_err(),
-            ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
+            ResolveDestinationError::ChainKeyError(err) => assert_eq!(
                     err,
                     format!(
                         "Requested unknown or signing disabled threshold key: {}, existing keys with signing enabled: []",
@@ -1021,7 +1020,7 @@ mod tests {
                 &Some(subnet_id),
                 ChainKeySubnetKind::HoldsAndSignWithKey,
             ) {
-                Err(ResolveDestinationError::IDkgKeyError(msg)) => assert_eq!(
+                Err(ResolveDestinationError::ChainKeyError(msg)) => assert_eq!(
                     msg,
                     format!(
                         "Subnet {} is not enabled to sign with threshold key {}",
@@ -1047,7 +1046,7 @@ mod tests {
                 &Some(unknown_subnet_id),
                 ChainKeySubnetKind::HoldsAndSignWithKey,
             ) {
-                Err(ResolveDestinationError::IDkgKeyError(msg)) => assert_eq!(
+                Err(ResolveDestinationError::ChainKeyError(msg)) => assert_eq!(
                     msg,
                     format!(
                         "Requested threshold key {key_id} from unknown subnet {unknown_subnet_id}",
@@ -1072,7 +1071,7 @@ mod tests {
                 &Some(subnet_id),
                 ChainKeySubnetKind::HoldsAndSignWithKey,
             ) {
-                Err(ResolveDestinationError::IDkgKeyError(msg)) => assert_eq!(
+                Err(ResolveDestinationError::ChainKeyError(msg)) => assert_eq!(
                     msg,
                     format!("Requested unknown threshold key {key_id} on subnet {subnet_id}, subnet has keys: []",)
                 ),
@@ -1106,7 +1105,7 @@ mod tests {
                 &None,
                 ChainKeySubnetKind::HoldsAndSignWithKey,
             ) {
-                Err(ResolveDestinationError::IDkgKeyError(msg)) => assert_eq!(
+                Err(ResolveDestinationError::ChainKeyError(msg)) => assert_eq!(
                     msg,
                     format!(
                         "Requested unknown or signing disabled threshold key: {unknown_key_id}, existing keys with signing enabled: [{known_key_id}]",
@@ -1145,7 +1144,7 @@ mod tests {
                 &None,
                 ChainKeySubnetKind::OnlyHoldsKey,
             ) {
-                Err(ResolveDestinationError::IDkgKeyError(msg)) => assert_eq!(
+                Err(ResolveDestinationError::ChainKeyError(msg)) => assert_eq!(
                     msg,
                     format!(
                         "Requested unknown threshold key: {unknown_key_id}, existing keys: [{key_id1}, {key_id2}]",
