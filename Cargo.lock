@@ -8002,6 +8002,7 @@ dependencies = [
 name = "ic-crypto-utils-canister-threshold-sig"
 version = "0.9.0"
 dependencies = [
+ "ic-crypto-internal-bls12-381-vetkd",
  "ic-crypto-internal-threshold-sig-canister-threshold-sig",
  "ic-types",
 ]

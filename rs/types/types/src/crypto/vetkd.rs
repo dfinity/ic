@@ -70,6 +70,14 @@ impl std::fmt::Debug for VetKdEncryptedKey {
 impl_display_using_debug!(VetKdEncryptedKey);
 
 #[derive(Clone, Eq, PartialEq, Debug)]
+pub enum VetKdPublicKeyDeriveError {
+    InvalidArgument(String),
+    InvalidAlgorithmId,
+    InvalidPublicKey,
+}
+impl_display_using_debug!(VetKdPublicKeyDeriveError);
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum VedKdKeyShareCreationError {
     ThresholdSigDataNotFound(ThresholdSigDataNotFoundError),
     SecretKeyNotFound { dkg_id: NiDkgId, key_id: String },
