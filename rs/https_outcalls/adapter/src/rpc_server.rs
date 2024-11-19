@@ -48,14 +48,14 @@ type OutboundRequestBody = Full<Bytes>;
 
 struct Cache {
     api_bn_ips: Vec<String>,
-    clients: Vec<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>,
+    socks_clients: Vec<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>,
 }
 
 impl Cache {
     fn new() -> Self {
         Self {
             api_bn_ips: Vec::new(),
-            clients: Vec::new(),
+            socks_clients: Vec::new(),
         }
     }
 
@@ -65,15 +65,15 @@ impl Cache {
         client: Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>,
     ) {
         self.api_bn_ips.push(ip);
-        self.clients.push(client);
+        self.socks_clients.push(client);
     }
 
     fn is_empty(&self) -> bool {
-        self.clients.is_empty()
+        self.socks_clients.is_empty()
     }
 
     fn len(&self) -> usize {
-        self.clients.len()
+        self.socks_clients.len()
     }
 }
 
@@ -162,7 +162,7 @@ impl CanisterHttp {
         }
 
         let index = self.next_proxy_index.fetch_add(1, Ordering::SeqCst);
-        Some(cache.clients[index % cache.len()].clone())
+        Some(cache.socks_clients[index % cache.len()].clone())
     }
 }
 
@@ -180,17 +180,17 @@ impl HttpsOutcallsService for CanisterHttp {
         sorted_incoming_ips.sort();
         sorted_incoming_ips.dedup();
 
-        let mut cache = self.cache.load_full();
+        let mut current_cache = self.cache.load_full();
 
-        let cached_ips = cache.api_bn_ips.clone();
+        let cached_ips = current_cache.api_bn_ips.clone();
 
         if !sorted_incoming_ips.is_empty() && cached_ips != sorted_incoming_ips {
             // multiple threads can enter this block, but it's fine, as the whole cache is lightweight.
-            cache = Arc::new(self.create_cache(sorted_incoming_ips));
-            self.cache.store(cache.clone());
+            current_cache = Arc::new(self.create_cache(sorted_incoming_ips));
+            self.cache.store(current_cache.clone());
         }
 
-        // "cache" now points to Cache with the IPs from the request.
+        // "current_cache" now points to the Cache with the IPs from the request.
 
         let uri = req.url.parse::<Uri>().map_err(|err| {
             debug!(self.logger, "Failed to parse URL: {}", err);
@@ -276,7 +276,7 @@ impl HttpsOutcallsService for CanisterHttp {
                 // fail fast because our interface does not have an ipv4 assigned.
                 Err(direct_err) => {
                     self.metrics.requests_socks.inc();
-                    let client = self.get_next_socks_client(&cache).ok_or_else(|| {
+                    let client = self.get_next_socks_client(&current_cache).ok_or_else(|| {
                         Status::new(
                             tonic::Code::Unavailable,
                             "No SOCKS proxy available".to_string(),
