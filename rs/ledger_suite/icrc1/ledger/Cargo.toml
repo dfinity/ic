@@ -34,6 +34,7 @@ ic-metrics-encoder = "1.1.1"
 ic-stable-structures = { workspace = true }
 icrc-ledger-client = { path = "../../../../packages/icrc-ledger-client" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+minicbor = { workspace = true }
 num-traits = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

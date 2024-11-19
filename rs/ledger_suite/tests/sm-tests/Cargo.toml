@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+assert_matches = { workspace = true }
 async-trait = { workspace = true }
 candid = { workspace = true }
 cddl = "0.9.4"
@@ -16,6 +17,7 @@ hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
+ic-config = { path = "../../../config" }
 ic-error-types = { path = "../../../types/error_types" }
 ic-icrc1 = { path = "../../icrc1" }
 ic-icrc1-ledger = { path = "../../icrc1/ledger" }
@@ -27,6 +29,7 @@ ic-ledger-core = { path = "../../common/ledger_core" }
 ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
 ic-rosetta-test-utils = { path = "../../../rosetta-api/icp/test_utils" }
 ic-management-canister-types = { path = "../../../types/management_canister_types" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-types = { path = "../../../types/types" }
 ic-universal-canister = { path = "../../../universal_canister/lib" }

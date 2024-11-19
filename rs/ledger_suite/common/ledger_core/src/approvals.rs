@@ -500,7 +500,10 @@ impl<Tokens: Clone + Into<Nat> + TryFrom<Nat, Error = String>> Storable for Allo
             .encode(&mut buffer)
             .expect("Unable to serialize amount");
         if let Some(expires_at) = self.expires_at {
+            buffer.extend([8u8]);
             buffer.extend(expires_at.as_nanos_since_unix_epoch().to_le_bytes());
+        } else {
+            buffer.extend([0u8]);
         }
         // We don't serialize arrived_at - it is not used after stable structures migration.
         Cow::Owned(buffer)
@@ -512,12 +515,20 @@ impl<Tokens: Clone + Into<Nat> + TryFrom<Nat, Error = String>> Storable for Allo
         let amount = Tokens::try_from(amount).expect("Unable to convert Nat to Tokens");
         // arrived_at was not serialized, use a default value.
         let arrived_at = TimeStamp::from_nanos_since_unix_epoch(0);
-        let mut expires_at_bytes = [0u8; 8];
-        let expires_at = match cursor.read_exact(&mut expires_at_bytes) {
-            Ok(()) => Some(TimeStamp::from_nanos_since_unix_epoch(u64::from_le_bytes(
+        let mut expires_at_length_bytes = [0u8; 1];
+        cursor
+            .read_exact(&mut expires_at_length_bytes)
+            .expect("could not read expires_at_length_bytes");
+        let expires_at = if expires_at_length_bytes[0] > 0 {
+            let mut expires_at_bytes = [0u8; 8];
+            cursor
+                .read_exact(&mut expires_at_bytes)
+                .expect("could not read expires_at");
+            Some(TimeStamp::from_nanos_since_unix_epoch(u64::from_le_bytes(
                 expires_at_bytes,
-            ))),
-            _ => None,
+            )))
+        } else {
+            None
         };
         Self {
             amount,

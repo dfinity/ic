@@ -19,7 +19,7 @@ pub const DEFAULT_SUBACCOUNT: &Subaccount = &[0; 32];
 // Account representation of ledgers supporting the ICRC1 standard
 #[derive(Serialize, CandidType, Deserialize, Clone, Debug, Copy, Encode, Decode)]
 pub struct Account {
-    #[cbor(n(0), with = "crate::icrc1::principal")]
+    #[cbor(n(0), with = "crate::cbor::principal")]
     pub owner: Principal,
     #[cbor(n(1), with = "minicbor::bytes")]
     pub subaccount: Option<Subaccount>,
@@ -173,8 +173,6 @@ impl FromStr for Account {
     }
 }
 
-const MAX_SERIALIZATION_LEN: u32 = 92;
-
 impl Storable for Account {
     //// MINICBOR
     // fn to_bytes(&self) -> Cow<[u8]> {
@@ -240,24 +238,16 @@ impl Storable for Account {
     //// CIBORIUM
     fn to_bytes(&self) -> Cow<[u8]> {
         let mut buf = vec![];
-        ciborium::ser::into_writer(self, &mut buf).unwrap_or_else(|err| {
-            ic_cdk::api::trap(&format!("{:?}", err));
-        });
+        minicbor::encode(self, &mut buf).expect("event encoding should always succeed");
         Cow::Owned(buf)
     }
 
-    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        ciborium::de::from_reader(&bytes[..]).unwrap_or_else(|err| {
-            ic_cdk::api::trap(&format!("{:?}", err));
-        })
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        minicbor::decode(bytes.as_ref())
+            .unwrap_or_else(|e| panic!("failed to decode event bytes {}: {e}", hex::encode(bytes)))
     }
 
-    // const BOUND: Bound = Bound::Unbounded;
-
-    const BOUND: Bound = Bound::Bounded {
-        max_size: MAX_SERIALIZATION_LEN,
-        is_fixed_size: false,
-    };
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 #[cfg(test)]
@@ -270,9 +260,7 @@ mod tests {
 
     use candid::Principal;
 
-    use crate::icrc1::account::{
-        Account, ICRC1TextReprError, DEFAULT_SUBACCOUNT, MAX_SERIALIZATION_LEN,
-    };
+    use crate::icrc1::account::{Account, ICRC1TextReprError, DEFAULT_SUBACCOUNT};
 
     pub fn principal_strategy() -> impl Strategy<Value = Principal> {
         let bytes_strategy = prop::collection::vec(0..=255u8, 29);
@@ -419,28 +407,6 @@ mod tests {
             Account::from_str(str),
             Err(ICRC1TextReprError::InvalidChecksum { expected: _ })
         );
-    }
-
-    #[test]
-    fn test_account_max_serialization_length() {
-        let owner =
-            Principal::from_text("k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae")
-                .unwrap();
-        // let owner = Principal::anonymous();
-        let subaccount = Some(
-            hex::decode("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        );
-        // let subaccount = None;
-        let account = Account { owner, subaccount };
-        let serialized_len = account.to_bytes().len();
-        assert_eq!(
-            serialized_len,
-            1 + DEFAULT_SUBACCOUNT.len() + 1 + Principal::MAX_LENGTH_IN_BYTES
-        );
-        assert_eq!(serialized_len as u32, MAX_SERIALIZATION_LEN);
     }
 
     #[test]
