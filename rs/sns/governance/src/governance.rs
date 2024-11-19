@@ -5097,16 +5097,20 @@ impl Governance {
         }
     }
 
+    // This is a test-only function, so panicking should be okay.
     pub fn advance_target_version(
         &mut self,
         request: AdvanceTargetVersionRequest,
     ) -> AdvanceTargetVersionResponse {
-        self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionSet::new(
-            self.proto.target_version.clone(),
-            request.target_version.clone(),
-        ));
+        let AdvanceTargetVersionRequest {
+            target_version: Some(target_version),
+        } = request
+        else {
+            panic!("AdvanceTargetVersionRequest.target_version must be specified.");
+        };
 
-        self.proto.target_version = request.target_version;
+        self.perform_advance_target_version(target_version)
+            .expect("Cannot perform perform_advance_target_version");
 
         AdvanceTargetVersionResponse {}
     }

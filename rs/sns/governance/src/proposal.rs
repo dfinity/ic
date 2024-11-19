@@ -482,7 +482,6 @@ pub(crate) async fn validate_and_render_action(
             validate_and_render_manage_dapp_canister_settings(manage_dapp_canister_settings)
         }
         proposal::Action::AdvanceSnsTargetVersion(_) => {
-            // TODO[NNS1-3434]: Implement Action::AdvanceSnsTargetVersion
             return Err("Action::AdvanceSnsTargetVersion is not implemented yet.".to_string());
         }
     }
