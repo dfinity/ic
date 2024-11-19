@@ -171,7 +171,7 @@ oci.pull(
 use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
 oci.pull(
     name = "jaeger",
-    image = "ghcr.io/dfinity/jaegertracing/all-in-one@sha256:836e9b69c88afbedf7683ea7162e179de63b1f981662e83f5ebb68badadc710f",
+    image = "ghcr.io/dfinity/jaegertracing/all-in-one@sha256:24175ca1d44a43e1a9b03d7ab9f61e87efcc5a87f9e76e037a6fbf86cf65e8ee",
     platforms = [
         "linux/amd64",
     ],
