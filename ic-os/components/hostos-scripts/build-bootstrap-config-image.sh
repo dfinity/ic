@@ -295,7 +295,7 @@ EOF
     fi
     if [ "${JAEGER_ADDR}" != "" ]; then
         echo "jaeger_addr=http://${JAEGER_ADDR}" >"${BOOTSTRAP_TMPDIR}/jaeger_addr.conf"
-
+    fi
     if [ "${SOCKS_PROXY}" != "" ]; then
         echo "socks_proxy=${SOCKS_PROXY}" >"${BOOTSTRAP_TMPDIR}/socks_proxy.conf"
     fi
