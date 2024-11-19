@@ -193,7 +193,7 @@ pub(super) fn resolve_destination(
                 &MasterPublicKeyId::Ecdsa(key_id),
                 network_topology,
                 &None,
-                ChainKeySubnetKind::HoldsAndSignWithKey,
+                ChainKeySubnetKind::HoldsEnabledKey,
             )
         }
         Ok(Ic00Method::ComputeInitialIDkgDealings) => {
@@ -229,7 +229,7 @@ pub(super) fn resolve_destination(
                 &MasterPublicKeyId::Schnorr(args.key_id),
                 network_topology,
                 &None,
-                ChainKeySubnetKind::HoldsAndSignWithKey,
+                ChainKeySubnetKind::HoldsEnabledKey,
             )
         }
         Ok(Ic00Method::VetKdPublicKey) => {
@@ -247,7 +247,7 @@ pub(super) fn resolve_destination(
                 &MasterPublicKeyId::VetKd(args.key_id),
                 network_topology,
                 &None,
-                ChainKeySubnetKind::HoldsAndSignWithKey,
+                ChainKeySubnetKind::HoldsEnabledKey,
             )
         }
         Ok(Ic00Method::UploadChunk) => {
@@ -309,7 +309,7 @@ pub(super) fn resolve_destination(
 
 enum ChainKeySubnetKind {
     OnlyHoldsKey,
-    HoldsAndSignWithKey,
+    HoldsEnabledKey,
 }
 
 /// Routes to the `requested_subnet` if it holds the key (and fails if that
@@ -335,7 +335,7 @@ fn route_chain_key_message(
             Some(subnet_topology) => {
                 if subnet_topology.idkg_keys_held.contains(key_id) {
                     match chain_key_subnet_kind {
-                        ChainKeySubnetKind::HoldsAndSignWithKey => {
+                        ChainKeySubnetKind::HoldsEnabledKey => {
                             if network_topology
                                 .idkg_signing_subnets(key_id)
                                 .contains(subnet_id)
@@ -368,7 +368,7 @@ fn route_chain_key_message(
             // Otherwise either return an error, or look through all subnets to
             // find one with the key if signing isn't required.
             match chain_key_subnet_kind {
-                ChainKeySubnetKind::HoldsAndSignWithKey => {
+                ChainKeySubnetKind::HoldsEnabledKey => {
                     let keys = format_keys(network_topology.idkg_signing_subnets.keys());
                     Err(ResolveDestinationError::ChainKeyError(format!(
                         "Requested unknown or signing disabled threshold key: {}, existing keys with signing enabled: {}",
@@ -997,7 +997,7 @@ mod tests {
                     &key_id,
                     &network_topology,
                     &Some(subnet_test_id(0)),
-                    ChainKeySubnetKind::HoldsAndSignWithKey
+                    ChainKeySubnetKind::HoldsEnabledKey
                 )
                 .unwrap(),
                 subnet_test_id(0).get()
@@ -1018,7 +1018,7 @@ mod tests {
                 &key_id,
                 &network_topology,
                 &Some(subnet_id),
-                ChainKeySubnetKind::HoldsAndSignWithKey,
+                ChainKeySubnetKind::HoldsEnabledKey,
             ) {
                 Err(ResolveDestinationError::ChainKeyError(msg)) => assert_eq!(
                     msg,
@@ -1044,7 +1044,7 @@ mod tests {
                 &key_id,
                 &network_topology,
                 &Some(unknown_subnet_id),
-                ChainKeySubnetKind::HoldsAndSignWithKey,
+                ChainKeySubnetKind::HoldsEnabledKey,
             ) {
                 Err(ResolveDestinationError::ChainKeyError(msg)) => assert_eq!(
                     msg,
@@ -1069,7 +1069,7 @@ mod tests {
                 &key_id,
                 &network_topology,
                 &Some(subnet_id),
-                ChainKeySubnetKind::HoldsAndSignWithKey,
+                ChainKeySubnetKind::HoldsEnabledKey,
             ) {
                 Err(ResolveDestinationError::ChainKeyError(msg)) => assert_eq!(
                     msg,
@@ -1103,7 +1103,7 @@ mod tests {
                 &unknown_key_id,
                 &network_topology,
                 &None,
-                ChainKeySubnetKind::HoldsAndSignWithKey,
+                ChainKeySubnetKind::HoldsEnabledKey,
             ) {
                 Err(ResolveDestinationError::ChainKeyError(msg)) => assert_eq!(
                     msg,
