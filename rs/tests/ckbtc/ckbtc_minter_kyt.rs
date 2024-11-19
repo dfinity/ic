@@ -175,7 +175,6 @@ pub fn test_kyt(env: TestEnv) {
         }
         start_canister(&new_kyt_canister).await;
 
-        // Put the kyt canister into accept all utxos mode.
         upgrade_new_kyt(&mut new_kyt_canister, NewKytMode::Normal).await;
         // Now that the kyt canister is available and accept all utxos
         // we should be able to mint new utxos.
