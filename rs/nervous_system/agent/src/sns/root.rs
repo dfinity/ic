@@ -1,8 +1,14 @@
 use ic_base_types::PrincipalId;
-use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
+use ic_sns_root::{
+    pb::v1::{ListSnsCanistersRequest, ListSnsCanistersResponse},
+    GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+};
 use serde::{Deserialize, Serialize};
 
-use crate::CallCanisters;
+use crate::{
+    sns::archive::ArchiveCanister, sns::governance::GovernanceCanister, sns::index::IndexCanister,
+    sns::ledger::LedgerCanister, sns::swap::SwapCanister, sns::Sns, CallCanisters,
+};
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct RootCanister {
@@ -27,5 +33,31 @@ impl RootCanister {
                 },
             )
             .await
+    }
+
+    pub async fn list_sns_canisters<C: CallCanisters>(&self, agent: &C) -> Result<Sns, C::Error> {
+        let ListSnsCanistersResponse {
+            root: Some(sns_root_canister_id_1),
+            governance: Some(sns_governance_canister_id),
+            ledger: Some(sns_ledger_canister_id),
+            swap: Some(swap_canister_id),
+            index: Some(index_canister_id),
+            archives,
+            dapps: _,
+        } = agent
+            .call(self.canister_id, ListSnsCanistersRequest {})
+            .await?
+        else {
+            panic!("SNS root canister did not return canister IDs for all canisters - this should never happen");
+        };
+
+        Ok(Sns {
+            root: RootCanister::new(sns_root_canister_id_1),
+            governance: GovernanceCanister::new(sns_governance_canister_id),
+            ledger: LedgerCanister::new(sns_ledger_canister_id),
+            swap: SwapCanister::new(swap_canister_id),
+            index: IndexCanister::new(index_canister_id),
+            archive: archives.into_iter().map(ArchiveCanister::new).collect(),
+        })
     }
 }
