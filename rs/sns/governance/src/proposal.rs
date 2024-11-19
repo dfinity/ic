@@ -1,3 +1,6 @@
+use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
+use crate::cached_upgrade_steps::CachedUpgradeSteps;
+use crate::pb::v1::AdvanceSnsTargetVersion;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     governance::{
@@ -481,8 +484,13 @@ pub(crate) async fn validate_and_render_action(
         proposal::Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
             validate_and_render_manage_dapp_canister_settings(manage_dapp_canister_settings)
         }
-        proposal::Action::AdvanceSnsTargetVersion(_) => {
-            return Err("Action::AdvanceSnsTargetVersion is not implemented yet.".to_string());
+        proposal::Action::AdvanceSnsTargetVersion(advance_sns_target_version) => {
+            let cached_upgrade_steps = governance_proto.cached_upgrade_steps_or_err()?;
+            return validate_and_render_advance_sns_target_version_proposal(
+                env.canister_id(),
+                cached_upgrade_steps,
+                advance_sns_target_version,
+            );
         }
     }
     .map(|rendering| (rendering, ActionAuxiliary::None))
@@ -1708,6 +1716,54 @@ fn validate_and_render_manage_dapp_canister_settings(
     } else {
         Ok(render)
     }
+}
+
+fn validate_and_render_advance_sns_target_version_proposal(
+    sns_governance_canister_id: CanisterId,
+    cached_upgrade_steps: CachedUpgradeSteps,
+    advance_sns_target_version: &AdvanceSnsTargetVersion,
+) -> Result<(String, ActionAuxiliary), String> {
+    let new_target = if let Some(new_target) = &advance_sns_target_version.new_target {
+        let new_target = Version::try_from(new_target.clone()).map_err(|err| {
+            format!(
+                "Cannot validate and render AdvanceSnsTargetVersion proposal: {}",
+                err
+            )
+        })?;
+
+        cached_upgrade_steps.validate_new_target_version(&new_target)?;
+
+        new_target
+    } else {
+        cached_upgrade_steps.last().clone()
+    };
+
+    let valid_timestamp_seconds =
+        cached_upgrade_steps.approximate_time_of_validity_timestamp_seconds();
+
+    let current_target_versions_render =
+        render_two_versions_as_markdown_table(cached_upgrade_steps.current(), &new_target);
+
+    let upgrade_journal_url_render = format!(
+        "https://{}.raw.icp0.io/journal/json",
+        sns_governance_canister_id,
+    );
+
+    let render = format!(
+        "# Proposal to advance SNS target version\n\
+         {current_target_versions_render}\n\
+         ### Upgrade steps\n\
+         {cached_upgrade_steps}\n\
+         ### Monitoring the upgrade process\n\
+         Please note that the upgrade steps indicated above are not guaranteed to remain the same \
+         outside of the time period {valid_timestamp_seconds}. In particular, the upgrade steps \
+         for this SNS might change during this proposal's voting period.\n\
+         \n\
+         The **upgrade journal** provides up-to-date information on this SNS's upgrade process:\n\
+         {upgrade_journal_url_render}"
+    );
+
+    Ok((render, ActionAuxiliary::AdvanceSnsTargetVersion(new_target)))
 }
 
 impl ProposalData {
