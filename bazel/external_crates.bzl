@@ -22,6 +22,8 @@ ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
 BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
 
+IC_ASSET_CERTIFICATION_REV = "ac8f90b7c45e13e240d6c01a43d191b99f1aec4a"
+
 def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enabled):
     CRATE_ANNOTATIONS = {
         "canbench": [crate.annotation(
@@ -566,6 +568,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "pem",
                 ],
             ),
+            "ic-asset-certification_rev": crate.spec(
+                git = "https://github.com/dfinity/response-verification",
+                rev = IC_ASSET_CERTIFICATION_REV,
+                package = "ic-asset-certification",
+            ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
                 rev = "526d34d15cfbf369d8baf2dae9932aa18d570a1d",
@@ -600,11 +607,21 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-certification": crate.spec(
                 version = "2.6.0",
             ),
+            "ic-certification_rev": crate.spec(
+                git = "https://github.com/dfinity/response-verification",
+                rev = IC_ASSET_CERTIFICATION_REV,
+                package = "ic-certification",
+            ),
             "ic-certificate-verification": crate.spec(
                 version = "2.6.0",
             ),
             "ic-http-certification": crate.spec(
                 version = "2.6.0",
+            ),
+            "ic-http-certification_rev": crate.spec(
+                git = "https://github.com/dfinity/response-verification",
+                rev = IC_ASSET_CERTIFICATION_REV,
+                package = "ic-http-certification",
             ),
             "ic-http-gateway": crate.spec(
                 git = "https://github.com/dfinity/http-gateway",

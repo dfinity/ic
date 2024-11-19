@@ -11,10 +11,11 @@ anyhow = { workspace = true }
 candid = { workspace = true }
 getrandom = { version = "0.2", features = ["custom"] }
 hex = { workspace = true }
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+ic-asset-certification = { git = "https://github.com/dfinity/response-verification", rev = "ac8f90b7c45e13e240d6c01a43d191b99f1aec4a" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
+ic-http-certification = { git = "https://github.com/dfinity/response-verification", rev = "ac8f90b7c45e13e240d6c01a43d191b99f1aec4a" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-stable-structures = { workspace = true }
 mockall = { workspace = true }

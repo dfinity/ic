@@ -1,19 +1,20 @@
 use crate::access_control::{AccessLevelResolver, WithAuthorization};
 use crate::add_config::{AddsConfig, ConfigAdder};
+use crate::certification::serve_asset;
 use crate::confidentiality_formatting::{
     ConfigConfidentialityFormatter, RuleConfidentialityFormatter,
 };
 use crate::disclose::{DisclosesRules, RulesDiscloser};
 use crate::fetcher::{ConfigFetcher, EntityFetcher, IncidentFetcher, RuleFetcher};
 use crate::metrics::{
-    export_metrics_as_http_response, with_metrics_registry, WithMetrics, LAST_CANISTER_CHANGE_TIME,
-    LAST_SUCCESSFUL_REGISTRY_POLL_TIME, REGISTRY_POLL_CALLS_COUNTER,
+    WithMetrics, LAST_CANISTER_CHANGE_TIME, LAST_SUCCESSFUL_REGISTRY_POLL_TIME,
+    REGISTRY_POLL_CALLS_COUNTER,
 };
 use crate::state::{init_version_and_config, with_canister_state, CanisterApi};
 use candid::Principal;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::call;
 use ic_cdk_macros::{init, inspect_message, post_upgrade, query, update};
+use ic_http_certification::{HttpRequest, HttpResponse};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use rate_limits_api::{
     AddConfigResponse, ApiBoundaryNodeIdRecord, DiscloseRulesArg, DiscloseRulesResponse,
@@ -157,13 +158,8 @@ fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
 }
 
 #[query(decoding_quota = 10000)]
-fn http_request(request: HttpRequest) -> HttpResponse {
-    match request.path() {
-        "/metrics" => with_canister_state(|state| {
-            with_metrics_registry(|registry| export_metrics_as_http_response(registry, state))
-        }),
-        _ => HttpResponseBuilder::not_found().build(),
-    }
+fn http_request(request: HttpRequest<'static>) -> HttpResponse<'static> {
+    serve_asset(&request)
 }
 
 fn periodically_poll_api_boundary_nodes(interval: u64, canister_api: Arc<dyn CanisterApi>) {

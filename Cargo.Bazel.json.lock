@@ -1,5 +1,5 @@
 {
-  "checksum": "3ae1d8f974c70715eb6c96b5461fb094433a0ac382617ef84fa0efbfb2a8feef",
+  "checksum": "99060b1c8df99e29bda546fe7c68d5ad2b11f8c00c78aa0e704bc96ff4d2e193",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1562,6 +1562,7 @@
         ],
         "crate_features": {
           "common": [
+            "default",
             "perf-literal",
             "std"
           ],
@@ -18506,6 +18507,11 @@
               "target": "ic_agent"
             },
             {
+              "id": "ic-asset-certification 2.6.0",
+              "target": "ic_asset_certification",
+              "alias": "ic_asset_certification_rev"
+            },
+            {
               "id": "ic-bn-lib 0.1.0",
               "target": "ic_bn_lib"
             },
@@ -18546,12 +18552,22 @@
               "target": "ic_certification"
             },
             {
+              "id": "ic-certification 2.6.0",
+              "target": "ic_certification",
+              "alias": "ic_certification_rev"
+            },
+            {
               "id": "ic-certified-map 0.3.4",
               "target": "ic_certified_map"
             },
             {
               "id": "ic-http-certification 2.6.0",
               "target": "ic_http_certification"
+            },
+            {
+              "id": "ic-http-certification 2.6.0",
+              "target": "ic_http_certification",
+              "alias": "ic_http_certification_rev"
             },
             {
               "id": "ic-http-gateway 0.0.0",
@@ -25572,6 +25588,77 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "globset 0.4.13": {
+      "name": "globset",
+      "version": "0.4.13",
+      "package_url": "https://github.com/BurntSushi/ripgrep/tree/master/crates/globset",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/globset/0.4.13/download",
+          "sha256": "759c97c1e17c55525b57192c06a267cda0ac5210b222d6b82189a2338fa1c13d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "globset",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "globset",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "log"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "aho-corasick 1.0.2",
+              "target": "aho_corasick"
+            },
+            {
+              "id": "bstr 1.6.0",
+              "target": "bstr"
+            },
+            {
+              "id": "fnv 1.0.7",
+              "target": "fnv"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "regex 1.11.0",
+              "target": "regex"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.4.13"
+      },
+      "license": "Unlicense OR MIT",
+      "license_ids": [
+        "MIT",
+        "Unlicense"
+      ],
+      "license_file": "LICENSE-MIT"
+    },
     "governor 0.6.0": {
       "name": "governor",
       "version": "0.6.0",
@@ -30260,6 +30347,72 @@
         "Apache-2.0"
       ],
       "license_file": null
+    },
+    "ic-asset-certification 2.6.0": {
+      "name": "ic-asset-certification",
+      "version": "2.6.0",
+      "package_url": "https://github.com/dfinity/response-verification",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/response-verification",
+          "commitish": {
+            "Rev": "ac8f90b7c45e13e240d6c01a43d191b99f1aec4a"
+          },
+          "strip_prefix": "packages/ic-asset-certification"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_asset_certification",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_asset_certification",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "globset 0.4.13",
+              "target": "globset"
+            },
+            {
+              "id": "http 0.2.12",
+              "target": "http"
+            },
+            {
+              "id": "ic-certification 2.6.0",
+              "target": "ic_certification"
+            },
+            {
+              "id": "ic-http-certification 2.6.0",
+              "target": "ic_http_certification"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.6.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
     },
     "ic-bn-lib 0.1.0": {
       "name": "ic-bn-lib",
@@ -86237,6 +86390,7 @@
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.10",
     "ic-agent 0.37.1",
+    "ic-asset-certification 2.6.0",
     "ic-bn-lib 0.1.0",
     "ic-btc-interface 0.2.2",
     "ic-btc-test-utils 0.1.0",

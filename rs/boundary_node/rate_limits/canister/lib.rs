@@ -5,6 +5,8 @@ mod add_config;
 #[cfg(target_family = "wasm")]
 mod canister;
 #[allow(dead_code)]
+mod certification;
+#[allow(dead_code)]
 mod confidentiality_formatting;
 #[allow(dead_code)]
 mod disclose;

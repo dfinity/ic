@@ -4,8 +4,8 @@ use crate::{
     state::CanisterApi,
     types::Timestamp,
 };
-use ic_canisters_http_types::{HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::WASM_PAGE_SIZE_IN_BYTES;
+use ic_http_certification::HttpResponse;
 use prometheus::{CounterVec, Encoder, Gauge, IntGauge, Opts, Registry, TextEncoder};
 use std::cell::RefCell;
 
@@ -141,7 +141,7 @@ thread_local! {
 pub fn export_metrics_as_http_response(
     registry: &Registry,
     canister_api: impl CanisterApi,
-) -> HttpResponse {
+) -> HttpResponse<'static> {
     // Certain metrics need to be recomputed
     recompute_metrics(canister_api);
 
@@ -150,13 +150,21 @@ pub fn export_metrics_as_http_response(
     let metrics_family = registry.gather();
 
     match encoder.encode(&metrics_family, &mut buffer) {
-        Ok(()) => HttpResponseBuilder::ok()
-            .header("Content-Type", "text/plain")
-            .with_body_and_content_length(buffer)
+        Ok(()) => HttpResponse::builder()
+            .with_status_code(200)
+            .with_headers(vec![("Content-Type".to_string(), "text/plain".to_string())])
+            .with_body(buffer)
             .build(),
-        Err(err) => {
-            // Return an HTTP 500 error with detailed error information
-            HttpResponseBuilder::server_error(format!("Failed to encode metrics: {:?}", err))
+        Err(err) =>
+        // Return an HTTP 500 error with detailed error information
+        {
+            HttpResponse::builder()
+                .with_status_code(500)
+                .with_body(
+                    format!("Failed to encode metrics: {:?}", err)
+                        .as_bytes()
+                        .to_vec(),
+                )
                 .build()
         }
     }
