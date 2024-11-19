@@ -14,7 +14,7 @@ rust_library(
         "@crate_index//:opentelemetry-otlp",
         "@crate_index//:opentelemetry_sdk",
         "@crate_index//:tokio",
-        "@crate_index//:tracing-subscriber",
         "@crate_index//:tracing-opentelemetry",
+        "@crate_index//:tracing-subscriber",
     ],
 )

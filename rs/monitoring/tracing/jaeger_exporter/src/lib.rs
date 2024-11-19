@@ -5,7 +5,7 @@ use opentelemetry_sdk::{runtime as sdk_runtime, trace as sdk_trace, Resource};
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::{Layer, Registry};
 
-pub fn layer_for_exporting_spans_to_jaeger(
+pub fn jaeger_exporter(
     jaeger_addr: &str,
     service_name: &'static str,
     rt_handle: &tokio::runtime::Handle,
@@ -34,5 +34,5 @@ pub fn layer_for_exporting_spans_to_jaeger(
         .with_batch_exporter(span_exporter, sdk_runtime::Tokio)
         .build();
 
-    Ok(OpenTelemetryLayer::new(tracer.tracer("jaeger")).boxed())
+    Ok(OpenTelemetryLayer::new(tracer.tracer("jaeger-exporter")))
 }
