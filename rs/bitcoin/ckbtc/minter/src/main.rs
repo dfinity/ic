@@ -21,11 +21,11 @@ use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
-use ic_ckbtc_minter::MinterInfo;
 use ic_ckbtc_minter::{
     state::eventlog::{Event, GetEventsArg},
     storage, {Log, LogEntry, Priority},
 };
+use ic_ckbtc_minter::{MinterInfo, IC_CANISTER_RUNTIME};
 use icrc_ledger_types::icrc1::account::Account;
 use std::str::FromStr;
 
@@ -35,9 +35,7 @@ fn init(args: MinterArg) {
         MinterArg::Init(args) => {
             storage::record_event(&Event::Init(args.clone()));
             lifecycle::init::init(args);
-            schedule_now(TaskType::ProcessLogic);
-            schedule_now(TaskType::RefreshFeePercentiles);
-            schedule_now(TaskType::DistributeKytFee);
+            setup_tasks();
 
             #[cfg(feature = "self_check")]
             ok_or_die(check_invariants())
@@ -46,6 +44,12 @@ fn init(args: MinterArg) {
             panic!("expected InitArgs got UpgradeArgs");
         }
     }
+}
+
+fn setup_tasks() {
+    schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::RefreshFeePercentiles, &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::DistributeKytFee, &IC_CANISTER_RUNTIME);
 }
 
 #[cfg(feature = "self_check")]
@@ -120,7 +124,7 @@ fn timer() {
     #[cfg(feature = "self_check")]
     ok_or_die(check_invariants());
 
-    ic_ckbtc_minter::timer();
+    ic_ckbtc_minter::timer(IC_CANISTER_RUNTIME);
 }
 
 #[post_upgrade]
@@ -133,9 +137,7 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
         };
     }
     lifecycle::upgrade::post_upgrade(upgrade_arg);
-    schedule_now(TaskType::ProcessLogic);
-    schedule_now(TaskType::RefreshFeePercentiles);
-    schedule_now(TaskType::DistributeKytFee);
+    setup_tasks();
 }
 
 #[update]

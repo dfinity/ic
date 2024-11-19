@@ -38,8 +38,11 @@ async fn assert_upgrade_journal(
     {
         assert!(actual.timestamp_seconds.is_some());
         assert_eq!(
-            &actual.event,
-            &Some(expected.clone()),
+            &actual
+                .event
+                .clone()
+                .map(|event| event.redact_human_readable()),
+            &Some(expected.clone().redact_human_readable()),
             "Upgrade journal entry at index {} does not match",
             index
         );
@@ -294,7 +297,7 @@ async fn test_get_upgrade_journal() {
 
         expected_upgrade_journal_entries.push(
             sns_pb::upgrade_journal_entry::Event::UpgradeOutcome(
-                sns_pb::upgrade_journal_entry::UpgradeOutcome::success(None),
+                sns_pb::upgrade_journal_entry::UpgradeOutcome::success("redacted".to_string()),
             ),
         );
 
@@ -309,7 +312,7 @@ async fn test_get_upgrade_journal() {
 
         expected_upgrade_journal_entries.push(
             sns_pb::upgrade_journal_entry::Event::UpgradeOutcome(
-                sns_pb::upgrade_journal_entry::UpgradeOutcome::success(None),
+                sns_pb::upgrade_journal_entry::UpgradeOutcome::success("redacted".to_string()),
             ),
         );
 

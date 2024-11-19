@@ -25,8 +25,8 @@ use ic_sns_governance::pb::v1::{
 use ic_sns_test_utils::{
     itest_helpers::{
         install_governance_canister, install_ledger_canister, install_root_canister,
-        install_swap_canister, local_test_on_sns_subnet, state_machine_test_on_sns_subnet,
-        SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
+        install_swap_canister, state_machine_test_on_sns_subnet, SnsCanisters,
+        SnsTestsInitPayloadBuilder, UserInfo,
     },
     state_test_helpers::{
         setup_sns_canisters, sns_root_register_dapp_canisters, state_machine_builder_for_sns_tests,
@@ -180,7 +180,7 @@ fn test_upgrade_canister_proposal_is_successful() {
 
 #[test]
 fn test_upgrade_canister_proposal_reinstall() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Step 1: Prepare
 
         // Step 1.a: Boot up SNS with one user.
@@ -327,7 +327,7 @@ fn test_upgrade_canister_proposal_reinstall() {
 
 #[test]
 fn test_upgrade_canister_proposal_execution_fail() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Step 1: Prepare
 
         // Step 1.a: Boot up SNS with one user.
@@ -587,7 +587,7 @@ fn governance_mem_test() {
 /// in a trap in post_upgrade.
 #[test]
 fn test_upgrade_after_state_shrink() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize a User with a unique principal to claim a neuron
         let neuron_claimer = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         // Initialize an extra user who's unique principal will be used to shrink the state
@@ -690,7 +690,7 @@ fn test_upgrade_after_state_shrink() {
 /// Test that SNS canisters can be installed in any order.
 #[test]
 fn test_install_canisters_in_any_order() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let mut sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_nervous_system_parameters(NervousSystemParameters::with_default_values())
             .build();
