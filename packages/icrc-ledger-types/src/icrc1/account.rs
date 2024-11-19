@@ -175,13 +175,14 @@ impl FromStr for Account {
 impl Storable for Account {
     fn to_bytes(&self) -> Cow<[u8]> {
         let mut buf = vec![];
-        minicbor::encode(self, &mut buf).expect("event encoding should always succeed");
+        minicbor::encode(self, &mut buf).expect("account encoding should always succeed");
         Cow::Owned(buf)
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        minicbor::decode(bytes.as_ref())
-            .unwrap_or_else(|e| panic!("failed to decode event bytes {}: {e}", hex::encode(bytes)))
+        minicbor::decode(bytes.as_ref()).unwrap_or_else(|e| {
+            panic!("failed to decode account bytes {}: {e}", hex::encode(bytes))
+        })
     }
 
     const BOUND: Bound = Bound::Unbounded;
