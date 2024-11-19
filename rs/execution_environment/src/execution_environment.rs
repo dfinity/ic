@@ -40,7 +40,8 @@ use ic_management_canister_types::{
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
     SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
-    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
+    VetKdPublicKeyArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -488,7 +489,7 @@ impl ExecutionEnvironment {
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
         rng: &mut dyn RngCore,
-        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        chain_key_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
         replica_version: &ReplicaVersion,
         registry_settings: &RegistryExecutionSettings,
         round_limits: &mut RoundLimits,
@@ -633,7 +634,7 @@ impl ExecutionEnvironment {
                         Ok(args) => {
                             let key_id = MasterPublicKeyId::Ecdsa(args.key_id.clone());
                             match get_master_public_key(
-                                idkg_subnet_public_keys,
+                                chain_key_subnet_public_keys,
                                 self.own_subnet_id,
                                 &key_id,
                             ) {
@@ -1049,7 +1050,7 @@ impl ExecutionEnvironment {
                         let res = match ECDSAPublicKeyArgs::decode(request.method_payload()) {
                             Err(err) => Err(err),
                             Ok(args) => match get_master_public_key(
-                                idkg_subnet_public_keys,
+                                chain_key_subnet_public_keys,
                                 self.own_subnet_id,
                                 &MasterPublicKeyId::Ecdsa(args.key_id.clone()),
                             ) {
@@ -1091,7 +1092,7 @@ impl ExecutionEnvironment {
                     CanisterCall::Request(request) => {
                         match ComputeInitialIDkgDealingsArgs::decode(request.method_payload()) {
                             Ok(args) => match get_master_public_key(
-                                idkg_subnet_public_keys,
+                                chain_key_subnet_public_keys,
                                 self.own_subnet_id,
                                 &args.key_id,
                             ) {
@@ -1128,7 +1129,7 @@ impl ExecutionEnvironment {
                         let res = match SchnorrPublicKeyArgs::decode(request.method_payload()) {
                             Err(err) => Err(err),
                             Ok(args) => match get_master_public_key(
-                                idkg_subnet_public_keys,
+                                chain_key_subnet_public_keys,
                                 self.own_subnet_id,
                                 &MasterPublicKeyId::Schnorr(args.key_id.clone()),
                             ) {
@@ -1195,7 +1196,7 @@ impl ExecutionEnvironment {
                         Ok(args) => {
                             let key_id = MasterPublicKeyId::Schnorr(args.key_id.clone());
                             match get_master_public_key(
-                                idkg_subnet_public_keys,
+                                chain_key_subnet_public_keys,
                                 self.own_subnet_id,
                                 &key_id,
                             ) {
@@ -1242,15 +1243,60 @@ impl ExecutionEnvironment {
                 }
             },
 
-            Ok(Ic00Method::ReshareChainKey)
-            | Ok(Ic00Method::VetKdPublicKey)
-            | Ok(Ic00Method::VetKdDeriveEncryptedKey) => ExecuteSubnetMessageResult::Finished {
-                response: Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!("{} API is not yet implemented.", msg.method_name()),
-                )),
-                refund: msg.take_cycles(),
-            },
+            Ok(Ic00Method::VetKdPublicKey) => {
+                let cycles = msg.take_cycles();
+                match &msg {
+                    CanisterCall::Request(request) => {
+                        let res = match VetKdPublicKeyArgs::decode(request.method_payload()) {
+                            Err(err) => Err(err),
+                            Ok(args) => match get_master_public_key(
+                                chain_key_subnet_public_keys,
+                                self.own_subnet_id,
+                                &MasterPublicKeyId::VetKd(args.key_id.clone()),
+                            ) {
+                                Err(err) => Err(err),
+                                Ok(pubkey) => {
+                                    let canister_id = match args.canister_id {
+                                        Some(id) => id.into(),
+                                        None => *msg.sender(),
+                                    };
+                                    // TODO: Implement the function
+
+                                    todo!()
+                                    // self.get_threshold_public_key(
+                                    //     pubkey,
+                                    //     canister_id,
+                                    //     args.derivation_path.into_inner(),
+                                    // )
+                                    // .map(|res| {
+                                    //     ECDSAPublicKeyResponse {
+                                    //         public_key: res.public_key,
+                                    //         chain_code: res.chain_key,
+                                    //     }
+                                    //     .encode()
+                                    // })
+                                }
+                            },
+                        };
+                        ExecuteSubnetMessageResult::Finished {
+                            response: res,
+                            refund: cycles,
+                        }
+                    }
+                    CanisterCall::Ingress(_) => {
+                        self.reject_unexpected_ingress(Ic00Method::VetKdPublicKey)
+                    }
+                }
+            }
+            Ok(Ic00Method::ReshareChainKey) | Ok(Ic00Method::VetKdDeriveEncryptedKey) => {
+                ExecuteSubnetMessageResult::Finished {
+                    response: Err(UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        format!("{} API is not yet implemented.", msg.method_name()),
+                    )),
+                    refund: msg.take_cycles(),
+                }
+            }
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
                 let res =
@@ -3778,11 +3824,11 @@ pub fn execute_canister(
 }
 
 fn get_master_public_key<'a>(
-    idkg_subnet_public_keys: &'a BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    chain_key_subnet_public_keys: &'a BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     subnet_id: SubnetId,
     key_id: &MasterPublicKeyId,
 ) -> Result<&'a MasterPublicKey, UserError> {
-    match idkg_subnet_public_keys.get(key_id) {
+    match chain_key_subnet_public_keys.get(key_id) {
         None => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
             format!(
