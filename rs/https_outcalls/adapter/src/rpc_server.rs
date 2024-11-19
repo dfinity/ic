@@ -24,6 +24,7 @@ use ic_https_outcalls_service::{
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -46,16 +47,14 @@ const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 
 type OutboundRequestBody = Full<Bytes>;
 
+type Cache =
+    BTreeMap<String, Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>;
+
 /// Implements HttpsOutcallsService
 // TODO: consider making this private
 pub struct CanisterHttp {
     client: Client<HttpsConnector<HttpConnector>, OutboundRequestBody>,
-    /// Cached socks clients. This is updated when the api boundary nodes change.
-    socks_clients:
-        ArcSwap<Vec<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>>,
-    /// This should always be sorted.
-    /// This is a list of IPs that are SOCKS proxies. The IPs are used to check whether the socks_client need updating.
-    current_socks_ips: ArcSwap<Vec<String>>,
+    cache: ArcSwap<Cache>,
     logger: ReplicaLogger,
     metrics: AdapterMetrics,
     http_connect_timeout_secs: u64,
@@ -87,8 +86,7 @@ impl CanisterHttp {
 
         Self {
             client,
-            socks_clients: ArcSwap::new(Arc::new(vec![])),
-            current_socks_ips: ArcSwap::new(Arc::new(vec![])),
+            cache: ArcSwap::new(Arc::new(BTreeMap::new())),
             logger,
             metrics: AdapterMetrics::new(metrics),
             http_connect_timeout_secs: config.http_connect_timeout_secs,
@@ -96,16 +94,13 @@ impl CanisterHttp {
         }
     }
 
-    fn generate_socks_clients(
-        &self,
-        api_bn_ips: &Vec<String>,
-    ) -> Vec<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>> {
+    fn create_cache(&self, api_bn_ips: Vec<String>) -> Cache {
+        let mut new_cache = BTreeMap::new();
+
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false);
         http_connector
             .set_connect_timeout(Some(Duration::from_secs(self.http_connect_timeout_secs)));
-
-        let mut socks_clients = Vec::new();
 
         for ip in api_bn_ips {
             let proxy_addr = ip.parse().expect("Failed to parse SOCKS IP.");
@@ -126,30 +121,21 @@ impl CanisterHttp {
             let socks_client = Client::builder(TokioExecutor::new())
                 .build::<_, Full<Bytes>>(proxied_https_connector);
 
-            socks_clients.push(socks_client);
+            new_cache.insert(ip.clone(), socks_client);
         }
-
-        socks_clients
-    }
-
-    // This happens extremely rarely, only when there are changes to the api boundary nodes.
-    fn update_socks_clients(&self, api_bn_ips: Vec<String>) {
-        let new_clients = self.generate_socks_clients(&api_bn_ips);
-        self.socks_clients.store(Arc::new(new_clients));
-        self.current_socks_ips.store(Arc::new(api_bn_ips));
+        new_cache
     }
 
     fn get_next_socks_client(
         &self,
+        cache: &Cache,
     ) -> Option<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>> {
-        let socks_clients = self.socks_clients.load_full();
-
-        if socks_clients.is_empty() {
+        if cache.is_empty() {
             return None;
         }
 
         let index = self.next_proxy_index.fetch_add(1, Ordering::SeqCst);
-        Some(socks_clients[index % socks_clients.len()].clone())
+        Some(cache.values().nth(index % cache.len()).unwrap().clone())
     }
 }
 
@@ -166,16 +152,14 @@ impl HttpsOutcallsService for CanisterHttp {
         let mut sorted_incoming_ips = req.api_bn_ips;
         sorted_incoming_ips.sort();
         sorted_incoming_ips.dedup();
-        let cached_ips = self.current_socks_ips.load_full();
 
-        // Check if incoming IPs differ from cached IPs
-        // If the registry / consensus messes up (no ips present), we want to keep using the current cache for as long as possible.
-        let needs_update = !sorted_incoming_ips.is_empty() && *cached_ips != sorted_incoming_ips;
+        let mut cache = self.cache.load_full();
 
-        if needs_update {
-            // Multiple threads could be updating the socks clients at the same time.
-            // This is fine because the update should be idempotent and cheap.
-            self.update_socks_clients(sorted_incoming_ips);
+        let ordered_cached_ips = cache.keys().cloned().collect::<Vec<String>>();
+
+        if !sorted_incoming_ips.is_empty() && ordered_cached_ips != sorted_incoming_ips {
+            cache = Arc::new(self.create_cache(sorted_incoming_ips));
+            self.cache.store(cache.clone());
         }
 
         let uri = req.url.parse::<Uri>().map_err(|err| {
@@ -262,7 +246,7 @@ impl HttpsOutcallsService for CanisterHttp {
                 // fail fast because our interface does not have an ipv4 assigned.
                 Err(direct_err) => {
                     self.metrics.requests_socks.inc();
-                    let client = self.get_next_socks_client().ok_or_else(|| {
+                    let client = self.get_next_socks_client(&cache).ok_or_else(|| {
                         Status::new(
                             tonic::Code::Unavailable,
                             "No SOCKS proxy available".to_string(),
