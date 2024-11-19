@@ -76,13 +76,15 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/
 ARG nvm_version=v0.39.1
 ARG dependency_mgmt_nns_dapp_node_version=18.17.1
 ARG dependency_mgmt_default_node_version=20
+ARG dependency_mgmt_oisy_wallet_node_version=22.11.0
 ENV NVM_DIR=/opt/nvm
 RUN mkdir $NVM_DIR && \
     curl --fail https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh -sSf | bash
 
 RUN . /opt/nvm/nvm.sh && \
     nvm install ${dependency_mgmt_nns_dapp_node_version} && \
-    nvm install ${dependency_mgmt_default_node_version}
+    nvm install ${dependency_mgmt_default_node_version} && \
+    nvm install ${dependency_mgmt_oisy_wallet_node_version}
 
 RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu && \
     # needed for github actions runner \
