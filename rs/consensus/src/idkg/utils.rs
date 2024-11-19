@@ -30,8 +30,8 @@ use ic_types::consensus::{
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
 };
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey};
-use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
+use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::messages::CallbackId;
 use ic_types::registry::RegistryClientError;
 use ic_types::{Height, RegistryVersion, SubnetId};
@@ -369,31 +369,20 @@ pub(crate) fn inspect_idkg_chain_key_initializations(
             .to_string());
     }
 
-    // TODO(CON-1332): Do not panic if fields are missing
     for ecdsa_init in ecdsa_initializations {
         let ecdsa_key_id = ecdsa_init
             .key_id
             .clone()
-            .expect("Error: Failed to find key_id in ecdsa_initializations")
+            .ok_or("Failed to find key_id in ecdsa_initializations")?
             .try_into()
-            .map_err(|err| {
-                format!(
-                    "Error reading ECDSA key_id: {:?}. Setting idkg_summary to None.",
-                    err
-                )
-            })?;
+            .map_err(|err| format!("Error reading ECDSA key_id: {:?}", err))?;
 
         let dealings = ecdsa_init
             .dealings
             .as_ref()
-            .expect("Error: Failed to find dealings in ecdsa_initializations")
+            .ok_or("Failed to find dealings in ecdsa_initializations")?
             .try_into()
-            .map_err(|err| {
-                format!(
-                    "Error reading ECDSA dealings: {:?}. Setting idkg_summary to None.",
-                    err
-                )
-            })?;
+            .map_err(|err| format!("Error reading ECDSA dealings: {:?}", err))?;
 
         initial_dealings_per_key_id.insert(
             MasterPublicKeyId::Ecdsa(ecdsa_key_id).try_into().unwrap(),
@@ -401,19 +390,13 @@ pub(crate) fn inspect_idkg_chain_key_initializations(
         );
     }
 
-    // TODO(CON-1332): Do not panic if fields are missing
     for chain_key_init in chain_key_initializations {
         let key_id: MasterPublicKeyId = chain_key_init
             .key_id
             .clone()
-            .expect("Error: Failed to find key_id in chain_key_initializations")
+            .ok_or("Failed to find key_id in chain_key_initializations")?
             .try_into()
-            .map_err(|err| {
-                format!(
-                    "Error reading Master public key_id: {:?}. Setting idkg_summary to None.",
-                    err
-                )
-            })?;
+            .map_err(|err| format!("Error reading Master public key_id: {:?}", err))?;
 
         // Skip non-idkg keys
         let key_id = match key_id.try_into() {
@@ -423,20 +406,16 @@ pub(crate) fn inspect_idkg_chain_key_initializations(
 
         let dealings = match &chain_key_init.initialization {
             Some(pb::chain_key_initialization::Initialization::Dealings(dealings)) => dealings,
-            Some(pb::chain_key_initialization::Initialization::TranscriptRecord(_)) => continue,
-            None => {
+            Some(pb::chain_key_initialization::Initialization::TranscriptRecord(_)) | None => {
                 return Err(
                     "Error: Failed to find dealings in chain_key_initializations".to_string(),
                 )
             }
         };
 
-        let dealings = dealings.try_into().map_err(|err| {
-            format!(
-                "Error reading initial IDkg dealings: {:?}. Setting idkg_summary to None.",
-                err
-            )
-        })?;
+        let dealings = dealings
+            .try_into()
+            .map_err(|err| format!("Error reading initial IDkg dealings: {:?}", err))?;
 
         initial_dealings_per_key_id.insert(key_id, dealings);
     }

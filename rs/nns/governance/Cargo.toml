@@ -113,6 +113,7 @@ criterion = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
 ic-config = { path = "../../config" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
+ic-nns-governance = { path = ".", features = ["test"] }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 local_key = { path = "../../tla_instrumentation/local_key" }

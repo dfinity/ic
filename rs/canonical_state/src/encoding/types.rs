@@ -101,11 +101,11 @@ pub struct RequestOrResponse {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct RequestMetadata {
     // TODO(MR-642): Remove `Option` from `call_tree_depth` and `call_tree_start_time`.
-    #[serde(skip_serializing_if = "is_none_or_zero")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub call_tree_depth: Option<u64>,
-    #[serde(skip_serializing_if = "is_none_or_zero")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub call_tree_start_time_u64: Option<u64>,
-    #[serde(skip_serializing_if = "is_none_or_zero")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub call_subtree_deadline_u64: Option<u64>,
 }
 
@@ -172,10 +172,6 @@ where
     T: Into<u64> + Copy,
 {
     (*v).into() == 0
-}
-
-pub fn is_none_or_zero(v: &Option<u64>) -> bool {
-    v.map_or(true, |v| v == 0)
 }
 
 /// Canonical representation of `ic_types::messages::Payload`.
