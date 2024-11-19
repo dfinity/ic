@@ -23,12 +23,12 @@ pub fn update_guestos_config() -> Result<()> {
     let network_conf_path = config_dir.join("network.conf");
     let config_json_path = config_dir.join("config.json");
 
-    let network_conf_exists = network_conf_path.exists();
-    let config_json_exists = config_json_path.exists();
+    let old_config_exists = network_conf_path.exists();
+    let new_config_exists = config_json_path.exists();
 
     // Regenerate config.json on every boot in case the config structure changes between
     // when we roll out the update-config service and when we roll out the 'config integration'
-    if network_conf_exists {
+    if old_config_exists {
         // Read existing configuration files and generate new config.json
         let network_config_result = read_network_conf(config_dir)?;
         let network_settings = network_config_result.network_settings;
@@ -74,7 +74,7 @@ pub fn update_guestos_config() -> Result<()> {
             "New GuestOSConfig has been written to {}",
             config_json_path.display()
         );
-    } else if config_json_exists && !network_conf_exists {
+    } else if new_config_exists && !old_config_exists {
         // Read config.json and generate old configuration files
         let guestos_config = read_guestos_config(&config_json_path)?;
 
