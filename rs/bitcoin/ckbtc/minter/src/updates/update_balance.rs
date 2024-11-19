@@ -357,7 +357,7 @@ async fn kyt_check_utxo(
     }
     Err(UpdateBalanceError::GenericError {
         error_code: ErrorCode::KytError as u64,
-        error_message: format!("The KYT canister required too many calls to check_transaction"),
+        error_message: "The KYT canister required too many calls to check_transaction".to_string(),
     })
 }
 
