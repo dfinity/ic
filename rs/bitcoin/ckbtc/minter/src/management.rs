@@ -19,6 +19,10 @@ use ic_management_canister_types::{
 use serde::de::DeserializeOwned;
 use std::fmt;
 
+// Cycles to attach with a check_transaction call to the KYT canister.
+// Note that the actual cost may be lower, and unspent cycles will be returned.
+const KYT_CHECK_TRANSACTION_CYCLE_COST: u128 = 40_000_000_000;
+
 /// Represents an error from a management canister call, such as
 /// `sign_with_ecdsa` or `bitcoin_send_transaction`.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -322,8 +326,8 @@ pub async fn check_transaction(
     kyt_principal: Principal,
     utxo: &Utxo,
 ) -> Result<CheckTransactionResponse, CallError> {
-    let payment = 40_000_000_000;
-    let (res,): (CheckTransactionResponse,) = ic_cdk::api::call::call_with_payment(
+    let payment = KYT_CHECK_TRANSACTION_CYCLE_COST;
+    let (res,): (CheckTransactionResponse,) = ic_cdk::api::call::call_with_payment128(
         kyt_principal,
         "check_transaction",
         (CheckTransactionArgs {
