@@ -434,7 +434,7 @@ impl GovernanceProto {
         result
     }
 
-    fn cached_upgrade_steps_or_err(&self) -> Result<CachedUpgradeSteps, String> {
+    pub(crate) fn cached_upgrade_steps_or_err(&self) -> Result<CachedUpgradeSteps, String> {
         let Some(cached_upgrade_steps) = &self.cached_upgrade_steps else {
             return Err(
                 "Internal error: GovernanceProto.cached_upgrade_steps must be specified."
