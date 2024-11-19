@@ -256,7 +256,7 @@ function build_ic_bootstrap_tar() {
     fi
 
     # TODO(NODE-1518): remove parsing for old config
-        [[ "$HOSTNAME" == "" ]] || [[ "$HOSTNAME" =~ [a-zA-Z]*([a-zA-Z0-9])*(-+([a-zA-Z0-9])) ]] || {
+    [[ "$HOSTNAME" == "" ]] || [[ "$HOSTNAME" =~ [a-zA-Z]*([a-zA-Z0-9])*(-+([a-zA-Z0-9])) ]] || {
         echo "Invalid hostname: '$HOSTNAME'" >&2
         exit 1
     }
