@@ -82,7 +82,7 @@ async fn add_config_1(agent: &Agent, canister_id: Principal) {
         canister_id: Some(canister_id),
         subnet_id: None,
         methods_regex: Some(r"^(method_1)$".to_string()),
-        request_type: Some(RequestType::Call),
+        request_types: Some(vec![RequestType::Call]),
         limit: "1req/s".to_string(),
     };
 
@@ -90,7 +90,7 @@ async fn add_config_1(agent: &Agent, canister_id: Principal) {
         canister_id: Some(canister_id),
         subnet_id: None,
         methods_regex: Some(r"^(method_2)$".to_string()),
-        request_type: Some(RequestType::Query),
+        request_types: Some(vec![RequestType::Query]),
         limit: "2req/s".to_string(),
     };
 
@@ -98,7 +98,7 @@ async fn add_config_1(agent: &Agent, canister_id: Principal) {
         canister_id: Some(canister_id),
         subnet_id: None,
         methods_regex: Some(r"^(method_3)$".to_string()),
-        request_type: None,
+        request_types: None,
         limit: "3req/s".to_string(),
     };
 
@@ -106,7 +106,7 @@ async fn add_config_1(agent: &Agent, canister_id: Principal) {
         canister_id: Some(canister_id),
         subnet_id: None,
         methods_regex: Some(r"^(method_4)$".to_string()),
-        request_type: Some(RequestType::ReadState),
+        request_types: Some(vec![RequestType::ReadState]),
         limit: "4req/s".to_string(),
     };
 
@@ -160,7 +160,7 @@ async fn add_config_2(agent: &Agent, canister_id: Principal) {
         canister_id: Some(canister_id),
         subnet_id: None,
         methods_regex: Some(r"^(method_1)$".to_string()),
-        request_type: Some(RequestType::Call),
+        request_types: Some(vec![RequestType::Call]),
         limit: "1req/s".to_string(),
     };
 
@@ -168,7 +168,7 @@ async fn add_config_2(agent: &Agent, canister_id: Principal) {
         canister_id: Some(canister_id),
         subnet_id: None,
         methods_regex: Some(r"^(method_2)$".to_string()),
-        request_type: Some(RequestType::Query),
+        request_types: Some(vec![RequestType::Query]),
         limit: "2req/s".to_string(),
     };
 
@@ -177,7 +177,7 @@ async fn add_config_2(agent: &Agent, canister_id: Principal) {
         canister_id: Some(canister_id),
         subnet_id: None,
         methods_regex: Some(r"^(method_33)$".to_string()),
-        request_type: None,
+        request_types: None,
         limit: "33req/s".to_string(),
     };
 
@@ -185,7 +185,7 @@ async fn add_config_2(agent: &Agent, canister_id: Principal) {
         canister_id: Some(canister_id),
         subnet_id: None,
         methods_regex: Some(r"^(method_4)$".to_string()),
-        request_type: Some(RequestType::ReadState),
+        request_types: Some(vec![RequestType::ReadState]),
         limit: "4req/s".to_string(),
     };
 
@@ -236,9 +236,9 @@ async fn read_config(agent: &Agent, version: Version, canister_id: Principal) ->
     let args = Encode!(&Some(version)).unwrap();
 
     let response = agent
-        .update(&canister_id, "get_config")
+        .query(&canister_id, "get_config")
         .with_arg(args)
-        .call_and_wait()
+        .call()
         .await
         .expect("update call failed");
 
@@ -276,9 +276,9 @@ async fn read_rule(agent: &Agent, rule_id: &RuleId, canister_id: Principal) {
     let args = Encode!(rule_id).unwrap();
 
     let response = agent
-        .update(&canister_id, "get_rule_by_id")
+        .query(&canister_id, "get_rule_by_id")
         .with_arg(args)
-        .call_and_wait()
+        .call()
         .await
         .expect("update call failed");
 

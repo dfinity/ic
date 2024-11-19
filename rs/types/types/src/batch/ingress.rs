@@ -156,12 +156,12 @@ impl CountBytes for IngressPayload {
     }
 }
 
-impl From<Vec<SignedIngress>> for IngressPayload {
-    fn from(msgs: Vec<SignedIngress>) -> IngressPayload {
+impl<'a> FromIterator<&'a SignedIngress> for IngressPayload {
+    fn from_iter<I: IntoIterator<Item = &'a SignedIngress>>(msgs: I) -> Self {
         let mut buf = Cursor::new(Vec::new());
         let mut id_and_pos = Vec::new();
         for ingress in msgs {
-            let id = IngressMessageId::from(&ingress);
+            let id = IngressMessageId::from(ingress);
             let pos = buf.position();
             // This panic will only happen when we run out of memory.
             buf.write_all(ingress.binary().as_ref())
@@ -169,10 +169,16 @@ impl From<Vec<SignedIngress>> for IngressPayload {
 
             id_and_pos.push((id, pos));
         }
-        IngressPayload {
+        Self {
             id_and_pos,
             buffer: buf.into_inner(),
         }
+    }
+}
+
+impl From<Vec<SignedIngress>> for IngressPayload {
+    fn from(msgs: Vec<SignedIngress>) -> IngressPayload {
+        IngressPayload::from_iter(&msgs)
     }
 }
 

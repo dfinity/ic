@@ -10,13 +10,13 @@ pub enum LedgerSuiteType {
     ICRC,
 }
 
-pub fn assert_existence_of_index_total_memory_bytes_metric<T>(
+pub fn assert_existence_of_index_heap_memory_bytes_metric<T>(
     index_wasm: Vec<u8>,
     encode_init_args: fn(Principal) -> T,
 ) where
     T: CandidType,
 {
-    const METRIC: &str = "index_total_memory_bytes";
+    const METRIC: &str = "heap_memory_bytes";
 
     let env = StateMachine::new();
     let ledger_id = CanisterId::from_u64(100);
@@ -42,13 +42,13 @@ pub fn assert_existence_of_ledger_num_archives_metric<T>(
     assert_existence_of_metric(&env, canister_id, METRIC);
 }
 
-pub fn assert_existence_of_ledger_total_memory_bytes_metric<T>(
+pub fn assert_existence_of_heap_memory_bytes_metric<T>(
     ledger_wasm: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
 ) where
     T: CandidType,
 {
-    const METRIC: &str = "ledger_total_memory_bytes";
+    const METRIC: &str = "heap_memory_bytes";
 
     let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
 

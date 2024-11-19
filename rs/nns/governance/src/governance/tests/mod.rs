@@ -1138,13 +1138,13 @@ mod cast_vote_and_cascade_follow {
     use crate::{
         governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
-        neuron_store::NeuronStore,
-        pb::v1::{neuron::Followees, Ballot, Topic, Vote},
+        pb::v1::{neuron::Followees, Ballot, ProposalData, Topic, Vote},
+        test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
     };
     use ic_base_types::PrincipalId;
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
     use icp_ledger::Subaccount;
-    use maplit::hashmap;
+    use maplit::{btreemap, hashmap};
     use std::collections::{BTreeMap, HashMap};
 
     fn make_ballot(voting_power: u64, vote: Vote) -> Ballot {
@@ -1230,24 +1230,42 @@ mod cast_vote_and_cascade_follow {
         // Add a neuron without a ballot for neuron 6 to follow.
         add_neuron_without_ballot(&mut heap_neurons, 7, vec![1]);
 
-        let mut neuron_store = NeuronStore::new(heap_neurons);
+        let governance_proto = crate::pb::v1::Governance {
+            neurons: heap_neurons
+                .into_iter()
+                .map(|(id, neuron)| (id, neuron.into()))
+                .collect(),
+            proposals: btreemap! {
+                1 => ProposalData {
+                    id: Some(ProposalId {id: 1}),
+                    ballots,
+                    ..Default::default()
+                }
+            },
+            ..Default::default()
+        };
+        let mut governance = Governance::new(
+            governance_proto,
+            Box::new(MockEnvironment::new(Default::default(), 0)),
+            Box::new(StubIcpLedger {}),
+            Box::new(StubCMC {}),
+        );
 
-        Governance::cast_vote_and_cascade_follow(
-            &ProposalId { id: 1 },
-            &mut ballots,
-            &NeuronId { id: 1 },
+        governance.cast_vote_and_cascade_follow(
+            ProposalId { id: 1 },
+            NeuronId { id: 1 },
             Vote::Yes,
             topic,
-            &mut neuron_store,
         );
 
         let deciding_voting_power = |neuron_id| {
-            neuron_store
+            governance
+                .neuron_store
                 .with_neuron(&neuron_id, |n| n.deciding_voting_power(now))
                 .unwrap()
         };
         assert_eq!(
-            ballots,
+            governance.heap_data.proposals.get(&1).unwrap().ballots,
             hashmap! {
                 1 => make_ballot(deciding_voting_power(NeuronId { id: 1}), Vote::Yes),
                 2 => make_ballot(deciding_voting_power(NeuronId { id: 2}), Vote::Unspecified),
@@ -1299,24 +1317,42 @@ mod cast_vote_and_cascade_follow {
         // Add a neuron without a ballot for neuron 6 to follow.
         add_neuron_without_ballot(&mut neurons, 7, vec![1]);
 
-        let mut neuron_store = NeuronStore::new(neurons);
+        let governance_proto = crate::pb::v1::Governance {
+            neurons: neurons
+                .into_iter()
+                .map(|(id, neuron)| (id, neuron.into()))
+                .collect(),
+            proposals: btreemap! {
+                1 => ProposalData {
+                    id: Some(ProposalId {id: 1}),
+                    ballots,
+                    ..Default::default()
+                }
+            },
+            ..Default::default()
+        };
+        let mut governance = Governance::new(
+            governance_proto,
+            Box::new(MockEnvironment::new(Default::default(), 0)),
+            Box::new(StubIcpLedger {}),
+            Box::new(StubCMC {}),
+        );
 
-        Governance::cast_vote_and_cascade_follow(
-            &ProposalId { id: 1 },
-            &mut ballots,
-            &NeuronId { id: 1 },
+        governance.cast_vote_and_cascade_follow(
+            ProposalId { id: 1 },
+            NeuronId { id: 1 },
             Vote::Yes,
             topic,
-            &mut neuron_store,
         );
 
         let deciding_voting_power = |neuron_id| {
-            neuron_store
+            governance
+                .neuron_store
                 .with_neuron(&neuron_id, |n| n.deciding_voting_power(now))
                 .unwrap()
         };
         assert_eq!(
-            ballots,
+            governance.heap_data.proposals.get(&1).unwrap().ballots,
             hashmap! {
                 1 => make_ballot(deciding_voting_power(NeuronId { id: 1 }), Vote::Yes),
                 2 => make_ballot(deciding_voting_power(NeuronId { id: 2 }), Vote::Yes),

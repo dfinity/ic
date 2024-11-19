@@ -61,7 +61,7 @@ use crate::{
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
     Shutdown, SubnetTopology,
 };
-use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
+use crate::{metrics::QuicTransportMetrics, request_handler::start_stream_acceptor};
 
 /// The value of 25MB is chosen from experiments and the BDP product shown below to support
 /// around 2Gb/s.
@@ -385,7 +385,7 @@ impl ConnectionManager {
                 self.endpoint.set_server_config(Some(server_config));
             }
             Err(e) => {
-                error!(self.log, "Failed to get certificate from crypto {}", e)
+                error!(self.log, "Failed to get certificate from crypto {:?}", e)
             }
         }
 
@@ -449,7 +449,7 @@ impl ConnectionManager {
             return;
         }
 
-        info!(self.log, "Connecting to node {}", peer_id);
+        info!(self.log, "Connecting to node {:?}", peer_id);
         self.metrics.outbound_connection_total.inc();
         let addr = self
             .topology
@@ -527,7 +527,7 @@ impl ConnectionManager {
                         .close(VarInt::from_u32(0), b"using newer connection");
                     info!(
                         self.log,
-                        "Replacing old connection to {} with newer", peer_id
+                        "Replacing old connection to {:?} with newer", peer_id
                     );
                 } else {
                     self.metrics.peer_map_size.inc();
@@ -539,7 +539,7 @@ impl ConnectionManager {
                 );
                 self.active_connections.spawn_on(
                     peer_id,
-                    run_stream_acceptor(
+                    start_stream_acceptor(
                         self.log.clone(),
                         peer_id,
                         connection_handle,
@@ -558,7 +558,7 @@ impl ConnectionManager {
                 if let Some(peer_id) = peer_id {
                     self.connect_queue.insert(peer_id, CONNECT_RETRY_BACKOFF);
                 }
-                info!(self.log, "Failed to connect {}", err);
+                info!(self.log, "Failed to connect {:?}", err);
             }
         };
     }
@@ -643,7 +643,7 @@ impl ConnectionManager {
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
                 if data != GRUEZI_HANDSHAKE.as_bytes() {
                     return Err(ConnectionEstablishError::Gruezi(format!(
-                        "Handshake failed unexpected response: {}",
+                        "Handshake failed unexpected response: {:?}",
                         String::from_utf8_lossy(&data)
                     )));
                 }
@@ -659,7 +659,7 @@ impl ConnectionManager {
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
                 if data != GRUEZI_HANDSHAKE.as_bytes() {
                     return Err(ConnectionEstablishError::Gruezi(format!(
-                        "Handshake failed unexpected response: {}",
+                        "Handshake failed unexpected response: {:?}",
                         String::from_utf8_lossy(&data)
                     )));
                 }

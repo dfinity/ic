@@ -7,9 +7,10 @@ use ic_nervous_system_integration_tests::{
     },
 };
 use ic_nns_test_utils::sns_wasm::create_modified_sns_wasm;
-use ic_sns_governance::pb::v1::governance::Versions;
 use ic_sns_governance::{
-    governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS, pb::v1 as sns_pb,
+    governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
+    pb::v1 as sns_pb,
+    pb::v1::upgrade_journal_entry::{Event, TargetVersionSet, UpgradeStepsRefreshed},
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::SnsCanisterType;
@@ -37,8 +38,11 @@ async fn assert_upgrade_journal(
     {
         assert!(actual.timestamp_seconds.is_some());
         assert_eq!(
-            &actual.event,
-            &Some(expected.clone()),
+            &actual
+                .event
+                .clone()
+                .map(|event| event.redact_human_readable()),
+            &Some(expected.clone().redact_human_readable()),
             "Upgrade journal entry at index {} does not match",
             index
         );
@@ -129,15 +133,9 @@ async fn test_get_upgrade_journal() {
     // Step 1: right after SNS creation.
     let mut expected_upgrade_journal_entries = vec![];
     {
-        expected_upgrade_journal_entries.push(
-            sns_pb::upgrade_journal_entry::Event::UpgradeStepsRefreshed(
-                sns_pb::upgrade_journal_entry::UpgradeStepsRefreshed {
-                    upgrade_steps: Some(Versions {
-                        versions: vec![initial_sns_version.clone()],
-                    }),
-                },
-            ),
-        );
+        expected_upgrade_journal_entries.push(Event::UpgradeStepsRefreshed(
+            UpgradeStepsRefreshed::new(vec![initial_sns_version.clone()]),
+        ));
 
         assert_upgrade_journal(
             &pocket_ic,
@@ -220,19 +218,13 @@ async fn test_get_upgrade_journal() {
     .unwrap();
 
     {
-        expected_upgrade_journal_entries.push(
-            sns_pb::upgrade_journal_entry::Event::UpgradeStepsRefreshed(
-                sns_pb::upgrade_journal_entry::UpgradeStepsRefreshed {
-                    upgrade_steps: Some(Versions {
-                        versions: vec![
-                            initial_sns_version.clone(),
-                            new_sns_version_1.clone(),
-                            new_sns_version_2.clone(),
-                        ],
-                    }),
-                },
-            ),
-        );
+        expected_upgrade_journal_entries.push(Event::UpgradeStepsRefreshed(
+            UpgradeStepsRefreshed::new(vec![
+                initial_sns_version.clone(),
+                new_sns_version_1.clone(),
+                new_sns_version_2.clone(),
+            ]),
+        ));
 
         assert_upgrade_journal(
             &pocket_ic,
@@ -250,12 +242,10 @@ async fn test_get_upgrade_journal() {
     )
     .await;
 
-    expected_upgrade_journal_entries.push(sns_pb::upgrade_journal_entry::Event::TargetVersionSet(
-        sns_pb::upgrade_journal_entry::TargetVersionSet {
-            old_target_version: None,
-            new_target_version: Some(new_sns_version_2),
-        },
-    ));
+    expected_upgrade_journal_entries.push(Event::TargetVersionSet(TargetVersionSet::new(
+        None,
+        Some(new_sns_version_2.clone()),
+    )));
 
     assert_upgrade_journal(
         &pocket_ic,
@@ -263,4 +253,74 @@ async fn test_get_upgrade_journal() {
         &expected_upgrade_journal_entries,
     )
     .await;
+
+    // Check that the target version is set to the new version.
+    {
+        let sns_pb::GetUpgradeJournalResponse { target_version, .. } =
+            sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
+
+        assert_eq!(target_version, Some(new_sns_version_2.clone()));
+    }
+
+    await_with_timeout(
+        &pocket_ic,
+        UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
+        |pocket_ic| async {
+            sns::governance::get_upgrade_journal(pocket_ic, sns.governance.canister_id)
+                .await
+                .deployed_version
+        },
+        &Some(new_sns_version_2.clone()),
+    )
+    .await
+    .unwrap();
+
+    // Check that the deployed version is now set to the new version.
+    {
+        let sns_pb::GetUpgradeJournalResponse {
+            deployed_version, ..
+        } = sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
+
+        assert_eq!(deployed_version, Some(new_sns_version_2.clone()));
+    }
+
+    // Check that the upgrade journal contains the correct entries.
+    {
+        expected_upgrade_journal_entries.push(
+            sns_pb::upgrade_journal_entry::Event::UpgradeStarted(
+                sns_pb::upgrade_journal_entry::UpgradeStarted::from_behind_target(
+                    initial_sns_version.clone(),
+                    new_sns_version_1.clone(),
+                ),
+            ),
+        );
+
+        expected_upgrade_journal_entries.push(
+            sns_pb::upgrade_journal_entry::Event::UpgradeOutcome(
+                sns_pb::upgrade_journal_entry::UpgradeOutcome::success("redacted".to_string()),
+            ),
+        );
+
+        expected_upgrade_journal_entries.push(
+            sns_pb::upgrade_journal_entry::Event::UpgradeStarted(
+                sns_pb::upgrade_journal_entry::UpgradeStarted::from_behind_target(
+                    new_sns_version_1.clone(),
+                    new_sns_version_2.clone(),
+                ),
+            ),
+        );
+
+        expected_upgrade_journal_entries.push(
+            sns_pb::upgrade_journal_entry::Event::UpgradeOutcome(
+                sns_pb::upgrade_journal_entry::UpgradeOutcome::success("redacted".to_string()),
+            ),
+        );
+
+        assert_upgrade_journal(
+            &pocket_ic,
+            sns.governance,
+            &expected_upgrade_journal_entries,
+        )
+        .await;
+    }
 }

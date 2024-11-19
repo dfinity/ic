@@ -33,6 +33,7 @@ ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-types = { path = "../../../types/types" }
 ic-universal-canister = { path = "../../../universal_canister/lib" }
+icp-ledger = { path = "../../icp" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 icrc1-test-env = { git = "https://github.com/dfinity/ICRC-1", rev = "26a80d777e079644cd69e883e18dad1a201f5b1a" }
 icrc1-test-suite = { git = "https://github.com/dfinity/ICRC-1", rev = "26a80d777e079644cd69e883e18dad1a201f5b1a" }
@@ -43,3 +44,4 @@ serde = { workspace = true }
 [features]
 default = []
 u256-tokens = ["dep:ic-icrc1-tokens-u256"]
+icp-tokens = []

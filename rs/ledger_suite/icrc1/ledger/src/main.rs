@@ -23,7 +23,7 @@ use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
     TransferError as CoreTransferError,
 };
-use ic_ledger_canister_core::runtime::total_memory_size_bytes;
+use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
@@ -310,14 +310,14 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
-        "ledger_stable_memory_bytes",
+        "stable_memory_bytes",
         (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
-        "Size of the stable memory allocated by this canister.",
+        "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
-        "ledger_total_memory_bytes",
-        total_memory_size_bytes() as f64,
-        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
+        "heap_memory_bytes",
+        heap_memory_size_bytes() as f64,
+        "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
 
     let cycle_balance = ic_cdk::api::canister_balance128() as f64;

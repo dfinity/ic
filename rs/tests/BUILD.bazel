@@ -25,7 +25,7 @@ rust_library(
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
     compile_data = [
-        "//ic-os/components:ic/ic.json5.template",
+        "//ic-os/components:ic/generate-ic-config/ic.json5.template",
         "src/ledger_tests/transaction_ledger_correctness.wasm",
     ],
     crate_name = "ic_tests",
@@ -292,8 +292,8 @@ exports_files([
 uvm_config_image(
     name = "jaeger_uvm_config_image",
     srcs = [
+        ":jaeger.tar",
         ":jaeger_activate.sh",
-        ":jaeger_image",
     ],
     remap_paths = {
         "jaeger_activate.sh": "activate",
