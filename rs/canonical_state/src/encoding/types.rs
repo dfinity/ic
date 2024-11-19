@@ -100,6 +100,7 @@ pub struct RequestOrResponse {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct RequestMetadata {
+    // TODO(MR-642): Remove `Option` from `call_tree_depth` and `call_tree_start_time`.
     #[serde(skip_serializing_if = "is_none_or_zero")]
     pub call_tree_depth: Option<u64>,
     #[serde(skip_serializing_if = "is_none_or_zero")]
@@ -123,6 +124,7 @@ pub struct Request {
     pub method_payload: Bytes,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cycles_payment: Option<Cycles>,
+    // TODO(MR-642): Remove `Option` from `metadata`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<RequestMetadata>,
     #[serde(skip_serializing_if = "is_zero", default)]

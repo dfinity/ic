@@ -54,8 +54,11 @@ message StreamEntry {
 }
 
 message RequestMetadata {
-  optional uint64 call_tree_depth = 1;
-  optional uint64 call_tree_start_time_nanos = 2;
+  // TODO(MR-641): Remove deprecated fields.
+  optional uint64 deprecated_opt_call_tree_depth = 1;
+  optional uint64 deprecated_opt_call_tree_start_time_nanos = 2;
+  uint64 call_tree_depth = 4;
+  uint64 call_tree_start_time_nanos = 5;
   // A point in the future vs. `call_tree_start_time` at which a request would ideally have concluded
   // its lifecycle on the IC. Unlike `call_tree_depth` and `call_tree_start_time`, the deadline
   // does not have to be a constant for the whole call tree. Rather it's valid only for the subtree of

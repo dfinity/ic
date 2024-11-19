@@ -46,9 +46,13 @@ pub struct StreamEntry {
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct RequestMetadata {
     #[prost(uint64, optional, tag = "1")]
-    pub call_tree_depth: ::core::option::Option<u64>,
+    pub deprecated_opt_call_tree_depth: ::core::option::Option<u64>,
     #[prost(uint64, optional, tag = "2")]
-    pub call_tree_start_time_nanos: ::core::option::Option<u64>,
+    pub deprecated_opt_call_tree_start_time_nanos: ::core::option::Option<u64>,
+    #[prost(uint64, tag = "4")]
+    pub call_tree_depth: u64,
+    #[prost(uint64, tag = "5")]
+    pub call_tree_start_time_nanos: u64,
     /// A point in the future vs. `call_tree_start_time` at which a request would ideally have concluded
     /// its lifecycle on the IC. Unlike `call_tree_depth` and `call_tree_start_time`, the deadline
     /// does not have to be a constant for the whole call tree. Rather it's valid only for the subtree of
