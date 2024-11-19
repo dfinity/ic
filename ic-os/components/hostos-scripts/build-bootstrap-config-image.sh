@@ -261,7 +261,7 @@ function build_ic_bootstrap_tar() {
         exit 1
     }
 
-        cat >"${BOOTSTRAP_TMPDIR}/network.conf" <<EOF
+    cat >"${BOOTSTRAP_TMPDIR}/network.conf" <<EOF
 ${IPV6_ADDRESS:+ipv6_address=$IPV6_ADDRESS}
 ${IPV6_GATEWAY:+ipv6_gateway=$IPV6_GATEWAY}
 hostname=$HOSTNAME
@@ -277,7 +277,6 @@ EOF
     fi
     if [ "${ELASTICSEARCH_TAGS}" != "" ]; then
         echo "elasticsearch_tags=$ELASTICSEARCH_TAGS" >>"${BOOTSTRAP_TMPDIR}/filebeat.conf"
-
     if [ "${NNS_URLS}" != "" ]; then
         echo "nns_url=${NNS_URLS}" >"${BOOTSTRAP_TMPDIR}/nns.conf"
     fi
@@ -299,6 +298,7 @@ EOF
 
     if [ "${SOCKS_PROXY}" != "" ]; then
         echo "socks_proxy=${SOCKS_PROXY}" >"${BOOTSTRAP_TMPDIR}/socks_proxy.conf"
+    fi
 
     tar cf "${OUT_FILE}" \
         --sort=name \
