@@ -45,6 +45,76 @@ options may be specified:
 
   --node_operator_private_key path
     Should point to a file containing a Node Provider private key PEM.
+
+  --ipv6_address a:b::c/n
+    The IPv6 address to assign. Must include netmask in bits (e.g.
+    dead:beef::1/64). Overrides all other generation for testing.
+
+  --ipv6_gateway a:b::c
+    Default IPv6 gateway.
+
+  --ipv4_address a.b.c.d/n
+    (optional) The IPv4 address to assign. Must include prefix length (e.g.
+    18.208.190.35/28).
+
+  --ipv4_gateway a.b.c.d
+    (optional) Default IPv4 gateway (e.g. 18.208.190.33).
+
+  --domain domain
+    (optional) The domain name to assign to the guest.
+
+  --node_reward_type node_reward_type
+    (optional) The node reward type determines node rewards
+
+  --hostname name
+    Name to assign to the host. Will be used in logging.
+
+  --elasticsearch_hosts hosts
+    Logging hosts to use. Can be multiple hosts separated by space (make sure
+    to quote the argument string so it appears as a single argument to the
+    script, e.g. --elasticsearch_hosts "h1.domain.tld h2.domain.tld").
+
+  --elasticsearch_tags tags
+    Tags to be used by Filebeat. Can be multiple tags separated by space
+    (make sure to quote the argument string so it appears as a single argument
+    to the script, e.g. --elasticsearch_tags "testnet1 slo")
+
+  --nns_urls urls
+    URL of NNS nodes for sign up or registry access. Can be multiple nodes
+    separated by commas.
+
+  --backup_retention_time seconds
+    How long the backed up consensus artifacts should stay on the spool
+    before they get purged.
+
+  --backup_puging_interval seconds
+    How often the backup purging should be executed.
+
+  --malicious_behavior malicious_behavior
+    A JSON-object that describes the malicious behavior activated on
+    the node. This is only used for testing.
+    The Json-object corresponds to this Rust-structure:
+      ic_types::malicious_behaviour::MaliciousBehaviour
+
+  --query_stats_epoch_length length
+    The length of the epoch in seconds. To be used in
+    systems tests only.
+
+  --bitcoind_addr address
+    The IP address of a running bitcoind instance. To be used in
+    systems tests only.
+
+  --jaeger_addr address
+    The IP address of a running Jaeger Collector instance. To be used in
+    systems tests only.
+
+  --socks_proxy url
+    The URL of the socks proxy to use. To be used in
+    systems tests only.
+
+  --generate_ic_boundary_tls_cert domain_name
+    Generate and inject a self-signed TLS certificate and key for ic-boundary
+    for the given domain name. To be used in system tests only.
 EOF
 }
 
@@ -58,6 +128,15 @@ function build_ic_bootstrap_tar() {
     local GUESTOS_CONFIG
     local NNS_PUBLIC_KEY NODE_OPERATOR_PRIVATE_KEY ACCOUNTS_SSH_AUTHORIZED_KEYS
     local IC_CRYPTO IC_STATE IC_REGISTRY_LOCAL_STORE
+
+    local IPV6_ADDRESS IPV6_GATEWAY DOMAIN HOSTNAME
+    local NNS_URLS
+    local BACKUP_RETENTION_TIME_SECS BACKUP_PURGING_INTERVAL_SECS
+    local ELASTICSEARCH_HOSTS ELASTICSEARCH_TAGS
+    local MALICIOUS_BEHAVIOR
+    local QUERY_STATS_EPOCH_LENGTH
+    local BITCOIND_ADDR
+    local JAEGER_ADDR
 
     while true; do
         if [ $# == 0 ]; then
@@ -85,6 +164,60 @@ function build_ic_bootstrap_tar() {
                 ;;
             --ic_registry_local_store)
                 IC_REGISTRY_LOCAL_STORE="$2"
+                ;;
+            --ipv6_address)
+                IPV6_ADDRESS="$2"
+                ;;
+            --ipv6_gateway)
+                IPV6_GATEWAY="$2"
+                ;;
+            --ipv4_address)
+                IPV4_ADDRESS="$2"
+                ;;
+            --ipv4_gateway)
+                IPV4_GATEWAY="$2"
+                ;;
+            --domain)
+                DOMAIN="$2"
+                ;;
+            --node_reward_type)
+                NODE_REWARD_TYPE="$2"
+                ;;
+            --hostname)
+                HOSTNAME="$2"
+                ;;
+            --elasticsearch_hosts)
+                ELASTICSEARCH_HOSTS="$2"
+                ;;
+            --elasticsearch_tags)
+                ELASTICSEARCH_TAGS="$2"
+                ;;
+            --nns_urls)
+                NNS_URLS="$2"
+                ;;
+            --backup_retention_time)
+                BACKUP_RETENTION_TIME_SECS="$2"
+                ;;
+            --backup_puging_interval)
+                BACKUP_PURGING_INTERVAL_SECS="$2"
+                ;;
+            --malicious_behavior)
+                MALICIOUS_BEHAVIOR="$2"
+                ;;
+            --query_stats_epoch_length)
+                QUERY_STATS_EPOCH_LENGTH="$2"
+                ;;
+            --bitcoind_addr)
+                BITCOIND_ADDR="$2"
+                ;;
+            --jaeger_addr)
+                JAEGER_ADDR="$2"
+                ;;
+            --socks_proxy)
+                SOCKS_PROXY="$2"
+                ;;
+            --generate_ic_boundary_tls_cert)
+                IC_BOUNDARY_TLS_CERT_DOMAIN_NAME="$2"
                 ;;
             *)
                 echo "Unrecognized option: $1"
@@ -121,6 +254,51 @@ function build_ic_bootstrap_tar() {
     if [ "${IC_REGISTRY_LOCAL_STORE}" != "" ]; then
         cp -r "${IC_REGISTRY_LOCAL_STORE}" "${BOOTSTRAP_TMPDIR}/ic_registry_local_store"
     fi
+
+    # TODO(NODE-1518): remove parsing for old config
+        [[ "$HOSTNAME" == "" ]] || [[ "$HOSTNAME" =~ [a-zA-Z]*([a-zA-Z0-9])*(-+([a-zA-Z0-9])) ]] || {
+        echo "Invalid hostname: '$HOSTNAME'" >&2
+        exit 1
+    }
+
+        cat >"${BOOTSTRAP_TMPDIR}/network.conf" <<EOF
+${IPV6_ADDRESS:+ipv6_address=$IPV6_ADDRESS}
+${IPV6_GATEWAY:+ipv6_gateway=$IPV6_GATEWAY}
+hostname=$HOSTNAME
+${IPV4_ADDRESS:+ipv4_address=$IPV4_ADDRESS}
+${IPV4_GATEWAY:+ipv4_gateway=$IPV4_GATEWAY}
+${DOMAIN:+domain=$DOMAIN}
+EOF
+    if [ "${NODE_REWARD_TYPE}" != "" ]; then
+        echo "node_reward_type=$NODE_REWARD_TYPE" >"${BOOTSTRAP_TMPDIR}/reward.conf"
+    fi
+    if [ "${ELASTICSEARCH_HOSTS}" != "" ]; then
+        echo "elasticsearch_hosts=$ELASTICSEARCH_HOSTS" >"${BOOTSTRAP_TMPDIR}/filebeat.conf"
+    fi
+    if [ "${ELASTICSEARCH_TAGS}" != "" ]; then
+        echo "elasticsearch_tags=$ELASTICSEARCH_TAGS" >>"${BOOTSTRAP_TMPDIR}/filebeat.conf"
+
+    if [ "${NNS_URLS}" != "" ]; then
+        echo "nns_url=${NNS_URLS}" >"${BOOTSTRAP_TMPDIR}/nns.conf"
+    fi
+    if [ "${BACKUP_RETENTION_TIME_SECS}" != "" ] || [ "${BACKUP_PURGING_INTERVAL_SECS}" != "" ]; then
+        echo "backup_retention_time_secs=${BACKUP_RETENTION_TIME_SECS}" >"${BOOTSTRAP_TMPDIR}/backup.conf"
+        echo "backup_puging_interval_secs=${BACKUP_PURGING_INTERVAL_SECS}" >>"${BOOTSTRAP_TMPDIR}/backup.conf"
+    fi
+    if [ "${MALICIOUS_BEHAVIOR}" != "" ]; then
+        echo "malicious_behavior=${MALICIOUS_BEHAVIOR}" >"${BOOTSTRAP_TMPDIR}/malicious_behavior.conf"
+    fi
+    if [ "${QUERY_STATS_EPOCH_LENGTH}" != "" ]; then
+        echo "query_stats_epoch_length=${QUERY_STATS_EPOCH_LENGTH}" >"${BOOTSTRAP_TMPDIR}/query_stats.conf"
+    fi
+    if [ "${BITCOIND_ADDR}" != "" ]; then
+        echo "bitcoind_addr=${BITCOIND_ADDR}" >"${BOOTSTRAP_TMPDIR}/bitcoind_addr.conf"
+    fi
+    if [ "${JAEGER_ADDR}" != "" ]; then
+        echo "jaeger_addr=http://${JAEGER_ADDR}" >"${BOOTSTRAP_TMPDIR}/jaeger_addr.conf"
+
+    if [ "${SOCKS_PROXY}" != "" ]; then
+        echo "socks_proxy=${SOCKS_PROXY}" >"${BOOTSTRAP_TMPDIR}/socks_proxy.conf"
 
     tar cf "${OUT_FILE}" \
         --sort=name \
