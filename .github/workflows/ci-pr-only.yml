@@ -20,7 +20,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
+      image: ghcr.io/dfinity/ic-build@sha256:a9a164fcf92c866941898ec3ac8d01a5955e689ab7a9a9258856cbecbaabd0d8
       options: >-
         -e NODE_NAME
     steps:
@@ -60,7 +60,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
+      image: ghcr.io/dfinity/ic-build@sha256:a9a164fcf92c866941898ec3ac8d01a5955e689ab7a9a9258856cbecbaabd0d8
       options: >-
         -e NODE_NAME
     steps:
@@ -92,7 +92,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
+      image: ghcr.io/dfinity/ic-build@sha256:a9a164fcf92c866941898ec3ac8d01a5955e689ab7a9a9258856cbecbaabd0d8
       options: >-
         -e NODE_NAME
     timeout-minutes: 60
@@ -138,7 +138,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
+      image: ghcr.io/dfinity/ic-build@sha256:a9a164fcf92c866941898ec3ac8d01a5955e689ab7a9a9258856cbecbaabd0d8
       options: >-
         -e NODE_NAME
     if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')

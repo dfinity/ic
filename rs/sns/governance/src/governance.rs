@@ -5572,6 +5572,7 @@ impl Governance {
                 "Too many attempts to check upgrade without success.  Marking upgrade failed."
                     .to_string();
             let status = upgrade_journal_entry::upgrade_outcome::Status::Timeout(Empty {});
+
             self.complete_sns_upgrade_to_next_version(proposal_id, status, message, None);
             return;
         }
