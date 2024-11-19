@@ -1197,7 +1197,8 @@ impl SnsCanisters<'_> {
                 return proposal;
             }
 
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            self.governance.runtime().tick().await;
+
             proposal = self.get_proposal(*proposal_id).await;
         }
 

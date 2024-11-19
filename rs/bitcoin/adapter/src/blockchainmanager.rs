@@ -12,6 +12,7 @@ use bitcoin::{
     Block, BlockHash, BlockHeader,
 };
 use hashlink::{LinkedHashMap, LinkedHashSet};
+use ic_btc_validation::ValidateHeaderError;
 use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
 use std::{
     collections::{HashMap, HashSet},
@@ -59,8 +60,8 @@ enum ReceivedHeadersMessageError {
     ReceivedTooManyHeaders,
     #[error("Received too many unsolicited headers")]
     ReceivedTooManyUnsolicitedHeaders,
-    #[error("Received an invalid header")]
-    ReceivedInvalidHeader,
+    #[error("Received an invalid header, with block hash {0} and error {1:?}")]
+    ReceivedInvalidHeader(BlockHash, ValidateHeaderError),
 }
 
 /// The possible errors the `BlockchainManager::received_inv_message(...)` may produce.
@@ -372,8 +373,11 @@ impl BlockchainManager {
             }
 
             match maybe_err {
-                Some(AddHeaderError::InvalidHeader(_, _)) => {
-                    return Err(ReceivedHeadersMessageError::ReceivedInvalidHeader)
+                Some(AddHeaderError::InvalidHeader(block_hash, validate_header_error)) => {
+                    return Err(ReceivedHeadersMessageError::ReceivedInvalidHeader(
+                        block_hash,
+                        validate_header_error,
+                    ));
                 }
                 Some(AddHeaderError::PrevHeaderNotCached(stop_hash)) => {
                     Some((blockchain_state.locator_hashes(), stop_hash))
@@ -630,23 +634,26 @@ impl BlockchainManager {
     ) -> Result<(), ProcessBitcoinNetworkMessageError> {
         match message {
             NetworkMessage::Inv(inventory) => {
-                if self
-                    .received_inv_message(channel, &addr, inventory)
-                    .is_err()
-                {
+                if let Err(err) = self.received_inv_message(channel, &addr, inventory) {
+                    warn!(
+                        self.logger,
+                        "Received an invalid inv message from {}: {}", addr, err
+                    );
                     return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
                 }
             }
             NetworkMessage::Headers(headers) => {
-                if self
-                    .received_headers_message(channel, &addr, headers)
-                    .is_err()
-                {
+                if let Err(err) = self.received_headers_message(channel, &addr, headers) {
+                    warn!(
+                        self.logger,
+                        "Received an invalid headers message form {}: {}", addr, err
+                    );
                     return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
                 }
             }
             NetworkMessage::Block(block) => {
-                if self.received_block_message(&addr, block).is_err() {
+                if let Err(err) = self.received_block_message(&addr, block) {
+                    warn!(self.logger, "Received an invalid block {}: {}", addr, err);
                     return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
                 }
             }

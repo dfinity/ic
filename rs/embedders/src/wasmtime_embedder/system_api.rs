@@ -286,7 +286,9 @@ fn ic0_performance_counter_helper(
     }
 }
 
-pub(crate) fn syscalls<
+/// pub for usage in fuzzing to generate the available system api imports
+#[doc(hidden)]
+pub fn syscalls<
     I: TryInto<usize>
         + TryInto<u64>
         + TryInto<u32>

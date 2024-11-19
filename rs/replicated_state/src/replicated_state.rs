@@ -29,7 +29,7 @@ use ic_types::{
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
     time::CoarseTime,
-    CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
+    AccumulatedPriority, CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -460,6 +460,19 @@ impl ReplicatedState {
         Arc::clone(&self.metadata.network_topology.routing_table)
     }
 
+    /// Time complexity: O(n), where n is the number of canisters.
+    pub fn get_scheduler_priorities(&self) -> BTreeMap<CanisterId, AccumulatedPriority> {
+        self.canister_states
+            .iter()
+            .map(|(canister_id, canister_state)| {
+                (
+                    *canister_id,
+                    canister_state.scheduler_state.accumulated_priority,
+                )
+            })
+            .collect()
+    }
+
     /// Insert the canister state into the replicated state. If a canister
     /// already exists for the given canister ID, it will be replaced. It is the
     /// responsibility of the caller of this function to ensure that any
@@ -684,6 +697,18 @@ impl ReplicatedState {
     /// Returns the total memory taken by the ingress history in bytes.
     pub fn total_ingress_memory_taken(&self) -> NumBytes {
         self.metadata.ingress_history.memory_usage()
+    }
+
+    /// Returns the total number of callbacks across all canisters.
+    pub fn callback_count(&self) -> usize {
+        self.canisters_iter()
+            .map(|canister| {
+                canister
+                    .system_state
+                    .call_context_manager()
+                    .map_or(0, |ccm| ccm.callbacks().len())
+            })
+            .sum()
     }
 
     /// Returns the `SubnetId` hosting the given `principal_id` (canister or

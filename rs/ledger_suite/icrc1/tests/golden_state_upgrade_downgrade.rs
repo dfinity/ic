@@ -6,7 +6,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::Block;
 use ic_icrc1_index_ng::{IndexArg, UpgradeArg as IndexUpgradeArg};
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
-    ApprovalKey, BurnsWithoutSpender, InMemoryLedger,
+    BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
 use ic_ledger_suite_state_machine_tests::{
     generate_transactions, get_all_ledger_and_archive_blocks, get_blocks, list_archives,
@@ -260,7 +260,7 @@ struct FetchedBlocks {
 }
 
 struct LedgerState {
-    in_memory_ledger: InMemoryLedger<ApprovalKey, Account, Tokens>,
+    in_memory_ledger: InMemoryLedger<Account, Tokens>,
     num_blocks: u64,
 }
 
@@ -301,7 +301,7 @@ impl LedgerState {
             .num_blocks
             .checked_add(blocks.len() as u64)
             .expect("number of blocks should fit in u64");
-        self.in_memory_ledger.ingest_icrc1_ledger_blocks(&blocks);
+        self.in_memory_ledger.consume_blocks(&blocks);
         FetchedBlocks {
             blocks,
             start_index,
