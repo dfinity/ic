@@ -277,6 +277,7 @@ EOF
     fi
     if [ "${ELASTICSEARCH_TAGS}" != "" ]; then
         echo "elasticsearch_tags=$ELASTICSEARCH_TAGS" >>"${BOOTSTRAP_TMPDIR}/filebeat.conf"
+    fi
     if [ "${NNS_URLS}" != "" ]; then
         echo "nns_url=${NNS_URLS}" >"${BOOTSTRAP_TMPDIR}/nns.conf"
     fi
