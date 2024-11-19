@@ -2203,8 +2203,11 @@ fn can_execute_subnet_msg(
         | Ic00Method::UninstallCode
         | Ic00Method::UpdateSettings
         | Ic00Method::ComputeInitialIDkgDealings
+        | Ic00Method::ReshareChainKey
         | Ic00Method::SchnorrPublicKey
         | Ic00Method::SignWithSchnorr
+        | Ic00Method::VetKdPublicKey
+        | Ic00Method::VetKdDeriveEncryptedKey
         | Ic00Method::BitcoinGetBalance
         | Ic00Method::BitcoinGetUtxos
         | Ic00Method::BitcoinGetBlockHeaders
@@ -2263,8 +2266,11 @@ fn get_instructions_limits_for_subnet_message(
             | SetupInitialDKG
             | SignWithECDSA
             | ComputeInitialIDkgDealings
+            | ReshareChainKey
             | SchnorrPublicKey
             | SignWithSchnorr
+            | VetKdPublicKey
+            | VetKdDeriveEncryptedKey
             | StartCanister
             | StopCanister
             | UninstallCode
