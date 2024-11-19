@@ -952,6 +952,43 @@ impl CkBtcMinterState {
         utxos
     }
 
+    pub fn processable_utxos_for_account<I: IntoIterator<Item = Utxo>>(
+        &self,
+        all_utxos_for_account: I,
+        account: &Account,
+    ) -> ProcessableUtxos {
+        let is_known = |utxo: &Utxo| {
+            self.utxos_state_addresses
+                .get(account)
+                .map(|utxos| utxos.contains(utxo))
+                .unwrap_or(false)
+                || self
+                    .finalized_utxos
+                    .get(&account.owner)
+                    .map(|utxos| utxos.contains(utxo))
+                    .unwrap_or(false)
+        };
+        let mut new_utxos = BTreeSet::new();
+        let mut previously_ignored_utxos = BTreeSet::new();
+        let mut previously_quarantined_utxos = BTreeSet::new();
+
+        for utxo in all_utxos_for_account.into_iter() {
+            if self.ignored_utxos.contains(&utxo) {
+                previously_ignored_utxos.insert(utxo);
+            } else if self.quarantined_utxos.contains(&utxo) {
+                previously_quarantined_utxos.insert(utxo);
+            } else if !is_known(&utxo) {
+                new_utxos.insert(utxo);
+            }
+        }
+
+        ProcessableUtxos {
+            new_utxos,
+            previously_ignored_utxos,
+            previously_quarantined_utxos,
+        }
+    }
+
     /// Adds given UTXO to the set of ignored UTXOs.
     fn ignore_utxo(&mut self, utxo: Utxo) {
         assert!(utxo.value <= self.kyt_fee);
@@ -1167,6 +1204,12 @@ impl CkBtcMinterState {
         total_btc += self.available_utxos.iter().map(|u| u.value).sum::<u64>();
         total_btc
     }
+}
+
+pub struct ProcessableUtxos {
+    new_utxos: BTreeSet<Utxo>,
+    previously_ignored_utxos: BTreeSet<Utxo>,
+    previously_quarantined_utxos: BTreeSet<Utxo>,
 }
 
 fn as_sorted_vec<T, K: Ord>(values: impl Iterator<Item = T>, key: impl Fn(&T) -> K) -> Vec<T> {
