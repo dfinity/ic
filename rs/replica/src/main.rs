@@ -1,5 +1,6 @@
 //! Replica -- Internet Computer
 
+use anyhow::anyhow;
 use ic_async_utils::{abort_on_panic, shutdown_signal};
 use ic_config::Config;
 use ic_crypto_sha2::Sha256;
@@ -22,6 +23,7 @@ use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{signal, SignalKind};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Layer;
+use tracing_subscriber::Registry;
 
 #[cfg(target_os = "linux")]
 mod jemalloc_metrics;
@@ -41,6 +43,44 @@ use regex::Regex;
 use std::fs::File;
 #[cfg(feature = "profiler")]
 use std::io::Write;
+
+pub type BoxedRegistryLayer = Box<dyn Layer<Registry> + Send + Sync>;
+
+fn layer_for_exporting_spans_to_jeager(
+    config: &Config,
+) -> Result<BoxedRegistryLayer, anyhow::Error> {
+    // TODO: the replica config has empty string instead of a None value for the 'jaeger_addr'. It needs to be fixed.
+    let jager_addr = config
+        .tracing
+        .jaeger_addr
+        .clone()
+        .ok_or(anyhow!("No jeager addr."))?;
+    if jager_addr.is_empty() {
+        return Err(anyhow!("Empty jeager addr."));
+    }
+
+    let span_exporter = SpanExporter::builder()
+        .with_tonic()
+        .with_endpoint(jager_addr)
+        .with_protocol(opentelemetry_otlp::Protocol::Grpc)
+        .build()
+        .unwrap();
+
+    let tracer = opentelemetry_sdk::trace::TracerProvider::builder()
+        .with_config(
+            trace::Config::default()
+                .with_sampler(opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(0.01))
+                .with_resource(Resource::new(vec![KeyValue::new(
+                    "service.name",
+                    "replica",
+                )])),
+        )
+        .with_batch_exporter(span_exporter, opentelemetry_sdk::runtime::Tokio)
+        .build();
+
+    let otel_layer = tracing_opentelemetry::OpenTelemetryLayer::new(tracer.tracer("jaeger"));
+    return Ok(otel_layer.boxed());
+}
 
 /// Determine sha256 hash of the current replica binary
 ///
@@ -234,35 +274,8 @@ fn main() -> io::Result<()> {
     // Set up tracing
     let mut tracing_layers = vec![];
 
-    // TODO: the replica config has empty string instead of a None value for the 'jaeger_addr'. It needs to be fixed.
-    match config.tracing.jaeger_addr.as_ref() {
-        Some(jaeger_collector_addr) if !jaeger_collector_addr.is_empty() => {
-            let _rt_guard = rt_main.enter();
-
-            let span_exporter = SpanExporter::builder()
-                .with_tonic()
-                .with_endpoint(jaeger_collector_addr)
-                .with_protocol(opentelemetry_otlp::Protocol::Grpc)
-                .build()
-                .unwrap();
-
-            let tracer = opentelemetry_sdk::trace::TracerProvider::builder()
-                .with_config(
-                    trace::Config::default()
-                        .with_sampler(opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(0.01))
-                        .with_resource(Resource::new(vec![KeyValue::new(
-                            "service.name",
-                            "replica",
-                        )])),
-                )
-                .with_batch_exporter(span_exporter, opentelemetry_sdk::runtime::Tokio)
-                .build();
-
-            let otel_layer =
-                tracing_opentelemetry::OpenTelemetryLayer::new(tracer.tracer("jaeger"));
-            tracing_layers.push(otel_layer.boxed());
-        }
-        _ => {}
+    if let Ok(jager_exporter_layer) = layer_for_exporting_spans_to_jeager(&config) {
+        tracing_layers.push(jager_exporter_layer);
     }
 
     let (reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(vec![]);
