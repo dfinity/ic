@@ -1,3 +1,4 @@
+use crate::cached_upgrade_steps::CachedUpgradeSteps;
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -20,8 +21,8 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, Command as InFlightCommand},
-                CachedUpgradeSteps, MaturityModulation, NeuronInFlightCommand, PendingVersion,
-                SnsMetadata, Version, Versions,
+                CachedUpgradeSteps as CachedUpgradeStepsPb, MaturityModulation,
+                NeuronInFlightCommand, PendingVersion, SnsMetadata, Version, Versions,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -431,6 +432,20 @@ impl GovernanceProto {
         );
 
         result
+    }
+
+    fn cached_upgrade_steps_or_err(&self) -> Result<CachedUpgradeSteps, String> {
+        let Some(cached_upgrade_steps) = &self.cached_upgrade_steps else {
+            return Err(
+                "Internal error: GovernanceProto.cached_upgrade_steps must be specified."
+                    .to_string(),
+            );
+        };
+
+        let cached_upgrade_steps = CachedUpgradeSteps::try_from(cached_upgrade_steps)
+            .map_err(|err| format!("Internal error: {}", err))?;
+
+        Ok(cached_upgrade_steps)
     }
 
     /// Gets the current deployed version of the SNS or panics.
@@ -2128,11 +2143,13 @@ impl Governance {
                 self.perform_manage_dapp_canister_settings(manage_dapp_canister_settings)
                     .await
             }
-            // TODO[NNS1-3434]: Implement `AdvanceSnsTargetVersion` proposals.
-            Action::AdvanceSnsTargetVersion(_) => Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "AdvanceSnsTargetVersion proposals are not implemented yet.".to_string(),
-            )),
+            Action::AdvanceSnsTargetVersion(_) => {
+                get_action_auxiliary(&self.proto.proposals, ProposalId { id: proposal_id })
+                    .and_then(|action_auxiliary| {
+                        action_auxiliary.unwrap_advance_sns_target_version_or_err()
+                    })
+                    .and_then(|new_target| self.perform_advance_target_version(new_target))
+            }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
             Action::Unspecified(_) => Err(GovernanceError::new_with_message(
@@ -3022,6 +3039,29 @@ impl Governance {
                     )),
                 },
             )
+    }
+
+    fn perform_advance_target_version(
+        &mut self,
+        new_target: Version,
+    ) -> Result<(), GovernanceError> {
+        let cached_upgrade_steps = self
+            .proto
+            .cached_upgrade_steps_or_err()
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::NotFound, err))?;
+
+        cached_upgrade_steps
+            .validate_new_target_version(&new_target)
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
+
+        self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionSet::new(
+            self.proto.target_version.clone(),
+            Some(new_target.clone()),
+        ));
+
+        self.proto.target_version = Some(new_target);
+
+        Ok(())
     }
 
     // Returns an option with the NervousSystemParameters
@@ -4846,7 +4886,7 @@ impl Governance {
             return;
         };
 
-        let Some(CachedUpgradeSteps {
+        let Some(CachedUpgradeStepsPb {
             upgrade_steps: Some(Versions {
                 versions: upgrade_steps,
             }),
@@ -4962,7 +5002,7 @@ impl Governance {
         let upgrade_steps =
             self.proto
                 .cached_upgrade_steps
-                .get_or_insert_with(|| CachedUpgradeSteps {
+                .get_or_insert_with(|| CachedUpgradeStepsPb {
                     requested_timestamp_seconds: Some(self.env.now()),
                     ..Default::default()
                 });
