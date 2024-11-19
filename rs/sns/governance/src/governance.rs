@@ -2964,7 +2964,7 @@ impl Governance {
 
             if self.env.now() > mark_failed_at_seconds {
                 let error = format!(
-                    "Upgrade marked as failed at {} seconds from genesis. \
+                    "Upgrade marked as failed at timestamp {} seconds. \
                     Did not find an upgrade in the ledger's canister_info recent_changes.",
                     self.env.now(),
                 );
@@ -5527,16 +5527,16 @@ impl Governance {
             // If we have an upgrade_in_progress with no target_version, we are in an unexpected
             // situation. We recover to workable state by marking upgrade as failed.
 
-            let msg = "No target_version set for upgrade_in_progress. This should be impossible. \
+            let message = "No target_version set for upgrade_in_progress. This should be impossible. \
                 Clearing upgrade_in_progress state and marking proposal failed to unblock further upgrades.";
 
             self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::invalid_state(
-                msg.to_string(),
+                message.to_string(),
                 None,
             ));
             self.fail_sns_upgrade_to_next_version_proposal(
                 upgrade_in_progress.proposal_id,
-                GovernanceError::new_with_message(ErrorType::PreconditionFailed, msg),
+                GovernanceError::new_with_message(ErrorType::PreconditionFailed, message),
             );
 
             return;
@@ -5562,16 +5562,16 @@ impl Governance {
             .checking_upgrade_lock;
 
         if lock > 1000 {
-            let error =
+            let message =
                 "Too many attempts to check upgrade without success.  Marking upgrade failed.";
 
             self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::timeout(
-                error.to_string(),
+                message.to_string(),
             ));
 
             self.fail_sns_upgrade_to_next_version_proposal(
                 proposal_id,
-                GovernanceError::new_with_message(ErrorType::External, error),
+                GovernanceError::new_with_message(ErrorType::External, message),
             );
             return;
         }
@@ -5589,6 +5589,7 @@ impl Governance {
             .as_mut()
             .unwrap()
             .checking_upgrade_lock = 0;
+
         // We cannot panic or we will get stuck with "checking_upgrade_lock" set to true.  We log
         // the issue and return so the next check can be performed.
         let mut running_version = match running_version {
@@ -5598,20 +5599,19 @@ impl Governance {
                 log!(ERROR, "Could not get running version of SNS: {}", message);
 
                 if self.env.now() > mark_failed_at {
-                    let error = format!(
+                    let message = format!(
                         "Upgrade marked as failed at {} seconds from unix epoch. \
                              Governance could not determine running version from root: {}. \
                              Setting upgrade to failed to unblock retry.",
                         self.env.now(),
                         message,
                     );
-
                     self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::timeout(
-                        error.to_string(),
+                        message.to_string(),
                     ));
                     self.fail_sns_upgrade_to_next_version_proposal(
                         proposal_id,
-                        GovernanceError::new_with_message(ErrorType::External, error),
+                        GovernanceError::new_with_message(ErrorType::External, message),
                     );
                 }
                 return;
@@ -5626,67 +5626,67 @@ impl Governance {
                 .clone_from(&target_version.archive_wasm_hash);
         }
 
-        let deployed_version = match self.proto.deployed_version.clone() {
+        let deployed_version = match self.proto.deployed_version.as_ref() {
             None => {
-                let error = format!(
-                    "Upgrade marked as failed at {} seconds from genesis. \
-                Governance had no recorded deployed_version.  \
-                Setting it to currently running version and failing upgrade.",
+                let message = format!(
+                    "SNS Governance had no recorded deployed_version at timestamp {} seconds. \
+                     Setting it to currently running {:?} and attempting to proceed.",
                     self.env.now(),
+                    running_version,
                 );
-
-                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::invalid_state(
-                    error.to_string(),
-                    None,
+                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset::new(
+                    message,
+                    vec![running_version.clone()],
                 ));
 
-                self.proto.deployed_version = Some(running_version);
-                self.fail_sns_upgrade_to_next_version_proposal(
-                    proposal_id,
-                    GovernanceError::new_with_message(ErrorType::PreconditionFailed, error),
-                );
-                return;
+                self.proto.deployed_version = Some(running_version.clone());
+
+                &running_version
             }
             Some(version) => version,
         };
 
-        let expected_changes = deployed_version.changes_against(&target_version);
+        let expected_changes = {
+            let expected_changes = deployed_version.changes_against(&target_version);
+            running_version.version_has_expected_hashes(&expected_changes)
+        };
 
-        match running_version.version_has_expected_hashes(&expected_changes) {
-            Ok(_) => {
-                log!(
-                    INFO,
-                    "Upgrade marked successful at {} from genesis.  New Version: {:?}",
+        if let Err(errs) = expected_changes {
+            if self.env.now() > mark_failed_at {
+                let message = format!(
+                    "Upgrade marked as failed at timestamp {} seconds. \
+                     Running system version does not match expected state:\n- {:?}",
                     self.env.now(),
-                    target_version
+                    errs.join("- {}\n"),
                 );
-                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::success(None));
-                if let Some(proposal_id) = proposal_id {
-                    self.set_proposal_execution_status(proposal_id, Ok(()));
-                }
-                self.proto.deployed_version = Some(target_version);
-                self.proto.pending_version = None;
-            }
-            Err(errors) => {
-                // We are past mark_failed_at_seconds.
-                if self.env.now() > mark_failed_at {
-                    let error = format!(
-                        "Upgrade marked as failed at {} seconds from genesis. \
-                Running system version does not match expected state.\n{:?}",
-                        self.env.now(),
-                        errors
-                    );
 
-                    self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::timeout(
-                        error.to_string(),
-                    ));
-                    self.fail_sns_upgrade_to_next_version_proposal(
-                        proposal_id,
-                        GovernanceError::new_with_message(ErrorType::External, error),
-                    );
-                }
+                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::timeout(
+                    message.to_string(),
+                ));
+                self.fail_sns_upgrade_to_next_version_proposal(
+                    proposal_id,
+                    GovernanceError::new_with_message(ErrorType::External, message),
+                );
             }
+
+            // Returning here because (1) the expected changes were not observed yet and (2) either
+            // the upgrade has timed out or there will be another attempt in the next periodic task.
+            return;
         }
+
+        let message = format!(
+            "Upgrade marked successful at timestamp {} seconds, new {:?}",
+            self.env.now(),
+            target_version,
+        );
+        self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::success(message));
+
+        if let Some(proposal_id) = proposal_id {
+            self.set_proposal_execution_status(proposal_id, Ok(()));
+        }
+
+        self.proto.deployed_version = Some(target_version);
+        self.proto.pending_version = None;
     }
 
     // This method sets internal state to remove pending_version and sets the proposal status to
