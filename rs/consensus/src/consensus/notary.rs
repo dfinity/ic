@@ -395,7 +395,10 @@ mod tests {
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use std::{sync::Arc, time::Duration};
+    use std::{
+        sync::{Arc, RwLock},
+        time::Duration,
+    };
 
     /// Do basic notary validations
     #[test]
@@ -767,6 +770,203 @@ mod tests {
                     &logger,
                 ),
                 NotaryDelay::ReachedMaxNotarizationCUPGap { .. }
+            );
+        });
+    }
+
+    #[test]
+    fn test_get_adjusted_notary_delay_certified_finalized_gap() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let logger = no_op_logger();
+            let backlog_delay = Duration::from_millis(BACKLOG_DELAY_MILLIS);
+            let initial_notary_delay = Duration::from_secs(1);
+            let dkg_interval = 19;
+            let settings = NotarizationDelaySettings {
+                unit_delay: Duration::from_secs(1),
+                initial_notary_delay,
+            };
+            let committee = (0..3).map(node_test_id).collect::<Vec<_>>();
+            let record = SubnetRecordBuilder::from(&committee)
+                .with_dkg_interval_length(dkg_interval)
+                .build();
+
+            let Dependencies {
+                mut pool,
+                state_manager,
+                membership,
+                ..
+            } = dependencies_with_subnet_params(pool_config, subnet_test_id(0), vec![(1, record)]);
+
+            let certified_height = Arc::new(RwLock::new(Height::from(0)));
+            let certified_height_clone = Arc::clone(&certified_height);
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .returning(move || *certified_height_clone.read().unwrap());
+
+            let notary_delay = get_adjusted_notary_delay_from_settings(
+                settings.clone(),
+                &PoolReader::new(&pool),
+                state_manager.as_ref(),
+                membership.as_ref(),
+                Rank(0),
+                &logger,
+            );
+            assert_eq!(
+                notary_delay,
+                NotaryDelay::CanNotarizeAfter(initial_notary_delay)
+            );
+
+            // Advance to finalized height by the acceptable gap
+            pool.advance_round_normal_operation_n(ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP);
+            let notary_delay = get_adjusted_notary_delay_from_settings(
+                settings.clone(),
+                &PoolReader::new(&pool),
+                state_manager.as_ref(),
+                membership.as_ref(),
+                Rank(0),
+                &logger,
+            );
+            assert_eq!(
+                notary_delay,
+                NotaryDelay::CanNotarizeAfter(initial_notary_delay)
+            );
+
+            // Advance to finalized height by one more round
+            pool.advance_round_normal_operation_n(1);
+            let notary_delay = get_adjusted_notary_delay_from_settings(
+                settings.clone(),
+                &PoolReader::new(&pool),
+                state_manager.as_ref(),
+                membership.as_ref(),
+                Rank(0),
+                &logger,
+            );
+            assert_eq!(
+                notary_delay,
+                NotaryDelay::CanNotarizeAfter(
+                    initial_notary_delay + backlog_delay.saturating_mul(2)
+                )
+            );
+            // Advance to finalized height by one more round
+            pool.advance_round_normal_operation_n(1);
+            let notary_delay = get_adjusted_notary_delay_from_settings(
+                settings.clone(),
+                &PoolReader::new(&pool),
+                state_manager.as_ref(),
+                membership.as_ref(),
+                Rank(0),
+                &logger,
+            );
+            assert_eq!(
+                notary_delay,
+                NotaryDelay::CanNotarizeAfter(
+                    initial_notary_delay + backlog_delay.saturating_mul(3)
+                )
+            );
+
+            // Execution catches up
+            *certified_height.write().unwrap() =
+                Height::from(ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP + 2);
+            let notary_delay = get_adjusted_notary_delay_from_settings(
+                settings.clone(),
+                &PoolReader::new(&pool),
+                state_manager.as_ref(),
+                membership.as_ref(),
+                Rank(0),
+                &logger,
+            );
+            assert_eq!(
+                notary_delay,
+                NotaryDelay::CanNotarizeAfter(initial_notary_delay)
+            );
+        });
+    }
+
+    #[test]
+    fn test_get_adjusted_notary_delay_upgrades() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let logger = no_op_logger();
+            let backlog_delay = Duration::from_millis(BACKLOG_DELAY_MILLIS);
+            let initial_notary_delay = Duration::from_secs(1);
+            let dkg_interval = 19;
+            let settings = NotarizationDelaySettings {
+                unit_delay: Duration::from_secs(1),
+                initial_notary_delay,
+            };
+            let committee = (0..3).map(node_test_id).collect::<Vec<_>>();
+            let Dependencies {
+                mut pool,
+                state_manager,
+                membership,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_test_id(0),
+                vec![
+                    (
+                        1,
+                        SubnetRecordBuilder::from(&committee)
+                            .with_dkg_interval_length(dkg_interval)
+                            .build(),
+                    ),
+                    (
+                        10,
+                        SubnetRecordBuilder::from(&committee)
+                            .with_dkg_interval_length(dkg_interval)
+                            .with_replica_version("new_version")
+                            .build(),
+                    ),
+                ],
+            );
+
+            let certified_height = Arc::new(RwLock::new(Height::from(0)));
+            let certified_height_clone = Arc::clone(&certified_height);
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .returning(move || *certified_height_clone.read().unwrap());
+
+            // Advance pool to the next CUP height
+            pool.advance_round_normal_operation_n(dkg_interval + 1);
+            *certified_height.write().unwrap() = Height::from(dkg_interval + 1);
+
+            // Advance pool past acceptable gap
+            pool.advance_round_normal_operation_n(ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP + 2);
+
+            // Notary delay should be increased
+            let notary_delay = get_adjusted_notary_delay_from_settings(
+                settings.clone(),
+                &PoolReader::new(&pool),
+                state_manager.as_ref(),
+                membership.as_ref(),
+                Rank(0),
+                &logger,
+            );
+            assert_eq!(
+                notary_delay,
+                NotaryDelay::CanNotarizeAfter(
+                    initial_notary_delay + backlog_delay.saturating_mul(3)
+                )
+            );
+
+            // Advance pool past the upgrade CUP height
+            pool.advance_round_normal_operation_n(dkg_interval + 1);
+            // Advance certified height to the upgrade CUP height
+            *certified_height.write().unwrap() = Height::from(2 * (dkg_interval + 1));
+
+            // Notary delay should not be increased during pending upgrade
+            let notary_delay = get_adjusted_notary_delay_from_settings(
+                settings.clone(),
+                &PoolReader::new(&pool),
+                state_manager.as_ref(),
+                membership.as_ref(),
+                Rank(0),
+                &logger,
+            );
+            assert_eq!(
+                notary_delay,
+                NotaryDelay::CanNotarizeAfter(initial_notary_delay)
             );
         });
     }
