@@ -24,7 +24,6 @@ use ic_https_outcalls_service::{
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -47,8 +46,36 @@ const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 
 type OutboundRequestBody = Full<Bytes>;
 
-type Cache =
-    BTreeMap<String, Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>;
+struct Cache {
+    api_bn_ips: Vec<String>,
+    clients: Vec<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>,
+}
+
+impl Cache {
+    fn new() -> Self {
+        Self {
+            api_bn_ips: Vec::new(),
+            clients: Vec::new(),
+        }
+    }
+
+    fn insert(
+        &mut self,
+        ip: String,
+        client: Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>,
+    ) {
+        self.api_bn_ips.push(ip);
+        self.clients.push(client);
+    }
+
+    fn is_empty(&self) -> bool {
+        self.clients.is_empty()
+    }
+
+    fn len(&self) -> usize {
+        self.clients.len()
+    }
+}
 
 /// Implements HttpsOutcallsService
 // TODO: consider making this private
@@ -86,7 +113,7 @@ impl CanisterHttp {
 
         Self {
             client,
-            cache: ArcSwap::new(Arc::new(BTreeMap::new())),
+            cache: ArcSwap::new(Arc::new(Cache::new())),
             logger,
             metrics: AdapterMetrics::new(metrics),
             http_connect_timeout_secs: config.http_connect_timeout_secs,
@@ -95,7 +122,7 @@ impl CanisterHttp {
     }
 
     fn create_cache(&self, api_bn_ips: Vec<String>) -> Cache {
-        let mut new_cache = BTreeMap::new();
+        let mut new_cache = Cache::new();
 
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false);
@@ -135,7 +162,7 @@ impl CanisterHttp {
         }
 
         let index = self.next_proxy_index.fetch_add(1, Ordering::SeqCst);
-        Some(cache.values().nth(index % cache.len()).unwrap().clone())
+        Some(cache.clients[index % cache.len()].clone())
     }
 }
 
@@ -155,15 +182,15 @@ impl HttpsOutcallsService for CanisterHttp {
 
         let mut cache = self.cache.load_full();
 
-        let ordered_cached_ips = cache.keys().cloned().collect::<Vec<String>>();
+        let cached_ips = cache.api_bn_ips.clone();
 
-        if !sorted_incoming_ips.is_empty() && ordered_cached_ips != sorted_incoming_ips {
+        if !sorted_incoming_ips.is_empty() && cached_ips != sorted_incoming_ips {
             // multiple threads can enter this block, but it's fine, as the whole cache is lightweight.
             cache = Arc::new(self.create_cache(sorted_incoming_ips));
             self.cache.store(cache.clone());
         }
 
-        // "cache" now points to BTreeMap with the IPs from the request.
+        // "cache" now points to Cache with the IPs from the request.
 
         let uri = req.url.parse::<Uri>().map_err(|err| {
             debug!(self.logger, "Failed to parse URL: {}", err);
