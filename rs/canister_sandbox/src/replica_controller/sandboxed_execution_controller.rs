@@ -1745,6 +1745,8 @@ fn evict_sandbox_processes(
 
     let total_sandboxes_rss = total_sandboxes_rss(backends);
 
+    // We have the same if statement in `sandbox_process_eviction::evict`, but
+    // if we return here we will skip the creation of `candidates` vector.
     if active_count <= max_active_sandboxes && total_sandboxes_rss <= max_sandboxes_rss {
         return;
     }
