@@ -6967,6 +6967,11 @@ impl Governance {
         })
     }
 
+    pub fn batch_adjust_neurons_storage(&mut self, start_neuron_id: NeuronId) -> Option<NeuronId> {
+        self.neuron_store
+            .batch_adjust_neurons_storage(start_neuron_id)
+    }
+
     /// Recompute cached metrics once per day
     pub fn should_compute_cached_metrics(&self) -> bool {
         if let Some(metrics) = self.heap_data.metrics.as_ref() {
