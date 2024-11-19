@@ -179,7 +179,9 @@ pub fn main() -> Result<()> {
                 }),
                 (None, None, None) => None,
                 _ => {
-                    println!("Warning: Partial IPv4 configuration provided. All parameters are required for IPv4 configuration.");
+                    // FIXME: bad input data should probably be rendered as hard failure,
+                    // not as a silent partial configuration drop.
+                    eprintln!("Warning: Partial IPv4 configuration provided. All parameters are required for IPv4 configuration.");
                     None
                 }
             };
@@ -244,12 +246,12 @@ pub fn main() -> Result<()> {
                 hostos_settings,
                 guestos_settings,
             };
-            println!("SetupOSConfig: {:?}", setupos_config);
+            eprintln!("SetupOSConfig: {:?}", setupos_config);
 
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
             serialize_and_write_config(setupos_config_json_path, &setupos_config)?;
 
-            println!(
+            eprintln!(
                 "SetupOSConfig has been written to {}",
                 setupos_config_json_path.display()
             );
@@ -276,7 +278,7 @@ pub fn main() -> Result<()> {
             let hostos_config_json_path = Path::new(&hostos_config_json_path);
             serialize_and_write_config(hostos_config_json_path, &hostos_config)?;
 
-            println!(
+            eprintln!(
                 "HostOSConfig has been written to {}",
                 hostos_config_json_path.display()
             );
