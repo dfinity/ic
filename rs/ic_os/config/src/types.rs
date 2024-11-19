@@ -14,6 +14,10 @@
 //! - **Removing Fields**: To prevent backwards-compatibility deserialization errors, required fields must not be removed directly: In a first step, they have to be made optional and code that reads the value must be removed/handle missing values. In a second step, after the first step has rolled out to all OSes and there is no risk of a rollback, the field can be removed. Additionally, to avoid reintroducing a previously removed field, add your removed field to the RESERVED_FIELD_NAMES list.
 //!
 //! - **Renaming Fields**: Avoid renaming fields unless absolutely necessary. If you must rename a field, use `#[serde(rename = "old_name")]`.
+//!
+//! ## Logging Safety
+//!
+//! All configuration objects defined in this file are safe to log. They do not contain any secret material.
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use mac_address::mac_address::FormattedMacAddress;
 use serde::{Deserialize, Serialize};

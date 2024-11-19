@@ -267,6 +267,7 @@ pub fn main() -> Result<()> {
                 hostos_settings,
                 guestos_settings,
             };
+            // SetupOSConfig is safe to log; it does not contain any secret material
             println!("SetupOSConfig: {:?}", setupos_config);
 
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
@@ -498,6 +499,8 @@ pub fn main() -> Result<()> {
                 hostos_settings,
                 guestos_settings,
             };
+
+            // HostOSConfig is safe to log; it does not contain any secret material
             println!("New HostOSConfig: {:?}", hostos_config);
 
             serialize_and_write_config(hostos_config_json_path, &hostos_config)?;

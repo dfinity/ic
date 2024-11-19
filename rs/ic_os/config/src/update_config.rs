@@ -66,6 +66,7 @@ pub fn update_guestos_config() -> Result<()> {
             guestos_settings,
         };
 
+        // GuestOSConfig is safe to log; it does not contain any secret material
         println!("New GuestOSConfig: {:?}", guestos_config);
 
         serialize_and_write_config(&config_json_path, &guestos_config)?;
