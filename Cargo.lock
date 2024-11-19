@@ -17120,7 +17120,6 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "slog",
- "socket2 0.5.7",
  "spec-compliance",
  "tempfile",
  "time",
