@@ -1116,7 +1116,7 @@ impl SandboxedExecutionController {
         });
 
         let backends_copy = Arc::clone(&backends);
-        let (tx_evict, rx) = std::sync::mpsc::sync_channel(1);
+        let (tx_evict, rx) = std::sync::mpsc::sync_channel(2);
         let state_reader_copy = Arc::clone(&state_reader);
 
         std::thread::spawn(move || {
