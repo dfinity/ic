@@ -2048,7 +2048,7 @@ where
     let start = Instant::now();
     debug!(
         log,
-        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a linear backoff of {backoff:?}"
+        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a constant backoff of {backoff:?}"
     );
     loop {
         match f().await {
