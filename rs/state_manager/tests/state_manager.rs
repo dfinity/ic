@@ -1631,16 +1631,19 @@ fn remove_inmemory_states_below_can_keep_extra_states() {
 
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
 
-        state_manager.remove_inmemory_states_below(height(5), &btreeset![height(1), height(7)]);
+        state_manager
+            .remove_inmemory_states_below(height(5), &btreeset![height(1), height(4), height(7)]);
 
         // State at height 1 is kept because of it is included in `extra_heights_to_keep`.
+        // State at 2 is removed because it is below the requested height and are not asked to keep in addition.
+        // Note that although state at 2 has a checkpoint, we don't treat it differently when removing in-memory states.
+        // State at 4 is kept because of it is protected by `extra_heights_to_keep`.
         // The additional protection on the state at height 7 has no effect since it is above the requested height.
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
             vec![
                 height(0),
                 height(1),
-                height(2),
                 height(4),
                 height(5),
                 height(6),
@@ -1650,46 +1653,41 @@ fn remove_inmemory_states_below_can_keep_extra_states() {
             ],
         );
 
-        state_manager.remove_inmemory_states_below(height(9), &btreeset![height(7), height(8)]);
+        state_manager
+            .remove_inmemory_states_below(height(9), &btreeset![height(2), height(7), height(8)]);
 
-        // State at height 7 is kept because of it is included in `extra_heights_to_keep`.
-        // The additional protection on the state at height 8 currently has no effect since it is a checkpoint.
-        // However, this may be subject to change in the future.
+        // Asking to keep state at 2 has no effect since it is already removed.
+        // State at height 7 and 8 are kept because they are included in `extra_heights_to_keep`.
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![
-                height(0),
-                height(2),
-                height(4),
-                height(6),
-                height(7),
-                height(8),
-                height(9)
-            ],
+            vec![height(0), height(7), height(8), height(9)],
         );
 
-        state_manager.remove_inmemory_states_below(height(9), &BTreeSet::new());
+        certify_height(&state_manager, height(8));
 
-        // State at height 7 is removed.
+        state_manager.remove_inmemory_states_below(height(10), &BTreeSet::new());
+
+        // There remain only the latest state, the latest certified height and the initial state.
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![
-                height(0),
-                height(2),
-                height(4),
-                height(6),
-                height(8),
-                height(9)
-            ],
+            vec![height(0), height(8), height(9)],
         );
 
-        state_manager.remove_states_below(height(8));
+        // Checkpoints are all present because we have not called `remove_states_below` yet.
+        assert_eq!(
+            state_manager.checkpoint_heights(),
+            vec![height(2), height(4), height(6), height(8)]
+        );
+
+        state_manager.remove_states_below(height(10));
         state_manager.flush_deallocation_channel();
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
             vec![height(0), height(8), height(9)],
         );
+
+        assert_eq!(state_manager.checkpoint_heights(), vec![height(8)]);
 
         let state_manager = restart_fn(state_manager, Some(height(8)));
 

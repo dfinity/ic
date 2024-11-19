@@ -2422,15 +2422,21 @@ impl StateManagerImpl {
                 });
 
             let state_heights = self.list_state_heights(CERT_ANY);
-            let certified_state_heights = self.list_state_heights(CERT_CERTIFIED);
 
             debug_assert!(checkpoint_heights_to_keep
                 .iter()
                 .all(|h| unfiltered_checkpoint_heights.contains(h)));
 
+            info!(
+                self.log,
+                "extra_inmemory_heights_to_keep: {:?}, state_heights: {:?}",
+                extra_inmemory_heights_to_keep,
+                state_heights
+            );
+
             debug_assert!(extra_inmemory_heights_to_keep
                 .iter()
-                .all(|h| certified_state_heights.contains(h) || *h == Self::INITIAL_STATE_HEIGHT));
+                .all(|h| state_heights.contains(h)));
 
             debug_assert!(state_heights.contains(&latest_state_height));
             debug_assert!(state_heights.contains(&latest_certified_height));
