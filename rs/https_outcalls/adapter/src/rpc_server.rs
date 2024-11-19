@@ -158,9 +158,12 @@ impl HttpsOutcallsService for CanisterHttp {
         let ordered_cached_ips = cache.keys().cloned().collect::<Vec<String>>();
 
         if !sorted_incoming_ips.is_empty() && ordered_cached_ips != sorted_incoming_ips {
+            // multiple threads can enter this block, but it's fine, as the whole cache is lightweight.
             cache = Arc::new(self.create_cache(sorted_incoming_ips));
             self.cache.store(cache.clone());
         }
+
+        // "cache" now points to BTreeMap with the IPs from the request.
 
         let uri = req.url.parse::<Uri>().map_err(|err| {
             debug!(self.logger, "Failed to parse URL: {}", err);
