@@ -140,20 +140,21 @@ fn get_ipmi_mac() -> Result<FormattedMacAddress> {
     })
 }
 
-/// Get the management MAC address.
+/// Derive the management MAC address for a machine.
 ///
-/// Retrieves the MAC address from IPMI if available, else falls back to
-/// a known hard-coded string that is hexadecimally-encoded "invirt".
-pub fn get_mgmt_mac() -> Result<FormattedMacAddress> {
-    let output = Command::new("systemd-detect-virt").output()?.stdout;
-
-    let stdout = std::str::from_utf8(&output)?.trim();
-
-    match stdout {
-        "none" => get_ipmi_mac(),
-        _ => {
-            // The following string is hex for "invirt".
-            FormattedMacAddress::try_from("69:6e:76:69:72:74")
+/// Uses the supplied MAC address if Some(), else retrieves the MAC
+/// address from IPMI if available, else falls back to a known
+/// hard-coded string that is the string "invirt" but
+/// hexadecimally-encoded.
+pub fn derive_mgmt_mac(maybe_mac: Option<String>) -> Result<FormattedMacAddress> {
+    match maybe_mac {
+        Some(mac) => FormattedMacAddress::try_from(mac.as_str()),
+        None => {
+            let stdout = Command::new("systemd-detect-virt").output()?.stdout;
+            match std::str::from_utf8(&stdout)?.trim() {
+                "none" => get_ipmi_mac(),
+                _ => FormattedMacAddress::try_from("69:6e:76:69:72:74"),
+            }
         }
     }
 }
