@@ -46,7 +46,7 @@ use std::io::Write;
 
 pub type BoxedRegistryLayer = Box<dyn Layer<Registry> + Send + Sync>;
 
-fn layer_for_exporting_spans_to_jeager(
+fn layer_for_exporting_spans_to_jaeger(
     config: &Config,
 ) -> Result<BoxedRegistryLayer, anyhow::Error> {
     // TODO: the replica config has empty string instead of a None value for the 'jaeger_addr'. It needs to be fixed.
@@ -54,9 +54,9 @@ fn layer_for_exporting_spans_to_jeager(
         .tracing
         .jaeger_addr
         .clone()
-        .ok_or(anyhow!("No jeager addr."))?;
+        .ok_or(anyhow!("No jaeger addr."))?;
     if jager_addr.is_empty() {
-        return Err(anyhow!("Empty jeager addr."));
+        return Err(anyhow!("Empty jaeger addr."));
     }
 
     let span_exporter = SpanExporter::builder()
@@ -77,8 +77,7 @@ fn layer_for_exporting_spans_to_jeager(
         .with_batch_exporter(span_exporter, opentelemetry_sdk::runtime::Tokio)
         .build();
 
-    let otel_layer = tracing_opentelemetry::OpenTelemetryLayer::new(tracer.tracer("jaeger"));
-    return Ok(otel_layer.boxed());
+    Ok(tracing_opentelemetry::OpenTelemetryLayer::new(tracer.tracer("jaeger")).boxed())
 }
 
 /// Determine sha256 hash of the current replica binary
@@ -273,7 +272,7 @@ fn main() -> io::Result<()> {
     // Set up tracing
     let mut tracing_layers = vec![];
 
-    if let Ok(jager_exporter_layer) = layer_for_exporting_spans_to_jeager(&config) {
+    if let Ok(jager_exporter_layer) = layer_for_exporting_spans_to_jaeger(&config) {
         tracing_layers.push(jager_exporter_layer);
     }
 
