@@ -293,7 +293,7 @@ uvm_config_image(
     name = "jaeger_uvm_config_image",
     srcs = [
         ":jaeger_activate.sh",
-        ":jaeger_image",
+        ":jaeger.tar",
     ],
     remap_paths = {
         "jaeger_activate.sh": "activate",
