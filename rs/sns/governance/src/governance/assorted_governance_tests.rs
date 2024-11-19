@@ -2479,9 +2479,9 @@ fn test_no_target_version_fails_check_upgrade_status() {
     assert_eq!(
         proposal_data.failure_reason.unwrap(),
         GovernanceError::new_with_message(
-            ErrorType::PreconditionFailed,
-                "No target_version set for upgrade_in_progress. This should be impossible. \
-                    Clearing upgrade_in_progress state and marking proposal failed to unblock further upgrades."
+            ErrorType::InconsistentInternalData,
+            "No target_version set for upgrade_in_progress. This should be impossible. Clearing \
+             upgrade_in_progress state and marking proposal failed to unblock further upgrades."
         )
     );
 
