@@ -171,7 +171,7 @@ impl OnDiskSerializedModule {
         let mut bytes_file = File::create(bytes_path)
             .expect("Unable to serialize module: failed to create bytes file");
         bytes_file
-            .write_all(&bytes)
+            .write_all(bytes)
             .expect("Unable to serialize module: failed to write bytes file");
         let mut initial_state_file = File::create(initial_state_path)
             .expect("Unable to serialize module: failed to create initial state file");
@@ -244,7 +244,7 @@ impl OnDiskSerializedModule {
         }) as *mut u8;
         // Safety: allocation was made with length `mmap_size`.
         let data = unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) };
-        bincode::deserialize::<InitialStateData>(&data)
+        bincode::deserialize::<InitialStateData>(data)
             .expect("Error parsing initial state data file")
     }
 }
