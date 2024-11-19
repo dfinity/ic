@@ -5387,7 +5387,7 @@ impl Governance {
             .collect()
     }
 
-    pub fn make_proposal(
+    pub async fn make_proposal(
         &mut self,
         proposer_id: &NeuronId,
         caller: &PrincipalId,
@@ -5592,7 +5592,8 @@ impl Governance {
         );
         self.heap_data.proposals.insert(proposal_num, proposal_data);
 
-        self.cast_vote_and_cascade_follow(proposal_id, *proposer_id, Vote::Yes, topic);
+        self.cast_vote_and_cascade_follow(proposal_id, *proposer_id, Vote::Yes, topic)
+            .await;
 
         self.process_proposal(proposal_num);
 
@@ -5744,7 +5745,7 @@ impl Governance {
         }
     }
 
-    fn register_vote(
+    async fn register_vote(
         &mut self,
         neuron_id: &NeuronId,
         caller: &PrincipalId,
@@ -5816,7 +5817,8 @@ impl Governance {
             *neuron_id,
             vote,
             topic,
-        );
+        )
+        .await;
 
         self.process_proposal(proposal_id.id);
 
@@ -6328,7 +6330,7 @@ impl Governance {
                 .follow(&id, caller, f)
                 .map(|_| ManageNeuronResponse::follow_response()),
             Some(Command::MakeProposal(p)) => {
-                self.make_proposal(&id, caller, p).map(|proposal_id| {
+                self.make_proposal(&id, caller, p).await.map(|proposal_id| {
                     ManageNeuronResponse::make_proposal_response(
                         proposal_id,
                         "The proposal has been created successfully.".to_string(),
@@ -6337,6 +6339,7 @@ impl Governance {
             }
             Some(Command::RegisterVote(v)) => self
                 .register_vote(&id, caller, v)
+                .await
                 .map(|_| ManageNeuronResponse::register_vote_response()),
             Some(Command::ClaimOrRefresh(_)) => {
                 panic!("This should have already returned")

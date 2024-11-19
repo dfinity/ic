@@ -1141,6 +1141,7 @@ mod cast_vote_and_cascade_follow {
         pb::v1::{neuron::Followees, Ballot, ProposalData, Topic, Vote},
         test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
     };
+    use futures::FutureExt;
     use ic_base_types::PrincipalId;
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
     use icp_ledger::Subaccount;
@@ -1251,12 +1252,15 @@ mod cast_vote_and_cascade_follow {
             Box::new(StubCMC {}),
         );
 
-        governance.cast_vote_and_cascade_follow(
-            ProposalId { id: 1 },
-            NeuronId { id: 1 },
-            Vote::Yes,
-            topic,
-        );
+        governance
+            .cast_vote_and_cascade_follow(
+                ProposalId { id: 1 },
+                NeuronId { id: 1 },
+                Vote::Yes,
+                topic,
+            )
+            .now_or_never()
+            .unwrap();
 
         let deciding_voting_power = |neuron_id| {
             governance
@@ -1338,12 +1342,15 @@ mod cast_vote_and_cascade_follow {
             Box::new(StubCMC {}),
         );
 
-        governance.cast_vote_and_cascade_follow(
-            ProposalId { id: 1 },
-            NeuronId { id: 1 },
-            Vote::Yes,
-            topic,
-        );
+        governance
+            .cast_vote_and_cascade_follow(
+                ProposalId { id: 1 },
+                NeuronId { id: 1 },
+                Vote::Yes,
+                topic,
+            )
+            .now_or_never()
+            .unwrap();
 
         let deciding_voting_power = |neuron_id| {
             governance
