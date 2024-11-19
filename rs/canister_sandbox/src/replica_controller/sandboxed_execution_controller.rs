@@ -1116,7 +1116,8 @@ impl SandboxedExecutionController {
         });
 
         let backends_copy = Arc::clone(&backends);
-        let (tx_evict, rx) = std::sync::mpsc::sync_channel(2);
+        // Bound the number of requests in flight to the number of scheduler cores.
+        let (tx_evict, rx) = std::sync::mpsc::sync_channel(4);
         let state_reader_copy = Arc::clone(&state_reader);
 
         std::thread::spawn(move || {
@@ -1298,12 +1299,15 @@ impl SandboxedExecutionController {
         loop {
             {
                 let mut guard = backends.lock().unwrap();
-                println!("XXX EVICT THREAD backends:{}", guard.len());
-
-                if guard.len() >= max_sandbox_count {
+                let active_sandboxes = total_active_sandboxes(&guard);
+                println!(
+                    "XXX EVICT THREAD backends:{} active_sandboxes:{active_sandboxes}",
+                    guard.len()
+                );
+                if active_sandboxes > max_sandbox_count {
                     // Trigger eviction of idle sandboxes, as there may be no canister executions
                     // to trigger sync eviction.
-                    let max_active_sandboxes = guard.len() - SANDBOX_PROCESSES_TO_EVICT;
+                    let max_active_sandboxes = active_sandboxes - SANDBOX_PROCESSES_TO_EVICT;
                     evict_sandbox_processes(
                         &mut guard,
                         max_active_sandboxes,
@@ -1316,8 +1320,15 @@ impl SandboxedExecutionController {
                 }
             }
 
-            if let Ok(true) = stop_or_evict_request.recv_timeout(SANDBOX_PROCESS_EVICT_INTERVAL) {
-                break;
+            match stop_or_evict_request.recv_timeout(SANDBOX_PROCESS_EVICT_INTERVAL) {
+                // Stop.
+                Ok(true) => break,
+                // Evict.
+                Ok(false) => {}
+                // Receive timeout -> evict periodically.
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                // Send side disconnected -> stop.
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
             }
         }
         println!("XXX EVICT THREAD STOPPED");
