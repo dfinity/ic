@@ -1390,6 +1390,17 @@ pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
     Path::new(&runfiles).join(p)
 }
 
+/// Return the (actual) path of the (runfiles-relative) artifact in environment variable `v`.
+pub fn get_dependency_path_from_env(v: &str) -> PathBuf {
+    let runfiles =
+        std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
+
+    let path_from_env =
+        std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
+
+    Path::new(&runfiles).join(path_from_env)
+}
+
 pub fn read_dependency_to_string<P: AsRef<Path>>(p: P) -> Result<String> {
     let dep_path = get_dependency_path(p);
     if dep_path.exists() {
@@ -2048,7 +2059,7 @@ where
     let start = Instant::now();
     debug!(
         log,
-        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a linear backoff of {backoff:?}"
+        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a constant backoff of {backoff:?}"
     );
     loop {
         match f().await {

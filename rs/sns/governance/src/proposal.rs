@@ -12,16 +12,16 @@ use crate::{
         proposal,
         proposal::Action,
         proposal_data::{
-            self, ActionAuxiliary as ActionAuxiliaryPb, MintSnsTokensActionAuxiliary,
-            TransferSnsTreasuryFundsActionAuxiliary,
+            self, ActionAuxiliary as ActionAuxiliaryPb, AdvanceSnsTargetVersionActionAuxiliary,
+            MintSnsTokensActionAuxiliary, TransferSnsTreasuryFundsActionAuxiliary,
         },
         transfer_sns_treasury_funds::TransferFrom,
         DeregisterDappCanisters, ExecuteGenericNervousSystemFunction, Governance, GovernanceError,
         LogVisibility, ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata,
         MintSnsTokens, Motion, NervousSystemFunction, NervousSystemParameters, Proposal,
         ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-        RegisterDappCanisters, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-        UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
+        RegisterDappCanisters, SnsVersion, Tally, TransferSnsTreasuryFunds,
+        UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
     },
     sns_upgrade::{get_proposal_id_that_added_wasm, get_upgrade_params, UpgradeSnsParams},
     types::Environment,
@@ -173,6 +173,7 @@ pub(crate) fn get_action_auxiliary(
 pub(crate) enum ActionAuxiliary {
     TransferSnsTreasuryFunds(Valuation),
     MintSnsTokens(Valuation),
+    AdvanceSnsTargetVersion(Version),
     None,
 }
 
@@ -215,6 +216,14 @@ impl TryFrom<ActionAuxiliary> for Option<ActionAuxiliaryPb> {
                     valuation: Some(ValuationPb::try_from(valuation)?),
                 },
             )),
+
+            ActionAuxiliary::AdvanceSnsTargetVersion(target_version) => {
+                Some(ActionAuxiliaryPb::AdvanceSnsTargetVersion(
+                    AdvanceSnsTargetVersionActionAuxiliary {
+                        target_version: Some(SnsVersion::from(target_version)),
+                    },
+                ))
+            }
         };
 
         Ok(result)
@@ -244,6 +253,21 @@ impl TryFrom<&Option<ActionAuxiliaryPb>> for ActionAuxiliary {
                     .map_err(|err| format!("Invalid ActionAuxiliaryPb {:?}: {}", src, err))?;
 
                 ActionAuxiliary::MintSnsTokens(valuation)
+            }
+            Some(ActionAuxiliaryPb::AdvanceSnsTargetVersion(action_auxiliary)) => {
+                let AdvanceSnsTargetVersionActionAuxiliary {
+                    target_version: Some(target_version),
+                } = action_auxiliary
+                else {
+                    return Err(
+                        "Invalid ActionAuxiliaryPb: target_version must be specified.".to_string(),
+                    );
+                };
+
+                let target_version = Version::try_from(target_version.clone())
+                    .map_err(|err| format!("Invalid ActionAuxiliaryPb {:?}: {}", src, err))?;
+
+                ActionAuxiliary::AdvanceSnsTargetVersion(target_version)
             }
         };
 
@@ -441,6 +465,10 @@ pub(crate) async fn validate_and_render_action(
         }
         proposal::Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
             validate_and_render_manage_dapp_canister_settings(manage_dapp_canister_settings)
+        }
+        proposal::Action::AdvanceSnsTargetVersion(_) => {
+            // TODO[NNS1-3434]: Implement Action::AdvanceSnsTargetVersion
+            return Err("Action::AdvanceSnsTargetVersion is not implemented yet.".to_string());
         }
     }
     .map(|rendering| (rendering, ActionAuxiliary::None))

@@ -17,7 +17,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:702245a9cba671fb3740bcb810d254ad2072aea9005a0b57bfca1751f8484b15
+    image: ghcr.io/dfinity/ic-build@sha256:1d775e6d161dee883d10f082ab7fdde3e3d26061e1209255fb6514f8b62b206b
   dind-small-setup: &dind-small-setup
     timeout-minutes: 30
     runs-on:
@@ -77,11 +77,17 @@ jobs:
     name: Lock Generate
     <<: *dind-small-setup
     steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-          token: ${{ secrets.IDX_PUSH_TO_PR }}
+          token: ${{ steps.app-token.outputs.token }}
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter

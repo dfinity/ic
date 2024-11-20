@@ -1,6 +1,5 @@
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
-use ic_interfaces::ingress_manager::IngressSelector;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
@@ -491,10 +490,6 @@ pub struct ValidatorMetrics {
     pub(crate) validation_share_batch_size: HistogramVec,
     // Payload metrics
     pub(crate) ingress_messages: Histogram,
-    // The number of messages in a block which are not (yet) present in the Ingress Pool.
-    // This is a temporary metrics needed for a hashes in blocks experiment.
-    // TODO(CON-1312): Delete this once not necessary anymore
-    pub(crate) missing_ingress_messages: Histogram,
 }
 
 impl ValidatorMetrics {
@@ -557,21 +552,10 @@ impl ValidatorMetrics {
                 // 0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000
                 decimal_buckets_with_zero(0, 3),
             ),
-            missing_ingress_messages: metrics_registry.histogram(
-                "consensus_missing_ingress_messages_in_block",
-                "The number of ingress messages in a validated block \
-                which are not present in the ingress pool",
-                // 0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000
-                decimal_buckets_with_zero(0, 3),
-            ),
         }
     }
 
-    pub(crate) fn observe_data_payload(
-        &self,
-        proposal: &BlockProposal,
-        ingress_selector: Option<&dyn IngressSelector>,
-    ) {
+    pub(crate) fn observe_data_payload(&self, proposal: &BlockProposal) {
         let BlockPayload::Data(payload) = proposal.as_ref().payload.as_ref() else {
             // Skip if it's a summary block.
             return;
@@ -579,19 +563,6 @@ impl ValidatorMetrics {
 
         let total_ingress_messages = payload.batch.ingress.message_count();
         self.ingress_messages.observe(total_ingress_messages as f64);
-
-        if let Some(ingress_selector) = ingress_selector {
-            let missing_ingress_messages = payload
-                .batch
-                .ingress
-                .message_ids()
-                .iter()
-                .filter(|message_id| !ingress_selector.has_message(message_id))
-                .count();
-
-            self.missing_ingress_messages
-                .observe(missing_ingress_messages as f64);
-        }
     }
 
     pub(crate) fn observe_block(&self, pool_reader: &PoolReader, proposal: &BlockProposal) {
