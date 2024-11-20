@@ -4,7 +4,6 @@ use crate::metrics::{
     LABEL_UPLOAD, LABEL_URL_PARSE,
 };
 use crate::Config;
-use arc_swap::ArcSwap;
 use core::convert::TryFrom;
 use http::{header::USER_AGENT, HeaderName, HeaderValue, Uri};
 use http_body_util::{BodyExt, Full};
@@ -24,6 +23,7 @@ use ic_https_outcalls_service::{
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -46,17 +46,14 @@ const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 
 type OutboundRequestBody = Full<Bytes>;
 
-#[derive(Default)]
-struct Cache {
-    api_bn_ips: Vec<String>,
-    socks_clients: Vec<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>,
-}
+type Cache =
+    BTreeMap<String, Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>;
 
-/// Implements HttpsOutcallsService
-// TODO: consider making this private
+use std::sync::Mutex;
+
 pub struct CanisterHttp {
     client: Client<HttpsConnector<HttpConnector>, OutboundRequestBody>,
-    cache: ArcSwap<Cache>,
+    cache: Arc<Mutex<Cache>>,
     logger: ReplicaLogger,
     metrics: AdapterMetrics,
     http_connect_timeout_secs: u64,
@@ -88,7 +85,7 @@ impl CanisterHttp {
 
         Self {
             client,
-            cache: ArcSwap::new(Arc::new(Cache::default())),
+            cache: Arc::new(Mutex::new(BTreeMap::new())),
             logger,
             metrics: AdapterMetrics::new(metrics),
             http_connect_timeout_secs: config.http_connect_timeout_secs,
@@ -96,20 +93,8 @@ impl CanisterHttp {
         }
     }
 
-    // Round robin over the available clients, starting from the next index.
-    fn socks_clients_iter(
-        &self,
-        cache: &Cache,
-    ) -> impl Iterator<Item = Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>
-    {
-        let len = cache.socks_clients.len();
-        let start_index = self.next_proxy_index.fetch_add(1, Ordering::SeqCst) % len;
-        let clients = cache.socks_clients.clone();
-        clients.into_iter().cycle().skip(start_index).take(len)
-    }
-
-    fn create_cache(&self, api_bn_ips: Vec<String>) -> Cache {
-        let mut new_cache = Cache::default();
+    fn create_cache(&self, api_bn_ips: &[String]) -> Cache {
+        let mut new_cache = Cache::new();
 
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false);
@@ -135,8 +120,7 @@ impl CanisterHttp {
                     let socks_client = Client::builder(TokioExecutor::new())
                         .build::<_, Full<Bytes>>(proxied_https_connector);
 
-                    new_cache.api_bn_ips.push(ip);
-                    new_cache.socks_clients.push(socks_client);
+                    new_cache.insert(ip.clone(), socks_client);
                 }
                 Err(e) => {
                     debug!(self.logger, "Failed to parse SOCKS IP: {}", e);
@@ -161,19 +145,22 @@ impl HttpsOutcallsService for CanisterHttp {
         sorted_incoming_ips.sort();
         sorted_incoming_ips.dedup();
 
-        let mut current_cache = self.cache.load_full();
+        // Lock the cache and clone the relevant data
+       let clients = {
+            let mut cache_guard = self.cache.lock().unwrap();
 
-        let cached_ips = current_cache.api_bn_ips.clone();
+            // Check if the cache needs to be updated
+            let cached_ips: Vec<String> = cache_guard.keys().cloned().collect();
+            if cached_ips != sorted_incoming_ips {
+                // Update the cache
+                *cache_guard = self.create_cache(&sorted_incoming_ips);
+            }
 
-        if cached_ips != sorted_incoming_ips {
-            // Cache miss. We need to update the cache and make sure that current_cache points to the IPs in the request.
-            // Multiple threads can enter this block, but it's fine, as the whole cache is lightweight.
-            current_cache = Arc::new(self.create_cache(sorted_incoming_ips));
-            self.cache.store(current_cache.clone());
-        }
+            // Clone the clients to avoid holding the lock during async operations
+            cache_guard.values().cloned().collect::<Vec<_>>()
+        };
 
-        // "current_cache" now points to the Cache with the IPs from the request.
-
+        // Proceed with the rest of the method using `clients`
         let uri = req.url.parse::<Uri>().map_err(|err| {
             debug!(self.logger, "Failed to parse URL: {}", err);
             self.metrics
@@ -190,7 +177,7 @@ impl HttpsOutcallsService for CanisterHttp {
         if uri.scheme() != Some(&http::uri::Scheme::HTTPS) {
             use crate::metrics::LABEL_HTTP_SCHEME;
             debug!(
-                self.logger,
+                 self.logger,
                 "Got request with no or http scheme specified. {}", uri
             );
             self.metrics
@@ -199,7 +186,7 @@ impl HttpsOutcallsService for CanisterHttp {
                 .inc();
             return Err(Status::new(
                 tonic::Code::InvalidArgument,
-                "Url need to specify https scheme",
+                "URL needs to specify HTTPS scheme",
             ));
         }
 
@@ -226,7 +213,7 @@ impl HttpsOutcallsService for CanisterHttp {
                 }
             })?;
 
-        // Build Http Request.
+        // Build HTTP Request
         let mut headers = validate_headers(req.headers).inspect_err(|_| {
             self.metrics
                 .request_errors
@@ -234,7 +221,7 @@ impl HttpsOutcallsService for CanisterHttp {
                 .inc();
         })?;
 
-        // Add user-agent header if not present.
+        // Add user-agent header if not present
         add_fallback_user_agent_header(&mut headers);
 
         let mut request_size = req.body.len();
@@ -243,32 +230,30 @@ impl HttpsOutcallsService for CanisterHttp {
             .map(|(name, value)| name.as_str().len() + value.len())
             .sum::<usize>();
 
-        // If we are allowed to use socks and condition described in `should_use_socks_proxy` hold,
-        // we do the requests through the socks proxy. If not we use the default IPv6 route.
+        // Determine if we should use the SOCKS proxy
         let http_resp = if req.socks_proxy_allowed {
-            // Http request does not implement clone. So we have to manually construct a clone.
             let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
-            *http_req.headers_mut() = headers;
-            *http_req.method_mut() = method;
+            *http_req.headers_mut() = headers.clone();
+            *http_req.method_mut() = method.clone();
             *http_req.uri_mut() = uri.clone();
             let http_req_clone = http_req.clone();
 
             match self.client.request(http_req).await {
-                // If we fail we try with the socks proxy. For destinations that are ipv4 only this should
-                // fail fast because our interface does not have an ipv4 assigned.
                 Err(direct_err) => {
                     self.metrics.requests_socks.inc();
 
-                    let clients_iter = self.socks_clients_iter(&current_cache);
-
-                    let mut response = None;
-
-                    if current_cache.socks_clients.is_empty() {
+                    let len = clients.len();
+                    if len == 0 {
                         return Err(Status::new(
                             tonic::Code::Unavailable,
                             "No SOCKS proxy available".to_string(),
                         ));
                     }
+
+                    let start_index = self.next_proxy_index.fetch_add(1, Ordering::SeqCst) % len;
+                    let clients_iter = clients.into_iter().cycle().skip(start_index).take(len);
+
+                    let mut response = None;
 
                     for client in clients_iter {
                         let http_req = http_req_clone.clone();
@@ -279,25 +264,28 @@ impl HttpsOutcallsService for CanisterHttp {
                             }
                             Err(e) => {
                                 debug!(self.logger, "Failed to connect through SOCKS: {}", e);
-                                //TODO(mihailjiau1): add some metrics.
                                 continue;
                             }
                         }
                     }
 
-                    //TODO(mihailjianu1): bubble up the errors from the socks proxy.
                     response.ok_or_else(|| {
-                        format!("Request failed direct connect {direct_err} and connect through all socks proxies")
+                        format!(
+                            "Request failed direct connect {direct_err} and connect through all SOCKS proxies"
+                        )
                     })
                 }
-                Ok(resp)=> Ok(resp),
+                Ok(resp) => Ok(resp),
             }
         } else {
             let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
             *http_req.headers_mut() = headers;
             *http_req.method_mut() = method;
             *http_req.uri_mut() = uri.clone();
-            self.client.request(http_req).await.map_err(|e| format!("Failed to directly connect: {:?}", e))
+            self.client
+                .request(http_req)
+                .await
+                .map_err(|e| format!("Failed to directly connect: {:?}", e))
         }
         .map_err(|err| {
             debug!(self.logger, "Failed to connect: {}", err);
@@ -314,6 +302,7 @@ impl HttpsOutcallsService for CanisterHttp {
                 ),
             )
         })?;
+
         self.metrics
             .network_traffic
             .with_label_values(&[LABEL_UPLOAD])
@@ -321,15 +310,13 @@ impl HttpsOutcallsService for CanisterHttp {
 
         let status = http_resp.status().as_u16() as u32;
 
-        // Parse received headers.
+        // Parse received headers
         let mut headers_size_bytes = 0;
         let headers = http_resp
             .headers()
             .iter()
             .map(|(k, v)| {
                 let name = k.to_string();
-                // Use the header value in bytes for the size.
-                // It is possible that bytes.len() > str.len().
                 headers_size_bytes += name.len() + v.len();
                 let value = v.to_str()?.to_string();
                 Ok(HttpHeader { name, value })
@@ -347,7 +334,7 @@ impl HttpsOutcallsService for CanisterHttp {
                 )
             })?;
 
-        // We don't need a timeout here because there is a global timeout on the entire request.
+        // Collect the body with a size limit
         let body_bytes = http_body_util::Limited::new(
             http_resp.into_body(),
             req.max_response_size_bytes
@@ -378,7 +365,7 @@ impl HttpsOutcallsService for CanisterHttp {
             Status::new(
                 tonic::Code::OutOfRange,
                 format!(
-                    "Http body exceeds size limit of {} bytes.",
+                    "HTTP body exceeds size limit of {} bytes.",
                     req.max_response_size_bytes
                 ),
             )
@@ -388,6 +375,7 @@ impl HttpsOutcallsService for CanisterHttp {
             .network_traffic
             .with_label_values(&[LABEL_DOWNLOAD])
             .inc_by(body_bytes.len() as u64 + headers_size_bytes as u64);
+
         Ok(Response::new(HttpsOutcallResponse {
             status,
             headers,
