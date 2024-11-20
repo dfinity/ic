@@ -78,6 +78,7 @@ uvm_config_image(
     srcs = [
         ":bitcoind.tar",
         ":minica.tar",
+        ":nginx-proxy.tar",
         "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
         "//ic-os/components:networking/dev-certs/canister_http_test_ca.key",
         "//rs/tests/httpbin-rs:httpbin.tar",
