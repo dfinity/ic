@@ -168,6 +168,7 @@ members = [
     "rs/monitoring/logger",
     "rs/monitoring/metrics",
     "rs/monitoring/pprof",
+    "rs/monitoring/tracing/jaeger_exporter",
     "rs/nervous_system/agent",
     "rs/nervous_system/clients",
     "rs/nervous_system/collections/union_multi_map",
