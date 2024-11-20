@@ -2669,7 +2669,7 @@ pub fn test_downgrade_from_incompatible_version<T>(
     // Upgrade to the next version.
     env.upgrade_canister(
         canister_id,
-        ledger_wasm_nextledgerversion,
+        ledger_wasm_nextledgerversion.clone(),
         Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
     )
     .expect("failed to upgrade to next version");
