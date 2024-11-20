@@ -1,3 +1,4 @@
+use candid::Principal;
 use clap::{Args, Parser};
 use humantime::parse_duration;
 use ic_bn_lib::{
@@ -228,6 +229,10 @@ pub struct Observability {
     /// Enables logging to /dev/null (to benchmark logging)
     #[clap(env, long)]
     pub obs_log_null: bool,
+
+    /// Log Anonymization Canister ID
+    #[clap(env, long)]
+    pub obs_log_anonymization_canister_id: Option<Principal>,
 }
 
 #[derive(Args)]

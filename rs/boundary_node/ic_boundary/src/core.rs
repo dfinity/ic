@@ -21,7 +21,7 @@ use axum::{
     Extension, Router,
 };
 use axum_extra::middleware::option_layer;
-use candid::{DecoderConfig, Principal};
+use candid::DecoderConfig;
 use futures::TryFutureExt;
 use ic_bn_lib::{
     http::{
@@ -45,7 +45,6 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId};
-use lazy_static::lazy_static;
 use nix::unistd::{getpgid, setpgid, Pid};
 use prometheus::Registry;
 use rand::{rngs::StdRng, SeedableRng};
@@ -90,13 +89,6 @@ pub const SECOND: Duration = Duration::from_secs(1);
 
 const KB: usize = 1024;
 const MB: usize = 1024 * KB;
-
-// Log Anonymization
-
-lazy_static! {
-    static ref LOG_ANONYMIZATION_CID: Principal =
-        Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
-}
 
 pub const MAX_REQUEST_BODY_SIZE: usize = 4 * MB;
 const METRICS_CACHE_CAPACITY: usize = 15 * MB;
@@ -428,8 +420,8 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     // Canister
     let c = AnonymizationCanister::new(
-        ag,                     // agent
-        *LOG_ANONYMIZATION_CID, // canister_id
+        ag,                                                 // agent
+        cli.obs.obs_log_anonymization_canister_id.unwrap(), // canister_id
     );
 
     // Rng
