@@ -434,10 +434,7 @@ fn induct_messages_to_self_callback_gone() {
 
     // Pop and start executing it (pretend it's waiting for multiple rounds for
     // downstream calls).
-    assert_eq!(
-        Some(CanisterMessage::Request(request.clone().into())),
-        fixture.pop_input()
-    );
+    assert_eq!(Some(CanisterMessage::Request(request)), fixture.pop_input());
 
     // Expire the callback.
     fixture.time_out_callbacks(CoarseTime::from_secs_since_unix_epoch(u32::MAX));
