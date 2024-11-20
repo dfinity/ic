@@ -15,7 +15,7 @@ thread_local! {
     // initializing the asset router with an HTTP certification tree is optional.
     // if direct access to the HTTP certification tree is not needed for certifying
     // requests and responses outside of the asset router, then this step can be skipped.
-    static ASSET_ROUTER: RefCell<AssetRouter<'static>> = RefCell::new(AssetRouter::with_tree(HTTP_TREE.with(|tree| tree.clone())));
+    static ASSET_ROUTER: RefCell<AssetRouter<'static>> = Default::default();
 }
 
 // Handlers
