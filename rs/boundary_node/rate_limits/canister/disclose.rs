@@ -1,46 +1,21 @@
 use crate::{
     state::CanisterApi,
-    types::{DiscloseRulesArg, IncidentId, RuleId, Timestamp},
+    types::{DiscloseRulesArg, DiscloseRulesError, IncidentId, RuleId, Timestamp},
 };
-use strum::AsRefStr;
-use thiserror::Error;
 
 /// Defines a trait for disclosing rules, enabling them to be publicly accessible.
 pub trait DisclosesRules {
     /// # Arguments
     /// * `arg` - the argument specifying which rules or incidents to disclose
-    /// * `current_time` - the timestamp to use for disclosure
+    /// * `disclosure_time` - the timestamp to use for disclosure
     ///
     /// # Returns
     /// A result indicating success or a specific disclosure error
     fn disclose_rules(
         &self,
         arg: rate_limits_api::DiscloseRulesArg,
-        current_time: Timestamp,
+        disclosure_time: Timestamp,
     ) -> Result<(), DiscloseRulesError>;
-}
-
-#[derive(Debug, Error, AsRefStr)]
-pub enum DiscloseRulesError {
-    /// Indicates an unauthorized attempt to disclose rules
-    #[error("Unauthorized operation")]
-    #[strum(serialize = "unauthorized_error")]
-    Unauthorized,
-    /// Signifies that an input ID provided for disclosure is not a valid UUID
-    #[error("Invalid UUID at index = {0}")]
-    InvalidUuidFormat(usize),
-    /// Signifies that a specified incident ID could not be found
-    #[error("Incident with ID={0} not found")]
-    #[strum(serialize = "incident_id_not_found_error")]
-    IncidentIdNotFound(IncidentId),
-    /// Signifies that a specified rule ID could not be found
-    #[error("Rule with ID={0} not found")]
-    #[strum(serialize = "rule_id_not_found_error")]
-    RuleIdNotFound(RuleId),
-    /// Captures unexpected internal errors during the disclosure process
-    #[error("An unexpected internal error occurred: {0}")]
-    #[strum(serialize = "internal_error")]
-    Internal(#[from] anyhow::Error),
 }
 
 /// Struct responsible for managing rules disclosure operations
@@ -60,17 +35,17 @@ impl<A: CanisterApi> DisclosesRules for RulesDiscloser<A> {
     fn disclose_rules(
         &self,
         arg: rate_limits_api::DiscloseRulesArg,
-        current_time: Timestamp,
+        disclosure_time: Timestamp,
     ) -> Result<(), DiscloseRulesError> {
         // Convert the input argument and handle specific disclosure scenarios
         let arg = DiscloseRulesArg::try_from(arg)?;
 
         match arg {
             DiscloseRulesArg::RuleIds(rule_ids) => {
-                disclose_rules(&self.canister_api, current_time, &rule_ids)?;
+                disclose_rules(&self.canister_api, disclosure_time, &rule_ids)?;
             }
             DiscloseRulesArg::IncidentIds(incident_ids) => {
-                disclose_incidents(&self.canister_api, current_time, &incident_ids)?;
+                disclose_incidents(&self.canister_api, disclosure_time, &incident_ids)?;
             }
         }
         Ok(())
@@ -133,13 +108,6 @@ fn disclose_incidents(
     }
 
     Ok(())
-}
-
-/// Conversion trait implementation to allow easy string representation of errors
-impl From<DiscloseRulesError> for String {
-    fn from(value: DiscloseRulesError) -> Self {
-        value.to_string()
-    }
 }
 
 #[cfg(test)]
@@ -242,7 +210,7 @@ mod tests {
                 .expect("Failed to disclose rules");
             let rule = state.get_rule(&rule_id_5).unwrap();
             assert_eq!(rule.disclosed_at, Some(current_time_2));
-            // Check disclosing rules individually again has no impact
+            // Check disclosing already disclosed rules again has no impact
             let arg = rate_limits_api::DiscloseRulesArg::RuleIds(vec![
                 rule_id_1.to_string(),
                 rule_id_5.to_string(),
