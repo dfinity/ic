@@ -126,6 +126,26 @@ struct Instance {
     state: InstanceState,
 }
 
+struct HttpGateway {
+    details: HttpGatewayDetails,
+    shutdown_handle: Handle,
+}
+
+impl HttpGateway {
+    fn new(details: HttpGatewayDetails, shutdown_handle: Handle) -> Self {
+        Self {
+            details,
+            shutdown_handle,
+        }
+    }
+}
+
+impl Drop for HttpGateway {
+    fn drop(&mut self) {
+        self.shutdown_handle.shutdown();
+    }
+}
+
 /// The state of the PocketIC API.
 pub struct ApiState {
     // impl note: If locks are acquired on both fields, acquire first on `instances` and then on `graph`.
@@ -136,7 +156,7 @@ pub struct ApiState {
     // PocketIC server port
     port: Option<u16>,
     // HTTP gateway infos (`None` = stopped)
-    http_gateways: Arc<RwLock<Vec<Option<HttpGatewayDetails>>>>,
+    http_gateways: Arc<RwLock<Vec<Option<HttpGateway>>>>,
 }
 
 #[derive(Default)]
@@ -1063,22 +1083,10 @@ impl ApiState {
             domains: http_gateway_config.domains.clone(),
             https_config: http_gateway_config.https_config.clone(),
         };
-        http_gateways.push(Some(http_gateway_details));
-        drop(http_gateways);
-
-        let http_gateways_for_shutdown = self.http_gateways.clone();
         let shutdown_handle = handle.clone();
-        tokio::spawn(async move {
-            loop {
-                let guard = http_gateways_for_shutdown.read().await;
-                if guard[instance_id].is_none() {
-                    shutdown_handle.shutdown();
-                    break;
-                }
-                drop(guard);
-                tokio::time::sleep(Duration::from_secs(1)).await;
-            }
-        });
+        let http_gateway = HttpGateway::new(http_gateway_details, shutdown_handle);
+        http_gateways.push(Some(http_gateway));
+        drop(http_gateways);
 
         Ok(HttpGatewayInfo {
             instance_id,
@@ -1197,9 +1205,8 @@ impl ApiState {
         self.http_gateways
             .read()
             .await
-            .clone()
-            .into_iter()
-            .flatten()
+            .iter()
+            .filter_map(|gateway| gateway.as_ref().map(|g| g.details.clone()))
             .collect()
     }
 
