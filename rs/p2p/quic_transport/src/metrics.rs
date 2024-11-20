@@ -21,7 +21,7 @@ const ERROR_CLOSED_STREAM: &str = "closed_stream";
 const ERROR_RESET_STREAM: &str = "reset_stream";
 const ERROR_STOPPED_STREAM: &str = "stopped_stream";
 const ERROR_APP_CLOSED_CONN: &str = "app_closed_conn";
-const ERROR_TIMEDOUT_CONN: &str = "timedout_conn";
+const ERROR_TIMED_OUT_CONN: &str = "timed_out_conn";
 const ERROR_LOCALLY_CLOSED_CONN: &str = "locally_closed_conn";
 const ERROR_QUIC_CLOSED_CONN: &str = "quic_closed_conn";
 
@@ -212,7 +212,7 @@ pub fn observe_conn_error(err: &ConnectionError, op: &str, counter: &IntCounterV
             .with_label_values(&[op, ERROR_APP_CLOSED_CONN])
             .inc(),
         // Can happen if peer crashes or there are connectivity problems.
-        ConnectionError::TimedOut => counter.with_label_values(&[op, ERROR_TIMEDOUT_CONN]).inc(),
+        ConnectionError::TimedOut => counter.with_label_values(&[op, ERROR_TIMED_OUT_CONN]).inc(),
         // A connection was closed by the QUIC protocol.
         _ => counter
             .with_label_values(&[op, ERROR_QUIC_CLOSED_CONN])
