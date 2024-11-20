@@ -17009,6 +17009,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pocket-ic-cli"
+version = "5.0.0"
+dependencies = [
+ "candid",
+ "clap 4.5.20",
+ "pocket-ic",
+ "reqwest 0.12.9",
+]
+
+[[package]]
 name = "pocket-ic-server"
 version = "7.0.0"
 dependencies = [
