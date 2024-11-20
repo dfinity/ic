@@ -31,6 +31,7 @@ ic-crypto-tls-cert-validation = { path = "node_key_validation/tls_cert_validatio
 ic-crypto-tls-interfaces = { path = "tls_interfaces" }
 ic-crypto-utils-basic-sig = { path = "utils/basic_sig" }
 ic-crypto-utils-tls = { path = "utils/tls" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-logger = { path = "../monitoring/logger" }
@@ -96,7 +97,7 @@ proptest-derive = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-rsa = "0.9.2"
+rsa = { workspace = true }
 sha2 = { workspace = true }
 simple_asn1 = { workspace = true }
 

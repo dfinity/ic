@@ -21,11 +21,11 @@ use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
-use ic_ckbtc_minter::MinterInfo;
 use ic_ckbtc_minter::{
     state::eventlog::{Event, GetEventsArg},
     storage, {Log, LogEntry, Priority},
 };
+use ic_ckbtc_minter::{MinterInfo, IC_CANISTER_RUNTIME};
 use icrc_ledger_types::icrc1::account::Account;
 use std::str::FromStr;
 
@@ -35,9 +35,7 @@ fn init(args: MinterArg) {
         MinterArg::Init(args) => {
             storage::record_event(&Event::Init(args.clone()));
             lifecycle::init::init(args);
-            schedule_now(TaskType::ProcessLogic);
-            schedule_now(TaskType::RefreshFeePercentiles);
-            schedule_now(TaskType::DistributeKytFee);
+            setup_tasks();
 
             #[cfg(feature = "self_check")]
             ok_or_die(check_invariants())
@@ -46,6 +44,12 @@ fn init(args: MinterArg) {
             panic!("expected InitArgs got UpgradeArgs");
         }
     }
+}
+
+fn setup_tasks() {
+    schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::RefreshFeePercentiles, &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::DistributeKytFee, &IC_CANISTER_RUNTIME);
 }
 
 #[cfg(feature = "self_check")]
@@ -59,13 +63,13 @@ fn ok_or_die(result: Result<(), String>) {
 /// Checks that ckBTC minter state internally consistent.
 #[cfg(feature = "self_check")]
 fn check_invariants() -> Result<(), String> {
-    use ic_ckbtc_minter::state::eventlog::replay;
+    use ic_ckbtc_minter::state::{eventlog::replay, invariants::CheckInvariantsImpl};
 
     read_state(|s| {
         s.check_invariants()?;
 
         let events: Vec<_> = storage::events().collect();
-        let recovered_state = replay(events.clone().into_iter())
+        let recovered_state = replay::<CheckInvariantsImpl>(events.clone().into_iter())
             .unwrap_or_else(|e| panic!("failed to replay log {:?}: {:?}", events, e));
 
         recovered_state.check_invariants()?;
@@ -92,6 +96,14 @@ async fn distribute_kyt_fee() {
 #[cfg(feature = "self_check")]
 #[update]
 async fn refresh_fee_percentiles() {
+    // Use `TimerLogicGuard` here because:
+    // 1. `estimate_fee_per_vbyte` could potentially change the state.
+    // 2. `estimate_fee_per_vbyte` is also called from timer
+    //    `TaskType::ProcessLogic` and `TaskType::RefreshFeePercentiles`.
+    let _guard = match ic_ckbtc_minter::guard::TimerLogicGuard::new() {
+        Some(guard) => guard,
+        None => return,
+    };
     let _ = ic_ckbtc_minter::estimate_fee_per_vbyte().await;
 }
 
@@ -112,7 +124,7 @@ fn timer() {
     #[cfg(feature = "self_check")]
     ok_or_die(check_invariants());
 
-    ic_ckbtc_minter::timer();
+    ic_ckbtc_minter::timer(IC_CANISTER_RUNTIME);
 }
 
 #[post_upgrade]
@@ -125,9 +137,7 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
         };
     }
     lifecycle::upgrade::post_upgrade(upgrade_arg);
-    schedule_now(TaskType::ProcessLogic);
-    schedule_now(TaskType::RefreshFeePercentiles);
-    schedule_now(TaskType::DistributeKytFee);
+    setup_tasks();
 }
 
 #[update]
@@ -202,11 +212,10 @@ async fn get_canister_status() -> ic_cdk::api::management_canister::main::Canist
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
     read_state(|s| {
-        ic_ckbtc_minter::estimate_fee(
+        ic_ckbtc_minter::estimate_retrieve_btc_fee(
             &s.available_utxos,
             arg.amount,
             s.last_fee_per_vbyte[50],
-            s.kyt_fee,
         )
     })
 }
@@ -216,7 +225,7 @@ fn get_minter_info() -> MinterInfo {
     read_state(|s| MinterInfo {
         kyt_fee: s.kyt_fee,
         min_confirmations: s.min_confirmations,
-        retrieve_btc_min_amount: s.retrieve_btc_min_amount,
+        retrieve_btc_min_amount: s.fee_based_retrieve_btc_min_amount,
     })
 }
 

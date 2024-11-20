@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-async-utils = { path = "../async_utils" }
@@ -41,14 +41,12 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-sys = { path = "../sys" }
 ic-tracing = { path = "../monitoring/tracing" }
+ic-tracing-jaeger-exporter = { path = "../monitoring/tracing/jaeger_exporter" }
 ic-types = { path = "../types/types" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
 libc = { workspace = true }
 nix = { workspace = true }
-num_cpus = "1.13.1"
-opentelemetry = { workspace = true }
-opentelemetry-otlp = { workspace = true }
-opentelemetry_sdk = { workspace = true }
+num_cpus = { workspace = true }
 pprof = { workspace = true, optional = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
@@ -60,17 +58,16 @@ tikv-jemallocator = "0.5"
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-flame = "0.2.0"
-tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
-assert_cmd = "2.0.12"
+assert_cmd = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { workspace = true }
 ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-test-utilities = { path = "../test_utilities" }
-predicates = "3.0.4"
+predicates = { workspace = true }
 wat = { workspace = true }
 
 [[bench]]

@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -27,15 +27,22 @@ rust_library(
     ],
 )
 
-BACKUP_RUNTIME_DEPS = ["//rs/tests:backup/binaries"]
+BACKUP_RUNTIME_DEPS = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
+    # Keep sorted.
+    "//rs/tests:backup/binaries",
+]
+
+BACKUP_ENV = UNIVERSAL_CANISTER_ENV
 
 system_test_nns(
     name = "backup_manager_downgrade_test",
+    env = BACKUP_ENV,
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
-        "system_test_hourly",
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
@@ -54,11 +61,13 @@ system_test_nns(
 
 system_test_nns(
     name = "backup_manager_upgrade_test",
+    env = BACKUP_ENV,
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
-        "system_test_hourly",
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,

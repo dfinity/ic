@@ -435,13 +435,9 @@ httpx==0.27.2 \
 ic-py @ https://github.com/rocklabs-io/ic-py/archive/53c375a1d6c1d09e8d24588142dece550b801cef.zip \
     --hash=sha256:a07b08e996d4be6749ba10934cc519daf08f20b8874551960274d8dc2c6260f4
     # via -r requirements.in
-icmplib==3.0.4 \
-    --hash=sha256:336b75c6c23c5ce99ddec33f718fab09661f6ad698e35b6f1fc7cc0ecf809398 \
-    --hash=sha256:57868f2cdb011418c0e1d5586b16d1fabd206569fe9652654c27b6b2d6a316de
-    # via -r requirements.in
-idna==3.10 \
-    --hash=sha256:12f65c9b470abda6dc35cf8e63cc574b1c52b11df2c86030af0ac09b01b13ea9 \
-    --hash=sha256:946d195a0d259cbba61165e88e65941f16e9b36ea6ddb97f00452bae8b1287d3
+idna==3.4 \
+    --hash=sha256:814f528e8dead7d329833b91c5faa87d60bf71824cd12a7530b5526063d02cb4 \
+    --hash=sha256:90b77e79eaa3eba6de819a0c442c0b4ceefc341a7a2ab77d7562bf49f425c5c2
     # via
     #   anyio
     #   httpx

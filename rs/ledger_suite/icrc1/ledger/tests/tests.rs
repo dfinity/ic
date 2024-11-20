@@ -10,9 +10,10 @@ use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType};
 use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
+use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::verify_ledger_state;
 use ic_ledger_suite_state_machine_tests::{
-    get_allowance, send_approval, send_transfer_from, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
+    send_approval, send_transfer_from, AllowanceProvider, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
     BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY,
     NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME,
     TOKEN_SYMBOL,
@@ -33,6 +34,12 @@ use num_traits::ToPrimitive;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+#[cfg(not(feature = "u256-tokens"))]
+pub type Tokens = ic_icrc1_tokens_u64::U64;
+
+#[cfg(feature = "u256-tokens")]
+pub type Tokens = ic_icrc1_tokens_u256::U256;
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub struct LegacyInitArgs {
@@ -250,31 +257,31 @@ fn test_get_blocks() {
 // Generate random blocks and check that their CBOR encoding complies with the CDDL spec.
 #[test]
 fn block_encoding_agrees_with_the_schema() {
-    ic_ledger_suite_state_machine_tests::block_encoding_agrees_with_the_schema();
+    ic_ledger_suite_state_machine_tests::block_encoding_agrees_with_the_schema::<Tokens>();
 }
 
 // Generate random blocks and check that their value encoding complies with the ICRC-3 spec.
 #[test]
 fn block_encoding_agrees_with_the_icrc3_schema() {
-    ic_ledger_suite_state_machine_tests::block_encoding_agreed_with_the_icrc3_schema();
+    ic_ledger_suite_state_machine_tests::block_encoding_agreed_with_the_icrc3_schema::<Tokens>();
 }
 
 // Check that different blocks produce different hashes.
 #[test]
 fn transaction_hashes_are_unique() {
-    ic_ledger_suite_state_machine_tests::transaction_hashes_are_unique();
+    ic_ledger_suite_state_machine_tests::transaction_hashes_are_unique::<Tokens>();
 }
 
 // Check that different blocks produce different hashes.
 #[test]
 fn block_hashes_are_unique() {
-    ic_ledger_suite_state_machine_tests::block_hashes_are_unique();
+    ic_ledger_suite_state_machine_tests::block_hashes_are_unique::<Tokens>();
 }
 
 // Generate random blocks and check that the block hash is stable.
 #[test]
 fn block_hashes_are_stable() {
-    ic_ledger_suite_state_machine_tests::block_hashes_are_stable();
+    ic_ledger_suite_state_machine_tests::block_hashes_are_stable::<Tokens>();
 }
 
 #[test]
@@ -284,12 +291,28 @@ fn check_transfer_model() {
 
 #[test]
 fn check_fee_collector() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
 fn check_fee_collector_blocks() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector_blocks(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_blocks(
+        ledger_wasm(),
+        encode_init_args,
+        BlockRetrieval::Legacy,
+    );
+}
+
+#[test]
+fn check_fee_collector_icrc3_blocks() {
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_blocks(
+        ledger_wasm(),
+        encode_init_args,
+        BlockRetrieval::Icrc3,
+    );
 }
 
 #[test]
@@ -327,7 +350,10 @@ fn test_approve_cant_pay_fee() {
 
 #[test]
 fn test_approve_cap() {
-    ic_ledger_suite_state_machine_tests::test_approve_cap(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_cap::<LedgerArgument, Tokens>(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
@@ -405,7 +431,7 @@ fn test_ledger_http_request_decoding_quota() {
 
 #[test]
 fn test_block_transformation() {
-    ic_ledger_suite_state_machine_tests::icrc1_test_block_transformation(
+    ic_ledger_suite_state_machine_tests::icrc1_test_block_transformation::<LedgerArgument, Tokens>(
         ledger_mainnet_wasm(),
         ledger_wasm(),
         encode_init_args,
@@ -420,17 +446,12 @@ fn icrc1_test_upgrade_serialization() {
         .with_transfer_fee(FEE);
     let init_args = Encode!(&LedgerArgument::Init(builder.build())).unwrap();
     let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
-    ic_ledger_suite_state_machine_tests::test_upgrade_serialization(
+    ic_ledger_suite_state_machine_tests::test_upgrade_serialization::<Tokens>(
         ledger_mainnet_wasm(),
         ledger_wasm(),
-        None,
         init_args,
         upgrade_args,
         minter,
-        true,
-        // With the ckBTC and ckETH mainnet canisters being at V1, and the tip-of-master also being V1,
-        // downgrading the ledger canister to the mainnet version from the tip-of-master version
-        // should succeed.
         true,
     );
 }
@@ -467,8 +488,8 @@ mod metrics {
     }
 
     #[test]
-    fn should_export_total_memory_usage_metrics() {
-        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_ledger_total_memory_bytes_metric(
+    fn should_export_heap_memory_usage_metrics() {
+        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_heap_memory_bytes_metric(
             ledger_wasm(),
             encode_init_args,
         );
@@ -487,7 +508,6 @@ mod metrics {
     fn should_set_ledger_upgrade_instructions_consumed_metric() {
         ic_ledger_suite_state_machine_tests::metrics::assert_ledger_upgrade_instructions_consumed_metric_set(
             ledger_wasm(),
-            None,
             encode_init_args,
             encode_upgrade_args,
         );
@@ -638,7 +658,7 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
     // should trap
 
     assert_eq!(
-        get_allowance(&env, ledger_id, user1, user2),
+        Account::get_allowance(&env, ledger_id, user1, user2),
         Allowance {
             allowance: 0u32.into(),
             expires_at: None
@@ -747,12 +767,6 @@ where
         .bytes();
     Decode!(&res, O).unwrap()
 }
-
-#[cfg(not(feature = "u256-tokens"))]
-pub type Tokens = ic_icrc1_tokens_u64::U64;
-
-#[cfg(feature = "u256-tokens")]
-pub type Tokens = ic_icrc1_tokens_u256::U256;
 
 #[test]
 fn test_icrc3_get_archives() {
@@ -1122,7 +1136,7 @@ fn test_icrc3_get_blocks() {
     // multiple ranges
     check_icrc3_get_blocks(vec![(2, 3), (1, 2), (0, 10), (10, 5)]);
 
-    verify_ledger_state(&env, ledger_id, None);
+    verify_ledger_state::<Tokens>(&env, ledger_id, None);
 }
 
 #[test]
@@ -1734,7 +1748,7 @@ mod incompatible_token_type_upgrade {
         // The balance, allowance, total supply, and blocks should not change
         let verify_state = || {
             assert_eq!(balance, balance_of(&env, ledger_id, account(1)));
-            let actual_allowance = get_allowance(&env, ledger_id, account(1), account(2));
+            let actual_allowance = Account::get_allowance(&env, ledger_id, account(1), account(2));
             assert_eq!(actual_allowance, initial_allowance);
             assert_eq!(
                 initial_blocks,
@@ -1765,7 +1779,9 @@ mod incompatible_token_type_upgrade {
     }
 
     #[test]
-    #[should_panic(expected = "failed to decode ledger state")]
+    #[should_panic(
+        expected = "Failed to read the Ledger state from memory manager managed stable structures"
+    )]
     fn should_trap_when_upgrading_a_ledger_installed_as_u256_to_u64_wasm() {
         let env = StateMachine::new();
         let ledger_id = env
@@ -1838,7 +1854,7 @@ mod incompatible_token_type_upgrade {
         );
         assert_eq!(approval_result, Ok(BlockIndex::from(1u64)));
         balance_1 -= FEE;
-        let allowance_2 = get_allowance(&env, ledger_id, account(1), account(2));
+        let allowance_2 = Account::get_allowance(&env, ledger_id, account(1), account(2));
         assert_eq!(balance_1, balance_of(&env, ledger_id, account(1)));
         assert_eq!(allowance_2.allowance, Nat::from(big_amount));
         assert!(allowance_2.allowance > u64::MAX);

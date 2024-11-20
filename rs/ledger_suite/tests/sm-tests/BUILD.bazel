@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/ledger_suite/common/ledger_canister_core",
     "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1",
     "//rs/ledger_suite/icrc1/ledger",
     "//rs/ledger_suite/icrc1/test_utils",
@@ -29,7 +30,6 @@ DEPENDENCIES = [
     "@crate_index//:icrc1-test-suite",
     "@crate_index//:num-traits",
     "@crate_index//:proptest",
-    "@crate_index//:serde",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -64,6 +64,11 @@ MACRO_DEPENDENCIES = [
             ["u256-tokens"],
             ["//rs/ledger_suite/icrc1/tokens_u256"],
         ),
+        (
+            "_icp",
+            ["icp-tokens"],
+            [],
+        ),
     ]
 ]
 
@@ -84,6 +89,11 @@ MACRO_DEPENDENCIES = [
             "_u256",
             ["u256-tokens"],
             ["//rs/ledger_suite/icrc1/tokens_u256"],
+        ),
+        (
+            "_icp",
+            ["icp-tokens"],
+            [],
         ),
     ]
 ]

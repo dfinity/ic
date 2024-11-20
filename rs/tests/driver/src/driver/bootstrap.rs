@@ -9,8 +9,8 @@ use crate::driver::{
     resource::AllocatedVm,
     test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
-        get_dependency_path, get_elasticsearch_hosts, get_ic_os_update_img_sha256,
-        get_ic_os_update_img_url, get_mainnet_ic_os_update_img_url,
+        get_dependency_path, get_dependency_path_from_env, get_elasticsearch_hosts,
+        get_ic_os_update_img_sha256, get_ic_os_update_img_url, get_mainnet_ic_os_update_img_url,
         get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
         read_dependency_from_env_to_string, read_dependency_to_string, HasIcDependencies,
         HasTopologySnapshot, IcNodeContainer, InitialReplicaVersion, NodesInfo,
@@ -172,6 +172,12 @@ pub fn init_ic(
         ic_topology.insert_unassigned_node(node_index as NodeIndex, node_to_config(node));
     }
 
+    for node in &ic.api_boundary_nodes {
+        let node_index = next_node_index;
+        next_node_index += 1;
+        ic_topology.insert_api_boundary_node(node_index as NodeIndex, node_to_config(node))?;
+    }
+
     let whitelist = ProvisionalWhitelist::All;
     let (ic_os_update_img_sha256, ic_os_update_img_url) = {
         if ic.has_malicious_behaviours() {
@@ -232,6 +238,9 @@ pub fn setup_and_start_vms(
         }
     }
     for node in initialized_ic.unassigned_nodes.values() {
+        nodes.push(node.clone());
+    }
+    for node in initialized_ic.api_boundary_nodes.values() {
         nodes.push(node.clone());
     }
 
@@ -419,6 +428,7 @@ fn create_config_disk_image(
         .expect("no no-name IC")
         .registry_local_store_path();
     cmd.arg(img_path.clone())
+        .args(["--node_reward_type", "type3.1"])
         .arg("--hostname")
         .arg(node.node_id.to_string())
         .arg("--ic_registry_local_store")
@@ -481,6 +491,12 @@ fn create_config_disk_image(
             ipv4_config.prefix_length()
         ));
         cmd.arg("--ipv4_gateway").arg(ipv4_config.gateway_ip_addr());
+    }
+
+    // if the node has a domain name, generate a certificate to be used
+    // when the node is an API boundary node.
+    if let Some(domain_name) = &node.node_config.domain {
+        cmd.arg("--generate_ic_boundary_tls_cert").arg(domain_name);
     }
 
     if let Some(domain) = domain {
@@ -565,6 +581,7 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
         // this value will be overridden by IcConfig::with_node_operator()
         node_operator_principal_id: None,
         secret_key_store: node.secret_key_store.clone(),
+        domain: node.domain.clone(),
     }
 }
 
@@ -574,13 +591,9 @@ fn configure_setupos_image(
     nns_url: &Url,
     nns_public_key: &str,
 ) -> anyhow::Result<PathBuf> {
-    let setupos_image = get_dependency_path("ic-os/setupos/envs/dev/disk-img.tar.zst");
-    let setupos_inject_configs = get_dependency_path(
-        "rs/ic_os/dev_test_tools/setupos-inject-configuration/setupos-inject-configuration",
-    );
-    let setupos_disable_checks = get_dependency_path(
-        "rs/ic_os/dev_test_tools/setupos-disable-checks/setupos-disable-checks",
-    );
+    let setupos_image = get_dependency_path_from_env("ENV_DEPS__DEV_SETUPOS_IMG_TAR_ZST");
+    let setupos_inject_configs = get_dependency_path_from_env("ENV_DEPS__SETUPOS_INJECT_CONFIGS");
+    let setupos_disable_checks = get_dependency_path_from_env("ENV_DEPS__SETUPOS_DISABLE_CHECKS");
 
     let nested_vm = env.get_nested_vm(name)?;
 

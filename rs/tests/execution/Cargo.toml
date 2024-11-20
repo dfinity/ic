@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+bitcoincore-rpc = "0.15.0"
 candid = { workspace = true }
 futures = { workspace = true }
 ic-agent = { workspace = true }
@@ -17,6 +18,7 @@ ic-system-test-driver = { path = "../driver" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-utils = { workspace = true }
 slog = { workspace = true }
+ic-tests-ckbtc = { path = "../ckbtc" }
 ic-types = { path = "../../types/types" }
 ic-config = { path = "../../config" }
 ic-cdk = { workspace = true }
@@ -66,3 +68,7 @@ path = "system_subnets_test.rs"
 [[bin]]
 name = "fill_execution_rounds_workload"
 path = "fill_execution_rounds_workload.rs"
+
+[[bin]]
+name = "btc_get_balance_test"
+path = "btc_get_balance_test.rs"

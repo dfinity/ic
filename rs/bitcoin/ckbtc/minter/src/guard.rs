@@ -145,6 +145,7 @@ mod tests {
             max_time_in_queue_nanos: 0,
             min_confirmations: None,
             mode: crate::state::Mode::GeneralAvailability,
+            new_kyt_principal: Some(CanisterId::from(0)),
             kyt_principal: Some(CanisterId::from(0)),
             kyt_fee: None,
         }
@@ -166,7 +167,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::needless_collect)]
     fn guard_prevents_more_than_max_concurrent_principals() {
         // test that at most MAX_CONCURRENT guards can be created if each one
         // is for a different principal

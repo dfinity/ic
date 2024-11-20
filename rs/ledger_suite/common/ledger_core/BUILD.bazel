@@ -11,6 +11,7 @@ rust_library(
         # Keep sorted.
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "@crate_index//:candid",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:num-traits",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
@@ -21,6 +22,7 @@ rust_test(
     name = "ledger_core_test",
     crate = ":ledger_core",
     deps = [
+        "@crate_index//:proptest",
     ],
 )
 

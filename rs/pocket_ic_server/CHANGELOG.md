@@ -11,12 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+
+## 7.0.0 - 2024-11-13
+
 ### Added
 - Support for IC Bitcoin API via the management canister if the bitcoin canister is installed as the bitcoin testnet canister
   (canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai`) on the bitcoin subnet and configured with `Network::Regtest`
   and a `bitcoind` process is listening at an address and port specified in an additional argument
   of the endpoint `/instances/` to create a new PocketIC instance.
 - New endpoint `/instances/<instance_id>/_/topology` returning the topology of the PocketIC instance.
+- New CLI option `--log-levels` to specify the log levels for PocketIC server logs (defaults to `pocket_ic_server=info,tower_http=info,axum::rejection=trace`).
+- New endpoint `/instances/<instance_id/read/get_controllers` to get the controllers of a canister.
 
 ### Fixed
 - Renamed `dfx_test_key1` tECDSA and tSchnorr keys to `dfx_test_key`.
@@ -26,13 +32,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   directly to the PocketIC instance/replica (this only used to apply to requests for `/_/dashboard` independently
   of whether a canister ID could be found).
 - Subnet ids can be specified in `SubnetSpec`s for all subnet kinds.
+- The certified time of a round is only bumped by `1ns` if the time of the corresponding PocketIC instance did not increase since the last round.
+- The endpoint `/instances/<instance_id>/update/set_time` returns an error if the time of a PocketIC instance is set into the past.
+- Subnet sizes to match the subnet sizes on the ICP mainnet: II from 28 to 31 nodes, Fiduciary from 28 to 34 nodes.
+
+### Removed
+- The CLI option `--pid`: use the CLI option `--port-file` instead.
 
 
 
 ## 6.0.0 - 2024-09-12
 
 ### Added
-- New CLI option `--ip_addr` to specify the IP address at which the PocketIC server should listen (defaults to `127.0.0.1`).
+- New CLI option `--ip-addr` to specify the IP address at which the PocketIC server should listen (defaults to `127.0.0.1`).
 - New argument `ip_addr` of the endpoint `/http_gateway` to specify the IP address at which the HTTP gateway should listen (defaults to `127.0.0.1`).
 - New GET endpoint `/http_gateway` listing all HTTP gateways and their details.
 - Support for query statistics in the management canister.

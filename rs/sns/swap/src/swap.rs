@@ -676,9 +676,10 @@ impl Swap {
     ///
     /// See also: `Swap.run_periodic_tasks`.
     pub fn requires_periodic_tasks(&self) -> bool {
-        // Practically, already_tried_to_auto_finalize should never be None, but we err towards
-        // caution, which in this case means to continue scheduling periodic tasks.
-        !self.lifecycle_is_terminal() || !self.already_tried_to_auto_finalize.unwrap_or(false)
+        // Practically, already_tried_to_auto_finalize should never be None, unless a Swap has not
+        // been updated since this field had been introduced. We default this field to `true` to
+        // capture those old Swaps (which were finalized manually).
+        !self.lifecycle_is_terminal() || !self.already_tried_to_auto_finalize.unwrap_or(true)
     }
 
     //
@@ -1012,32 +1013,6 @@ impl Swap {
     //
     // --- state modifying methods ---------------------------------------------
     //
-
-    // TODO[NNS1-3386]: Remove this function.
-    pub fn migrate_state(&mut self) {
-        if self.direct_participation_icp_e8s.is_none() {
-            let direct_participation_icp_e8s =
-                self.buyers
-                    .values()
-                    .fold(0_u64, |sum_icp_e8s, buyer_state| {
-                        let amount_icp_e8s = buyer_state.amount_icp_e8s();
-                        sum_icp_e8s.saturating_add(amount_icp_e8s)
-                    });
-            self.direct_participation_icp_e8s = Some(direct_participation_icp_e8s);
-        }
-
-        if self.neurons_fund_participation_icp_e8s.is_none() {
-            let neurons_fund_participation_icp_e8s =
-                self.cf_participants
-                    .iter()
-                    .fold(0_u64, |sum_icp_e8s, neurons_fund_participant| {
-                        let participant_total_icp_e8s =
-                            neurons_fund_participant.participant_total_icp_e8s();
-                        sum_icp_e8s.saturating_add(participant_total_icp_e8s)
-                    });
-            self.neurons_fund_participation_icp_e8s = Some(neurons_fund_participation_icp_e8s);
-        }
-    }
 
     /// Runs those tasks that should be run periodically.
     ///
@@ -4757,8 +4732,8 @@ mod tests {
             .with_swap_start_due(None, Some(10_000_000))
             .build();
 
-        let try_purge_old_tickets = |sale: &mut Swap, time: u64| loop {
-            match sale.try_purge_old_tickets(
+        let try_purge_old_tickets = |swap: &mut Swap, time: u64| loop {
+            match swap.try_purge_old_tickets(
                 || time,
                 NUMBER_OF_TICKETS_THRESHOLD,
                 MAX_AGE_IN_NANOSECONDS,

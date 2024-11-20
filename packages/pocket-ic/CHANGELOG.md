@@ -8,20 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
+- The function `PocketIcBuilder::with_bitcoind_addrs` to specify multiple addresses and ports at which `bitcoind` processes are listening.
+
+
+
+## 6.0.0 - 2024-11-13
+
+### Added
 - The function `PocketIc::get_subnet_metrics` to retrieve metrics of a given subnet.
 - The function `PocketIcBuilder::with_bitcoind_addr` to specify the address and port at which a `bitcoind` process is listening.
 - The function `PocketIcBuilder::new_with_config` to specify a custom `ExtendedSubnetConfigSet`.
 - The function `PocketIcBuilder::with_subnet_state` to load subnet state from a state directory for an arbitrary subnet kind and subnet id.
 - The function `get_default_effective_canister_id` to retrieve a default effective canister id for canister creation on a PocketIC instance.
+- The function `PocketIc::get_controllers` to get the controllers of a canister.
+- Functions `PocketIc::take_canister_snapshot`, `PocketIc::load_canister_snapshot`, `PocketIc::list_canister_snapshots`, and `PocketIc::delete_canister_snapshot` to manage canister snapshots.
+- Functions `PocketIc::upload_chunk`, `PocketIc::stored_chunks`, and `PocketIc::clear_chunk_store` to manage the WASM chunk store of a canister.
+- The function `PocketIc::install_chunked_canister` to install a canister from WASM chunks in the WASM chunk store of a canister.
+- The function `PocketIc::fetch_canister_logs` to fetch canister logs via a query call to the management canister.
+- The function `Topology::get_subnet` to get a subnet to which a canister belongs independently of whether the canister exists.
 
 ### Removed
 - Functions `PocketIc::from_config`, `PocketIc::from_config_and_max_request_time`, and `PocketIc::from_config_and_server_url`.
   Use the `PocketIcBuilder` instead.
+- The enumeration `DtsFlag` and its associated builder patterns: DTS is always enabled in PocketIC.
+- The reexport `pocket_ic::CanisterSettings`: use `pocket_ic::management_canister::CanisterSettings` instead.
 
 ### Changed
 - The type `Topology` becomes a struct with two fields: `subnet_configs` contains an association of subnet ids to their configurations
   and `default_effective_canister_id` contains a default effective canister id for canister creation.
-
+- Management canister types are defined in a new `management_canister` module to avoid a dependency on `ic-cdk`.
+- Environment variable `POCKET_IC_MUTE_SERVER` now only mutes output when set to non-empty string (previously any value muted server).
 
 
 ## 5.0.0 - 2024-09-12

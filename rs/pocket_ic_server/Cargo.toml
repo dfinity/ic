@@ -1,10 +1,10 @@
 [package]
 name = "pocket-ic-server"
-version = "6.0.0"
+version = "7.0.0"
 edition = "2021"
 
 [dependencies]
-aide = { version = "^0.13.0", features = ["axum"] }
+aide = { version = "^0.13.4", features = ["axum"] }
 askama = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
@@ -15,7 +15,7 @@ base64 = { workspace = true }
 bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
 bytes = { workspace = true }
 candid = { workspace = true }
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 ctrlc = { version = "3.4.5", features = ["termination"] }
 flate2 = { workspace = true }
 form_urlencoded = "1"
@@ -36,6 +36,7 @@ ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
+ic-error-types = { path = "../types/error_types" }
 ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", tag = "0.1.0-b0" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
@@ -67,6 +68,7 @@ rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
+slog = { workspace = true }
 tempfile = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
@@ -91,5 +93,4 @@ rcgen = { workspace = true }
 registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 serde_json = { workspace = true }
-spec-compliance = { path = "../tests/testing_verification/spec_compliance" }
-slog = { workspace = true }
+spec-compliance = { path = "../tests/research/spec_compliance" }

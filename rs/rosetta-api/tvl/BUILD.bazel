@@ -9,17 +9,12 @@ DEPENDENCIES = [
     "//rs/rust_canisters/http_types",
     "//rs/types/base_types",
     "@crate_index//:candid",
-    "@crate_index//:ciborium",
-    "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:ic-xrc-types",
-    "@crate_index//:ic0",
-    "@crate_index//:num-traits",
     "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -89,6 +84,7 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/tvl/xrc_mock",
     "//rs/state_machine_tests",
     "//rs/test_utilities/load_wasm",
+    "//rs/types/base_types",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
     "@crate_index//:rand",

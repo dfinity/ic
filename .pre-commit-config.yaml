@@ -59,13 +59,6 @@ repos:
     always_run: true
     verbose: true
 
-  - id: buf-breaking
-    name: Check no breaking changes were introduced
-    entry: ./pre-commit/check-incompatibilities.sh
-    language: script
-    stages: [manual]
-    pass_filenames: false
-
 - repo: https://github.com/ansible/ansible-lint.git
   rev: v24.5.0
   hooks:

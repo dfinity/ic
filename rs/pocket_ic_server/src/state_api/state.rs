@@ -1,9 +1,9 @@
+#![allow(clippy::disallowed_types)]
 /// This module contains the core state of the PocketIc server.
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
 use crate::pocket_ic::{
-    AdvanceTimeAndTick, ApiResponse, CanisterHttpAdapters, EffectivePrincipal, GetCanisterHttp,
-    MockCanisterHttp, PocketIc,
+    AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, PocketIc, ProcessCanisterHttpInternal,
 };
 use crate::state_api::canister_id::{self, DomainResolver, ResolvesDomain};
 use crate::state_api::routes::verify_cbor_content_header;
@@ -33,25 +33,23 @@ use hyper::{Request, Response as HyperResponse};
 use hyper_util::client::legacy::{connect::HttpConnector, Client};
 use ic_http_endpoints_public::cors_layer;
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
-use ic_https_outcalls_adapter::CanisterHttp;
-use ic_https_outcalls_adapter_client::grpc_status_code_to_reject;
-use ic_https_outcalls_service::{
-    https_outcalls_service_server::HttpsOutcallsService, HttpHeader, HttpMethod,
-    HttpsOutcallRequest, HttpsOutcallResponse,
-};
-use ic_state_machine_tests::RejectCode;
-use ic_types::{
-    canister_http::{CanisterHttpRequestId, MAX_CANISTER_HTTP_RESPONSE_BYTES},
-    CanisterId, PrincipalId, SubnetId,
-};
+use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, PrincipalId, SubnetId};
+use itertools::Itertools;
 use pocket_ic::common::rest::{
-    CanisterHttpHeader, CanisterHttpMethod, CanisterHttpReject, CanisterHttpReply,
-    CanisterHttpRequest, CanisterHttpResponse, HttpGatewayBackend, HttpGatewayConfig,
-    HttpGatewayDetails, HttpGatewayInfo, MockCanisterHttpResponse, Topology,
+    CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
+    HttpGatewayInfo, Topology,
 };
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    fmt,
+    path::PathBuf,
+    str::FromStr,
+    sync::atomic::AtomicU64,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 use tokio::{
     sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
@@ -59,7 +57,6 @@ use tokio::{
     task::{spawn, spawn_blocking, JoinHandle, JoinSet},
     time::{self, sleep, Instant},
 };
-use tonic::Request as TonicRequest;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, trace};
 
@@ -73,11 +70,25 @@ const MIN_OPERATION_DELAY: Duration = Duration::from_millis(100);
 // The minimum delay between consecutive attempts to read the graph in auto progress mode.
 const READ_GRAPH_DELAY: Duration = Duration::from_millis(100);
 
-pub const STATE_LABEL_HASH_SIZE: usize = 32;
+pub const STATE_LABEL_HASH_SIZE: usize = 16;
 
 /// Uniquely identifies a state.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
 pub struct StateLabel(pub [u8; STATE_LABEL_HASH_SIZE]);
+
+impl StateLabel {
+    pub fn new(seed: u64) -> Self {
+        let mut seq_no: u128 = seed.into();
+        seq_no <<= 64;
+        Self(seq_no.to_le_bytes())
+    }
+
+    pub fn bump(&mut self) {
+        let mut seq_no: u128 = u128::from_le_bytes(self.0);
+        seq_no += 1;
+        self.0 = seq_no.to_le_bytes();
+    }
+}
 
 // The only error condition is if the vector has the wrong size.
 pub struct InvalidSize;
@@ -110,19 +121,42 @@ struct ProgressThread {
     sender: mpsc::Sender<()>,
 }
 
+struct Instance {
+    progress_thread: Option<ProgressThread>,
+    state: InstanceState,
+}
+
+struct HttpGateway {
+    details: HttpGatewayDetails,
+    shutdown_handle: Handle,
+}
+
+impl HttpGateway {
+    fn new(details: HttpGatewayDetails, shutdown_handle: Handle) -> Self {
+        Self {
+            details,
+            shutdown_handle,
+        }
+    }
+}
+
+impl Drop for HttpGateway {
+    fn drop(&mut self) {
+        self.shutdown_handle.shutdown();
+    }
+}
+
 /// The state of the PocketIC API.
 pub struct ApiState {
-    // impl note: If locks are acquired on multiple fields, acquire first on `instances`, then on `canister_http_adapters`, and then on `graph`.
-    instances: Arc<RwLock<Vec<Mutex<InstanceState>>>>,
-    canister_http_adapters: Arc<RwLock<HashMap<InstanceId, CanisterHttpAdapters>>>,
+    // impl note: If locks are acquired on both fields, acquire first on `instances` and then on `graph`.
+    instances: Arc<RwLock<Vec<Mutex<Instance>>>>,
     graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
-    // threads making IC instances progress automatically
-    progress_threads: RwLock<Vec<Mutex<Option<ProgressThread>>>>,
+    seed: AtomicU64,
     sync_wait_time: Duration,
     // PocketIC server port
     port: Option<u16>,
     // HTTP gateway infos (`None` = stopped)
-    http_gateways: Arc<RwLock<Vec<Option<HttpGatewayDetails>>>>,
+    http_gateways: Arc<RwLock<Vec<Option<HttpGateway>>>>,
 }
 
 #[derive(Default)]
@@ -165,33 +199,26 @@ impl PocketIcApiStateBuilder {
             .iter()
             .map(|i| (i.get_state_label(), Computations::default()))
             .collect();
-        let graph = RwLock::new(graph);
-
-        let canister_http_adapters = RwLock::new(
-            self.initial_instances
-                .iter()
-                .enumerate()
-                .map(|(instance_id, instance)| (instance_id, instance.canister_http_adapters()))
-                .collect(),
-        );
+        let graph = Arc::new(RwLock::new(graph));
 
         let instances: Vec<_> = self
             .initial_instances
             .into_iter()
-            .map(|inst| Mutex::new(InstanceState::Available(inst)))
+            .map(|instance| {
+                Mutex::new(Instance {
+                    progress_thread: None,
+                    state: InstanceState::Available(instance),
+                })
+            })
             .collect();
-        let instances_len = instances.len();
-        let instances = RwLock::new(instances);
-
-        let progress_threads = RwLock::new((0..instances_len).map(|_| Mutex::new(None)).collect());
+        let instances = Arc::new(RwLock::new(instances));
 
         let sync_wait_time = self.sync_wait_time.unwrap_or(DEFAULT_SYNC_WAIT_DURATION);
 
         Arc::new(ApiState {
-            instances: instances.into(),
-            canister_http_adapters: canister_http_adapters.into(),
-            graph: graph.into(),
-            progress_threads,
+            instances,
+            graph,
+            seed: AtomicU64::new(0),
             sync_wait_time,
             port: self.port,
             http_gateways: Arc::new(RwLock::new(Vec::new())),
@@ -205,6 +232,7 @@ pub enum OpOut {
     Time(u64),
     CanisterResult(Result<WasmResult, UserError>),
     CanisterId(CanisterId),
+    Controllers(Vec<PrincipalId>),
     Cycles(u128),
     Bytes(Vec<u8>),
     StableMemBytes(Vec<u8>),
@@ -219,11 +247,14 @@ pub enum OpOut {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum PocketIcError {
     CanisterNotFound(CanisterId),
+    CanisterIsEmpty(CanisterId),
     BadIngressMessage(String),
     SubnetNotFound(candid::Principal),
     RequestRoutingError(String),
     InvalidCanisterHttpRequestId((SubnetId, CanisterHttpRequestId)),
     InvalidMockCanisterHttpResponses((usize, usize)),
+    InvalidRejectCode(u64),
+    SettingTimeIntoPast((u64, u64)),
 }
 
 impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>> for OpOut {
@@ -244,22 +275,6 @@ impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::Use
     }
 }
 
-// TODO: Remove this Into: It's only used in the InstallCanisterAsController Operation, which also should be removed.
-impl From<Result<(), ic_state_machine_tests::UserError>> for OpOut {
-    fn from(r: Result<(), ic_state_machine_tests::UserError>) -> Self {
-        let res = {
-            match r {
-                Ok(_) => Ok(WasmResult::Reply(vec![])),
-                Err(user_err) => Err(UserError {
-                    code: ErrorCode::try_from(user_err.code() as u64).unwrap(),
-                    description: user_err.description().to_string(),
-                }),
-            }
-        };
-        OpOut::CanisterResult(res)
-    }
-}
-
 impl std::fmt::Debug for OpOut {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -267,11 +282,19 @@ impl std::fmt::Debug for OpOut {
             OpOut::Time(x) => write!(f, "Time({})", x),
             OpOut::Topology(t) => write!(f, "Topology({:?})", t),
             OpOut::CanisterId(cid) => write!(f, "CanisterId({})", cid),
+            OpOut::Controllers(controllers) => write!(
+                f,
+                "Controllers({})",
+                controllers.iter().map(|c| c.to_string()).join(",")
+            ),
             OpOut::Cycles(x) => write!(f, "Cycles({})", x),
             OpOut::CanisterResult(Ok(x)) => write!(f, "CanisterResult: Ok({:?})", x),
             OpOut::CanisterResult(Err(x)) => write!(f, "CanisterResult: Err({})", x),
             OpOut::Error(PocketIcError::CanisterNotFound(cid)) => {
                 write!(f, "CanisterNotFound({})", cid)
+            }
+            OpOut::Error(PocketIcError::CanisterIsEmpty(cid)) => {
+                write!(f, "CanisterIsEmpty({})", cid)
             }
             OpOut::Error(PocketIcError::BadIngressMessage(msg)) => {
                 write!(f, "BadIngressMessage({})", msg)
@@ -298,6 +321,12 @@ impl std::fmt::Debug for OpOut {
                     "InvalidMockCanisterHttpResponses(actual={},expected={})",
                     actual, expected
                 )
+            }
+            OpOut::Error(PocketIcError::InvalidRejectCode(code)) => {
+                write!(f, "InvalidRejectCode({})", code)
+            }
+            OpOut::Error(PocketIcError::SettingTimeIntoPast((current, set))) => {
+                write!(f, "SettingTimeIntoPast(current={},set={})", current, set)
             }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
@@ -642,7 +671,7 @@ impl ApiState {
     // Executes an operation to completion and returns its `OpOut`
     // or `None` if the auto progress mode received a stop signal.
     async fn execute_operation(
-        instances: Arc<RwLock<Vec<Mutex<InstanceState>>>>,
+        instances: Arc<RwLock<Vec<Mutex<Instance>>>>,
         graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
         instance_id: InstanceId,
         op: impl Operation + Send + Sync + 'static,
@@ -688,7 +717,7 @@ impl ApiState {
     /// For polling:
     /// The client lib dispatches a long running operation and gets a Started {state_label, op_id}.
     /// It then polls on that via this state tree api function.
-    pub fn read_result(
+    fn read_result(
         graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
         state_label: &StateLabel,
         op_id: &OpId,
@@ -701,31 +730,41 @@ impl ApiState {
         }
     }
 
-    pub fn get_graph(&self) -> Arc<RwLock<HashMap<StateLabel, Computations>>> {
-        self.graph.clone()
+    pub fn read_graph(
+        &self,
+        state_label: &StateLabel,
+        op_id: &OpId,
+    ) -> Option<(StateLabel, OpOut)> {
+        Self::read_result(self.graph.clone(), state_label, op_id)
     }
 
-    pub async fn add_instance(&self, instance: PocketIc) -> InstanceId {
+    pub async fn add_instance<F>(&self, f: F) -> (InstanceId, Topology)
+    where
+        F: FnOnce(u64) -> PocketIc + std::marker::Send + 'static,
+    {
+        let seed = self.seed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        // create the instance using `spawn_blocking` before acquiring a lock
+        let instance = tokio::task::spawn_blocking(move || f(seed))
+            .await
+            .expect("Failed to create PocketIC instance");
+        let topology = instance.topology();
         let mut instances = self.instances.write().await;
-        let mut canister_http_adapters = self.canister_http_adapters.write().await;
-        let mut progress_threads = self.progress_threads.write().await;
         let instance_id = instances.len();
-        canister_http_adapters.insert(instance_id, instance.canister_http_adapters().clone());
-        instances.push(Mutex::new(InstanceState::Available(instance)));
-        progress_threads.push(Mutex::new(None));
-        instance_id
+        instances.push(Mutex::new(Instance {
+            progress_thread: None,
+            state: InstanceState::Available(instance),
+        }));
+        (instance_id, topology)
     }
 
     pub async fn delete_instance(&self, instance_id: InstanceId) {
         self.stop_progress(instance_id).await;
-        let instances = self.instances.read().await;
-        let mut canister_http_adapters = self.canister_http_adapters.write().await;
         loop {
-            let mut instance_state = instances[instance_id].lock().await;
-            match std::mem::replace(&mut *instance_state, InstanceState::Deleted) {
-                InstanceState::Available(pocket_ic) => {
-                    std::mem::drop(pocket_ic);
-                    canister_http_adapters.remove(&instance_id);
+            let instances = self.instances.read().await;
+            let mut instance = instances[instance_id].lock().await;
+            match &instance.state {
+                InstanceState::Available(_) => {
+                    let _ = std::mem::replace(&mut instance.state, InstanceState::Deleted);
                     break;
                 }
                 InstanceState::Deleted => {
@@ -733,14 +772,17 @@ impl ApiState {
                 }
                 InstanceState::Busy { .. } => {}
             }
-            drop(instance_state);
+            drop(instance);
+            drop(instances);
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
 
     pub async fn delete_all_instances(arc_self: Arc<ApiState>) {
         let mut tasks = JoinSet::new();
-        let num_instances = arc_self.instances.read().await.len();
+        let instances = arc_self.instances.read().await;
+        let num_instances = instances.len();
+        drop(instances);
         for instance_id in 0..num_instances {
             let arc_self_clone = arc_self.clone();
             tasks.spawn(async move { arc_self_clone.delete_instance(instance_id).await });
@@ -888,14 +930,27 @@ impl ApiState {
             handler_api_subnet(ApiVersion::V2, replica_url, subnet_id, "read_state", bytes).await
         }
 
+        let https_config = if let Some(ref https_config) = http_gateway_config.https_config {
+            Some(
+                RustlsConfig::from_pem_file(
+                    PathBuf::from(https_config.cert_path.clone()),
+                    PathBuf::from(https_config.key_path.clone()),
+                )
+                .await
+                .map_err(|e| format!("TLS config could not be created: {}", e))?,
+            )
+        } else {
+            None
+        };
+
         let ip_addr = http_gateway_config
             .ip_addr
+            .clone()
             .unwrap_or("127.0.0.1".to_string());
         let port = http_gateway_config.port.unwrap_or_default();
         let addr = format!("{}:{}", ip_addr, port);
         let listener = std::net::TcpListener::bind(&addr)
-            .unwrap_or_else(|_| panic!("Failed to start HTTP gateway on port {}", port));
-        let real_port = listener.local_addr().unwrap().port();
+            .map_err(|e| format!("Failed to bind to address {}: {}", addr, e))?;
 
         let pocket_ic_server_port = self.port.unwrap();
         let replica_url = match http_gateway_config.forward_to {
@@ -915,22 +970,15 @@ impl ApiState {
 
         let replica_url = replica_url.trim_end_matches('/').to_string();
 
-        let mut http_gateways = self.http_gateways.write().await;
-        let instance_id = http_gateways.len();
-        let http_gateway_details = HttpGatewayDetails {
-            instance_id,
-            port: real_port,
-            forward_to: http_gateway_config.forward_to.clone(),
-            domains: http_gateway_config.domains.clone(),
-            https_config: http_gateway_config.https_config.clone(),
-        };
-        http_gateways.push(Some(http_gateway_details));
-        drop(http_gateways);
-
-        let http_gateways = self.http_gateways.clone();
         let handle = Handle::new();
-        let shutdown_handle = handle.clone();
         let axum_handle = handle.clone();
+        let domains = http_gateway_config
+            .domains
+            .clone()
+            .unwrap_or(vec!["localhost".to_string()])
+            .iter()
+            .map(|d| fqdn!(d))
+            .collect();
         spawn(async move {
             let http_gateway_client = ic_http_gateway::HttpGatewayClientBuilder::new()
                 .with_agent(agent)
@@ -938,14 +986,7 @@ impl ApiState {
                 .unwrap();
             let backend_client =
                 Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
-            let domain_resolver = DomainResolver::new(
-                http_gateway_config
-                    .domains
-                    .unwrap_or(vec!["localhost".to_string()])
-                    .iter()
-                    .map(|d| fqdn!(d))
-                    .collect(),
-            );
+            let domain_resolver = DomainResolver::new(domains);
             let state_handler = Arc::new(HandlerState::new(
                 http_gateway_client,
                 backend_client,
@@ -1005,52 +1046,47 @@ impl ApiState {
                 .with_state(replica_url)
                 .into_make_service();
 
-            let http_gateways_for_shutdown = http_gateways.clone();
-            tokio::spawn(async move {
-                loop {
-                    let guard = http_gateways_for_shutdown.read().await;
-                    if guard[instance_id].is_none() {
-                        shutdown_handle.shutdown();
-                        break;
-                    }
-                    drop(guard);
-                    tokio::time::sleep(Duration::from_secs(1)).await;
+            match https_config {
+                Some(config) => {
+                    axum_server::from_tcp_rustls(listener, config)
+                        .handle(axum_handle)
+                        .serve(router)
+                        .await
+                        .unwrap();
                 }
-            });
-            if let Some(https_config) = http_gateway_config.https_config {
-                let config = RustlsConfig::from_pem_file(
-                    PathBuf::from(https_config.cert_path),
-                    PathBuf::from(https_config.key_path),
-                )
-                .await;
-                match config {
-                    Ok(config) => {
-                        axum_server::from_tcp_rustls(listener, config)
-                            .handle(axum_handle)
-                            .serve(router)
-                            .await
-                            .unwrap();
-                    }
-                    Err(e) => {
-                        error!("TLS config could not be created: {:?}", e);
-                        let mut guard = http_gateways.write().await;
-                        guard[instance_id] = None;
-                        return;
-                    }
+                None => {
+                    axum_server::from_tcp(listener)
+                        .handle(axum_handle)
+                        .serve(router)
+                        .await
+                        .unwrap();
                 }
-            } else {
-                axum_server::from_tcp(listener)
-                    .handle(axum_handle)
-                    .serve(router)
-                    .await
-                    .unwrap();
             }
 
             debug!("Terminating HTTP gateway.");
         });
 
         // Wait until the HTTP gateway starts listening.
-        while handle.listening().await.is_none() {}
+        let real_port = loop {
+            if let Some(socket_addr) = handle.listening().await {
+                break socket_addr.port();
+            }
+            sleep(Duration::from_millis(20)).await;
+        };
+
+        let mut http_gateways = self.http_gateways.write().await;
+        let instance_id = http_gateways.len();
+        let http_gateway_details = HttpGatewayDetails {
+            instance_id,
+            port: real_port,
+            forward_to: http_gateway_config.forward_to.clone(),
+            domains: http_gateway_config.domains.clone(),
+            https_config: http_gateway_config.https_config.clone(),
+        };
+        let shutdown_handle = handle.clone();
+        let http_gateway = HttpGateway::new(http_gateway_details, shutdown_handle);
+        http_gateways.push(Some(http_gateway));
+        drop(http_gateways);
 
         Ok(HttpGatewayInfo {
             instance_id,
@@ -1065,123 +1101,11 @@ impl ApiState {
         }
     }
 
-    async fn make_http_request(
-        canister_http_request: CanisterHttpRequest,
-        canister_http_adapter: &CanisterHttp,
-    ) -> Result<CanisterHttpReply, (RejectCode, String)> {
-        let canister_http_request = HttpsOutcallRequest {
-            url: canister_http_request.url,
-            method: match canister_http_request.http_method {
-                CanisterHttpMethod::GET => HttpMethod::Get.into(),
-                CanisterHttpMethod::POST => HttpMethod::Post.into(),
-                CanisterHttpMethod::HEAD => HttpMethod::Head.into(),
-            },
-            max_response_size_bytes: canister_http_request
-                .max_response_bytes
-                .unwrap_or(MAX_CANISTER_HTTP_RESPONSE_BYTES),
-            headers: canister_http_request
-                .headers
-                .into_iter()
-                .map(|h| HttpHeader {
-                    name: h.name,
-                    value: h.value,
-                })
-                .collect(),
-            body: canister_http_request.body,
-            socks_proxy_allowed: false,
-        };
-        let request = TonicRequest::new(canister_http_request);
-        canister_http_adapter
-            .https_outcall(request)
-            .await
-            .map(|adapter_response| {
-                let HttpsOutcallResponse {
-                    status,
-                    headers,
-                    content: body,
-                } = adapter_response.into_inner();
-                CanisterHttpReply {
-                    status: status.try_into().unwrap(),
-                    headers: headers
-                        .into_iter()
-                        .map(|HttpHeader { name, value }| CanisterHttpHeader { name, value })
-                        .collect(),
-                    body,
-                }
-            })
-            .map_err(|grpc_status| {
-                (
-                    grpc_status_code_to_reject(grpc_status.code()),
-                    grpc_status.message().to_string(),
-                )
-            })
-    }
-
-    async fn process_canister_http_requests(
-        instances: Arc<RwLock<Vec<Mutex<InstanceState>>>>,
-        canister_http_adapters: Arc<RwLock<HashMap<InstanceId, CanisterHttpAdapters>>>,
-        graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
-        instance_id: InstanceId,
-        rx: &mut Receiver<()>,
-    ) -> Option<()> {
-        let get_canister_http_op = GetCanisterHttp;
-        let canister_http_requests = match Self::execute_operation(
-            instances.clone(),
-            graph.clone(),
-            instance_id,
-            get_canister_http_op,
-            rx,
-        )
-        .await?
-        {
-            OpOut::CanisterHttp(canister_http) => canister_http,
-            out => panic!("Unexpected OpOut: {:?}", out),
-        };
-        let mut mock_canister_http_responses = vec![];
-        for canister_http_request in canister_http_requests {
-            let subnet_id = canister_http_request.subnet_id;
-            let request_id = canister_http_request.request_id;
-            let canister_http_adapters = canister_http_adapters.read().await;
-            let canister_http_adapters = canister_http_adapters
-                .get(&instance_id)
-                .unwrap()
-                .lock()
-                .await;
-            let canister_http_adapter = canister_http_adapters
-                .get(&SubnetId::from(PrincipalId::from(subnet_id)))
-                .unwrap();
-            let response =
-                match Self::make_http_request(canister_http_request, canister_http_adapter).await {
-                    Ok(reply) => CanisterHttpResponse::CanisterHttpReply(reply),
-                    Err((reject_code, e)) => {
-                        CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
-                            reject_code: reject_code as u64,
-                            message: e,
-                        })
-                    }
-                };
-            let mock_canister_http_response = MockCanisterHttpResponse {
-                subnet_id,
-                request_id,
-                response,
-                additional_responses: vec![],
-            };
-            mock_canister_http_responses.push(mock_canister_http_response);
+    pub async fn stop_all_http_gateways(&self) {
+        let mut http_gateways = self.http_gateways.write().await;
+        for i in 0..http_gateways.len() {
+            http_gateways[i] = None;
         }
-        for mock_canister_http_response in mock_canister_http_responses {
-            let mock_canister_http_op = MockCanisterHttp {
-                mock_canister_http_response,
-            };
-            Self::execute_operation(
-                instances.clone(),
-                graph.clone(),
-                instance_id,
-                mock_canister_http_op,
-                rx,
-            )
-            .await?;
-        }
-        Some(())
     }
 
     pub async fn auto_progress(
@@ -1190,21 +1114,21 @@ impl ApiState {
         artificial_delay_ms: Option<u64>,
     ) -> Result<(), String> {
         let artificial_delay = Duration::from_millis(artificial_delay_ms.unwrap_or_default());
-        let progress_threads = self.progress_threads.read().await;
-        let mut progress_thread = progress_threads[instance_id].lock().await;
-        let instances = self.instances.clone();
-        let canister_http_adapters = self.canister_http_adapters.clone();
+        let instances_clone = self.instances.clone();
         let graph = self.graph.clone();
-        if progress_thread.is_none() {
+        let instances = self.instances.read().await;
+        let mut instance = instances[instance_id].lock().await;
+        if instance.progress_thread.is_none() {
             let (tx, mut rx) = mpsc::channel::<()>(1);
             let handle = spawn(async move {
-                let mut now = Instant::now();
+                debug!("Starting auto progress for instance {}.", instance_id);
+                let mut now = SystemTime::now();
                 loop {
                     let start = Instant::now();
-                    let old = std::mem::replace(&mut now, Instant::now());
-                    let op = AdvanceTimeAndTick(now.duration_since(old));
+                    let old = std::mem::replace(&mut now, SystemTime::now());
+                    let op = AdvanceTimeAndTick(now.duration_since(old).unwrap_or_default());
                     if Self::execute_operation(
-                        instances.clone(),
+                        instances_clone.clone(),
                         graph.clone(),
                         instance_id,
                         op,
@@ -1213,19 +1137,20 @@ impl ApiState {
                     .await
                     .is_none()
                     {
-                        return;
+                        break;
                     }
-                    if Self::process_canister_http_requests(
-                        instances.clone(),
-                        canister_http_adapters.clone(),
+                    let op = ProcessCanisterHttpInternal;
+                    if Self::execute_operation(
+                        instances_clone.clone(),
                         graph.clone(),
                         instance_id,
+                        op,
                         &mut rx,
                     )
                     .await
                     .is_none()
                     {
-                        return;
+                        break;
                     }
                     let duration = start.elapsed();
                     sleep(std::cmp::max(
@@ -1234,11 +1159,12 @@ impl ApiState {
                     ))
                     .await;
                     if received_stop_signal(&mut rx) {
-                        return;
+                        break;
                     }
                 }
+                debug!("Stopping auto progress for instance {}.", instance_id);
             });
-            *progress_thread = Some(ProgressThread { handle, sender: tx });
+            instance.progress_thread = Some(ProgressThread { handle, sender: tx });
             Ok(())
         } else {
             Err("Auto progress mode has already been enabled.".to_string())
@@ -1246,9 +1172,13 @@ impl ApiState {
     }
 
     pub async fn stop_progress(&self, instance_id: InstanceId) {
-        let progress_threads = self.progress_threads.read().await;
-        let mut progress_thread = progress_threads[instance_id].lock().await;
-        if let Some(t) = progress_thread.take() {
+        let instances = self.instances.read().await;
+        let mut instance = instances[instance_id].lock().await;
+        let progress_thread = instance.progress_thread.take();
+        // drop locks otherwise we might end up with a deadlock
+        drop(instance);
+        drop(instances);
+        if let Some(t) = progress_thread {
             t.sender.send(()).await.unwrap();
             t.handle.await.unwrap();
         }
@@ -1258,9 +1188,9 @@ impl ApiState {
         let instances = self.instances.read().await;
         let mut res = vec![];
 
-        for instance_state in &*instances {
-            let instance_state = &*instance_state.lock().await;
-            match instance_state {
+        for instance in &*instances {
+            let instance = &*instance.lock().await;
+            match &instance.state {
                 InstanceState::Busy { state_label, op_id } => {
                     res.push(format!("Busy({:?}, {:?})", state_label, op_id))
                 }
@@ -1275,9 +1205,8 @@ impl ApiState {
         self.http_gateways
             .read()
             .await
-            .clone()
-            .into_iter()
-            .flatten()
+            .iter()
+            .filter_map(|gateway| gateway.as_ref().map(|g| g.details.clone()))
             .collect()
     }
 
@@ -1329,7 +1258,7 @@ impl ApiState {
     /// Same as [Self::update] except that the timeout can be specified manually. This is useful in
     /// cases when clients want to enforce a long-running blocking call.
     async fn update_instances_with_timeout<O>(
-        instances: Arc<RwLock<Vec<Mutex<InstanceState>>>>,
+        instances: Arc<RwLock<Vec<Mutex<Instance>>>>,
         graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
         op: Arc<O>,
         instance_id: InstanceId,
@@ -1349,9 +1278,9 @@ impl ApiState {
         let (bg_task, busy_outcome) = if let Some(instance_mutex) =
             instances_locked.get(instance_id)
         {
-            let mut instance_state = instance_mutex.lock().await;
+            let mut instance = instance_mutex.lock().await;
             // If this instance is busy, return the running op and initial state
-            match &*instance_state {
+            match &instance.state {
                 InstanceState::Deleted => {
                     return Err(UpdateError {
                         message: "Instance was deleted".to_string(),
@@ -1374,7 +1303,7 @@ impl ApiState {
                         op_id: op_id.clone(),
                     };
                     let InstanceState::Available(mut pocket_ic) =
-                        std::mem::replace(&mut *instance_state, busy)
+                        std::mem::replace(&mut instance.state, busy)
                     else {
                         unreachable!()
                     };
@@ -1391,6 +1320,7 @@ impl ApiState {
                                 op_id.0,
                             );
                             let result = op.compute(&mut pocket_ic);
+                            pocket_ic.bump_state_label();
                             let new_state_label = pocket_ic.get_state_label();
                             // add result to graph, but grab instance lock first!
                             let instances = instances.blocking_read();
@@ -1400,16 +1330,15 @@ impl ApiState {
                             cached_computations
                                 .insert(op_id.clone(), (new_state_label, result.clone()));
                             drop(graph_guard);
-                            let mut instance_state = instances[instance_id].blocking_lock();
-                            if let InstanceState::Deleted = &*instance_state {
+                            let mut instance = instances[instance_id].blocking_lock();
+                            if let InstanceState::Deleted = &instance.state {
                                 error!("The instance is deleted immediately after an operation. This is a bug!");
                                 std::mem::drop(pocket_ic);
                             } else {
-                                *instance_state = InstanceState::Available(pocket_ic);
+                                instance.state = InstanceState::Available(pocket_ic);
                             }
                             trace!("bg_task::end instance_id={} op_id={}", instance_id, op_id.0);
-                            // also return old_state_label so we can prune graph if we return quickly
-                            (result, old_state_label)
+                            result
                         }
                     };
 
@@ -1442,7 +1371,7 @@ impl ApiState {
         // note: this assumes that cancelling the JoinHandle does not stop the execution of the
         // background task. This only works because the background thread, in this case, is a
         // kernel thread.
-        if let Ok(Ok((op_out, _old_state_label))) = time::timeout(sync_wait_time, bg_handle).await {
+        if let Ok(Ok(op_out)) = time::timeout(sync_wait_time, bg_handle).await {
             trace!(
                 "update_with_timeout::synchronous instance_id={} op_id={}",
                 instance_id,
@@ -1457,36 +1386,5 @@ impl ApiState {
             op_id,
         );
         Ok(busy_outcome)
-    }
-}
-
-impl std::fmt::Debug for InstanceState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Busy { state_label, op_id } => {
-                write!(f, "Busy {{ {state_label:?}, {op_id:?} }}")?
-            }
-            Self::Available(pic) => write!(f, "Available({:?})", pic.get_state_label())?,
-            Self::Deleted => write!(f, "Deleted")?,
-        }
-        Ok(())
-    }
-}
-
-impl std::fmt::Debug for ApiState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let instances = self.instances.blocking_read();
-        let graph = self.graph.blocking_read();
-
-        writeln!(f, "Instances:")?;
-        for (idx, instance) in instances.iter().enumerate() {
-            writeln!(f, "  [{idx}] {instance:?}")?;
-        }
-
-        writeln!(f, "Graph:")?;
-        for (k, v) in graph.iter() {
-            writeln!(f, "  {k:?} => {v:?}")?;
-        }
-        Ok(())
     }
 }

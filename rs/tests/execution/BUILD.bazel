@@ -1,16 +1,17 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "oci_tar", "system_test", "system_test_nns", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "compute_allocation_test",
+    env = UNIVERSAL_CANISTER_ENV,
     flaky = True,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/config",
         "//rs/registry/subnet_type",
@@ -27,12 +28,13 @@ system_test(
 
 system_test(
     name = "cycles_restrictions_test",
+    env = UNIVERSAL_CANISTER_ENV,
     flaky = True,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
@@ -47,12 +49,13 @@ system_test(
     name = "general_execution_test",
     srcs = glob(["general_execution_tests/*.rs"]),
     crate_root = "general_execution_test.rs",
+    env = UNIVERSAL_CANISTER_ENV,
     flaky = True,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/config",
         "//rs/crypto/sha2",
@@ -86,12 +89,13 @@ system_test(
     name = "inter_canister_queries_test",
     srcs = glob(["inter_canister_queries_tests/*.rs"]),
     crate_root = "inter_canister_queries_test.rs",
+    env = UNIVERSAL_CANISTER_ENV,
     flaky = True,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
@@ -106,12 +110,13 @@ system_test(
 
 system_test(
     name = "max_number_of_canisters_test",
+    env = UNIVERSAL_CANISTER_ENV,
     flaky = True,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
@@ -145,12 +150,13 @@ system_test(
 
 system_test(
     name = "system_subnets_test",
+    env = UNIVERSAL_CANISTER_ENV,
     flaky = True,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
@@ -179,6 +185,64 @@ system_test(
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
         "@crate_index//:futures",
+        "@crate_index//:slog",
+    ],
+)
+
+exports_files([
+    "btc_integration/bitcoin.conf",
+    "btc_integration/btc_activate.sh",
+])
+
+uvm_config_image(
+    name = "btc_uvm_config_image",
+    srcs = [
+        ":bitcoind.tar",
+        ":btc_integration/bitcoin.conf",
+        ":btc_integration/btc_activate.sh",
+    ],
+    remap_paths = {
+        "btc_activate.sh": "activate",
+    },
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
+)
+
+oci_tar(
+    name = "bitcoind.tar",
+    image = "@bitcoind",
+    repo_tags = ["bitcoind:pinned"],
+)
+
+BTC_RUNTIME_DEPS = [
+    # Keep sorted.
+    ":btc_uvm_config_image",
+    "@btc_canister//file",
+]
+
+system_test_nns(
+    name = "btc_get_balance_test",
+    env = UNIVERSAL_CANISTER_ENV | {
+        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+    },
+    flaky = True,
+    tags = [
+        "k8s",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        UNIVERSAL_CANISTER_RUNTIME_DEPS +
+        BTC_RUNTIME_DEPS,
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/ckbtc",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:bitcoincore-rpc",
+        "@crate_index//:candid",
         "@crate_index//:slog",
     ],
 )

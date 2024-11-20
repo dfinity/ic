@@ -39,7 +39,7 @@ submit_nns_upgrade_proposal_mainnet() {
 
     PROPOSAL_TITLE=$(grep '.' "$PROPOSAL_FILE" | head -n 1 | sed 's/# //')
 
-    VERSION=$(grep '__Source Code__: ' $PROPOSAL_FILE | sed -E 's~.*\[(.{40})\].*~\1~')
+    VERSION=$(grep '__Source code__: ' $PROPOSAL_FILE | sed -E 's~.*\[(.{40})\].*~\1~')
     HUMANIZED_CANISTER_NAME=$(echo $PROPOSAL_TITLE | sed -E 's~Upgrade the (.+) Canister to .+~\1~')
     CANISTER_NAME=$(
         echo "$HUMANIZED_CANISTER_NAME" \
@@ -68,7 +68,7 @@ submit_nns_upgrade_proposal_mainnet() {
     echo
 
     echo "Upgrade Synopsis:"
-    echo "    Target Canister: $HUMANIZED_CANISTER_NAME (NNS)"
+    echo "    Target canister: $HUMANIZED_CANISTER_NAME (NNS)"
     echo "    Build Commit: $VERSION"
 
     if [ ! -z "$CANDID_ARGS_FILE" ]; then
@@ -104,7 +104,6 @@ submit_nns_upgrade_proposal_mainnet() {
         --wasm-module-path="$WASM_GZ"
 
         # Misc
-        --use-explicit-action-type true
         --wasm-module-sha256="$WASM_SHA"
         --proposer="$NEURON_ID"
     )

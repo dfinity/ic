@@ -33,18 +33,32 @@ function eval_command_with_retries() {
     local error_message="${2}"
     local result=""
     local attempt_count=0
+    local exit_code=1
 
-    while [ -z "${result}" ] && [ ${attempt_count} -lt 3 ]; do
+    while [ ${exit_code} -ne 0 ] && [ ${attempt_count} -lt 3 ]; do
         result=$(eval "${command}")
+        exit_code=$?
         ((attempt_count++))
 
-        if [ -z "${result}" ] && [ ${attempt_count} -lt 3 ]; then
+        if [ ${exit_code} -ne 0 ] && [ ${attempt_count} -lt 3 ]; then
             sleep 1
         fi
     done
 
-    if [ -z "${result}" ]; then
-        log_and_halt_installation_on_error "1" "${error_message}"
+    if [ ${exit_code} -ne 0 ]; then
+        local ip6_output=$(ip -6 addr show)
+        local ip6_route_output=$(ip -6 route show)
+        local dns_servers=$(grep 'nameserver' /etc/resolv.conf)
+
+        log_and_halt_installation_on_error "${exit_code}" "${error_message}
+Output of 'ip -6 addr show':
+${ip6_output}
+
+Output of 'ip -6 route show':
+${ip6_route_output}
+
+Configured DNS servers:
+${dns_servers}"
     fi
 
     echo "${result}"
@@ -64,7 +78,7 @@ function get_network_settings() {
 
     # Full IPv6 address
     ipv6_address_system_full=$(eval_command_with_retries \
-        "ip -6 addr show | awk '(/inet6/) && (!/fe80|::1/) { print \$2 }'" \
+        "ip -6 addr show | awk '(/inet6/) && (!/\sfe80|\s::1/) { print \$2 }'" \
         "Failed to get system's network configuration.")
 
     if [ -z "${ipv6_address_system_full}" ]; then
@@ -95,7 +109,7 @@ function print_network_settings() {
     echo "* Printing user defined network settings..."
     echo "  IPv6 Prefix : ${ipv6_prefix}"
     echo "  IPv6 Gateway: ${ipv6_gateway}"
-    if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} && -n ${domain} ]]; then
+    if [[ -v ipv4_address && -n ${ipv4_address} && -v ipv4_prefix_length && -n ${ipv4_prefix_length} && -v ipv4_gateway && -n ${ipv4_gateway} && -v domain && -n ${domain} ]]; then
         echo "  IPv4 Address: ${ipv4_address}"
         echo "  IPv4 Prefix Length: ${ipv4_prefix_length}"
         echo "  IPv4 Gateway: ${ipv4_gateway}"
@@ -203,19 +217,23 @@ function query_nns_nodes() {
 # Establish run order
 main() {
     log_start "$(basename $0)"
-    read_variables
-    get_network_settings
-    print_network_settings
+    if kernel_cmdline_bool_default_true ic.setupos.check_network; then
+        read_variables
+        get_network_settings
+        print_network_settings
 
-    if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
-        validate_domain_name
-        setup_ipv4_network
-        ping_ipv4_gateway
+        if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
+            validate_domain_name
+            setup_ipv4_network
+            ping_ipv4_gateway
+        fi
+
+        ping_ipv6_gateway
+        assemble_nns_nodes_list
+        query_nns_nodes
+    else
+        echo "* Network checks skipped by request via kernel command line"
     fi
-
-    ping_ipv6_gateway
-    assemble_nns_nodes_list
-    query_nns_nodes
     log_end "$(basename $0)"
 }
 
