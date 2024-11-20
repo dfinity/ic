@@ -1821,6 +1821,13 @@ impl ExecutionTestBuilder {
         }
     }
 
+    pub fn with_subnet_id(self, principal_id: PrincipalId) -> Self {
+        Self {
+            own_subnet_id: SubnetId::new(principal_id),
+            ..self
+        }
+    }
+
     pub fn with_max_query_call_graph_instructions(
         mut self,
         max_query_call_graph_instructions: NumInstructions,
@@ -2290,6 +2297,7 @@ impl ExecutionTestBuilder {
             Arc::clone(&cycles_account_manager),
             dirty_page_overhead,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+            Arc::new(FakeStateManager::new()),
         );
         let hypervisor = Arc::new(hypervisor);
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
@@ -2327,6 +2335,7 @@ impl ExecutionTestBuilder {
         let query_handler = InternalHttpQueryHandler::new(
             self.log.clone(),
             hypervisor,
+            self.own_subnet_id,
             self.subnet_type,
             config.clone(),
             &metrics_registry,

@@ -23,11 +23,13 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    EcdsaPreSignatureQuadruple, ExtendedDerivationPath, SchnorrPreSignatureTranscript,
-    ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
-    ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
+    EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript, ThresholdEcdsaCombinedSignature,
+    ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare, ThresholdSchnorrCombinedSignature,
+    ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
 };
-use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, KeyPurpose, Signed};
+use ic_types::crypto::{
+    AlgorithmId, BasicSig, BasicSigOf, ExtendedDerivationPath, KeyPurpose, Signed,
+};
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
 use rand::prelude::*;
@@ -2885,10 +2887,8 @@ pub mod ecdsa {
         CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
-    use ic_types::crypto::canister_threshold_sig::{
-        ExtendedDerivationPath, ThresholdEcdsaSigInputs,
-    };
-    use ic_types::crypto::AlgorithmId;
+    use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
+    use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
     use ic_types::PrincipalId;
     use ic_types::Randomness;
     use rand::distributions::uniform::SampleRange;
@@ -2941,10 +2941,8 @@ pub mod schnorr {
         CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
-    use ic_types::crypto::canister_threshold_sig::{
-        ExtendedDerivationPath, ThresholdSchnorrSigInputs,
-    };
-    use ic_types::crypto::AlgorithmId;
+    use ic_types::crypto::canister_threshold_sig::ThresholdSchnorrSigInputs;
+    use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
     use ic_types::PrincipalId;
     use ic_types::Randomness;
     use rand::distributions::uniform::SampleRange;

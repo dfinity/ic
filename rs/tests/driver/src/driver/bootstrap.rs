@@ -9,8 +9,8 @@ use crate::driver::{
     resource::AllocatedVm,
     test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
-        get_dependency_path, get_elasticsearch_hosts, get_ic_os_update_img_sha256,
-        get_ic_os_update_img_url, get_mainnet_ic_os_update_img_url,
+        get_dependency_path, get_dependency_path_from_env, get_elasticsearch_hosts,
+        get_ic_os_update_img_sha256, get_ic_os_update_img_url, get_mainnet_ic_os_update_img_url,
         get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
         read_dependency_from_env_to_string, read_dependency_to_string, HasIcDependencies,
         HasTopologySnapshot, IcNodeContainer, InitialReplicaVersion, NodesInfo,
@@ -629,13 +629,9 @@ fn configure_setupos_image(
     nns_url: &Url,
     nns_public_key: &str,
 ) -> anyhow::Result<PathBuf> {
-    let setupos_image = get_dependency_path("ic-os/setupos/envs/dev/disk-img.tar.zst");
-    let setupos_inject_configs = get_dependency_path(
-        "rs/ic_os/dev_test_tools/setupos-inject-configuration/setupos-inject-configuration",
-    );
-    let setupos_disable_checks = get_dependency_path(
-        "rs/ic_os/dev_test_tools/setupos-disable-checks/setupos-disable-checks",
-    );
+    let setupos_image = get_dependency_path_from_env("ENV_DEPS__DEV_SETUPOS_IMG_TAR_ZST");
+    let setupos_inject_configs = get_dependency_path_from_env("ENV_DEPS__SETUPOS_INJECT_CONFIGS");
+    let setupos_disable_checks = get_dependency_path_from_env("ENV_DEPS__SETUPOS_DISABLE_CHECKS");
 
     let nested_vm = env.get_nested_vm(name)?;
 

@@ -4,13 +4,11 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/pocket-ic:pocket-ic",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icp/ledger",
     "//rs/ledger_suite/icp/test_utils",
-    "//rs/ledger_suite/icrc1",
     "//rs/rosetta-api/common/rosetta_core:rosetta-core",
     "//rs/rosetta-api/icp:rosetta-api",
     "//rs/rosetta-api/icrc1:ic-icrc-rosetta",
@@ -20,9 +18,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:ic-agent",
     "@crate_index//:num-traits",
-    "@crate_index//:reqwest",
     "@crate_index//:serde",
-    "@crate_index//:serde_json",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:url",
