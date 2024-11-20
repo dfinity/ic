@@ -208,7 +208,7 @@ proptest! {
             assert_eq!(tip_block.get_block_hash(),hash);
         }
 
-        // We are only interested in the szenario when there are blocks to be fetched
+        // We are only interested in the scenario when there are blocks to be fetched
         if transfer_args.is_empty() {
             return Ok(());
         }
@@ -218,7 +218,7 @@ proptest! {
                 ledger_canister_id: icrc_ledger_canister_id,
             });
 
-            // If we fetch the certificate now we should get and empty certificate
+            // If we fetch the certificate now we should get an empty certificate
             let certificate = agent.get_certified_chain_tip().await.unwrap();
             assert!(certificate.is_none());
 
