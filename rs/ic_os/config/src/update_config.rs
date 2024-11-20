@@ -1,7 +1,6 @@
 use crate::serialize_and_write_config;
 use anyhow::{Context, Result};
 use mac_address::mac_address::FormattedMacAddress;
-use serde_json;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
@@ -24,9 +23,8 @@ pub fn update_guestos_config() -> Result<()> {
     let config_json_path = config_dir.join("config.json");
 
     let old_config_exists = network_conf_path.exists();
-    let new_config_exists = config_json_path.exists();
 
-    // Regenerate config.json on every boot in case the config structure changes between
+    // Regenerate config.json on *every boot* in case the config structure changes between
     // when we roll out the update-config service and when we roll out the 'config integration'
     if old_config_exists {
         // Read existing configuration files and generate new config.json
@@ -75,111 +73,10 @@ pub fn update_guestos_config() -> Result<()> {
             "New GuestOSConfig has been written to {}",
             config_json_path.display()
         );
-    } else if new_config_exists && !old_config_exists {
-        // Read config.json and generate old configuration files
-        let guestos_config = read_guestos_config(&config_json_path)?;
-
-        write_network_conf(
-            &guestos_config.network_settings,
-            &guestos_config.icos_settings.mgmt_mac,
-        )?;
-        write_filebeat_conf(&guestos_config.icos_settings.logging)?;
-        write_nns_conf(&guestos_config.icos_settings.nns_urls)?;
-
-        println!(
-            "Configuration files have been generated from {}",
-            config_json_path.display()
-        );
     } else {
         println!("No update-config action taken.");
     }
 
-    Ok(())
-}
-
-fn read_guestos_config(input_file: &Path) -> Result<GuestOSConfig> {
-    let content = fs::read_to_string(input_file)
-        .with_context(|| format!("Failed to read configuration file: {:?}", input_file))?;
-    let guestos_config: GuestOSConfig = serde_json::from_str(&content)
-        .with_context(|| format!("Failed to parse JSON from file: {:?}", input_file))?;
-    Ok(guestos_config)
-}
-
-fn write_network_conf(
-    network_settings: &NetworkSettings,
-    mgmt_mac: &FormattedMacAddress,
-) -> Result<()> {
-    let mut conf_lines = Vec::new();
-
-    match &network_settings.ipv6_config {
-        Ipv6Config::Fixed(config) => {
-            conf_lines.push(format!("ipv6_address={}", config.address));
-            conf_lines.push(format!("ipv6_gateway={}", config.gateway));
-        }
-        _ => {
-            println!("Unexpected IPv6 configuration; expected Fixed configuration.");
-        }
-    }
-
-    if let Some(ipv4_config) = &network_settings.ipv4_config {
-        conf_lines.push(format!(
-            "ipv4_address={}/{}",
-            ipv4_config.address, ipv4_config.prefix_length
-        ));
-        conf_lines.push(format!("ipv4_gateway={}", ipv4_config.gateway));
-    }
-
-    if let Some(domain_name) = &network_settings.domain_name {
-        conf_lines.push(format!("domain={}", domain_name));
-    }
-
-    // Generate hostname as "guest-{mgmt_mac without colons}"
-    let mgmt_mac_str = mgmt_mac.get().replace(":", "");
-    let hostname = format!("guest-{}", mgmt_mac_str);
-    conf_lines.push(format!("hostname={}", hostname));
-
-    let network_conf_path = Path::new(CONFIG_ROOT).join("network.conf");
-    write_conf_file(&network_conf_path, &conf_lines)?;
-
-    Ok(())
-}
-
-fn write_filebeat_conf(logging: &Logging) -> Result<()> {
-    let mut conf_lines = Vec::new();
-    conf_lines.push(format!(
-        "elasticsearch_hosts={}",
-        logging.elasticsearch_hosts
-    ));
-    if let Some(tags) = &logging.elasticsearch_tags {
-        conf_lines.push(format!("elasticsearch_tags={}", tags));
-    }
-
-    let filebeat_conf_path = Path::new(CONFIG_ROOT).join("filebeat.conf");
-    write_conf_file(&filebeat_conf_path, &conf_lines)?;
-
-    Ok(())
-}
-
-fn write_nns_conf(nns_urls: &[Url]) -> Result<()> {
-    let nns_url_str = nns_urls
-        .iter()
-        .map(|url| url.as_str())
-        .collect::<Vec<_>>()
-        .join(",");
-
-    let conf_lines = vec![format!("nns_url={}", nns_url_str)];
-
-    let nns_conf_path = Path::new(CONFIG_ROOT).join("nns.conf");
-    write_conf_file(&nns_conf_path, &conf_lines)?;
-
-    Ok(())
-}
-
-fn write_conf_file(conf_path: &Path, conf_lines: &[String]) -> Result<()> {
-    let content = conf_lines.join("\n") + "\n";
-    fs::write(conf_path, content)
-        .with_context(|| format!("Failed to write config file to {:?}", conf_path))?;
-    println!("Generated {:?}", conf_path);
     Ok(())
 }
 
@@ -383,7 +280,6 @@ fn log_directory_structure(path: &Path) -> Result<()> {
 
     Ok(())
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -430,25 +326,6 @@ mod tests {
         assert_eq!(conf_map.get("key1"), Some(&"value1".to_string()));
         assert_eq!(conf_map.get("key2"), Some(&"value2".to_string()));
         assert_eq!(conf_map.get("key3"), Some(&"value3".to_string()));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_write_conf_file() -> Result<()> {
-        let dir = tempdir()?;
-        let file_path = dir.path().join("test.conf");
-        let conf_lines = vec![
-            "key1=value1".to_string(),
-            "key2=value2".to_string(),
-            "key3=value3".to_string(),
-        ];
-
-        write_conf_file(&file_path, &conf_lines)?;
-
-        let content = fs::read_to_string(&file_path)?;
-        let expected_content = "key1=value1\nkey2=value2\nkey3=value3\n";
-        assert_eq!(content, expected_content);
 
         Ok(())
     }
@@ -565,3 +442,91 @@ mod tests {
         Ok(())
     }
 }
+
+// "DOWNGRADE" guestOS config logic
+//
+// fn read_guestos_config(input_file: &Path) -> Result<GuestOSConfig> {
+//     let content = fs::read_to_string(input_file)
+//         .with_context(|| format!("Failed to read configuration file: {:?}", input_file))?;
+//     let guestos_config: GuestOSConfig = serde_json::from_str(&content)
+//         .with_context(|| format!("Failed to parse JSON from file: {:?}", input_file))?;
+//     Ok(guestos_config)
+// }
+//
+// fn write_network_conf(
+//     network_settings: &NetworkSettings,
+//     mgmt_mac: &FormattedMacAddress,
+// ) -> Result<()> {
+//     let mut conf_lines = Vec::new();
+
+//     match &network_settings.ipv6_config {
+//         Ipv6Config::Fixed(config) => {
+//             conf_lines.push(format!("ipv6_address={}", config.address));
+//             conf_lines.push(format!("ipv6_gateway={}", config.gateway));
+//         }
+//         _ => {
+//             println!("Unexpected IPv6 configuration; expected Fixed configuration.");
+//         }
+//     }
+
+//     if let Some(ipv4_config) = &network_settings.ipv4_config {
+//         conf_lines.push(format!(
+//             "ipv4_address={}/{}",
+//             ipv4_config.address, ipv4_config.prefix_length
+//         ));
+//         conf_lines.push(format!("ipv4_gateway={}", ipv4_config.gateway));
+//     }
+
+//     if let Some(domain_name) = &network_settings.domain_name {
+//         conf_lines.push(format!("domain={}", domain_name));
+//     }
+
+//     // Generate hostname as "guest-{mgmt_mac without colons}"
+//     let mgmt_mac_str = mgmt_mac.get().replace(":", "");
+//     let hostname = format!("guest-{}", mgmt_mac_str);
+//     conf_lines.push(format!("hostname={}", hostname));
+
+//     let network_conf_path = Path::new(CONFIG_ROOT).join("network.conf");
+//     write_conf_file(&network_conf_path, &conf_lines)?;
+
+//     Ok(())
+// }
+
+// fn write_filebeat_conf(logging: &Logging) -> Result<()> {
+//     let mut conf_lines = Vec::new();
+//     conf_lines.push(format!(
+//         "elasticsearch_hosts={}",
+//         logging.elasticsearch_hosts
+//     ));
+//     if let Some(tags) = &logging.elasticsearch_tags {
+//         conf_lines.push(format!("elasticsearch_tags={}", tags));
+//     }
+
+//     let filebeat_conf_path = Path::new(CONFIG_ROOT).join("filebeat.conf");
+//     write_conf_file(&filebeat_conf_path, &conf_lines)?;
+
+//     Ok(())
+// }
+
+// fn write_nns_conf(nns_urls: &[Url]) -> Result<()> {
+//     let nns_url_str = nns_urls
+//         .iter()
+//         .map(|url| url.as_str())
+//         .collect::<Vec<_>>()
+//         .join(",");
+
+//     let conf_lines = vec![format!("nns_url={}", nns_url_str)];
+
+//     let nns_conf_path = Path::new(CONFIG_ROOT).join("nns.conf");
+//     write_conf_file(&nns_conf_path, &conf_lines)?;
+
+//     Ok(())
+// }
+
+// fn write_conf_file(conf_path: &Path, conf_lines: &[String]) -> Result<()> {
+//     let content = conf_lines.join("\n") + "\n";
+//     fs::write(conf_path, content)
+//         .with_context(|| format!("Failed to write config file to {:?}", conf_path))?;
+//     println!("Generated {:?}", conf_path);
+//     Ok(())
+// }
