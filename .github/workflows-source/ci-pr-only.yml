@@ -17,7 +17,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:ced9611af39119f62feedc8a5ad75a8fac478cb43d2d56b623023766f6ce8ca7
+    image: ghcr.io/dfinity/ic-build@sha256:1d775e6d161dee883d10f082ab7fdde3e3d26061e1209255fb6514f8b62b206b
   dind-small-setup: &dind-small-setup
     timeout-minutes: 30
     runs-on:
@@ -34,12 +34,6 @@ anchors:
       <<: *image
       options: >-
         -e NODE_NAME
-  before-script: &before-script
-    name: Before script
-    id: before-script
-    shell: bash
-    run: |
-      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -50,7 +44,6 @@ jobs:
     <<: *dind-large-setup
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
@@ -84,12 +77,17 @@ jobs:
     name: Lock Generate
     <<: *dind-small-setup
     steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-          token: ${{ secrets.IDX_PUSH_TO_PR }}
-      - <<: *before-script
+          token: ${{ steps.app-token.outputs.token }}
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
@@ -130,7 +128,6 @@ jobs:
       - <<: *checkout
         with:
           fetch-depth: 256
-      - <<: *before-script
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -148,3 +145,19 @@ jobs:
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
           cd ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
+
+  # CI job is also executed in Schedule Hourly
+  bazel-test-coverage:
+    name: Bazel Test Coverage
+    <<: *dind-large-setup
+    if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
+    steps:
+      - <<: *checkout
+      - name: Run Bazel Test Coverage
+        shell: bash
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+          ./ci/scripts/bazel-coverage.sh
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

@@ -1,4 +1,3 @@
-#![allow(clippy::disallowed_types)]
 use crate::{
     args::OrchestratorArgs,
     boundary_node::BoundaryNodeManager,
@@ -31,15 +30,12 @@ use std::{
     convert::TryFrom,
     net::SocketAddr,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
     thread,
     time::Duration,
 };
 use tokio::{
-    sync::{
-        watch::{self, Receiver, Sender},
-        RwLock,
-    },
+    sync::watch::{self, Receiver, Sender},
     task::JoinHandle,
 };
 
@@ -126,6 +122,8 @@ impl Orchestrator {
             .as_str(),
             1,
         );
+
+        UtilityCommand::notify_host("Please wait for a 'Join request successful!' message confirming a successful onboarding.", 3);
 
         let version = replica_version.clone();
         thread::spawn(move || loop {
@@ -377,7 +375,7 @@ impl Orchestrator {
                 .upgrade_loop(exit_signal, CHECK_INTERVAL_SECS, timeout, |r| async {
                     match r {
                         Ok(Ok(val)) => {
-                            *maybe_subnet_id.write().await = val;
+                            *maybe_subnet_id.write().unwrap() = val;
                             metrics.failed_consecutive_upgrade_checks.reset();
                         }
                         e => {
@@ -450,7 +448,8 @@ impl Orchestrator {
             log: ReplicaLogger,
         ) {
             while !*exit_signal.borrow() {
-                if let Some(subnet_id) = *maybe_subnet_id.read().await {
+                let maybe_subnet_id = *maybe_subnet_id.read().unwrap();
+                if let Some(subnet_id) = maybe_subnet_id {
                     registration
                         .check_all_keys_registered_otherwise_register(subnet_id)
                         .await;
@@ -474,11 +473,9 @@ impl Orchestrator {
         ) {
             while !*exit_signal.borrow() {
                 // Check if new SSH keys need to be deployed
-                ssh_access_manager
-                    .check_for_keyset_changes(*maybe_subnet_id.read().await)
-                    .await;
+                ssh_access_manager.check_for_keyset_changes(*maybe_subnet_id.read().unwrap());
                 // Check and update the firewall rules
-                firewall.check_and_update().await;
+                firewall.check_and_update();
                 // Check and update the network configuration
                 ipv4_configurator.check_and_update().await;
                 tokio::select! {

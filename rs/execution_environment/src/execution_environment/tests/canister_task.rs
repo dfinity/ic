@@ -7,13 +7,15 @@ use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::page_map::PAGE_SIZE;
 use ic_replicated_state::NumWasmPages;
-use ic_state_machine_tests::{Cycles, StateMachine};
+use ic_state_machine_tests::StateMachine;
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig, WasmResult};
 use ic_test_utilities_execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_types::messages::CanisterTask;
+use ic_types::Cycles;
 use ic_types::{CanisterId, NumBytes};
-use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::wasm;
+use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use maplit::btreemap;
 use std::time::{Duration, UNIX_EPOCH};
 
@@ -225,12 +227,10 @@ fn global_timer_can_be_cancelled() {
         .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
         .unwrap();
 
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
     // Setup global timer to increase a global counter
-    let now_nanos = env
-        .time_of_next_round()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos() as u64;
+    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
     let set_global_timer = wasm()
         .set_global_timer_method(wasm().inc_global_counter())
         .api_global_timer_set(now_nanos + 3) // set the deadline in three rounds from now
@@ -308,12 +308,10 @@ fn global_timer_is_one_off() {
         .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
         .unwrap();
 
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
     // Setup global timer to increase a global counter
-    let now_nanos = env
-        .time_of_next_round()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos() as u64;
+    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
     let set_global_timer = wasm()
         .set_global_timer_method(wasm().inc_global_counter())
         .api_global_timer_set(now_nanos + 2) // set the deadline in two rounds from now
@@ -576,7 +574,7 @@ fn global_timer_refunds_cycles_for_request_in_prep() {
     .unwrap();
 
     let canister_id = env
-        .install_canister_with_cycles(binary, vec![], None, Cycles::new(121_000_000_000))
+        .install_canister_with_cycles(binary, vec![], None, Cycles::new(301_000_000_000))
         .unwrap();
 
     let result = env.execute_ingress(canister_id, "test", vec![]).unwrap();
@@ -640,7 +638,7 @@ fn global_timer_set_returns_zero_in_canister_global_timer_method() {
     .unwrap();
 
     let canister_id = env
-        .install_canister_with_cycles(binary, vec![], None, Cycles::new(121_000_000_000))
+        .install_canister_with_cycles(binary, vec![], None, Cycles::new(301_000_000_000))
         .unwrap();
 
     let result = env

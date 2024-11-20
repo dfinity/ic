@@ -1,5 +1,6 @@
 use candid::{define_function, CandidType, Principal};
 use ic_cdk::api::call::RejectionCode;
+use ic_cdk::api::instruction_counter;
 use ic_cdk::api::management_canister::ecdsa::{
     ecdsa_public_key as ic_cdk_ecdsa_public_key, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
     EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, EcdsaPublicKeyResponse, SignWithEcdsaArgument,
@@ -276,6 +277,27 @@ async fn call_with_large_blob(canister: Principal, blob_len: usize) -> usize {
         .await
         .unwrap()
         .0
+}
+
+// executing many instructions
+
+#[update]
+async fn execute_many_instructions(n: u64) {
+    while instruction_counter() < n {}
+}
+
+// canister logs
+
+#[update]
+async fn canister_log(msg: String) {
+    ic_cdk::print(msg);
+}
+
+// time
+
+#[query]
+fn time() -> u64 {
+    ic_cdk::api::time()
 }
 
 fn main() {}

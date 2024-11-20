@@ -8,6 +8,7 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::WasmExecutionMode;
 use ic_embedders::{
     wasm_utils::{compile, decoding::decode_wasm},
     WasmtimeEmbedder,
@@ -153,7 +154,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
 /// actually charged). This function returns the amount needed to correct for
 /// that difference.
 pub fn universal_canister_compilation_cost_correction() -> NumInstructions {
-    let cost = wasm_compilation_cost(UNIVERSAL_CANISTER_WASM);
+    let cost = wasm_compilation_cost(&UNIVERSAL_CANISTER_WASM);
     cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost)
 }
 
@@ -189,6 +190,8 @@ pub struct ExecutionTest {
     message_id: u64,
     // The memory available in the subnet.
     subnet_available_memory: SubnetAvailableMemory,
+    // The pool of callbacks available on the subnet.
+    subnet_available_callbacks: i64,
     // The number of instructions executed so far per canister.
     executed_instructions: HashMap<CanisterId, NumInstructions>,
     // The total cost of execution so far per canister.
@@ -275,6 +278,18 @@ impl ExecutionTest {
             .execution_state
             .as_ref()
             .unwrap()
+    }
+
+    pub fn canister_wasm_execution_mode(&self, canister_id: CanisterId) -> WasmExecutionMode {
+        // In case of any error or missing state, default to Wasm32.
+        if let Some(state) = self.state.as_ref() {
+            if let Some(canister) = state.canister_state(&canister_id).as_ref() {
+                if let Some(execution_state) = canister.execution_state.as_ref() {
+                    return execution_state.is_wasm64.into();
+                }
+            }
+        }
+        WasmExecutionMode::Wasm32
     }
 
     pub fn xnet_messages(&self) -> &Vec<RequestOrResponse> {
@@ -419,13 +434,17 @@ impl ExecutionTest {
         self.cycles_account_manager()
             .convert_instructions_to_cycles(
                 cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost),
+                WasmExecutionMode::Wasm32, // In this case it does not matter if it is a Wasm64 or Wasm32 canister.
             )
     }
 
     pub fn install_code_reserved_execution_cycles(&self) -> Cycles {
         let num_instructions = self.install_code_instruction_limits.message();
-        self.cycles_account_manager
-            .execution_cost(num_instructions, self.subnet_size())
+        self.cycles_account_manager.execution_cost(
+            num_instructions,
+            self.subnet_size(),
+            WasmExecutionMode::Wasm32, // For this test, we can assume a Wasm32 execution.
+        )
     }
 
     pub fn subnet_available_memory(&self) -> SubnetAvailableMemory {
@@ -434,6 +453,14 @@ impl ExecutionTest {
 
     pub fn set_subnet_available_memory(&mut self, memory: SubnetAvailableMemory) {
         self.subnet_available_memory = memory
+    }
+
+    pub fn subnet_available_callbacks(&self) -> i64 {
+        self.subnet_available_callbacks
+    }
+
+    pub fn set_subnet_available_callbacks(&mut self, callbacks: i64) {
+        self.subnet_available_callbacks = callbacks
     }
 
     pub fn metrics_registry(&self) -> &MetricsRegistry {
@@ -453,7 +480,7 @@ impl ExecutionTest {
     }
 
     pub fn ingress_status(&self, message_id: &MessageId) -> IngressStatus {
-        self.state().get_ingress_status(message_id)
+        self.state().get_ingress_status(message_id).clone()
     }
 
     pub fn ingress_state(&self, message_id: &MessageId) -> IngressState {
@@ -1033,6 +1060,7 @@ impl ExecutionTest {
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used,
         };
         let instruction_limits = InstructionLimits::new(
@@ -1077,6 +1105,7 @@ impl ExecutionTest {
             self.subnet_size(),
         );
         self.subnet_available_memory = round_limits.subnet_available_memory;
+        self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         state.put_canister_state(result.canister);
         state.metadata.heap_delta_estimate += result.heap_delta;
         self.state = Some(state);
@@ -1151,6 +1180,7 @@ impl ExecutionTest {
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used,
         };
         let result = self.exec_env.execute_canister_response(
@@ -1175,6 +1205,7 @@ impl ExecutionTest {
             }
         };
         self.subnet_available_memory = round_limits.subnet_available_memory;
+        self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
 
         state.metadata.heap_delta_estimate += heap_delta;
         self.update_execution_stats(
@@ -1248,6 +1279,7 @@ impl ExecutionTest {
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used,
         };
 
@@ -1262,6 +1294,7 @@ impl ExecutionTest {
             &mut round_limits,
         );
         self.subnet_available_memory = round_limits.subnet_available_memory;
+        self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.state = Some(new_state);
         if let Some(canister_id) = maybe_canister_id {
             if let Some(instructions_used) = instructions_used {
@@ -1300,6 +1333,7 @@ impl ExecutionTest {
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used,
         };
         for canister_id in canister_ids {
@@ -1341,6 +1375,7 @@ impl ExecutionTest {
             canisters.insert(canister_id, canister);
         }
         self.subnet_available_memory = round_limits.subnet_available_memory;
+        self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         state.put_canister_states(canisters);
         self.state = Some(state);
         executed_any
@@ -1377,6 +1412,7 @@ impl ExecutionTest {
                 let mut round_limits = RoundLimits {
                     instructions: RoundInstructions::from(i64::MAX),
                     subnet_available_memory: self.subnet_available_memory,
+                    subnet_available_callbacks: self.subnet_available_callbacks,
                     compute_allocation_used,
                 };
                 let (new_state, instructions_used) = self.exec_env.resume_install_code(
@@ -1388,6 +1424,7 @@ impl ExecutionTest {
                 );
                 state = new_state;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
+                self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
                 if let Some(instructions_used) = instructions_used {
                     self.update_execution_stats(
                         canister_id,
@@ -1400,6 +1437,7 @@ impl ExecutionTest {
                 let mut round_limits = RoundLimits {
                     instructions: RoundInstructions::from(i64::MAX),
                     subnet_available_memory: self.subnet_available_memory,
+                    subnet_available_callbacks: self.subnet_available_callbacks,
                     compute_allocation_used,
                 };
                 let result = execute_canister(
@@ -1414,6 +1452,7 @@ impl ExecutionTest {
                 );
                 state.metadata.heap_delta_estimate += result.heap_delta;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
+                self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
                 if let Some(instructions_used) = result.instructions_used {
                     self.update_execution_stats(
                         canister_id,
@@ -1454,11 +1493,19 @@ impl ExecutionTest {
             .executed_instructions
             .entry(canister_id)
             .or_insert(NumInstructions::new(0)) += limit - left;
+
+        let is_wasm64_execution = self.canister_wasm_execution_mode(canister_id);
+
         // Ideally we would simply add `execution_cost(limit - left)`
         // but that leads to small precision errors because 1 Cycle = 0.4 Instructions.
-        let fixed_cost = mgr.execution_cost(NumInstructions::from(0), self.subnet_size());
-        let instruction_cost = mgr.execution_cost(limit, self.subnet_size())
-            - mgr.execution_cost(left, self.subnet_size());
+        let fixed_cost = mgr.execution_cost(
+            NumInstructions::from(0),
+            self.subnet_size(),
+            is_wasm64_execution,
+        );
+        let instruction_cost = mgr.execution_cost(limit, self.subnet_size(), is_wasm64_execution)
+            - mgr.execution_cost(left, self.subnet_size(), is_wasm64_execution);
+
         *self
             .execution_cost
             .entry(canister_id)
@@ -1619,8 +1666,12 @@ impl ExecutionTest {
                     .unwrap();
             }
             let factory = Arc::clone(&fd_factory);
-            es.wasm_memory.page_map =
-                PageMap::open(&base_only_storage_layout(path), Height::new(0), factory).unwrap();
+            es.wasm_memory.page_map = PageMap::open(
+                Box::new(base_only_storage_layout(path)),
+                Height::new(0),
+                factory,
+            )
+            .unwrap();
             *es.wasm_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
             new_checkpoint_files.push(checkpoint_file);
 
@@ -1639,8 +1690,12 @@ impl ExecutionTest {
                     .unwrap();
             }
             let factory = Arc::clone(&fd_factory);
-            es.stable_memory.page_map =
-                PageMap::open(&base_only_storage_layout(path), Height::new(0), factory).unwrap();
+            es.stable_memory.page_map = PageMap::open(
+                Box::new(base_only_storage_layout(path)),
+                Height::new(0),
+                factory,
+            )
+            .unwrap();
             *es.stable_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
             new_checkpoint_files.push(checkpoint_file);
         }
@@ -1766,6 +1821,13 @@ impl ExecutionTestBuilder {
         }
     }
 
+    pub fn with_subnet_id(self, principal_id: PrincipalId) -> Self {
+        Self {
+            own_subnet_id: SubnetId::new(principal_id),
+            ..self
+        }
+    }
+
     pub fn with_max_query_call_graph_instructions(
         mut self,
         max_query_call_graph_instructions: NumInstructions,
@@ -1875,6 +1937,11 @@ impl ExecutionTestBuilder {
         self.execution_config
             .subnet_wasm_custom_sections_memory_capacity =
             NumBytes::from(subnet_wasm_custom_sections_memory as u64);
+        self
+    }
+
+    pub fn with_canister_callback_quota(mut self, canister_callback_quota: usize) -> Self {
+        self.execution_config.canister_guaranteed_callback_quota = canister_callback_quota;
         self
     }
 
@@ -2052,11 +2119,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_snapshots(mut self, status: FlagStatus) -> Self {
-        self.execution_config.canister_snapshots = status;
-        self
-    }
-
     pub fn with_best_effort_responses(mut self, status: FlagStatus) -> Self {
         self.execution_config
             .embedders_config
@@ -2195,6 +2257,13 @@ impl ExecutionTestBuilder {
                         public_key: b"cdcdcdcd".to_vec(),
                     },
                 ),
+                MasterPublicKeyId::VetKd(_) => (
+                    key_id,
+                    MasterPublicKey {
+                        algorithm_id: AlgorithmId::ThresBls12_381,
+                        public_key: b"efefefef".to_vec(),
+                    },
+                ),
             })
             .collect();
 
@@ -2228,6 +2297,7 @@ impl ExecutionTestBuilder {
             Arc::clone(&cycles_account_manager),
             dirty_page_overhead,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+            Arc::new(FakeStateManager::new()),
         );
         let hypervisor = Arc::new(hypervisor);
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
@@ -2265,6 +2335,7 @@ impl ExecutionTestBuilder {
         let query_handler = InternalHttpQueryHandler::new(
             self.log.clone(),
             hypervisor,
+            self.own_subnet_id,
             self.subnet_type,
             config.clone(),
             &metrics_registry,
@@ -2287,6 +2358,7 @@ impl ExecutionTestBuilder {
                     .subnet_wasm_custom_sections_memory_capacity
                     .get() as i64,
             ),
+            subnet_available_callbacks: self.execution_config.subnet_callback_soft_limit as i64,
             time: self.time,
             dirty_heap_page_overhead,
             instruction_limits: InstructionLimits::new(

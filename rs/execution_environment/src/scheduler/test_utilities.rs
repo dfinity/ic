@@ -68,7 +68,7 @@ use crate::{
     as_round_instructions, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl, RoundLimits,
 };
 
-use super::SchedulerImpl;
+use super::{RoundSchedule, SchedulerImpl};
 use crate::metrics::MeasurementScope;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_types::time::UNIX_EPOCH;
@@ -199,9 +199,12 @@ impl SchedulerTest {
     }
 
     pub fn execution_cost(&self, num_instructions: NumInstructions) -> Cycles {
-        self.scheduler
-            .cycles_account_manager
-            .execution_cost(num_instructions, self.subnet_size())
+        use ic_cycles_account_manager::WasmExecutionMode;
+        self.scheduler.cycles_account_manager.execution_cost(
+            num_instructions,
+            self.subnet_size(),
+            WasmExecutionMode::Wasm32,
+        )
     }
 
     /// Creates a canister with the given balance and allocations.
@@ -309,7 +312,11 @@ impl SchedulerTest {
     }
 
     pub fn ingress_status(&self, message_id: &MessageId) -> IngressStatus {
-        self.state.as_ref().unwrap().get_ingress_status(message_id)
+        self.state
+            .as_ref()
+            .unwrap()
+            .get_ingress_status(message_id)
+            .clone()
     }
 
     pub fn ingress_error(&self, message_id: &MessageId) -> UserError {
@@ -553,6 +560,7 @@ impl SchedulerTest {
                 self.scheduler.config.max_instructions_per_round / 16,
             ),
             subnet_available_memory: self.scheduler.exec_env.subnet_available_memory(&state),
+            subnet_available_callbacks: self.scheduler.exec_env.subnet_available_callbacks(&state),
             compute_allocation_used,
         };
         let measurements = MeasurementScope::root(&self.scheduler.metrics.round_subnet_queue);
@@ -653,6 +661,8 @@ pub(crate) struct SchedulerTestBuilder {
     scheduler_config: SchedulerConfig,
     initial_canister_cycles: Cycles,
     subnet_message_memory: u64,
+    subnet_callback_soft_limit: usize,
+    canister_guaranteed_callback_quota: usize,
     registry_settings: RegistryExecutionSettings,
     allocatable_compute_capacity_in_percent: usize,
     rate_limiting_of_instructions: bool,
@@ -662,7 +672,6 @@ pub(crate) struct SchedulerTestBuilder {
     idkg_keys: Vec<MasterPublicKeyId>,
     metrics_registry: MetricsRegistry,
     round_summary: Option<ExecutionRoundSummary>,
-    canister_snapshot_flag: bool,
     replica_version: ReplicaVersion,
 }
 
@@ -679,6 +688,8 @@ impl Default for SchedulerTestBuilder {
             scheduler_config,
             initial_canister_cycles: Cycles::new(1_000_000_000_000_000_000),
             subnet_message_memory: config.subnet_message_memory_capacity.get(),
+            subnet_callback_soft_limit: config.subnet_callback_soft_limit,
+            canister_guaranteed_callback_quota: config.canister_guaranteed_callback_quota,
             registry_settings: test_registry_settings(),
             allocatable_compute_capacity_in_percent: 100,
             rate_limiting_of_instructions: false,
@@ -688,7 +699,6 @@ impl Default for SchedulerTestBuilder {
             idkg_keys: vec![],
             metrics_registry: MetricsRegistry::new(),
             round_summary: None,
-            canister_snapshot_flag: true,
             replica_version: ReplicaVersion::default(),
         }
     }
@@ -711,6 +721,23 @@ impl SchedulerTestBuilder {
     pub fn with_subnet_message_memory(self, subnet_message_memory: u64) -> Self {
         Self {
             subnet_message_memory,
+            ..self
+        }
+    }
+
+    pub fn with_subnet_callback_soft_limit(self, subnet_callback_soft_limit: usize) -> Self {
+        Self {
+            subnet_callback_soft_limit,
+            ..self
+        }
+    }
+
+    pub fn with_canister_guaranteed_callback_quota(
+        self,
+        canister_guaranteed_callback_quota: usize,
+    ) -> Self {
+        Self {
+            canister_guaranteed_callback_quota,
             ..self
         }
     }
@@ -755,13 +782,6 @@ impl SchedulerTestBuilder {
     pub fn with_round_summary(self, round_summary: ExecutionRoundSummary) -> Self {
         Self {
             round_summary: Some(round_summary),
-            ..self
-        }
-    }
-
-    pub fn with_canister_snapshots(self, canister_snapshot_flag: bool) -> Self {
-        Self {
-            canister_snapshot_flag,
             ..self
         }
     }
@@ -855,18 +875,14 @@ impl SchedulerTestBuilder {
         } else {
             FlagStatus::Disabled
         };
-        let canister_snapshots = if self.canister_snapshot_flag {
-            FlagStatus::Enabled
-        } else {
-            FlagStatus::Disabled
-        };
         let config = ic_config::execution_environment::Config {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory),
+            subnet_callback_soft_limit: self.subnet_callback_soft_limit,
+            canister_guaranteed_callback_quota: self.canister_guaranteed_callback_quota,
             rate_limiting_of_instructions,
             rate_limiting_of_heap_delta,
             deterministic_time_slicing,
-            canister_snapshots,
             ..ic_config::execution_environment::Config::default()
         };
         let wasm_executor = Arc::new(TestWasmExecutor::new(
@@ -883,6 +899,7 @@ impl SchedulerTestBuilder {
             deterministic_time_slicing,
             config.embedders_config.cost_to_compile_wasm_instruction,
             SchedulerConfig::application_subnet().dirty_page_overhead,
+            self.canister_guaranteed_callback_quota,
         );
         let hypervisor = Arc::new(hypervisor);
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
@@ -904,7 +921,7 @@ impl SchedulerTestBuilder {
             &self.metrics_registry,
             self.own_subnet_id,
             self.subnet_type,
-            SchedulerImpl::compute_capacity_percent(self.scheduler_config.scheduler_cores),
+            RoundSchedule::compute_capacity_percent(self.scheduler_config.scheduler_cores),
             config,
             Arc::clone(&cycles_account_manager),
             self.scheduler_config.scheduler_cores,
@@ -1301,7 +1318,10 @@ impl TestWasmExecutorCore {
         let closure = WasmClosure::new(0, response_message_id.into());
         let prepayment_for_response_execution = self
             .cycles_account_manager
-            .prepayment_for_response_execution(self.subnet_size);
+            .prepayment_for_response_execution(
+                self.subnet_size,
+                system_state.is_wasm64_execution.into(),
+            );
         let prepayment_for_response_transmission = self
             .cycles_account_manager
             .prepayment_for_response_transmission(self.subnet_size);

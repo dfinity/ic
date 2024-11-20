@@ -59,9 +59,9 @@ use tokio_util::{sync::CancellationToken, time::DelayQueue};
 use crate::{
     connection_handle::ConnectionHandle,
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
-    ConnId, Shutdown, SubnetTopology,
+    Shutdown, SubnetTopology,
 };
-use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
+use crate::{metrics::QuicTransportMetrics, request_handler::start_stream_acceptor};
 
 /// The value of 25MB is chosen from experiments and the BDP product shown below to support
 /// around 2Gb/s.
@@ -115,7 +115,6 @@ struct ConnectionManager {
     // Shared state
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
-    conn_id_counter: ConnId,
 
     // Local state.
     /// Task joinmap that holds stores a connecting tasks keys by peer id.
@@ -255,7 +254,6 @@ pub(crate) fn start_connection_manager(
         topology,
         connect_queue: DelayQueue::new(),
         peer_map,
-        conn_id_counter: ConnId::default(),
         watcher,
         endpoint,
         transport_config,
@@ -387,7 +385,7 @@ impl ConnectionManager {
                 self.endpoint.set_server_config(Some(server_config));
             }
             Err(e) => {
-                error!(self.log, "Failed to get certificate from crypto {}", e)
+                error!(self.log, "Failed to get certificate from crypto {:?}", e)
             }
         }
 
@@ -419,7 +417,7 @@ impl ConnectionManager {
             if should_close_connection {
                 self.metrics.peers_removed_total.inc();
                 conn_handle
-                    .connection
+                    .conn()
                     .close(VarInt::from_u32(0), b"node not part of subnet anymore");
                 false
             } else {
@@ -451,7 +449,7 @@ impl ConnectionManager {
             return;
         }
 
-        info!(self.log, "Connecting to node {}", peer_id);
+        info!(self.log, "Connecting to node {:?}", peer_id);
         self.metrics.outbound_connection_total.inc();
         let addr = self
             .topology
@@ -520,21 +518,16 @@ impl ConnectionManager {
                 // This should be done while holding a write lock to the peer map
                 // such that the next read call sees the new id.
 
-                self.conn_id_counter.inc_assign();
-                let conn_id = self.conn_id_counter;
-
-                let connection_handle =
-                    ConnectionHandle::new(peer_id, connection, self.metrics.clone(), conn_id);
-                let req_handler_connection_handle = connection_handle.clone();
+                let connection_handle = ConnectionHandle::new(connection, self.metrics.clone());
 
                 // dropping the old connection will result in closing it
-                if let Some(old_conn) = peer_map_mut.insert(peer_id, connection_handle) {
+                if let Some(old_conn) = peer_map_mut.insert(peer_id, connection_handle.clone()) {
                     old_conn
-                        .connection
+                        .conn()
                         .close(VarInt::from_u32(0), b"using newer connection");
                     info!(
                         self.log,
-                        "Replacing old connection to {} with newer", peer_id
+                        "Replacing old connection to {:?} with newer", peer_id
                     );
                 } else {
                     self.metrics.peer_map_size.inc();
@@ -546,11 +539,10 @@ impl ConnectionManager {
                 );
                 self.active_connections.spawn_on(
                     peer_id,
-                    run_stream_acceptor(
+                    start_stream_acceptor(
                         self.log.clone(),
-                        req_handler_connection_handle.peer_id,
-                        req_handler_connection_handle.conn_id(),
-                        req_handler_connection_handle.connection,
+                        peer_id,
+                        connection_handle,
                         self.metrics.clone(),
                         self.router.clone(),
                     ),
@@ -566,7 +558,7 @@ impl ConnectionManager {
                 if let Some(peer_id) = peer_id {
                     self.connect_queue.insert(peer_id, CONNECT_RETRY_BACKOFF);
                 }
-                info!(self.log, "Failed to connect {}", err);
+                info!(self.log, "Failed to connect {:?}", err);
             }
         };
     }
@@ -651,7 +643,7 @@ impl ConnectionManager {
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
                 if data != GRUEZI_HANDSHAKE.as_bytes() {
                     return Err(ConnectionEstablishError::Gruezi(format!(
-                        "Handshake failed unexpected response: {}",
+                        "Handshake failed unexpected response: {:?}",
                         String::from_utf8_lossy(&data)
                     )));
                 }
@@ -667,7 +659,7 @@ impl ConnectionManager {
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
                 if data != GRUEZI_HANDSHAKE.as_bytes() {
                     return Err(ConnectionEstablishError::Gruezi(format!(
-                        "Handshake failed unexpected response: {}",
+                        "Handshake failed unexpected response: {:?}",
                         String::from_utf8_lossy(&data)
                     )));
                 }

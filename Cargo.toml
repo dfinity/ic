@@ -27,10 +27,15 @@ members = [
     "rs/bitcoin/replica_types",
     "rs/bitcoin/validation",
     "rs/boundary_node/canary_proxy",
+    "rs/boundary_node/anonymization/backend",
+    "rs/boundary_node/anonymization/client",
     "rs/boundary_node/certificate_issuance/certificate_issuer",
     "rs/boundary_node/certificate_issuance/certificate_orchestrator",
     "rs/boundary_node/discower_bowndary",
     "rs/boundary_node/ic_boundary",
+    "rs/boundary_node/rate_limits",
+    "rs/boundary_node/rate_limits/api",
+    "rs/boundary_node/rate_limits/canister_client",
     "rs/boundary_node/systemd_journal_gatewayd_shim",
     "rs/canister_client",
     "rs/canister_client/sender",
@@ -154,6 +159,7 @@ members = [
     "rs/interfaces/state_manager",
     "rs/interfaces/state_manager/mocks",
     "rs/limits",
+    "rs/ic_os/linux_kernel_command_line",
     "rs/memory_tracker",
     "rs/messaging",
     "rs/monitoring/adapter_metrics/client",
@@ -178,6 +184,7 @@ members = [
     "rs/nervous_system/instruction_stats_update_attribute",
     "rs/nervous_system/integration_tests",
     "rs/nervous_system/lock",
+    "rs/nervous_system/linear_map",
     "rs/nervous_system/neurons_fund",
     "rs/nervous_system/neurons_fund/nfplot",
     "rs/nervous_system/proto",
@@ -238,6 +245,7 @@ members = [
     "rs/registry/canister/api",
     "rs/registry/canister/protobuf_generator",
     "rs/registry/client",
+    "rs/registry/canister-client",
     "rs/registry/fake",
     "rs/registry/helpers",
     "rs/registry/local_registry",
@@ -308,6 +316,7 @@ members = [
     "rs/rust_canisters/downstream_calls_test",
     "rs/rust_canisters/ecdsa",
     "rs/rust_canisters/http_types",
+    "rs/rust_canisters/load_simulator",
     "rs/rust_canisters/memory_test",
     "rs/rust_canisters/on_wire",
     "rs/rust_canisters/pmap",
@@ -385,7 +394,9 @@ members = [
     "rs/tests/nested",
     "rs/tests/nns",
     "rs/tests/nns/sns",
+    "rs/tests/nns/sns/lib",
     "rs/tests/nns/ic_mainnet_nns_recovery",
+    "rs/tests/nns/cycles_minting",
     "rs/tests/nns/nns_dapp",
     "rs/tests/node",
     "rs/tests/research",
@@ -529,8 +540,8 @@ ed25519-dalek = { version = "2.1.1", features = [
 ] }
 ethnum = { version = "1.3.2", features = ["serde"] }
 flate2 = "1.0.31"
-futures = "0.3.30"
-futures-util = "0.3.30"
+futures = "0.3.31"
+futures-util = "0.3.31"
 hex = { version = "0.4.3", features = ["serde"] }
 http = "1.1.0"
 http-body = "1.0.1"
@@ -598,11 +609,12 @@ mockall = "0.13.0"
 mockito = "1.2.0"
 nftables = "0.4"
 nix = "0.24.3"
+num_cpus = "1.16.0"
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
-opentelemetry = { version = "0.26.0", features = ["metrics", "trace"] }
-opentelemetry-otlp = { version = "0.26.0", features = ["grpc-tonic"] }
-opentelemetry_sdk = { version = "0.26.0", features = ["trace", "rt-tokio"] }
+opentelemetry = { version = "0.27.0", features = ["metrics", "trace"] }
+opentelemetry-otlp = { version = "0.27.0", features = ["grpc-tonic"] }
+opentelemetry_sdk = { version = "0.27.0", features = ["trace", "rt-tokio"] }
 p256 = { version = "0.13.2", default-features = false, features = [
     "arithmetic",
     "ecdsa",
@@ -656,7 +668,7 @@ rolling-file = "0.2.0"
 rsa = { version = "0.9.6", features = ["sha2"] }
 rstest = "0.19.0"
 rustc-demangle = { version = "0.1.16" }
-rustls = { version = "0.23.15", default-features = false, features = [
+rustls = { version = "0.23.16", default-features = false, features = [
     "ring",
     "std",
     "brotli",
@@ -685,13 +697,12 @@ strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
 subtle = "2.6.1"
 syn = { version = "1.0.109", features = ["fold", "full"] }
-sync_wrapper = "1.0.1"
 tar = "0.4.39"
 tempfile = "3.12.0"
 thiserror = "1.0.62"
 threadpool = "1.8.1"
 time = { version = "0.3.36", features = ["formatting"] }
-tokio = { version = "1.40.0", features = ["full"] }
+tokio = { version = "1.41.1", features = ["full"] }
 tokio-metrics = "0.3.1"
 tokio-rustls = { version = "0.26.0", default-features = false, features = [
     "ring",
@@ -700,8 +711,8 @@ tokio-test = "0.4.4"
 tokio-util = { version = "0.7.12", features = ["full"] }
 tonic = "0.12.3"
 tonic-build = "0.12.3"
-tower = { version = "0.4.13", features = ["full"] }
-tower-http = { version = "0.5.2", features = [
+tower = { version = "0.5.1", features = ["full"] }
+tower-http = { version = "0.6.1", features = [
     "cors",
     "limit",
     "trace",
@@ -712,15 +723,15 @@ tower-http = { version = "0.5.2", features = [
 ] }
 tracing = "0.1.40"
 tracing-appender = "0.2.3"
-tracing-opentelemetry = "0.27.0"
+tracing-opentelemetry = "0.28.0"
 tracing-subscriber = { version = "0.3.18", features = [
     "env-filter",
     "fmt",
     "json",
 ] }
-turmoil = "0.6.3"
-url = { version = "2.5.2", features = ["serde"] }
-uuid = { version = "1.10.0", features = ["v4", "serde"] }
+turmoil = "0.6.4"
+url = { version = "2.5.3", features = ["serde"] }
+uuid = { version = "1.11.0", features = ["v4", "serde"] }
 walkdir = "2.3.3"
 walrus = "0.21.1"
 wasm-encoder = { version = "0.217.0", features = ["wasmparser"] }
@@ -728,6 +739,7 @@ wasmparser = "0.217.0"
 wasmprinter = "0.217.0"
 wast = "212.0.0"
 wat = "1.212.0"
+which = "6.0.3"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }

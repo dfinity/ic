@@ -3,8 +3,7 @@
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
 use crate::pocket_ic::{
-    AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, GetCanisterHttp, MockCanisterHttp,
-    PocketIc,
+    AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, PocketIc, ProcessCanisterHttpInternal,
 };
 use crate::state_api::canister_id::{self, DomainResolver, ResolvesDomain};
 use crate::state_api::routes::verify_cbor_content_header;
@@ -34,27 +33,22 @@ use hyper::{Request, Response as HyperResponse};
 use hyper_util::client::legacy::{connect::HttpConnector, Client};
 use ic_http_endpoints_public::cors_layer;
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
-use ic_https_outcalls_adapter::CanisterHttp;
-use ic_https_outcalls_adapter_client::grpc_status_code_to_reject;
-use ic_https_outcalls_service::{
-    https_outcalls_service_server::HttpsOutcallsService, HttpHeader, HttpMethod,
-    HttpsOutcallRequest, HttpsOutcallResponse,
-};
-use ic_state_machine_tests::RejectCode;
-use ic_types::{
-    canister_http::{CanisterHttpRequestId, MAX_CANISTER_HTTP_RESPONSE_BYTES},
-    CanisterId, PrincipalId, SubnetId,
-};
+use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, PrincipalId, SubnetId};
+use itertools::Itertools;
 use pocket_ic::common::rest::{
-    CanisterHttpHeader, CanisterHttpMethod, CanisterHttpReject, CanisterHttpReply,
-    CanisterHttpRequest, CanisterHttpResponse, HttpGatewayBackend, HttpGatewayConfig,
-    HttpGatewayDetails, HttpGatewayInfo, MockCanisterHttpResponse, Topology,
+    CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
+    HttpGatewayInfo, Topology,
 };
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::atomic::AtomicU64, sync::Arc,
-    time::Duration,
+    collections::HashMap,
+    fmt,
+    path::PathBuf,
+    str::FromStr,
+    sync::atomic::AtomicU64,
+    sync::Arc,
+    time::{Duration, SystemTime},
 };
 use tokio::{
     sync::mpsc::error::TryRecvError,
@@ -63,7 +57,6 @@ use tokio::{
     task::{spawn, spawn_blocking, JoinHandle, JoinSet},
     time::{self, sleep, Instant},
 };
-use tonic::Request as TonicRequest;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, trace};
 
@@ -133,6 +126,26 @@ struct Instance {
     state: InstanceState,
 }
 
+struct HttpGateway {
+    details: HttpGatewayDetails,
+    shutdown_handle: Handle,
+}
+
+impl HttpGateway {
+    fn new(details: HttpGatewayDetails, shutdown_handle: Handle) -> Self {
+        Self {
+            details,
+            shutdown_handle,
+        }
+    }
+}
+
+impl Drop for HttpGateway {
+    fn drop(&mut self) {
+        self.shutdown_handle.shutdown();
+    }
+}
+
 /// The state of the PocketIC API.
 pub struct ApiState {
     // impl note: If locks are acquired on both fields, acquire first on `instances` and then on `graph`.
@@ -143,7 +156,7 @@ pub struct ApiState {
     // PocketIC server port
     port: Option<u16>,
     // HTTP gateway infos (`None` = stopped)
-    http_gateways: Arc<RwLock<Vec<Option<HttpGatewayDetails>>>>,
+    http_gateways: Arc<RwLock<Vec<Option<HttpGateway>>>>,
 }
 
 #[derive(Default)]
@@ -219,6 +232,7 @@ pub enum OpOut {
     Time(u64),
     CanisterResult(Result<WasmResult, UserError>),
     CanisterId(CanisterId),
+    Controllers(Vec<PrincipalId>),
     Cycles(u128),
     Bytes(Vec<u8>),
     StableMemBytes(Vec<u8>),
@@ -233,11 +247,14 @@ pub enum OpOut {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum PocketIcError {
     CanisterNotFound(CanisterId),
+    CanisterIsEmpty(CanisterId),
     BadIngressMessage(String),
     SubnetNotFound(candid::Principal),
     RequestRoutingError(String),
     InvalidCanisterHttpRequestId((SubnetId, CanisterHttpRequestId)),
     InvalidMockCanisterHttpResponses((usize, usize)),
+    InvalidRejectCode(u64),
+    SettingTimeIntoPast((u64, u64)),
 }
 
 impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>> for OpOut {
@@ -258,22 +275,6 @@ impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::Use
     }
 }
 
-// TODO: Remove this Into: It's only used in the InstallCanisterAsController Operation, which also should be removed.
-impl From<Result<(), ic_state_machine_tests::UserError>> for OpOut {
-    fn from(r: Result<(), ic_state_machine_tests::UserError>) -> Self {
-        let res = {
-            match r {
-                Ok(_) => Ok(WasmResult::Reply(vec![])),
-                Err(user_err) => Err(UserError {
-                    code: ErrorCode::try_from(user_err.code() as u64).unwrap(),
-                    description: user_err.description().to_string(),
-                }),
-            }
-        };
-        OpOut::CanisterResult(res)
-    }
-}
-
 impl std::fmt::Debug for OpOut {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -281,11 +282,19 @@ impl std::fmt::Debug for OpOut {
             OpOut::Time(x) => write!(f, "Time({})", x),
             OpOut::Topology(t) => write!(f, "Topology({:?})", t),
             OpOut::CanisterId(cid) => write!(f, "CanisterId({})", cid),
+            OpOut::Controllers(controllers) => write!(
+                f,
+                "Controllers({})",
+                controllers.iter().map(|c| c.to_string()).join(",")
+            ),
             OpOut::Cycles(x) => write!(f, "Cycles({})", x),
             OpOut::CanisterResult(Ok(x)) => write!(f, "CanisterResult: Ok({:?})", x),
             OpOut::CanisterResult(Err(x)) => write!(f, "CanisterResult: Err({})", x),
             OpOut::Error(PocketIcError::CanisterNotFound(cid)) => {
                 write!(f, "CanisterNotFound({})", cid)
+            }
+            OpOut::Error(PocketIcError::CanisterIsEmpty(cid)) => {
+                write!(f, "CanisterIsEmpty({})", cid)
             }
             OpOut::Error(PocketIcError::BadIngressMessage(msg)) => {
                 write!(f, "BadIngressMessage({})", msg)
@@ -312,6 +321,12 @@ impl std::fmt::Debug for OpOut {
                     "InvalidMockCanisterHttpResponses(actual={},expected={})",
                     actual, expected
                 )
+            }
+            OpOut::Error(PocketIcError::InvalidRejectCode(code)) => {
+                write!(f, "InvalidRejectCode({})", code)
+            }
+            OpOut::Error(PocketIcError::SettingTimeIntoPast((current, set))) => {
+                write!(f, "SettingTimeIntoPast(current={},set={})", current, set)
             }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
@@ -915,14 +930,27 @@ impl ApiState {
             handler_api_subnet(ApiVersion::V2, replica_url, subnet_id, "read_state", bytes).await
         }
 
+        let https_config = if let Some(ref https_config) = http_gateway_config.https_config {
+            Some(
+                RustlsConfig::from_pem_file(
+                    PathBuf::from(https_config.cert_path.clone()),
+                    PathBuf::from(https_config.key_path.clone()),
+                )
+                .await
+                .map_err(|e| format!("TLS config could not be created: {}", e))?,
+            )
+        } else {
+            None
+        };
+
         let ip_addr = http_gateway_config
             .ip_addr
+            .clone()
             .unwrap_or("127.0.0.1".to_string());
         let port = http_gateway_config.port.unwrap_or_default();
         let addr = format!("{}:{}", ip_addr, port);
         let listener = std::net::TcpListener::bind(&addr)
-            .unwrap_or_else(|_| panic!("Failed to start HTTP gateway on port {}", port));
-        let real_port = listener.local_addr().unwrap().port();
+            .map_err(|e| format!("Failed to bind to address {}: {}", addr, e))?;
 
         let pocket_ic_server_port = self.port.unwrap();
         let replica_url = match http_gateway_config.forward_to {
@@ -942,22 +970,15 @@ impl ApiState {
 
         let replica_url = replica_url.trim_end_matches('/').to_string();
 
-        let mut http_gateways = self.http_gateways.write().await;
-        let instance_id = http_gateways.len();
-        let http_gateway_details = HttpGatewayDetails {
-            instance_id,
-            port: real_port,
-            forward_to: http_gateway_config.forward_to.clone(),
-            domains: http_gateway_config.domains.clone(),
-            https_config: http_gateway_config.https_config.clone(),
-        };
-        http_gateways.push(Some(http_gateway_details));
-        drop(http_gateways);
-
-        let http_gateways = self.http_gateways.clone();
         let handle = Handle::new();
-        let shutdown_handle = handle.clone();
         let axum_handle = handle.clone();
+        let domains = http_gateway_config
+            .domains
+            .clone()
+            .unwrap_or(vec!["localhost".to_string()])
+            .iter()
+            .map(|d| fqdn!(d))
+            .collect();
         spawn(async move {
             let http_gateway_client = ic_http_gateway::HttpGatewayClientBuilder::new()
                 .with_agent(agent)
@@ -965,14 +986,7 @@ impl ApiState {
                 .unwrap();
             let backend_client =
                 Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
-            let domain_resolver = DomainResolver::new(
-                http_gateway_config
-                    .domains
-                    .unwrap_or(vec!["localhost".to_string()])
-                    .iter()
-                    .map(|d| fqdn!(d))
-                    .collect(),
-            );
+            let domain_resolver = DomainResolver::new(domains);
             let state_handler = Arc::new(HandlerState::new(
                 http_gateway_client,
                 backend_client,
@@ -1032,52 +1046,47 @@ impl ApiState {
                 .with_state(replica_url)
                 .into_make_service();
 
-            let http_gateways_for_shutdown = http_gateways.clone();
-            tokio::spawn(async move {
-                loop {
-                    let guard = http_gateways_for_shutdown.read().await;
-                    if guard[instance_id].is_none() {
-                        shutdown_handle.shutdown();
-                        break;
-                    }
-                    drop(guard);
-                    tokio::time::sleep(Duration::from_secs(1)).await;
+            match https_config {
+                Some(config) => {
+                    axum_server::from_tcp_rustls(listener, config)
+                        .handle(axum_handle)
+                        .serve(router)
+                        .await
+                        .unwrap();
                 }
-            });
-            if let Some(https_config) = http_gateway_config.https_config {
-                let config = RustlsConfig::from_pem_file(
-                    PathBuf::from(https_config.cert_path),
-                    PathBuf::from(https_config.key_path),
-                )
-                .await;
-                match config {
-                    Ok(config) => {
-                        axum_server::from_tcp_rustls(listener, config)
-                            .handle(axum_handle)
-                            .serve(router)
-                            .await
-                            .unwrap();
-                    }
-                    Err(e) => {
-                        error!("TLS config could not be created: {:?}", e);
-                        let mut guard = http_gateways.write().await;
-                        guard[instance_id] = None;
-                        return;
-                    }
+                None => {
+                    axum_server::from_tcp(listener)
+                        .handle(axum_handle)
+                        .serve(router)
+                        .await
+                        .unwrap();
                 }
-            } else {
-                axum_server::from_tcp(listener)
-                    .handle(axum_handle)
-                    .serve(router)
-                    .await
-                    .unwrap();
             }
 
             debug!("Terminating HTTP gateway.");
         });
 
         // Wait until the HTTP gateway starts listening.
-        while handle.listening().await.is_none() {}
+        let real_port = loop {
+            if let Some(socket_addr) = handle.listening().await {
+                break socket_addr.port();
+            }
+            sleep(Duration::from_millis(20)).await;
+        };
+
+        let mut http_gateways = self.http_gateways.write().await;
+        let instance_id = http_gateways.len();
+        let http_gateway_details = HttpGatewayDetails {
+            instance_id,
+            port: real_port,
+            forward_to: http_gateway_config.forward_to.clone(),
+            domains: http_gateway_config.domains.clone(),
+            https_config: http_gateway_config.https_config.clone(),
+        };
+        let shutdown_handle = handle.clone();
+        let http_gateway = HttpGateway::new(http_gateway_details, shutdown_handle);
+        http_gateways.push(Some(http_gateway));
+        drop(http_gateways);
 
         Ok(HttpGatewayInfo {
             instance_id,
@@ -1092,131 +1101,11 @@ impl ApiState {
         }
     }
 
-    async fn make_http_request(
-        canister_http_request: CanisterHttpRequest,
-        canister_http_adapter: &CanisterHttp,
-    ) -> Result<CanisterHttpReply, (RejectCode, String)> {
-        let canister_http_request = HttpsOutcallRequest {
-            url: canister_http_request.url,
-            method: match canister_http_request.http_method {
-                CanisterHttpMethod::GET => HttpMethod::Get.into(),
-                CanisterHttpMethod::POST => HttpMethod::Post.into(),
-                CanisterHttpMethod::HEAD => HttpMethod::Head.into(),
-            },
-            max_response_size_bytes: canister_http_request
-                .max_response_bytes
-                .unwrap_or(MAX_CANISTER_HTTP_RESPONSE_BYTES),
-            headers: canister_http_request
-                .headers
-                .into_iter()
-                .map(|h| HttpHeader {
-                    name: h.name,
-                    value: h.value,
-                })
-                .collect(),
-            body: canister_http_request.body,
-            socks_proxy_allowed: false,
-        };
-        let request = TonicRequest::new(canister_http_request);
-        canister_http_adapter
-            .https_outcall(request)
-            .await
-            .map(|adapter_response| {
-                let HttpsOutcallResponse {
-                    status,
-                    headers,
-                    content: body,
-                } = adapter_response.into_inner();
-                CanisterHttpReply {
-                    status: status.try_into().unwrap(),
-                    headers: headers
-                        .into_iter()
-                        .map(|HttpHeader { name, value }| CanisterHttpHeader { name, value })
-                        .collect(),
-                    body,
-                }
-            })
-            .map_err(|grpc_status| {
-                (
-                    grpc_status_code_to_reject(grpc_status.code()),
-                    grpc_status.message().to_string(),
-                )
-            })
-    }
-
-    async fn process_canister_http_requests(
-        instances: Arc<RwLock<Vec<Mutex<Instance>>>>,
-        graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
-        instance_id: InstanceId,
-        rx: &mut Receiver<()>,
-    ) -> Option<()> {
-        let get_canister_http_op = GetCanisterHttp;
-        let canister_http_requests = match Self::execute_operation(
-            instances.clone(),
-            graph.clone(),
-            instance_id,
-            get_canister_http_op,
-            rx,
-        )
-        .await?
-        {
-            OpOut::CanisterHttp(canister_http) => canister_http,
-            out => panic!("Unexpected OpOut: {:?}", out),
-        };
-        let mut mock_canister_http_responses = vec![];
-        for canister_http_request in canister_http_requests {
-            let subnet_id = canister_http_request.subnet_id;
-            let request_id = canister_http_request.request_id;
-            let response = loop {
-                let instances = instances.read().await;
-                let instance = instances[instance_id].lock().await;
-                if let InstanceState::Available(pocket_ic) = &instance.state {
-                    let canister_http_adapters = pocket_ic.canister_http_adapters();
-                    let canister_http_adapters = canister_http_adapters.lock().await;
-                    let canister_http_adapter = canister_http_adapters
-                        .get(&SubnetId::from(PrincipalId::from(subnet_id)))
-                        .unwrap();
-                    break match Self::make_http_request(
-                        canister_http_request,
-                        canister_http_adapter,
-                    )
-                    .await
-                    {
-                        Ok(reply) => CanisterHttpResponse::CanisterHttpReply(reply),
-                        Err((reject_code, e)) => {
-                            CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
-                                reject_code: reject_code as u64,
-                                message: e,
-                            })
-                        }
-                    };
-                }
-                drop(instance);
-                drop(instances);
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            };
-            let mock_canister_http_response = MockCanisterHttpResponse {
-                subnet_id,
-                request_id,
-                response,
-                additional_responses: vec![],
-            };
-            mock_canister_http_responses.push(mock_canister_http_response);
+    pub async fn stop_all_http_gateways(&self) {
+        let mut http_gateways = self.http_gateways.write().await;
+        for i in 0..http_gateways.len() {
+            http_gateways[i] = None;
         }
-        for mock_canister_http_response in mock_canister_http_responses {
-            let mock_canister_http_op = MockCanisterHttp {
-                mock_canister_http_response,
-            };
-            Self::execute_operation(
-                instances.clone(),
-                graph.clone(),
-                instance_id,
-                mock_canister_http_op,
-                rx,
-            )
-            .await?;
-        }
-        Some(())
     }
 
     pub async fn auto_progress(
@@ -1232,11 +1121,12 @@ impl ApiState {
         if instance.progress_thread.is_none() {
             let (tx, mut rx) = mpsc::channel::<()>(1);
             let handle = spawn(async move {
-                let mut now = Instant::now();
+                debug!("Starting auto progress for instance {}.", instance_id);
+                let mut now = SystemTime::now();
                 loop {
                     let start = Instant::now();
-                    let old = std::mem::replace(&mut now, Instant::now());
-                    let op = AdvanceTimeAndTick(now.duration_since(old));
+                    let old = std::mem::replace(&mut now, SystemTime::now());
+                    let op = AdvanceTimeAndTick(now.duration_since(old).unwrap_or_default());
                     if Self::execute_operation(
                         instances_clone.clone(),
                         graph.clone(),
@@ -1247,18 +1137,20 @@ impl ApiState {
                     .await
                     .is_none()
                     {
-                        return;
+                        break;
                     }
-                    if Self::process_canister_http_requests(
+                    let op = ProcessCanisterHttpInternal;
+                    if Self::execute_operation(
                         instances_clone.clone(),
                         graph.clone(),
                         instance_id,
+                        op,
                         &mut rx,
                     )
                     .await
                     .is_none()
                     {
-                        return;
+                        break;
                     }
                     let duration = start.elapsed();
                     sleep(std::cmp::max(
@@ -1267,9 +1159,10 @@ impl ApiState {
                     ))
                     .await;
                     if received_stop_signal(&mut rx) {
-                        return;
+                        break;
                     }
                 }
+                debug!("Stopping auto progress for instance {}.", instance_id);
             });
             instance.progress_thread = Some(ProgressThread { handle, sender: tx });
             Ok(())
@@ -1312,9 +1205,8 @@ impl ApiState {
         self.http_gateways
             .read()
             .await
-            .clone()
-            .into_iter()
-            .flatten()
+            .iter()
+            .filter_map(|gateway| gateway.as_ref().map(|g| g.details.clone()))
             .collect()
     }
 

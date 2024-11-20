@@ -211,8 +211,11 @@ impl Request {
             | Ok(Method::ECDSAPublicKey)
             | Ok(Method::SignWithECDSA)
             | Ok(Method::ComputeInitialIDkgDealings)
+            | Ok(Method::ReshareChainKey)
             | Ok(Method::SchnorrPublicKey)
             | Ok(Method::SignWithSchnorr)
+            | Ok(Method::VetKdPublicKey)
+            | Ok(Method::VetKdDeriveEncryptedKey)
             | Ok(Method::BitcoinGetBalance)
             | Ok(Method::BitcoinGetUtxos)
             | Ok(Method::BitcoinGetBlockHeaders)
@@ -220,7 +223,8 @@ impl Request {
             | Ok(Method::BitcoinSendTransactionInternal)
             | Ok(Method::BitcoinGetSuccessors)
             | Ok(Method::BitcoinGetCurrentFeePercentiles)
-            | Ok(Method::NodeMetricsHistory) => {
+            | Ok(Method::NodeMetricsHistory)
+            | Ok(Method::SubnetInfo) => {
                 // No effective canister id.
                 None
             }

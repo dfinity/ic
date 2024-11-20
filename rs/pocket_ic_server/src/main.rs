@@ -54,11 +54,14 @@ const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 #[derive(Parser)]
-#[clap(version = "6.0.0")]
+#[clap(version = "7.0.0")]
 struct Args {
     /// The IP address to which the PocketIC server should bind (defaults to 127.0.0.1)
     #[clap(long, short)]
     ip_addr: Option<String>,
+    /// Log levels for PocketIC server logs (defaults to `pocket_ic_server=info,tower_http=info,axum::rejection=trace`).
+    #[clap(long, short)]
+    log_levels: Option<String>,
     /// The port at which the PocketIC server should listen
     #[clap(long, short, default_value_t = 0)]
     port: u16,
@@ -125,7 +128,7 @@ async fn start(runtime: Arc<Runtime>) {
         .unwrap_or_else(|_| panic!("Failed to bind PocketIC server to address {}", addr));
     let real_port = listener.local_addr().unwrap().port();
 
-    let _guard = setup_tracing();
+    let _guard = setup_tracing(args.log_levels);
     // The shared, mutable state of the PocketIC process.
     let api_state = PocketIcApiStateBuilder::default()
         .with_port(real_port)
@@ -251,6 +254,7 @@ async fn terminate(
 ) {
     debug!("The PocketIC server will terminate");
 
+    app_state.api_state.stop_all_http_gateways().await;
     ApiState::delete_all_instances(app_state.api_state).await;
 
     if let Some(port_file_path) = port_file_path {
@@ -266,7 +270,7 @@ async fn serve_api(Extension(api): Extension<OpenApi>) -> impl IntoApiResponse {
 }
 
 // Registers a global subscriber that collects tracing events and spans.
-fn setup_tracing() -> Option<WorkerGuard> {
+fn setup_tracing(log_levels: Option<String>) -> Option<WorkerGuard> {
     use time::format_description::well_known::Rfc3339;
     use time::OffsetDateTime;
     use tracing_subscriber::prelude::*;
@@ -274,8 +278,12 @@ fn setup_tracing() -> Option<WorkerGuard> {
     let mut layers = Vec::new();
 
     let default_log_filter = || {
-        tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| DEFAULT_LOG_LEVELS.to_string().into())
+        tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+            log_levels
+                .clone()
+                .unwrap_or(DEFAULT_LOG_LEVELS.to_string())
+                .into()
+        })
     };
 
     layers.push(

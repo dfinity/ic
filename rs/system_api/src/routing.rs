@@ -10,9 +10,10 @@ use ic_management_canister_types::{
     ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs, DeleteCanisterSnapshotArgs,
     ECDSAPublicKeyArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
-    Payload, ProvisionalTopUpCanisterArgs, SchnorrPublicKeyArgs, SignWithECDSAArgs,
-    SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadChunkArgs,
+    Payload, ProvisionalTopUpCanisterArgs, ReshareChainKeyArgs, SchnorrPublicKeyArgs,
+    SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
+    VetKdDeriveEncryptedKeyArgs, VetKdPublicKeyArgs,
 };
 use ic_replicated_state::NetworkTopology;
 use itertools::Itertools;
@@ -168,6 +169,7 @@ pub(super) fn resolve_destination(
         Ok(Ic00Method::NodeMetricsHistory) => {
             Ok(NodeMetricsHistoryArgs::decode(payload)?.subnet_id)
         }
+        Ok(Ic00Method::SubnetInfo) => Ok(SubnetInfoArgs::decode(payload)?.subnet_id),
         Ok(Ic00Method::FetchCanisterLogs) => {
             Err(ResolveDestinationError::UserError(UserError::new(
                 ic_error_types::ErrorCode::CanisterRejectedMessage,
@@ -204,6 +206,15 @@ pub(super) fn resolve_destination(
                 IDkgSubnetKind::OnlyHoldsKey,
             )
         }
+        Ok(Ic00Method::ReshareChainKey) => {
+            let args = ReshareChainKeyArgs::decode(payload)?;
+            route_idkg_message(
+                &args.key_id,
+                network_topology,
+                &Some(args.subnet_id),
+                IDkgSubnetKind::OnlyHoldsKey,
+            )
+        }
         Ok(Ic00Method::SchnorrPublicKey) => {
             let args = SchnorrPublicKeyArgs::decode(payload)?;
             route_idkg_message(
@@ -217,6 +228,24 @@ pub(super) fn resolve_destination(
             let args = SignWithSchnorrArgs::decode(payload)?;
             route_idkg_message(
                 &MasterPublicKeyId::Schnorr(args.key_id),
+                network_topology,
+                &None,
+                IDkgSubnetKind::HoldsAndSignWithKey,
+            )
+        }
+        Ok(Ic00Method::VetKdPublicKey) => {
+            let args = VetKdPublicKeyArgs::decode(payload)?;
+            route_idkg_message(
+                &MasterPublicKeyId::VetKd(args.key_id),
+                network_topology,
+                &None,
+                IDkgSubnetKind::OnlyHoldsKey,
+            )
+        }
+        Ok(Ic00Method::VetKdDeriveEncryptedKey) => {
+            let args = VetKdDeriveEncryptedKeyArgs::decode(payload)?;
+            route_idkg_message(
+                &MasterPublicKeyId::VetKd(args.key_id),
                 network_topology,
                 &None,
                 IDkgSubnetKind::HoldsAndSignWithKey,
@@ -278,11 +307,15 @@ pub(super) fn resolve_destination(
         )),
     }
 }
+
+/// TODO(CRP-2614): Rename to include VetKD
 enum IDkgSubnetKind {
     OnlyHoldsKey,
     HoldsAndSignWithKey,
 }
 
+/// TODO(CRP-2614): Rename to include VetKD
+/// TODO(CRP-2615): Unit tests for VetKD routing
 /// Routes to the `requested_subnet` if it holds the key (and fails if that
 /// subnet doesn't hold the key).  If a `requested_subnet` is not provided,
 /// route to the first subnet enabled to sign with the given key.

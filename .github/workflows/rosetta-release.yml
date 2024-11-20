@@ -22,7 +22,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:ced9611af39119f62feedc8a5ad75a8fac478cb43d2d56b623023766f6ce8ca7
+      image: ghcr.io/dfinity/ic-build@sha256:1d775e6d161dee883d10f082ab7fdde3e3d26061e1209255fb6514f8b62b206b
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,7 +31,7 @@ jobs:
         uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
         with:
           registry: docker.io
-          username: ${{ secrets.DOCKER_HUB_USER}}
+          username: ${{ vars.DOCKER_HUB_USER}}
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
 
       - name: Configure Git

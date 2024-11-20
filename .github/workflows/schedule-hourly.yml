@@ -19,18 +19,13 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:ced9611af39119f62feedc8a5ad75a8fac478cb43d2d56b623023766f6ce8ca7
+      image: ghcr.io/dfinity/ic-build@sha256:1d775e6d161dee883d10f082ab7fdde3e3d26061e1209255fb6514f8b62b206b
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Before script
-        id: before-script
-        shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
         shell: bash
         run: ./ci/scripts/docker-login.sh
@@ -61,7 +56,7 @@ jobs:
   bazel-system-test-hourly:
     name: Bazel System Tests Hourly
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:ced9611af39119f62feedc8a5ad75a8fac478cb43d2d56b623023766f6ce8ca7
+      image: ghcr.io/dfinity/ic-build@sha256:1d775e6d161dee883d10f082ab7fdde3e3d26061e1209255fb6514f8b62b206b
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 120
@@ -71,11 +66,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Before script
-        id: before-script
-        shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
       - name: Login to Dockerhub
         shell: bash
         run: ./ci/scripts/docker-login.sh
@@ -104,28 +94,29 @@ jobs:
           path: |
             bazel-bep.pb
             profile.json
-  # CI job is also executed in PR on use of 'CI_COVERAGE' label
-  bazel-test-coverage:
-    name: Bazel Test Coverage
+  bazel-run-fuzzers-hourly:
+    name: Bazel Run Fuzzers Hourly
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:ced9611af39119f62feedc8a5ad75a8fac478cb43d2d56b623023766f6ce8ca7
+      image: ghcr.io/dfinity/ic-build@sha256:1d775e6d161dee883d10f082ab7fdde3e3d26061e1209255fb6514f8b62b206b
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Before script
-        id: before-script
+      - name: Run Libfuzzer targets
         shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
-      - name: Run Bazel Test Coverage
+        run: ./bin/run-all-fuzzers.sh --libfuzzer 100
+      - name: Run AFL targets
         shell: bash
-        run: |
-          ./ci/scripts/bazel-coverage.sh
+        run: ./bin/run-all-fuzzers.sh --afl 100
+      - name: Post Slack Notification
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        if: failure()
+        with:
+          channel-id: prodsec-fuzzing
+          slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}

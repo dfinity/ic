@@ -33,6 +33,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_stable_memory_usage: Histogram,
     pub(super) canister_memory_allocation: Histogram,
     pub(super) canister_compute_allocation: Histogram,
+    pub(super) canister_ingress_queue_latencies: Histogram,
     pub(super) compute_utilization_per_core: Histogram,
     pub(super) instructions_consumed_per_message: Histogram,
     pub(super) instructions_consumed_per_round: Histogram,
@@ -197,6 +198,12 @@ impl SchedulerMetrics {
                 "canister_compute_allocation_ratio",
                 "Canisters compute allocation distribution ratio (0-1).",
                 linear_buckets(0.0, 0.1, 11),
+            ),
+            canister_ingress_queue_latencies: metrics_registry.histogram(
+                "scheduler_canister_ingress_queue_latencies_seconds",
+                "Per-canister mean IC clock duration spent by messages in the ingress queue.",
+                // 10ms, 20ms, 50ms, …, 100s, 200s, 500s
+                decimal_buckets(-2, 2),
             ),
             compute_utilization_per_core: metrics_registry.histogram(
                 "scheduler_compute_utilization_per_core",

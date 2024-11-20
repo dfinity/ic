@@ -173,6 +173,7 @@ use ic_protobuf::registry::{
     subnet::v1 as pb_subnet,
 };
 use ic_registry_client_helpers::{
+    api_boundary_node::ApiBoundaryNodeRegistry,
     node::NodeRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
@@ -303,6 +304,21 @@ impl std::fmt::Display for TopologySnapshot {
                 .unwrap();
             });
         });
+        if self.api_boundary_nodes().count() > 0 {
+            writeln!(f, "API boundary nodes:").unwrap();
+        }
+        self.api_boundary_nodes().enumerate().for_each(|(idx, n)| {
+            writeln!(
+                f,
+                "\tNode id={}, ipv6={:<width$}, domain_name={}, index={}",
+                n.node_id,
+                n.get_ip_addr(),
+                n.get_domain().map_or("n/a".to_string(), |domain| domain),
+                idx,
+                width = max_length_ipv6,
+            )
+            .unwrap()
+        });
         if self.unassigned_nodes().count() > 0 {
             writeln!(f, "Unassigned nodes:").unwrap();
         }
@@ -332,6 +348,7 @@ impl TopologySnapshot {
         pub struct NodeView {
             pub id: NodeId,
             pub ipv6: IpAddr,
+            pub domain: Option<String>,
         }
 
         #[derive(Deserialize, Serialize)]
@@ -346,6 +363,7 @@ impl TopologySnapshot {
             pub registry_version: String,
             pub subnets: Vec<SubnetView>,
             pub unassigned_nodes: Vec<NodeView>,
+            pub api_boundary_nodes: Vec<NodeView>,
         }
         let subnets: Vec<_> = self
             .subnets()
@@ -355,6 +373,7 @@ impl TopologySnapshot {
                     .map(|n| NodeView {
                         id: n.node_id,
                         ipv6: n.get_ip_addr(),
+                        domain: n.get_domain(),
                     })
                     .collect();
                 SubnetView {
@@ -369,6 +388,15 @@ impl TopologySnapshot {
             .map(|n| NodeView {
                 id: n.node_id,
                 ipv6: n.get_ip_addr(),
+                domain: n.get_domain(),
+            })
+            .collect();
+        let api_boundary_nodes: Vec<_> = self
+            .api_boundary_nodes()
+            .map(|n| NodeView {
+                id: n.node_id,
+                ipv6: n.get_ip_addr(),
+                domain: n.get_domain(),
             })
             .collect();
         let event = log_events::LogEvent::new(
@@ -377,6 +405,7 @@ impl TopologySnapshot {
                 registry_version: self.registry_version.to_string(),
                 subnets,
                 unassigned_nodes,
+                api_boundary_nodes,
             },
         );
         event.emit_log(log);
@@ -426,12 +455,39 @@ impl TopologySnapshot {
             })
             .collect();
 
+        let api_boundary_nodes = self
+            .local_registry
+            .get_api_boundary_node_ids(registry_version)
+            .unwrap();
+
         Box::new(
             self.local_registry
                 .get_node_ids(registry_version)
                 .unwrap()
                 .into_iter()
-                .filter(|node_id| !assigned_nodes.contains(node_id))
+                .filter(|node_id| {
+                    !assigned_nodes.contains(node_id) && !api_boundary_nodes.contains(node_id)
+                })
+                .map(|node_id| IcNodeSnapshot {
+                    node_id,
+                    registry_version,
+                    local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
+                    ic_name: self.ic_name.clone(),
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
+    }
+
+    pub fn api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+        let registry_version = self.local_registry.get_latest_version();
+
+        Box::new(
+            self.local_registry
+                .get_api_boundary_node_ids(registry_version)
+                .unwrap()
+                .into_iter()
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
                     registry_version,
@@ -825,10 +881,22 @@ impl IcNodeSnapshot {
                     .expect("Optional routing table is None in local registry.");
                 match canister_ranges.first() {
                     Some(range) => range.start.get(),
-                    None => PrincipalId::default(),
+                    None => {
+                        warn!(
+                            self.env.logger(),
+                            "No canister ranges found for subnet_id={}", subnet_id
+                        );
+                        PrincipalId::default()
+                    }
                 }
             }
-            None => PrincipalId::default(),
+            None => {
+                warn!(
+                    self.env.logger(),
+                    "Node {} is not assigned to any subnet", self.node_id
+                );
+                PrincipalId::default()
+            }
         }
     }
 
@@ -1070,15 +1138,25 @@ pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
     parse_elasticsearch_hosts(Some(hosts))
 }
 
+/// Helper function to figure out SHA256 from a CAS url
+pub fn get_sha256_from_cas_url(img_name: &str, url: &Url) -> Result<String> {
+    // Since this is a CAS url, we assume the last URL path part is the sha256.
+    let (_prefix, sha256) = url
+        .path()
+        .rsplit_once('/')
+        .ok_or(anyhow!("failed to extract sha256 from CAS url '{url}'"))?;
+    let sha256 = sha256.to_string();
+    bail_if_sha256_invalid(&sha256, img_name)?;
+    Ok(sha256.to_string())
+}
+
 pub fn get_ic_os_img_url() -> Result<Url> {
     let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_ic_os_img_sha256() -> Result<String> {
-    let sha256 = read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
-    Ok(sha256)
+    get_sha256_from_cas_url("ic_os_img_sha256", &get_ic_os_img_url()?)
 }
 
 pub fn get_malicious_ic_os_img_url() -> Result<Url> {
@@ -1088,10 +1166,7 @@ pub fn get_malicious_ic_os_img_url() -> Result<Url> {
 }
 
 pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
-    Ok(sha256)
+    get_sha256_from_cas_url("ic_os_img_sha256", &get_malicious_ic_os_img_url()?)
 }
 
 pub fn get_ic_os_update_img_url() -> Result<Url> {
@@ -1100,9 +1175,7 @@ pub fn get_ic_os_update_img_url() -> Result<Url> {
 }
 
 pub fn get_ic_os_update_img_sha256() -> Result<String> {
-    let sha256 = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-    Ok(sha256)
+    get_sha256_from_cas_url("ic_os_update_img_sha256", &get_ic_os_update_img_url()?)
 }
 
 pub fn get_ic_os_update_img_test_url() -> Result<Url> {
@@ -1111,10 +1184,7 @@ pub fn get_ic_os_update_img_test_url() -> Result<Url> {
 }
 
 pub fn get_ic_os_update_img_test_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-    Ok(sha256)
+    get_sha256_from_cas_url("ic_os_update_img_sha256", &get_ic_os_update_img_test_url()?)
 }
 
 pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
@@ -1124,10 +1194,10 @@ pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
 }
 
 pub fn get_malicious_ic_os_update_img_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-    Ok(sha256)
+    get_sha256_from_cas_url(
+        "ic_os_update_img_sha256",
+        &get_malicious_ic_os_update_img_url()?,
+    )
 }
 
 pub fn get_boundary_node_img_url() -> Result<Url> {
@@ -1162,10 +1232,10 @@ pub fn get_hostos_update_img_test_url() -> Result<Url> {
 }
 
 pub fn get_hostos_update_img_test_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "hostos_update_img_sha256")?;
-    Ok(sha256)
+    get_sha256_from_cas_url(
+        "hostos_update_img_sha256",
+        &get_hostos_update_img_test_url()?,
+    )
 }
 
 pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
@@ -1318,6 +1388,17 @@ pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
     let runfiles =
         std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
     Path::new(&runfiles).join(p)
+}
+
+/// Return the (actual) path of the (runfiles-relative) artifact in environment variable `v`.
+pub fn get_dependency_path_from_env(v: &str) -> PathBuf {
+    let runfiles =
+        std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
+
+    let path_from_env =
+        std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
+
+    Path::new(&runfiles).join(path_from_env)
 }
 
 pub fn read_dependency_to_string<P: AsRef<Path>>(p: P) -> Result<String> {
@@ -1978,7 +2059,7 @@ where
     let start = Instant::now();
     debug!(
         log,
-        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a linear backoff of {backoff:?}"
+        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a constant backoff of {backoff:?}"
     );
     loop {
         match f().await {

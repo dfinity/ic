@@ -1906,6 +1906,13 @@ impl SystemState {
         (self.queues.guaranteed_response_memory_usage() as u64).into()
     }
 
+    /// Returns the memory currently used by best-effort canister messages.
+    ///
+    /// This returns zero iff there are zero best-effort messages enqueued.
+    pub fn best_effort_message_memory_usage(&self) -> NumBytes {
+        (self.queues.best_effort_message_memory_usage() as u64).into()
+    }
+
     /// Returns the memory currently in use by the `SystemState`
     /// for canister history.
     pub fn canister_history_memory_usage(&self) -> NumBytes {
@@ -2089,6 +2096,19 @@ impl SystemState {
         (expired_callback_count, errors)
     }
 
+    /// Removes the largest best-effort message in the underlying pool. Returns
+    /// `true` if a message was removed; `false` otherwise.
+    ///
+    /// Time complexity: `O(log(n))`.
+    pub fn shed_largest_message(
+        &mut self,
+        own_canister_id: &CanisterId,
+        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+    ) -> bool {
+        self.queues
+            .shed_largest_message(own_canister_id, local_canisters)
+    }
+
     /// Re-partitions the local and remote input schedules of `self.queues`
     /// following a canister migration, based on the updated set of local canisters.
     ///
@@ -2141,12 +2161,10 @@ impl SystemState {
     /// Moves the given amount of cycles from the main balance to the reserved balance.
     /// Returns an error if the main balance is lower than the requested amount.
     pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), ReservationError> {
-        if let Some(reserved_balance_limit) = self.reserved_balance_limit {
-            if self.reserved_balance + amount > reserved_balance_limit {
-                return Err(ReservationError::ReservedLimitExceed {
-                    requested: self.reserved_balance + amount,
-                    limit: reserved_balance_limit,
-                });
+        if let Some(limit) = self.reserved_balance_limit {
+            let requested = self.reserved_balance + amount;
+            if requested > limit {
+                return Err(ReservationError::ReservedLimitExceed { requested, limit });
             }
         }
         if amount > self.cycles_balance {

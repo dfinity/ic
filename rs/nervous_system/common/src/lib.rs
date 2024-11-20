@@ -722,6 +722,21 @@ pub fn serve_metrics(
     }
 }
 
+pub fn serve_journal<Journal>(journal: &Journal) -> HttpResponse
+where
+    Journal: serde::Serialize,
+{
+    match serde_json::to_string(journal) {
+        Err(err) => {
+            HttpResponseBuilder::server_error(format!("Failed to encode journal: {}", err)).build()
+        }
+        Ok(body) => HttpResponseBuilder::ok()
+            .header("Content-Type", "application/json")
+            .with_body_and_content_length(body)
+            .build(),
+    }
+}
+
 /// Returns the total amount of memory (heap, stable memory, etc) that the calling canister has allocated.
 #[cfg(target_arch = "wasm32")]
 pub fn total_memory_size_bytes() -> usize {
@@ -761,6 +776,16 @@ fn checked_div_mod(dividend: usize, divisor: usize) -> Option<(usize, usize)> {
     let quotient = dividend.checked_div(divisor)?;
     let remainder = dividend.checked_rem(divisor)?;
     Some((quotient, remainder))
+}
+
+/// Converts a sha256 hash into a hex string representation
+pub fn hash_to_hex_string(hash: &[u8]) -> String {
+    use std::fmt::Write;
+    let mut result_hash = String::new();
+    for b in hash {
+        let _ = write!(result_hash, "{:02x}", b);
+    }
+    result_hash
 }
 
 #[cfg(test)]

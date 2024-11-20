@@ -1,4 +1,7 @@
-use crate::{providers::Provider, types::BtcNetwork};
+use crate::{
+    providers::{parse_authorization_header_from_url, Provider},
+    BtcNetwork, KytMode,
+};
 use bitcoin::{Address, Transaction};
 use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
@@ -8,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
+use std::fmt;
 
 #[cfg(test)]
 mod tests;
@@ -25,6 +29,22 @@ pub enum HttpGetTxError {
         code: RejectionCode,
         message: String,
     },
+}
+
+impl fmt::Display for HttpGetTxError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use HttpGetTxError::*;
+        match self {
+            TxEncoding(s) => write!(f, "TxEncoding: {}", s),
+            TxidMismatch { expected, decoded } => write!(
+                f,
+                "TxidMismatch: expected {} but decoded {}",
+                expected, decoded
+            ),
+            ResponseTooLarge => write!(f, "ResponseTooLarge"),
+            Rejected { code, message } => write!(f, "Rejected: code {:?}, {}", code, message),
+        }
+    }
 }
 
 /// We store in state the `FetchStatus` for every `Txid` we fetch.
@@ -89,8 +109,11 @@ impl TransactionKytData {
             // Some outputs do not have addresses. These outputs will never be
             // inputs of other transactions, so it is okay to treat them as `None`.
             outputs.push(
-                Address::from_script(&output.script_pubkey, bitcoin::Network::from(*btc_network))
-                    .ok(),
+                Address::from_script(
+                    &output.script_pubkey,
+                    bitcoin::Network::from(btc_network.clone()),
+                )
+                .ok(),
             )
         }
         Ok(Self { inputs, outputs })
@@ -257,7 +280,28 @@ impl Drop for FetchGuard {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
-    pub btc_network: BtcNetwork,
+    btc_network: BtcNetwork,
+    kyt_mode: KytMode,
+}
+
+impl Config {
+    pub fn new_and_validate(btc_network: BtcNetwork, kyt_mode: KytMode) -> Result<Self, String> {
+        if let BtcNetwork::Regtest { json_rpc_url } = &btc_network {
+            let _ = parse_authorization_header_from_url(json_rpc_url)?;
+        }
+        Ok(Self {
+            btc_network,
+            kyt_mode,
+        })
+    }
+
+    pub fn btc_network(&self) -> BtcNetwork {
+        self.btc_network.clone()
+    }
+
+    pub fn kyt_mode(&self) -> KytMode {
+        self.kyt_mode
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

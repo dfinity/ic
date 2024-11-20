@@ -3,13 +3,13 @@ use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
-    registry::crypto::v1 as pb_crypto,
     state::queues::v1 as pb_queues,
     state::system_metadata::v1 as pb_metadata,
+    types::v1 as pb_types,
 };
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
-    consensus::idkg::PreSigId,
+    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId},
     crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgTargetId},
     messages::{CallbackId, CanisterCall, Request, StopCanisterCallId},
     node_id_into_protobuf, node_id_try_from_option, CanisterId, ExecutionRound, Height, NodeId,
@@ -944,7 +944,7 @@ impl TryFrom<pb_metadata::SignWithThresholdContext> for SignWithThresholdContext
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct IDkgDealingsContext {
     pub request: Request,
-    pub key_id: MasterPublicKeyId,
+    pub key_id: IDkgMasterPublicKeyId,
     pub nodes: BTreeSet<NodeId>,
     pub registry_version: RegistryVersion,
     pub time: Time,
@@ -954,7 +954,7 @@ impl From<&IDkgDealingsContext> for pb_metadata::IDkgDealingsContext {
     fn from(context: &IDkgDealingsContext) -> Self {
         Self {
             request: Some(pb_queues::Request::from(&context.request)),
-            key_id: Some(pb_crypto::MasterPublicKeyId::from(&context.key_id)),
+            key_id: Some(pb_types::MasterPublicKeyId::from(context.key_id.inner())),
             nodes: context
                 .nodes
                 .iter()
@@ -973,9 +973,13 @@ impl TryFrom<(Time, pb_metadata::IDkgDealingsContext)> for IDkgDealingsContext {
     fn try_from(
         (time, context): (Time, pb_metadata::IDkgDealingsContext),
     ) -> Result<Self, Self::Error> {
+        let key_id: MasterPublicKeyId =
+            try_from_option_field(context.key_id, "IDkgDealingsContext::key_id")?;
+        let key_id = key_id.try_into().map_err(ProxyDecodeError::Other)?;
+
         Ok(Self {
             request: try_from_option_field(context.request, "IDkgDealingsContext::request")?,
-            key_id: try_from_option_field(context.key_id, "IDkgDealingsContext::key_id")?,
+            key_id,
             nodes: context
                 .nodes
                 .into_iter()

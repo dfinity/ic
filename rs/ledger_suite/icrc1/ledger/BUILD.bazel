@@ -216,6 +216,7 @@ rust_test(
             ":ledger_canister" + name_suffix + ".wasm",
             ":ledger_canister" + name_suffix + "_nextledgerversion.wasm",
             "//rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
+            "//rs/universal_canister/impl:universal_canister.wasm.gz",
             "@ic-icrc1-ledger-first-version.wasm.gz//file",
             "@mainnet_ckbtc_ic-icrc1-ledger//file",
             "@mainnet_cketh_ic-icrc1-ledger-u256//file",
@@ -230,6 +231,7 @@ rust_test(
             "IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH": "$(rootpath @ic-icrc1-ledger-first-version.wasm.gz//file)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm)",
             "IC_ICRC1_LEDGER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + "_nextledgerversion.wasm)",
+            "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
         },
         deps = [
             # Keep sorted.
@@ -248,7 +250,6 @@ rust_test(
             "@crate_index//:assert_matches",
             "@crate_index//:candid",
             "@crate_index//:cddl",
-            "@crate_index//:hex",
             "@crate_index//:ic-agent",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:leb128",
