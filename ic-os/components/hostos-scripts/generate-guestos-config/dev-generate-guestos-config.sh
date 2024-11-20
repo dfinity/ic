@@ -85,9 +85,10 @@ function read_old_config_variables() {
 function read_config_variables() {
     ipv6_prefix=$(get_config_value '.network_settings.ipv6_config.Deterministic.prefix')
     elasticsearch_hosts=$(get_config_value '.icos_settings.logging.elasticsearch_hosts')
-    nns_public_key_exists=$(get_config_value '.icos_settings.nns_public_key_exists')
+    use_nns_public_key=$(get_config_value '.icos_settings.use_nns_public_key')
     nns_urls=$(get_config_value '.icos_settings.nns_urls | join(",")')
-    node_operator_private_key_exists=$(get_config_value '.icos_settings.node_operator_private_key_exists')
+    use_node_operator_private_key=$(get_config_value '.icos_settings.use_node_operator_private_key')
+    use_node_operator_private_key=$(get_config_value '.icos_settings.use_node_operator_private_key')
     vm_memory=$(get_config_value '.hostos_settings.vm_memory')
     vm_cpu=$(get_config_value '.hostos_settings.vm_cpu')
     use_ssh_authorized_keys=$(get_config_value '.icos_settings.use_ssh_authorized_keys')
@@ -99,10 +100,10 @@ function assemble_config_media() {
 
     cmd=(/opt/ic/bin/build-bootstrap-config-image.sh ${MEDIA})
     cmd+=(--guestos_config "/boot/config/config-guestos.json")
-    if [[ "${nns_public_key_exists,,}" == "true" ]]; then
+    if [[ "${use_nns_public_key,,}" == "true" ]]; then
         cmd+=(--nns_public_key "/boot/config/nns_public_key.pem")
     fi
-    if [ -f "$node_operator_private_key_exists" ]; then
+    if [ -f "$use_node_operator_private_key" ]; then
         cmd+=(--node_operator_private_key "/boot/config/node_operator_private_key.pem")
     fi
     if [[ "${ssh_authorized_keys,,}" == "true" ]]; then
