@@ -635,17 +635,21 @@ pub async fn metrics_middleware(
             .observe(response_size as f64);
 
         // Anonymization
-        let hash_fn = |s: &str| {
+        let hash_fn = |v: &str| -> String {
+            let s = salt.load();
+            if s.is_none() {
+                return "N/A".to_string();
+            }
+
             let mut h = DefaultHasher::new();
+            v.hash(&mut h);
             s.hash(&mut h);
-            salt.load().hash(&mut h);
+
             format!("{:x}", h.finish())
         };
 
         let remote_addr = hash_fn(&remote_addr);
-
-        let sender = sender.unwrap_or_default();
-        let sender = hash_fn(&sender);
+        let sender = hash_fn(&sender.unwrap_or_default());
 
         // Log
         if !log_failed_requests_only || failed {
