@@ -35,7 +35,7 @@ icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
-leb128 = "0.2.5"
+leb128 = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
