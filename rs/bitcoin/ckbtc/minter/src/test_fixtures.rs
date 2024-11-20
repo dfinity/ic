@@ -16,7 +16,6 @@ pub fn init_args() -> InitArgs {
         max_time_in_queue_nanos: 600_000_000_000,
         min_confirmations: Some(6),
         mode: crate::state::Mode::GeneralAvailability,
-        new_kyt_principal: Some(CanisterId::from(0)),
         kyt_principal: Some(CanisterId::from(0)),
         kyt_fee: None,
     }

@@ -392,7 +392,7 @@ pub async fn install_minter(
     ledger_id: CanisterId,
     logger: &Logger,
     max_time_in_queue_nanos: u64,
-    new_kyt_canister_id: CanisterId,
+    kyt_canister_id: CanisterId,
 ) -> CanisterId {
     info!(&logger, "Installing minter ...");
     let args = CkbtcMinterInitArgs {
@@ -404,8 +404,7 @@ pub async fn install_minter(
         min_confirmations: Some(BTC_MIN_CONFIRMATIONS as u32),
         mode: Mode::GeneralAvailability,
         kyt_fee: Some(KYT_FEE),
-        kyt_principal: None,
-        new_kyt_principal: Some(new_kyt_canister_id),
+        kyt_principal: Some(kyt_canister_id),
     };
 
     let minter_arg = MinterArg::Init(args);
@@ -421,7 +420,7 @@ pub async fn install_minter(
     canister.canister_id()
 }
 
-pub async fn install_new_kyt(new_kyt_canister: &mut Canister<'_>, env: &TestEnv) -> CanisterId {
+pub async fn install_kyt(kyt_canister: &mut Canister<'_>, env: &TestEnv) -> CanisterId {
     let logger = env.logger();
     info!(logger, "Installing kyt canister ...");
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
@@ -437,26 +436,26 @@ pub async fn install_new_kyt(new_kyt_canister: &mut Canister<'_>, env: &TestEnv)
     });
 
     install_rust_canister_from_path(
-        new_kyt_canister,
+        kyt_canister,
         get_dependency_path(
             env::var("IC_BTC_KYT_WASM_PATH").expect("IC_BTC_KYT_WASM_PATH not set"),
         ),
         Some(Encode!(&kyt_init_args).unwrap()),
     )
     .await;
-    new_kyt_canister.canister_id()
+    kyt_canister.canister_id()
 }
 
-pub async fn upgrade_new_kyt(new_kyt_canister: &mut Canister<'_>, mode: NewKytMode) -> CanisterId {
+pub async fn upgrade_kyt(kyt_canister: &mut Canister<'_>, mode: NewKytMode) -> CanisterId {
     let kyt_upgrade_arg = NewKytArg::UpgradeArg(Some(NewKytUpgradeArg {
         kyt_mode: Some(mode),
     }));
 
-    new_kyt_canister
+    kyt_canister
         .upgrade_to_self_binary(Encode!(&kyt_upgrade_arg).unwrap())
         .await
         .expect("failed to upgrade the canister");
-    new_kyt_canister.canister_id()
+    kyt_canister.canister_id()
 }
 
 pub async fn install_bitcoin_canister(runtime: &Runtime, logger: &Logger) -> CanisterId {

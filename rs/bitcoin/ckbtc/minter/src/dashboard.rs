@@ -314,7 +314,7 @@ pub fn build_metadata(s: &CkBtcMinterState) -> String {
             .unwrap_or_default(),
         s.min_confirmations,
         s.ledger_id,
-        s.new_kyt_principal
+        s.kyt_principal
             .map(|p| p.to_string())
             .unwrap_or_else(|| "N/A".to_string()),
         DisplayAmount(s.kyt_fee),

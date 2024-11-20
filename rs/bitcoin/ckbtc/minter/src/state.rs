@@ -347,8 +347,8 @@ pub struct CkBtcMinterState {
     /// The CanisterId of the ckBTC Ledger.
     pub ledger_id: CanisterId,
 
-    /// The new principal of the KYT canister.
-    pub new_kyt_principal: Option<CanisterId>,
+    /// The principal of the KYT canister.
+    pub kyt_principal: Option<CanisterId>,
 
     /// The set of UTXOs unused in pending transactions.
     pub available_utxos: BTreeSet<Utxo>,
@@ -441,8 +441,7 @@ impl CkBtcMinterState {
             min_confirmations,
             mode,
             kyt_fee,
-            new_kyt_principal,
-            kyt_principal: _,
+            kyt_principal,
         }: InitArgs,
     ) {
         self.btc_network = btc_network.into();
@@ -452,7 +451,7 @@ impl CkBtcMinterState {
         self.ledger_id = ledger_id;
         self.max_time_in_queue_nanos = max_time_in_queue_nanos;
         self.mode = mode;
-        self.new_kyt_principal = new_kyt_principal;
+        self.kyt_principal = kyt_principal;
         if let Some(kyt_fee) = kyt_fee {
             self.kyt_fee = kyt_fee;
         }
@@ -468,9 +467,8 @@ impl CkBtcMinterState {
             max_time_in_queue_nanos,
             min_confirmations,
             mode,
-            new_kyt_principal,
             kyt_fee,
-            kyt_principal: _,
+            kyt_principal,
         }: UpgradeArgs,
     ) {
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
@@ -495,8 +493,8 @@ impl CkBtcMinterState {
         if let Some(mode) = mode {
             self.mode = mode;
         }
-        if let Some(new_kyt_principal) = new_kyt_principal {
-            self.new_kyt_principal = Some(new_kyt_principal);
+        if let Some(kyt_principal) = kyt_principal {
+            self.kyt_principal = Some(kyt_principal);
         }
         if let Some(kyt_fee) = kyt_fee {
             self.kyt_fee = kyt_fee;
@@ -510,7 +508,7 @@ impl CkBtcMinterState {
         if self.ecdsa_key_name.is_empty() {
             ic_cdk::trap("ecdsa_key_name is not set");
         }
-        if self.new_kyt_principal.is_none() {
+        if self.kyt_principal.is_none() {
             ic_cdk::trap("New KYT principal is not set");
         }
     }
@@ -1117,9 +1115,9 @@ impl CkBtcMinterState {
         );
 
         ensure_eq!(
-            self.new_kyt_principal,
-            other.new_kyt_principal,
-            "new_kyt_principal does not match"
+            self.kyt_principal,
+            other.kyt_principal,
+            "kyt_principal does not match"
         );
 
         ensure_eq!(
@@ -1211,7 +1209,7 @@ impl From<InitArgs> for CkBtcMinterState {
             tokens_minted: 0,
             tokens_burned: 0,
             ledger_id: args.ledger_id,
-            new_kyt_principal: args.new_kyt_principal,
+            kyt_principal: args.kyt_principal,
             available_utxos: Default::default(),
             outpoint_account: Default::default(),
             utxos_state_addresses: Default::default(),
