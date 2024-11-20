@@ -46,35 +46,10 @@ const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 
 type OutboundRequestBody = Full<Bytes>;
 
+#[derive(Default)]
 struct Cache {
     api_bn_ips: Vec<String>,
     socks_clients: Vec<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>,
-}
-
-impl Cache {
-    fn new() -> Self {
-        Self {
-            api_bn_ips: Vec::new(),
-            socks_clients: Vec::new(),
-        }
-    }
-
-    fn insert(
-        &mut self,
-        ip: String,
-        client: Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>,
-    ) {
-        self.api_bn_ips.push(ip);
-        self.socks_clients.push(client);
-    }
-
-    fn is_empty(&self) -> bool {
-        self.socks_clients.is_empty()
-    }
-
-    fn len(&self) -> usize {
-        self.socks_clients.len()
-    }
 }
 
 /// Implements HttpsOutcallsService
@@ -113,7 +88,7 @@ impl CanisterHttp {
 
         Self {
             client,
-            cache: ArcSwap::new(Arc::new(Cache::new())),
+            cache: ArcSwap::new(Arc::new(Cache::default())),
             logger,
             metrics: AdapterMetrics::new(metrics),
             http_connect_timeout_secs: config.http_connect_timeout_secs,
@@ -121,8 +96,20 @@ impl CanisterHttp {
         }
     }
 
+    // Round robin over the available clients, starting from the next index.
+    fn socks_clients_iter(
+        &self,
+        cache: &Cache,
+    ) -> impl Iterator<Item = Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>
+    {
+        let len = cache.socks_clients.len();
+        let start_index = self.next_proxy_index.fetch_add(1, Ordering::SeqCst) % len;
+        let clients = cache.socks_clients.clone();
+        clients.into_iter().cycle().skip(start_index).take(len)
+    }
+
     fn create_cache(&self, api_bn_ips: Vec<String>) -> Cache {
-        let mut new_cache = Cache::new();
+        let mut new_cache = Cache::default();
 
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false);
@@ -130,39 +117,33 @@ impl CanisterHttp {
             .set_connect_timeout(Some(Duration::from_secs(self.http_connect_timeout_secs)));
 
         for ip in api_bn_ips {
-            let proxy_addr = ip.parse().expect("Failed to parse SOCKS IP.");
+            match ip.parse() {
+                Ok(proxy_addr) => {
+                    let proxy_connector = SocksConnector {
+                        proxy_addr,
+                        auth: None,
+                        connector: http_connector.clone(),
+                    };
 
-            let proxy_connector = SocksConnector {
-                proxy_addr,
-                auth: None,
-                connector: http_connector.clone(),
-            };
+                    let proxied_https_connector = HttpsConnectorBuilder::new()
+                        .with_native_roots()
+                        .expect("Failed to set native roots")
+                        .https_only()
+                        .enable_all_versions()
+                        .wrap_connector(proxy_connector);
 
-            let proxied_https_connector = HttpsConnectorBuilder::new()
-                .with_native_roots()
-                .expect("Failed to set native roots")
-                .https_only()
-                .enable_all_versions()
-                .wrap_connector(proxy_connector);
+                    let socks_client = Client::builder(TokioExecutor::new())
+                        .build::<_, Full<Bytes>>(proxied_https_connector);
 
-            let socks_client = Client::builder(TokioExecutor::new())
-                .build::<_, Full<Bytes>>(proxied_https_connector);
-
-            new_cache.insert(ip.clone(), socks_client);
+                    new_cache.api_bn_ips.push(ip);
+                    new_cache.socks_clients.push(socks_client);
+                }
+                Err(e) => {
+                    debug!(self.logger, "Failed to parse SOCKS IP: {}", e);
+                }
+            }
         }
         new_cache
-    }
-
-    fn get_next_socks_client(
-        &self,
-        cache: &Cache,
-    ) -> Option<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>> {
-        if cache.is_empty() {
-            return None;
-        }
-
-        let index = self.next_proxy_index.fetch_add(1, Ordering::SeqCst);
-        Some(cache.socks_clients[index % cache.len()].clone())
     }
 }
 
@@ -184,8 +165,9 @@ impl HttpsOutcallsService for CanisterHttp {
 
         let cached_ips = current_cache.api_bn_ips.clone();
 
-        if !sorted_incoming_ips.is_empty() && cached_ips != sorted_incoming_ips {
-            // multiple threads can enter this block, but it's fine, as the whole cache is lightweight.
+        if cached_ips != sorted_incoming_ips {
+            // Cache miss. We need to update the cache and make sure that current_cache points to the IPs in the request.
+            // Multiple threads can enter this block, but it's fine, as the whole cache is lightweight.
             current_cache = Arc::new(self.create_cache(sorted_incoming_ips));
             self.cache.store(current_cache.clone());
         }
@@ -276,15 +258,36 @@ impl HttpsOutcallsService for CanisterHttp {
                 // fail fast because our interface does not have an ipv4 assigned.
                 Err(direct_err) => {
                     self.metrics.requests_socks.inc();
-                    let client = self.get_next_socks_client(&current_cache).ok_or_else(|| {
-                        Status::new(
+
+                    let clients_iter = self.socks_clients_iter(&current_cache);
+
+                    let mut response = None;
+
+                    if current_cache.socks_clients.is_empty() {
+                        return Err(Status::new(
                             tonic::Code::Unavailable,
                             "No SOCKS proxy available".to_string(),
-                        )
-                    })?;
-                    //TODO: consider retrying with a different proxy if the first one fails
-                    client.request(http_req_clone).await.map_err(|e| {
-                        format!("Request failed direct connect {direct_err} and connect through socks {e}")
+                        ));
+                    }
+
+                    for client in clients_iter {
+                        let http_req = http_req_clone.clone();
+                        match client.request(http_req).await {
+                            Ok(resp) => {
+                                response = Some(resp);
+                                break;
+                            }
+                            Err(e) => {
+                                debug!(self.logger, "Failed to connect through SOCKS: {}", e);
+                                //TODO(mihailjiau1): add some metrics.
+                                continue;
+                            }
+                        }
+                    }
+
+                    //TODO(mihailjianu1): bubble up the errors from the socks proxy.
+                    response.ok_or_else(|| {
+                        format!("Request failed direct connect {direct_err} and connect through all socks proxies")
                     })
                 }
                 Ok(resp)=> Ok(resp),
