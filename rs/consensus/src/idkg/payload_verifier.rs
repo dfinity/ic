@@ -1150,16 +1150,17 @@ mod test {
     }
 
     #[test]
-    fn test_reject_new_signature_agreement_for_vetkd() {
+    fn test_reject_new_idkg_signature_agreement_for_vetkd_context() {
         let height = Height::from(0);
         let subnet_id = subnet_test_id(0);
         let crypto = &CryptoReturningOk::default();
         let block_reader = TestIDkgBlockReader::new();
+        // Create a parent block payload for a subnet with a single ECDSA key
         let ecdsa_key_id = fake_ecdsa_idkg_master_public_key_id();
         let prev_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![ecdsa_key_id.clone()]);
 
+        // Create a state requesting vetKD with callback/random ID '1'.
         let callback_id = CallbackId::from(1);
-
         let vetkd_key_id = fake_vetkd_master_public_key_id();
         let pseudo_random_id = [1; 32];
         let signature_request_contexts = BTreeMap::from_iter([(
@@ -1169,6 +1170,7 @@ mod test {
         let snapshot =
             fake_state_with_signature_requests(height, signature_request_contexts.clone());
 
+        // Create an (invalid) signature agreement or the callback ID requested above
         let fake_response =
             CompletedSignature::Unreported(ic_types::batch::ConsensusResponse::new(
                 callback_id,
@@ -1177,12 +1179,16 @@ mod test {
                 ),
             ));
 
-        // Insert agreement for unknown context
+        // A malicious node sends us an IDKG payload with a signature agreement
+        // that references the requested vetKD context.
         let mut idkg_payload_vetkd_context =
             empty_idkg_payload_with_key_ids(subnet_id, vec![ecdsa_key_id]);
         idkg_payload_vetkd_context
             .signature_agreements
             .insert(pseudo_random_id, fake_response);
+
+        // The payload should be rejected, because there should be no aggreements
+        // for vetKD in the IDKG payload
         let res = validate_new_signature_agreements(
             crypto,
             &block_reader,
@@ -1190,6 +1196,8 @@ mod test {
             &prev_payload,
             &idkg_payload_vetkd_context,
         );
+        // The error should be "Signature missing context", because vetKD contexts
+        // should be filtered out during IDKG payload validation.
         assert_matches!(
             res,
             Err(ValidationError::InvalidArtifact(
