@@ -10,7 +10,7 @@ use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::messages::{
     CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RejectContext, Request,
-    RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
+    RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{CanisterId, Cycles};
@@ -35,6 +35,7 @@ fn mock_freeze_threshold_cycles(
 const CANISTER_ID: CanisterId = CanisterId::from_u64(0);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
 const SUBNET_AVAILABLE_MEMORY: i64 = 300 << 30;
+const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
 
 fn default_input_request() -> RequestOrResponse {
     RequestBuilder::default()
@@ -72,17 +73,27 @@ fn input_response(callback_id: CallbackId, deadline: CoarseTime) -> RequestOrRes
 }
 
 fn default_request_to_self() -> Arc<Request> {
+    request_to_self(NO_DEADLINE)
+}
+
+fn request_to_self(deadline: CoarseTime) -> Arc<Request> {
     RequestBuilder::default()
         .sender(CANISTER_ID)
         .receiver(CANISTER_ID)
+        .deadline(deadline)
         .build()
         .into()
 }
 
 fn default_response_to_self() -> Arc<Response> {
+    response_to_self(NO_DEADLINE)
+}
+
+fn response_to_self(deadline: CoarseTime) -> Arc<Response> {
     ResponseBuilder::default()
         .respondent(CANISTER_ID)
         .originator(CANISTER_ID)
+        .deadline(deadline)
         .build()
         .into()
 }
@@ -371,7 +382,7 @@ fn induct_messages_to_self_memory_limit_test_impl(
     assert!(!fixture.system_state.queues().has_output());
 }
 
-// Inducting messages to self works up to capacity.
+/// Inducting messages to self works up to capacity.
 #[test]
 fn induct_messages_to_self_full_queue() {
     let mut fixture = SystemStateFixture::running();
@@ -398,7 +409,61 @@ fn induct_messages_to_self_full_queue() {
     }
 
     assert_eq!(None, fixture.pop_input());
-    assert_eq!(0, fixture.system_state.queues().output_message_count());
+    assert_eq!(
+        0,
+        fixture.system_state.queues().output_queues_message_count()
+    );
+}
+
+/// Induct a message to self for a callback that has already been closed.
+#[test]
+fn induct_messages_to_self_callback_gone() {
+    let mut fixture = SystemStateFixture::running();
+
+    // Register the callback.
+    let callback = fixture
+        .system_state
+        .with_callback(CANISTER_ID, SOME_DEADLINE);
+
+    // Enqueue the outgoing request.
+    let request = request_to_self(SOME_DEADLINE);
+    fixture.push_output_request(request.clone()).unwrap();
+
+    // Induct it into the input queue.
+    fixture.induct_messages_to_self();
+
+    // Pop and start executing it (pretend it's waiting for multiple rounds for
+    // downstream calls).
+    assert_eq!(
+        Some(CanisterMessage::Request(request.clone().into())),
+        fixture.pop_input()
+    );
+
+    // Expire the callback.
+    fixture.time_out_callbacks(CoarseTime::from_secs_since_unix_epoch(u32::MAX));
+
+    // Pop the resulting reject response and execute it (consuming the callback).
+    assert_matches!(fixture.pop_input(), Some(CanisterMessage::Response(_)));
+    assert_matches!(
+        fixture.system_state.unregister_callback(callback),
+        Ok(Some(_))
+    );
+
+    // A few rounds later, have the running call context produce a response.
+    fixture.push_output_response(response_to_self(SOME_DEADLINE));
+
+    // Try inducting the response before it times out.
+    fixture.induct_messages_to_self();
+
+    // Response should have been silently dropped.
+    assert_eq!(None, fixture.pop_input());
+
+    // And there should be zero messages and reserved slots in the canister queues.
+    let queues = fixture.system_state.queues();
+    assert!(!queues.has_input());
+    assert!(!queues.has_output());
+    assert_eq!(0, queues.input_queues_reserved_slots());
+    assert_eq!(0, queues.output_queues_reserved_slots());
 }
 
 /// Simulates an outbound call with the given deadline, by registering a
