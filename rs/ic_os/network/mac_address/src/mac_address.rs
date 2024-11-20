@@ -4,6 +4,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fmt;
+use std::fmt::Write;
 use std::net::Ipv6Addr;
 use std::process::Command;
 use std::str::FromStr;
@@ -18,6 +19,20 @@ impl MacAddress {
 
     pub fn octets(&self) -> [u8; 6] {
         self.0
+    }
+
+    /// Returns the formatted MAC address string (with colons).
+    pub fn formatted_string(&self) -> String {
+        self.to_string()
+    }
+
+    /// Returns the unformatted MAC address string (without colons).
+    pub fn unformatted_string(&self) -> String {
+        let mut result = String::new();
+        for byte in self.octets() {
+            write!(result, "{:02x}", byte).unwrap();
+        }
+        result
     }
 
     /// Generates the SLAAC IPv6 address for the given prefix.
@@ -127,8 +142,8 @@ pub enum IpVariant {
     V6,
 }
 
-/// Generate a deterministic unformatted MAC address
-/// E.g. "6a01eb49a2b0"
+/// Generates a deterministic MAC address.
+/// E.g., "6a:01:eb:49:a2:b0"
 pub fn generate_deterministic_mac_address(
     mgmt_mac: &MacAddress,
     deployment: Deployment,
@@ -153,6 +168,7 @@ pub fn generate_deterministic_mac_address(
     MacAddress::new(octets)
 }
 
+/// Parses the MAC address from `ipmitool` output.
 pub fn get_mac_address_from_ipmitool_output(output: &str) -> Result<MacAddress> {
     let mac_line = output
         .lines()
@@ -200,12 +216,21 @@ mod tests {
 
     #[test]
     fn test_mac_address_parsing() {
+        // Test parsing formatted MAC address
         let mac = MacAddress::from_str("DE:AD:BE:EF:FF:00").unwrap();
         assert_eq!(mac.to_string(), "de:ad:be:ef:ff:00");
 
+        // Test parsing unformatted MAC address
         let mac = MacAddress::from_str("deadbeefff00").unwrap();
         assert_eq!(mac.to_string(), "de:ad:be:ef:ff:00");
 
+        // Test unformatted string representation
+        assert_eq!(mac.unformatted_string(), "deadbeefff00");
+
+        // Test formatted string representation
+        assert_eq!(mac.formatted_string(), "de:ad:be:ef:ff:00");
+
+        // Test invalid MAC addresses
         assert!(MacAddress::from_str("123456789ABCDEF").is_err()); // Too many chars
         assert!(MacAddress::from_str("ZOOMBAWRONG1").is_err()); // Non-hex chars
         assert!(MacAddress::from_str("Fast times").is_err()); // Nonsense
@@ -215,21 +240,21 @@ mod tests {
     #[test]
     fn test_generate_deterministic_mac_address() {
         let mgmt_mac = MacAddress::from_str("de:ad:de:ad:de:ad").unwrap();
-        let mac = generate_deterministic_mac_address(
+        let mac_v4 = generate_deterministic_mac_address(
             &mgmt_mac,
             Deployment::Mainnet,
             NodeType::GuestOS,
             IpVariant::V4,
         );
-        assert_eq!(mac.to_string(), "4a:01:f7:e0:c6:84");
+        assert_eq!(mac_v4.to_string(), "4a:01:f7:e0:c6:84");
 
-        let mac = generate_deterministic_mac_address(
+        let mac_v6 = generate_deterministic_mac_address(
             &mgmt_mac,
             Deployment::Mainnet,
             NodeType::GuestOS,
             IpVariant::V6,
         );
-        assert_eq!(mac.to_string(), "6a:01:f7:e0:c6:84");
+        assert_eq!(mac_v6.to_string(), "6a:01:f7:e0:c6:84");
     }
 
     #[test]
@@ -291,7 +316,7 @@ User Lockout Interval   : 300";
     #[test]
     fn test_slaac_generation_with_deterministic_mac() {
         let mgmt_mac = MacAddress::from_str("b0:7b:25:c8:f6:c0").unwrap();
-        let prefix = "2602:FFE4:801:17";
+        let prefix = "2602:ffe4:801:17";
         let expected_ip = "2602:ffe4:801:17:6801:ff:feec:bd51"
             .parse::<Ipv6Addr>()
             .unwrap();
@@ -304,5 +329,14 @@ User Lockout Interval   : 300";
         );
         let slaac = mac.calculate_slaac(prefix).unwrap();
         assert_eq!(slaac, expected_ip);
+    }
+
+    #[test]
+    fn test_unformatted_string() {
+        let mac = MacAddress::from_str("de:ad:be:ef:ff:00").unwrap();
+        assert_eq!(mac.unformatted_string(), "deadbeefff00");
+
+        let mac = MacAddress::from_str("deadbeefff00").unwrap();
+        assert_eq!(mac.unformatted_string(), "deadbeefff00");
     }
 }
