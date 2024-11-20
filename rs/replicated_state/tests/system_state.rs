@@ -73,26 +73,28 @@ fn input_response(callback_id: CallbackId, deadline: CoarseTime) -> RequestOrRes
 }
 
 fn default_request_to_self() -> Arc<Request> {
-    request_to_self(NO_DEADLINE)
-}
-
-fn request_to_self(deadline: CoarseTime) -> Arc<Request> {
     RequestBuilder::default()
         .sender(CANISTER_ID)
         .receiver(CANISTER_ID)
+        .build()
+        .into()
+}
+
+fn request_to_self(callback: CallbackId, deadline: CoarseTime) -> Arc<Request> {
+    RequestBuilder::default()
+        .sender(CANISTER_ID)
+        .receiver(CANISTER_ID)
+        .sender_reply_callback(callback)
         .deadline(deadline)
         .build()
         .into()
 }
 
-fn default_response_to_self() -> Arc<Response> {
-    response_to_self(NO_DEADLINE)
-}
-
-fn response_to_self(deadline: CoarseTime) -> Arc<Response> {
+fn response_to_self(callback: CallbackId, deadline: CoarseTime) -> Arc<Response> {
     ResponseBuilder::default()
         .respondent(CANISTER_ID)
         .originator(CANISTER_ID)
+        .originator_reply_callback(callback)
         .deadline(deadline)
         .build()
         .into()
@@ -310,10 +312,6 @@ fn induct_messages_to_self_memory_limit_test_impl(
     deadline: u32,
     should_enforce_limit: bool,
 ) {
-    // Request and response to self.
-    let request = default_request_to_self();
-    let response = default_response_to_self();
-
     // A second request that might exceed the available memory (if guaranteed
     // response; and on an application subnet).
     let second_request: Arc<Request> = RequestBuilder::default()
@@ -324,14 +322,13 @@ fn induct_messages_to_self_memory_limit_test_impl(
         .into();
 
     // A system state with a slot reservation for an outgoing response.
-    let mut fixture = SystemStateFixture {
-        system_state: SystemState::new_running_for_testing(
-            CANISTER_ID,
-            user_test_id(1).get(),
-            Cycles::new(5_000_000_000_000),
-            NumSeconds::new(0),
-        ),
-    };
+    let mut fixture = SystemStateFixture::running();
+
+    // Request and response to self.
+    let request = default_request_to_self();
+    let callback = fixture.system_state.with_callback(CANISTER_ID, NO_DEADLINE);
+    let response = response_to_self(callback, NO_DEADLINE);
+
     fixture
         .push_input(
             RequestOrResponse::Request(request.clone()),
@@ -426,7 +423,7 @@ fn induct_messages_to_self_callback_gone() {
         .with_callback(CANISTER_ID, SOME_DEADLINE);
 
     // Enqueue the outgoing request.
-    let request = request_to_self(SOME_DEADLINE);
+    let request = request_to_self(callback, SOME_DEADLINE);
     fixture.push_output_request(request.clone()).unwrap();
 
     // Induct it into the input queue.
@@ -447,7 +444,7 @@ fn induct_messages_to_self_callback_gone() {
     );
 
     // A few rounds later, have the running call context produce a response.
-    fixture.push_output_response(response_to_self(SOME_DEADLINE));
+    fixture.push_output_response(response_to_self(callback, SOME_DEADLINE));
 
     // Try inducting the response before it times out.
     fixture.induct_messages_to_self();

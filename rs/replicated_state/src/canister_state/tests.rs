@@ -485,8 +485,8 @@ fn canister_state_induct_messages_to_self_guaranteed_response_duplicate_of_pause
     );
     // Nothing was enqueued.
     assert!(!fixture.canister_state.has_input());
-    // And the response is still in the output queue.
-    assert!(fixture.canister_state.has_output());
+    // And the response is gone from the output queue.
+    assert!(!fixture.canister_state.has_output());
 }
 
 #[test]
