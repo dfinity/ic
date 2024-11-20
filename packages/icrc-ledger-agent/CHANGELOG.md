@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Changed
-- Use leb128 decoding for icrc3 certificates
+- Also support leb128 encoded last_block_hash icrc3 certificates
 ### Added
 
 - The basic functions for interacting with icrc ledgers.
