@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use ic_asset_certification::{Asset, AssetConfig, AssetEncoding, AssetFallbackConfig, AssetRouter};
+use ic_asset_certification::{Asset, AssetConfig, AssetFallbackConfig, AssetRouter};
 use ic_cdk::api::{data_certificate, set_certified_data};
 use ic_http_certification::{HeaderField, HttpCertificationTree, HttpRequest, HttpResponse};
 
@@ -65,12 +65,6 @@ pub fn serve_asset(request: &HttpRequest<'static>) -> HttpResponse<'static> {
 }
 
 pub fn certify_assets(assets: Vec<Asset<'static, 'static>>) {
-    // Define the asset certification configurations.
-    let encodings = vec![
-        AssetEncoding::Brotli.default_config(),
-        AssetEncoding::Gzip.default_config(),
-    ];
-
     let asset_configs = vec![
         AssetConfig::File {
             path: "/configs".to_string(),
@@ -81,7 +75,7 @@ pub fn certify_assets(assets: Vec<Asset<'static, 'static>>) {
             )]),
             fallback_for: vec![],
             aliased_by: vec![],
-            encodings: encodings.clone(),
+            encodings: vec![],
         },
         AssetConfig::File {
             path: "/rules".to_string(),
@@ -92,7 +86,7 @@ pub fn certify_assets(assets: Vec<Asset<'static, 'static>>) {
             )]),
             fallback_for: vec![],
             aliased_by: vec![],
-            encodings: encodings.clone(),
+            encodings: vec![],
         },
         AssetConfig::File {
             path: "/incidents".to_string(),
@@ -103,7 +97,7 @@ pub fn certify_assets(assets: Vec<Asset<'static, 'static>>) {
             )]),
             fallback_for: vec![],
             aliased_by: vec![],
-            encodings: encodings.clone(),
+            encodings: vec![],
         },
         AssetConfig::File {
             path: "/404".to_string(),
@@ -116,7 +110,7 @@ pub fn certify_assets(assets: Vec<Asset<'static, 'static>>) {
                 scope: "/".to_string(),
             }],
             aliased_by: vec![],
-            encodings: encodings.clone(),
+            encodings: vec![],
         },
         AssetConfig::File {
             path: "/403".to_string(),
@@ -129,7 +123,7 @@ pub fn certify_assets(assets: Vec<Asset<'static, 'static>>) {
                 scope: "/rules".to_string(),
             }],
             aliased_by: vec![],
-            encodings: encodings.clone(),
+            encodings: vec![],
         },
     ];
 
