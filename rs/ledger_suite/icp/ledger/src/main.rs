@@ -14,7 +14,6 @@ use ic_cdk::api::instruction_counter;
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
 use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
-use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
     ledger::{

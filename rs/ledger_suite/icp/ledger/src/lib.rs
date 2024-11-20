@@ -14,6 +14,7 @@ use ic_ledger_core::{
 use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
 use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use icp_ledger::{
     AccountIdentifier, Block, FeatureFlags, LedgerAllowances, LedgerBalances, Memo, Operation,
@@ -22,6 +23,7 @@ use icp_ledger::{
 use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
 use lazy_static::lazy_static;
+use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -74,6 +76,52 @@ const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
 const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
 
+#[derive(Clone, Debug, Encode, Decode)]
+struct StorableAllowance {
+    #[n(0)]
+    amount: Tokens,
+    #[n(1)]
+    expires_at: Option<TimeStamp>,
+}
+
+impl Storable for StorableAllowance {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let mut buf = vec![];
+        minicbor::encode(self, &mut buf).expect("StorableAllowance encoding should always succeed");
+        Cow::Owned(buf)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        minicbor::decode(bytes.as_ref()).unwrap_or_else(|e| {
+            panic!(
+                "failed to decode StorableAllowance bytes {}: {e}",
+                hex::encode(bytes)
+            )
+        })
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+impl From<Allowance<Tokens>> for StorableAllowance {
+    fn from(val: Allowance<Tokens>) -> Self {
+        Self {
+            amount: val.amount,
+            expires_at: val.expires_at,
+        }
+    }
+}
+
+impl From<StorableAllowance> for Allowance<Tokens> {
+    fn from(val: StorableAllowance) -> Self {
+        Self {
+            amount: val.amount,
+            expires_at: val.expires_at,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
+        }
+    }
+}
+
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
         MemoryManager::init(DefaultMemoryImpl::default())
@@ -85,7 +133,7 @@ thread_local! {
 
     // (from, spender) -> allowance - map storing ledger allowances.
     #[allow(clippy::type_complexity)]
-    pub static ALLOWANCES_MEMORY: RefCell<StableBTreeMap<(AccountIdentifier, AccountIdentifier), Allowance<Tokens>, VirtualMemory<DefaultMemoryImpl>>> =
+    pub static ALLOWANCES_MEMORY: RefCell<StableBTreeMap<(AccountIdentifier, AccountIdentifier), StorableAllowance, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_MEMORY_ID))));
 
     // (timestamp, (from, spender)) - expiration set used for removing expired allowances.
@@ -173,7 +221,7 @@ pub struct Ledger {
 
     #[serde(default)]
     pub state: LedgerState,
-    
+
     #[serde(default = "default_ledger_version")]
     pub ledger_version: u64,
 }
@@ -559,7 +607,9 @@ impl AllowancesData for StableAllowancesData {
         &self,
         account_spender: &(Self::AccountId, Self::AccountId),
     ) -> Option<Allowance<Self::Tokens>> {
-        ALLOWANCES_MEMORY.with_borrow(|allowances| allowances.get(account_spender))
+        ALLOWANCES_MEMORY
+            .with_borrow(|allowances| allowances.get(account_spender))
+            .map(|a| a.into())
     }
 
     fn set_allowance(
@@ -568,7 +618,7 @@ impl AllowancesData for StableAllowancesData {
         allowance: Allowance<Self::Tokens>,
     ) {
         ALLOWANCES_MEMORY
-            .with_borrow_mut(|allowances| allowances.insert(account_spender, allowance));
+            .with_borrow_mut(|allowances| allowances.insert(account_spender, allowance.into()));
     }
 
     fn remove_allowance(&mut self, account_spender: &(Self::AccountId, Self::AccountId)) {
