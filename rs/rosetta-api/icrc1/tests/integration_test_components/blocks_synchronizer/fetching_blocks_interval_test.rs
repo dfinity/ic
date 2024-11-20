@@ -218,7 +218,7 @@ proptest! {
                 ledger_canister_id: icrc_ledger_canister_id,
             });
 
-            // If we fetch the certificate now we should get and empty certificate
+            // If we fetch the certificate now we should get an empty certificate
             let certificate = agent.get_certified_chain_tip().await.unwrap();
             assert!(certificate.is_none());
 
