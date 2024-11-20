@@ -7641,6 +7641,7 @@ name = "ic-crypto-secp256k1"
 version = "0.9.0"
 dependencies = [
  "bip32",
+ "bitcoin 0.28.2",
  "hex",
  "hex-literal",
  "hmac",
@@ -7650,6 +7651,7 @@ dependencies = [
  "pem 1.1.1",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "secp256k1 0.22.2",
  "sha2 0.10.8",
  "simple_asn1",
  "wycheproof",

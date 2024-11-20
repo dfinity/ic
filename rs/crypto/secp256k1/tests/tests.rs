@@ -147,6 +147,39 @@ fn should_accept_ecdsa_signatures_that_we_generate() {
 }
 
 #[test]
+fn bitcoin_library_accepts_our_bip341_signatures() {
+    use bitcoin::{
+        hashes::hex::FromHex,
+        schnorr::TapTweak,
+        secp256k1::{schnorr::Signature, Message, Secp256k1, XOnlyPublicKey},
+        util::taproot::TapBranchHash,
+    };
+
+    let secp256k1 = Secp256k1::new();
+
+    let mut rng = test_rng();
+
+    for _trial in 0..1024 {
+        let sk = PrivateKey::generate_using_rng(&mut rng);
+
+        let msg = rng.gen::<[u8; 32]>();
+        let ttr = rng.gen::<[u8; 32]>();
+
+        let sig = sk.sign_message_with_bip341(&msg, &mut rng, &ttr).unwrap();
+
+        let pk = XOnlyPublicKey::from_slice(&sk.public_key().serialize_sec1(true)[1..]).unwrap();
+
+        let tnh = TapBranchHash::from_hex(&hex::encode(ttr)).unwrap();
+
+        let dk = pk.tap_tweak(&secp256k1, Some(tnh)).0.to_inner();
+
+        let msg = Message::from_slice(&msg).unwrap();
+        let sig = Signature::from_slice(&sig).unwrap();
+        assert!(sig.verify(&msg, &dk).is_ok());
+    }
+}
+
+#[test]
 fn should_accept_bip340_signatures_that_we_generate() {
     use rand::RngCore;
 
@@ -159,9 +192,16 @@ fn should_accept_bip340_signatures_that_we_generate() {
 
         let mut msg = vec![0u8; len];
         rng.fill_bytes(&mut msg);
-        let sig = sk.sign_message_with_bip340(&msg, &mut rng);
 
+        let sig = sk.sign_message_with_bip340(&msg, &mut rng);
         assert!(pk.verify_bip340_signature(&msg, &sig));
+
+        for ttr_len in [0, 32] {
+            let mut ttr = vec![0u8; ttr_len];
+            rng.fill_bytes(&mut ttr);
+            let sig = sk.sign_message_with_bip341(&msg, &mut rng, &ttr).unwrap();
+            assert!(pk.verify_bip341_signature(&msg, &sig, &ttr));
+        }
     }
 }
 
