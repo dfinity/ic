@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 use config::config_ini::config_map_from_path;
 use config::deployment_json::get_deployment_settings;
 use config::firewall_json;
+use config::firewall_policy;
 use config::{
     DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH,
     DEFAULT_SETUPOS_FIREWALL_JSON_FILE_PATH,
@@ -30,6 +31,7 @@ pub enum Commands {
         #[arg(short, long, default_value = "SetupOS")]
         node_type: String,
     },
+    /// Check the firewall configuration for validity and policy compliance.
     CheckFirewallConfig {
         #[arg(index = 1)]
         /// Path to firewall.json.  Defaults to DEFAULT_SETUPOS_FIREWALL_JSON_FILE_PATH if unspecified.
@@ -38,6 +40,9 @@ pub enum Commands {
         /// it will raise an error.  If the file exists but the rules cannot be read, it will
         /// raise an error.
         firewall_file: Option<String>,
+        /// If specified, causes the firewall configuration checker to skip checking firewall policy.
+        #[arg(short, long, action)]
+        no_check_policy: bool,
     },
 }
 
@@ -138,18 +143,29 @@ pub fn main() -> Result<()> {
             println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
             Ok(())
         }
-        Some(Commands::CheckFirewallConfig { firewall_file }) => {
-            firewall_json::get_firewall_rules_json_or_default(
+        Some(Commands::CheckFirewallConfig {
+            firewall_file,
+            no_check_policy,
+        }) => {
+            let check_policy = !no_check_policy;
+            let firewall_settings = firewall_json::get_firewall_rules_json_or_default(
                 firewall_file.as_ref().map(Path::new),
                 Path::new(DEFAULT_SETUPOS_FIREWALL_JSON_FILE_PATH),
             )?;
             eprintln!(
-                "Firewall config checks out {}",
+                "Firewall config syntax checks out {}",
                 match firewall_file {
                     Some(f) => format!("from explicitly specified {}", f),
                     None => format!("from default {}", DEFAULT_SETUPOS_FIREWALL_JSON_FILE_PATH),
                 },
             );
+            if check_policy {
+                if let Some(firewall_settings) = firewall_settings {
+                    let checker = firewall_policy::FirewallPolicyChecker::default();
+                    checker.check(firewall_settings)?;
+                    eprintln!("Firewall config complies with policy");
+                }
+            }
             Ok(())
         }
 

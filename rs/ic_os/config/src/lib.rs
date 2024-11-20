@@ -1,6 +1,7 @@
 pub mod config_ini;
 pub mod deployment_json;
 pub mod firewall_json;
+pub mod firewall_policy;
 pub mod generate_testnet_config;
 pub mod types;
 

@@ -1,6 +1,5 @@
 use crate::types::firewall::FirewallRule;
 use crate::types::firewall::FirewallSettings;
-use anyhow::Result;
 use std::error::Error;
 use std::fmt::Display;
 use std::fs::File;
@@ -85,6 +84,7 @@ pub fn get_firewall_rules_json_or_default(
 mod tests {
     use super::*;
     use crate::types::firewall::{FirewallRuleAction, FirewallRuleDestination};
+    use anyhow::Result;
     use std::io::Write;
     use tempfile::NamedTempFile;
 
