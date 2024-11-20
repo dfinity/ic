@@ -53,6 +53,25 @@ async fn assert_upgrade_journal(
 /// Each tick, it observes the state using the provided `observe` function.
 /// If the observed state matches the `expected` state, it returns `Ok(())`.
 /// If the timeout is reached, it returns an error.
+///
+/// Example:
+/// ```
+/// let upgrade_journal_interval_seconds = 60 * 60;
+/// await_with_timeout(
+///     &pocket_ic,
+///     upgrade_journal_interval_seconds,
+///     |pocket_ic| async {
+///         sns::governance::get_upgrade_journal(pocket_ic, sns.governance.canister_id)
+///             .await
+///             .upgrade_steps
+///             .unwrap()
+///             .versions
+///     },
+///     &vec![initial_sns_version.clone()],
+/// )
+/// .await
+/// .unwrap();
+/// ```
 async fn await_with_timeout<'a, T, F, Fut>(
     pocket_ic: &'a PocketIc,
     timeout_seconds: u64,
