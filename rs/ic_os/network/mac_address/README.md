@@ -4,8 +4,9 @@ Each IC-OS node must have a unique but deterministic MAC address derived from it
 
 ## Schema
 
-- **The first 8-bits: `6a`**
-  - Indicates an IPv6 interface.
+- **The first 8-bits:**
+  - IPv4 interfaces: 4a
+  - IPv6 interfaces: 6a
 
 - **The second 8-bits:**
   - Reserved hexadecimal numbers for each IC-OS:
