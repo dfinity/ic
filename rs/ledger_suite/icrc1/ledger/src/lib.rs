@@ -479,6 +479,7 @@ impl From<StorableAllowance> for Allowance<Tokens> {
         Self {
             amount: val.amount,
             expires_at: val.expires_at,
+            // This field is not used and will be removed in subsequent PR.
             arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         }
     }
