@@ -73,46 +73,33 @@ impl TryFrom<&CachedUpgradeStepsPb> for CachedUpgradeSteps {
     }
 }
 
-/// Formats the first 7 bytes of a hash as a hexadecimal string.
+/// Formats the first 3 bytes of a hash as a hexadecimal string. Corresponds to 6 ascii symbols.
 pub fn format_short_hash(hash: &[u8]) -> String {
     hash.iter()
-        .take(7)
+        .take(3)
         .map(|b| format!("{:02x}", b))
         .collect::<Vec<_>>()
         .join("")
 }
 
-/// Formats the 32 bytes of a hash as a hexadecimal string.
+/// Formats the 32 bytes of a hash as a hexadecimal string. Corresponds to 64 ascii symbols.
 pub fn format_full_hash(hash: &[u8]) -> String {
     hash.iter()
-        .take(32)
         .map(|b| format!("{:02x}", b))
         .collect::<Vec<_>>()
         .join("")
-}
-
-/// Formats the version as a Markdown table row.
-fn render_markdown_row(index: usize, version: &Version, canister_changes: &str) -> String {
-    format!(
-        "| {} | {} | {} | {} | {} | {} | {} | {} |",
-        index,
-        format_short_hash(&version.root_wasm_hash[..]),
-        format_short_hash(&version.governance_wasm_hash[..]),
-        format_short_hash(&version.swap_wasm_hash[..]),
-        format_short_hash(&version.index_wasm_hash[..]),
-        format_short_hash(&version.ledger_wasm_hash[..]),
-        format_short_hash(&version.archive_wasm_hash[..]),
-        canister_changes,
-    )
 }
 
 pub fn render_two_versions_as_markdown_table(
     current_version: &Version,
     target_version: &Version,
 ) -> String {
+    let long_line = "-".repeat(64);
+    let current_column_label = format!("{:<64}", "Current version's module hash");
+    let target_column_label = format!("{:<64}", "New target version's module hash");
     format!(
-        "| Canister   | Current version's module hash    | New target version's module hash |\n\
-         |------------|----------------------------------|----------------------------------|\n\
+        "| Canister   | {current_column_label} | {target_column_label} |\n\
+         |------------|-{long_line}-|-{long_line}-|\n\
          | Root       | {} | {} |\n\
          | Governance | {} | {} |\n\
          | Swap       | {} | {} |\n\
@@ -162,15 +149,27 @@ fn render_sns_canister_change(
         .join(",")
 }
 
+/// Formats the version as a Markdown table row.
+fn render_markdown_row(index: usize, version: &Version, canister_changes: &str) -> String {
+    format!(
+        "| {:>4} | {} | {} | {} | {} | {} | {} | {} |",
+        index,
+        format_short_hash(&version.root_wasm_hash[..]),
+        format_short_hash(&version.governance_wasm_hash[..]),
+        format_short_hash(&version.swap_wasm_hash[..]),
+        format_short_hash(&version.index_wasm_hash[..]),
+        format_short_hash(&version.ledger_wasm_hash[..]),
+        format_short_hash(&version.archive_wasm_hash[..]),
+        canister_changes,
+    )
+}
+
 impl std::fmt::Display for CachedUpgradeSteps {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(
             f,
-            "| Step | Root  | Governance | Swap  | Index | Ledger | Archive | Changes |"
-        )?;
-        writeln!(
-            f,
-            "|------|-------|------------|-------|-------|--------|---------|---------|"
+            "| Step | Root | Governance | Swap | Index | Ledger | Archive | Changes |\n\
+             |------|------|------------|------|-------|--------|---------|---------|"
         )?;
         writeln!(
             f,
@@ -186,11 +185,7 @@ impl std::fmt::Display for CachedUpgradeSteps {
             // Index 0 corresponds to `current_version`.
             let index = index.saturating_add(1);
 
-            writeln!(
-                f,
-                "{}",
-                render_markdown_row(index + 1, &self.current_version, &changes)
-            )?;
+            writeln!(f, "{}", render_markdown_row(index, &version, &changes))?;
 
             previous_version = version;
         }

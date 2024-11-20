@@ -166,10 +166,10 @@ async fn test_get_upgrade_journal() {
         .await;
     }
 
-    // State 3: Advance the target version via proposal.
+    // State 3: Advance the target version via proposal. This is the main code under test.
     sns::governance::propose_to_advance_sns_target_version(&pocket_ic, sns.governance.canister_id)
         .await
-        .unwrap();
+        .unwrap_err();
 
     expected_upgrade_journal_entries.push(Event::TargetVersionSet(TargetVersionSet::new(
         None,

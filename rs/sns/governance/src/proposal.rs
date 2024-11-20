@@ -172,7 +172,7 @@ pub(crate) fn get_action_auxiliary(
         })
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum ActionAuxiliary {
     TransferSnsTreasuryFunds(Valuation),
     MintSnsTokens(Valuation),
@@ -2547,6 +2547,9 @@ mod treasury_tests;
 
 #[cfg(test)]
 mod minting_tests;
+
+#[cfg(test)]
+mod advance_sns_target_version;
 
 #[cfg(test)]
 mod tests {
