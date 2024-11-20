@@ -67,6 +67,12 @@ oci_tar(
     repo_tags = ["bitcoind:image"],
 )
 
+oci_tar(
+    name = "nginx-proxy.tar",
+    image = "@nginx-proxy",
+    repo_tags = ["nginx-proxy:image"],
+)
+
 uvm_config_image(
     name = "ckbtc_uvm_config_image",
     srcs = [

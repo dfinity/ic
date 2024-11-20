@@ -126,9 +126,10 @@ sudo mv "{btc_node_ipv6}"/key.pem localhost.key
 sudo chmod 644 localhost*
 
 # Run nginx auto proxy
+docker load -i /config/nginx-proxy.tar
 docker run -d --name=proxy -e ENABLE_IPV6=true -e DEFAULT_HOST=localhost -p 80:80 -p {HTTPS_PORT}:443 \
            -v /tmp/certs:/etc/nginx/certs -v /var/run/docker.sock:/tmp/docker.sock:ro \
-           nginxproxy/nginx-proxy
+           nginx-proxy:image
 
 # Setup bitcoin.conf and run bitcoind
 # The following variable assignment prevents the dollar sign in Rust's BITCOIND_RPC_AUTH string
