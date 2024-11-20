@@ -78,6 +78,10 @@ pub fn mark_utxo_checked(
     status: UtxoCheckStatus,
     kyt_provider: Principal,
 ) {
+    if state.utxo_checked_status(utxo) == Some(&status) {
+        // no need to record an event if the status is unchanged
+        return;
+    }
     record_event(&Event::CheckedUtxo {
         utxo: utxo.clone(),
         uuid: uuid.clone(),

@@ -108,10 +108,12 @@ pub fn get_uxos_response() -> GetUtxosResponse {
 
 pub mod mock {
     use crate::management::CallError;
+    use crate::state::UtxoCheckStatus;
+    use crate::updates::update_balance::UpdateBalanceError;
     use crate::CanisterRuntime;
     use async_trait::async_trait;
     use candid::Principal;
-    use ic_btc_interface::{GetUtxosRequest, GetUtxosResponse};
+    use ic_btc_interface::{GetUtxosRequest, GetUtxosResponse, Utxo};
     use mockall::mock;
 
     mock! {
@@ -124,6 +126,7 @@ pub mod mock {
             fn time(&self) -> u64;
             fn global_timer_set(&self, timestamp: u64);
             async fn bitcoin_get_utxos(&self, request: &GetUtxosRequest, cycles: u64) -> Result<GetUtxosResponse, CallError>;
+            async fn kyt_check_utxo(&self, caller: Principal, utxo: &Utxo) -> Result<(String, UtxoCheckStatus, Principal), UpdateBalanceError>;
         }
     }
 }

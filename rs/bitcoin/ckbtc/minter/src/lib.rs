@@ -3,7 +3,8 @@ use crate::logs::{P0, P1};
 use crate::management::CallError;
 use crate::memo::Status;
 use crate::queries::WithdrawalFee;
-use crate::state::ReimbursementReason;
+use crate::state::{ReimbursementReason, UtxoCheckStatus};
+use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
 use ic_btc_interface::{
@@ -1273,6 +1274,12 @@ pub trait CanisterRuntime {
         request: &GetUtxosRequest,
         cycles: u64,
     ) -> Result<GetUtxosResponse, CallError>;
+
+    async fn kyt_check_utxo(
+        &self,
+        caller: Principal,
+        utxo: &Utxo,
+    ) -> Result<(String, UtxoCheckStatus, Principal), UpdateBalanceError>;
 }
 
 #[derive(Copy, Clone)]
@@ -1302,5 +1309,13 @@ impl CanisterRuntime for IcCanisterRuntime {
         cycles: u64,
     ) -> Result<GetUtxosResponse, CallError> {
         management::call("bitcoin_get_utxos", cycles, &request).await
+    }
+
+    async fn kyt_check_utxo(
+        &self,
+        caller: Principal,
+        utxo: &Utxo,
+    ) -> Result<(String, UtxoCheckStatus, Principal), UpdateBalanceError> {
+        updates::update_balance::kyt_check_utxo(caller, utxo).await
     }
 }

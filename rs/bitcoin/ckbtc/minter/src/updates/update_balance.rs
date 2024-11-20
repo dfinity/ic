@@ -239,9 +239,9 @@ pub async fn update_balance<R: CanisterRuntime>(
             utxo_statuses.push(UtxoStatus::ValueTooSmall(utxo));
             continue;
         }
-        let (uuid, status, kyt_provider) = kyt_check_utxo(caller_account.owner, &utxo).await?;
+        let (uuid, status, kyt_provider) =
+            runtime.kyt_check_utxo(caller_account.owner, &utxo).await?;
         mutate_state(|s| {
-            //TODO XC-230: do not dedup event if utxo already ignored
             crate::state::audit::mark_utxo_checked(s, &utxo, uuid.clone(), status, kyt_provider);
         });
         if status == UtxoCheckStatus::Tainted {
@@ -294,7 +294,7 @@ pub async fn update_balance<R: CanisterRuntime>(
     Ok(utxo_statuses)
 }
 
-async fn kyt_check_utxo(
+pub async fn kyt_check_utxo(
     caller: Principal,
     utxo: &Utxo,
 ) -> Result<(String, UtxoCheckStatus, Principal), UpdateBalanceError> {

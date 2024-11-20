@@ -1023,6 +1023,8 @@ impl CkBtcMinterState {
     ) {
         match status {
             UtxoCheckStatus::Clean => {
+                self.ignored_utxos.remove(&utxo);
+                self.quarantined_utxos.remove(&utxo);
                 if self
                     .checked_utxos
                     .insert(utxo, (uuid, status, kyt_provider))
@@ -1034,9 +1036,21 @@ impl CkBtcMinterState {
                 }
             }
             UtxoCheckStatus::Tainted => {
+                self.ignored_utxos.remove(&utxo);
                 self.quarantined_utxos.insert(utxo);
             }
         }
+    }
+
+    fn utxo_checked_status(&self, utxo: &Utxo) -> Option<&UtxoCheckStatus> {
+        self.checked_utxos
+            .get(utxo)
+            .map(|(_, status, _)| status)
+            .or_else(|| {
+                self.quarantined_utxos
+                    .contains(utxo)
+                    .then_some(&UtxoCheckStatus::Tainted)
+            })
     }
 
     /// Decreases the owed amount for the given provider by the amount.
