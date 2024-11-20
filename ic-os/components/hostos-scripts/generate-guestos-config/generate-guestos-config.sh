@@ -80,6 +80,7 @@ function read_old_config_variables() {
             "node_reward_type") node_reward_type="${value}" ;;
         esac
     done <"${CONFIG}"
+}
 
 function read_config_variables() {
     ipv6_prefix=$(get_config_value '.network_settings.ipv6_config.Deterministic.prefix')
