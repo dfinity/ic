@@ -613,6 +613,10 @@ pub struct ManageDappCanisterSettings {
     #[prost(uint64, optional, tag = "7")]
     pub wasm_memory_limit: ::core::option::Option<u64>,
 }
+/// Unlike `Governance.Version`, this message has optional fields and is the recommended one
+/// to use in APIs that can evolve. For example, the SNS Governance could eventually support
+/// a shorthand notation for SNS versions, enabling clients to specify SNS versions without having
+/// to set each individual SNS framework canister's WASM hash.
 #[derive(
     candid::CandidType,
     candid::Deserialize,

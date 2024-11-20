@@ -439,6 +439,10 @@ message ManageDappCanisterSettings {
   optional uint64 wasm_memory_limit = 7;
 }
 
+// Unlike `Governance.Version`, this message has optional fields and is the recommended one
+// to use in APIs that can evolve. For example, the SNS Governance could eventually support
+// a shorthand notation for SNS versions, enabling clients to specify SNS versions without having
+// to set each individual SNS framework canister's WASM hash.
 message SnsVersion {
   // The hash of the Governance canister WASM.
   optional bytes governance_wasm_hash = 1;
