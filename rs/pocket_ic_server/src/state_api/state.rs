@@ -911,7 +911,7 @@ impl ApiState {
         let port = http_gateway_config.port.unwrap_or_default();
         let addr = format!("{}:{}", ip_addr, port);
         let listener = std::net::TcpListener::bind(&addr)
-            .unwrap_or_else(|_| panic!("Failed to start HTTP gateway on port {}", port));
+            .map_err(|e| format!("Failed to bind to address {}: {}", addr, e))?;
         let real_port = listener.local_addr().unwrap().port();
 
         let pocket_ic_server_port = self.port.unwrap();
