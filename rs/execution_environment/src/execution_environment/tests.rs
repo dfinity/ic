@@ -3170,7 +3170,8 @@ fn test_sign_with_schnorr_api_is_enabled() {
 }
 
 #[test]
-fn test_vetkd_public_key_api_is_disabled() {
+fn test_vetkd_public_key_api_is_enabled() {
+    let key_id = make_vetkd_key("correct_key");
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
     let nns_canister = canister_test_id(0x10);
@@ -3178,22 +3179,50 @@ fn test_vetkd_public_key_api_is_disabled() {
         .with_own_subnet_id(own_subnet)
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
+        .with_chain_key(key_id.clone())
         .build();
+
+    let some_key = into_inner_vetkd(make_vetkd_key("some_key"));
     test.inject_call_to_ic00(
         Method::VetKdPublicKey,
         ic00::VetKdPublicKeyArgs {
             canister_id: None,
             derivation_path: DerivationPath::new(vec![]),
-            key_id: into_inner_vetkd(make_vetkd_key("some_key")),
+            key_id: some_key.clone(),
+        }
+        .encode(),
+        Cycles::new(0),
+    );
+    test.inject_call_to_ic00(
+        Method::VetKdPublicKey,
+        ic00::VetKdPublicKeyArgs {
+            canister_id: None,
+            derivation_path: DerivationPath::new(vec![]),
+            key_id: into_inner_vetkd(make_vetkd_key("correct_key")),
         }
         .encode(),
         Cycles::new(0),
     );
     test.execute_all();
+
+    // Check, that call fails for a key that doesn't exist
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        "vetkd_public_key API is not yet implemented.",
+        format!(
+            "Subnet {} does not hold threshold key vetkd:{}.",
+            own_subnet, some_key
+        ),
+    );
+
+    // NOTE: Since the public keys delivered to execution by the test framework
+    // are not well formed Bls G2 points, the deserialization of this function will
+    // fail. However, the fact that we get this error message indicates, that we
+    // requested a key that actually exists.
+    let response = test.xnet_messages()[1].clone();
+    assert_eq!(
+        get_reject_message(response),
+        "failed to retrieve VetKD public key: InvalidPublicKey",
     )
 }
 

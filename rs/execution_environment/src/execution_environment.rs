@@ -2684,7 +2684,12 @@ impl ExecutionEnvironment {
                 derivation_path,
             },
         )
-        .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, format!("{}", err)))
+        .map_err(|err| {
+            UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!("failed to retrieve VetKD public key: {}", err),
+            )
+        })
     }
 
     fn calculate_signature_fee(&self, args: &ThresholdArguments, subnet_size: usize) -> Cycles {
