@@ -65,7 +65,7 @@ const MAX_TRANSACTIONS_PER_REQUEST: usize = 2_000;
 const ACCOUNTS_OVERFLOW_TRIM_QUANTITY: usize = 100_000;
 const MAX_TRANSACTIONS_IN_WINDOW: usize = 3_000_000;
 const MAX_TRANSACTIONS_TO_PURGE: usize = 100_000;
-
+const MAX_U64_ENCODING_BYTES: usize = 10;
 const DEFAULT_MAX_MEMO_LENGTH: u16 = 32;
 
 /// The ledger versions represent backwards incompatible versions of the ledger.
@@ -719,7 +719,7 @@ impl<Tokens: TokensType> Ledger<Tokens> {
                 #[cfg(feature = "icrc3-compatible-data-certificate")]
                 {
                     let last_block_hash_label = Label::from("last_block_hash");
-                    let mut last_block_index_encoded = Vec::new();
+                    let mut last_block_index_encoded = Vec::with_capacity(MAX_U64_ENCODING_BYTES);
                     leb128::write::unsigned(&mut last_block_index_encoded, last_block_index)
                         .expect("Failed to write LEB128");
                     return fork(

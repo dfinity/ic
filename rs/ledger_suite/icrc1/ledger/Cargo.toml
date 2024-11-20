@@ -41,16 +41,15 @@ leb128 = "0.2.5"
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
 cddl = "0.9.4"
+ciborium = { workspace = true }
 ic-agent = { workspace = true }
+ic-certification = { workspace = true }
 ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
 ic-icrc1-test-utils = { path = "../test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
-leb128 = "0.2.4"
 num-bigint = { workspace = true }
 proptest = { workspace = true }
-ic-certification = { workspace = true }
-ciborium = { workspace = true }
 
 [features]
 default = []
