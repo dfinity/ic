@@ -1,129 +1,183 @@
-use std::fmt;
-use std::process::Command;
-
-use anyhow::{bail, Context, Result};
-use regex::Regex;
-use sha2::{Digest, Sha256};
-
 use crate::node_type::NodeType;
+use anyhow::{anyhow, Context, Error, Result};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
-use utils::intersperse;
+use sha2::{Digest, Sha256};
+use std::fmt;
+use std::net::Ipv6Addr;
+use std::process::Command;
+use std::str::FromStr;
 
-/// Wrapper types for MAC addresses
-/// - ensure clients cannot modify or construct incorrectly.
-///
-/// Hex alpha digits are turned to lower case to match ipmitool presentation
-/// Construct with `try_from(&str)`
-/// Use `.get()` to get the underlying string
-/// Transform between the types with `from(the_other)`
-// TODO - Make a canonical type which can convert to either un/formatted on demand
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
-pub struct UnformattedMacAddress(String);
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
-pub struct FormattedMacAddress(String);
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct MacAddress([u8; 6]);
 
-impl UnformattedMacAddress {
-    pub fn get(&self) -> String {
-        self.0.clone()
+impl MacAddress {
+    pub fn new(octets: [u8; 6]) -> Self {
+        MacAddress(octets)
+    }
+
+    pub fn octets(&self) -> [u8; 6] {
+        self.0
+    }
+
+    /// Generates the SLAAC IPv6 address for the given prefix.
+    pub fn calculate_slaac(&self, prefix: &str) -> Result<Ipv6Addr> {
+        let mut octets = self.octets().to_vec();
+
+        octets.insert(3, 0xff);
+        octets.insert(4, 0xfe);
+
+        octets[0] ^= 0x02;
+
+        let interface_id = format!(
+            "{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}",
+            octets[0], octets[1], octets[2], octets[3], octets[4], octets[5], octets[6], octets[7]
+        );
+
+        let address_str = format!("{}:{}", prefix.trim_end_matches(':'), interface_id);
+        address_str
+            .parse()
+            .map_err(|_| anyhow!("Invalid IPv6 address: {}", address_str))
     }
 }
 
-impl FormattedMacAddress {
-    pub fn get(&self) -> String {
-        self.0.clone()
-    }
-}
-
-impl fmt::Display for UnformattedMacAddress {
+impl fmt::Display for MacAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.get())
+        let octets = self.octets();
+        write!(
+            f,
+            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+            octets[0], octets[1], octets[2], octets[3], octets[4], octets[5]
+        )
     }
 }
 
-impl fmt::Display for FormattedMacAddress {
+#[derive(Debug)]
+pub enum MacAddressParseError {
+    InvalidFormat,
+    InvalidLength,
+}
+
+impl FromStr for MacAddress {
+    type Err = MacAddressParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.to_ascii_lowercase();
+        let s_no_colons: String = s.chars().filter(|c| c.is_ascii_hexdigit()).collect();
+        if s_no_colons.len() != 12 {
+            return Err(MacAddressParseError::InvalidLength);
+        }
+        let bytes = (0..12)
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s_no_colons[i..i + 2], 16))
+            .collect::<Result<Vec<u8>, _>>()
+            .map_err(|_| MacAddressParseError::InvalidFormat)?;
+
+        let octets: [u8; 6] = bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| MacAddressParseError::InvalidLength)?;
+        Ok(MacAddress(octets))
+    }
+}
+
+impl std::error::Error for MacAddressParseError {}
+
+impl fmt::Display for MacAddressParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.get())
-    }
-}
-
-impl TryFrom<&str> for UnformattedMacAddress {
-    type Error = anyhow::Error;
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        if s.len() != 12 || s.chars().any(|c| !c.is_ascii_hexdigit()) {
-            bail!("Malformed raw mac address: {}", s);
+        match self {
+            MacAddressParseError::InvalidFormat => write!(f, "Invalid MAC address format"),
+            MacAddressParseError::InvalidLength => write!(f, "Invalid MAC address length"),
         }
-
-        Ok(UnformattedMacAddress(s.to_string().to_lowercase()))
     }
 }
 
-impl TryFrom<&str> for FormattedMacAddress {
-    type Error = anyhow::Error;
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        if s.len() != 17 || s.chars().filter(|c| *c == ':').count() != 5 {
-            bail!(
-                "Invalid BMC MAC. Must be formatted as MAC address with colons: {}",
-                s
-            );
+/// Deployment environment.
+#[derive(Debug, Clone, Copy)]
+pub enum Deployment {
+    Mainnet,
+    Testnet,
+}
+
+impl fmt::Display for Deployment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Deployment::Mainnet => write!(f, "mainnet"),
+            Deployment::Testnet => write!(f, "testnet"),
         }
-
-        Ok(FormattedMacAddress(s.to_string().to_lowercase()))
     }
 }
 
-impl From<&UnformattedMacAddress> for FormattedMacAddress {
-    /// Return a standard formatted MAC address given a 'raw' unformatted 12 char string
-    /// E.g. "aabbccddeeff" -> "aa:bb:cc:dd:ee:ff"
-    /// Error if not the correct length or hexadecimal
-    fn from(mac: &UnformattedMacAddress) -> Self {
-        let result = intersperse(&mac.get(), ':', 2);
-        FormattedMacAddress(result)
+impl FromStr for Deployment {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "mainnet" => Ok(Deployment::Mainnet),
+            "testnet" => Ok(Deployment::Testnet),
+            _ => Err(anyhow!("Invalid deployment: {}", s)),
+        }
     }
 }
 
-impl From<&FormattedMacAddress> for UnformattedMacAddress {
-    fn from(mac: &FormattedMacAddress) -> Self {
-        let result: String = mac.0.chars().filter(|c| *c != ':').collect();
-        UnformattedMacAddress(result)
-    }
-}
-
-fn parse_mac_line(line: &str) -> Result<FormattedMacAddress> {
-    let error_msg = format!("Could not parse mac address line: {}", line);
-    let re = Regex::new(r"MAC Address\s+:\s+(([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2}))")?;
-    let captures = re.captures(line).context(error_msg.clone())?;
-    let mac = captures.get(1).context(error_msg.clone())?;
-    FormattedMacAddress::try_from(mac.as_str())
-}
-
-pub fn get_mac_address_from_ipmitool_output(output: &str) -> Result<FormattedMacAddress> {
-    let mac_line = output
-        .lines()
-        .find(|line| line.trim().starts_with("MAC Address"))
-        .context(format!(
-            "Could not find mac address line in ipmitool output: {}",
-            output
-        ))?;
-    parse_mac_line(mac_line)
+/// IP version variant.
+#[derive(Debug, Clone, Copy)]
+pub enum IpVariant {
+    V4,
+    V6,
 }
 
 /// Generate a deterministic unformatted MAC address
 /// E.g. "6a01eb49a2b0"
-pub fn generate_mac_address(
-    mgmt_mac: &FormattedMacAddress,
-    deployment_environment: &str,
-    node_type: &NodeType,
-) -> Result<UnformattedMacAddress> {
-    // Newline added to match behavior
-    let seed = format!("{}{}\n", mgmt_mac.get(), deployment_environment);
-    let vendor_part: String = hex::encode(Sha256::digest(seed)).chars().take(8).collect();
-    let node_index = node_type.to_char();
-    let mac = format!("6a0{}{}", node_index, vendor_part);
-    UnformattedMacAddress::try_from(mac.as_str())
+pub fn generate_deterministic_mac_address(
+    mgmt_mac: &MacAddress,
+    deployment: Deployment,
+    node_type: NodeType,
+    ip_variant: IpVariant,
+) -> MacAddress {
+    // NOTE: In order to be backwards compatible with existing scripts, this seed
+    // **MUST** have a newline.
+    let seed = format!("{}{}\n", mgmt_mac, deployment);
+
+    let hash = Sha256::digest(seed.as_bytes());
+
+    let version = match ip_variant {
+        IpVariant::V4 => 0x4a,
+        IpVariant::V6 => 0x6a,
+    };
+
+    let index = node_type.to_index();
+
+    let octets = [version, index, hash[0], hash[1], hash[2], hash[3]];
+
+    MacAddress::new(octets)
+}
+
+pub fn get_mac_address_from_ipmitool_output(output: &str) -> Result<MacAddress> {
+    let mac_line = output
+        .lines()
+        .find(|line| line.trim().starts_with("MAC Address"))
+        .ok_or_else(|| {
+            anyhow!(
+                "Could not find MAC address line in ipmitool output: {}",
+                output
+            )
+        })?;
+
+    let error_msg = format!("Could not parse MAC address line: {}", mac_line);
+    let re = Regex::new(r"MAC Address\s+:\s+(([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2}))")?;
+    let captures = re
+        .captures(mac_line)
+        .ok_or_else(|| anyhow!(error_msg.clone()))?;
+    let mac = captures.get(1).ok_or_else(|| anyhow!(error_msg.clone()))?;
+    let mac_str = mac.as_str();
+    let mac_address = MacAddress::from_str(mac_str)
+        .map_err(|_| anyhow!("Invalid MAC address format: {}", mac_str))?;
+    Ok(mac_address)
 }
 
 /// Retrieves the MAC address from the IPMI LAN interface
-pub fn get_ipmi_mac() -> Result<FormattedMacAddress> {
+pub fn get_ipmi_mac() -> Result<MacAddress> {
     let output = Command::new("ipmitool").arg("lan").arg("print").output()?;
     let ipmitool_output = String::from_utf8(output.stdout)?;
 
@@ -141,70 +195,49 @@ pub fn get_ipmi_mac() -> Result<FormattedMacAddress> {
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::*;
-    #[test]
-    fn test_mac() {
-        assert_eq!(
-            FormattedMacAddress::try_from("DE:AD:BE:EF:FF:00")
-                .unwrap()
-                .get(),
-            "de:ad:be:ef:ff:00"
-        );
-        assert!(FormattedMacAddress::try_from("123456789ABCDEF").is_err()); // Too many chars
-        assert!(FormattedMacAddress::try_from("ZOOMBAWRONG1").is_err()); // Non-hex chars
-        assert!(FormattedMacAddress::try_from("Fast times").is_err()); // Nonsense
-        assert!(FormattedMacAddress::try_from("").is_err()); // Too few chars
-        assert!(UnformattedMacAddress::try_from("").is_err()); // Too few chars
 
-        let raw_mac = UnformattedMacAddress::try_from("ABCDEF123456");
-        assert!(raw_mac.is_ok());
-        assert_eq!(
-            FormattedMacAddress::from(&raw_mac.unwrap()).get(),
-            "ab:cd:ef:12:34:56"
-        );
-        let mac = FormattedMacAddress::try_from("AA:BB:CC:DD:EE:FF");
-        assert!(mac.is_ok());
-        assert_eq!(
-            UnformattedMacAddress::from(&mac.unwrap()).get(),
-            "aabbccddeeff"
-        );
+    #[test]
+    fn test_mac_address_parsing() {
+        let mac = MacAddress::from_str("DE:AD:BE:EF:FF:00").unwrap();
+        assert_eq!(mac.to_string(), "de:ad:be:ef:ff:00");
+
+        let mac = MacAddress::from_str("deadbeefff00").unwrap();
+        assert_eq!(mac.to_string(), "de:ad:be:ef:ff:00");
+
+        assert!(MacAddress::from_str("123456789ABCDEF").is_err()); // Too many chars
+        assert!(MacAddress::from_str("ZOOMBAWRONG1").is_err()); // Non-hex chars
+        assert!(MacAddress::from_str("Fast times").is_err()); // Nonsense
+        assert!(MacAddress::from_str("").is_err()); // Too few chars
     }
 
     #[test]
-    fn test_generate_mac_address() {
-        assert_eq!(
-            generate_mac_address(
-                &FormattedMacAddress::try_from("de:ad:de:ad:de:ad").unwrap(),
-                "mainnet",
-                &NodeType::GuestOS,
-            )
-            .unwrap()
-            .get(),
-            "6a01f7e0c684"
+    fn test_generate_deterministic_mac_address() {
+        let mgmt_mac = MacAddress::from_str("de:ad:de:ad:de:ad").unwrap();
+        let mac = generate_deterministic_mac_address(
+            &mgmt_mac,
+            Deployment::Mainnet,
+            NodeType::GuestOS,
+            IpVariant::V4,
         );
-        assert_eq!(
-            generate_mac_address(
-                &FormattedMacAddress::try_from("00:aa:bb:cc:dd:ee").unwrap(),
-                "mainnet",
-                &NodeType::GuestOS,
-            )
-            .unwrap()
-            .get(),
-            "6a01d9ab57f2"
+        assert_eq!(mac.to_string(), "4a:01:f7:e0:c6:84");
+
+        let mac = generate_deterministic_mac_address(
+            &mgmt_mac,
+            Deployment::Mainnet,
+            NodeType::GuestOS,
+            IpVariant::V6,
         );
+        assert_eq!(mac.to_string(), "6a:01:f7:e0:c6:84");
     }
 
     #[test]
     fn test_get_mac_address_from_ipmitool_output() {
-        assert_eq!(
-            get_mac_address_from_ipmitool_output(" MAC Address             : de:ad:be:ef:be:ef  ")
-                .unwrap()
-                .get(),
-            FormattedMacAddress::try_from("de:ad:be:ef:be:ef")
-                .unwrap()
-                .get()
-        );
+        let ipmitool_output = " MAC Address             : de:ad:be:ef:be:ef  ";
+        let mac = get_mac_address_from_ipmitool_output(ipmitool_output).unwrap();
+        assert_eq!(mac.to_string(), "de:ad:be:ef:be:ef");
+
         let ipmitool_output = "Set in Progress         : Set In Progress
 Auth Type Support       : NONE MD2 MD5 PASSWORD
 Auth Type Enable        : Callback : MD2 MD5 PASSWORD
@@ -237,15 +270,39 @@ Bad Password Threshold  : 3
 Invalid password disable: yes
 Attempt Count Reset Int.: 300
 User Lockout Interval   : 300";
-        assert_eq!(
-            get_mac_address_from_ipmitool_output(ipmitool_output)
-                .unwrap()
-                .get(),
-            FormattedMacAddress::try_from("3c:ec:ef:2f:7a:79")
-                .unwrap()
-                .get()
-        );
+        let mac = get_mac_address_from_ipmitool_output(ipmitool_output).unwrap();
+        assert_eq!(mac.to_string(), "3c:ec:ef:2f:7a:79");
 
-        assert!(get_mac_address_from_ipmitool_output("MAC Address : UNKNOWN").is_err());
+        let ipmitool_output = "MAC Address : UNKNOWN";
+        assert!(get_mac_address_from_ipmitool_output(ipmitool_output).is_err());
+    }
+
+    #[test]
+    fn test_calculate_slaac() {
+        let mac = MacAddress::from_str("6a:01:e5:96:2d:49").unwrap();
+        let prefix = "2a04:9dc0:0:108";
+        let expected_ip = "2a04:9dc0:0:108:6801:e5ff:fe96:2d49"
+            .parse::<Ipv6Addr>()
+            .unwrap();
+        let slaac = mac.calculate_slaac(prefix).unwrap();
+        assert_eq!(slaac, expected_ip);
+    }
+
+    #[test]
+    fn test_slaac_generation_with_deterministic_mac() {
+        let mgmt_mac = MacAddress::from_str("b0:7b:25:c8:f6:c0").unwrap();
+        let prefix = "2602:FFE4:801:17";
+        let expected_ip = "2602:ffe4:801:17:6801:ff:feec:bd51"
+            .parse::<Ipv6Addr>()
+            .unwrap();
+
+        let mac = generate_deterministic_mac_address(
+            &mgmt_mac,
+            Deployment::Mainnet,
+            NodeType::GuestOS,
+            IpVariant::V6,
+        );
+        let slaac = mac.calculate_slaac(prefix).unwrap();
+        assert_eq!(slaac, expected_ip);
     }
 }
