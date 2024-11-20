@@ -9964,6 +9964,7 @@ dependencies = [
  "ic-xrc-types",
  "icp-ledger",
  "icrc-ledger-types",
+ "itertools 0.12.1",
  "lazy_static",
  "lifeline",
  "maplit",
