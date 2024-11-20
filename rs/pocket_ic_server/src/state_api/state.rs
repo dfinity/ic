@@ -905,14 +905,27 @@ impl ApiState {
             handler_api_subnet(ApiVersion::V2, replica_url, subnet_id, "read_state", bytes).await
         }
 
+        let https_config = if let Some(ref https_config) = http_gateway_config.https_config {
+            Some(
+                RustlsConfig::from_pem_file(
+                    PathBuf::from(https_config.cert_path.clone()),
+                    PathBuf::from(https_config.key_path.clone()),
+                )
+                .await
+                .map_err(|e| format!("TLS config could not be created: {}", e))?,
+            )
+        } else {
+            None
+        };
+
         let ip_addr = http_gateway_config
             .ip_addr
+            .clone()
             .unwrap_or("127.0.0.1".to_string());
         let port = http_gateway_config.port.unwrap_or_default();
         let addr = format!("{}:{}", ip_addr, port);
         let listener = std::net::TcpListener::bind(&addr)
             .map_err(|e| format!("Failed to bind to address {}: {}", addr, e))?;
-        let real_port = listener.local_addr().unwrap().port();
 
         let pocket_ic_server_port = self.port.unwrap();
         let replica_url = match http_gateway_config.forward_to {
@@ -932,22 +945,15 @@ impl ApiState {
 
         let replica_url = replica_url.trim_end_matches('/').to_string();
 
-        let mut http_gateways = self.http_gateways.write().await;
-        let instance_id = http_gateways.len();
-        let http_gateway_details = HttpGatewayDetails {
-            instance_id,
-            port: real_port,
-            forward_to: http_gateway_config.forward_to.clone(),
-            domains: http_gateway_config.domains.clone(),
-            https_config: http_gateway_config.https_config.clone(),
-        };
-        http_gateways.push(Some(http_gateway_details));
-        drop(http_gateways);
-
-        let http_gateways = self.http_gateways.clone();
         let handle = Handle::new();
-        let shutdown_handle = handle.clone();
         let axum_handle = handle.clone();
+        let domains = http_gateway_config
+            .domains
+            .clone()
+            .unwrap_or(vec!["localhost".to_string()])
+            .iter()
+            .map(|d| fqdn!(d))
+            .collect();
         spawn(async move {
             let http_gateway_client = ic_http_gateway::HttpGatewayClientBuilder::new()
                 .with_agent(agent)
@@ -955,14 +961,7 @@ impl ApiState {
                 .unwrap();
             let backend_client =
                 Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
-            let domain_resolver = DomainResolver::new(
-                http_gateway_config
-                    .domains
-                    .unwrap_or(vec!["localhost".to_string()])
-                    .iter()
-                    .map(|d| fqdn!(d))
-                    .collect(),
-            );
+            let domain_resolver = DomainResolver::new(domains);
             let state_handler = Arc::new(HandlerState::new(
                 http_gateway_client,
                 backend_client,
@@ -1022,52 +1021,59 @@ impl ApiState {
                 .with_state(replica_url)
                 .into_make_service();
 
-            let http_gateways_for_shutdown = http_gateways.clone();
-            tokio::spawn(async move {
-                loop {
-                    let guard = http_gateways_for_shutdown.read().await;
-                    if guard[instance_id].is_none() {
-                        shutdown_handle.shutdown();
-                        break;
-                    }
-                    drop(guard);
-                    tokio::time::sleep(Duration::from_secs(1)).await;
+            match https_config {
+                Some(config) => {
+                    axum_server::from_tcp_rustls(listener, config)
+                        .handle(axum_handle)
+                        .serve(router)
+                        .await
+                        .unwrap();
                 }
-            });
-            if let Some(https_config) = http_gateway_config.https_config {
-                let config = RustlsConfig::from_pem_file(
-                    PathBuf::from(https_config.cert_path),
-                    PathBuf::from(https_config.key_path),
-                )
-                .await;
-                match config {
-                    Ok(config) => {
-                        axum_server::from_tcp_rustls(listener, config)
-                            .handle(axum_handle)
-                            .serve(router)
-                            .await
-                            .unwrap();
-                    }
-                    Err(e) => {
-                        error!("TLS config could not be created: {:?}", e);
-                        let mut guard = http_gateways.write().await;
-                        guard[instance_id] = None;
-                        return;
-                    }
+                None => {
+                    axum_server::from_tcp(listener)
+                        .handle(axum_handle)
+                        .serve(router)
+                        .await
+                        .unwrap();
                 }
-            } else {
-                axum_server::from_tcp(listener)
-                    .handle(axum_handle)
-                    .serve(router)
-                    .await
-                    .unwrap();
             }
 
             debug!("Terminating HTTP gateway.");
         });
 
         // Wait until the HTTP gateway starts listening.
-        while handle.listening().await.is_none() {}
+        let real_port = loop {
+            if let Some(socket_addr) = handle.listening().await {
+                break socket_addr.port();
+            }
+            sleep(Duration::from_millis(20)).await;
+        };
+
+        let mut http_gateways = self.http_gateways.write().await;
+        let instance_id = http_gateways.len();
+        let http_gateway_details = HttpGatewayDetails {
+            instance_id,
+            port: real_port,
+            forward_to: http_gateway_config.forward_to.clone(),
+            domains: http_gateway_config.domains.clone(),
+            https_config: http_gateway_config.https_config.clone(),
+        };
+        http_gateways.push(Some(http_gateway_details));
+        drop(http_gateways);
+
+        let http_gateways_for_shutdown = self.http_gateways.clone();
+        let shutdown_handle = handle.clone();
+        tokio::spawn(async move {
+            loop {
+                let guard = http_gateways_for_shutdown.read().await;
+                if guard[instance_id].is_none() {
+                    shutdown_handle.shutdown();
+                    break;
+                }
+                drop(guard);
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+        });
 
         Ok(HttpGatewayInfo {
             instance_id,
