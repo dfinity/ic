@@ -785,7 +785,7 @@ impl NeuronStore {
                 // error since it signals a real issue.
                 if is_neuron_changed {
                     with_stable_neuron_store_mut(|stable_neuron_store| {
-                        stable_neuron_store.update(old_neuron, new_neuron)
+                        stable_neuron_store.update_sections(old_neuron, new_neuron, sections)
                     })?;
                 }
             }
@@ -1133,27 +1133,20 @@ impl NeuronStore {
         proposal_id: ProposalId,
         vote: Vote,
     ) -> Result<(), NeuronStoreError> {
-        let sections = NeuronSections {
-            hot_keys: false,
-            recent_ballots: true,
-            followees: false,
-            known_neuron_data: false,
-            transfer: false,
-        };
-        let (neuron, location) = self.load_neuron_with_sections(neuron_id, sections)?;
-
-        let old_neuron = neuron.deref().clone();
-        let mut new_neuron = old_neuron.clone();
-
-        new_neuron.register_recent_ballot(topic, &proposal_id, vote);
-
-        self.update_neuron(
-            neuron_id,
-            &old_neuron,
-            new_neuron.clone(),
-            location,
-            sections,
-        )?;
+        if self.heap_neurons.contains_key(&neuron_id.id) {
+            self.with_neuron_mut(&neuron_id, |neuron| {
+                neuron.register_recent_ballot(topic, &proposal_id, vote)
+            })?;
+        } else {
+            with_stable_neuron_store_mut(|stable_neuron_store| {
+                stable_neuron_store.register_recent_neuron_ballot(
+                    neuron_id,
+                    topic,
+                    proposal_id,
+                    vote,
+                )
+            })?;
+        }
 
         Ok(())
     }

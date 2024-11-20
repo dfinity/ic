@@ -230,46 +230,57 @@ where
         Ok(self.reconstitute_neuron(neuron_id, main_neuron_part, sections))
     }
 
-    // pub fn register_recent_neuron_ballot(
-    //     &mut self,
-    //     neuron_id: NeuronId,
-    //     topic: Topic,
-    //     proposal_id: ProposalId,
-    //     vote: Vote,
-    // ) -> Result<(), NeuronStoreError> {
-    //     let main_neuron_part = self
-    //         .main
-    //         .get(&neuron_id)
-    //         // Deal with no entry by blaming it on the caller.
-    //         .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
-    //
-    //     if main_neuron_part.recent_ballots_next_entry_index.is_none() {
-    //         // We need to do a data conversion to reverse the direction
-    //         // otherwise this gets very confusing.
-    //     }
-    //
-    //     let mut neuron =
-    //         self.reconstitute_neuron(neuron_id, main_neuron_part, NeuronSections::all());
-    //
-    //     let ballot_info = BallotInfo {
-    //         proposal_id: Some(proposal_id),
-    //         vote: vote as i32,
-    //     };
-    //
-    //     if let Some(existing_ballot) = neuron
-    //         .recent_ballots
-    //         .iter_mut()
-    //         .find(|ballot| ballot.proposal_id == Some(proposal_id))
-    //     {
-    //         *existing_ballot = ballot_info;
-    //     } else {
-    //         neuron.recent_ballots.push(ballot_info);
-    //     }
-    //
-    //     self.update_sections(main_neuron_part, neuron, NeuronSections::recent_ballots)?;
-    //
-    //     Ok(())
-    // }
+    pub fn register_recent_neuron_ballot(
+        &mut self,
+        neuron_id: NeuronId,
+        topic: Topic,
+        proposal_id: ProposalId,
+        vote: Vote,
+    ) -> Result<(), NeuronStoreError> {
+        if topic == Topic::ExchangeRate {
+            return Ok(());
+        }
+
+        let main_neuron_part = self
+            .main
+            .get(&neuron_id)
+            // Deal with no entry by blaming it on the caller.
+            .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
+
+        let recent_entry_index = main_neuron_part.recent_ballots_next_entry_index;
+
+        let next_entry_index = if recent_entry_index.is_none() {
+            let mut ballots = read_repeated_field(neuron_id, &self.recent_ballots_map);
+            ballots.reverse();
+            let next_entry = ballots.len() % MAX_NEURON_RECENT_BALLOTS;
+            update_repeated_field(neuron_id, ballots, &mut self.recent_ballots_map);
+            next_entry
+        } else {
+            recent_entry_index.unwrap() as usize
+        };
+        // We cannot error after this, or we risk creating some chaos with the ordering
+        // of the ballots b/c of the migration code above.
+
+        let ballot_info = BallotInfo {
+            proposal_id: Some(proposal_id),
+            vote: vote as i32,
+        };
+
+        insert_element_in_repeated_field(
+            neuron_id,
+            next_entry_index as u64,
+            ballot_info,
+            &mut self.recent_ballots_map,
+        );
+
+        // update the main part now
+        let mut main_neuron_part = main_neuron_part;
+        main_neuron_part.recent_ballots_next_entry_index =
+            Some(((next_entry_index + 1) % MAX_NEURON_RECENT_BALLOTS) as u32);
+        self.main.insert(neuron_id, main_neuron_part);
+
+        Ok(())
+    }
 
     /// TODO DO NOT MERGE - add a test for this method / remove if we
     /// go in a different direction
@@ -685,7 +696,7 @@ pub struct NeuronStorageLens {
     pub known_neuron_data: u64,
 }
 
-use crate::pb::v1::Vote;
+use crate::{governance::MAX_NEURON_RECENT_BALLOTS, pb::v1::Vote};
 #[cfg(test)]
 use ic_stable_structures::VectorMemory;
 
@@ -873,6 +884,19 @@ fn update_repeated_field<Element, Memory>(
     };
 
     update_range(new_entries, range, map)
+}
+
+fn insert_element_in_repeated_field<Element, Memory>(
+    neuron_id: NeuronId,
+    index: u64,
+    element: Element,
+    map: &mut StableBTreeMap<(NeuronId, /* index */ u64), Element, Memory>,
+) where
+    Element: Storable + PartialEq,
+    Memory: ic_stable_structures::Memory,
+{
+    let key = (neuron_id, index);
+    map.insert(key, element);
 }
 
 /// Replaces the contents of map where keys are in range with new_entries.
