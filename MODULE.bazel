@@ -177,6 +177,7 @@ oci.pull(
     platforms = [
         "linux/amd64",
     ],
+)
 use_repo(oci, "nginx-proxy", "nginx-proxy_linux_amd64")
 
 oci.pull(
