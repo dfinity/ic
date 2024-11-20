@@ -1,5 +1,4 @@
-use ic_nervous_system_agent::sns::governance::GovernanceCanister;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::sns;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::{await_with_timeout, sns};
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
@@ -14,74 +13,7 @@ use ic_sns_governance::{
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::SnsCanisterType;
-use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
-use std::time::Duration;
-
-/// Verifies that the upgrade journal has the expected entries.
-async fn assert_upgrade_journal(
-    pocket_ic: &PocketIc,
-    governance: GovernanceCanister,
-    expected_entries: &[sns_pb::upgrade_journal_entry::Event],
-) {
-    let sns_pb::GetUpgradeJournalResponse {
-        upgrade_journal, ..
-    } = sns::governance::get_upgrade_journal(pocket_ic, governance.canister_id).await;
-
-    let upgrade_journal = upgrade_journal.unwrap().entries;
-    assert_eq!(upgrade_journal.len(), expected_entries.len());
-
-    for (index, (actual, expected)) in upgrade_journal
-        .iter()
-        .zip(expected_entries.iter())
-        .enumerate()
-    {
-        assert!(actual.timestamp_seconds.is_some());
-        assert_eq!(
-            &actual
-                .event
-                .clone()
-                .map(|event| event.redact_human_readable()),
-            &Some(expected.clone().redact_human_readable()),
-            "Upgrade journal entry at index {} does not match",
-            index
-        );
-    }
-}
-
-/// Advances time by up to `timeout_seconds` seconds and `timeout_seconds` tickets (1 tick = 1 second).
-/// Each tick, it observes the state using the provided `observe` function.
-/// If the observed state matches the `expected` state, it returns `Ok(())`.
-/// If the timeout is reached, it returns an error.
-async fn await_with_timeout<'a, T, F, Fut>(
-    pocket_ic: &'a PocketIc,
-    timeout_seconds: u64,
-    observe: F,
-    expected: &T,
-) -> Result<(), String>
-where
-    T: std::cmp::PartialEq + std::fmt::Debug,
-    F: Fn(&'a PocketIc) -> Fut,
-    Fut: std::future::Future<Output = T>,
-{
-    let mut counter = 0;
-    loop {
-        pocket_ic.advance_time(Duration::from_secs(1)).await;
-        pocket_ic.tick().await;
-
-        let observed = observe(pocket_ic).await;
-        if observed == *expected {
-            return Ok(());
-        }
-        if counter == timeout_seconds {
-            return Err(format!(
-                "Observed state: {:?}\n!= Expected state {:?}\nafter {} seconds / rounds",
-                observed, expected, timeout_seconds,
-            ));
-        }
-        counter += 1;
-    }
-}
 
 #[tokio::test]
 async fn test_get_upgrade_journal() {
@@ -137,9 +69,9 @@ async fn test_get_upgrade_journal() {
             UpgradeStepsRefreshed::new(vec![initial_sns_version.clone()]),
         ));
 
-        assert_upgrade_journal(
+        sns::governance::assert_upgrade_journal(
             &pocket_ic,
-            sns.governance,
+            sns.governance.canister_id,
             &expected_upgrade_journal_entries,
         )
         .await;
@@ -226,30 +158,27 @@ async fn test_get_upgrade_journal() {
             ]),
         ));
 
-        assert_upgrade_journal(
+        sns::governance::assert_upgrade_journal(
             &pocket_ic,
-            sns.governance,
+            sns.governance.canister_id,
             &expected_upgrade_journal_entries,
         )
         .await;
     }
 
-    // State 3: Advance the target version.
-    sns::governance::advance_target_version(
-        &pocket_ic,
-        sns.governance.canister_id,
-        new_sns_version_2.clone(),
-    )
-    .await;
+    // State 3: Advance the target version via proposal.
+    sns::governance::propose_to_advance_sns_target_version(&pocket_ic, sns.governance.canister_id)
+        .await
+        .unwrap();
 
     expected_upgrade_journal_entries.push(Event::TargetVersionSet(TargetVersionSet::new(
         None,
         Some(new_sns_version_2.clone()),
     )));
 
-    assert_upgrade_journal(
+    sns::governance::assert_upgrade_journal(
         &pocket_ic,
-        sns.governance,
+        sns.governance.canister_id,
         &expected_upgrade_journal_entries,
     )
     .await;
@@ -316,9 +245,9 @@ async fn test_get_upgrade_journal() {
             ),
         );
 
-        assert_upgrade_journal(
+        sns::governance::assert_upgrade_journal(
             &pocket_ic,
-            sns.governance,
+            sns.governance.canister_id,
             &expected_upgrade_journal_entries,
         )
         .await;
