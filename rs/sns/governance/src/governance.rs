@@ -3045,6 +3045,9 @@ impl Governance {
         &mut self,
         new_target: Version,
     ) -> Result<(), GovernanceError> {
+        // TODO[NNS1-3365]: Enable the AdvanceSnsTargetVersionFeature.
+        self.check_test_features_enabled();
+
         let cached_upgrade_steps = self
             .proto
             .cached_upgrade_steps_or_err()
@@ -5102,8 +5105,6 @@ impl Governance {
         &mut self,
         request: AdvanceTargetVersionRequest,
     ) -> AdvanceTargetVersionResponse {
-        self.check_test_features_enabled();
-
         let AdvanceTargetVersionRequest {
             target_version: Some(target_version),
         } = request
