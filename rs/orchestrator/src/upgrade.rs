@@ -664,10 +664,7 @@ fn run_command(mut cmd: std::process::Command, logger: &ReplicaLogger) -> Result
                 ))
             }
         }
-        Err(err) => Err(format!(
-            "Failed to run command '{:?}', error {}",
-            cmd, err
-        )),
+        Err(err) => Err(format!("Failed to run command '{:?}', error {}", cmd, err)),
     }
 }
 
