@@ -3122,7 +3122,7 @@ fn test_sign_with_schnorr_api_is_enabled() {
         .with_own_subnet_id(own_subnet)
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
-        .with_idkg_key(key_id.clone())
+        .with_chain_key(key_id.clone())
         .build();
     let canister_id = test.universal_canister().unwrap();
     // Check that the SubnetCallContextManager is empty.
