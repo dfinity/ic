@@ -44,7 +44,7 @@ const DEFAULT_PAGE_ALLOCATOR_THREADS: usize = 8;
 
 /// Sandbox process eviction ensures that the number of sandbox processes is
 /// always below this threshold.
-pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 5_000;
+pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 7_000;
 
 /// A sandbox process may be evicted after it has been idle for this
 /// duration and sandbox process eviction is activated.
