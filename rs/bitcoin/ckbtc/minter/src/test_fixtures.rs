@@ -76,3 +76,22 @@ pub fn quarantined_utxo() -> Utxo {
         height: 829_081,
     }
 }
+
+pub mod mock {
+    use crate::CanisterRuntime;
+    use async_trait::async_trait;
+    use candid::Principal;
+    use mockall::mock;
+
+    mock! {
+        pub CanisterRuntime {}
+
+        #[async_trait]
+        impl CanisterRuntime for CanisterRuntime {
+            fn caller(&self) -> Principal;
+            fn id(&self) -> Principal;
+            fn time(&self) -> u64;
+            fn global_timer_set(&self, timestamp: u64);
+        }
+    }
+}

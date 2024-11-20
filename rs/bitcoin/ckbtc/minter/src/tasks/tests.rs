@@ -1,5 +1,5 @@
-use crate::tasks::tests::mock::MockCanisterRuntime;
 use crate::tasks::{pop_if_ready, run_task, schedule_now, Task, TaskQueue, TaskType, TASKS};
+use crate::test_fixtures::mock::MockCanisterRuntime;
 use proptest::{collection::vec as pvec, prop_assert_eq, proptest};
 use std::time::Duration;
 
@@ -94,20 +94,4 @@ fn task_deadline_from_state(task: &TaskType) -> Option<u64> {
 
 fn init_state() {
     crate::test_fixtures::init_state(crate::test_fixtures::init_args());
-}
-
-mod mock {
-    use crate::CanisterRuntime;
-    use async_trait::async_trait;
-    use mockall::mock;
-
-    mock! {
-        pub CanisterRuntime {}
-
-        #[async_trait]
-        impl CanisterRuntime for CanisterRuntime {
-            fn time(&self) -> u64;
-            fn global_timer_set(&self, timestamp: u64);
-        }
-    }
 }
