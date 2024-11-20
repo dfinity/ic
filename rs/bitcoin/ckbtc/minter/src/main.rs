@@ -194,7 +194,7 @@ fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
 #[update]
 async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, UpdateBalanceError> {
     check_anonymous_caller();
-    check_postcondition(updates::update_balance::update_balance(args).await)
+    check_postcondition(updates::update_balance::update_balance(args, &IC_CANISTER_RUNTIME).await)
 }
 
 #[update]

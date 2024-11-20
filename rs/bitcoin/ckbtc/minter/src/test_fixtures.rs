@@ -1,9 +1,11 @@
-use crate::lifecycle;
 use crate::lifecycle::init::{BtcNetwork, InitArgs};
+use crate::{lifecycle, ECDSAPublicKey};
 use candid::Principal;
 use ic_base_types::CanisterId;
 use ic_btc_interface::{OutPoint, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
+
+pub const MINTER_CANISTER_ID: Principal = Principal::from_slice(&[0, 0, 0, 0, 2, 48, 0, 7, 1, 1]);
 
 pub fn init_args() -> InitArgs {
     InitArgs {
@@ -26,6 +28,21 @@ pub fn init_args() -> InitArgs {
 
 pub fn init_state(args: InitArgs) {
     lifecycle::init::init(args)
+}
+
+pub fn ecdsa_public_key() -> ECDSAPublicKey {
+    const PUBLIC_KEY: [u8; 33] = [
+        3, 148, 123, 81, 208, 34, 99, 144, 214, 13, 193, 18, 89, 94, 30, 185, 101, 191, 164, 124,
+        208, 174, 236, 190, 3, 16, 230, 196, 9, 252, 191, 110, 127,
+    ];
+    const CHAIN_CODE: [u8; 32] = [
+        75, 34, 9, 207, 130, 169, 36, 138, 73, 80, 39, 225, 249, 154, 160, 111, 145, 197, 192, 53,
+        148, 5, 62, 21, 47, 232, 104, 195, 249, 32, 160, 189,
+    ];
+    ECDSAPublicKey {
+        public_key: PUBLIC_KEY.to_vec(),
+        chain_code: CHAIN_CODE.to_vec(),
+    }
 }
 
 pub fn ledger_account() -> Account {
@@ -78,9 +95,11 @@ pub fn quarantined_utxo() -> Utxo {
 }
 
 pub mod mock {
+    use crate::management::CallError;
     use crate::CanisterRuntime;
     use async_trait::async_trait;
     use candid::Principal;
+    use ic_btc_interface::{GetUtxosRequest, GetUtxosResponse};
     use mockall::mock;
 
     mock! {
@@ -92,6 +111,7 @@ pub mod mock {
             fn id(&self) -> Principal;
             fn time(&self) -> u64;
             fn global_timer_set(&self, timestamp: u64);
+            async fn bitcoin_get_utxos(&self, request: &GetUtxosRequest, cycles: u64) -> Result<GetUtxosResponse, CallError>;
         }
     }
 }

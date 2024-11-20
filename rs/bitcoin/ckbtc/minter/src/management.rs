@@ -1,8 +1,8 @@
 //! This module contains async functions for interacting with the management canister.
 
 use crate::logs::P0;
-use crate::tx;
 use crate::ECDSAPublicKey;
+use crate::{tx, CanisterRuntime};
 use candid::{CandidType, Principal};
 use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
@@ -87,7 +87,7 @@ impl Reason {
     }
 }
 
-async fn call<I, O>(method: &str, payment: u64, input: &I) -> Result<O, CallError>
+pub(crate) async fn call<I, O>(method: &str, payment: u64, input: &I) -> Result<O, CallError>
 where
     I: CandidType,
     O: CandidType + DeserializeOwned,
@@ -134,11 +134,12 @@ pub enum CallSource {
 }
 
 /// Fetches the full list of UTXOs for the specified address.
-pub async fn get_utxos(
+pub async fn get_utxos<R: CanisterRuntime>(
     network: Network,
     address: &Address,
     min_confirmations: u32,
     source: CallSource,
+    runtime: &R,
 ) -> Result<GetUtxosResponse, CallError> {
     // NB. The minimum number of cycles that need to be sent with the call is 10B (4B) for
     // Bitcoin mainnet (Bitcoin testnet):
@@ -150,17 +151,18 @@ pub async fn get_utxos(
 
     // Calls "bitcoin_get_utxos" method with the specified argument on the
     // management canister.
-    async fn bitcoin_get_utxos(
+    async fn bitcoin_get_utxos<R: CanisterRuntime>(
         req: &GetUtxosRequest,
         cycles: u64,
         source: CallSource,
+        runtime: &R,
     ) -> Result<GetUtxosResponse, CallError> {
         match source {
             CallSource::Client => &crate::metrics::GET_UTXOS_CLIENT_CALLS,
             CallSource::Minter => &crate::metrics::GET_UTXOS_MINTER_CALLS,
         }
         .with(|cell| cell.set(cell.get() + 1));
-        call("bitcoin_get_utxos", cycles, req).await
+        runtime.bitcoin_get_utxos(req, cycles).await
     }
 
     let mut response = bitcoin_get_utxos(
@@ -171,6 +173,7 @@ pub async fn get_utxos(
         },
         get_utxos_cost_cycles,
         source,
+        runtime,
     )
     .await?;
 
@@ -186,6 +189,7 @@ pub async fn get_utxos(
             },
             get_utxos_cost_cycles,
             source,
+            runtime,
         )
         .await?;
 

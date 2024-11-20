@@ -21,7 +21,7 @@ use crate::{
     state,
     tx::{DisplayAmount, DisplayOutpoint},
     updates::get_btc_address,
-    IC_CANISTER_RUNTIME,
+    CanisterRuntime, IC_CANISTER_RUNTIME,
 };
 
 /// The argument of the [update_balance] endpoint.
@@ -125,11 +125,12 @@ impl From<CallError> for UpdateBalanceError {
 }
 
 /// Notifies the ckBTC minter to update the balance of the user subaccount.
-pub async fn update_balance(
+pub async fn update_balance<R: CanisterRuntime>(
     args: UpdateBalanceArgs,
+    runtime: &R,
 ) -> Result<Vec<UtxoStatus>, UpdateBalanceError> {
-    let caller = ic_cdk::caller();
-    if args.owner.unwrap_or(caller) == ic_cdk::id() {
+    let caller = runtime.caller();
+    if args.owner.unwrap_or(caller) == runtime.id() {
         ic_cdk::trap("cannot update minter's balance");
     }
 
@@ -154,9 +155,15 @@ pub async fn update_balance(
     let (btc_network, min_confirmations) =
         state::read_state(|s| (s.btc_network, s.min_confirmations));
 
-    let utxos = get_utxos(btc_network, &address, min_confirmations, CallSource::Client)
-        .await?
-        .utxos;
+    let utxos = get_utxos(
+        btc_network,
+        &address,
+        min_confirmations,
+        CallSource::Client,
+        runtime,
+    )
+    .await?
+    .utxos;
 
     let new_utxos = state::read_state(|s| s.processable_utxos_for_account(utxos, &caller_account));
 
@@ -182,6 +189,7 @@ pub async fn update_balance(
             &address,
             /*min_confirmations=*/ 0,
             CallSource::Client,
+            runtime,
         )
         .await?;
 
@@ -283,7 +291,7 @@ pub async fn update_balance(
         }
     }
 
-    schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::ProcessLogic, runtime);
     Ok(utxo_statuses)
 }
 
