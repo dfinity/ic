@@ -2,7 +2,7 @@ use crate::lifecycle::init::{BtcNetwork, InitArgs};
 use crate::{lifecycle, ECDSAPublicKey};
 use candid::Principal;
 use ic_base_types::CanisterId;
-use ic_btc_interface::{OutPoint, Utxo};
+use ic_btc_interface::{GetUtxosResponse, OutPoint, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 
 pub const MINTER_CANISTER_ID: Principal = Principal::from_slice(&[0, 0, 0, 0, 2, 48, 0, 7, 1, 1]);
@@ -91,6 +91,18 @@ pub fn quarantined_utxo() -> Utxo {
         },
         value: 426_762,
         height: 829_081,
+    }
+}
+
+pub fn get_uxos_response() -> GetUtxosResponse {
+    GetUtxosResponse {
+        utxos: vec![],
+        tip_block_hash: hex::decode(
+            "00000000000000000002716d23b6b02097a297a84da484c7a9b6427a999112d8",
+        )
+        .unwrap(),
+        tip_height: 871160,
+        next_page: None,
     }
 }
 
