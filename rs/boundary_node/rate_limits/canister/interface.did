@@ -62,9 +62,17 @@ type AddConfigResponse = variant {
   Err: text;
 };
 
+type DiscloseRulesError = variant {
+    Unauthorized;                   // Indicates an unauthorized attempt to disclose rules
+    InvalidUuidFormat: text;        // Signifies that an input ID provided for disclosure is not a valid UUID
+    IncidentIdNotFound: text;       // Signifies that a specified incident ID could not be found
+    RuleIdNotFound: text;           // Signifies that a specified rule ID could not be found
+    Internal: text;                 // Captures all unexpected internal errors during the disclosure process
+};
+
 type DiscloseRulesResponse = variant {
   Ok;
-  Err: text;
+  Err: DiscloseRulesError;
 };
 
 type DiscloseRulesArg = variant {
