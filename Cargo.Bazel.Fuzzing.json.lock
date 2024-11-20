@@ -1,5 +1,5 @@
 {
-  "checksum": "12851c6ba4c9f6ac1c749cc7ff0dbfe30e4f2dda7951663e4a4cc64d29fdee95",
+  "checksum": "735996ca7d335059a03cab23c5b2831d8ed8d04943be5b9c007f6ee086ca75dd",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18706,7 +18706,7 @@
               "target": "ic_cdk"
             },
             {
-              "id": "ic-cdk-timers 0.7.0",
+              "id": "ic-cdk-timers 0.11.0",
               "target": "ic_cdk_timers"
             },
             {
@@ -18971,11 +18971,11 @@
               "alias": "opentelemetry_0_20_0"
             },
             {
-              "id": "opentelemetry 0.26.0",
+              "id": "opentelemetry 0.27.0",
               "target": "opentelemetry"
             },
             {
-              "id": "opentelemetry-otlp 0.26.0",
+              "id": "opentelemetry-otlp 0.27.0",
               "target": "opentelemetry_otlp"
             },
             {
@@ -18983,7 +18983,7 @@
               "target": "opentelemetry_prometheus"
             },
             {
-              "id": "opentelemetry_sdk 0.26.0",
+              "id": "opentelemetry_sdk 0.27.0",
               "target": "opentelemetry_sdk"
             },
             {
@@ -19452,7 +19452,7 @@
               "target": "tracing_flame"
             },
             {
-              "id": "tracing-opentelemetry 0.27.0",
+              "id": "tracing-opentelemetry 0.28.0",
               "target": "tracing_opentelemetry"
             },
             {
@@ -31265,6 +31265,74 @@
       ],
       "license_file": "LICENSE"
     },
+    "ic-cdk 0.17.0": {
+      "name": "ic-cdk",
+      "version": "0.17.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk/0.17.0/download",
+          "sha256": "b2abdf9341da9f9f6b451a40609cb69645a05a8e9eb7784c16209f16f2c0f76f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_cdk",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.10",
+              "target": "candid"
+            },
+            {
+              "id": "ic0 0.23.0",
+              "target": "ic0"
+            },
+            {
+              "id": "serde 1.0.214",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ic-cdk-macros 0.17.0",
+              "target": "ic_cdk_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.17.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "ic-cdk-macros 0.8.4": {
       "name": "ic-cdk-macros",
       "version": "0.8.4",
@@ -31600,14 +31668,81 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk-timers 0.7.0": {
-      "name": "ic-cdk-timers",
-      "version": "0.7.0",
+    "ic-cdk-macros 0.17.0": {
+      "name": "ic-cdk-macros",
+      "version": "0.17.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-timers/0.7.0/download",
-          "sha256": "054727a3a1c486528b96349817d54290ff70df6addf417def456ea708a16f7fb"
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.17.0/download",
+          "sha256": "b8df41980e95dead28735ab0f748c75477b0c5eab37a09a5641c78ec406a1db0"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ic_cdk_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.10",
+              "target": "candid"
+            },
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "serde 1.0.214",
+              "target": "serde"
+            },
+            {
+              "id": "serde_tokenstream 0.2.1",
+              "target": "serde_tokenstream"
+            },
+            {
+              "id": "syn 2.0.87",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.17.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-cdk-timers 0.11.0": {
+      "name": "ic-cdk-timers",
+      "version": "0.11.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk-timers/0.11.0/download",
+          "sha256": "fb8fd812a9e26f6aa00594546f8fbf4d4853f39c3ba794c8ff11ecf86fd3c9e4"
         }
       },
       "targets": [
@@ -31636,11 +31771,11 @@
               "target": "futures"
             },
             {
-              "id": "ic-cdk 0.13.5",
+              "id": "ic-cdk 0.17.0",
               "target": "ic_cdk"
             },
             {
-              "id": "ic0 0.21.1",
+              "id": "ic0 0.23.0",
               "target": "ic0"
             },
             {
@@ -31659,7 +31794,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.7.0"
+        "version": "0.11.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -45011,14 +45146,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "opentelemetry 0.26.0": {
+    "opentelemetry 0.27.0": {
       "name": "opentelemetry",
-      "version": "0.26.0",
+      "version": "0.27.0",
       "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry/0.26.0/download",
-          "sha256": "570074cc999d1a58184080966e5bd3bf3a9a4af650c3b05047c2621e7405cd17"
+          "url": "https://static.crates.io/crates/opentelemetry/0.27.0/download",
+          "sha256": "0f3cebff57f7dbd1255b44d8bddc2cebeb0ea677dbaa2e25a3070a91b318f660"
         }
       },
       "targets": [
@@ -45083,7 +45218,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.26.0"
+        "version": "0.27.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -45091,14 +45226,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "opentelemetry-otlp 0.26.0": {
+    "opentelemetry-otlp 0.27.0": {
       "name": "opentelemetry-otlp",
-      "version": "0.26.0",
+      "version": "0.27.0",
       "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-otlp",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry-otlp/0.26.0/download",
-          "sha256": "29e1f9c8b032d4f635c730c0efcf731d5e2530ea13fa8bef7939ddc8420696bd"
+          "url": "https://static.crates.io/crates/opentelemetry-otlp/0.27.0/download",
+          "sha256": "91cf61a1868dacc576bf2b2a1c3e9ab150af7272909e80085c3173384fe11f76"
         }
       },
       "targets": [
@@ -45125,12 +45260,14 @@
             "default",
             "grpc-tonic",
             "http",
+            "internal-logs",
             "logs",
             "metrics",
             "prost",
             "tokio",
             "tonic",
-            "trace"
+            "trace",
+            "tracing"
           ],
           "selects": {}
         },
@@ -45145,15 +45282,15 @@
               "target": "http"
             },
             {
-              "id": "opentelemetry 0.26.0",
+              "id": "opentelemetry 0.27.0",
               "target": "opentelemetry"
             },
             {
-              "id": "opentelemetry-proto 0.26.1",
+              "id": "opentelemetry-proto 0.27.0",
               "target": "opentelemetry_proto"
             },
             {
-              "id": "opentelemetry_sdk 0.26.0",
+              "id": "opentelemetry_sdk 0.27.0",
               "target": "opentelemetry_sdk"
             },
             {
@@ -45171,6 +45308,10 @@
             {
               "id": "tonic 0.12.3",
               "target": "tonic"
+            },
+            {
+              "id": "tracing 0.1.40",
+              "target": "tracing"
             }
           ],
           "selects": {}
@@ -45185,7 +45326,7 @@
           ],
           "selects": {}
         },
-        "version": "0.26.0"
+        "version": "0.27.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -45325,14 +45466,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "opentelemetry-proto 0.26.1": {
+    "opentelemetry-proto 0.27.0": {
       "name": "opentelemetry-proto",
-      "version": "0.26.1",
+      "version": "0.27.0",
       "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-proto",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry-proto/0.26.1/download",
-          "sha256": "c9d3968ce3aefdcca5c27e3c4ea4391b37547726a70893aab52d3de95d5f8b34"
+          "url": "https://static.crates.io/crates/opentelemetry-proto/0.27.0/download",
+          "sha256": "a6e05acbfada5ec79023c85368af14abd0b307c015e9064d249b2a950ef459a6"
         }
       },
       "targets": [
@@ -45369,11 +45510,11 @@
         "deps": {
           "common": [
             {
-              "id": "opentelemetry 0.26.0",
+              "id": "opentelemetry 0.27.0",
               "target": "opentelemetry"
             },
             {
-              "id": "opentelemetry_sdk 0.26.0",
+              "id": "opentelemetry_sdk 0.27.0",
               "target": "opentelemetry_sdk"
             },
             {
@@ -45388,7 +45529,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.26.1"
+        "version": "0.27.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -45940,14 +46081,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "opentelemetry_sdk 0.26.0": {
+    "opentelemetry_sdk 0.27.0": {
       "name": "opentelemetry_sdk",
-      "version": "0.26.0",
+      "version": "0.27.0",
       "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry_sdk/0.26.0/download",
-          "sha256": "d2c627d9f4c9cdc1f21a29ee4bfbd6028fcb8bcf2a857b43f3abdf72c9c862f3"
+          "url": "https://static.crates.io/crates/opentelemetry_sdk/0.27.0/download",
+          "sha256": "27b742c1cae4693792cc564e58d75a2a0ba29421a34a85b50da92efa89ecb2bc"
         }
       },
       "targets": [
@@ -45974,6 +46115,7 @@
             "async-trait",
             "default",
             "glob",
+            "internal-logs",
             "logs",
             "metrics",
             "percent-encoding",
@@ -45982,7 +46124,8 @@
             "serde_json",
             "tokio",
             "tokio-stream",
-            "trace"
+            "trace",
+            "tracing"
           ],
           "selects": {}
         },
@@ -46009,7 +46152,7 @@
               "target": "once_cell"
             },
             {
-              "id": "opentelemetry 0.26.0",
+              "id": "opentelemetry 0.27.0",
               "target": "opentelemetry"
             },
             {
@@ -46035,6 +46178,10 @@
             {
               "id": "tokio-stream 0.1.16",
               "target": "tokio_stream"
+            },
+            {
+              "id": "tracing 0.1.40",
+              "target": "tracing"
             }
           ],
           "selects": {}
@@ -46049,7 +46196,7 @@
           ],
           "selects": {}
         },
-        "version": "0.26.0"
+        "version": "0.27.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -75011,14 +75158,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tracing-opentelemetry 0.27.0": {
+    "tracing-opentelemetry 0.28.0": {
       "name": "tracing-opentelemetry",
-      "version": "0.27.0",
+      "version": "0.28.0",
       "package_url": "https://github.com/tokio-rs/tracing-opentelemetry",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tracing-opentelemetry/0.27.0/download",
-          "sha256": "dc58af5d3f6c5811462cabb3289aec0093f7338e367e5a33d28c0433b3c7360b"
+          "url": "https://static.crates.io/crates/tracing-opentelemetry/0.28.0/download",
+          "sha256": "97a971f6058498b5c0f1affa23e7ea202057a7301dbff68e968b2d578bcbd053"
         }
       },
       "targets": [
@@ -75056,11 +75203,11 @@
               "target": "once_cell"
             },
             {
-              "id": "opentelemetry 0.26.0",
+              "id": "opentelemetry 0.27.0",
               "target": "opentelemetry"
             },
             {
-              "id": "opentelemetry_sdk 0.26.0",
+              "id": "opentelemetry_sdk 0.27.0",
               "target": "opentelemetry_sdk"
             },
             {
@@ -75098,7 +75245,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.27.0"
+        "version": "0.28.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -86365,7 +86512,7 @@
     "ic-cbor 2.6.0",
     "ic-cdk 0.16.0",
     "ic-cdk-macros 0.9.0",
-    "ic-cdk-timers 0.7.0",
+    "ic-cdk-timers 0.11.0",
     "ic-certificate-verification 2.6.0",
     "ic-certification 2.6.0",
     "ic-certified-map 0.3.4",
@@ -86433,10 +86580,10 @@
     "once_cell 1.19.0",
     "openssh-keys 0.5.0",
     "opentelemetry 0.20.0",
-    "opentelemetry 0.26.0",
-    "opentelemetry-otlp 0.26.0",
+    "opentelemetry 0.27.0",
+    "opentelemetry-otlp 0.27.0",
     "opentelemetry-prometheus 0.13.0",
-    "opentelemetry_sdk 0.26.0",
+    "opentelemetry_sdk 0.27.0",
     "p256 0.13.2",
     "pairing 0.23.0",
     "parking_lot 0.12.1",
@@ -86559,7 +86706,7 @@
     "tracing 0.1.40",
     "tracing-appender 0.2.3",
     "tracing-flame 0.2.0",
-    "tracing-opentelemetry 0.27.0",
+    "tracing-opentelemetry 0.28.0",
     "tracing-serde 0.1.3",
     "tracing-slog 0.2.0",
     "tracing-subscriber 0.3.18",

@@ -3,9 +3,9 @@ use mockall::automock;
 
 use crate::{
     add_config::{AddConfigError, AddsConfig},
-    disclose::{DiscloseRulesError, DisclosesRules},
+    disclose::DisclosesRules,
     state::CanisterApi,
-    types::Timestamp,
+    types::{DiscloseRulesError, Timestamp},
 };
 
 #[automock]

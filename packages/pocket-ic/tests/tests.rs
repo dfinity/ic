@@ -1944,3 +1944,18 @@ fn get_subnet() {
     let nns_subnet_config = topology.subnet_configs.get(&nns_subnet).unwrap();
     assert_eq!(nns_subnet_config.subnet_kind, SubnetKind::NNS);
 }
+
+#[test]
+fn make_live_twice() {
+    // create PocketIC instance
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // create HTTP gateway
+    let url = pic.make_live(None);
+
+    let same_url = pic.make_live(None);
+    assert_eq!(same_url, url);
+}

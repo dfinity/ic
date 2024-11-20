@@ -13,7 +13,7 @@ thread_local! {
     static VOTING_STATE_MACHINES: RefCell<VotingStateMachines> = RefCell::new(VotingStateMachines::new());
 }
 impl Governance {
-    pub fn cast_vote_and_cascade_follow(
+    pub async fn cast_vote_and_cascade_follow(
         &mut self,
         proposal_id: ProposalId,
         voting_neuron_id: NeuronId,
@@ -166,7 +166,7 @@ impl ProposalVotingStateMachine {
             self.add_followers_to_check(neuron_store, neuron_id, self.topic);
         }
 
-        // Optimization, will not cause tests to fail if removed
+        // Memory optimization, will not cause tests to fail if removed
         retain_neurons_with_castable_ballots(&mut self.followers_to_check, ballots);
 
         while let Some(follower) = self.followers_to_check.pop_first() {
