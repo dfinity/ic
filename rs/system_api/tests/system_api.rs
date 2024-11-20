@@ -293,7 +293,8 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::InReplicatedExecution => vec!["*", "s"],
         SystemApiCallId::DebugPrint => vec!["*", "s"],
         SystemApiCallId::Trap => vec!["*", "s"],
-        SystemApiCallId::MintCycles => vec!["U", "Ry", "Rt", "T"]
+        SystemApiCallId::MintCycles => vec!["U", "Ry", "Rt", "T"],
+        SystemApiCallId::MintCycles128 => vec!["U", "Ry", "Rt", "T"]
     };
     // the semantics of "*" is to cover all modes except for "s"
     matrix.get(&api_type).unwrap().contains(&context)
@@ -745,6 +746,11 @@ fn api_availability_test(
             let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
             assert_api_not_supported(api.ic0_mint_cycles(0));
         }
+        SystemApiCallId::MintCycles128 => {
+            // ic0.mint_cycles128 is only supported for CMC which is tested separately
+            let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
+            assert_api_not_supported(api.ic0_mint_cycles128(0, 0, 0, &mut vec![0u8; 16]));
+        }
         SystemApiCallId::IsController => {
             assert_api_availability(
                 |api| api.ic0_is_controller(0, 0, &[42; 128]),
@@ -822,7 +828,7 @@ fn system_api_availability() {
             let api = get_system_api(api_type.clone(), &system_state, cycles_account_manager);
             check_stable_apis_support(api);
 
-            // check ic0.mint_cycles API availability for CMC
+            // check ic0.mint_cycles, ic0.mint_cycles128 API availability for CMC
             let cmc_system_state = get_cmc_system_state();
             assert_api_availability(
                 |mut api| api.ic0_mint_cycles(0),
@@ -830,6 +836,14 @@ fn system_api_availability() {
                 &cmc_system_state,
                 cycles_account_manager,
                 SystemApiCallId::MintCycles,
+                context,
+            );
+            assert_api_availability(
+                |mut api| api.ic0_mint_cycles128(0, 0, 0, &mut vec![0u8; 16]),
+                api_type.clone(),
+                &cmc_system_state,
+                cycles_account_manager,
+                SystemApiCallId::MintCycles128,
                 context,
             );
 
