@@ -2275,19 +2275,8 @@ impl StateManagerImpl {
                     state_metadata.bundled_manifest.as_ref().map(|_| *height)
                 });
 
-        // The `extra_inmemory_heights_to_keep` is used for preserving in-memory states,
-        // but it can safely be included in the `heights_to_keep` set, which retains both
-        // in-memory states and checkpoints. This is safe because:
-        //
-        // 1. When called by `remove_inmemory_states_below`, checkpoints are never removed,
-        //    regardless of the inclusion of `extra_inmemory_heights_to_keep`, so no harm
-        //    or unnecessary preservation occurs.
-        //
-        // 2. When called by `remove_states_below`, `extra_inmemory_heights_to_keep` is always
-        //    an empty set, having no effect on the outcome.
-        //
-        // In the future, separating these sets could clarify their distinct purposes and
-        // simplify reasoning about correctness without relying heavily on input behavior.
+        // We keep checkpoints at or above the `last_checkpoint_to_keep` height
+        // as well as the one with latest manifest for the purpose of incremental manifest computation and fast state sync.
         let checkpoint_heights_to_keep: BTreeSet<Height> = states
             .states_metadata
             .keys()
@@ -2298,6 +2287,9 @@ impl StateManagerImpl {
             .chain(latest_manifest_height)
             .collect();
 
+        // In addition, we retain the latest certified state and any extra states specified to keep.
+        // Note that `checkpoint_heights_to_keep` and `inmemory_heights_to_keep` are separate,
+        // as decisions to retain a checkpoint or an in-memory state are made independently.
         let inmemory_heights_to_keep = std::iter::once(latest_certified_height)
             .chain(extra_inmemory_heights_to_keep.iter().copied())
             .collect::<BTreeSet<_>>();
