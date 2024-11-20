@@ -200,6 +200,15 @@ impl std::fmt::Display for CachedUpgradeSteps {
 }
 
 impl CachedUpgradeSteps {
+    pub fn empty(current_version: Version, now_timestamp_seconds: u64) -> Self {
+        Self {
+            current_version: current_version,
+            subsequent_versions: vec![],
+            requested_timestamp_seconds: 0,
+            response_timestamp_seconds: now_timestamp_seconds,
+        }
+    }
+
     pub fn last(&self) -> &Version {
         self.subsequent_versions
             .last()
@@ -231,5 +240,37 @@ impl CachedUpgradeSteps {
             return Err("new_target_version must differ from the current version.".to_string());
         }
         Ok(())
+    }
+
+    /// Consume self, returning the previous SNS version and a new `CachedUpgradeSteps` instance
+    /// containing *all but the current* SNS versions in the `Ok` result.
+    ///
+    /// Returns `Err` if the current version is the only one (i.e., there are no pending upgrades).
+    pub fn split_first(self) -> Result<(Version, CachedUpgradeSteps), String> {
+        let Self {
+            current_version: previous_version,
+            subsequent_versions: previous_subsequent_versions,
+            requested_timestamp_seconds,
+            response_timestamp_seconds,
+        } = self;
+
+        let Some((current_version, subsequent_versions)) =
+            previous_subsequent_versions.split_first()
+        else {
+            return Err(format!(
+                "Cannot split the first upgrade step: only the current version {:?} is available.",
+                previous_version
+            ));
+        };
+
+        Ok((
+            previous_version,
+            Self {
+                current_version: current_version.clone(),
+                subsequent_versions: subsequent_versions.to_vec(),
+                requested_timestamp_seconds,
+                response_timestamp_seconds,
+            },
+        ))
     }
 }

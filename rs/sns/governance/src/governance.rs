@@ -4987,6 +4987,42 @@ impl Governance {
         self.proto.cached_upgrade_steps = None;
     }
 
+    /// Returns the upgrade steps that are guaranteed to start from `current_version`, resetting
+    /// `cached_upgrade_steps` and `target_version` if an inconsistency is detected.
+    pub(crate) fn cached_upgrade_steps(&mut self, current_version: &Version) -> CachedUpgradeSteps {
+        let human_readable = match self.proto.cached_upgrade_steps_or_err() {
+            Ok(cached_upgrade_steps) if cached_upgrade_steps.is_current(current_version) => {
+                // Happy case.
+                return cached_upgrade_steps;
+            }
+            Ok(cached_upgrade_steps) => {
+                format!(
+                    "{:?} is not the current version on {:?}",
+                    current_version, cached_upgrade_steps
+                )
+            }
+            Err(err) => err,
+        };
+
+        self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset::new(
+            human_readable.clone(),
+            vec![current_version.clone()],
+        ));
+
+        let cached_upgrade_steps =
+            CachedUpgradeSteps::empty(current_version.clone(), self.env.now());
+
+        self.proto
+            .cached_upgrade_steps
+            .replace(CachedUpgradeStepsPb::from(cached_upgrade_steps.clone()));
+
+        if self.proto.target_version.is_some() {
+            self.invalidate_target_version(human_readable)
+        }
+
+        cached_upgrade_steps
+    }
+
     /// Invalidates the cached upgrade steps.
     fn invalidate_target_version(&mut self, reason: String) {
         self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionReset::new(
@@ -5673,7 +5709,7 @@ impl Governance {
                 .clone_from(&target_version.archive_wasm_hash);
         }
 
-        let deployed_version = match self.proto.deployed_version.as_ref() {
+        let deployed_version = match self.proto.deployed_version.clone() {
             None => {
                 let message = format!(
                     "SNS Governance had no recorded deployed_version at timestamp {} seconds. \
@@ -5686,9 +5722,15 @@ impl Governance {
                     vec![running_version.clone()],
                 ));
 
-                self.proto.deployed_version = Some(running_version.clone());
+                self.proto.deployed_version.replace(running_version.clone());
+                self.proto
+                    .cached_upgrade_steps
+                    .replace(CachedUpgradeStepsPb::from(CachedUpgradeSteps::empty(
+                        running_version.clone(),
+                        self.env.now(),
+                    )));
 
-                &running_version
+                running_version.clone()
             }
             Some(version) => version,
         };
@@ -5723,11 +5765,26 @@ impl Governance {
         );
         let status = upgrade_journal_entry::upgrade_outcome::Status::Success(Empty {});
 
+        let old_cached_upgrade_steps = self.cached_upgrade_steps(&deployed_version);
+
+        let new_deployed_version_and_upgrade_steps = match old_cached_upgrade_steps.split_first() {
+            Ok(ok) => ok,
+            Err(err) => {
+                log!(
+                    ERROR,
+                    "New SNS version is not available in cached_upgrade_steps: {}",
+                    err
+                );
+                let new_upgrade_steps = self.cached_upgrade_steps(&target_version);
+                (target_version, new_upgrade_steps)
+            }
+        };
+
         self.complete_sns_upgrade_to_next_version(
             proposal_id,
             status,
             message,
-            Some(target_version),
+            Some(new_deployed_version_and_upgrade_steps),
         );
     }
 
@@ -5741,13 +5798,14 @@ impl Governance {
     /// - `proposal_id`: If set, will be used to set this proposal's execution status.
     /// - `status`: Indicates the ultimate upgrade status.
     /// - `message`: Human-readable text for the upgrade journal.
-    /// - `deployed_version`: If set, replaces the `deployed_version` in the canister state.
+    /// - `deployed_version_and_upgrade_steps`: If set, replaces the `deployed_version` and
+    ///     `cached_upgrade_steps` in the canister state with the provided new values.
     fn complete_sns_upgrade_to_next_version(
         &mut self,
         proposal_id: Option<u64>,
         status: upgrade_journal_entry::upgrade_outcome::Status,
         message: String,
-        deployed_version: Option<Version>,
+        deployed_version_and_upgrade_steps: Option<(Version, CachedUpgradeSteps)>,
     ) {
         use upgrade_journal_entry::upgrade_outcome::Status;
 
@@ -5773,8 +5831,11 @@ impl Governance {
 
         self.proto.pending_version = None;
 
-        if let Some(deployed_version) = deployed_version {
+        if let Some((deployed_version, cached_upgrade_steps)) = deployed_version_and_upgrade_steps {
             self.proto.deployed_version.replace(deployed_version);
+            self.proto
+                .cached_upgrade_steps
+                .replace(CachedUpgradeStepsPb::from(cached_upgrade_steps));
         }
     }
 
