@@ -255,7 +255,10 @@ pub async fn update_balance<R: CanisterRuntime>(
             kyt_fee: Some(kyt_fee),
         };
 
-        match mint(amount, caller_account, crate::memo::encode(&memo).into()).await {
+        match runtime
+            .mint_ckbtc(amount, caller_account, crate::memo::encode(&memo).into())
+            .await
+        {
             Ok(block_index) => {
                 log!(
                     P1,

@@ -999,7 +999,7 @@ impl CkBtcMinterState {
         }
     }
 
-    fn has_ignored_utxo(&self, utxo: &Utxo) -> bool {
+    pub fn has_ignored_utxo(&self, utxo: &Utxo) -> bool {
         self.ignored_utxos.contains(utxo)
     }
 
@@ -1042,7 +1042,7 @@ impl CkBtcMinterState {
         }
     }
 
-    fn utxo_checked_status(&self, utxo: &Utxo) -> Option<&UtxoCheckStatus> {
+    pub fn utxo_checked_status(&self, utxo: &Utxo) -> Option<&UtxoCheckStatus> {
         self.checked_utxos
             .get(utxo)
             .map(|(_, status, _)| status)

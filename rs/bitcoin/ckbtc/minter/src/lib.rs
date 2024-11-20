@@ -1280,6 +1280,13 @@ pub trait CanisterRuntime {
         caller: Principal,
         utxo: &Utxo,
     ) -> Result<(String, UtxoCheckStatus, Principal), UpdateBalanceError>;
+
+    async fn mint_ckbtc(
+        &self,
+        amount: u64,
+        to: Account,
+        memo: Memo,
+    ) -> Result<u64, UpdateBalanceError>;
 }
 
 #[derive(Copy, Clone)]
@@ -1317,5 +1324,14 @@ impl CanisterRuntime for IcCanisterRuntime {
         utxo: &Utxo,
     ) -> Result<(String, UtxoCheckStatus, Principal), UpdateBalanceError> {
         updates::update_balance::kyt_check_utxo(caller, utxo).await
+    }
+
+    async fn mint_ckbtc(
+        &self,
+        amount: u64,
+        to: Account,
+        memo: Memo,
+    ) -> Result<u64, UpdateBalanceError> {
+        updates::update_balance::mint(amount, to, memo).await
     }
 }

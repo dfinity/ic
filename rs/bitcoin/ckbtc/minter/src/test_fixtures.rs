@@ -114,9 +114,12 @@ pub mod mock {
     use async_trait::async_trait;
     use candid::Principal;
     use ic_btc_interface::{GetUtxosRequest, GetUtxosResponse, Utxo};
+    use icrc_ledger_types::icrc1::account::Account;
+    use icrc_ledger_types::icrc1::transfer::Memo;
     use mockall::mock;
 
     mock! {
+        #[derive(Debug)]
         pub CanisterRuntime {}
 
         #[async_trait]
@@ -127,6 +130,7 @@ pub mod mock {
             fn global_timer_set(&self, timestamp: u64);
             async fn bitcoin_get_utxos(&self, request: &GetUtxosRequest, cycles: u64) -> Result<GetUtxosResponse, CallError>;
             async fn kyt_check_utxo(&self, caller: Principal, utxo: &Utxo) -> Result<(String, UtxoCheckStatus, Principal), UpdateBalanceError>;
+            async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;
         }
     }
 }
