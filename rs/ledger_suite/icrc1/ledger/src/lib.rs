@@ -715,6 +715,10 @@ impl Ledger {
         }
     }
 
+    pub fn clear_stable_allowance_data(&mut self) {
+        self.stable_approvals.allowances_data.clear_all();
+    }
+
     pub fn clear_arrivals(&mut self) {
         self.approvals.allowances_data.clear_arrivals();
     }
@@ -1242,5 +1246,14 @@ impl AllowancesData for StableAllowancesData {
 
     fn clear_arrivals(&mut self) {
         panic!("The method `clear_arrivals` should not be called for StableAllowancesData")
+    }
+
+    fn clear_all(&mut self) {
+        ALLOWANCES_MEMORY.with_borrow_mut(|allowances| {
+            allowances.clear_new();
+        });
+        ALLOWANCES_EXPIRATIONS_MEMORY.with_borrow_mut(|expirations| {
+            expirations.clear_new();
+        });
     }
 }
