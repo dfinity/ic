@@ -438,6 +438,52 @@ impl Storable for Expiration {
     const BOUND: Bound = Bound::Unbounded;
 }
 
+#[derive(Clone, Debug, Encode, Decode)]
+struct StorableAllowance {
+    #[n(0)]
+    amount: Tokens,
+    #[n(1)]
+    expires_at: Option<TimeStamp>,
+}
+
+impl Storable for StorableAllowance {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let mut buf = vec![];
+        minicbor::encode(self, &mut buf).expect("StorableAllowance encoding should always succeed");
+        Cow::Owned(buf)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        minicbor::decode(bytes.as_ref()).unwrap_or_else(|e| {
+            panic!(
+                "failed to decode StorableAllowance bytes {}: {e}",
+                hex::encode(bytes)
+            )
+        })
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+impl From<Allowance<Tokens>> for StorableAllowance {
+    fn from(val: Allowance<Tokens>) -> Self {
+        Self {
+            amount: val.amount,
+            expires_at: val.expires_at,
+        }
+    }
+}
+
+impl From<StorableAllowance> for Allowance<Tokens> {
+    fn from(val: StorableAllowance) -> Self {
+        Self {
+            amount: val.amount,
+            expires_at: val.expires_at,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
+        }
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 #[allow(clippy::large_enum_variant)]
 pub enum LedgerArgument {
@@ -462,7 +508,7 @@ thread_local! {
 
     // (from, spender) -> allowance - map storing ledger allowances.
     #[allow(clippy::type_complexity)]
-    pub static ALLOWANCES_MEMORY: RefCell<StableBTreeMap<AccountSpender, Allowance<Tokens>, VirtualMemory<DefaultMemoryImpl>>> =
+    pub static ALLOWANCES_MEMORY: RefCell<StableBTreeMap<AccountSpender, StorableAllowance, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_MEMORY_ID))));
 
     // (timestamp, (from, spender)) - expiration set used for removing expired allowances.
@@ -1086,7 +1132,9 @@ impl AllowancesData for StableAllowancesData {
         account_spender: &(Self::AccountId, Self::AccountId),
     ) -> Option<Allowance<Self::Tokens>> {
         let account_spender = account_spender.into();
-        ALLOWANCES_MEMORY.with_borrow(|allowances| allowances.get(&account_spender))
+        ALLOWANCES_MEMORY
+            .with_borrow(|allowances| allowances.get(&account_spender))
+            .map(|a| a.into())
     }
 
     fn set_allowance(
@@ -1096,7 +1144,7 @@ impl AllowancesData for StableAllowancesData {
     ) {
         let account_spender = (&account_spender).into();
         ALLOWANCES_MEMORY
-            .with_borrow_mut(|allowances| allowances.insert(account_spender, allowance));
+            .with_borrow_mut(|allowances| allowances.insert(account_spender, allowance.into()));
     }
 
     fn remove_allowance(&mut self, account_spender: &(Self::AccountId, Self::AccountId)) {
