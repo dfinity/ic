@@ -6,7 +6,7 @@ use crate::{
 /// Defines a trait for disclosing rules, enabling them to be publicly accessible.
 pub trait DisclosesRules {
     /// # Arguments
-    /// * `arg` - the argument specifying which rules or incidents to disclose
+    /// * `arg` - the argument specifying which rules or incidents to be disclosed
     /// * `disclosure_time` - the timestamp to use for disclosure
     ///
     /// # Returns
