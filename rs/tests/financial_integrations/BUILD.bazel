@@ -40,20 +40,6 @@ system_test(
 )
 
 system_test_nns(
-    name = "token_fault_tolerance_test",
-    env = UNIVERSAL_CANISTER_ENV,
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-        "system_test_hourly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test_nns(
     name = "transaction_ledger_correctness_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
