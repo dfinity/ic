@@ -1766,6 +1766,8 @@ fn evict_sandbox_processes(
         .get_ref()
         .get_scheduler_priorities();
 
+    let min_scheduler_priority = AccumulatedPriority::new(i64::MIN);
+
     let candidates: Vec<_> = backends
         .iter()
         .filter_map(|(id, backend)| match backend {
@@ -1775,7 +1777,7 @@ fn evict_sandbox_processes(
                 rss: stats.rss,
                 scheduler_priority: *scheduler_priorities
                     .get(id)
-                    .unwrap_or(&AccumulatedPriority::new(0)),
+                    .unwrap_or(&min_scheduler_priority),
             }),
             Backend::Evicted { .. } | Backend::Empty => None,
         })
