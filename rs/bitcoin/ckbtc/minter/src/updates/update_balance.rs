@@ -158,7 +158,7 @@ pub async fn update_balance(
         .await?
         .utxos;
 
-    let new_utxos = state::read_state(|s| s.new_utxos_for_account(utxos, &caller_account));
+    let new_utxos = state::read_state(|s| s.processable_utxos_for_account(utxos, &caller_account));
 
     // Remove pending finalized transactions for the affected principal.
     state::mutate_state(|s| s.finalized_utxos.remove(&caller_account.owner));
@@ -220,6 +220,7 @@ pub async fn update_balance(
     let mut utxo_statuses: Vec<UtxoStatus> = vec![];
     for utxo in new_utxos {
         if utxo.value <= kyt_fee {
+            //TODO XC-230: do not dedup event if utxo already ignored
             mutate_state(|s| crate::state::audit::ignore_utxo(s, utxo.clone()));
             log!(
                 P1,
@@ -233,6 +234,7 @@ pub async fn update_balance(
         }
         let (uuid, status, kyt_provider) = kyt_check_utxo(caller_account.owner, &utxo).await?;
         mutate_state(|s| {
+            //TODO XC-230: do not dedup event if utxo already ignored
             crate::state::audit::mark_utxo_checked(s, &utxo, uuid.clone(), status, kyt_provider);
         });
         if status == UtxoCheckStatus::Tainted {
@@ -255,6 +257,7 @@ pub async fn update_balance(
                     DisplayAmount(utxo.value),
                 );
                 state::mutate_state(|s| {
+                    //TODO XC-230: remove utxo from ignored/quarantined utxos
                     state::audit::add_utxos(
                         s,
                         Some(block_index),

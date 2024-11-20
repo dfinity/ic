@@ -29,6 +29,8 @@ use ic_utils_ensure::ensure_eq;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
 use std::collections::btree_map::Entry;
+use std::collections::btree_set;
+use std::iter::Chain;
 
 /// The maximum number of finalized BTC retrieval requests that we keep in the
 /// history.
@@ -938,23 +940,12 @@ impl CkBtcMinterState {
         }
     }
 
-    /// Filters out known UTXOs of the given account from the given UTXO list.
-    pub fn new_utxos_for_account(&self, mut utxos: Vec<Utxo>, account: &Account) -> Vec<Utxo> {
-        let maybe_existing_utxos = self.utxos_state_addresses.get(account);
-        let maybe_finalized_utxos = self.finalized_utxos.get(&account.owner);
-        utxos.retain(|utxo| {
-            !maybe_existing_utxos
-                .map(|utxos| utxos.contains(utxo))
-                .unwrap_or(false)
-                && !maybe_finalized_utxos
-                    .map(|utxos| utxos.contains(utxo))
-                    .unwrap_or(false)
-                && !self.ignored_utxos.contains(utxo)
-                && !self.quarantined_utxos.contains(utxo)
-        });
-        utxos
-    }
-
+    /// Returns the UTXOs that can be processed for the given account.
+    ///
+    /// The returned UTXOs include:
+    /// * new UTXOs that are not known to the minter,
+    /// * UTXOs that were previously ignored and that can be re-evaluated,
+    /// * UTXOs that were previously quarantined and that can be re-evaluated.
     pub fn processable_utxos_for_account<I: IntoIterator<Item = Utxo>>(
         &self,
         all_utxos_for_account: I,
@@ -1230,6 +1221,30 @@ pub struct ProcessableUtxos {
     new_utxos: BTreeSet<Utxo>,
     previously_ignored_utxos: BTreeSet<Utxo>,
     previously_quarantined_utxos: BTreeSet<Utxo>,
+}
+
+impl ProcessableUtxos {
+    pub fn iter(&self) -> impl Iterator<Item = &Utxo> {
+        self.new_utxos
+            .iter()
+            .chain(&self.previously_ignored_utxos)
+            .chain(&self.previously_quarantined_utxos)
+    }
+}
+
+impl IntoIterator for ProcessableUtxos {
+    type Item = Utxo;
+    type IntoIter = Chain<
+        Chain<btree_set::IntoIter<Utxo>, btree_set::IntoIter<Utxo>>,
+        btree_set::IntoIter<Utxo>,
+    >;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.new_utxos
+            .into_iter()
+            .chain(self.previously_ignored_utxos)
+            .chain(self.previously_quarantined_utxos)
+    }
 }
 
 fn as_sorted_vec<T, K: Ord>(values: impl Iterator<Item = T>, key: impl Fn(&T) -> K) -> Vec<T> {

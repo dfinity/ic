@@ -1,5 +1,5 @@
 mod processable_utxos_for_account {
-    use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
+    use crate::state::invariants::CheckInvariantsImpl;
     use crate::state::{CkBtcMinterState, ProcessableUtxos};
     use crate::test_fixtures::{ignored_utxo, init_args, ledger_account, quarantined_utxo, utxo};
     use candid::Principal;
