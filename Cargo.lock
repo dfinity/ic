@@ -6113,6 +6113,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-embedders",
  "ic-interfaces",
+ "ic-interfaces-state-manager",
  "ic-limits",
  "ic-logger",
  "ic-management-canister-types",
@@ -6122,6 +6123,7 @@ dependencies = [
  "ic-replicated-state",
  "ic-sys",
  "ic-system-api",
+ "ic-test-utilities",
  "ic-test-utilities-types",
  "ic-types",
  "ic-utils 0.9.0",
@@ -6135,6 +6137,7 @@ dependencies = [
  "num-traits",
  "once_cell",
  "prometheus",
+ "rand 0.8.5",
  "rayon",
  "regex",
  "serde",
@@ -6579,6 +6582,7 @@ dependencies = [
  "lazy_static",
  "minicbor",
  "minicbor-derive",
+ "mockall",
  "num-traits",
  "proptest",
  "ripemd",
@@ -8707,9 +8711,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "candid",
- "clap 4.5.20",
  "hex",
- "ic-agent",
  "ic-base-types",
  "ic-crypto-ed25519",
  "ic-crypto-secp256k1",
@@ -8733,12 +8735,10 @@ dependencies = [
 name = "ic-icp-rosetta-runner"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "candid",
  "ic-ledger-test-utils",
  "ic-rosetta-test-utils",
  "icp-ledger",
- "icrc-ledger-types",
  "pocket-ic",
  "reqwest 0.12.9",
  "tempfile",
@@ -8758,8 +8758,6 @@ dependencies = [
  "hex",
  "ic-agent",
  "ic-base-types",
- "ic-certification 2.6.0",
- "ic-crypto-tree-hash",
  "ic-icrc-rosetta-client",
  "ic-icrc-rosetta-runner",
  "ic-icrc1",
@@ -8769,7 +8767,6 @@ dependencies = [
  "ic-icrc1-tokens-u64",
  "ic-ledger-canister-core",
  "ic-ledger-core",
- "ic-ledger-hash-of",
  "ic-ledger-suite-state-machine-tests",
  "ic-limits",
  "ic-rosetta-api",
@@ -8795,7 +8792,6 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "serde_json",
- "serde_with 1.14.0",
  "strum",
  "strum_macros",
  "tempfile",
@@ -8878,7 +8874,6 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_bytes",
- "tempfile",
  "thiserror",
 ]
 
@@ -8913,25 +8908,18 @@ version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
- "ciborium",
  "dfn_http_metrics",
  "futures",
  "getrandom",
- "hex",
  "ic-base-types",
  "ic-cdk 0.16.0",
  "ic-cdk-macros 0.9.0",
- "ic-crypto-tree-hash",
- "ic-icrc1",
  "ic-icrc1-benchmark-worker",
  "ic-icrc1-index",
- "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-metrics-encoder",
- "icrc-ledger-client",
  "icrc-ledger-client-cdk",
  "icrc-ledger-types",
- "num-traits",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "serde",
@@ -9073,7 +9061,6 @@ dependencies = [
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
- "icrc-ledger-client",
  "icrc-ledger-types",
  "leb128",
  "num-bigint 0.4.6",
@@ -9093,10 +9080,8 @@ dependencies = [
  "ic-crypto-secp256k1",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-icrc1",
- "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
- "ic-limits",
  "ic-types",
  "icrc-ledger-types",
  "num-traits",
@@ -9308,7 +9293,6 @@ dependencies = [
  "ic-ledger-hash-of",
  "ic-types",
  "icp-ledger",
- "leb128",
  "on_wire",
  "proptest",
  "rusqlite",
@@ -9323,17 +9307,13 @@ name = "ic-ledger-canister-blocks-synchronizer-test-utils"
 version = "0.9.0"
 dependencies = [
  "ic-canister-client-sender",
- "ic-cdk 0.16.0",
  "ic-ledger-canister-blocks-synchronizer",
  "ic-ledger-core",
  "ic-types",
  "icp-ledger",
  "rand 0.8.5",
  "rand_distr",
- "serde",
- "serde_bytes",
  "tempfile",
- "tokio",
 ]
 
 [[package]]
@@ -9349,7 +9329,6 @@ dependencies = [
  "ic-limits",
  "ic-management-canister-types",
  "ic-utils 0.9.0",
- "num-traits",
  "serde",
 ]
 
@@ -9472,7 +9451,6 @@ dependencies = [
  "icrc1-test-suite",
  "num-traits",
  "proptest",
- "serde",
 ]
 
 [[package]]
@@ -9480,7 +9458,6 @@ name = "ic-ledger-test-utils"
 version = "0.9.0"
 dependencies = [
  "candid",
- "candid_parser",
  "canister-test",
  "dfn_protobuf",
  "ic-base-types",
@@ -9490,7 +9467,6 @@ dependencies = [
  "ic-state-machine-tests",
  "icp-ledger",
  "icrc-ledger-types",
- "maplit",
  "on_wire",
  "pocket-ic",
  "serde",
@@ -10234,6 +10210,7 @@ dependencies = [
  "ic-neurons-fund",
  "ic-nns-common",
  "ic-nns-constants",
+ "ic-nns-governance",
  "ic-nns-governance-api",
  "ic-nns-governance-init",
  "ic-nns-governance-protobuf-generator",
@@ -11310,6 +11287,7 @@ dependencies = [
 name = "ic-replica"
 version = "0.9.0"
 dependencies = [
+ "anyhow",
  "assert_cmd",
  "canister-test",
  "clap 4.5.20",
@@ -11355,9 +11333,9 @@ dependencies = [
  "libc",
  "nix 0.24.3",
  "num_cpus",
- "opentelemetry 0.26.0",
+ "opentelemetry 0.27.0",
  "opentelemetry-otlp",
- "opentelemetry_sdk 0.26.0",
+ "opentelemetry_sdk 0.27.0",
  "pprof",
  "predicates",
  "prometheus",
@@ -11370,7 +11348,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-flame",
- "tracing-opentelemetry 0.27.0",
+ "tracing-opentelemetry 0.28.0",
  "tracing-subscriber",
  "wat",
 ]
@@ -11579,7 +11557,6 @@ dependencies = [
  "ic-base-types",
  "ic-canister-client",
  "ic-crypto-ed25519",
- "ic-crypto-secp256k1",
  "ic-crypto-sha2",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
@@ -13158,8 +13135,6 @@ dependencies = [
  "assert_matches",
  "candid",
  "candid_parser",
- "ciborium",
- "futures",
  "ic-base-types",
  "ic-canisters-http-types",
  "ic-cdk 0.16.0",
@@ -13171,11 +13146,8 @@ dependencies = [
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
- "ic0 0.18.11",
- "num-traits",
  "rand 0.8.5",
  "serde",
- "serde_bytes",
  "xrc-mock",
 ]
 
@@ -13918,7 +13890,6 @@ dependencies = [
  "lazy_static",
  "ledger-canister-protobuf-generator",
  "maplit",
- "num-traits",
  "on_wire",
  "pocket-ic",
  "proptest",
@@ -13942,21 +13913,17 @@ dependencies = [
  "ic-agent",
  "ic-icrc-rosetta",
  "ic-icrc-rosetta-client",
- "ic-icrc1",
  "ic-ledger-test-utils",
  "ic-rosetta-api",
  "ic-sender-canister",
  "ic-test-utilities-load-wasm",
  "icp-ledger",
- "icrc-ledger-agent",
  "icrc-ledger-types",
  "ledger-canister",
  "num-traits",
  "pocket-ic",
- "reqwest 0.12.9",
  "rosetta-core",
  "serde",
- "serde_json",
  "tempfile",
  "tokio",
  "url",
@@ -16244,9 +16211,9 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry"
-version = "0.26.0"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "570074cc999d1a58184080966e5bd3bf3a9a4af650c3b05047c2621e7405cd17"
+checksum = "0f3cebff57f7dbd1255b44d8bddc2cebeb0ea677dbaa2e25a3070a91b318f660"
 dependencies = [
  "futures-core",
  "futures-sink",
@@ -16258,20 +16225,21 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry-otlp"
-version = "0.26.0"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29e1f9c8b032d4f635c730c0efcf731d5e2530ea13fa8bef7939ddc8420696bd"
+checksum = "91cf61a1868dacc576bf2b2a1c3e9ab150af7272909e80085c3173384fe11f76"
 dependencies = [
  "async-trait",
  "futures-core",
  "http 1.1.0",
- "opentelemetry 0.26.0",
+ "opentelemetry 0.27.0",
  "opentelemetry-proto",
- "opentelemetry_sdk 0.26.0",
+ "opentelemetry_sdk 0.27.0",
  "prost 0.13.3",
  "thiserror",
  "tokio",
  "tonic",
+ "tracing",
 ]
 
 [[package]]
@@ -16289,12 +16257,12 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry-proto"
-version = "0.26.1"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9d3968ce3aefdcca5c27e3c4ea4391b37547726a70893aab52d3de95d5f8b34"
+checksum = "a6e05acbfada5ec79023c85368af14abd0b307c015e9064d249b2a950ef459a6"
 dependencies = [
- "opentelemetry 0.26.0",
- "opentelemetry_sdk 0.26.0",
+ "opentelemetry 0.27.0",
+ "opentelemetry_sdk 0.27.0",
  "prost 0.13.3",
  "tonic",
 ]
@@ -16370,9 +16338,9 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry_sdk"
-version = "0.26.0"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2c627d9f4c9cdc1f21a29ee4bfbd6028fcb8bcf2a857b43f3abdf72c9c862f3"
+checksum = "27b742c1cae4693792cc564e58d75a2a0ba29421a34a85b50da92efa89ecb2bc"
 dependencies = [
  "async-trait",
  "futures-channel",
@@ -16380,13 +16348,14 @@ dependencies = [
  "futures-util",
  "glob",
  "once_cell",
- "opentelemetry 0.26.0",
+ "opentelemetry 0.27.0",
  "percent-encoding",
  "rand 0.8.5",
  "serde_json",
  "thiserror",
  "tokio",
  "tokio-stream",
+ "tracing",
 ]
 
 [[package]]
@@ -18555,7 +18524,6 @@ dependencies = [
  "hex",
  "ic-agent",
  "ic-crypto-ed25519",
- "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
  "ic-crypto-secp256k1",
  "ic-types",
  "icp-ledger",
@@ -18564,7 +18532,6 @@ dependencies = [
  "proptest",
  "serde",
  "serde_bytes",
- "serde_cbor",
  "serde_json",
  "serde_with 1.14.0",
 ]
@@ -21320,14 +21287,14 @@ dependencies = [
 
 [[package]]
 name = "tracing-opentelemetry"
-version = "0.27.0"
+version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc58af5d3f6c5811462cabb3289aec0093f7338e367e5a33d28c0433b3c7360b"
+checksum = "97a971f6058498b5c0f1affa23e7ea202057a7301dbff68e968b2d578bcbd053"
 dependencies = [
  "js-sys",
  "once_cell",
- "opentelemetry 0.26.0",
- "opentelemetry_sdk 0.26.0",
+ "opentelemetry 0.27.0",
+ "opentelemetry_sdk 0.27.0",
  "smallvec",
  "tracing",
  "tracing-core",

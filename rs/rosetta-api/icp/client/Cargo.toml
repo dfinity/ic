@@ -11,9 +11,7 @@ path = "src/lib.rs"
 [dependencies]
 anyhow = { workspace = true }
 candid = { workspace = true }
-clap = { workspace = true }
 hex = { workspace = true }
-ic-agent = { workspace = true }
 ic-rosetta-api = { path = "../" }
 num-bigint = { workspace = true }
 reqwest = { workspace = true }

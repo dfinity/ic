@@ -35,7 +35,9 @@ use ic_types::{
     replica_config::ReplicaConfig,
     Height,
 };
-use std::{cell::RefCell, sync::Arc};
+use std::cell::RefCell;
+use std::sync::Arc;
+use std::time::Instant;
 
 pub struct Finalizer {
     pub(crate) replica_config: ReplicaConfig,
@@ -47,6 +49,7 @@ pub struct Finalizer {
     pub(crate) log: ReplicaLogger,
     metrics: FinalizerMetrics,
     prev_finalized_height: RefCell<Height>,
+    last_batch_delivered_at: RefCell<Option<Instant>>,
 }
 
 impl Finalizer {
@@ -71,6 +74,7 @@ impl Finalizer {
             log,
             metrics: FinalizerMetrics::new(metrics_registry),
             prev_finalized_height: RefCell::new(Height::from(0)),
+            last_batch_delivered_at: RefCell::new(None),
         }
     }
 
@@ -122,7 +126,16 @@ impl Finalizer {
     ) {
         match result {
             Ok(()) => {
+                let now = Instant::now();
+                if let Some(last_batch_delivered_at) = *self.last_batch_delivered_at.borrow() {
+                    self.metrics
+                        .batch_delivery_interval
+                        .observe(now.duration_since(last_batch_delivered_at).as_secs_f64());
+                }
+                self.last_batch_delivered_at.borrow_mut().replace(now);
+
                 self.metrics.process(&block_stats, &batch_stats);
+
                 for ingress in batch_stats.ingress_ids.iter() {
                     debug!(
                         self.log,

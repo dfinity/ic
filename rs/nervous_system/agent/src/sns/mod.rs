@@ -1,3 +1,4 @@
+pub mod archive;
 pub mod governance;
 pub mod index;
 pub mod ledger;
@@ -18,6 +19,7 @@ pub struct Sns {
     pub index: index::IndexCanister,
     pub swap: swap::SwapCanister,
     pub root: root::RootCanister,
+    pub archive: Vec<archive::ArchiveCanister>,
 }
 
 impl Sns {
@@ -67,6 +69,7 @@ impl TryFrom<ic_sns_wasm::pb::v1::DeployedSns> for Sns {
                     .root_canister_id
                     .ok_or("ledger_canister_id not found")?,
             },
+            archive: Vec::new(),
         })
     }
 }
