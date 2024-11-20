@@ -180,6 +180,7 @@ oci.pull(
 )
 use_repo(oci, "nginx-proxy", "nginx-proxy_linux_amd64")
 
+# Used by tests
 oci.pull(
     name = "jaeger",
     image = "ghcr.io/dfinity/jaegertracing/all-in-one@sha256:836e9b69c88afbedf7683ea7162e179de63b1f981662e83f5ebb68badadc710f",
