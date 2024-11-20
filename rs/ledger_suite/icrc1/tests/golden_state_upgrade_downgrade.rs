@@ -151,6 +151,9 @@ impl LedgerSuiteConfig {
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
         let index_canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.index_id).unwrap());
+        // Top up the ledger suite canisters so that they do not risk running out of cycles as
+        // part of the upgrade/downgrade testing.
+        top_up_canisters(state_machine, ledger_canister_id, index_canister_id);
         let mut previous_ledger_state = None;
         if self.extended_testing {
             previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
@@ -776,6 +779,22 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
 
 fn archive_wasm() -> Vec<u8> {
     load_wasm_using_env_var("IC_ICRC1_ARCHIVE_WASM_PATH")
+}
+
+fn top_up_canisters(
+    state_machine: &StateMachine,
+    ledger_canister_id: CanisterId,
+    index_canister_id: CanisterId,
+) {
+    const TOP_UP_AMOUNT: u128 = 2_000_000_000_000_000; // 2_000 T cycles
+    let archives = list_archives(state_machine, ledger_canister_id);
+    for archive in archives {
+        let archive_canister_id =
+            CanisterId::unchecked_from_principal(PrincipalId(archive.canister_id));
+        state_machine.add_cycles(archive_canister_id, TOP_UP_AMOUNT);
+    }
+    state_machine.add_cycles(ledger_canister_id, TOP_UP_AMOUNT);
+    state_machine.add_cycles(index_canister_id, TOP_UP_AMOUNT);
 }
 
 mod index {

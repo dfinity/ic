@@ -8,6 +8,7 @@ use crate::{
     address::{account_to_bitcoin_address, BitcoinAddress, ParseAddressError},
     guard::{retrieve_btc_guard, GuardError},
     state::{self, mutate_state, read_state, RetrieveBtcRequest},
+    IC_CANISTER_RUNTIME,
 };
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
@@ -243,7 +244,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         read_state(|s| s.retrieve_btc_status(block_index))
     );
 
-    schedule_now(TaskType::ProcessLogic);
+    schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
 
     Ok(RetrieveBtcOk { block_index })
 }
@@ -344,7 +345,7 @@ pub async fn retrieve_btc_with_approval(
         read_state(|s| s.retrieve_btc_status(block_index))
     );
 
-    schedule_now(TaskType::ProcessLogic);
+    schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
 
     Ok(RetrieveBtcOk { block_index })
 }

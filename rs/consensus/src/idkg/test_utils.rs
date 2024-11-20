@@ -53,13 +53,13 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    ExtendedDerivationPath, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
-    ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
+    ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare, ThresholdSchnorrSigInputs,
+    ThresholdSchnorrSigShare,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
-use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::messages::CallbackId;
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{signature::*, time};

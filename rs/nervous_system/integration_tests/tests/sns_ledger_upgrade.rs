@@ -215,7 +215,7 @@ async fn test_upgrade_existing_sns() {
     {
         sns::upgrade_sns_to_next_version_and_assert_change(
             &pocket_ic,
-            sns.root.canister_id,
+            &sns,
             SnsCanisterType::Index,
         )
         .await;
@@ -257,7 +257,7 @@ async fn test_upgrade_existing_sns() {
 
         sns::upgrade_sns_to_next_version_and_assert_change(
             &pocket_ic,
-            sns.root.canister_id,
+            &sns,
             SnsCanisterType::Ledger,
         )
         .await;
@@ -372,7 +372,7 @@ async fn test_upgrade_existing_sns() {
 
         sns::upgrade_sns_to_next_version_and_assert_change(
             &pocket_ic,
-            sns.root.canister_id,
+            &sns,
             SnsCanisterType::Archive,
         )
         .await;
@@ -403,11 +403,7 @@ async fn test_upgrade_existing_sns() {
         SnsCanisterType::Ledger,
         SnsCanisterType::Archive,
     ] {
-        sns::upgrade_sns_to_next_version_and_assert_change(
-            &pocket_ic,
-            sns.root.canister_id,
-            sns_canister_type,
-        )
-        .await;
+        sns::upgrade_sns_to_next_version_and_assert_change(&pocket_ic, &sns, sns_canister_type)
+            .await;
     }
 }

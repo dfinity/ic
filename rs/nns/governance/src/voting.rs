@@ -1,4 +1,5 @@
 use crate::{
+    governance::Governance,
     neuron_store::NeuronStore,
     pb::v1::{Ballot, Topic, Topic::NeuronManagement, Vote},
 };
@@ -10,6 +11,40 @@ use std::{
 
 thread_local! {
     static VOTING_STATE_MACHINES: RefCell<VotingStateMachines> = RefCell::new(VotingStateMachines::new());
+}
+impl Governance {
+    pub async fn cast_vote_and_cascade_follow(
+        &mut self,
+        proposal_id: ProposalId,
+        voting_neuron_id: NeuronId,
+        vote_of_neuron: Vote,
+        topic: Topic,
+    ) {
+        let neuron_store = &mut self.neuron_store;
+        let ballots = &mut self
+            .heap_data
+            .proposals
+            .get_mut(&proposal_id.id)
+            .unwrap()
+            .ballots;
+        // Use of thread local storage to store the state machines prevents
+        // more than one state machine per proposal, which limits the overall
+        // memory usage for voting, which will be relevant when this can be used
+        // across multiple messages, which would cause the memory usage to accumulate.
+        VOTING_STATE_MACHINES.with(|vsm| {
+            let mut voting_state_machines = vsm.borrow_mut();
+            let proposal_voting_machine =
+                voting_state_machines.get_or_create_machine(proposal_id, topic);
+
+            proposal_voting_machine.cast_vote(ballots, voting_neuron_id, vote_of_neuron);
+
+            while !proposal_voting_machine.is_done() {
+                proposal_voting_machine.continue_processing(neuron_store, ballots);
+            }
+
+            voting_state_machines.remove_if_done(&proposal_id);
+        });
+    }
 }
 
 struct VotingStateMachines {
@@ -131,6 +166,7 @@ impl ProposalVotingStateMachine {
             self.add_followers_to_check(neuron_store, neuron_id, self.topic);
         }
 
+        // Memory optimization, will not cause tests to fail if removed
         retain_neurons_with_castable_ballots(&mut self.followers_to_check, ballots);
 
         while let Some(follower) = self.followers_to_check.pop_first() {
@@ -180,33 +216,6 @@ fn retain_neurons_with_castable_ballots(
             .map(|b| b.vote == Vote::Unspecified as i32)
             // Neurons without ballots are also dropped
             .unwrap_or_default()
-    });
-}
-
-pub(crate) fn cast_vote_and_cascade_follow(
-    proposal_id: &ProposalId,
-    ballots: &mut HashMap<u64, Ballot>,
-    voting_neuron_id: &NeuronId,
-    vote_of_neuron: Vote,
-    topic: Topic,
-    neuron_store: &mut NeuronStore,
-) {
-    // Use of thread local storage to store the state machines prevents
-    // more than one state machine per proposal, which limits the overall
-    // memory usage for voting, which will be relevant when this can be used
-    // across multiple messages, which would cause the memory usage to accumulate.
-    VOTING_STATE_MACHINES.with(|vsm| {
-        let mut voting_state_machines = vsm.borrow_mut();
-        let proposal_voting_machine =
-            voting_state_machines.get_or_create_machine(*proposal_id, topic);
-
-        proposal_voting_machine.cast_vote(ballots, *voting_neuron_id, vote_of_neuron);
-
-        while !proposal_voting_machine.is_done() {
-            proposal_voting_machine.continue_processing(neuron_store, ballots);
-        }
-
-        voting_state_machines.remove_if_done(proposal_id);
     });
 }
 
