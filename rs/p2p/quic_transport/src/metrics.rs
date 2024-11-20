@@ -21,6 +21,7 @@ const ERROR_CLOSED_STREAM: &str = "closed_stream";
 const ERROR_RESET_STREAM: &str = "reset_stream";
 const ERROR_STOPPED_STREAM: &str = "stopped_stream";
 const ERROR_APP_CLOSED_CONN: &str = "app_closed_conn";
+const ERROR_TIMEOUT_CONN: &str = "timeout_conn";
 const ERROR_LOCALLY_CLOSED_CONN: &str = "locally_closed_conn";
 const ERROR_QUIC_CLOSED_CONN: &str = "quic_closed_conn";
 
@@ -204,13 +205,14 @@ impl QuicTransportMetrics {
 
 pub fn observe_conn_error(err: &ConnectionError, op: &str, counter: &IntCounterVec) {
     match err {
-        // TODO: most likely this can be made infallible
         ConnectionError::LocallyClosed => counter
             .with_label_values(&[op, ERROR_LOCALLY_CLOSED_CONN])
             .inc(),
         ConnectionError::ApplicationClosed(_) => counter
             .with_label_values(&[op, ERROR_APP_CLOSED_CONN])
             .inc(),
+        // Can happen if peer crashes or there are connectivity problems.
+        ConnectionError::Timeout => counter.with_label_values(&[op, ERROR_TIMEOUT_CONN]).inc(),
         // A connection was closed by the QUIC protocol.
         _ => counter
             .with_label_values(&[op, ERROR_QUIC_CLOSED_CONN])
