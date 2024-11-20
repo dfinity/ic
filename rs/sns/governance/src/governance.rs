@@ -5102,6 +5102,8 @@ impl Governance {
         &mut self,
         request: AdvanceTargetVersionRequest,
     ) -> AdvanceTargetVersionResponse {
+        self.check_test_features_enabled();
+
         let AdvanceTargetVersionRequest {
             target_version: Some(target_version),
         } = request

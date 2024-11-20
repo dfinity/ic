@@ -1718,6 +1718,13 @@ fn validate_and_render_manage_dapp_canister_settings(
     }
 }
 
+/// This function does a few things:
+/// 1. Validates the action's `new_target` field, if it is `Some(new_target)`.
+/// 2. Identifies the `new_target`, either based on the above, or using `cached_upgrade_steps`.
+/// 3. Renders the Markdown proposal description.
+/// 4. Returns the rendering and the identified `new_target` (guaranteed to be `Some`)
+///    as `ActionAuxiliary`. This returned `new_target` should be used for executing this action,
+///    assuming the proposal will be adopted.
 fn validate_and_render_advance_sns_target_version_proposal(
     sns_governance_canister_id: CanisterId,
     cached_upgrade_steps: CachedUpgradeSteps,
@@ -1750,16 +1757,15 @@ fn validate_and_render_advance_sns_target_version_proposal(
     );
 
     let render = format!(
-        "# Proposal to advance SNS target version\n\
-         {current_target_versions_render}\n\
-         ### Upgrade steps\n\
-         {cached_upgrade_steps}\n\
-         ### Monitoring the upgrade process\n\
-         Please note that the upgrade steps indicated above are not guaranteed to remain the same \
-         outside of the time period {valid_timestamp_seconds}. In particular, the upgrade steps \
-         for this SNS might change during this proposal's voting period.\n\
-         \n\
-         The **upgrade journal** provides up-to-date information on this SNS's upgrade process:\n\
+        "# Proposal to advance SNS target version\n\n\
+         {current_target_versions_render}\n\n\
+         ### Upgrade steps\n\n\
+         {cached_upgrade_steps}\n\n\
+         ### Monitoring the upgrade process\n\n\
+         Please note: the upgrade steps above (valid around timestamp {valid_timestamp_seconds} \
+         seconds) might change during this proposal's voting period. Such changes are unlikely and \
+         are subject to NNS community's approval.\n\n\
+         The **upgrade journal** provides up-to-date information on this SNS's upgrade process:\n\n\
          {upgrade_journal_url_render}"
     );
 

@@ -210,12 +210,12 @@ impl CachedUpgradeSteps {
         &self.current_version == version || self.subsequent_versions.contains(version)
     }
 
-    pub fn is_last(&self, version: &Version) -> bool {
-        version == self.last()
-    }
-
     pub fn current(&self) -> &Version {
         &self.current_version
+    }
+
+    pub fn is_current(&self, version: &Version) -> bool {
+        version == self.current()
     }
 
     /// Approximate time at which this cache was valid.
@@ -227,8 +227,8 @@ impl CachedUpgradeSteps {
         if !self.contains(new_target) {
             return Err("new_target_version must be among the upgrade steps.".to_string());
         }
-        if self.is_last(new_target) {
-            return Err("new_target_version must differ from the last known version.".to_string());
+        if self.is_current(new_target) {
+            return Err("new_target_version must differ from the current version.".to_string());
         }
         Ok(())
     }
