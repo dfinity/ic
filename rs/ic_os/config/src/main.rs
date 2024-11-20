@@ -463,8 +463,8 @@ pub fn main() -> Result<()> {
                 None => get_ipmi_mac()?,
             };
 
-            let nns_public_key_exists = Path::new("/boot/config/nns_public_key.pem").exists();
-            let node_operator_private_key_exists =
+            let use_nns_public_key = Path::new("/boot/config/nns_public_key.pem").exists();
+            let use_node_operator_private_key =
                 Path::new("/boot/config/node_operator_private_key.pem").exists();
             let use_ssh_authorized_keys = Path::new("/boot/config/ssh_authorized_keys").exists();
 
@@ -473,9 +473,9 @@ pub fn main() -> Result<()> {
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name,
                 logging,
-                nns_public_key_exists,
+                use_nns_public_key,
                 nns_urls: deployment_json_settings.nns.url.clone(),
-                node_operator_private_key_exists,
+                use_node_operator_private_key,
                 use_ssh_authorized_keys,
                 icos_dev_settings: ICOSDevSettings::default(),
             };

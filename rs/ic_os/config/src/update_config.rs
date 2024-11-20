@@ -35,8 +35,8 @@ pub fn update_guestos_config() -> Result<()> {
         let logging = read_filebeat_conf(config_dir)?;
         let nns_urls = read_nns_conf(config_dir)?;
 
-        let nns_public_key_exists = state_root.join("nns_public_key.pem").exists();
-        let node_operator_private_key_exists =
+        let use_nns_public_key = state_root.join("nns_public_key.pem").exists();
+        let use_node_operator_private_key =
             state_root.join("node_operator_private_key.pem").exists();
         let use_ssh_authorized_keys = config_dir.join("accounts_ssh_authorized_keys").is_dir();
 
@@ -48,9 +48,9 @@ pub fn update_guestos_config() -> Result<()> {
             mgmt_mac,
             deployment_environment,
             logging,
-            nns_public_key_exists,
+            use_nns_public_key,
             nns_urls,
-            node_operator_private_key_exists,
+            use_node_operator_private_key,
             use_ssh_authorized_keys,
             icos_dev_settings: ICOSDevSettings::default(),
         };
