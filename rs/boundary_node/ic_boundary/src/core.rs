@@ -95,7 +95,7 @@ const MB: usize = 1024 * KB;
 
 lazy_static! {
     static ref LOG_ANONYMIZATION_CID: Principal =
-        Principal::from_text("usv67-saaaa-aaaah-qpwlq-cai").unwrap();
+        Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
 }
 
 pub const MAX_REQUEST_BODY_SIZE: usize = 4 * MB;
