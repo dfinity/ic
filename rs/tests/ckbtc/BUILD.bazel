@@ -61,10 +61,17 @@ oci_tar(
     repo_tags = ["minica:image"],
 )
 
+oci_tar(
+    name = "bitcoind.tar",
+    image = "@bitcoind",
+    repo_tags = ["bitcoind:image"],
+)
+
 uvm_config_image(
     name = "ckbtc_uvm_config_image",
     srcs = [
         ":minica.tar",
+        ":bitcoind.tar",
         "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
         "//ic-os/components:networking/dev-certs/canister_http_test_ca.key",
         "//rs/tests/httpbin-rs:httpbin.tar",

@@ -141,10 +141,11 @@ cat >/tmp/bitcoin.conf <<END
     fallbackfee=0.0002
     rpcauth=$BITCOIND_RPC_AUTH
 END
+docker load -i /config/bitcoind.tar
 docker run  --name=bitcoind-node -d \
   -e VIRTUAL_HOST=localhost -e VIRTUAL_PORT={BITCOIND_RPC_PORT} -v /tmp:/bitcoin/.bitcoin \
   -p {BITCOIN_CLI_PORT}:{BITCOIN_CLI_PORT} -p {BITCOIND_RPC_PORT}:{BITCOIND_RPC_PORT} \
-  ghcr.io/dfinity/bitcoind@sha256:17c7dd21690f3be34630db7389d2f0bff14649e27a964afef03806a6d631e0f1
+  bitcoind:image
 
 # docker load -i /config/httpbin.tar
 # docker run --rm -d -p {HTTPS_PORT}:80 -v /tmp/certs:/certs --name httpbin httpbin:image \
