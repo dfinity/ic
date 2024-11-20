@@ -21,12 +21,12 @@ impl MacAddress {
         self.0
     }
 
-    /// Returns the formatted MAC address string (with colons).
+    /// Returns the formatted MAC address string (with colons)
     pub fn formatted_string(&self) -> String {
         self.to_string()
     }
 
-    /// Returns the unformatted MAC address string (without colons).
+    /// Returns the unformatted MAC address string (without colons)
     pub fn unformatted_string(&self) -> String {
         let mut result = String::new();
         for byte in self.octets() {

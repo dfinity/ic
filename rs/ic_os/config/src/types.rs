@@ -15,7 +15,7 @@
 //!
 //! - **Renaming Fields**: Avoid renaming fields unless absolutely necessary. If you must rename a field, use `#[serde(rename = "old_name")]`.
 use ic_types::malicious_behaviour::MaliciousBehaviour;
-use mac_address::mac_address::FormattedMacAddress;
+use mac_address::mac_address::MacAddress;
 use serde::{Deserialize, Serialize};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use url::Url;
@@ -65,7 +65,7 @@ pub struct ICOSSettings {
     pub node_reward_type: Option<String>,
     /// In nested testing, mgmt_mac is set in deployment.json.template,
     /// else found dynamically in call to config tool CreateSetuposConfig
-    pub mgmt_mac: FormattedMacAddress,
+    pub mgmt_mac: MacAddress,
     /// "mainnet" or "testnet"
     pub deployment_environment: String,
     pub logging: Logging,
@@ -189,6 +189,7 @@ mod tests {
     use super::*;
     use serde_json::Value;
     use std::collections::HashSet;
+    use std::str::FromStr;
 
     #[test]
     fn test_no_reserved_field_names_used() -> Result<(), Box<dyn std::error::Error>> {
@@ -203,7 +204,7 @@ mod tests {
             },
             icos_settings: ICOSSettings {
                 node_reward_type: Some(String::new()),
-                mgmt_mac: FormattedMacAddress::try_from("00:00:00:00:00:00")?,
+                mgmt_mac: MacAddress::from_str("00:00:00:00:00:00")?,
                 deployment_environment: String::new(),
                 logging: Logging {
                     elasticsearch_hosts: String::new(),

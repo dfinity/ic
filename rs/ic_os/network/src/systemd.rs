@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 
 use crate::info::NetworkInfo;
 use crate::interfaces::{get_interfaces, has_ipv6_connectivity, Interface};
-use mac_address::mac_address::FormattedMacAddress;
+use mac_address::mac_address::MacAddress;
 
 pub static DEFAULT_SYSTEMD_NETWORK_DIR: &str = "/run/systemd/network";
 
@@ -100,7 +100,7 @@ pub fn restart_systemd_networkd() {
 fn generate_and_write_systemd_files(
     output_directory: &Path,
     interface: &Interface,
-    generated_mac: Option<&FormattedMacAddress>,
+    generated_mac: Option<&MacAddress>,
     ipv6_address: &str,
     ipv6_gateway: &str,
 ) -> Result<()> {
@@ -121,7 +121,7 @@ fn generate_and_write_systemd_files(
     let bond6_netdev_filename = "20-bond6.netdev";
     let bond6_netdev_path = output_directory.join(bond6_netdev_filename);
     let mac_line = match generated_mac {
-        Some(mac) => format!("MACAddress={}", mac.get()),
+        Some(mac) => format!("MACAddress={}", mac.formatted_string()),
         None => String::new(),
     };
     let bond6_netdev_content = generate_bond6_netdev_content(&mac_line);
@@ -150,7 +150,7 @@ fn generate_and_write_systemd_files(
 pub fn generate_systemd_config_files(
     output_directory: &Path,
     network_info: &NetworkInfo,
-    generated_mac: Option<&FormattedMacAddress>,
+    generated_mac: Option<&MacAddress>,
     ipv6_address: &Ipv6Addr,
 ) -> Result<()> {
     let mut interfaces = get_interfaces()?;
@@ -158,8 +158,8 @@ pub fn generate_systemd_config_files(
     eprintln!("Interfaces sorted by speed: {:?}", interfaces);
 
     let ping_target = network_info.ipv6_gateway.to_string();
-    // old nodes are still configured with a local IPv4 interface connection
-    // local IPv4 interfaces must be filtered out
+    // Old nodes are still configured with a local IPv4 interface connection
+    // Local IPv4 interfaces must be filtered out
     let ipv6_interfaces: Vec<&Interface> = interfaces
         .iter()
         .filter(|i| {
@@ -173,9 +173,9 @@ pub fn generate_systemd_config_files(
         })
         .collect();
 
-    // For now only assign the fastest interface to ipv6.
-    // TODO - probe to make sure the interfaces are on the same network before doing active-backup bonding.
-    // TODO - Ensure ipv6 connectivity exists
+    // For now only assign the fastest interface to IPv6.
+    // TODO: Probe to make sure the interfaces are on the same network before doing active-backup bonding.
+    // TODO: Ensure IPv6 connectivity exists
     let fastest_interface = ipv6_interfaces
         .first()
         .context("Could not find any network interfaces")?;

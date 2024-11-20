@@ -46,7 +46,8 @@ pub fn deserialize_config<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(file_pat
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mac_address::mac_address::FormattedMacAddress;
+    use mac_address::mac_address::MacAddress;
+    use std::str::FromStr;
     use types::*;
 
     #[test]
@@ -74,7 +75,7 @@ mod tests {
         let icos_dev_settings = ICOSDevSettings::default();
         let icos_settings = ICOSSettings {
             node_reward_type: Some("type3.1".to_string()),
-            mgmt_mac: FormattedMacAddress::try_from("ec:2a:72:31:a2:0c")?,
+            mgmt_mac: MacAddress::from_str("ec:2a:72:31:a2:0c")?,
             deployment_environment: "Mainnet".to_string(),
             logging,
             nns_public_key_exists: true,

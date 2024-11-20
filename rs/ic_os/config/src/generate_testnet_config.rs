@@ -1,7 +1,8 @@
 use anyhow::Result;
-use mac_address::mac_address::FormattedMacAddress;
+use mac_address::mac_address::MacAddress;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
+use std::str::FromStr;
 use url::Url;
 
 use crate::serialize_and_write_config;
@@ -164,10 +165,10 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
     let node_reward_type = node_reward_type.unwrap_or_else(|| "type3.1".to_string());
 
     let mgmt_mac = match mgmt_mac {
-        Some(mac_str) => FormattedMacAddress::try_from(mac_str.as_str())?,
+        Some(mac_str) => MacAddress::from_str(mac_str.as_str())?,
         None => {
             // Use a dummy MAC address
-            FormattedMacAddress::try_from("00:00:00:00:00:00")?
+            MacAddress::from_str("00:00:00:00:00:00")?
         }
     };
 

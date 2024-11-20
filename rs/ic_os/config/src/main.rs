@@ -3,10 +3,11 @@ use clap::{Args, Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
-use mac_address::mac_address::{get_ipmi_mac, FormattedMacAddress};
+use mac_address::mac_address::{get_ipmi_mac, MacAddress};
 use regex::Regex;
 use std::fs::File;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
@@ -200,7 +201,7 @@ pub fn main() -> Result<()> {
 
             let mgmt_mac = match deployment_json_settings.deployment.mgmt_mac {
                 Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
+                    let mgmt_mac = MacAddress::from_str(config_mac.as_str())?;
                     println!(
                         "Using mgmt_mac address found in deployment.json: {}",
                         mgmt_mac

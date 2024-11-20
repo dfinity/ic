@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::str::FromStr;
 
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
@@ -6,7 +7,9 @@ use clap::{Parser, Subcommand};
 use config::config_ini::config_map_from_path;
 use config::deployment_json::get_deployment_settings;
 use config::{DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH};
-use mac_address::mac_address::{generate_mac_address, get_ipmi_mac, FormattedMacAddress};
+use mac_address::mac_address::{
+    generate_deterministic_mac_address, get_ipmi_mac, Deployment, IpVariant, MacAddress,
+};
 use mac_address::node_type::NodeType;
 use network::generate_network_config;
 use network::info::NetworkInfo;
@@ -69,7 +72,7 @@ pub fn main() -> Result<()> {
 
             let mgmt_mac = match deployment_settings.deployment.mgmt_mac {
                 Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
+                    let mgmt_mac = MacAddress::from_str(config_mac.as_str())?;
                     eprintln!(
                         "Using mgmt_mac address found in deployment.json: {}",
                         mgmt_mac
@@ -78,12 +81,24 @@ pub fn main() -> Result<()> {
                 }
                 None => get_ipmi_mac()?,
             };
-            let generated_mac = generate_mac_address(
+
+            let deployment = deployment_settings
+                .deployment
+                .name
+                .parse::<Deployment>()
+                .context("Invalid deployment name")?;
+
+            let generated_mac = generate_deterministic_mac_address(
                 &mgmt_mac,
-                deployment_settings.deployment.name.as_str(),
-                &NodeType::SetupOS,
-            )?;
-            eprintln!("Using generated mac (unformatted) {}", generated_mac);
+                deployment,
+                NodeType::SetupOS,
+                IpVariant::V6,
+            );
+
+            eprintln!(
+                "Using generated mac (unformatted) {}",
+                generated_mac.unformatted_string()
+            );
 
             generate_network_config(&network_info, generated_mac, Path::new(&output_directory))
         }
@@ -107,7 +122,7 @@ pub fn main() -> Result<()> {
             let node_type = node_type.parse::<NodeType>()?;
             let mgmt_mac = match deployment_settings.deployment.mgmt_mac {
                 Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
+                    let mgmt_mac = MacAddress::from_str(config_mac.as_str())?;
                     eprintln!(
                         "Using mgmt_mac address found in deployment.json: {}",
                         mgmt_mac
@@ -116,11 +131,16 @@ pub fn main() -> Result<()> {
                 }
                 None => get_ipmi_mac()?,
             };
-            let generated_mac = generate_mac_address(
-                &mgmt_mac,
-                deployment_settings.deployment.name.as_str(),
-                &node_type,
-            )?;
+
+            let deployment = deployment_settings
+                .deployment
+                .name
+                .parse::<Deployment>()
+                .context("Invalid deployment name")?;
+
+            let generated_mac =
+                generate_deterministic_mac_address(&mgmt_mac, deployment, node_type, IpVariant::V6);
+
             let ipv6_address = generate_ipv6_address(&network_info.ipv6_prefix, &generated_mac)?;
             println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
             Ok(())
