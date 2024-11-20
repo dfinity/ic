@@ -731,7 +731,6 @@ impl NeuronStore {
         old_neuron: &Neuron,
         new_neuron: Neuron,
         previous_location: StorageLocation,
-        sections: NeuronSections,
     ) -> Result<(), NeuronStoreError> {
         let target_location = self.target_storage_location(&new_neuron);
         let is_neuron_changed = *old_neuron != new_neuron;
@@ -764,15 +763,6 @@ impl NeuronStore {
                 self.heap_neurons.remove(&neuron_id.id);
             }
             (StorageLocation::Stable, StorageLocation::Heap) => {
-                // TODO DO NOT MERGE - are these changes safe?
-                // We want to make sure that this can never really happen (i.e. registering a vote
-                // for a neuron that is in stable storage).
-                if sections != NeuronSections::all() {
-                    return Err(NeuronStoreError::InvalidData {
-                        reason: "Cannot perform partial update on neuron into heap from stable"
-                            .to_string(),
-                    });
-                }
                 // Now the neuron in heap becomes its primary copy and the one in stable memory is
                 // the secondary copy.
                 self.heap_neurons.insert(neuron_id.id, new_neuron);
@@ -785,7 +775,7 @@ impl NeuronStore {
                 // error since it signals a real issue.
                 if is_neuron_changed {
                     with_stable_neuron_store_mut(|stable_neuron_store| {
-                        stable_neuron_store.update_sections(old_neuron, new_neuron, sections)
+                        stable_neuron_store.update(old_neuron, new_neuron)
                     })?;
                 }
             }
@@ -1041,13 +1031,7 @@ impl NeuronStore {
         let old_neuron = neuron.deref().clone();
         let mut new_neuron = old_neuron.clone();
         let result = f(&mut new_neuron);
-        self.update_neuron(
-            *neuron_id,
-            &old_neuron,
-            new_neuron.clone(),
-            location,
-            NeuronSections::all(),
-        )?;
+        self.update_neuron(*neuron_id, &old_neuron, new_neuron.clone(), location)?;
         // Updating indexes needs to happen after successfully storing primary data.
         self.update_neuron_indexes(&old_neuron, &new_neuron);
         Ok(result)

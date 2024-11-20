@@ -282,13 +282,13 @@ where
         Ok(())
     }
 
-    /// TODO DO NOT MERGE - add a test for this method / remove if we
-    /// go in a different direction
-    pub fn update_sections(
+    /// Changes an existing entry.
+    ///
+    /// If the entry does not already exist, returns a NotFound Err.
+    pub fn update(
         &mut self,
         old_neuron: &Neuron,
         new_neuron: Neuron,
-        sections: NeuronSections,
     ) -> Result<(), NeuronStoreError> {
         let DecomposedNeuron {
             // The original neuron is consumed near the end of this
@@ -304,9 +304,7 @@ where
             transfer,
         } = DecomposedNeuron::try_from(new_neuron)?;
 
-        if sections.recent_ballots {
-            validate_recent_ballots(&recent_ballots)?;
-        }
+        validate_recent_ballots(&recent_ballots)?;
 
         // Try to insert into main.
         let previous_neuron = self.main.insert(
@@ -330,7 +328,7 @@ where
         // Auxiliary Data
         // --------------
 
-        if sections.hot_keys && hot_keys != old_neuron.hot_keys {
+        if hot_keys != old_neuron.hot_keys {
             update_repeated_field(
                 neuron_id,
                 hot_keys
@@ -340,37 +338,25 @@ where
                 &mut self.hot_keys_map,
             );
         }
-        if sections.recent_ballots && recent_ballots != old_neuron.recent_ballots {
+        if recent_ballots != old_neuron.recent_ballots {
             update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
         }
-        if sections.followees && followees != old_neuron.followees {
+        if followees != old_neuron.followees {
             self.update_followees(neuron_id, followees);
         }
 
-        if sections.known_neuron_data && known_neuron_data != old_neuron.known_neuron_data {
+        if known_neuron_data != old_neuron.known_neuron_data {
             update_singleton_field(
                 neuron_id,
                 known_neuron_data,
                 &mut self.known_neuron_data_map,
             );
         }
-
-        if sections.transfer && transfer != old_neuron.transfer {
+        if transfer != old_neuron.transfer {
             update_singleton_field(neuron_id, transfer, &mut self.transfer_map);
         }
 
         Ok(())
-    }
-
-    /// Changes an existing entry.
-    ///
-    /// If the entry does not already exist, returns a NotFound Err.
-    pub fn update(
-        &mut self,
-        old_neuron: &Neuron,
-        new_neuron: Neuron,
-    ) -> Result<(), NeuronStoreError> {
-        self.update_sections(old_neuron, new_neuron, NeuronSections::all())
     }
 
     /// Removes an existing element.
