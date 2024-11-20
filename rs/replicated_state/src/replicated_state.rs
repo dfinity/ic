@@ -953,6 +953,14 @@ impl ReplicatedState {
             self.canister_states.insert(canister_id, canister);
         }
 
+        if self.subnet_queues.has_expired_deadlines(current_time) {
+            timed_out_messages_count += self.subnet_queues.time_out_messages(
+                current_time,
+                &self.metadata.own_subnet_id.into(),
+                &self.canister_states,
+            );
+        }
+
         timed_out_messages_count
     }
 
