@@ -21,7 +21,7 @@ use crate::{
     state,
     tx::{DisplayAmount, DisplayOutpoint},
     updates::get_btc_address,
-    CanisterRuntime, IC_CANISTER_RUNTIME,
+    CanisterRuntime,
 };
 
 /// The argument of the [update_balance] endpoint.
@@ -228,7 +228,6 @@ pub async fn update_balance<R: CanisterRuntime>(
     let mut utxo_statuses: Vec<UtxoStatus> = vec![];
     for utxo in new_utxos {
         if utxo.value <= kyt_fee {
-            //TODO XC-230: do not dedup event if utxo already ignored
             mutate_state(|s| crate::state::audit::ignore_utxo(s, utxo.clone()));
             log!(
                 P1,

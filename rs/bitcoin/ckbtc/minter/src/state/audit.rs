@@ -88,6 +88,11 @@ pub fn mark_utxo_checked(
 }
 
 pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo) {
+    if state.has_ignored_utxo(&utxo) {
+        // ignored UTXOs are periodically re-evaluated and should not trigger
+        // an event if they are still ignored.
+        return;
+    }
     record_event(&Event::IgnoredUtxo { utxo: utxo.clone() });
     state.ignore_utxo(utxo);
 }

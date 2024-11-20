@@ -999,6 +999,10 @@ impl CkBtcMinterState {
         }
     }
 
+    fn has_ignored_utxo(&self, utxo: &Utxo) -> bool {
+        self.ignored_utxos.contains(utxo)
+    }
+
     /// Adds given UTXO to the set of ignored UTXOs.
     fn ignore_utxo(&mut self, utxo: Utxo) {
         assert!(utxo.value <= self.kyt_fee);
