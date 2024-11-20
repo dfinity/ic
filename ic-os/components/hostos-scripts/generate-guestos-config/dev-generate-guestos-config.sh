@@ -120,7 +120,8 @@ function assemble_config_media() {
     if [[ -n "$node_reward_type" ]]; then
         cmd+=(--node_reward_type "${node_reward_type}")
     fi
-    cmd+=(--hostname "guest-$(/opt/ic/bin/hostos_tool fetch-mac-address | sed 's/://g')")
+    MAC_ADDRESS=$(/opt/ic/bin/hostos_tool generate-mac-address --node-type GuestOS)
+    cmd+=(--hostname "guest-${MAC_ADDRESS}")
     cmd+=(--nns_urls "$(/opt/ic/bin/fetch-property.sh --key=.nns.url --metric=hostos_nns_url --config=${DEPLOYMENT})")
 
     # Run the above command
