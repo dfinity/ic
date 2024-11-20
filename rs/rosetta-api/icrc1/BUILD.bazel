@@ -11,10 +11,8 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/tree_hash",
     "//rs/ledger_suite/common/ledger_canister_core",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icrc1",
@@ -33,7 +31,6 @@ DEPENDENCIES = [
     "@crate_index//:clap",  # no clap because feature derive
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
-    "@crate_index//:ic-certification",
     "@crate_index//:indicatif",
     "@crate_index//:lazy_static",
     "@crate_index//:num-bigint",
@@ -47,7 +44,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
-    "@crate_index//:serde_with",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",

@@ -820,7 +820,7 @@ mod tests {
     };
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::consensus::idkg::*;
-    use ic_types::crypto::{canister_threshold_sig::ExtendedDerivationPath, AlgorithmId};
+    use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{Height, Randomness};
     use std::ops::Deref;

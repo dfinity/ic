@@ -4,23 +4,23 @@ use crate::{
     neuron_store::NeuronStore,
     pb::v1::{
         neuron::Followees, proposal::Action, Ballot, BallotInfo, Governance as GovernanceProto,
-        KnownNeuron, Neuron as NeuronProto, Topic, Vote,
+        KnownNeuron, Neuron as NeuronProto, ProposalData, Topic, Vote,
     },
     temporarily_disable_active_neurons_in_stable_memory,
     temporarily_disable_stable_memory_following_index,
     temporarily_enable_active_neurons_in_stable_memory,
     temporarily_enable_stable_memory_following_index,
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
-    voting::cast_vote_and_cascade_follow,
 };
 use canbench_rs::{bench, bench_fn, BenchResult};
+use futures::FutureExt;
 use ic_base_types::PrincipalId;
 use ic_nns_common::{
     pb::v1::{NeuronId as NeuronIdProto, ProposalId},
     types::NeuronId,
 };
 use icp_ledger::Subaccount;
-use maplit::{btreemap, hashmap};
+use maplit::hashmap;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::collections::{BTreeMap, HashMap};
@@ -47,10 +47,19 @@ enum SetUpStrategy {
 fn set_up<R: Rng>(
     strategy: SetUpStrategy,
     rng: &mut R,
-    neuron_store: &mut NeuronStore,
-    ballots: &mut HashMap<u64, Ballot>,
+    governance: &mut Governance,
     topic: Topic,
 ) -> NeuronId {
+    let neuron_store = &mut governance.neuron_store;
+    governance.heap_data.proposals.insert(
+        1,
+        ProposalData {
+            id: Some(ProposalId { id: 1 }),
+            ..Default::default()
+        },
+    );
+    let ballots = &mut governance.heap_data.proposals.get_mut(&1).unwrap().ballots;
+
     match strategy {
         SetUpStrategy::Centralized { num_neurons } => {
             set_up_centralized(num_neurons, rng, neuron_store, ballots, topic)
@@ -301,26 +310,26 @@ fn set_up_chain<R: Rng>(
 }
 
 fn cast_vote_cascade_helper(strategy: SetUpStrategy, topic: Topic) -> BenchResult {
-    let mut ballots = HashMap::new();
     let mut rng = ChaCha20Rng::seed_from_u64(0);
-    let mut neuron_store = NeuronStore::new(btreemap! {});
-    let neuron_id = set_up(strategy, &mut rng, &mut neuron_store, &mut ballots, topic);
+
+    let governance_proto = GovernanceProto {
+        ..Default::default()
+    };
+    let mut governance = Governance::new(
+        governance_proto,
+        Box::new(MockEnvironment::new(Default::default(), 0)),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+
+    let neuron_id = set_up(strategy, &mut rng, &mut governance, topic);
 
     let proposal_id = ProposalId { id: 1 };
     bench_fn(|| {
-        cast_vote_and_cascade_follow(
-            &proposal_id,
-            &mut ballots,
-            &neuron_id.into(),
-            Vote::Yes,
-            topic,
-            &mut neuron_store,
-        );
-        // let yes_votes = ballots
-        //     .iter()
-        //     .filter(|(id, ballot)| ballot.vote == Vote::Yes as i32)
-        //     .count();
-        // panic!("Number of cascaded votes: {}, {}", ballots.len(), yes_votes)
+        governance
+            .cast_vote_and_cascade_follow(proposal_id, neuron_id.into(), Vote::Yes, topic)
+            .now_or_never()
+            .unwrap();
     })
 }
 

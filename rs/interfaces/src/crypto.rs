@@ -20,6 +20,9 @@ pub use sign::ThresholdSigner;
 
 pub use sign::canister_threshold_sig::*;
 
+mod vetkd;
+pub use vetkd::*;
+
 use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_types::consensus::{
     certification::CertificationContent,

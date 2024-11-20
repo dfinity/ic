@@ -4,6 +4,7 @@ use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
 use mac_address::mac_address::{get_ipmi_mac, FormattedMacAddress};
+use regex::Regex;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
@@ -87,6 +88,8 @@ pub struct GenerateTestnetConfigClapArgs {
 
     // ICOSSettings arguments
     #[arg(long)]
+    pub node_reward_type: Option<String>,
+    #[arg(long)]
     pub mgmt_mac: Option<String>,
     #[arg(long)]
     pub deployment_environment: Option<String>,
@@ -158,6 +161,7 @@ pub fn main() -> Result<()> {
                 ipv4_prefix_length,
                 domain_name,
                 verbose,
+                node_reward_type,
             } = get_config_ini_settings(&config_ini_path)?;
 
             // create NetworkSettings
@@ -206,7 +210,18 @@ pub fn main() -> Result<()> {
                 None => get_ipmi_mac()?,
             };
 
+            let node_reward_type = node_reward_type.expect("Node reward type is required.");
+
+            let node_reward_type_pattern = Regex::new(r"^type[0-9]+(\.[0-9])?$")?;
+            if !node_reward_type_pattern.is_match(&node_reward_type) {
+                anyhow::bail!(
+                    "Invalid node_reward_type '{}'. It must match the pattern ^type[0-9]+(\\.[0-9])?$",
+                    node_reward_type
+                );
+            }
+
             let icos_settings = ICOSSettings {
+                node_reward_type: Some(node_reward_type),
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name,
                 logging,
@@ -336,6 +351,7 @@ pub fn main() -> Result<()> {
                 ipv4_gateway: clap_args.ipv4_gateway,
                 ipv4_prefix_length: clap_args.ipv4_prefix_length,
                 domain_name: clap_args.domain_name,
+                node_reward_type: clap_args.node_reward_type,
                 mgmt_mac: clap_args.mgmt_mac,
                 deployment_environment: clap_args.deployment_environment,
                 elasticsearch_hosts: clap_args.elasticsearch_hosts,

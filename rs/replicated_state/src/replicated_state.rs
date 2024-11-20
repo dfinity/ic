@@ -29,7 +29,7 @@ use ic_types::{
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
     time::CoarseTime,
-    CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
+    AccumulatedPriority, CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -458,6 +458,19 @@ impl ReplicatedState {
 
     pub fn routing_table(&self) -> Arc<RoutingTable> {
         Arc::clone(&self.metadata.network_topology.routing_table)
+    }
+
+    /// Time complexity: O(n), where n is the number of canisters.
+    pub fn get_scheduler_priorities(&self) -> BTreeMap<CanisterId, AccumulatedPriority> {
+        self.canister_states
+            .iter()
+            .map(|(canister_id, canister_state)| {
+                (
+                    *canister_id,
+                    canister_state.scheduler_state.accumulated_priority,
+                )
+            })
+            .collect()
     }
 
     /// Insert the canister state into the replicated state. If a canister
