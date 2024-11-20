@@ -485,4 +485,3 @@ where
 fn remote_future() -> TimeStamp {
     TimeStamp::from_nanos_since_unix_epoch(u64::MAX)
 }
-
