@@ -4,8 +4,12 @@ type StartArgs = record {
   payload_size_bytes : nat64;
 };
 
+type CanisterIdRecord = record {
+  canister_id : principal;
+};
+
 service : {
   start : (StartArgs) -> (text);
   stop : () -> (text);
-  return_cycles : () -> (text);
+  return_cycles : (CanisterIdRecord) -> (text);
 };

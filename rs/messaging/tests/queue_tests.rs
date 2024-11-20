@@ -457,7 +457,9 @@ fn test_response_in_output_queue_causes_backpressure() {
     // reporting call errors, indicating back pressure.
     do_until_or_panic(MAX_TICKS, |_| {
         execute_round_with_timeout(&subnets.local_env);
-        let reply = subnets.query_local_canister("metrics", Vec::new()).unwrap();
+        let reply = subnets
+            .query_local_canister("metrics", Encode!().unwrap())
+            .unwrap();
         Ok(Decode!(&reply.bytes(), Metrics).unwrap().call_errors > 0)
     })
     .unwrap();
@@ -500,7 +502,9 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
         .unwrap();
     do_until_or_panic(MAX_TICKS, |_| {
         subnets.local_env.tick();
-        let reply = subnets.query_local_canister("metrics", Vec::new()).unwrap();
+        let reply = subnets
+            .query_local_canister("metrics", Encode!().unwrap())
+            .unwrap();
         Ok(Decode!(&reply.bytes(), Metrics).unwrap().call_errors > 0)
     })
     .unwrap();
@@ -511,7 +515,7 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
     do_until_or_panic(MAX_TICKS, |_| {
         subnets.remote_env.tick();
         let reply = subnets
-            .query_remote_canister("metrics", Vec::new())
+            .query_remote_canister("metrics", Encode!().unwrap())
             .unwrap();
         Ok(Decode!(&reply.bytes(), Metrics).unwrap().call_errors > 0)
     })
@@ -520,7 +524,7 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
     // Try inducting all the requests successfully sent by the remote canister into
     // the local canister.
     let reply = subnets
-        .query_remote_canister("metrics", Vec::new())
+        .query_remote_canister("metrics", Encode!().unwrap())
         .unwrap();
     let metrics = Decode!(&reply.bytes(), Metrics).unwrap();
     induct_from_head_of_stream(
