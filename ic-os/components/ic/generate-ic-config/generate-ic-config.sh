@@ -229,7 +229,10 @@ QUERY_STATS_EPOCH_LENGTH="${query_stats_epoch_length:-600}"
 JAEGER_ADDR="${jaeger_addr:-}"
 
 # TODO: Should pass prefix directly
-IPV6_PREFIX=$(echo "${IPV6_ADDRESS}" | sed -E -e 's/:/#/4' -e 's/#.*/::\/64/')
+if ! IPV6_PREFIX=$(echo "${IPV6_ADDRESS}" | sed -E -e 's/:/#/4' -e '/#/!q1' -e 's/#.*/::\/64/'); then
+    # If address does not substitute correctly, fallback to loopback for easy templating
+    IPV6_PREFIX="::1/128"
+fi
 
 if [ "${IPV6_ADDRESS}" == "" ]; then
     echo "Cannot determine an IPv6 address, aborting"
