@@ -1112,6 +1112,7 @@ impl SandboxedExecutionController {
                 metrics_copy,
                 max_sandbox_count,
                 max_sandbox_idle_time,
+                max_sandboxes_rss,
                 rx,
                 state_reader_copy,
             );
@@ -1163,6 +1164,7 @@ impl SandboxedExecutionController {
         metrics: Arc<SandboxedExecutionMetrics>,
         max_sandbox_count: usize,
         max_sandbox_idle_time: Duration,
+        max_sandboxes_rss: NumBytes,
         stop_request: Receiver<bool>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) {
@@ -1262,13 +1264,9 @@ impl SandboxedExecutionController {
                 let mut guard = backends.lock().unwrap();
                 update_sandbox_processes_rss(&mut guard, sandbox_processes_rss);
 
-                // Trigger eviction of idle sandboxes, as there may be no canister executions
-                // to trigger sync eviction.
-                let max_active_sandboxes = max_sandbox_count;
-                let max_sandboxes_rss = u64::MAX.into();
                 evict_sandbox_processes(
                     &mut guard,
-                    max_active_sandboxes,
+                    max_sandbox_count,
                     max_sandbox_idle_time,
                     max_sandboxes_rss,
                     Arc::clone(&state_reader),
@@ -1293,44 +1291,39 @@ impl SandboxedExecutionController {
     ) where
         F: Fn() -> Option<NumBytes>,
     {
-        let active_sandboxes = total_active_sandboxes(backends);
-        if active_sandboxes > self.max_sandbox_count {
-            // The number of sandboxes is exceeded.
-            // Reduce the number of active sandboxes regardless of their RSS.
-            let max_active_sandboxes = active_sandboxes.saturating_sub(SANDBOX_PROCESSES_TO_EVICT);
-            let max_sandboxes_rss = u64::MAX.into();
+        let total_sandboxes_rss = total_sandboxes_rss(backends);
+
+        let max_sandboxes_rss = if available_memory().unwrap_or_default()
+            >= DEFAULT_MIN_MEM_AVAILABLE_TO_EVICT_SANDBOXES
+        {
+            total_sandboxes_rss
+        } else {
+            if total_sandboxes_rss > self.max_sandboxes_rss {
+                self.max_sandboxes_rss
+                    .saturating_sub(&SANDBOX_PROCESSES_RSS_TO_EVICT)
+            } else {
+                self.max_sandboxes_rss
+            }
+        };
+
+        let active_sandboxes: usize = total_active_sandboxes(backends);
+
+        if active_sandboxes > self.max_sandbox_count || total_sandboxes_rss > max_sandboxes_rss {
+            let max_active_sandboxes = if active_sandboxes > self.max_sandbox_count {
+                self.max_sandbox_count
+                    .saturating_sub(SANDBOX_PROCESSES_TO_EVICT)
+            } else {
+                self.max_sandbox_count
+            };
 
             evict_sandbox_processes(
                 backends,
                 max_active_sandboxes,
                 self.max_sandbox_idle_time,
-                // Do not trigger RSS-based eviction, as it's mostly an estimation at this point.
                 max_sandboxes_rss,
                 Arc::clone(&self.state_reader),
             );
-        } else {
-            // The total RSS is mostly an estimation at this point, so we use
-            // the available memory to confirm the eviction.
-            let total_sandboxes_rss = total_sandboxes_rss(backends);
-            if total_sandboxes_rss > self.max_sandboxes_rss
-                && available_memory().unwrap_or_default()
-                    < DEFAULT_MIN_MEM_AVAILABLE_TO_EVICT_SANDBOXES
-            {
-                // The total RSS is exceeded AND the available memory is low.
-                // Reduce the RSS of sandboxes, regardless of their number.
-                let max_active_sandboxes = backends.len();
-                let max_sandboxes_rss =
-                    total_sandboxes_rss.saturating_sub(&SANDBOX_PROCESSES_RSS_TO_EVICT);
-
-                evict_sandbox_processes(
-                    backends,
-                    max_active_sandboxes,
-                    self.max_sandbox_idle_time,
-                    max_sandboxes_rss,
-                    Arc::clone(&self.state_reader),
-                );
-            }
-        };
+        }
     }
 
     pub fn available_memory_wrapper() -> Option<NumBytes> {
@@ -1377,8 +1370,6 @@ impl SandboxedExecutionController {
                         },
                     };
                 }
-                // The number of active sandboxes is increasing, so trigger the eviction.
-                self.trigger_sandbox_eviction(&mut guard, Self::available_memory_wrapper);
                 return sandbox_process;
             }
         }
