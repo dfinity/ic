@@ -166,7 +166,7 @@ impl PocketIcBuilder {
     }
 
     pub fn with_bitcoind_addr(self, bitcoind_addr: SocketAddr) -> Self {
-        Self::with_bitcoind_addrs(vec![bitcoind_addr])
+        self.with_bitcoind_addrs(vec![bitcoind_addr])
     }
 
     pub fn with_bitcoind_addrs(self, bitcoind_addrs: Vec<SocketAddr>) -> Self {
