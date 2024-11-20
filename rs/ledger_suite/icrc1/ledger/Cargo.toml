@@ -50,6 +50,8 @@ ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 leb128 = "0.2.4"
 num-bigint = { workspace = true }
 proptest = { workspace = true }
+ic-certification = { workspace = true }
+ciborium = { workspace = true }
 
 [features]
 default = []
