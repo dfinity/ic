@@ -208,7 +208,7 @@ proptest! {
             assert_eq!(tip_block.get_block_hash(),hash);
         }
 
-        // We are only interested in the szenario when there are blocks to be fetched
+        // We are only interested in the scenario when there are blocks to be fetched
         if transfer_args.is_empty() {
             return Ok(());
         }
