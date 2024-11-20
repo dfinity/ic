@@ -258,6 +258,7 @@ impl TestCase {
         let tag_name = match self.dkg_tag {
             NiDkgTag::LowThreshold => "low",
             NiDkgTag::HighThreshold => "high",
+            NiDkgTag::HighThresholdForKey(_) => unimplemented!(),
         };
         format!(
             "crypto_nidkg_{}_nodes_{}_dealers_{}",
@@ -281,6 +282,7 @@ impl TestCase {
                 num_of_dealers: num_of_nodes,
                 dkg_tag,
             },
+            NiDkgTag::HighThresholdForKey(_) => unimplemented!(),
         }
     }
 }

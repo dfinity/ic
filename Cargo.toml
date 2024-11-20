@@ -394,6 +394,7 @@ members = [
     "rs/tests/nested",
     "rs/tests/nns",
     "rs/tests/nns/sns",
+    "rs/tests/nns/sns/lib",
     "rs/tests/nns/ic_mainnet_nns_recovery",
     "rs/tests/nns/cycles_minting",
     "rs/tests/nns/nns_dapp",
@@ -608,11 +609,12 @@ mockall = "0.13.0"
 mockito = "1.2.0"
 nftables = "0.4"
 nix = "0.24.3"
+num_cpus = "1.16.0"
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
-opentelemetry = { version = "0.26.0", features = ["metrics", "trace"] }
-opentelemetry-otlp = { version = "0.26.0", features = ["grpc-tonic"] }
-opentelemetry_sdk = { version = "0.26.0", features = ["trace", "rt-tokio"] }
+opentelemetry = { version = "0.27.0", features = ["metrics", "trace"] }
+opentelemetry-otlp = { version = "0.27.0", features = ["grpc-tonic"] }
+opentelemetry_sdk = { version = "0.27.0", features = ["trace", "rt-tokio"] }
 p256 = { version = "0.13.2", default-features = false, features = [
     "arithmetic",
     "ecdsa",
@@ -721,7 +723,7 @@ tower-http = { version = "0.6.1", features = [
 ] }
 tracing = "0.1.40"
 tracing-appender = "0.2.3"
-tracing-opentelemetry = "0.27.0"
+tracing-opentelemetry = "0.28.0"
 tracing-subscriber = { version = "0.3.18", features = [
     "env-filter",
     "fmt",

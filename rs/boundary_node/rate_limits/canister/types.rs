@@ -29,6 +29,7 @@ pub struct ConfigResponse {
 #[derive(Clone)]
 pub struct OutputConfig {
     pub schema_version: SchemaVersion,
+    pub is_redacted: bool,
     pub rules: Vec<OutputRule>,
 }
 
@@ -122,6 +123,7 @@ impl From<OutputConfig> for rate_limits_api::OutputConfig {
         rate_limits_api::OutputConfig {
             schema_version: value.schema_version,
             rules: value.rules.into_iter().map(|r| r.into()).collect(),
+            is_redacted: value.is_redacted,
         }
     }
 }

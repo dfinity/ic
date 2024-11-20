@@ -292,8 +292,8 @@ exports_files([
 uvm_config_image(
     name = "jaeger_uvm_config_image",
     srcs = [
+        ":jaeger.tar",
         ":jaeger_activate.sh",
-        ":jaeger_image",
     ],
     remap_paths = {
         "jaeger_activate.sh": "activate",

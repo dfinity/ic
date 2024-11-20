@@ -1160,6 +1160,70 @@ fn charging_for_message_memory_works() {
     );
 }
 
+/// Tests that given specific subnet callback soft cap and guaranteed canister
+/// callback quota values, two canisters trying to call themselves recursively
+/// twice will result in the execution of a specific number of messages.
+fn test_subnet_callback_soft_cap_impl(
+    subnet_callback_soft_cap: usize,
+    canister_callback_quota: usize,
+    expected_message_executions: u64,
+) {
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_callback_soft_limit(subnet_callback_soft_cap)
+        .with_canister_guaranteed_callback_quota(canister_callback_quota)
+        .build();
+
+    for _ in 0..2 {
+        let canister = test.create_canister();
+        test.send_ingress(
+            canister,
+            ingress(1).call(
+                other_side(canister, 1).call(other_side(canister, 1), on_response(1)),
+                on_response(1),
+            ),
+        );
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        expected_message_executions
+    );
+}
+
+#[test]
+fn subnet_callback_soft_cap_exceeded() {
+    // Given a shared pool size of 2 callbacks, the canisters should be able to
+    // execute the first call but not the second one (i.e. 3 messages each).
+    let subnet_callback_soft_cap = 2;
+    let canister_callback_quota = 0;
+    test_subnet_callback_soft_cap_impl(subnet_callback_soft_cap, canister_callback_quota, 6);
+}
+
+#[test]
+fn subnet_callback_soft_cap_not_exceeded() {
+    // Given a shared pool of 3 callbacks, the canisters should each be able to
+    // execute both their calls (5 messages each). This is because each of the 2
+    // execution threads is allowed full use of the remaining pool (1 callback).
+    let subnet_callback_soft_cap = 3;
+    let canister_callback_quota = 0;
+    test_subnet_callback_soft_cap_impl(subnet_callback_soft_cap, canister_callback_quota, 10);
+}
+
+#[test]
+fn subnet_callback_soft_cap_ignored() {
+    // A shared pool size of 2 callbacks (which would prevent the canisters from
+    // making a second call) is ignored if the canisters have available callback
+    // quota (with each canister executing 2 calls, i.e. 5 messages).
+    let subnet_callback_soft_cap = 2;
+    let canister_callback_quota = 10;
+    test_subnet_callback_soft_cap_impl(subnet_callback_soft_cap, canister_callback_quota, 10);
+}
+
 #[test]
 fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
     let instructions_per_message = NumInstructions::from(5);
@@ -1820,7 +1884,11 @@ fn scheduler_long_execution_progress_across_checkpoints() {
     // Penalize canister for a long execution.
     let message_id = test.send_ingress(penalized_long_id, ingress(message_instructions));
     assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
-    for _ in 0..message_instructions / slice_instructions {
+    for i in 0..message_instructions / slice_instructions {
+        // Without short executions, all idle canister will be equally executed.
+        if let Some(canister_id) = canister_ids.get(i as usize % num_canisters) {
+            test.send_ingress(*canister_id, ingress(slice_instructions));
+        }
         test.execute_round(ExecutionRoundType::OrdinaryRound);
     }
     assert_matches!(
@@ -4479,7 +4547,7 @@ fn scheduler_respects_compute_allocation(
     let replicated_state = test.state();
     let number_of_canisters = replicated_state.canister_states.len();
     let total_compute_allocation = replicated_state.total_compute_allocation();
-    assert!(total_compute_allocation <= 100 * scheduler_cores as u64);
+    prop_assert!(total_compute_allocation <= 100 * scheduler_cores as u64);
 
     // Count, for each canister, how many times it is the first canister
     // to be executed by a thread.
@@ -4492,7 +4560,8 @@ fn scheduler_respects_compute_allocation(
 
     let canister_ids: Vec<_> = test.state().canister_states.iter().map(|x| *x.0).collect();
 
-    for _ in 0..number_of_rounds {
+    // Add one more round as we update the accumulated priorities at the end of the round now.
+    for _ in 0..=number_of_rounds {
         for canister_id in canister_ids.iter() {
             test.expect_heartbeat(*canister_id, instructions(B as u64));
         }
@@ -4520,7 +4589,7 @@ fn scheduler_respects_compute_allocation(
             number_of_rounds / 100 * compute_allocation + 1
         };
 
-        assert!(
+        prop_assert!(
             *count >= expected_count,
             "Canister {} (allocation {}) should have been scheduled \
                     {} out of {} rounds, was scheduled only {} rounds instead.",

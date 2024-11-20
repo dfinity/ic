@@ -506,32 +506,6 @@ fn arb_retrieve_btc_requests(
 
 proptest! {
     #[test]
-    fn queue_holds_one_copy_of_each_task(
-        timestamps in pvec(1_000_000_u64..1_000_000_000, 2..100),
-    ) {
-        use crate::tasks::{Task, TaskQueue, TaskType};
-
-        let mut task_queue: TaskQueue = Default::default();
-        for (i, ts) in timestamps.iter().enumerate() {
-            task_queue.schedule_at(*ts, TaskType::ProcessLogic);
-            prop_assert_eq!(task_queue.len(), 1, "queue: {:?}", task_queue);
-
-            let task = task_queue.pop_if_ready(u64::MAX).unwrap();
-
-            prop_assert_eq!(task_queue.len(), 0);
-
-            prop_assert_eq!(&task, &Task{
-                execute_at: timestamps[0..=i].iter().cloned().min().unwrap(),
-                task_type: TaskType::ProcessLogic
-            });
-            task_queue.schedule_at(task.execute_at, task.task_type);
-
-            prop_assert_eq!(task_queue.len(), 1);
-        }
-    }
-
-
-    #[test]
     fn greedy_solution_properties(
         values in pvec(1u64..1_000_000_000, 1..10),
         target in 1u64..1_000_000_000,

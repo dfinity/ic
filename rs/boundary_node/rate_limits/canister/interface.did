@@ -24,6 +24,7 @@ type OutputRule = record {
 
 type OutputConfig = record {
   schema_version: SchemaVersion; // schema version needed to deserialize the rules
+  is_redacted: bool;             // when set to `true` indicates that the config contains some confidential rules, which are not fully exposed
   rules: vec OutputRule;
 };
 

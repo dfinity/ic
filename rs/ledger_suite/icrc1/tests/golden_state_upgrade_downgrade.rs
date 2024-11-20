@@ -6,7 +6,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::Block;
 use ic_icrc1_index_ng::{IndexArg, UpgradeArg as IndexUpgradeArg};
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
-    ApprovalKey, BurnsWithoutSpender, InMemoryLedger,
+    BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
 use ic_ledger_suite_state_machine_tests::{
     generate_transactions, get_all_ledger_and_archive_blocks, get_blocks, list_archives,
@@ -151,6 +151,9 @@ impl LedgerSuiteConfig {
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
         let index_canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.index_id).unwrap());
+        // Top up the ledger suite canisters so that they do not risk running out of cycles as
+        // part of the upgrade/downgrade testing.
+        top_up_canisters(state_machine, ledger_canister_id, index_canister_id);
         let mut previous_ledger_state = None;
         if self.extended_testing {
             previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
@@ -260,7 +263,7 @@ struct FetchedBlocks {
 }
 
 struct LedgerState {
-    in_memory_ledger: InMemoryLedger<ApprovalKey, Account, Tokens>,
+    in_memory_ledger: InMemoryLedger<Account, Tokens>,
     num_blocks: u64,
 }
 
@@ -301,7 +304,7 @@ impl LedgerState {
             .num_blocks
             .checked_add(blocks.len() as u64)
             .expect("number of blocks should fit in u64");
-        self.in_memory_ledger.ingest_icrc1_ledger_blocks(&blocks);
+        self.in_memory_ledger.consume_blocks(&blocks);
         FetchedBlocks {
             blocks,
             start_index,
@@ -776,6 +779,22 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
 
 fn archive_wasm() -> Vec<u8> {
     load_wasm_using_env_var("IC_ICRC1_ARCHIVE_WASM_PATH")
+}
+
+fn top_up_canisters(
+    state_machine: &StateMachine,
+    ledger_canister_id: CanisterId,
+    index_canister_id: CanisterId,
+) {
+    const TOP_UP_AMOUNT: u128 = 2_000_000_000_000_000; // 2_000 T cycles
+    let archives = list_archives(state_machine, ledger_canister_id);
+    for archive in archives {
+        let archive_canister_id =
+            CanisterId::unchecked_from_principal(PrincipalId(archive.canister_id));
+        state_machine.add_cycles(archive_canister_id, TOP_UP_AMOUNT);
+    }
+    state_machine.add_cycles(ledger_canister_id, TOP_UP_AMOUNT);
+    state_machine.add_cycles(index_canister_id, TOP_UP_AMOUNT);
 }
 
 mod index {

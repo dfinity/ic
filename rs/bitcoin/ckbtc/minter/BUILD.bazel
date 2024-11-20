@@ -110,8 +110,10 @@ rust_test(
     deps = [
         # Keep sorted.
         "@crate_index//:bitcoin",
+        "@crate_index//:mockall",
         "@crate_index//:proptest",
         "@crate_index//:simple_asn1",
+        "@crate_index//:tokio",
     ],
 )
 
