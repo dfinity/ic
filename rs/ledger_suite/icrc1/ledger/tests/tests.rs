@@ -1744,7 +1744,9 @@ mod incompatible_token_type_upgrade {
     }
 
     #[test]
-    #[should_panic(expected = "invalid type: enum, expected u64 or { e8s: u64 }")]
+    #[should_panic(
+        expected = "Failed to read the Ledger state from memory manager managed stable structures"
+    )]
     fn should_trap_when_upgrading_a_ledger_installed_as_u256_to_u64_wasm() {
         let env = StateMachine::new();
         let ledger_id = env

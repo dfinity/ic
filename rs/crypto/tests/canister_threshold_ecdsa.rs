@@ -16,8 +16,8 @@ use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
-use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
+use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::{NodeId, Randomness};
 use maplit::hashset;
 use rand::prelude::*;

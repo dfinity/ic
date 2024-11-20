@@ -61,7 +61,7 @@ def _run_system_test(ctx):
     for target in ctx.attr.runtime_deps:
         runtime_deps.append(target.files)
 
-    for t, e in ctx.attr.env_deps.items():
+    for e, t in ctx.attr.env_deps.items():
         runtime_deps.append(t.files)
         env[e] = t.files.to_list()[0].short_path
 
@@ -96,7 +96,7 @@ run_system_test = rule(
         "_k8s": attr.label(default = "//rs/tests:k8s"),
         "_k8sconfig": attr.label(allow_single_file = True, default = "@kubeconfig//:kubeconfig.yaml"),
         "runtime_deps": attr.label_list(allow_files = True),
-        "env_deps": attr.label_keyed_string_dict(allow_files = True),
+        "env_deps": attr.string_keyed_label_dict(allow_files = True),
         "env_inherit": attr.string_list(doc = "Specifies additional environment variables to inherit from the external environment when the test is executed by bazel test."),
     },
 )
@@ -185,6 +185,7 @@ def system_test(
             uses_guestos_dev = True
             break
 
+    # Environment variable names to targets (targets are resolved)
     _env_deps = {}
 
     _guestos = "//ic-os/guestos/envs/dev:"
@@ -193,28 +194,28 @@ def system_test(
 
     # Always add version.txt for now as all test use it even that they don't declare they use dev image.
     # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
-    _env_deps[_guestos + "version.txt"] = "ENV_DEPS__IC_VERSION_FILE"
+    _env_deps["ENV_DEPS__IC_VERSION_FILE"] = _guestos + "version.txt"
 
     if uses_guestos_dev:
-        _env_deps[_guestos + "disk-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL"
-        _env_deps[_guestos + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL"
+        _env_deps["ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL"] = _guestos + "disk-img.tar.zst.cas-url"
+        _env_deps["ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL"] = _guestos + "update-img.tar.zst.cas-url"
 
     if uses_hostos_dev_test:
-        _env_deps[_hostos + "update-img-test.tar.zst.cas-url"] = "ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"
+        _env_deps["ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"] = _hostos + "update-img-test.tar.zst.cas-url"
 
     if uses_setupos_dev:
-        _env_deps[_setupos + "disk-img.tar.zst"] = "ENV_DEPS__DEV_SETUPOS_IMG_TAR_ZST"
-        _env_deps["//rs/ic_os/dev_test_tools/setupos-disable-checks"] = "ENV_DEPS__SETUPOS_DISABLE_CHECKS"
-        _env_deps["//rs/ic_os/dev_test_tools/setupos-inject-configuration"] = "ENV_DEPS__SETUPOS_INJECT_CONFIGS"
+        _env_deps["ENV_DEPS__DEV_SETUPOS_IMG_TAR_ZST"] = _setupos + "disk-img.tar.zst"
+        _env_deps["ENV_DEPS__SETUPOS_DISABLE_CHECKS"] = "//rs/ic_os/dev_test_tools/setupos-disable-checks"
+        _env_deps["ENV_DEPS__SETUPOS_INJECT_CONFIGS"] = "//rs/ic_os/dev_test_tools/setupos-inject-configuration"
 
     if uses_guestos_dev_test:
-        _env_deps[_guestos + "update-img-test.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"
+        _env_deps["ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"] = _guestos + "update-img-test.tar.zst.cas-url"
 
     if malicious:
         _guestos_malicous = "//ic-os/guestos/envs/dev-malicious:"
 
-        _env_deps[_guestos_malicous + "disk-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL"
-        _env_deps[_guestos_malicous + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL"
+        _env_deps["ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL"] = _guestos_malicous + "disk-img.tar.zst.cas-url"
+        _env_deps["ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL"] = _guestos_malicous + "update-img.tar.zst.cas-url"
 
     run_system_test(
         name = name,

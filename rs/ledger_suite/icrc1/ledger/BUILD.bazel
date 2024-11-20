@@ -289,7 +289,6 @@ rust_test(
             "@crate_index//:assert_matches",
             "@crate_index//:candid",
             "@crate_index//:cddl",
-            "@crate_index//:hex",
             "@crate_index//:ic-agent",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:leb128",

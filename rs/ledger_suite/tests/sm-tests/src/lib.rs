@@ -2677,11 +2677,11 @@ pub fn test_downgrade_from_incompatible_version<T>(
     // Downgrade to current not possible.
     match env.upgrade_canister(
         canister_id,
-        ledger_wasm,
+        ledger_wasm.clone(),
         Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
     ) {
         Ok(_) => {
-            panic!("Upgrade from future ledger version should fail!")
+            panic!("Downgrade from future ledger version should fail!")
         }
         Err(e) => {
             assert!(e
@@ -2689,6 +2689,14 @@ pub fn test_downgrade_from_incompatible_version<T>(
                 .contains("Trying to downgrade from incompatible version"))
         }
     };
+
+    // Upgrade to the same (future) version succeeds.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_nextledgerversion,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .expect("failed to upgrade to next version");
 }
 
 pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
