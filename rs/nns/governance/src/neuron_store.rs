@@ -25,7 +25,7 @@ use ic_nervous_system_governance::index::{
     neuron_following::{HeapNeuronFollowingIndex, NeuronFollowingIndex},
     neuron_principal::NeuronPrincipalIndex,
 };
-use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::{AccountIdentifier, Subaccount};
 use std::{
     borrow::Cow,
@@ -731,6 +731,7 @@ impl NeuronStore {
         old_neuron: &Neuron,
         new_neuron: Neuron,
         previous_location: StorageLocation,
+        sections: NeuronSections,
     ) -> Result<(), NeuronStoreError> {
         let target_location = self.target_storage_location(&new_neuron);
         let is_neuron_changed = *old_neuron != new_neuron;
@@ -763,6 +764,15 @@ impl NeuronStore {
                 self.heap_neurons.remove(&neuron_id.id);
             }
             (StorageLocation::Stable, StorageLocation::Heap) => {
+                // TODO DO NOT MERGE - are these changes safe?
+                // We want to make sure that this can never really happen (i.e. registering a vote
+                // for a neuron that is in stable storage).
+                if sections != NeuronSections::all() {
+                    return Err(NeuronStoreError::InvalidData {
+                        reason: "Cannot perform partial update on neuron into heap from stable"
+                            .to_string(),
+                    });
+                }
                 // Now the neuron in heap becomes its primary copy and the one in stable memory is
                 // the secondary copy.
                 self.heap_neurons.insert(neuron_id.id, new_neuron);
@@ -1031,7 +1041,13 @@ impl NeuronStore {
         let old_neuron = neuron.deref().clone();
         let mut new_neuron = old_neuron.clone();
         let result = f(&mut new_neuron);
-        self.update_neuron(*neuron_id, &old_neuron, new_neuron.clone(), location)?;
+        self.update_neuron(
+            *neuron_id,
+            &old_neuron,
+            new_neuron.clone(),
+            location,
+            NeuronSections::all(),
+        )?;
         // Updating indexes needs to happen after successfully storing primary data.
         self.update_neuron_indexes(&old_neuron, &new_neuron);
         Ok(result)
@@ -1108,6 +1124,38 @@ impl NeuronStore {
         self.with_neuron_sections(&neuron_id, needed_sections, |neuron| {
             neuron.would_follow_ballots(topic, ballots)
         })
+    }
+
+    pub fn register_recent_neuron_ballot(
+        &mut self,
+        neuron_id: NeuronId,
+        topic: Topic,
+        proposal_id: ProposalId,
+        vote: Vote,
+    ) -> Result<(), NeuronStoreError> {
+        let sections = NeuronSections {
+            hot_keys: false,
+            recent_ballots: true,
+            followees: false,
+            known_neuron_data: false,
+            transfer: false,
+        };
+        let (neuron, location) = self.load_neuron_with_sections(neuron_id, sections)?;
+
+        let old_neuron = neuron.deref().clone();
+        let mut new_neuron = old_neuron.clone();
+
+        new_neuron.register_recent_ballot(topic, &proposal_id, vote);
+
+        self.update_neuron(
+            neuron_id,
+            &old_neuron,
+            new_neuron.clone(),
+            location,
+            sections,
+        )?;
+
+        Ok(())
     }
 
     // Below are indexes related methods. They don't have a unified interface yet, but NNS1-2507 will change that.
