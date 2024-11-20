@@ -217,9 +217,6 @@ function build_ic_bootstrap_tar() {
             --socks_proxy)
                 SOCKS_PROXY="$2"
                 ;;
-            --generate_ic_boundary_tls_cert)
-                IC_BOUNDARY_TLS_CERT_DOMAIN_NAME="$2"
-                ;;
             *)
                 echo "Unrecognized option: $1"
                 usage
