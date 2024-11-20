@@ -183,6 +183,7 @@ impl NnsInitPayloadsBuilder {
             .push_init_mutate_request(RegistryAtomicMutateRequest {
                 mutations: invariant_compliant_mutation(0),
                 preconditions: vec![],
+                timestamp: None
             });
         self
     }

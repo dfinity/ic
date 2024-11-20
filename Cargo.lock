@@ -13164,6 +13164,7 @@ dependencies = [
  "hex-literal",
  "ic-base-types",
  "ic-btc-replica-types",
+ "ic-cdk 0.16.0",
  "ic-crypto-internal-types",
  "ic-crypto-sha2",
  "ic-crypto-test-utils-canister-threshold-sigs",

@@ -30,12 +30,13 @@ pub fn invariant_compliant_registry(mutation_id: u8) -> Registry {
 }
 
 pub fn empty_mutation() -> Vec<u8> {
-    RegistryAtomicMutateRequest {
+     RegistryAtomicMutateRequest {
         mutations: vec![RegistryMutation {
             mutation_type: Type::Upsert as i32,
             key: "_".into(),
             value: "".into(),
         }],
+         timestamp: None,
         preconditions: vec![],
     }
     .encode_to_vec()
@@ -132,6 +133,7 @@ pub fn prepare_registry_with_nodes(
     let mutate_request = RegistryAtomicMutateRequest {
         mutations,
         preconditions: vec![],
+        timestamp: None
     };
     (mutate_request, node_ids_and_dkg_pks)
 }

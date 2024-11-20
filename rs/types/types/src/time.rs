@@ -269,9 +269,7 @@ impl fmt::Display for Time {
 }
 
 /// Returns the current time.
-///
-/// WARNING: this function should not be used in any deterministic part of the
-/// IC as it accesses system time, which is non-deterministic between nodes.
+#[cfg(not(any(target_arch = "wasm32")))]
 pub fn current_time() -> Time {
     let start = std::time::SystemTime::now();
     let since_epoch = start
@@ -279,6 +277,13 @@ pub fn current_time() -> Time {
         .expect("Time wrapped around");
     UNIX_EPOCH + since_epoch
 }
+
+#[cfg(target_arch = "wasm32")]
+pub fn current_time() -> Time {
+    let now_ns = ic_cdk::api::time();
+    Time::from_nanos_since_unix_epoch(now_ns)
+}
+
 
 /// A utility function that returns an expiry time when creating an
 /// SignedIngress message from scratch.

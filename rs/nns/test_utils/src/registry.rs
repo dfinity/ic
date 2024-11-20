@@ -62,6 +62,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
 };
+use ic_types::time::current_time;
 
 /// ID used in multiple tests.
 pub const TEST_ID: u64 = 999;
@@ -89,6 +90,7 @@ pub fn invariant_compliant_mutation_as_atomic_req(mutation_id: u8) -> RegistryAt
     RegistryAtomicMutateRequest {
         mutations: invariant_compliant_mutation(mutation_id),
         preconditions: vec![],
+        timestamp: None
     }
 }
 /// Returns a Result with either an Option(T) or a ic_registry_transport::Error
@@ -196,6 +198,7 @@ pub async fn get_node_operator_record(
 
 /// Inserts a value into the registry.
 pub async fn insert_value<T: Message + Default>(registry: &Canister<'_>, key: &[u8], value: &T) {
+    let mutate_ts = current_time().as_nanos_since_unix_epoch();
     let response_bytes = registry
         .update_(
             "atomic_mutate",
@@ -206,6 +209,7 @@ pub async fn insert_value<T: Message + Default>(registry: &Canister<'_>, key: &[
                     key: key.to_vec(),
                     value: value.encode_to_vec(),
                 }],
+                timestamp: Some(mutate_ts),
                 preconditions: vec![],
             }
             .encode_to_vec(),
@@ -730,6 +734,7 @@ pub fn prepare_registry_with_two_node_sets(
     let mutate_request = RegistryAtomicMutateRequest {
         mutations,
         preconditions: vec![],
+        timestamp: None
     };
 
     (

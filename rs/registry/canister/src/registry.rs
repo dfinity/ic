@@ -22,6 +22,7 @@ use std::{
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use ic_types::time::current_time;
 
 /// The maximum size a registry delta, used to ensure that response payloads
 /// stay under `MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64`.
@@ -191,6 +192,7 @@ impl Registry {
         &mut self,
         mut mutations: Vec<RegistryMutation>,
         version: Version,
+        timestamp: Option<u64>,
     ) {
         // We sort entries by key to eliminate the difference between changelog
         // produced by the new version of the registry canister starting from v1
@@ -217,6 +219,7 @@ impl Registry {
 
         let req = RegistryAtomicMutateRequest {
             mutations,
+            timestamp,
             preconditions: vec![],
         };
         self.changelog_insert(version, &req);
@@ -224,6 +227,7 @@ impl Registry {
         for mutation in req.mutations {
             (*self.store.entry(mutation.key).or_default()).push_back(RegistryValue {
                 version,
+                timestamp,
                 value: mutation.value,
                 deletion_marker: mutation.mutation_type == Type::Delete as i32,
             });
@@ -242,8 +246,10 @@ impl Registry {
             // global version is the max of all versions in the store.
             return;
         }
+        let mutations_ts = current_time().as_nanos_since_unix_epoch();
+        
         self.increment_version();
-        self.apply_mutations_as_version(mutations, self.version);
+        self.apply_mutations_as_version(mutations, self.version, Some(mutations_ts));
     }
 
     /// Verifies the implicit precondition corresponding to the mutation_type
@@ -400,7 +406,7 @@ impl Registry {
                             key: "_".into(),
                             value: "".into(),
                         }];
-                        self.apply_mutations_as_version(mutations, i);
+                        self.apply_mutations_as_version(mutations, i, None);
                         self.version = i;
                     }
                     // End code to fix ICSUP-2589
@@ -409,13 +415,13 @@ impl Registry {
                         .unwrap_or_else(|err| {
                             panic!("Failed to decode mutation@{}: {}", entry.version, err)
                         });
-                    self.apply_mutations_as_version(req.mutations, entry.version);
+                    self.apply_mutations_as_version(req.mutations, entry.version, req.timestamp);
                     self.version = entry.version;
                     current_version = self.version;
                 }
             }
             ReprVersion::Unspecified => {
-                let mut mutations_by_version = BTreeMap::<Version, Vec<RegistryMutation>>::new();
+                let mut mutations_by_version = BTreeMap::<(Version, Option<u64>), Vec<RegistryMutation>>::new();
                 for delta in stable_repr.deltas.into_iter() {
                     self.version = max(
                         self.version,
@@ -428,7 +434,7 @@ impl Registry {
 
                     for v in delta.values.iter() {
                         mutations_by_version
-                            .entry(v.version)
+                            .entry((v.version, v.timestamp))
                             .or_default()
                             .push(RegistryMutation {
                                 mutation_type: if v.deletion_marker {
@@ -445,12 +451,13 @@ impl Registry {
                 }
                 // We iterated over keys in ascending order, so the mutations
                 // must also be sorted by key, resulting in canonical encoding.
-                for (v, mutations) in mutations_by_version.into_iter() {
+                for ((version, timestamp), mutations) in mutations_by_version.into_iter() {
                     self.changelog_insert(
-                        v,
+                        version,
                         &RegistryAtomicMutateRequest {
                             mutations,
                             preconditions: vec![],
+                            timestamp
                         },
                     );
                 }
@@ -760,8 +767,9 @@ mod tests {
         let mut registry = Registry::new();
         let version = 1;
         let key = b"key";
+        let timestamp = Some(current_time().as_nanos_since_unix_epoch());
 
-        let max_value = vec![0; max_mutation_value_size(version, key)];
+        let max_value = vec![0; max_mutation_value_size(version, timestamp, key)];
 
         let mutation1 = upsert([90; 50], [1; 50]);
         let mutation2 = upsert(key, max_value);
@@ -996,12 +1004,14 @@ mod tests {
         let mut registry = Registry::new();
         let version = 1;
         let key = b"key";
+        let timestamp = Some(current_time().as_nanos_since_unix_epoch());
 
-        let max_value = vec![0; max_mutation_value_size(version, key)];
+        let max_value = vec![0; max_mutation_value_size(version, timestamp, key)];
         let mutations = vec![upsert(key, max_value)];
         let req = RegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
+            timestamp
         };
         registry.changelog_insert(version, &req);
 
@@ -1019,12 +1029,14 @@ mod tests {
         let mut registry = Registry::new();
         let version = 1;
         let key = b"key";
+        let timestamp = Some(current_time().as_nanos_since_unix_epoch());
 
-        let too_large_value = vec![0; max_mutation_value_size(version, key) + 1];
+        let too_large_value = vec![0; max_mutation_value_size(version, timestamp, key) + 1];
         let mutations = vec![upsert(key, too_large_value)];
         let req = RegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
+            timestamp
         };
 
         registry.changelog_insert(1, &req);
@@ -1035,19 +1047,22 @@ mod tests {
         let mut registry = Registry::new();
         let version = 1;
         let key = b"key";
+        let timestamp = Some(current_time().as_nanos_since_unix_epoch());
 
-        let max_value = vec![0; max_mutation_value_size(version, key)];
+        let max_value = vec![0; max_mutation_value_size(version, timestamp, key)];
         let mutations = vec![upsert(key, &max_value)];
         apply_mutations_skip_invariant_checks(&mut registry, mutations);
+        let registry_value  = registry.get(key, version).unwrap();
 
         assert_eq!(registry.latest_version(), version);
         assert_eq!(
-            registry.get(key, version),
-            Some(&RegistryValue {
+            registry_value,
+            &RegistryValue {
                 value: max_value,
                 version,
-                deletion_marker: false
-            })
+                deletion_marker: false,
+                timestamp: registry_value.timestamp
+            }
         );
     }
 
@@ -1057,8 +1072,9 @@ mod tests {
         let mut registry = Registry::new();
         let version = 1;
         let key = b"key";
+        let timestamp = Some(current_time().as_nanos_since_unix_epoch());
 
-        let too_large_value = vec![0; max_mutation_value_size(version, key) + 1];
+        let too_large_value = vec![0; max_mutation_value_size(version, timestamp, key) + 1];
         let mutations = vec![upsert(key, too_large_value)];
 
         apply_mutations_skip_invariant_checks(&mut registry, mutations);
@@ -1074,13 +1090,16 @@ mod tests {
         let mut registry = Registry::new();
         let version = 1;
         let key = b"key";
+        let timestamp = Some(current_time().as_nanos_since_unix_epoch());
 
-        let value = vec![0; max_mutation_value_size(version, key) + bytes_above_max_size];
+        let value = vec![0; max_mutation_value_size(version, timestamp, key) + bytes_above_max_size];
+
         let mutation = upsert(key, value);
         let mutations = vec![mutation.clone()];
         let req = RegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
+            timestamp
         };
         // Circumvent `changelog_insert()` to insert potentially oversized mutations.
         registry
@@ -1091,6 +1110,7 @@ mod tests {
             version,
             value: mutation.value,
             deletion_marker: mutation.mutation_type == Type::Delete as i32,
+            timestamp,
         });
         registry.version = version;
 
@@ -1206,11 +1226,12 @@ Average length of the values: {} (desired: {})",
 
     /// Computes the mutation value size (given the version and key) that will
     /// result in a delta of exactly `MAX_REGISTRY_DELTAS_SIZE` bytes.
-    fn max_mutation_value_size(version: u64, key: &[u8]) -> usize {
-        fn delta_size(version: u64, key: &[u8], value_size: usize) -> usize {
+    fn max_mutation_value_size(version: u64, timestamp: Option<u64>, key: &[u8]) -> usize {
+        fn delta_size(version: u64, timestamp: Option<u64>, key: &[u8], value_size: usize) -> usize {
             let req = RegistryAtomicMutateRequest {
                 mutations: vec![upsert(key, vec![0; value_size])],
                 preconditions: vec![],
+                timestamp
             };
 
             let version = EncodedVersion::from(version);
@@ -1220,7 +1241,7 @@ Average length of the values: {} (desired: {})",
         }
 
         // Start off with an oversized delta.
-        let too_large_delta_size = delta_size(version, key, MAX_REGISTRY_DELTAS_SIZE);
+        let too_large_delta_size = delta_size(version, timestamp, key, MAX_REGISTRY_DELTAS_SIZE);
 
         // Compoute the value size that will give us a delta of exactly
         // MAX_REGISTRY_DELTAS_SIZE.
@@ -1229,7 +1250,7 @@ Average length of the values: {} (desired: {})",
         // Ensure we actually get a MAX_REGISTRY_DELTAS_SIZE delta.
         assert_eq!(
             MAX_REGISTRY_DELTAS_SIZE,
-            delta_size(version, key, max_value_size)
+            delta_size(version, timestamp, key, max_value_size)
         );
 
         max_value_size
