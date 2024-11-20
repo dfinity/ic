@@ -1,6 +1,6 @@
 use crate::{
     state::CanisterApi,
-    types::{DiscloseRulesArg, DiscloseRulesArgError, IncidentId, RuleId, Timestamp},
+    types::{DiscloseRulesArg, IncidentId, RuleId, Timestamp},
 };
 use strum::AsRefStr;
 use thiserror::Error;
@@ -26,10 +26,9 @@ pub enum DiscloseRulesError {
     #[error("Unauthorized operation")]
     #[strum(serialize = "unauthorized_error")]
     Unauthorized,
-    /// Represents invalid input provided for disclosure
-    #[error("Invalid input: {0}")]
-    #[strum(serialize = "invalid_input_error")]
-    InvalidInput(#[from] DiscloseRulesArgError),
+    /// Signifies that an input ID provided for disclosure is not a valid UUID
+    #[error("Invalid UUID at index = {0}")]
+    InvalidUuidFormat(usize),
     /// Signifies that a specified incident ID could not be found
     #[error("Incident with ID={0} not found")]
     #[strum(serialize = "incident_id_not_found_error")]
@@ -274,13 +273,9 @@ mod tests {
         let discloser = RulesDiscloser::new(mock_canister_api);
         // Act
         let error = discloser.disclose_rules(arg_1, current_time).unwrap_err();
-        assert!(
-            matches!(error, DiscloseRulesError::InvalidInput(DiscloseRulesArgError::InvalidUuidFormat(idx)) if idx == 1)
-        );
+        assert!(matches!(error, DiscloseRulesError::InvalidUuidFormat(idx) if idx == 1));
         let error = discloser.disclose_rules(arg_2, current_time).unwrap_err();
-        assert!(
-            matches!(error, DiscloseRulesError::InvalidInput(DiscloseRulesArgError::InvalidUuidFormat(idx)) if idx == 1)
-        );
+        assert!(matches!(error, DiscloseRulesError::InvalidUuidFormat(idx) if idx == 1));
     }
 
     #[test]

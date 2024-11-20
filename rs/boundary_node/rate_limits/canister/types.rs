@@ -5,6 +5,8 @@ use serde_json::Value;
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::disclose::DiscloseRulesError;
+
 pub type Version = u64;
 pub type Timestamp = u64;
 pub type SchemaVersion = u64;
@@ -163,14 +165,8 @@ impl From<OutputRuleMetadata> for rate_limits_api::OutputRuleMetadata {
     }
 }
 
-#[derive(Debug, Error, Clone)]
-pub enum DiscloseRulesArgError {
-    #[error("Invalid UUID at index = {0}")]
-    InvalidUuidFormat(usize),
-}
-
 impl TryFrom<rate_limits_api::DiscloseRulesArg> for DiscloseRulesArg {
-    type Error = DiscloseRulesArgError;
+    type Error = DiscloseRulesError;
 
     fn try_from(value: rate_limits_api::DiscloseRulesArg) -> Result<DiscloseRulesArg, Self::Error> {
         match value {
@@ -178,7 +174,7 @@ impl TryFrom<rate_limits_api::DiscloseRulesArg> for DiscloseRulesArg {
                 let mut rules = Vec::with_capacity(rule_ids.len());
                 for (idx, rule_id) in rule_ids.into_iter().enumerate() {
                     let uuid = RuleId::try_from(rule_id)
-                        .map_err(|_| DiscloseRulesArgError::InvalidUuidFormat(idx))?;
+                        .map_err(|_| DiscloseRulesError::InvalidUuidFormat(idx))?;
                     rules.push(uuid);
                 }
                 Ok(DiscloseRulesArg::RuleIds(rules))
@@ -187,7 +183,7 @@ impl TryFrom<rate_limits_api::DiscloseRulesArg> for DiscloseRulesArg {
                 let mut incidents = Vec::with_capacity(incident_ids.len());
                 for (idx, incident_id) in incident_ids.into_iter().enumerate() {
                     let uuid = IncidentId::try_from(incident_id)
-                        .map_err(|_| DiscloseRulesArgError::InvalidUuidFormat(idx))?;
+                        .map_err(|_| DiscloseRulesError::InvalidUuidFormat(idx))?;
                     incidents.push(uuid);
                 }
                 Ok(DiscloseRulesArg::IncidentIds(incidents))
