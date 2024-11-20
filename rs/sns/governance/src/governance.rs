@@ -2128,6 +2128,11 @@ impl Governance {
                 self.perform_manage_dapp_canister_settings(manage_dapp_canister_settings)
                     .await
             }
+            // TODO[NNS1-3434]: Implement `AdvanceSnsTargetVersion` proposals.
+            Action::AdvanceSnsTargetVersion(_) => Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "AdvanceSnsTargetVersion proposals are not implemented yet.".to_string(),
+            )),
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
             Action::Unspecified(_) => Err(GovernanceError::new_with_message(
