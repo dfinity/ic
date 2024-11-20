@@ -77,6 +77,8 @@ pub struct Neuron {
     /// Map `Topic` to followees. The key is represented by an integer as
     /// Protobuf does not support enum keys in maps.
     pub followees: HashMap<i32, Followees>,
+    // TODO DO NOT MERGE - we will need to add an accessor for this field
+    // because the order is different than before...
     /// Information about how this neuron voted in the recent past. It
     /// only contains proposals that the neuron voted yes or no on.
     pub recent_ballots: Vec<BallotInfo>,

@@ -193,13 +193,12 @@ fn update_recent_ballots_stable_memory() -> BenchResult {
 
     bench_fn(|| {
         neuron_store
-            .with_neuron_mut(&id, |neuron| {
-                neuron.register_recent_ballot(
-                    Topic::NetworkEconomics,
-                    &ProposalId { id: rng.next_u64() },
-                    Vote::Yes,
-                )
-            })
+            .register_recent_neuron_ballot(
+                id,
+                Topic::NetworkEconomics,
+                ProposalId { id: rng.next_u64() },
+                Vote::Yes,
+            )
             .unwrap();
     })
 }

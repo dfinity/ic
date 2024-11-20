@@ -8,7 +8,7 @@ use crate::{
 };
 use candid::Principal;
 use ic_base_types::PrincipalId;
-use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_stable_structures::{storable::Bound, StableBTreeMap, Storable};
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -230,7 +230,49 @@ where
         Ok(self.reconstitute_neuron(neuron_id, main_neuron_part, sections))
     }
 
-    /// TODO DO NOT MERGE - add a test for this method
+    // pub fn register_recent_neuron_ballot(
+    //     &mut self,
+    //     neuron_id: NeuronId,
+    //     topic: Topic,
+    //     proposal_id: ProposalId,
+    //     vote: Vote,
+    // ) -> Result<(), NeuronStoreError> {
+    //     let main_neuron_part = self
+    //         .main
+    //         .get(&neuron_id)
+    //         // Deal with no entry by blaming it on the caller.
+    //         .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
+    //
+    //     if main_neuron_part.recent_ballots_next_entry_index.is_none() {
+    //         // We need to do a data conversion to reverse the direction
+    //         // otherwise this gets very confusing.
+    //     }
+    //
+    //     let mut neuron =
+    //         self.reconstitute_neuron(neuron_id, main_neuron_part, NeuronSections::all());
+    //
+    //     let ballot_info = BallotInfo {
+    //         proposal_id: Some(proposal_id),
+    //         vote: vote as i32,
+    //     };
+    //
+    //     if let Some(existing_ballot) = neuron
+    //         .recent_ballots
+    //         .iter_mut()
+    //         .find(|ballot| ballot.proposal_id == Some(proposal_id))
+    //     {
+    //         *existing_ballot = ballot_info;
+    //     } else {
+    //         neuron.recent_ballots.push(ballot_info);
+    //     }
+    //
+    //     self.update_sections(main_neuron_part, neuron, NeuronSections::recent_ballots)?;
+    //
+    //     Ok(())
+    // }
+
+    /// TODO DO NOT MERGE - add a test for this method / remove if we
+    /// go in a different direction
     pub fn update_sections(
         &mut self,
         old_neuron: &Neuron,
@@ -643,6 +685,7 @@ pub struct NeuronStorageLens {
     pub known_neuron_data: u64,
 }
 
+use crate::pb::v1::Vote;
 #[cfg(test)]
 use ic_stable_structures::VectorMemory;
 
