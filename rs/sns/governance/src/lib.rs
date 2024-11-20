@@ -11,9 +11,9 @@ pub mod proposal;
 mod request_impls;
 pub mod reward;
 pub mod sns_upgrade;
-pub mod types;
-
 mod treasury;
+pub mod types;
+pub mod upgrade_journal;
 
 trait Len {
     fn len(&self) -> usize;

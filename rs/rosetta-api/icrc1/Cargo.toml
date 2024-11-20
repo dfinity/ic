@@ -20,16 +20,13 @@ clap = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-certification = { workspace = true }
 ic-limits = { path = "../../limits" }
-ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-icrc1 = { path = "../../ledger_suite/icrc1" }
 ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
 ic-icrc1-tokens-u256 = { path = "../../ledger_suite/icrc1/tokens_u256" }
 ic-icrc1-tokens-u64 = { path = "../../ledger_suite/icrc1/tokens_u64" }
 ic-ledger-canister-core = { path = "../../ledger_suite/common/ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
-ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 ic-rosetta-api = { path = "../icp" }
 ic-sys = { path = "../../sys" }
 icrc-ledger-agent = { path = "../../../packages/icrc-ledger-agent" }
@@ -48,7 +45,6 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
-serde_with = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }
@@ -68,7 +64,7 @@ futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-icrc-rosetta-client = { path = "client" }
 ic-icrc-rosetta-runner = { path = "runner" }
-ic-icrc1-ledger-sm-tests = { path = "../../ledger_suite/tests/sm-tests" }
+ic-ledger-suite-state-machine-tests = { path = "../../ledger_suite/tests/sm-tests" }
 ic-icrc1-test-utils = { path = "../../ledger_suite/icrc1/test_utils" }
 ic-ledger-canister-core = { path = "../../ledger_suite/common/ledger_canister_core" }
 ic-rosetta-test-utils = { path = "../icp/test_utils" }
@@ -76,7 +72,6 @@ ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-utils = { workspace = true }
 once_cell = "1.8.0"
 pocket-ic = { path = "../../../packages/pocket-ic" }
-ring = { version = "0.16.11", features = ["std"] }
 url = { workspace = true }
 
 [[test]]

@@ -13,6 +13,7 @@ use ic_canister_log::{LogEntry, Sink};
 use ic_cdk::api::instruction_counter;
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
 use ic_ledger_canister_core::ledger::LedgerContext;
+use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
@@ -29,7 +30,6 @@ use ic_ledger_core::{
     tokens::{Tokens, DECIMAL_PLACES},
 };
 use ic_stable_structures::reader::{BufferedReader, Reader};
-#[cfg(feature = "upgrade-to-memory-manager")]
 use ic_stable_structures::writer::{BufferedWriter, Writer};
 #[cfg(feature = "icp-allowance-getter")]
 use icp_ledger::IcpAllowanceArgs;
@@ -59,7 +59,8 @@ use icrc_ledger_types::{
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
 use ledger_canister::{
-    Ledger, LedgerField, LedgerState, LEDGER, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY,
+    Ledger, LedgerField, LedgerState, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES,
+    UPGRADES_MEMORY,
 };
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
@@ -820,6 +821,14 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
         });
     }
 
+    if ledger.ledger_version > LEDGER_VERSION {
+        panic!(
+            "Trying to downgrade from incompatible version {}. Current version is {}.",
+            ledger.ledger_version, LEDGER_VERSION
+        );
+    }
+    ledger.ledger_version = LEDGER_VERSION;
+
     if let Some(args) = args {
         match args {
             LedgerCanisterPayload::Init(_) => trap_with("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
@@ -915,7 +924,6 @@ fn post_upgrade_() {
     over_init(|CandidOne(args)| post_upgrade(args));
 }
 
-#[cfg(not(feature = "upgrade-to-memory-manager"))]
 #[export_name = "canister_pre_upgrade"]
 fn pre_upgrade() {
     let start = dfn_core::api::performance_counter(0);
@@ -933,29 +941,6 @@ fn pre_upgrade() {
         print!("Ledger not ready, skipping write to UPGRADES_MEMORY.");
         return;
     }
-    let mut stable_writer = dfn_core::stable::StableWriter::new();
-    ciborium::ser::into_writer(&*ledger, &mut stable_writer)
-        .expect("failed to write ledger state to stable memory");
-    let end = dfn_core::api::performance_counter(0);
-    let instructions_consumed = end - start;
-    let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
-    stable_writer
-        .write_all(&counter_bytes)
-        .expect("failed to write instructions consumed to stable memory");
-}
-
-#[cfg(feature = "upgrade-to-memory-manager")]
-#[export_name = "canister_pre_upgrade"]
-fn pre_upgrade() {
-    let start = dfn_core::api::performance_counter(0);
-    setup::START.call_once(|| {
-        printer::hook();
-    });
-
-    let ledger = LEDGER
-        .read()
-        // This should never happen, but it's better to be safe than sorry
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     UPGRADES_MEMORY.with_borrow_mut(|bs| {
         let writer = Writer::new(bs, 0);
         let mut buffered_writer = BufferedWriter::new(BUFFER_SIZE, writer);
@@ -1469,14 +1454,14 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
-        "ledger_stable_memory_bytes",
+        "stable_memory_bytes",
         (dfn_core::api::stable_memory_size_in_pages() * 64 * 1024) as f64,
-        "Size of the stable memory allocated by this canister.",
+        "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
-        "ledger_total_memory_bytes",
-        total_memory_size_bytes() as f64,
-        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
+        "heap_memory_bytes",
+        heap_memory_size_bytes() as f64,
+        "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
         "ledger_transactions_by_hash_cache_entries",

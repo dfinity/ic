@@ -11,10 +11,8 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/tree_hash",
     "//rs/ledger_suite/common/ledger_canister_core",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icrc1",
@@ -33,7 +31,6 @@ DEPENDENCIES = [
     "@crate_index//:clap",  # no clap because feature derive
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
-    "@crate_index//:ic-certification",
     "@crate_index//:indicatif",
     "@crate_index//:lazy_static",
     "@crate_index//:num-bigint",
@@ -47,7 +44,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
-    "@crate_index//:serde_with",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
@@ -64,7 +60,7 @@ DEV_DEPENDENCIES = [
     ":ic-icrc-rosetta",
     "//packages/pocket-ic:pocket-ic",
     "//rs/ledger_suite/icrc1/test_utils",
-    "//rs/ledger_suite/tests/sm-tests",
+    "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
     "//rs/rosetta-api/icp/test_utils",
     "//rs/rosetta-api/icrc1/client:ic-icrc-rosetta-client",
     "//rs/rosetta-api/icrc1/runner:ic-icrc-rosetta-runner",
@@ -72,7 +68,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:ic-utils",
     "@crate_index//:once_cell",
-    "@crate_index//:ring",
 ]
 
 MACRO_DEPENDENCIES = [

@@ -3,17 +3,12 @@
 FROM ubuntu@sha256:48c35f3de33487442af224ed4aabac19fd9bfbd91ee90e9471d412706b20ba73
 ENV TZ=UTC
 
-COPY --chmod=0700 ./ci/container/files/known_hosts /etc/ssh/ssh_known_hosts
-
 ARG PACKAGE_FILE=ci/container/files/packages.common
 COPY ${PACKAGE_FILE} /tmp/
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
-
-ARG motoko_version=0.9.1
-RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
 ARG buildevents_version=0.6.0
 RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${buildevents_version}/buildevents-linux-amd64 -o /usr/bin/buildevents && \
@@ -55,13 +50,6 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     cd .. && \
     rm -rf e2fsdroid
 
-ARG sdk_version=0.12.0
-ARG sdk_sha=40da56ad27774d5e1b2cbc35f94c17368be8c8da557aca19878940264bd82a0a
-RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/download/${sdk_version}/dfx-${sdk_version}-x86_64-linux.tar.gz -o /tmp/sdk/dfx.tar.gz && \
-    echo "$sdk_sha /tmp/sdk/dfx.tar.gz" | sha256sum --check && \
-    tar -zxf /tmp/sdk/dfx.tar.gz -C /usr/local/bin && \
-    chmod +x /usr/local/bin/dfx
-
 ARG mkcert_version=1.4.4
 ARG mkcert_sha=6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
 RUN curl -fsSL https://github.com/FiloSottile/mkcert/releases/download/v${mkcert_version}/mkcert-v${mkcert_version}-linux-amd64 -o /usr/local/bin/mkcert && \
@@ -76,30 +64,10 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/
 ARG nvm_version=v0.39.1
 ARG dependency_mgmt_nns_dapp_node_version=18.17.1
 ARG dependency_mgmt_default_node_version=20
+ARG dependency_mgmt_oisy_wallet_node_version=22.11.0
 ENV NVM_DIR=/opt/nvm
 RUN mkdir $NVM_DIR && \
     curl --fail https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh -sSf | bash
-
-RUN . /opt/nvm/nvm.sh && \
-    nvm install ${dependency_mgmt_nns_dapp_node_version} && \
-    nvm install ${dependency_mgmt_default_node_version}
-
-RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu && \
-    # needed for github actions runner \
-    groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 buildifier && \
-    # CI before script requires sudo \
-    echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-
-# Add gitconfig
-COPY ./ci/container/files/gitconfig /etc/gitconfig
-
-# Pre-populate the Bazel installation for root
-COPY .bazelversion /tmp/bazel/
-RUN cd /tmp/bazel && touch WORKSPACE  && bazel version
-
-COPY ./ci/container/files/generate-bazel-completion.sh /tmp/
-RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh && \
-    echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
 # Add cocogitto
 ARG COCOGITTO_VERSION="5.4.0"
@@ -111,9 +79,9 @@ RUN curl -fsSL "https://github.com/cocogitto/cocogitto/releases/download/${COCOG
 
 # Add buf
 ARG BUF_BIN="/usr/local/bin/buf"
-ARG BUF_VERSION="1.31.0"
+ARG BUF_VERSION="1.46.0"
 RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-$(uname -s)-$(uname -m)" -o "${BUF_BIN}" && \
-    echo "a4589eea3afa5f8cda01c3830cdc0112ddd08c32f8b1d45007291fae9fc9bbf4  ${BUF_BIN}" | shasum -a 256 -c - && \
+    echo "04c92815f92431bea637d834bee9d2941e979b1c821c59805667c032e2e8fc1f  ${BUF_BIN}" | shasum -a 256 -c - && \
     chmod +x "${BUF_BIN}"
 
 # Add yq
@@ -130,12 +98,39 @@ RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}
     echo "4d34b489a0810e71a937103f38e4b6c951abac36b5b60c58bc07b73efa7139cd  ${MOLD_BIN}" | shasum -a 256 -c - && \
     ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
 
+# Add IC SDK (dfx)
+ARG sdk_version=0.12.0
+ARG sdk_sha=40da56ad27774d5e1b2cbc35f94c17368be8c8da557aca19878940264bd82a0a
+RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/download/${sdk_version}/dfx-${sdk_version}-x86_64-linux.tar.gz -o /tmp/sdk/dfx.tar.gz && \
+    echo "$sdk_sha /tmp/sdk/dfx.tar.gz" | sha256sum --check && \
+    tar -zxf /tmp/sdk/dfx.tar.gz -C /usr/local/bin && \
+    chmod +x /usr/local/bin/dfx
+
+# Add motoko compiler
+ARG motoko_version=0.9.1
+RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
+
 # Add kubectl
 ARG KUBECTL_BIN="/usr/local/bin/kubectl"
 ARG KUBECTL_VERSION="1.22.17"
 RUN curl -sSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o "${KUBECTL_BIN}" && \
     echo "7506a0ae7a59b35089853e1da2b0b9ac0258c5309ea3d165c3412904a9051d48  ${KUBECTL_BIN}" | sha256sum -c - && \
     chmod +x "${KUBECTL_BIN}"
+
+RUN . /opt/nvm/nvm.sh && \
+    nvm install ${dependency_mgmt_nns_dapp_node_version} && \
+    nvm install ${dependency_mgmt_default_node_version} && \
+    nvm install ${dependency_mgmt_oisy_wallet_node_version}
+
+# Create user groups
+RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu && \
+    # needed for github actions runner \
+    groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 buildifier && \
+    # CI before script requires sudo \
+    echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+# Add gitconfig
+COPY ./ci/container/files/gitconfig /etc/gitconfig
 
 # Install AFLplusplus
 ARG AFL_RELEASE_VERSION=v4.21c
@@ -148,6 +143,15 @@ RUN mkdir -p /afl && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-18 CC=/usr/bin/clang-18 CXX=/usr/bin/clang++-18 make install && \
     mv afl-fuzz afl-showmap  /afl && \
     cd .. && rm -rf AFLplusplus
+
+# Pre-populate the Bazel installation for root
+# (note: this is only used for bash completion; the actual bazel version comes from bazelisk)
+COPY .bazelversion /tmp/bazel/
+RUN cd /tmp/bazel && touch WORKSPACE  && bazel version
+
+COPY ./ci/container/files/generate-bazel-completion.sh /tmp/
+RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh && \
+    echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
 RUN mv /usr/bin/docker /usr/bin/docker-bin
 COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
@@ -164,20 +168,29 @@ ENV PYTHONPATH=/ic/ci/src:/ic/ci/src/dependencies:$PYTHONPATH
 RUN cd /tmp/bazel && bazel version
 
 # Add Rust/Cargo support
-ARG RUST_VERSION=1.81.0
+RUN mkdir -p /tmp/rust-version/
+COPY rust-toolchain.toml /tmp/rust-version/rust-toolchain.toml
+# Read the channel from the toolchain file
+RUN sed </tmp/rust-version/rust-toolchain.toml -n 's/^channel = "\(.*\)"$/\1/p' > /tmp/rust-version/version
+RUN echo "Rust version:" "$(cat /tmp/rust-version/version)"
 RUN curl --fail https://sh.rustup.rs -sSf \
-    | sh -s -- -y --default-toolchain ${RUST_VERSION}-x86_64-unknown-linux-gnu --no-modify-path && \
-    rustup default ${RUST_VERSION}-x86_64-unknown-linux-gnu && \
+    | sh -s -- -y --default-toolchain "$(cat /tmp/rust-version/version)-x86_64-unknown-linux-gnu" --no-modify-path && \
+    rustup default "$(cat /tmp/rust-version/version)-x86_64-unknown-linux-gnu" && \
     rustup target add wasm32-unknown-unknown && \
     rustup component add clippy
+RUN rm -rf /tmp/rust-version
 
 # Add cargo-audit
 ARG CARGO_AUDIT_VERSION=0.20.0
 RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
-
-COPY ./ci/container/TAG /home/ubuntu/.DFINITY-TAG
 # Add zshrc generated from zsh-newuser-install (option 2)
 COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
+
+# Whitelist some SSH keys
+COPY --chmod=0700 ./ci/container/files/known_hosts /etc/ssh/ssh_known_hosts
+
+# Read in the build-ci script
+COPY ./ci/container/TAG /home/ubuntu/.DFINITY-TAG
 
 WORKDIR /
 # Use buildifier (uid 1001) if /entrypoint.sh is overriden

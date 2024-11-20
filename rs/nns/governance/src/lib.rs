@@ -131,6 +131,7 @@ use crate::{
     },
 };
 use candid::DecoderConfig;
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 use ic_nervous_system_temporary::Temporary;
 use mockall::automock;
 use std::{
@@ -140,7 +141,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-#[cfg(test)]
+#[cfg(any(test, feature = "canbench-rs"))]
 pub mod test_utils;
 
 mod account_id_index;
@@ -170,26 +171,59 @@ pub mod proposals;
 mod reward;
 pub mod storage;
 mod subaccount_index;
+mod voting;
 
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.
 const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
+
+/// Value: 2024-09-01T00:00:00Z.
+///
+/// How this value was chosen: This "pre-ages" "legacy" neurons by a couple of
+/// months. This is so that they are required to refresh their voting power
+/// sooner than new neurons.
+///
+/// How this value is used: when a neuron otherwise does not have a value in the
+/// voting_power_refreshed_timestamp_seconds field (because it was created
+/// before this feature), we pretend as though this value is in that field. The
+/// field is always populated in new neurons.
+pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
 
 // TODO(NNS1-3248): Delete this once the feature has made it through the
 // probation period. At that point, we will not need this "kill switch". We can
 // leave this here indefinitely, but it will just be clutter after a modest
 // amount of time.
 thread_local! {
+    static IS_VOTING_POWER_ADJUSTMENT_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+
     // TODO(NNS1-3247): To release the feature, set this to true. Do not simply
     // delete. That way, if we need to recall the feature, we can do that via a
     // 1-line change (by replacing true with `cfg!(feature = "test")`). After
     // the feature has been released, it will go through its "probation" period.
     // If that goes well, then, this can be deleted.
-    static IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED: Cell<bool> = const { Cell::new(true) };
 
     static ARE_SET_VISIBILITY_PROPOSALS_ENABLED: Cell<bool> = const { Cell::new(true) };
 
-    static ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED: Cell<bool> = const { Cell::new(false) };
+    static ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+
+    static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+}
+
+pub fn is_voting_power_adjustment_enabled() -> bool {
+    IS_VOTING_POWER_ADJUSTMENT_ENABLED.with(|ok| ok.get())
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_voting_power_adjustment() -> Temporary {
+    Temporary::new(&IS_VOTING_POWER_ADJUSTMENT_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_voting_power_adjustment() -> Temporary {
+    Temporary::new(&IS_VOTING_POWER_ADJUSTMENT_ENABLED, false)
 }
 
 pub fn is_private_neuron_enforcement_enabled() -> bool {
@@ -197,11 +231,13 @@ pub fn is_private_neuron_enforcement_enabled() -> bool {
 }
 
 /// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_enable_private_neuron_enforcement() -> Temporary {
     Temporary::new(&IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED, true)
 }
 
 /// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_private_neuron_enforcement() -> Temporary {
     Temporary::new(&IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED, false)
 }
@@ -211,11 +247,13 @@ pub fn are_set_visibility_proposals_enabled() -> bool {
 }
 
 /// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_enable_set_visibility_proposals() -> Temporary {
     Temporary::new(&ARE_SET_VISIBILITY_PROPOSALS_ENABLED, true)
 }
 
 /// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_set_visibility_proposals() -> Temporary {
     Temporary::new(&ARE_SET_VISIBILITY_PROPOSALS_ENABLED, false)
 }
@@ -225,13 +263,31 @@ pub fn is_active_neurons_in_stable_memory_enabled() -> bool {
 }
 
 /// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_enable_active_neurons_in_stable_memory() -> Temporary {
     Temporary::new(&ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED, true)
 }
 
 /// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_active_neurons_in_stable_memory() -> Temporary {
     Temporary::new(&ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED, false)
+}
+
+pub fn use_stable_memory_following_index() -> bool {
+    USE_STABLE_MEMORY_FOLLOWING_INDEX.with(|ok| ok.get())
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_stable_memory_following_index() -> Temporary {
+    Temporary::new(&USE_STABLE_MEMORY_FOLLOWING_INDEX, true)
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_stable_memory_following_index() -> Temporary {
+    Temporary::new(&USE_STABLE_MEMORY_FOLLOWING_INDEX, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {

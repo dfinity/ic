@@ -2,6 +2,7 @@ use ic00::{
     CanisterSettingsArgsBuilder, CanisterSnapshotResponse, LoadCanisterSnapshotArgs,
     TakeCanisterSnapshotArgs,
 };
+use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_crypto_sha2::Sha256;
 use ic_error_types::{ErrorCode, UserError};
@@ -15,7 +16,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::{
     CanisterHistory, MAX_CANISTER_HISTORY_CHANGES,
 };
-use ic_state_machine_tests::{PrincipalId, StateMachine, StateMachineBuilder, StateMachineConfig};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::{ingress::WasmResult, CanisterId, Cycles};
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{
@@ -198,7 +199,7 @@ fn canister_history_tracks_create_install_reinstall() {
         InstallCodeArgs::new(
             Reinstall,
             canister_id,
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             None,
@@ -211,7 +212,7 @@ fn canister_history_tracks_create_install_reinstall() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Reinstall, UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(Reinstall, *UNIVERSAL_CANISTER_WASM_SHA256),
     ));
     let history = get_canister_history(&env, canister_id);
     assert_eq!(
@@ -310,7 +311,7 @@ fn canister_history_tracks_upgrade() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Upgrade, UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(Upgrade, *UNIVERSAL_CANISTER_WASM_SHA256),
     ));
     let history = get_canister_history(&env, canister_id);
     assert_eq!(
@@ -610,7 +611,7 @@ fn canister_history_tracks_changes_from_canister() {
     // create and install universal_canister
     let ucan = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             Some(
                 CanisterSettingsArgsBuilder::new()
@@ -709,7 +710,7 @@ fn canister_history_fails_with_incorrect_sender_version() {
     // create and install universal_canister
     let ucan = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             Some(
                 CanisterSettingsArgsBuilder::new()
@@ -760,7 +761,7 @@ fn canister_history_fails_with_incorrect_sender_version() {
         InstallCodeArgs {
             mode: Install,
             canister_id: canister_id.into(),
-            wasm_module: UNIVERSAL_CANISTER_WASM.into(),
+            wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
@@ -877,13 +878,13 @@ fn canister_info_retrieval() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Upgrade, UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(Upgrade, *UNIVERSAL_CANISTER_WASM_SHA256),
     ));
 
     // create and install universal_canister
     let ucan = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             Some(
                 CanisterSettingsArgsBuilder::new()
@@ -999,9 +1000,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     let (_, test_canister, test_canister_sha256) = test_setup(SubnetType::Application, now);
 
     // Set up StateMachine
-    let env = StateMachineBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     // Set time of StateMachine to current system time
     env.set_time(now);
 
@@ -1013,7 +1012,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     // Create and install universal_canister
     let ucan = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             Some(
                 CanisterSettingsArgsBuilder::new()

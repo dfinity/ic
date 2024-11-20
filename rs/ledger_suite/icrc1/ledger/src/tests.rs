@@ -9,7 +9,7 @@ use ic_ledger_core::timestamp::TimeStamp;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::Account;
 
-use ic_icrc1_ledger_sm_tests::{
+use ic_ledger_suite_state_machine_tests::{
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
     INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
     TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,

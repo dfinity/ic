@@ -1,7 +1,6 @@
 use super::*;
 use crate::timestamp::TimeStamp;
 use crate::tokens::Tokens;
-use ic_stable_structures::Storable;
 
 fn ts(n: u64) -> TimeStamp {
     TimeStamp::from_nanos_since_unix_epoch(n)
@@ -535,29 +534,4 @@ fn expected_allowance_if_zero_no_approval() {
             current_allowance: tokens(0)
         }
     );
-}
-
-#[test]
-fn allowance_serialization() {
-    let allowance1 = Allowance {
-        amount: tokens(100),
-        expires_at: None,
-        arrived_at: TimeStamp::from_nanos_since_unix_epoch(6),
-    };
-    let allowance2 = Allowance {
-        amount: tokens(300),
-        expires_at: Some(ts(5)),
-        arrived_at: TimeStamp::from_nanos_since_unix_epoch(6),
-    };
-
-    let allowances = vec![allowance1, allowance2];
-    for allowance in allowances {
-        let new_allowance: Allowance<Tokens> = Allowance::from_bytes(allowance.to_bytes());
-        assert_eq!(new_allowance.amount, allowance.amount);
-        assert_eq!(new_allowance.expires_at, allowance.expires_at);
-        assert_eq!(
-            new_allowance.arrived_at,
-            TimeStamp::from_nanos_since_unix_epoch(0)
-        );
-    }
 }

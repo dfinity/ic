@@ -7,13 +7,17 @@ COMMON_DEPS = [
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:ic-stable-structures",
+    "@crate_index//:minicbor",
     "@crate_index//:num-traits",
     "@crate_index//:serde",
 ]
 
 rust_library(
     name = "tokens_u256",
-    srcs = ["src/lib.rs"],
+    srcs = [
+        "src/encode_decode.rs",
+        "src/lib.rs",
+    ],
     crate_name = "ic_icrc1_tokens_u256",
     version = "0.1.0",
     deps = COMMON_DEPS + [

@@ -561,7 +561,7 @@ fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<
     // Note that although sometimes CUPs have no signatures (e.g. genesis and
     // recovery CUPs) they always have the signer id (the DKG id), which is taken
     // from the high-threshold transcript when we build a genesis/recovery CUP.
-    let dkg_id = cup.signature.signer;
+    let dkg_id = &cup.signature.signer;
     // If the DKG key material was signed by the subnet itself — use it, if not, get
     // the subnet id from the registry.
     match dkg_id.target_subnet {
@@ -771,7 +771,7 @@ fn get_master_public_keys(
 
         match get_master_public_key_from_transcript(transcript) {
             Ok(public_key) => {
-                public_keys.insert(key_id.clone(), public_key);
+                public_keys.insert(key_id.clone().into(), public_key);
             }
             Err(err) => {
                 warn!(
@@ -931,7 +931,7 @@ mod tests {
             vec![MasterKeyTranscript {
                 current: unmasked,
                 next_in_creation: idkg::KeyTranscriptCreation::Begin,
-                master_key_id: key_id.clone(),
+                master_key_id: key_id.clone().try_into().unwrap(),
             }],
         );
         idkg.idkg_transcripts = idkg_transcripts;

@@ -1,15 +1,18 @@
 use candid::Nat;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
 use ic_stable_structures::storable::{Bound, Storable};
+use minicbor::{Decode, Encode};
 use num_traits::{Bounded, ToPrimitive};
 use serde::{de::Deserializer, Deserialize, Serialize};
 use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Serialize)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Serialize, Encode, Decode,
+)]
 #[serde(transparent)]
-pub struct U64(u64);
+pub struct U64(#[n(0)] u64);
 
 impl U64 {
     pub const ZERO: Self = Self(0);

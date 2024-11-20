@@ -134,6 +134,11 @@ impl SystemStateChanges {
         self.cycles_balance_change.get_removed_cycles()
     }
 
+    /// Returns number of newly created callbacks (i.e. enqueued requests).
+    pub fn callbacks_created(&self) -> usize {
+        self.requests.len()
+    }
+
     fn error<S: ToString>(message: S) -> HypervisorError {
         HypervisorError::WasmEngineError(WasmEngineError::FailedToApplySystemChanges(
             message.to_string(),
@@ -244,8 +249,11 @@ impl SystemStateChanges {
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::ECDSAPublicKey)
             | Ok(Ic00Method::ComputeInitialIDkgDealings)
+            | Ok(Ic00Method::ReshareChainKey)
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
+            | Ok(Ic00Method::VetKdPublicKey)
+            | Ok(Ic00Method::VetKdDeriveEncryptedKey)
             | Ok(Ic00Method::ProvisionalTopUpCanister)
             | Ok(Ic00Method::BitcoinSendTransactionInternal)
             | Ok(Ic00Method::BitcoinGetSuccessors)
@@ -255,6 +263,7 @@ impl SystemStateChanges {
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
             | Ok(Ic00Method::NodeMetricsHistory)
+            | Ok(Ic00Method::SubnetInfo)
             | Ok(Ic00Method::FetchCanisterLogs)
             | Ok(Ic00Method::UploadChunk)
             | Ok(Ic00Method::StoredChunks)
@@ -570,6 +579,9 @@ pub struct SandboxSafeSystemState {
     // register callbacks (e.g. running the `start` method when installing a
     // canister.)
     next_callback_id: Option<u64>,
+    /// The number of calls / callbacks that can still be made. This is the maximum
+    /// available in either the subnet shared pool or the canister quota.
+    available_callbacks: u64,
     available_request_slots: BTreeMap<CanisterId, usize>,
     ic00_available_request_slots: usize,
     ic00_aliases: BTreeSet<CanisterId>,
@@ -578,6 +590,7 @@ pub struct SandboxSafeSystemState {
     controllers: BTreeSet<PrincipalId>,
     pub(super) request_metadata: RequestMetadata,
     caller: Option<PrincipalId>,
+    pub is_wasm64_execution: bool,
 }
 
 impl SandboxSafeSystemState {
@@ -599,6 +612,7 @@ impl SandboxSafeSystemState {
         call_context_deadline: Option<CoarseTime>,
         cycles_account_manager: CyclesAccountManager,
         next_callback_id: Option<u64>,
+        available_callbacks: u64,
         available_request_slots: BTreeMap<CanisterId, usize>,
         ic00_available_request_slots: usize,
         ic00_aliases: BTreeSet<CanisterId>,
@@ -610,6 +624,7 @@ impl SandboxSafeSystemState {
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
         next_canister_log_record_idx: u64,
+        is_wasm64_execution: bool,
     ) -> Self {
         Self {
             canister_id,
@@ -635,6 +650,7 @@ impl SandboxSafeSystemState {
             call_context_deadline,
             cycles_account_manager,
             next_callback_id,
+            available_callbacks,
             available_request_slots,
             ic00_available_request_slots,
             ic00_aliases,
@@ -643,7 +659,34 @@ impl SandboxSafeSystemState {
             controllers,
             request_metadata,
             caller,
+            is_wasm64_execution,
         }
+    }
+
+    pub fn new_for_testing(
+        system_state: &SystemState,
+        cycles_account_manager: CyclesAccountManager,
+        network_topology: &NetworkTopology,
+        dirty_page_overhead: NumInstructions,
+        compute_allocation: ComputeAllocation,
+        available_callbacks: u64,
+        request_metadata: RequestMetadata,
+        caller: Option<PrincipalId>,
+        call_context_id: Option<CallContextId>,
+    ) -> Self {
+        Self::new(
+            system_state,
+            cycles_account_manager,
+            network_topology,
+            dirty_page_overhead,
+            compute_allocation,
+            available_callbacks,
+            request_metadata,
+            caller,
+            call_context_id,
+            // We can assume a Wasm32 environment in tests for now.
+            false,
+        )
     }
 
     pub fn new(
@@ -652,9 +695,11 @@ impl SandboxSafeSystemState {
         network_topology: &NetworkTopology,
         dirty_page_overhead: NumInstructions,
         compute_allocation: ComputeAllocation,
+        available_callbacks: u64,
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
         call_context_id: Option<CallContextId>,
+        is_wasm64_execution: bool,
     ) -> Self {
         let call_context = call_context_id.and_then(|call_context_id| {
             system_state
@@ -716,6 +761,7 @@ impl SandboxSafeSystemState {
             system_state
                 .call_context_manager()
                 .map(|c| c.next_callback_id()),
+            available_callbacks,
             available_request_slots,
             ic00_available_request_slots,
             ic00_aliases,
@@ -727,6 +773,7 @@ impl SandboxSafeSystemState {
             request_metadata,
             caller,
             system_state.canister_log.next_idx(),
+            is_wasm64_execution,
         )
     }
 
@@ -883,7 +930,7 @@ impl SandboxSafeSystemState {
         let mut new_balance = self.cycles_balance();
 
         // It is safe to unwrap since msg_cycles_accept and msg_cycles_accept128 are
-        // available only forApiType::{Update, RepyCallback, RejectCallBack} and all of
+        // available only for ApiType::{Update, ReplyCallback, RejectCallback} and all of
         // them have CallContextId, hence SystemStateChanges::call_context_balance_taken
         // will never be `None`.
         debug_assert!(self
@@ -921,7 +968,7 @@ impl SandboxSafeSystemState {
 
     pub fn prepayment_for_response_execution(&self) -> Cycles {
         self.cycles_account_manager
-            .prepayment_for_response_execution(self.subnet_size)
+            .prepayment_for_response_execution(self.subnet_size, self.is_wasm64_execution.into())
     }
 
     pub fn prepayment_for_response_transmission(&self) -> Cycles {
@@ -966,6 +1013,11 @@ impl SandboxSafeSystemState {
         prepayment_for_response_execution: Cycles,
         prepayment_for_response_transmission: Cycles,
     ) -> Result<(), Request> {
+        if self.available_callbacks == 0 {
+            return Err(msg);
+        }
+        self.available_callbacks -= 1;
+
         let mut new_balance = self.cycles_balance();
         let consumed_cycles = match self.cycles_account_manager.withdraw_request_cycles(
             self.canister_id,
@@ -1428,6 +1480,7 @@ mod tests {
                 CyclesAccountManagerConfig::application_subnet(),
             ),
             Some(0),
+            0,
             BTreeMap::new(),
             0,
             BTreeSet::new(),
@@ -1439,6 +1492,8 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
+            // Wasm32 execution environment. Sufficient in testing.
+            false,
         );
         sandbox_state.msg_deadline()
     }
@@ -1475,6 +1530,7 @@ mod tests {
                 CyclesAccountManagerConfig::application_subnet(),
             ),
             Some(0),
+            0,
             BTreeMap::new(),
             0,
             BTreeSet::new(),
@@ -1486,6 +1542,8 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
+            // Wasm32 execution environment. Sufficient in testing.
+            false,
         )
     }
 

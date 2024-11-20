@@ -7,18 +7,20 @@ use std::{
 use base32::Alphabet;
 use candid::{types::principal::PrincipalError, CandidType, Deserialize, Principal};
 use ic_stable_structures::{storable::Bound, Storable};
+use minicbor::{Decode, Encode};
 use serde::Serialize;
 use std::borrow::Cow;
-use std::io::{Cursor, Read};
 
 pub type Subaccount = [u8; 32];
 
 pub const DEFAULT_SUBACCOUNT: &Subaccount = &[0; 32];
 
 // Account representation of ledgers supporting the ICRC1 standard
-#[derive(Serialize, CandidType, Deserialize, Clone, Debug, Copy)]
+#[derive(Serialize, CandidType, Deserialize, Clone, Debug, Copy, Encode, Decode)]
 pub struct Account {
+    #[cbor(n(0), with = "crate::cbor::principal")]
     pub owner: Principal,
+    #[cbor(n(1), with = "minicbor::bytes")]
     pub subaccount: Option<Subaccount>,
 }
 
@@ -170,66 +172,47 @@ impl FromStr for Account {
     }
 }
 
-const MAX_SERIALIZATION_LEN: u32 = 62;
-
 impl Storable for Account {
     fn to_bytes(&self) -> Cow<[u8]> {
-        let mut buffer: Vec<u8> = vec![];
-        let mut buffer0: Vec<u8> = vec![];
-
-        if let Some(subaccount) = self.subaccount {
-            buffer0.extend(subaccount.as_slice());
-        }
-        buffer0.extend(self.owner.as_slice());
-        buffer.extend((buffer0.len() as u8).to_le_bytes());
-        buffer.append(&mut buffer0);
-
-        Cow::Owned(buffer)
+        let mut buf = vec![];
+        minicbor::encode(self, &mut buf).expect("account encoding should always succeed");
+        Cow::Owned(buf)
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        let mut cursor = Cursor::new(bytes);
-
-        let mut len_bytes = [0u8; 1];
-        cursor
-            .read_exact(&mut len_bytes)
-            .expect("Unable to read the len of the account");
-        let mut len = u8::from_le_bytes(len_bytes);
-        let subaccount = if len >= 32 {
-            let mut subaccount_bytes = [0u8; 32];
-            cursor
-                .read_exact(&mut subaccount_bytes)
-                .expect("Unable to read the bytes of the account's subaccount");
-            len -= 32;
-            Some(subaccount_bytes)
-        } else {
-            None
-        };
-        let mut owner_bytes = vec![0; len as usize];
-        cursor
-            .read_exact(&mut owner_bytes)
-            .expect("Unable to read the bytes of the account's owners");
-        let owner = Principal::from_slice(&owner_bytes);
-        Account { owner, subaccount }
+        minicbor::decode(bytes.as_ref()).unwrap_or_else(|e| {
+            panic!("failed to decode account bytes {}: {e}", hex::encode(bytes))
+        })
     }
 
-    const BOUND: Bound = Bound::Bounded {
-        max_size: MAX_SERIALIZATION_LEN,
-        is_fixed_size: false,
-    };
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
     use ic_stable_structures::Storable;
+    use proptest::prelude::prop;
+    use proptest::strategy::Strategy;
     use std::str::FromStr;
 
     use candid::Principal;
 
-    use crate::icrc1::account::{
-        Account, ICRC1TextReprError, DEFAULT_SUBACCOUNT, MAX_SERIALIZATION_LEN,
-    };
+    use crate::icrc1::account::{Account, ICRC1TextReprError};
+
+    pub fn principal_strategy() -> impl Strategy<Value = Principal> {
+        let bytes_strategy = prop::collection::vec(0..=255u8, 29);
+        bytes_strategy.prop_map(|bytes| Principal::from_slice(bytes.as_slice()))
+    }
+
+    pub fn account_strategy() -> impl Strategy<Value = Account> {
+        let bytes_strategy = prop::option::of(prop::collection::vec(0..=255u8, 32));
+        let principal_strategy = principal_strategy();
+        (bytes_strategy, principal_strategy).prop_map(|(bytes, principal)| Account {
+            owner: principal,
+            subaccount: bytes.map(|x| x.as_slice().try_into().unwrap()),
+        })
+    }
 
     #[test]
     fn test_account_display_default_subaccount() {
@@ -365,52 +348,10 @@ mod tests {
     }
 
     #[test]
-    fn test_account_max_serialization_length() {
-        let owner =
-            Principal::from_text("k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae")
-                .unwrap();
-        let subaccount = Some(
-            hex::decode("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        );
-        let account = Account { owner, subaccount };
-        let serialized_len = account.to_bytes().len();
-        assert_eq!(
-            serialized_len,
-            1 + DEFAULT_SUBACCOUNT.len() + Principal::MAX_LENGTH_IN_BYTES
-        );
-        assert_eq!(serialized_len as u32, MAX_SERIALIZATION_LEN);
-    }
-
-    #[test]
     fn test_account_serialization() {
-        let owner =
-            Principal::from_text("k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae")
-                .unwrap();
-        let subaccount = Some(
-            hex::decode("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        );
-        let account1 = Account { owner, subaccount };
-        let account2 = Account {
-            owner,
-            subaccount: None,
-        };
-        let account3 = Account {
-            owner: Principal::anonymous(),
-            subaccount,
-        };
-        let account4 = Account {
-            owner: Principal::anonymous(),
-            subaccount: None,
-        };
-        let accounts = vec![account1, account2, account3, account4];
-        for account in accounts {
-            assert_eq!(Account::from_bytes(account.to_bytes()), account);
-        }
+        use proptest::{prop_assert_eq, proptest};
+        proptest!(|(account in account_strategy())| {
+            prop_assert_eq!(Account::from_bytes(account.to_bytes()), account);
+        })
     }
 }

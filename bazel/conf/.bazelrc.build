@@ -54,12 +54,11 @@ build --flag_alias=timeout_value=//bazel:timeout_value
 # Exclude system tests by default
 # https://github.com/bazelbuild/bazel/issues/8439
 build --build_tag_filters="-system_test,-upload,-fuzz_test"
-test --test_tag_filters="-system_test,-post_master,-fuzz_test"
+test --test_tag_filters="-system_test,-fuzz_test"
 test:alltests --test_tag_filters=""
 test:paritytests --test_tag_filters="-system_test"
 build:ci --build_tag_filters="-system_test,-fuzz_test"
 build:ci --verbose_failures
-test:ci --test_tag_filters="-post_master,-system_test_hourly,-system_test_nightly,-system_test_nightly_nns,-system_test_staging,-system_test_hotfix,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly"
 
 test --test_output=errors
 test --test_env=RUST_BACKTRACE=full
@@ -119,7 +118,13 @@ build:afl --action_env="LLVM_CONFIG=llvm-config-18"
 build:afl --action_env="RANLIB=llvm-ranlib-18"
 build:afl --config=fuzzing
 build:afl --build_tag_filters=afl
-build:afl --run_under="/ic/bin/afl_wrapper.sh"
+run:afl --run_under="//bin:afl_wrapper"
+
+# Fuzzing w/ Canister Sandbox configuration
+# NOTE: This is only for --config=fuzzing
+# AFL handles this differently in afl_wrapper.sh
+build:sandbox_fuzzing --config=fuzzing
+run:sandbox_fuzzing --run_under="ASAN_OPTIONS=detect_leaks=0:allow_user_segv_handler=1:handle_segv=1:handle_sigfpe=1:handle_sigill=0:quarantine_size_mb=16 LSAN_OPTIONS=handle_sigill=0 RUST_MIN_STACK=8192000"
 
 # Suppress all additional output to make it more convenient in scripts
 query --ui_event_filters=-info,-debug --noshow_progress

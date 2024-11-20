@@ -111,14 +111,6 @@
                         <th>Minter address</th>
                         <td>{% call etherscan_address_link(minter_address) %}</td>
                     </tr>
-                    <tr id="eth-helper-contract-address">
-                        <th>ETH helper contract address</th>
-                        <td>{% call etherscan_address_link(eth_helper_contract_address) %}</td>
-                    </tr>
-                    <tr id="erc20-helper-contract-address">
-                        <th>ERC20 helper contract address</th>
-                        <td>{% call etherscan_address_link(erc20_helper_contract_address) %}</td>
-                    </tr>
                     <tr id="cketh-ledger-canister-id">
                         <th>ckETH ledger canister ID</th>
                         <td><code>{{ cketh_ledger_id }}</code></td>
@@ -166,16 +158,6 @@
                         <td>{% call etherscan_block_link(last_observed_block.unwrap()) %}</td>
                     </tr>
                     {%- endif %}
-                    <tr id="last-eth-synced-block-number">
-                        <th>Last ETH synced block number</th>
-                        <td>{% call etherscan_block_link(last_eth_synced_block) %}</td>
-                    </tr>
-                    {% if last_erc20_synced_block.is_some() -%}
-                    <tr id="last-erc20-synced-block-number">
-                        <th>Last ERC20 synced block number</th>
-                        <td>{% call etherscan_block_link(last_erc20_synced_block.unwrap()) %}</td>
-                    </tr>
-                    {%- endif %}
                     {% if !skipped_blocks.is_empty() -%}
                     {% for (contract_address, blocks) in skipped_blocks -%}
                     <tr id="skipped-blocks-{{ contract_address }}">
@@ -193,6 +175,27 @@
                 </tbody>
             </table>
 
+            <h3 id="helper-smart-contracts">Helper Smart Contracts</h3>
+            <table>
+                <thead>
+                <tr>
+                    <th>Deposit</th>
+                    <th>Address</th>
+                    <th>Last synced block number</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for (id, scraping_state) in log_scrapings.iter() -%}
+                {% if scraping_state.contract_address().is_some() %}
+                <tr id="helper-smart-contract-{{ id|lower_alphanumeric }}">
+                    <td>{{ id }}</td>
+                    <td>{% call etherscan_address_link(scraping_state.contract_address().unwrap()) %}</td>
+                    <td><code>{% call etherscan_block_link(scraping_state.last_scraped_block_number()) %}</code></td>
+                </tr>
+                {% endif %}
+                {%- endfor %}
+                </tbody>
+            </table>
 
             {% if !supported_ckerc20_tokens.is_empty() %}
             <h3 id="supported-ckerc20-tokens">Supported ckERC20 tokens</h3>
@@ -271,7 +274,7 @@
                         <td>{% call etherscan_address_link(event.deposit_event.from_address().to_string()) %}</td>
                         <td class="numeric">{{ event.token_symbol }}</td>
                         <td class="numeric">{{ event.deposit_event.value() }}</td>
-                        <td><code>{{ event.deposit_event.principal() }}</code></td>
+                        <td><code>{{ event.deposit_event.beneficiary() }}</code></td>
                         <td class="numeric">{{ event.mint_block_index }}</td>
                     </tr>
                     {% endfor %}

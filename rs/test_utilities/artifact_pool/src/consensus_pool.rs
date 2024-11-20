@@ -1,3 +1,4 @@
+use batch::BatchPayload;
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -244,18 +245,28 @@ impl TestConsensusPool {
         let registry_version = self.registry_client.get_latest_version();
 
         // Increase time monotonically by at least initial_notary_delay
-        let monotonic_block_increment = self
+        let settings = self
             .registry_client
             .get_notarization_delay_settings(self.subnet_id, registry_version)
             .unwrap()
-            .expect("subnet record should be available")
-            .initial_notary_delay
-            + core::time::Duration::from_nanos(1);
+            .expect("subnet record should be available");
+        let monotonic_block_increment = settings.initial_notary_delay
+            + settings.unit_delay * rank.0 as u32
+            + std::time::Duration::from_nanos(1);
         block.context.time += monotonic_block_increment;
 
         block.context.registry_version = registry_version;
+        let idkg = block.payload.as_ref().as_idkg().cloned();
         let dkg_payload = (self.dkg_payload_builder)(self, parent.clone(), &block.context);
-        block.payload = Payload::new(ic_types::crypto::crypto_hash, dkg_payload.into());
+        let payload = match dkg_payload {
+            dkg::Payload::Summary(dkg) => BlockPayload::Summary(SummaryPayload { dkg, idkg }),
+            dkg::Payload::Dealings(dealings) => BlockPayload::Data(DataPayload {
+                batch: BatchPayload::default(),
+                dealings,
+                idkg,
+            }),
+        };
+        block.payload = Payload::new(ic_types::crypto::crypto_hash, payload);
         let signer = self.get_block_maker_by_rank(block.height(), rank);
         BlockProposal::fake(block, signer)
     }
@@ -583,7 +594,7 @@ impl TestConsensusPool {
             let content = RandomBeaconContent::new(height, ic_types::crypto::crypto_hash(&beacon));
             let share = RandomBeaconShare {
                 signature: crypto
-                    .sign_threshold(&content, dkg_id)
+                    .sign_threshold(&content, &dkg_id)
                     .map(|signature| ThresholdSignatureShare {
                         signature,
                         signer: node_id,

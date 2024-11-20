@@ -3,6 +3,7 @@ use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_agent::sns::Sns;
+use ic_nervous_system_agent::CallCanisters;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -33,7 +34,9 @@ use ic_nns_test_utils::{
     },
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_sns_governance::pb::v1::{self as sns_pb, governance::Version};
+use ic_sns_governance::pb::v1::{
+    self as sns_pb, governance::Version, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse,
+};
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_swap::pb::v1::{
     ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest, FinalizeSwapResponse,
@@ -56,7 +59,8 @@ use icrc_ledger_types::icrc1::{
 };
 use maplit::btreemap;
 use pocket_ic::{
-    nonblocking::PocketIc, CanisterSettings, ErrorCode, PocketIcBuilder, UserError, WasmResult,
+    management_canister::CanisterSettings, nonblocking::PocketIc, ErrorCode, PocketIcBuilder,
+    UserError, WasmResult,
 };
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
@@ -1116,85 +1120,75 @@ pub mod nns {
 }
 
 pub mod sns {
-    use ic_sns_root::pb::v1::ListSnsCanistersResponse;
-
     use super::*;
 
-    pub async fn upgrade_sns_to_next_version_and_assert_change(
-        pocket_ic: &PocketIc,
-        sns_root_canister_id: PrincipalId,
-        expected_type_to_change: SnsCanisterType,
-    ) {
-        let response = root::list_sns_canisters(pocket_ic, sns_root_canister_id).await;
-        let ListSnsCanistersResponse {
-            root: Some(sns_root_canister_id_1),
-            governance: Some(sns_governance_canister_id),
-            ledger: Some(sns_ledger_canister_id),
-            swap: Some(swap_canister_id),
-            index: Some(index_canister_id),
-            archives,
-            dapps: _,
-        } = response
-        else {
-            panic!("Cannot find some SNS canister IDs in {:#?}", response);
-        };
+    #[derive(Clone, Debug, PartialEq)]
+    pub enum SnsUpgradeError {
+        CanisterVersionMismatch {
+            canister_type: SnsCanisterType,
+            canister_version_from_sns_pov: Vec<u8>,
+            canister_version_from_ic00_pov: Vec<u8>,
+            is_pre_upgrade: bool,
+        },
+        TargetCanisterVersionUnchanged {
+            pre_upgrade_canister_version: Vec<u8>,
+            post_upgrade_canister_version: Vec<u8>,
+        },
+    }
 
-        // Sanity check
-        assert_eq!(sns_root_canister_id_1, sns_root_canister_id);
+    pub async fn try_upgrade_sns_to_next_version(
+        pocket_ic: &PocketIc,
+        sns: &Sns,
+        expected_type_to_change: SnsCanisterType,
+    ) -> Result<(), SnsUpgradeError> {
+        // Ensure that we are working with knowledge of the latest archive canisters (if there are any).
+        let sns = sns.root.list_sns_canisters(pocket_ic).await.unwrap();
 
         let (canister_id, controller_id) = match expected_type_to_change {
-            SnsCanisterType::Root => (sns_root_canister_id, sns_governance_canister_id),
-            SnsCanisterType::Governance => (sns_governance_canister_id, sns_root_canister_id),
-            SnsCanisterType::Ledger => (sns_ledger_canister_id, sns_root_canister_id),
-            SnsCanisterType::Swap => {
-                // The Swap canister is special in that it is controlled by the NNS, not SNS.
-                (swap_canister_id, ROOT_CANISTER_ID.get())
-            }
+            SnsCanisterType::Root => (sns.root.canister_id, sns.governance.canister_id),
+            SnsCanisterType::Governance => (sns.governance.canister_id, sns.root.canister_id),
+            SnsCanisterType::Ledger => (sns.ledger.canister_id, sns.root.canister_id),
+            SnsCanisterType::Swap => (sns.swap.canister_id, sns.root.canister_id),
             SnsCanisterType::Archive => {
-                let archive_canister_id = archives.last().expect(
+                let archive = sns.archive.last().expect(
                     "Testing Archive canister upgrade requires some Archive canisters \
                         to be created for this SNS.",
                 );
-                (*archive_canister_id, sns_root_canister_id)
+                (archive.canister_id, sns.root.canister_id)
             }
-            SnsCanisterType::Index => (index_canister_id, sns_root_canister_id),
+            SnsCanisterType::Index => (sns.index.canister_id, sns.root.canister_id),
             SnsCanisterType::Unspecified => {
                 panic!("Unspecified canister type to upgrade.");
             }
         };
 
-        let pre_upgrade_running_version =
-            governance::get_running_sns_version(pocket_ic, sns_governance_canister_id)
-                .await
-                .deployed_version
-                .unwrap();
+        let pre_upgrade_version = sns.governance.version(pocket_ic).await;
+        let pre_upgrade_version = pre_upgrade_version.unwrap().deployed_version.unwrap();
 
         // Check that we get the same version from the management canister and from the SNS.
-        let pre_upgrade_running_canister_version = {
-            let running_version_for_canister = extract_sns_canister_version(
-                pre_upgrade_running_version.clone(),
-                expected_type_to_change,
-            );
-            let module_hash = pocket_ic
+        let pre_upgrade_canister_version = {
+            let canister_version_from_sns_pov =
+                extract_sns_canister_version(pre_upgrade_version.clone(), expected_type_to_change);
+            let canister_version_from_ic00_pov = pocket_ic
                 .canister_status(canister_id.into(), Some(controller_id.into()))
                 .await
                 .unwrap()
                 .module_hash
                 .unwrap();
-            assert_eq!(
-                running_version_for_canister,
-                module_hash,
-                "pre_upgrade: running_version_for_canister of type {} ({}) != module_hash ({})",
-                expected_type_to_change.as_str_name(),
-                fmt_bytes(&running_version_for_canister),
-                fmt_bytes(&module_hash),
-            );
-            running_version_for_canister
+            if canister_version_from_sns_pov != canister_version_from_ic00_pov {
+                return Err(SnsUpgradeError::CanisterVersionMismatch {
+                    canister_type: expected_type_to_change,
+                    canister_version_from_sns_pov,
+                    canister_version_from_ic00_pov,
+                    is_pre_upgrade: true,
+                });
+            }
+            canister_version_from_sns_pov
         };
 
         governance::propose_to_upgrade_sns_to_next_version_and_wait(
             pocket_ic,
-            sns_governance_canister_id,
+            sns.governance.canister_id,
         )
         .await;
 
@@ -1203,117 +1197,61 @@ pub mod sns {
             pocket_ic.tick().await;
         }
 
-        let post_upgrade_running_version =
-            governance::get_running_sns_version(pocket_ic, sns_governance_canister_id)
-                .await
-                .deployed_version
-                .unwrap();
-
-        if expected_type_to_change == SnsCanisterType::Swap {
-            let wasm = nns::sns_wasm::get_wasm(
-                pocket_ic,
-                post_upgrade_running_version.swap_wasm_hash.clone(),
-            )
-            .await
-            .wasm;
-            nns::governance::propose_and_wait(
-                pocket_ic,
-                MakeProposalRequest {
-                    title: Some("Upgrade Swap from NNS Governance".to_string()),
-                    summary: "".to_string(),
-                    url: "".to_string(),
-                    action: Some(ProposalActionRequest::InstallCode(InstallCodeRequest {
-                        canister_id: Some(swap_canister_id),
-                        install_mode: Some(CanisterInstallMode::Upgrade as i32),
-                        wasm_module: Some(wasm),
-                        arg: Some(vec![]),
-                        skip_stopping_before_installing: None,
-                    })),
-                },
-            )
-            .await
-            .expect("Proposal did not execute successfully");
-
-            for _ in 0..10 {
-                pocket_ic.tick().await;
-                pocket_ic.advance_time(Duration::from_secs(10)).await;
-            }
-        }
+        let post_upgrade_version = sns.governance.version(pocket_ic).await;
+        let post_upgrade_version = post_upgrade_version.unwrap().deployed_version.unwrap();
 
         // Check that we get the same version from the management canister and from the SNS.
-        let post_upgrade_running_version_for_canister = {
-            let running_version_for_canister =
-                extract_sns_canister_version(post_upgrade_running_version, expected_type_to_change);
-            let module_hash = pocket_ic
+        let post_upgrade_canister_version = {
+            let canister_version_from_sns_pov =
+                extract_sns_canister_version(post_upgrade_version, expected_type_to_change);
+            let canister_version_from_ic00_pov = pocket_ic
                 .canister_status(canister_id.into(), Some(controller_id.into()))
                 .await
                 .unwrap()
                 .module_hash
                 .unwrap();
-            assert_eq!(
-                running_version_for_canister,
-                module_hash,
-                "post_upgrade: running_version_for_canister of type {} ({}) != module_hash ({})",
-                expected_type_to_change.as_str_name(),
-                fmt_bytes(&running_version_for_canister),
-                fmt_bytes(&module_hash),
-            );
-            running_version_for_canister
+            if canister_version_from_sns_pov != canister_version_from_ic00_pov {
+                println!(
+                    "pre_upgrade_canister_version = {:?}",
+                    pre_upgrade_canister_version
+                );
+                return Err(SnsUpgradeError::CanisterVersionMismatch {
+                    canister_type: expected_type_to_change,
+                    canister_version_from_sns_pov,
+                    canister_version_from_ic00_pov,
+                    is_pre_upgrade: false,
+                });
+            }
+            canister_version_from_sns_pov
         };
 
-        assert_ne!(
-            pre_upgrade_running_canister_version,
-            post_upgrade_running_version_for_canister,
-            "pre_upgrade_running_canister_version == post_upgrade_running_version_for_canister == {}",
-            fmt_bytes(&pre_upgrade_running_canister_version),
-        );
+        if pre_upgrade_canister_version == post_upgrade_canister_version {
+            return Err(SnsUpgradeError::TargetCanisterVersionUnchanged {
+                pre_upgrade_canister_version,
+                post_upgrade_canister_version,
+            });
+        }
+
+        Ok(())
+    }
+
+    pub async fn upgrade_sns_to_next_version_and_assert_change(
+        pocket_ic: &PocketIc,
+        sns: &Sns,
+        expected_type_to_change: SnsCanisterType,
+    ) {
+        try_upgrade_sns_to_next_version(pocket_ic, sns, expected_type_to_change)
+            .await
+            .unwrap_or_else(|err| {
+                panic!("Upgrading {:?} failed: {:#?}", expected_type_to_change, err)
+            });
     }
 
     pub mod governance {
         use super::*;
         use ic_crypto_sha2::Sha256;
-        use ic_sns_governance::pb::v1::{get_neuron_response, GetRunningSnsVersionResponse};
+        use ic_sns_governance::pb::v1::get_neuron_response;
         use pocket_ic::ErrorCode;
-
-        pub async fn get_mode(
-            pocket_ic: &PocketIc,
-            canister_id: PrincipalId,
-        ) -> sns_pb::GetModeResponse {
-            let result = pocket_ic
-                .query_call(
-                    canister_id.into(),
-                    Principal::anonymous(),
-                    "get_mode",
-                    Encode!(&sns_pb::GetMode {}).unwrap(),
-                )
-                .await
-                .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_mode failed: {:#?}", s),
-            };
-            Decode!(&result, sns_pb::GetModeResponse).unwrap()
-        }
-
-        pub async fn get_running_sns_version(
-            pocket_ic: &PocketIc,
-            sns_governance_canister_id: PrincipalId,
-        ) -> GetRunningSnsVersionResponse {
-            let result = pocket_ic
-                .query_call(
-                    sns_governance_canister_id.into(),
-                    Principal::anonymous(),
-                    "get_running_sns_version",
-                    Encode!(&sns_pb::GetRunningSnsVersionRequest {}).unwrap(),
-                )
-                .await
-                .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_running_sns_version failed: {:#?}", s),
-            };
-            Decode!(&result, GetRunningSnsVersionResponse).unwrap()
-        }
 
         /// Manage an SNS neuron, e.g., to make an SNS Governance proposal.
         async fn manage_neuron(
@@ -1650,6 +1588,20 @@ pub mod sns {
                 }
             };
             Decode!(&result, sns_pb::GetUpgradeJournalResponse).unwrap()
+        }
+
+        pub async fn advance_target_version(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+            target_version: Version,
+        ) -> AdvanceTargetVersionResponse {
+            let payload = AdvanceTargetVersionRequest {
+                target_version: Some(target_version),
+            };
+            pocket_ic
+                .call(sns_governance_canister_id, payload)
+                .await
+                .unwrap()
         }
     }
 
@@ -2101,30 +2053,7 @@ pub mod sns {
 
     pub mod root {
         use super::*;
-        use ic_sns_root::{
-            pb::v1::ListSnsCanistersRequest, GetSnsCanistersSummaryRequest,
-            GetSnsCanistersSummaryResponse,
-        };
-
-        pub async fn list_sns_canisters(
-            pocket_ic: &PocketIc,
-            sns_root_canister_id: PrincipalId,
-        ) -> ListSnsCanistersResponse {
-            let result = pocket_ic
-                .query_call(
-                    sns_root_canister_id.into(),
-                    Principal::anonymous(),
-                    "list_sns_canisters",
-                    Encode!(&ListSnsCanistersRequest {}).unwrap(),
-                )
-                .await
-                .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to list_sns_canisters failed: {:#?}", s),
-            };
-            Decode!(&result, ListSnsCanistersResponse).unwrap()
-        }
+        use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 
         pub async fn get_sns_canisters_summary(
             pocket_ic: &PocketIc,

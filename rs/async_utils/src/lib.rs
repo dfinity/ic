@@ -1,6 +1,5 @@
 use slog::{info, Logger};
 
-pub mod axum;
 mod hyper;
 mod join_map;
 mod unix;

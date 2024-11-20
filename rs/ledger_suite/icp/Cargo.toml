@@ -23,7 +23,6 @@ ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lazy_static = { workspace = true }
-num-traits = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
 serde = { workspace = true }
@@ -38,7 +37,7 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-icp-index = { path = "index" }
-ic-icrc1-ledger-sm-tests = { path = "../tests/sm-tests" }
+ic-ledger-suite-state-machine-tests = { path = "../tests/sm-tests" }
 ic-ledger-test-utils = { path = "test_utils" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-test-utils-golden-nns-state = { path = "../../nns/test_utils/golden_nns_state" }

@@ -3,6 +3,7 @@ use ciborium::tag::Required;
 use ethnum::u256;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
 use ic_stable_structures::storable::{Bound, Storable};
+use minicbor::{Decode, Encode};
 use num_traits::Bounded;
 use serde::{
     de::{self, Deserializer},
@@ -11,6 +12,8 @@ use serde::{
 };
 use std::borrow::Cow;
 use std::fmt;
+
+pub mod encode_decode;
 
 /// The tag number for big positive integers.
 // See https://www.rfc-editor.org/rfc/rfc8949.html#name-bignums
@@ -25,8 +28,8 @@ type TaggedRepr = Required<U256Repr, BIGNUM_CBOR_TAG>;
 struct U256Repr(#[serde(with = "ethnum::serde::compressed_bytes::be")] u256);
 
 /// 256-bit token amounts.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
-pub struct U256(u256);
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Decode, Encode)]
+pub struct U256(#[cbor(n(0), with = "encode_decode")] u256);
 
 impl U256 {
     pub const ZERO: Self = Self(u256::ZERO);

@@ -214,7 +214,7 @@ impl IngressSelector for IngressManager {
                     // The quota is not a hard limit. We always include the first message
                     // of each canister. This is why we check the third break criterion
                     // after this line.
-                    messages_in_payload.push(ingress.clone());
+                    messages_in_payload.push(ingress);
                     queue.msgs.pop();
                 }
 
@@ -240,15 +240,13 @@ impl IngressSelector for IngressManager {
                 };
             }
         }
-        // Relevant ingress was cloned, and no references are held, so we drop the lock.
-        drop(ingress_pool);
 
         // NOTE: Since the `Vec<SignedIngress>` is deserialized and slightly smaller than the
         // serialized `IngressPayload`, we need to check the size of the latter.
         // In the improbable case, that the deserialized form fits the size limit but the
         // serialized form does not, we need to remove some `SignedIngress` and try again.
         let payload = loop {
-            let payload = IngressPayload::from(messages_in_payload.clone());
+            let payload = IngressPayload::from_iter(messages_in_payload.iter().copied());
             let payload_size = payload.count_bytes();
             if payload_size < byte_limit.get() as usize {
                 break payload;
@@ -413,16 +411,6 @@ impl IngressSelector for IngressManager {
     fn request_purge_finalized_messages(&self, message_ids: Vec<IngressMessageId>) {
         self.messages_to_purge.write().unwrap().push(message_ids)
     }
-
-    fn has_message(&self, message_id: &IngressMessageId) -> bool {
-        self.ingress_pool
-            .as_ref()
-            .read()
-            .unwrap()
-            .validated()
-            .get(message_id)
-            .is_some()
-    }
 }
 
 impl IngressManager {
@@ -549,7 +537,7 @@ impl IngressManager {
         ) {
             let message_id = MessageId::from(&ingress_id);
             return Err(ValidationError::InvalidArtifact(match err {
-                RequestValidationError::InvalidIngressExpiry(msg)
+                RequestValidationError::InvalidRequestExpiry(msg)
                 | RequestValidationError::InvalidDelegationExpiry(msg) => {
                     InvalidIngressPayloadReason::IngressExpired(message_id, msg)
                 }

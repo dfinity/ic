@@ -415,6 +415,8 @@ mod tests {
 
     use super::{Reply, Request, TerminateRequest};
 
+    const IS_WASM64_EXECUTION: bool = false;
+
     fn wasm_module() -> (CompilationResult, SerializedModule) {
         let wat = r#"
             (module
@@ -570,6 +572,7 @@ mod tests {
                     canister_memory_limit: NumBytes::new(123),
                     wasm_memory_limit: Some(NumBytes::new(123)),
                     memory_allocation: MemoryAllocation::Reserved(NumBytes::new(123)),
+                    canister_guaranteed_callback_quota: 123,
                     compute_allocation: ComputeAllocation::zero(),
                     subnet_type: SubnetType::Application,
                     execution_mode: ExecutionMode::Replicated,
@@ -589,9 +592,11 @@ mod tests {
                     &NetworkTopology::default(),
                     NumInstructions::new(42),
                     ComputeAllocation::zero(),
+                    123,
                     RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(10)),
                     Some(canister_test_id(1).get()),
                     Some(CallContextId::new(123)),
+                    IS_WASM64_EXECUTION,
                 ),
                 wasm_reserved_pages: NumWasmPages::new(1),
             },

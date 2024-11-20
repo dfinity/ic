@@ -80,10 +80,13 @@ const STATUS_SUCCESS: &str = "success";
 const PHASE_LOAD_STATE: &str = "load_state";
 const PHASE_COMMIT: &str = "commit";
 
+const METRIC_RECEIVE_BATCH_LATENCY: &str = "mr_receive_batch_latency_seconds";
 const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_duration_seconds";
 const METRIC_TIMED_OUT_MESSAGES_TOTAL: &str = "mr_timed_out_messages_total";
 const METRIC_TIMED_OUT_CALLBACKS_TOTAL: &str = "mr_timed_out_callbacks_total";
+const METRIC_SHED_MESSAGES_TOTAL: &str = "mr_shed_messages_total";
+const METRIC_SHED_MESSAGE_BYTES_TOTAL: &str = "mr_shed_message_bytes_total";
 const METRIC_SUBNET_SPLIT_HEIGHT: &str = "mr_subnet_split_height";
 const BLOCKS_PROPOSED_TOTAL: &str = "mr_blocks_proposed_total";
 const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
@@ -266,6 +269,8 @@ pub(crate) struct MessageRoutingMetrics {
     expected_batch_height: IntGauge,
     /// Registry version referenced in the most recently executed batch.
     registry_version: IntGauge,
+    /// How long Message Routing had to wait to receive the next batch.
+    receive_batch_latency: Histogram,
     /// Batch processing durations.
     process_batch_duration: Histogram,
     /// Most recently seen certified height, per remote subnet
@@ -276,6 +281,10 @@ pub(crate) struct MessageRoutingMetrics {
     pub(crate) timed_out_messages_total: IntCounter,
     /// Number of timed out callbacks.
     pub(crate) timed_out_callbacks_total: IntCounter,
+    /// Number of shed best-effort messages.
+    pub(crate) shed_messages_total: IntCounter,
+    /// Byte size of shed best-effort messages.
+    pub(crate) shed_message_bytes_total: IntCounter,
     /// Height at which the subnet last split (if during the lifetime of this
     /// replica process; otherwise zero).
     pub(crate) subnet_split_height: IntGaugeVec,
@@ -354,6 +363,12 @@ impl MessageRoutingMetrics {
                 METRIC_REGISTRY_VERSION,
                 "Registry version referenced in the most recently executed batch.",
             ),
+            receive_batch_latency: metrics_registry.histogram(
+                METRIC_RECEIVE_BATCH_LATENCY,
+                "How long Message Routing had to wait to receive the next batch.",
+                // 0.1ms - 5s
+                decimal_buckets(-4, 0),
+            ),
             process_batch_phase_duration: metrics_registry.histogram_vec(
                 METRIC_PROCESS_BATCH_PHASE_DURATION,
                 "Batch processing phase durations, by phase.",
@@ -373,6 +388,14 @@ impl MessageRoutingMetrics {
             timed_out_callbacks_total: metrics_registry.int_counter(
                 METRIC_TIMED_OUT_CALLBACKS_TOTAL,
                 "Count of expired best-effort callbacks.",
+            ),
+            shed_messages_total: metrics_registry.int_counter(
+                METRIC_SHED_MESSAGES_TOTAL,
+                "Count of shed messages.",
+            ),
+            shed_message_bytes_total: metrics_registry.int_counter(
+                METRIC_SHED_MESSAGE_BYTES_TOTAL,
+                "Total byte size of shed messages.",
             ),
             subnet_split_height: metrics_registry.int_gauge_vec(
                 METRIC_SUBNET_SPLIT_HEIGHT,
@@ -592,6 +615,7 @@ impl BatchProcessorImpl {
             scheduler,
             demux,
             stream_builder,
+            hypervisor_config.clone(),
             log.clone(),
             metrics.clone(),
         ));
@@ -1327,12 +1351,18 @@ impl MessageRoutingImpl {
     ) -> Self {
         let (batch_sender, batch_receiver) = sync_channel(BATCH_QUEUE_BUFFER_SIZE);
 
+        let receive_batch_latency = metrics.receive_batch_latency.clone();
         let _batch_processor_handle = JoinOnDrop::new(
             std::thread::Builder::new()
                 .name("MR Batch Processor".to_string())
                 .spawn(move || {
+                    let mut since = Instant::now();
                     while let Ok(batch) = batch_receiver.recv() {
+                        receive_batch_latency.observe(since.elapsed().as_secs_f64());
+
                         batch_processor.process_batch(batch);
+
+                        since = Instant::now();
                     }
                 })
                 .expect("Can spawn a batch processing thread in MR"),

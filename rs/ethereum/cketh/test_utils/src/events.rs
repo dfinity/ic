@@ -51,7 +51,8 @@ impl<T> MinterEventAssert<T> {
         };
         assert_eq!(
             audit_event_indexes, sorted_audit_event_indexes,
-            "Events were found in unexpected order"
+            "Events were found in unexpected order. All events: {:?}",
+            self.events
         );
         self.setup
     }

@@ -66,6 +66,10 @@ fn unknown_token() -> String {
     "???".to_string()
 }
 
+fn default_ledger_version() -> u64 {
+    LEDGER_VERSION
+}
+
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
 const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
@@ -107,6 +111,17 @@ impl Default for LedgerState {
         Self::Ready
     }
 }
+
+/// The ledger versions represent backwards incompatible versions of the ledger.
+/// Downgrading to a lower ledger version is never suppported.
+/// Upgrading from version N to version N+1 should always be possible.
+/// We have the following ledger versions:
+///   * 0 - the whole ledger state is stored on the heap.
+#[cfg(not(feature = "next-ledger-version"))]
+pub const LEDGER_VERSION: u64 = 0;
+
+#[cfg(feature = "next-ledger-version")]
+pub const LEDGER_VERSION: u64 = 1;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Ledger {
@@ -158,6 +173,9 @@ pub struct Ledger {
 
     #[serde(default)]
     pub state: LedgerState,
+    
+    #[serde(default = "default_ledger_version")]
+    pub ledger_version: u64,
 }
 
 impl LedgerContext for Ledger {
@@ -278,6 +296,7 @@ impl Default for Ledger {
             token_name: unknown_token(),
             feature_flags: FeatureFlags::default(),
             state: LedgerState::Ready,
+            ledger_version: LEDGER_VERSION,
         }
     }
 }

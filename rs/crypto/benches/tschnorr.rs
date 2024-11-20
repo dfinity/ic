@@ -9,8 +9,8 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::{ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner};
-use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::Randomness;
 use rand::{CryptoRng, Rng, RngCore};
 use strum::IntoEnumIterator;
@@ -64,6 +64,7 @@ fn bench_create_sig_share<M: Measurement, R: RngCore + CryptoRng>(
                     &key_transcript,
                     &message,
                     seed,
+                    None,
                     &derivation_path,
                     test_case.alg,
                     rng,
@@ -103,6 +104,7 @@ fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
                     &key_transcript,
                     &message,
                     seed,
+                    None,
                     &derivation_path,
                     test_case.alg,
                     rng,
@@ -153,6 +155,7 @@ fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
                     &key_transcript,
                     &message,
                     seed,
+                    None,
                     &derivation_path,
                     test_case.alg,
                     rng,
@@ -194,6 +197,7 @@ fn bench_verify_combined_sig<M: Measurement, R: RngCore + CryptoRng>(
                     &key_transcript,
                     &message,
                     seed,
+                    None,
                     &derivation_path,
                     test_case.alg,
                     rng,
