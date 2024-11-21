@@ -188,7 +188,7 @@ impl std::fmt::Display for CachedUpgradeSteps {
             // Index 0 corresponds to `current_version`.
             let index = index.saturating_add(1);
 
-            writeln!(f, "{}", render_markdown_row(index, &version, &changes))?;
+            writeln!(f, "{}", render_markdown_row(index, version, &changes))?;
 
             previous_version = version;
         }
