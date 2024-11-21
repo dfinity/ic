@@ -41,7 +41,7 @@ use ic_interfaces::crypto::{BasicSigner, KeyManager};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
-use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
+use ic_registry_local_store::{LocalStore, LocalStoreImpl, LocalStoreReader};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId};
 use nix::unistd::{getpgid, setpgid, Pid};
@@ -348,6 +348,8 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             let RegistrySetupResult(registry_replicator, nns_pub_key, registry_runners) =
                 setup_registry(
                     &cli,
+                    local_store.clone(),
+                    registry_client.clone(),
                     registry_snapshot.clone(),
                     WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry)),
                     http_client_check,
@@ -525,25 +527,13 @@ struct RegistrySetupResult(
 // Sets up registry-related stuff
 fn setup_registry(
     cli: &Cli,
+    local_store: Arc<dyn LocalStore>,
+    registry_client: Arc<dyn RegistryClient>,
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     persister: WithMetricsPersist<Persister>,
     http_client_check: Arc<dyn http::Client>,
     metrics_registry: &Registry,
 ) -> Result<RegistrySetupResult, Error> {
-    // Registry Client
-    let local_store = Arc::new(LocalStoreImpl::new(
-        cli.registry.registry_local_store_path.clone().unwrap(),
-    ));
-
-    let registry_client = Arc::new(RegistryClientImpl::new(
-        local_store.clone(), // data_provider
-        None,                // metrics_registry
-    ));
-
-    registry_client
-        .fetch_and_start_polling()
-        .context("failed to start registry client")?;
-
     // Snapshots
     let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
     let snapshot_runner = WithMetricsSnapshot(
