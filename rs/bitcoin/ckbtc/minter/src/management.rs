@@ -317,7 +317,7 @@ pub async fn check_withdrawal_destination_address(
     Ok(res)
 }
 
-/// Check if the given utxo passes KYT.
+/// Check if the given UTXO passes KYT.
 pub async fn check_transaction(
     kyt_principal: Principal,
     utxo: &Utxo,
