@@ -6031,3 +6031,6 @@ mod assorted_governance_tests;
 
 #[cfg(test)]
 mod fail_stuck_upgrade_in_progress_tests;
+
+#[cfg(test)]
+mod advance_target_sns_version_tests;

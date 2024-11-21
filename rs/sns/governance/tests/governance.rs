@@ -10,6 +10,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nervous_system_proto::pb::v1::{Percentage, Principals};
+use ic_sns_governance::pb::v1::governance::CachedUpgradeSteps;
 use ic_sns_governance::{
     governance::{
         MATURITY_DISBURSEMENT_DELAY_SECONDS, UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
@@ -3070,6 +3071,7 @@ async fn test_refresh_cached_upgrade_steps_doesnt_panic_on_invalid_response() {
     assert_eq!(canister_fixture.governance.proto.cached_upgrade_steps, None);
 
     // Refresh should not panic on empty response
+    let now = canister_fixture.governance.env.now();
     canister_fixture
         .governance
         .temporarily_lock_refresh_cached_upgrade_steps();
@@ -3077,6 +3079,17 @@ async fn test_refresh_cached_upgrade_steps_doesnt_panic_on_invalid_response() {
         .governance
         .refresh_cached_upgrade_steps()
         .await;
+    let expected_upgrade_steps = Some(CachedUpgradeSteps {
+        upgrade_steps: Some(Versions {
+            versions: Vec::new(),
+        }),
+        requested_timestamp_seconds: Some(now),
+        response_timestamp_seconds: Some(now),
+    });
+    assert_eq!(
+        canister_fixture.governance.proto.cached_upgrade_steps,
+        expected_upgrade_steps
+    );
 }
 
 #[tokio::test]
@@ -3091,8 +3104,15 @@ async fn test_refresh_cached_upgrade_steps_handles_sns_w_error() {
         .environment_fixture
         .push_mocked_canister_panic("SNS-W error response");
 
-    // Initial state should be None
-    assert_eq!(canister_fixture.governance.proto.cached_upgrade_steps, None);
+    let now = canister_fixture.governance.env.now();
+    let expected_upgrade_steps = Some(CachedUpgradeSteps {
+        upgrade_steps: Some(Versions {
+            versions: Vec::new(),
+        }),
+        requested_timestamp_seconds: Some(now),
+        response_timestamp_seconds: Some(now),
+    });
+    canister_fixture.governance.proto.cached_upgrade_steps = expected_upgrade_steps.clone();
 
     // Refresh should not panic on error response
     canister_fixture
@@ -3101,7 +3121,10 @@ async fn test_refresh_cached_upgrade_steps_handles_sns_w_error() {
         .await;
 
     // State should remain None after error
-    assert_eq!(canister_fixture.governance.proto.cached_upgrade_steps, None);
+    assert_eq!(
+        canister_fixture.governance.proto.cached_upgrade_steps,
+        expected_upgrade_steps
+    );
 }
 
 #[tokio::test]
