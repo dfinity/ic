@@ -448,12 +448,18 @@ impl GovernanceProto {
         Ok(cached_upgrade_steps)
     }
 
+    pub fn deployed_version_or_err(&self) -> Result<Version, String> {
+        if let Some(deployed_version) = &self.deployed_version {
+            Ok(deployed_version.clone())
+        } else {
+            Err("GovernanceProto.deployed_version is not set.".to_string())
+        }
+    }
+
     /// Gets the current deployed version of the SNS or panics.
     pub fn deployed_version_or_panic(&self) -> Version {
-        self.deployed_version
-            .as_ref()
-            .cloned()
-            .expect("No version set in Governance.")
+        self.deployed_version_or_err()
+            .expect("GovernanceProto.deployed_version must be set.")
     }
 
     /// Returns 0 if maturity modulation is disabled (per
