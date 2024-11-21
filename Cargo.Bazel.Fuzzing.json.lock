@@ -1,5 +1,5 @@
 {
-  "checksum": "850e5384eba93e6b805267782561c56b665c2f0bfb6c29875c97539b7a94a35e",
+  "checksum": "eefb27c751d3bf2734e9a74e2a61b07e5507dbe0f114772a131188c432b83c62",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1681,6 +1681,60 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "aligned-vec 0.6.1": {
+      "name": "aligned-vec",
+      "version": "0.6.1",
+      "package_url": "https://github.com/sarah-ek/aligned-vec/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/aligned-vec/0.6.1/download",
+          "sha256": "7e0966165eaf052580bd70eb1b32cb3d6245774c0104d1b2793e9650bf83b52a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "aligned_vec",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "aligned_vec",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "equator 0.2.2",
+              "target": "equator"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
     },
     "alloc-no-stdlib 2.0.4": {
       "name": "alloc-no-stdlib",
@@ -17468,6 +17522,73 @@
       ],
       "license_file": "LICENSE"
     },
+    "dashmap 6.1.0": {
+      "name": "dashmap",
+      "version": "6.1.0",
+      "package_url": "https://github.com/xacrimon/dashmap",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/dashmap/6.1.0/download",
+          "sha256": "5041cc499144891f3790297212f32a74fb938e5136a14943f338ef9e0ae276cf"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "dashmap",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "dashmap",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "crossbeam-utils 0.8.19",
+              "target": "crossbeam_utils"
+            },
+            {
+              "id": "hashbrown 0.14.5",
+              "target": "hashbrown"
+            },
+            {
+              "id": "lock_api 0.4.10",
+              "target": "lock_api"
+            },
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "parking_lot_core 0.9.8",
+              "target": "parking_lot_core"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "6.1.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "data-encoding 2.4.0": {
       "name": "data-encoding",
       "version": "2.4.0",
@@ -18802,7 +18923,7 @@
               "target": "indicatif"
             },
             {
-              "id": "inferno 0.11.19",
+              "id": "inferno 0.12.0",
               "target": "inferno"
             },
             {
@@ -19023,7 +19144,7 @@
               "target": "pkg_config"
             },
             {
-              "id": "pprof 0.13.0",
+              "id": "pprof 0.14.0",
               "target": "pprof"
             },
             {
@@ -19424,7 +19545,7 @@
               "target": "tower"
             },
             {
-              "id": "tower-http 0.6.1",
+              "id": "tower-http 0.6.2",
               "target": "tower_http"
             },
             {
@@ -21232,6 +21353,54 @@
       ],
       "license_file": "LICENSE"
     },
+    "env_filter 0.1.2": {
+      "name": "env_filter",
+      "version": "0.1.2",
+      "package_url": "https://github.com/rust-cli/env_logger",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/env_filter/0.1.2/download",
+          "sha256": "4f2c92ceda6ceec50f43169f9ee8424fe2db276791afde7b2cd8bc084cb376ab"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "env_filter",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "env_filter",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.2"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "env_logger 0.8.4": {
       "name": "env_logger",
       "version": "0.8.4",
@@ -21290,14 +21459,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "env_logger 0.10.1": {
+    "env_logger 0.11.2": {
       "name": "env_logger",
-      "version": "0.10.1",
+      "version": "0.11.2",
       "package_url": "https://github.com/rust-cli/env_logger",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/env_logger/0.10.1/download",
-          "sha256": "95b3f3e67048839cb0d0781f445682a35113da7121f7c949db0e2be96a4fbece"
+          "url": "https://static.crates.io/crates/env_logger/0.11.2/download",
+          "sha256": "6c012a26a7f605efc424dd53697843a72be7dc86ad2d01f7814337794a12231d"
         }
       },
       "targets": [
@@ -21322,6 +21491,10 @@
         "deps": {
           "common": [
             {
+              "id": "env_filter 0.1.2",
+              "target": "env_filter"
+            },
+            {
               "id": "log 0.4.20",
               "target": "log"
             }
@@ -21329,7 +21502,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.10.1"
+        "version": "0.11.2"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -21337,6 +21510,108 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "equator 0.2.2": {
+      "name": "equator",
+      "version": "0.2.2",
+      "package_url": "https://github.com/sarah-ek/equator/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/equator/0.2.2/download",
+          "sha256": "c35da53b5a021d2484a7cc49b2ac7f2d840f8236a286f84202369bd338d761ea"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "equator",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "equator",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "equator-macro 0.2.1",
+              "target": "equator_macro"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.2.2"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "equator-macro 0.2.1": {
+      "name": "equator-macro",
+      "version": "0.2.1",
+      "package_url": "https://github.com/sarah-ek/equator/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/equator-macro/0.2.1/download",
+          "sha256": "3bf679796c0322556351f287a51b49e48f7c4986e727b5dd78c972d30e2e16cc"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "equator_macro",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "equator_macro",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.87",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": null
     },
     "equivalent 1.0.1": {
       "name": "equivalent",
@@ -35045,15 +35320,7 @@
         ],
         "crate_features": {
           "common": [
-            "clap",
-            "cli",
-            "crossbeam-channel",
-            "crossbeam-utils",
-            "dashmap",
-            "default",
-            "env_logger",
             "indexmap",
-            "multithreaded",
             "nameattr"
           ],
           "selects": {}
@@ -35063,26 +35330,6 @@
             {
               "id": "ahash 0.8.11",
               "target": "ahash"
-            },
-            {
-              "id": "clap 4.5.20",
-              "target": "clap"
-            },
-            {
-              "id": "crossbeam-channel 0.5.13",
-              "target": "crossbeam_channel"
-            },
-            {
-              "id": "crossbeam-utils 0.8.19",
-              "target": "crossbeam_utils"
-            },
-            {
-              "id": "dashmap 5.5.3",
-              "target": "dashmap"
-            },
-            {
-              "id": "env_logger 0.10.1",
-              "target": "env_logger"
             },
             {
               "id": "indexmap 2.2.6",
@@ -35125,6 +35372,120 @@
         },
         "edition": "2021",
         "version": "0.11.19"
+      },
+      "license": "CDDL-1.0",
+      "license_ids": [
+        "CDDL-1.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "inferno 0.12.0": {
+      "name": "inferno",
+      "version": "0.12.0",
+      "package_url": "https://github.com/jonhoo/inferno.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/inferno/0.12.0/download",
+          "sha256": "75a5d75fee4d36809e6b021e4b96b686e763d365ffdb03af2bd00786353f84fe"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "inferno",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "inferno",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "clap",
+            "cli",
+            "crossbeam-channel",
+            "crossbeam-utils",
+            "dashmap",
+            "default",
+            "env_logger",
+            "indexmap",
+            "multithreaded",
+            "nameattr"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "ahash 0.8.11",
+              "target": "ahash"
+            },
+            {
+              "id": "clap 4.5.20",
+              "target": "clap"
+            },
+            {
+              "id": "crossbeam-channel 0.5.13",
+              "target": "crossbeam_channel"
+            },
+            {
+              "id": "crossbeam-utils 0.8.19",
+              "target": "crossbeam_utils"
+            },
+            {
+              "id": "dashmap 6.1.0",
+              "target": "dashmap"
+            },
+            {
+              "id": "env_logger 0.11.2",
+              "target": "env_logger"
+            },
+            {
+              "id": "indexmap 2.2.6",
+              "target": "indexmap"
+            },
+            {
+              "id": "itoa 1.0.9",
+              "target": "itoa"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "num-format 0.4.4",
+              "target": "num_format"
+            },
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "quick-xml 0.37.1",
+              "target": "quick_xml"
+            },
+            {
+              "id": "rgb 0.8.37",
+              "target": "rgb"
+            },
+            {
+              "id": "str_stack 0.1.0",
+              "target": "str_stack"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.12.0"
       },
       "license": "CDDL-1.0",
       "license_ids": [
@@ -49510,14 +49871,14 @@
       ],
       "license_file": "LICENSE-Apache"
     },
-    "pprof 0.13.0": {
+    "pprof 0.14.0": {
       "name": "pprof",
-      "version": "0.13.0",
+      "version": "0.14.0",
       "package_url": "https://github.com/tikv/pprof-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/pprof/0.13.0/download",
-          "sha256": "ef5c97c51bd34c7e742402e216abdeb44d415fbe6ae41d56b114723e953711cb"
+          "url": "https://static.crates.io/crates/pprof/0.14.0/download",
+          "sha256": "ebbe2f8898beba44815fdc9e5a4ae9c929e21c5dc29b0c774a15555f7f58d6d0"
         }
       },
       "targets": [
@@ -49568,6 +49929,10 @@
         "deps": {
           "common": [
             {
+              "id": "aligned-vec 0.6.1",
+              "target": "aligned_vec"
+            },
+            {
               "id": "backtrace 0.3.69",
               "target": "backtrace"
             },
@@ -49608,7 +49973,7 @@
               "target": "parking_lot"
             },
             {
-              "id": "pprof 0.13.0",
+              "id": "pprof 0.14.0",
               "target": "build_script_build"
             },
             {
@@ -49644,7 +50009,7 @@
           ],
           "selects": {}
         },
-        "version": "0.13.0"
+        "version": "0.14.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -52742,6 +53107,53 @@
         },
         "edition": "2018",
         "version": "0.26.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE-MIT.md"
+    },
+    "quick-xml 0.37.1": {
+      "name": "quick-xml",
+      "version": "0.37.1",
+      "package_url": "https://github.com/tafia/quick-xml",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/quick-xml/0.37.1/download",
+          "sha256": "f22f29bdff3987b4d8632ef95fd6424ec7e4e0a57e2f4fc63e489e75357f6a03"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "quick_xml",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "quick_xml",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "memchr 2.6.4",
+              "target": "memchr"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.37.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -74457,14 +74869,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tower-http 0.6.1": {
+    "tower-http 0.6.2": {
       "name": "tower-http",
-      "version": "0.6.1",
+      "version": "0.6.2",
       "package_url": "https://github.com/tower-rs/tower-http",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tower-http/0.6.1/download",
-          "sha256": "8437150ab6bbc8c5f0f519e3d5ed4aa883a83dd4cdd3d1b21f9482936046cb97"
+          "url": "https://static.crates.io/crates/tower-http/0.6.2/download",
+          "sha256": "403fa3b783d4b626a8ad51d766ab03cb6d2dbfc46b1c5d4448395e6628dc9697"
         }
       },
       "targets": [
@@ -74575,7 +74987,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.6.1"
+        "version": "0.6.2"
       },
       "license": "MIT",
       "license_ids": [
@@ -86677,7 +87089,7 @@
     "indexmap 2.2.6",
     "indicatif 0.17.7",
     "indoc 1.0.9",
-    "inferno 0.11.19",
+    "inferno 0.12.0",
     "insta 1.34.0",
     "instant-acme 0.7.2",
     "intmap 1.1.0",
@@ -86734,7 +87146,7 @@
     "ping 0.5.0",
     "pkcs8 0.10.2",
     "pkg-config 0.3.27",
-    "pprof 0.13.0",
+    "pprof 0.14.0",
     "predicates 3.1.2",
     "pretty-bytes 0.2.2",
     "pretty_assertions 1.4.0",
@@ -86839,7 +87251,7 @@
     "tonic 0.12.3",
     "tonic-build 0.12.3",
     "tower 0.5.1",
-    "tower-http 0.6.1",
+    "tower-http 0.6.2",
     "tower-request-id 0.3.0",
     "tower-test 0.4.0",
     "tower_governor 0.4.2",
