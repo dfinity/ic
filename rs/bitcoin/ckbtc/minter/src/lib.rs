@@ -4,7 +4,7 @@ use crate::management::CallError;
 use crate::memo::Status;
 use crate::queries::WithdrawalFee;
 use crate::state::{ReimbursementReason, UtxoCheckStatus};
-use crate::updates::update_balance::UpdateBalanceError;
+use crate::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError};
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
 use ic_btc_interface::{
@@ -1277,9 +1277,9 @@ pub trait CanisterRuntime {
 
     async fn kyt_check_utxo(
         &self,
-        caller: Principal,
         utxo: &Utxo,
-    ) -> Result<(String, UtxoCheckStatus, Principal), UpdateBalanceError>;
+        args: &UpdateBalanceArgs,
+    ) -> Result<UtxoCheckStatus, UpdateBalanceError>;
 
     async fn mint_ckbtc(
         &self,
@@ -1320,10 +1320,10 @@ impl CanisterRuntime for IcCanisterRuntime {
 
     async fn kyt_check_utxo(
         &self,
-        caller: Principal,
         utxo: &Utxo,
-    ) -> Result<(String, UtxoCheckStatus, Principal), UpdateBalanceError> {
-        updates::update_balance::kyt_check_utxo(caller, utxo).await
+        args: &UpdateBalanceArgs,
+    ) -> Result<UtxoCheckStatus, UpdateBalanceError> {
+        updates::update_balance::kyt_check_utxo(utxo, args).await
     }
 
     async fn mint_ckbtc(

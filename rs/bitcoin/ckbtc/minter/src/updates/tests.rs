@@ -11,9 +11,6 @@ mod update_balance {
     use ic_btc_interface::{GetUtxosResponse, Utxo};
     use icrc_ledger_types::icrc1::account::Account;
 
-    const KYT_PROVIDER_UUID: &str = "815f0b5f-419f-47a4-8111-ab4469e437db";
-    const KYT_PROVIDER_PRINCIPAL: Principal = Principal::from_slice(&[24; 20]);
-
     #[tokio::test]
     async fn should_not_add_event_when_reevaluated_utxo_still_ignored() {
         init_state_with_ecdsa_public_key();
@@ -70,12 +67,7 @@ mod update_balance {
         assert_eq!(result, Ok(vec![UtxoStatus::Tainted(ignored_utxo.clone())]));
         assert_has_new_events(
             &events_before,
-            &[Event::CheckedUtxo {
-                utxo: ignored_utxo.clone(),
-                uuid: KYT_PROVIDER_UUID.to_string(),
-                clean: false,
-                kyt_provider: Some(KYT_PROVIDER_PRINCIPAL),
-            }],
+            &[checked_utxo_event(ignored_utxo.clone(), false)],
         );
         assert!(!read_state(|s| s.has_ignored_utxo(&ignored_utxo)));
         assert_eq!(
@@ -129,12 +121,7 @@ mod update_balance {
         assert_has_new_events(
             &events_before,
             &[
-                Event::CheckedUtxo {
-                    utxo: ignored_utxo.clone(),
-                    uuid: KYT_PROVIDER_UUID.to_string(),
-                    clean: true,
-                    kyt_provider: Some(KYT_PROVIDER_PRINCIPAL),
-                },
+                checked_utxo_event(ignored_utxo.clone(), true),
                 Event::ReceivedUtxos {
                     mint_txid: Some(1),
                     to_account: account,
@@ -220,12 +207,7 @@ mod update_balance {
         assert_has_new_events(
             &events_before,
             &[
-                Event::CheckedUtxo {
-                    utxo: quarantined_utxo.clone(),
-                    uuid: KYT_PROVIDER_UUID.to_string(),
-                    clean: true,
-                    kyt_provider: Some(KYT_PROVIDER_PRINCIPAL),
-                },
+                checked_utxo_event(quarantined_utxo.clone(), true),
                 Event::ReceivedUtxos {
                     mint_txid: Some(1),
                     to_account: account,
@@ -242,13 +224,7 @@ mod update_balance {
 
     fn register_utxo_checked(utxo: &Utxo, status: UtxoCheckStatus) {
         mutate_state(|s| {
-            audit::mark_utxo_checked(
-                s,
-                utxo,
-                KYT_PROVIDER_UUID.to_string(),
-                status,
-                KYT_PROVIDER_PRINCIPAL,
-            );
+            audit::mark_utxo_checked(s, utxo, None, status, None);
         });
     }
 
@@ -262,6 +238,7 @@ mod update_balance {
             }));
     }
 
+    //TODO XC-230: mock kyt at a deeper level to avoid mocking caching.
     fn expect_kyt_check_utxo_returning(
         runtime: &mut MockCanisterRuntime,
         caller: Principal,
@@ -271,12 +248,8 @@ mod update_balance {
         runtime
             .expect_kyt_check_utxo()
             .times(1)
-            .withf(move |c, u| c == &caller && u == &utxo)
-            .return_const(Ok((
-                KYT_PROVIDER_UUID.to_string(),
-                status,
-                KYT_PROVIDER_PRINCIPAL,
-            )));
+            .withf(move |u, args| args.owner.as_ref() == Some(&caller) && u == &utxo)
+            .return_const(Ok(status));
     }
 
     fn mock_schedule_now_process_logic(runtime: &mut MockCanisterRuntime) {
@@ -307,5 +280,14 @@ mod update_balance {
 
     fn assert_has_no_new_events(events_before: &[Event]) {
         assert_has_new_events(events_before, &[]);
+    }
+
+    fn checked_utxo_event(utxo: Utxo, clean: bool) -> Event {
+        Event::CheckedUtxo {
+            utxo,
+            uuid: String::default(),
+            clean,
+            kyt_provider: None,
+        }
     }
 }

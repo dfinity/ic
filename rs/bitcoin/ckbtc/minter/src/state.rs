@@ -1054,7 +1054,7 @@ impl CkBtcMinterState {
     pub fn utxo_checked_status(&self, utxo: &Utxo) -> Option<&UtxoCheckStatus> {
         self.checked_utxos
             .get(utxo)
-            .map(|(_, status, _)| status)
+            .map(|checked_utxo| &checked_utxo.status)
             .or_else(|| {
                 self.quarantined_utxos
                     .contains(utxo)
