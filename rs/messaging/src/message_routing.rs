@@ -900,7 +900,7 @@ impl BatchProcessorImpl {
                         ))
                     })?;
             let subnet_features: SubnetFeatures = subnet_record.features.unwrap_or_default().into();
-            let idkg_keys_held = subnet_record
+            let chain_keys_held = subnet_record
                 .chain_key_config
                 .map(|chain_key_config| {
                     chain_key_config
@@ -928,7 +928,7 @@ impl BatchProcessorImpl {
                     nodes,
                     subnet_type,
                     subnet_features,
-                    idkg_keys_held,
+                    chain_keys_held,
                 },
             );
         }
@@ -950,7 +950,7 @@ impl BatchProcessorImpl {
             .map_err(|err| registry_error("NNS subnet ID", None, err))?
             .ok_or_else(|| not_found_error("NNS subnet ID", None))?;
 
-        let idkg_signing_subnets = self
+        let chain_key_signing_subnets = self
             .registry
             .get_chain_key_signing_subnets(registry_version)
             .map_err(|err| registry_error("chain key signing subnets", None, err))?
@@ -961,7 +961,7 @@ impl BatchProcessorImpl {
             routing_table: Arc::new(routing_table),
             nns_subnet_id,
             canister_migrations: Arc::new(canister_migrations),
-            idkg_signing_subnets,
+            chain_key_signing_subnets,
             bitcoin_testnet_canister_id: self.bitcoin_config.testnet_canister_id,
             bitcoin_mainnet_canister_id: self.bitcoin_config.mainnet_canister_id,
         })

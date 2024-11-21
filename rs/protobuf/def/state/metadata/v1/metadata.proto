@@ -28,7 +28,7 @@ message SubnetTopology {
   registry.subnet.v1.SubnetFeatures subnet_features = 4;
   reserved 5;
   reserved "ecdsa_keys_held";
-  repeated types.v1.MasterPublicKeyId idkg_keys_held = 6;
+  repeated types.v1.MasterPublicKeyId chain_keys_held = 6;
 }
 
 message SubnetsEntry {
@@ -36,7 +36,7 @@ message SubnetsEntry {
   SubnetTopology subnet_topology = 2;
 }
 
-message IDkgKeyEntry {
+message ChainKeySubnetEntry {
   types.v1.MasterPublicKeyId key_id = 1;
   repeated types.v1.SubnetId subnet_ids = 2;
 }
@@ -50,7 +50,7 @@ message NetworkTopology {
   reserved "ecdsa_signing_subnets";
   repeated types.v1.CanisterId bitcoin_testnet_canister_ids = 6;
   repeated types.v1.CanisterId bitcoin_mainnet_canister_ids = 7;
-  repeated IDkgKeyEntry idkg_signing_subnets = 8;
+  repeated ChainKeySubnetEntry chain_key_signing_subnets = 8;
 }
 
 message SetupInitialDkgContext {

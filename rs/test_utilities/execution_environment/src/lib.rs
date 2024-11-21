@@ -108,7 +108,7 @@ pub fn generate_subnets(
                 nodes,
                 subnet_type,
                 subnet_features: SubnetFeatures::default(),
-                idkg_keys_held: BTreeSet::new(),
+                chain_keys_held: BTreeSet::new(),
             },
         );
     }
@@ -2220,7 +2220,7 @@ impl ExecutionTestBuilder {
                 state
                     .metadata
                     .network_topology
-                    .idkg_signing_subnets
+                    .chain_key_signing_subnets
                     .insert(key_id.clone(), vec![self.own_subnet_id]);
             }
             state
@@ -2229,7 +2229,7 @@ impl ExecutionTestBuilder {
                 .subnets
                 .get_mut(&self.own_subnet_id)
                 .unwrap()
-                .idkg_keys_held
+                .chain_keys_held
                 .insert(key_id.clone());
         }
 

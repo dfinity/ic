@@ -191,9 +191,9 @@ pub struct NetworkTopology {
     pub canister_migrations: Arc<CanisterMigrations>,
     pub nns_subnet_id: SubnetId,
 
-    /// Mapping from iDKG key_id to a list of subnets which can sign with the
+    /// Mapping from master public key_id to a list of subnets which can sign with the
     /// given key. Keys without any signing subnets are not included in the map.
-    pub idkg_signing_subnets: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
+    pub chain_key_signing_subnets: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
 
     /// The ID of the canister to forward bitcoin testnet requests to.
     pub bitcoin_testnet_canister_id: Option<CanisterId>,
@@ -224,7 +224,7 @@ impl Default for NetworkTopology {
             routing_table: Default::default(),
             canister_migrations: Default::default(),
             nns_subnet_id: SubnetId::new(PrincipalId::new_anonymous()),
-            idkg_signing_subnets: Default::default(),
+            chain_key_signing_subnets: Default::default(),
             bitcoin_testnet_canister_id: None,
             bitcoin_mainnet_canister_id: None,
         }
@@ -233,8 +233,8 @@ impl Default for NetworkTopology {
 
 impl NetworkTopology {
     /// Returns a list of subnets where the iDKG feature is enabled.
-    pub fn idkg_signing_subnets(&self, key_id: &MasterPublicKeyId) -> &[SubnetId] {
-        self.idkg_signing_subnets
+    pub fn chain_key_signing_subnets(&self, key_id: &MasterPublicKeyId) -> &[SubnetId] {
+        self.chain_key_signing_subnets
             .get(key_id)
             .map_or(&[], |ids| &ids[..])
     }
@@ -269,15 +269,15 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                 Some(c) => vec![pb_types::CanisterId::from(c)],
                 None => vec![],
             },
-            idkg_signing_subnets: item
-                .idkg_signing_subnets
+            chain_key_signing_subnets: item
+                .chain_key_signing_subnets
                 .iter()
                 .map(|(key_id, subnet_ids)| {
                     let subnet_ids = subnet_ids
                         .iter()
                         .map(|id| subnet_id_into_protobuf(*id))
                         .collect();
-                    pb_metadata::IDkgKeyEntry {
+                    pb_metadata::ChainKeySubnetEntry {
                         key_id: Some(key_id.into()),
                         subnet_ids,
                     }
@@ -306,14 +306,14 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             "NetworkTopology::nns_subnet_id",
         )?)?;
 
-        let mut idkg_signing_subnets = BTreeMap::new();
-        for entry in item.idkg_signing_subnets {
+        let mut chain_key_signing_subnets = BTreeMap::new();
+        for entry in item.chain_key_signing_subnets {
             let mut subnet_ids = vec![];
             for subnet_id in entry.subnet_ids {
                 subnet_ids.push(subnet_id_try_from_protobuf(subnet_id)?);
             }
-            idkg_signing_subnets.insert(
-                try_from_option_field(entry.key_id, "IDkgKeyEntry::key_id")?,
+            chain_key_signing_subnets.insert(
+                try_from_option_field(entry.key_id, "ChainKeySubnetEntry::key_id")?,
                 subnet_ids,
             );
         }
@@ -343,7 +343,7 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
                 .unwrap_or_default()
                 .into(),
             nns_subnet_id,
-            idkg_signing_subnets,
+            chain_key_signing_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
         })
@@ -358,12 +358,12 @@ pub struct SubnetTopology {
     pub nodes: BTreeSet<NodeId>,
     pub subnet_type: SubnetType,
     pub subnet_features: SubnetFeatures,
-    /// iDKG keys held by this subnet. Just because a subnet holds an iDKG key
+    /// Chain keys held by this subnet. Just because a subnet holds a Chain key
     /// doesn't mean the subnet has been enabled to sign with that key. This
     /// will happen when a key is shared with a second subnet which holds it as
     /// a backup. An additional NNS proposal will be needed to allow the subnet
     /// holding the key as backup to actually produce signatures.
-    pub idkg_keys_held: BTreeSet<MasterPublicKeyId>,
+    pub chain_keys_held: BTreeSet<MasterPublicKeyId>,
 }
 
 impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
@@ -379,7 +379,7 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
                 .collect(),
             subnet_type: i32::from(item.subnet_type),
             subnet_features: Some(pb_subnet::SubnetFeatures::from(item.subnet_features)),
-            idkg_keys_held: item.idkg_keys_held.iter().map(|k| k.into()).collect(),
+            chain_keys_held: item.chain_keys_held.iter().map(|k| k.into()).collect(),
         }
     }
 }
@@ -392,9 +392,9 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
             nodes.insert(node_id_try_from_option(entry.node_id)?);
         }
 
-        let mut idkg_keys_held = BTreeSet::new();
-        for key in item.idkg_keys_held {
-            idkg_keys_held.insert(MasterPublicKeyId::try_from(key)?);
+        let mut chain_keys_held = BTreeSet::new();
+        for key in item.chain_keys_held {
+            chain_keys_held.insert(MasterPublicKeyId::try_from(key)?);
         }
 
         Ok(Self {
@@ -408,7 +408,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
                 .subnet_features
                 .map(SubnetFeatures::from)
                 .unwrap_or_default(),
-            idkg_keys_held,
+            chain_keys_held,
         })
     }
 }

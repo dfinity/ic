@@ -820,7 +820,7 @@ impl SchedulerTestBuilder {
             state
                 .metadata
                 .network_topology
-                .idkg_signing_subnets
+                .chain_key_signing_subnets
                 .insert(idkg_key.clone(), vec![self.own_subnet_id]);
             state
                 .metadata
@@ -828,7 +828,7 @@ impl SchedulerTestBuilder {
                 .subnets
                 .get_mut(&self.own_subnet_id)
                 .unwrap()
-                .idkg_keys_held
+                .chain_keys_held
                 .insert(idkg_key.clone());
 
             registry_settings.chain_key_settings.insert(

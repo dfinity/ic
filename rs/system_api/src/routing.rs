@@ -333,11 +333,11 @@ fn route_chain_key_message(
                 key_id, subnet_id
             ))),
             Some(subnet_topology) => {
-                if subnet_topology.idkg_keys_held.contains(key_id) {
+                if subnet_topology.chain_keys_held.contains(key_id) {
                     match chain_key_subnet_kind {
                         ChainKeySubnetKind::HoldsEnabledKey => {
                             if network_topology
-                                .idkg_signing_subnets(key_id)
+                                .chain_key_signing_subnets(key_id)
                                 .contains(subnet_id)
                             {
                                 Ok((*subnet_id).get())
@@ -355,21 +355,21 @@ fn route_chain_key_message(
                         "Requested unknown threshold key {} on subnet {}, subnet has keys: {}",
                         key_id,
                         subnet_id,
-                        format_keys(subnet_topology.idkg_keys_held.iter())
+                        format_keys(subnet_topology.chain_keys_held.iter())
                     )))
                 }
             }
         },
         None => {
             // If some subnet is enabled to sign for the key we can immediately return it.
-            if let Some(subnet_id) = network_topology.idkg_signing_subnets(key_id).first() {
+            if let Some(subnet_id) = network_topology.chain_key_signing_subnets(key_id).first() {
                 return Ok((*subnet_id).get());
             }
             // Otherwise either return an error, or look through all subnets to
             // find one with the key if signing isn't required.
             match chain_key_subnet_kind {
                 ChainKeySubnetKind::HoldsEnabledKey => {
-                    let keys = format_keys(network_topology.idkg_signing_subnets.keys());
+                    let keys = format_keys(network_topology.chain_key_signing_subnets.keys());
                     Err(ResolveDestinationError::ChainKeyError(format!(
                         "Requested unknown or signing disabled threshold key: {}, existing keys with signing enabled: {}",
                         key_id, keys
@@ -378,10 +378,10 @@ fn route_chain_key_message(
                 ChainKeySubnetKind::OnlyHoldsKey => {
                     let mut keys = BTreeSet::new();
                     for (subnet_id, topology) in &network_topology.subnets {
-                        if topology.idkg_keys_held.contains(key_id) {
+                        if topology.chain_keys_held.contains(key_id) {
                             return Ok((*subnet_id).get());
                         }
-                        keys.extend(topology.idkg_keys_held.iter().cloned());
+                        keys.extend(topology.chain_keys_held.iter().cloned());
                     }
                     let keys = format_keys(keys.iter());
                     Err(ResolveDestinationError::ChainKeyError(format!(
@@ -475,18 +475,18 @@ mod tests {
         let subnet_id0 = subnet_test_id(0);
         NetworkTopology {
             // Only subnet 0 can sign with the first key.
-            idkg_signing_subnets: btreemap! {
+            chain_key_signing_subnets: btreemap! {
                 key_id1.clone() => vec![subnet_id0],
             },
             subnets: btreemap! {
                 // Subnet 0 holds both keys
                 subnet_id0 => SubnetTopology {
-                    idkg_keys_held: vec![key_id1.clone(), key_id2].into_iter().collect(),
+                    chain_keys_held: vec![key_id1.clone(), key_id2].into_iter().collect(),
                     ..SubnetTopology::default()
                 },
                 // Subnet 1 holds only the first key.
                 subnet_test_id(1) => SubnetTopology {
-                    idkg_keys_held: vec![key_id1].into_iter().collect(),
+                    chain_keys_held: vec![key_id1].into_iter().collect(),
                     ..SubnetTopology::default()
                 },
                 subnet_test_id(2) => SubnetTopology::default(),

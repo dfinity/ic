@@ -333,7 +333,7 @@ struct TestRecords<'a, const N: usize> {
     nns_subnet_id: Integrity<SubnetId>,
     // MasterPublicKeyId is used to make a key for the record. An empty `BTreeMap` therefore means no
     // records in the registry and wrapping it in `Integrity` would be redundant.
-    idkg_signing_subnets: &'a BTreeMap<MasterPublicKeyId, Integrity<Vec<SubnetId>>>,
+    chain_key_signing_subnets: &'a BTreeMap<MasterPublicKeyId, Integrity<Vec<SubnetId>>>,
     provisional_whitelist: Integrity<&'a ProvisionalWhitelist>,
     routing_table: Integrity<&'a RoutingTable>,
     canister_migrations: Integrity<&'a CanisterMigrations>,
@@ -473,13 +473,13 @@ impl RegistryFixture {
     }
 
     /// Writes the iDKG signing subnets into the registry.
-    fn write_idkg_signing_subnets(
+    fn write_chain_key_signing_subnets(
         &self,
-        idkg_signing_subnets: &BTreeMap<MasterPublicKeyId, Integrity<Vec<SubnetId>>>,
+        chain_key_signing_subnets: &BTreeMap<MasterPublicKeyId, Integrity<Vec<SubnetId>>>,
     ) -> Result<(), ProtoRegistryDataProviderError> {
         use ic_types::subnet_id_into_protobuf;
 
-        for (idkg_key, subnet_ids) in idkg_signing_subnets.iter() {
+        for (idkg_key, subnet_ids) in chain_key_signing_subnets.iter() {
             self.write_record(
                 &make_chain_key_signing_subnet_list_key(idkg_key),
                 subnet_ids
@@ -597,7 +597,7 @@ impl RegistryFixture {
         self.write_routing_table(input.routing_table)?;
         self.write_canister_migrations(input.canister_migrations)?;
         self.write_root_subnet_id(input.nns_subnet_id)?;
-        self.write_idkg_signing_subnets(input.idkg_signing_subnets)?;
+        self.write_chain_key_signing_subnets(input.chain_key_signing_subnets)?;
         self.write_provisional_whitelist(input.provisional_whitelist)?;
         self.write_node_public_keys(input.node_public_keys)?;
         self.write_api_boundary_nodes_records(input.api_boundary_node_records)?;
@@ -777,7 +777,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             PrincipalId::new_node_test_id(103),
             PrincipalId::new_subnet_test_id(107)
         });
-        let idkg_signing_subnets = btreemap! {
+        let chain_key_signing_subnets = btreemap! {
             MasterPublicKeyId::Ecdsa(EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: "key 1".to_string(),
@@ -869,7 +869,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                 subnet_records: [Valid(&own_subnet_record), Valid(&other_subnet_record)],
                 ni_dkg_transcripts: [Valid(Some(&own_transcript)), Valid(Some(&other_transcript))],
                 nns_subnet_id: Valid(nns_subnet_id),
-                idkg_signing_subnets: &idkg_signing_subnets,
+                chain_key_signing_subnets: &chain_key_signing_subnets,
                 provisional_whitelist: Valid(&provisional_whitelist),
                 routing_table: Valid(&routing_table),
                 canister_migrations: Valid(&canister_migrations),
@@ -929,14 +929,14 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                     .iter()
                     .map(|key_config| key_config.key_id.clone())
                     .collect::<BTreeSet<_>>(),
-                subnet_topology.idkg_keys_held
+                subnet_topology.chain_keys_held
             );
         }
         assert_eq!(nns_subnet_id, network_topology.nns_subnet_id);
         assert_eq!(
-            idkg_signing_subnets,
+            chain_key_signing_subnets,
             network_topology
-                .idkg_signing_subnets
+                .chain_key_signing_subnets
                 .iter()
                 .map(|(key, val)| (key.clone(), Valid(val.clone())))
                 .collect::<BTreeMap<_, _>>()
@@ -1081,7 +1081,7 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
             subnet_records: [Valid(&own_subnet_record)],
             ni_dkg_transcripts: [Valid(Some(&own_transcript))],
             nns_subnet_id: Valid(nns_subnet_id),
-            idkg_signing_subnets: &BTreeMap::default(),
+            chain_key_signing_subnets: &BTreeMap::default(),
             provisional_whitelist: Missing,
             routing_table: Missing,
             canister_migrations: Missing,
@@ -1182,7 +1182,7 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             subnet_records: [Valid(&own_subnet_record)],
             ni_dkg_transcripts: [Valid(Some(&own_transcript))],
             nns_subnet_id: Valid(nns_subnet_id),
-            idkg_signing_subnets: &BTreeMap::default(),
+            chain_key_signing_subnets: &BTreeMap::default(),
             provisional_whitelist: Missing,
             routing_table: Missing,
             canister_migrations: Missing,
@@ -1365,7 +1365,7 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
             subnet_records: [Valid(&own_subnet_record)],
             ni_dkg_transcripts: [Valid(Some(&own_transcript))],
             nns_subnet_id: Valid(nns_subnet_id),
-            idkg_signing_subnets: &BTreeMap::default(),
+            chain_key_signing_subnets: &BTreeMap::default(),
             provisional_whitelist: Missing,
             routing_table: Missing,
             canister_migrations: Missing,
@@ -1454,7 +1454,7 @@ fn try_read_registry_can_skip_missing_or_invalid_fields_of_api_boundary_nodes() 
             subnet_records: [Valid(&own_subnet_record)],
             ni_dkg_transcripts: [Valid(Some(&own_transcript))],
             nns_subnet_id: Valid(nns_subnet_id),
-            idkg_signing_subnets: &BTreeMap::default(),
+            chain_key_signing_subnets: &BTreeMap::default(),
             provisional_whitelist: Missing,
             routing_table: Missing,
             canister_migrations: Missing,
@@ -1603,7 +1603,7 @@ fn check_critical_error_counter_is_not_incremented_for_transient_error() {
             subnet_records: [Valid(&own_subnet_record)],
             ni_dkg_transcripts: [Valid(Some(&own_transcript))],
             nns_subnet_id: Valid(nns_subnet_id),
-            idkg_signing_subnets: &BTreeMap::default(),
+            chain_key_signing_subnets: &BTreeMap::default(),
             provisional_whitelist: Missing,
             routing_table: Missing,
             canister_migrations: Missing,
@@ -1754,7 +1754,7 @@ fn process_batch_updates_subnet_metrics() {
             PrincipalId::new_node_test_id(103),
             PrincipalId::new_subnet_test_id(107)
         });
-        let idkg_signing_subnets = btreemap! {
+        let chain_key_signing_subnets = btreemap! {
             MasterPublicKeyId::Ecdsa(EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: "key 1".to_string(),
@@ -1810,7 +1810,7 @@ fn process_batch_updates_subnet_metrics() {
                 subnet_records: [Valid(&own_subnet_record), Valid(&other_subnet_record)],
                 ni_dkg_transcripts: [Valid(Some(&own_transcript)), Valid(Some(&other_transcript))],
                 nns_subnet_id: Valid(nns_subnet_id),
-                idkg_signing_subnets: &idkg_signing_subnets,
+                chain_key_signing_subnets: &chain_key_signing_subnets,
                 provisional_whitelist: Valid(&provisional_whitelist),
                 routing_table: Valid(&routing_table),
                 canister_migrations: Valid(&canister_migrations),

@@ -26,7 +26,8 @@ pub struct SubnetTopology {
     pub subnet_features:
         ::core::option::Option<super::super::super::registry::subnet::v1::SubnetFeatures>,
     #[prost(message, repeated, tag = "6")]
-    pub idkg_keys_held: ::prost::alloc::vec::Vec<super::super::super::types::v1::MasterPublicKeyId>,
+    pub chain_keys_held:
+        ::prost::alloc::vec::Vec<super::super::super::types::v1::MasterPublicKeyId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetsEntry {
@@ -36,7 +37,7 @@ pub struct SubnetsEntry {
     pub subnet_topology: ::core::option::Option<SubnetTopology>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct IDkgKeyEntry {
+pub struct ChainKeySubnetEntry {
     #[prost(message, optional, tag = "1")]
     pub key_id: ::core::option::Option<super::super::super::types::v1::MasterPublicKeyId>,
     #[prost(message, repeated, tag = "2")]
@@ -62,7 +63,7 @@ pub struct NetworkTopology {
     pub bitcoin_mainnet_canister_ids:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(message, repeated, tag = "8")]
-    pub idkg_signing_subnets: ::prost::alloc::vec::Vec<IDkgKeyEntry>,
+    pub chain_key_signing_subnets: ::prost::alloc::vec::Vec<ChainKeySubnetEntry>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetupInitialDkgContext {
