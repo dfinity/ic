@@ -1,15 +1,13 @@
 use std::fs::{create_dir_all, write};
 use std::net::Ipv6Addr;
 use std::path::Path;
-use std::process::Command;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Error};
 
 use crate::info::NetworkInfo;
 use crate::interfaces::{get_interfaces, has_ipv6_connectivity, Interface};
-use mac_address::mac_address::FormattedMacAddress;
-
-pub static DEFAULT_SYSTEMD_NETWORK_DIR: &str = "/run/systemd/network";
+use config::types::FormattedMacAddress;
+use systemd::restart_systemd_networkd;
 
 pub const IPV6_NAME_SERVER_NETWORKD_CONTENTS: &str = r#"
 DNS=2606:4700:4700::1111
@@ -90,20 +88,13 @@ Gateway={ipv6_gateway}
     )
 }
 
-pub fn restart_systemd_networkd() {
-    let _ = Command::new("timeout")
-        .args(["3", "systemctl", "restart", "systemd-networkd"])
-        .status();
-    // Explicitly don't care about return code status...
-}
-
 fn generate_and_write_systemd_files(
     output_directory: &Path,
     interface: &Interface,
     generated_mac: Option<&FormattedMacAddress>,
     ipv6_address: &str,
     ipv6_gateway: &str,
-) -> Result<()> {
+) -> Result<(), Error> {
     eprintln!("Creating directory: {}", output_directory.to_string_lossy());
     create_dir_all(output_directory)?;
 
@@ -147,12 +138,12 @@ fn generate_and_write_systemd_files(
     Ok(())
 }
 
-pub fn generate_systemd_config_files(
+pub(crate) fn generate_systemd_config_files(
     output_directory: &Path,
     network_info: &NetworkInfo,
     generated_mac: Option<&FormattedMacAddress>,
     ipv6_address: &Ipv6Addr,
-) -> Result<()> {
+) -> Result<(), Error> {
     let mut interfaces = get_interfaces()?;
     interfaces.sort_by(|a, b| a.speed_mbps.cmp(&b.speed_mbps));
     eprintln!("Interfaces sorted by speed: {:?}", interfaces);
@@ -192,7 +183,7 @@ pub fn generate_systemd_config_files(
         &network_info.ipv6_gateway.to_string(),
     )?;
 
-    print!("Restarting systemd networkd");
+    eprintln!("Restarting systemd networkd");
     restart_systemd_networkd();
 
     Ok(())

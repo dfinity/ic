@@ -1,5 +1,5 @@
 [package]
-name = "network"
+name = "systemd"
 version = "1.0.0"
 edition = "2021"
 
@@ -14,6 +14,5 @@ regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { version = "^1.6.2" }
-systemd = { path = "../systemd" }
 sha2 = { workspace = true }
 utils = { path = "../utils" }

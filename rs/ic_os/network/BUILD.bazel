@@ -5,14 +5,18 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/ic_os/config:config_lib",
-    "//rs/ic_os/network/mac_address",
     "//rs/ic_os/utils",
+    "//rs/ic_os/systemd",
     "@crate_index//:anyhow",
     "@crate_index//:ping",
+    "@crate_index//:hex",
+    "@crate_index//:rand",
     "@crate_index//:rayon",
+    "@crate_index//:regex",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
+    "@crate_index//:sha2",
 ]
 
 rust_library(

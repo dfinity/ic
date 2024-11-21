@@ -1,99 +1,22 @@
-use std::fmt;
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
+use hex;
+use rand;
 use regex::Regex;
 use sha2::{Digest, Sha256};
 
 use crate::node_type::NodeType;
-use serde::{Deserialize, Serialize};
-use utils::intersperse;
+use systemd::{detect_virt, VirtualizationType};
 
-/// Wrapper types for MAC addresses
-/// - ensure clients cannot modify or construct incorrectly.
-///
-/// Hex alpha digits are turned to lower case to match ipmitool presentation
-/// Construct with `try_from(&str)`
-/// Use `.get()` to get the underlying string
-/// Transform between the types with `from(the_other)`
-// TODO - Make a canonical type which can convert to either un/formatted on demand
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
-pub struct UnformattedMacAddress(String);
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
-pub struct FormattedMacAddress(String);
-
-impl UnformattedMacAddress {
-    pub fn get(&self) -> String {
-        self.0.clone()
-    }
-}
-
-impl FormattedMacAddress {
-    pub fn get(&self) -> String {
-        self.0.clone()
-    }
-}
-
-impl fmt::Display for UnformattedMacAddress {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.get())
-    }
-}
-
-impl fmt::Display for FormattedMacAddress {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.get())
-    }
-}
-
-impl TryFrom<&str> for UnformattedMacAddress {
-    type Error = anyhow::Error;
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        if s.len() != 12 || s.chars().any(|c| !c.is_ascii_hexdigit()) {
-            bail!("Malformed raw mac address: {}", s);
-        }
-
-        Ok(UnformattedMacAddress(s.to_string().to_lowercase()))
-    }
-}
-
-impl TryFrom<&str> for FormattedMacAddress {
-    type Error = anyhow::Error;
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        if s.len() != 17 || s.chars().filter(|c| *c == ':').count() != 5 {
-            bail!(
-                "Invalid BMC MAC. Must be formatted as MAC address with colons: {}",
-                s
-            );
-        }
-
-        Ok(FormattedMacAddress(s.to_string().to_lowercase()))
-    }
-}
-
-impl From<&UnformattedMacAddress> for FormattedMacAddress {
-    /// Return a standard formatted MAC address given a 'raw' unformatted 12 char string
-    /// E.g. "aabbccddeeff" -> "aa:bb:cc:dd:ee:ff"
-    /// Error if not the correct length or hexadecimal
-    fn from(mac: &UnformattedMacAddress) -> Self {
-        let result = intersperse(&mac.get(), ':', 2);
-        FormattedMacAddress(result)
-    }
-}
-
-impl From<&FormattedMacAddress> for UnformattedMacAddress {
-    fn from(mac: &FormattedMacAddress) -> Self {
-        let result: String = mac.0.chars().filter(|c| *c != ':').collect();
-        UnformattedMacAddress(result)
-    }
-}
+use config::types::{FormattedMacAddress, UnformattedMacAddress};
 
 fn parse_mac_line(line: &str) -> Result<FormattedMacAddress> {
     let error_msg = format!("Could not parse mac address line: {}", line);
     let re = Regex::new(r"MAC Address\s+:\s+(([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2}))")?;
     let captures = re.captures(line).context(error_msg.clone())?;
     let mac = captures.get(1).context(error_msg.clone())?;
-    FormattedMacAddress::try_from(mac.as_str())
+    FormattedMacAddress::try_from(mac.as_str()).context(error_msg.clone())
 }
 
 pub fn get_mac_address_from_ipmitool_output(output: &str) -> Result<FormattedMacAddress> {
@@ -109,7 +32,7 @@ pub fn get_mac_address_from_ipmitool_output(output: &str) -> Result<FormattedMac
 
 /// Generate a deterministic unformatted MAC address
 /// E.g. "6a01eb49a2b0"
-pub fn generate_mac_address(
+pub fn derive_mac_address_for_hostos(
     mgmt_mac: &FormattedMacAddress,
     deployment_environment: &str,
     node_type: &NodeType,
@@ -119,7 +42,7 @@ pub fn generate_mac_address(
     let vendor_part: String = hex::encode(Sha256::digest(seed)).chars().take(8).collect();
     let node_index = node_type.to_char();
     let mac = format!("6a0{}{}", node_index, vendor_part);
-    UnformattedMacAddress::try_from(mac.as_str())
+    UnformattedMacAddress::try_from(mac.as_str()).context("Could not format MAC address")
 }
 
 /// Retrieves the MAC address from the IPMI LAN interface
@@ -148,23 +71,23 @@ fn get_ipmi_mac() -> Result<FormattedMacAddress> {
 /// and signifying likely offline operation.
 pub fn derive_mgmt_mac(maybe_mac: Option<String>) -> Result<FormattedMacAddress> {
     match maybe_mac {
-        Some(mac) => FormattedMacAddress::try_from(mac.as_str()),
-        None => {
-            let stdout = Command::new("systemd-detect-virt").output()?.stdout;
-            match std::str::from_utf8(&stdout)?.trim() {
-                "none" => get_ipmi_mac(),
-                _ => FormattedMacAddress::try_from(
-                    format!(
-                        "ba:dd:{:0x}:{:0x}:{:0x}:{:0x}",
-                        rand::random::<u8>(),
-                        rand::random::<u8>(),
-                        rand::random::<u8>(),
-                        rand::random::<u8>()
-                    )
-                    .as_str(),
-                ),
-            }
+        Some(mac) => {
+            FormattedMacAddress::try_from(mac.as_str()).context("Could not format MAC address")
         }
+        None => match detect_virt()? {
+            VirtualizationType::BareMetal => get_ipmi_mac(),
+            VirtualizationType::Virtualized => FormattedMacAddress::try_from(
+                format!(
+                    "ba:dd:{:0x}:{:0x}:{:0x}:{:0x}",
+                    rand::random::<u8>(),
+                    rand::random::<u8>(),
+                    rand::random::<u8>(),
+                    rand::random::<u8>()
+                )
+                .as_str(),
+            )
+            .context("Could not format MAC address"),
+        },
     }
 }
 
@@ -200,9 +123,9 @@ pub mod tests {
     }
 
     #[test]
-    fn test_generate_mac_address() {
+    fn test_derive_mac_address_for_hostos() {
         assert_eq!(
-            generate_mac_address(
+            derive_mac_address_for_hostos(
                 &FormattedMacAddress::try_from("de:ad:de:ad:de:ad").unwrap(),
                 "mainnet",
                 &NodeType::GuestOS,
@@ -212,7 +135,7 @@ pub mod tests {
             "6a01f7e0c684"
         );
         assert_eq!(
-            generate_mac_address(
+            derive_mac_address_for_hostos(
                 &FormattedMacAddress::try_from("00:aa:bb:cc:dd:ee").unwrap(),
                 "mainnet",
                 &NodeType::GuestOS,

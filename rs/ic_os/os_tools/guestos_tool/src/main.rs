@@ -15,7 +15,7 @@ use generate_network_config::{
     DEFAULT_GUESTOS_NETWORK_CONFIG_PATH,
 };
 
-use network::systemd::{restart_systemd_networkd, DEFAULT_SYSTEMD_NETWORK_DIR};
+use systemd::{restart_systemd_networkd, DEFAULT_SYSTEMD_NETWORK_DIR};
 
 #[derive(Subcommand)]
 pub enum Commands {

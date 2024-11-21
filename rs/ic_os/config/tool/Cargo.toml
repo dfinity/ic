@@ -1,0 +1,17 @@
+[package]
+name = "config_tool"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+config = { path = ".." }
+network = { path = "../../network" }
+regex = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+
+[[bin]]
+name = "config"
+path = "src/main.rs"

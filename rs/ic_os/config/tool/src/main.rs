@@ -3,7 +3,7 @@ use clap::{Args, Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
-use mac_address::mac_address::derive_mgmt_mac;
+use network::mac_address::derive_mgmt_mac;
 use regex::Regex;
 use std::fs::File;
 use std::path::{Path, PathBuf};

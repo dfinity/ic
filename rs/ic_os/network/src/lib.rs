@@ -2,15 +2,17 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use crate::systemd::generate_systemd_config_files;
+use crate::net_config::generate_systemd_config_files;
+use config::types::{FormattedMacAddress, UnformattedMacAddress};
 use info::NetworkInfo;
 use ipv6::generate_ipv6_address;
-use mac_address::mac_address::{FormattedMacAddress, UnformattedMacAddress};
 
 pub mod info;
 pub mod interfaces;
 pub mod ipv6;
-pub mod systemd;
+pub mod mac_address;
+pub mod net_config;
+pub mod node_type;
 
 /// Write SetupOS or HostOS systemd network configuration.
 /// Requires superuser permissions to run `ipmitool` and write to the systemd directory
