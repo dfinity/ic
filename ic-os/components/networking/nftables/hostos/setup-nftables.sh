@@ -63,7 +63,7 @@ if [ "${NETWORK_CONFIG_FILE}" != "" -a -e "${NETWORK_CONFIG_FILE}" ]; then
 fi
 
 IPV6_PREFIX="${ipv6_prefix:+${ipv6_prefix}::/64}" # Add suffix to prefix if found
-IPV6_PREFIX="${IPV6_PREFIX:-::1/128}" # Default to loopback for easy templating
+IPV6_PREFIX="${IPV6_PREFIX:-::1/128}"             # Default to loopback for easy templating
 
 mkdir -p /run/ic-node/nftables-ruleset/
 sed -e "s@{{ ipv6_prefix }}@${IPV6_PREFIX}@" \
