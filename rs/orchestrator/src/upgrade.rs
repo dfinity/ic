@@ -386,7 +386,10 @@ impl Upgrade {
             .map_err(OrchestratorError::UpgradeError)?;
         let elapsed = instant.elapsed().as_millis();
         self.metrics.fstrim_duration.set(elapsed as i64);
-        info!(self.logger, "Filesystem synced and trimmed in {}ms", elapsed);
+        info!(
+            self.logger,
+            "Filesystem synced and trimmed in {}ms", elapsed
+        );
 
         Ok(())
     }
