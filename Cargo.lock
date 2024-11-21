@@ -6561,7 +6561,6 @@ dependencies = [
  "ic-canisters-http-types",
  "ic-cdk 0.16.0",
  "ic-cdk-macros 0.9.0",
- "ic-ckbtc-kyt",
  "ic-config",
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-secp256k1",
