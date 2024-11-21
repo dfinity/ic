@@ -6,12 +6,12 @@ use clap::{Parser, Subcommand};
 use config::config_ini::config_map_from_path;
 use config::deployment_json::get_deployment_settings;
 use config::{DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH, DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH};
-use mac_address::mac_address::{generate_mac_address, get_ipmi_mac, FormattedMacAddress};
+use mac_address::mac_address::{generate_mac_address, FormattedMacAddress};
 use mac_address::node_type::NodeType;
-use network::generate_network_config;
 use network::info::NetworkInfo;
 use network::ipv6::generate_ipv6_address;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
+use network::{generate_network_config, get_ipmi_mac};
 use utils::to_cidr;
 
 #[derive(Subcommand)]

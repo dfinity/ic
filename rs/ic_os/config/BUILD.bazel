@@ -44,7 +44,7 @@ rust_binary(
     crate_name = "config",
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [":config_lib"] + DEPENDENCIES,
+    deps = [":config_lib", "//rs/ic_os/network"] + DEPENDENCIES,
 )
 
 rust_test(
