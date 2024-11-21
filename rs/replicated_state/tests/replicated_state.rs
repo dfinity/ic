@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_btc_interface::Network;
 use ic_btc_replica_types::{
@@ -11,13 +12,18 @@ use ic_management_canister_types::{
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::BitcoinSendTransactionInternalContext;
+use ic_replicated_state::canister_state::execution_state::{
+    CustomSection, CustomSectionType, WasmMetadata,
+};
+use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+    BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
+};
 use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
+use ic_replicated_state::replicated_state::{
+    MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting,
+};
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
-    canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
-    metadata_state::subnet_call_context_manager::{BitcoinGetSuccessorsContext, SubnetCallContext},
-    replicated_state::{MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting},
     CanisterState, IngressHistoryState, InputSource, ReplicatedState, SchedulerState, StateError,
     SystemState,
 };
@@ -26,14 +32,12 @@ use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{CallbackId, RejectContext};
-use ic_types::time::CoarseTime;
-use ic_types::{
-    messages::{
-        CanisterMessage, Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
-    },
-    time::UNIX_EPOCH,
-    CountBytes, Cycles, MemoryAllocation, Time,
+use ic_types::messages::{
+    CanisterMessage, Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
 };
+use ic_types::time::CoarseTime;
+use ic_types::time::UNIX_EPOCH;
+use ic_types::{CountBytes, Cycles, MemoryAllocation, Time};
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::collections::{BTreeMap, VecDeque};
@@ -711,6 +715,30 @@ fn time_out_messages_updates_subnet_input_schedules_correctly() {
         fixture.remote_subnet_input_schedule(&CANISTER_ID),
         &VecDeque::from(vec![remote_canister_id])
     );
+}
+
+#[test]
+fn time_out_messages_in_subnet_queues() {
+    let mut fixture = ReplicatedStateFixture::new();
+
+    // Enqueue 2 incoming best-effort requests for `SUBNET_ID`.
+    for i in 0..2 {
+        let mut request = request_to(SUBNET_ID.into());
+        request.deadline = CoarseTime::from_secs_since_unix_epoch(1000 + i as u32);
+        fixture.push_input(request.into()).unwrap();
+    }
+
+    // Time out the first request.
+    let second_request_deadline = CoarseTime::from_secs_since_unix_epoch(1001);
+    fixture.state.metadata.batch_time = second_request_deadline.into();
+    assert_eq!(1, fixture.state.time_out_messages());
+
+    // Second request should still be in the queue.
+    assert_matches!(
+        fixture.state.pop_subnet_input(),
+        Some(CanisterMessage::Request(request)) if request.deadline == second_request_deadline
+    );
+    assert_eq!(None, fixture.state.pop_subnet_input());
 }
 
 #[test]
