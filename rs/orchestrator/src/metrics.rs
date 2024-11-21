@@ -86,7 +86,7 @@ impl OrchestratorMetrics {
             ),
             critical_error_state_removal_failed: metrics_registry.int_counter(
                 "orchestrator_state_removal_failed_total",
-                "Number of times the deserialization of the locally persisted CUP failed",
+                "Number of times removing the local node state failed",
             ),
             fstrim_duration: metrics_registry.int_gauge(
                 "orchestrator_fstrim_duration_milliseconds",
