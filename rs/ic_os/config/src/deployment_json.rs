@@ -89,7 +89,7 @@ mod test {
                 "mgmt_mac": null
               },
               "logging": {
-                "hosts": "es-1.domain.local:443 es-2.domain.local:443"
+                "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
               },
               "nns": {
                 "url": "https://wiki.internetcomputer.org/"
@@ -108,7 +108,7 @@ mod test {
     "mgmt_mac": null
   },
   "logging": {
-    "hosts": "es-1.domain.local:443 es-2.domain.local:443"
+    "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
   },
   "nns": {
     "url": "https://wiki.internetcomputer.org/"
@@ -120,7 +120,13 @@ mod test {
 }"#;
 
     static DEPLOYMENT_STRUCT: Lazy<DeploymentSettings> = Lazy::new(|| {
-        let hosts = ["es-1.domain.local:443", "es-2.domain.local:443"].join(" ");
+        let hosts = [
+            "elasticsearch-node-0.mercury.dfinity.systems:443",
+            "elasticsearch-node-1.mercury.dfinity.systems:443",
+            "elasticsearch-node-2.mercury.dfinity.systems:443",
+            "elasticsearch-node-3.mercury.dfinity.systems:443",
+        ]
+        .join(" ");
         DeploymentSettings {
             deployment: Deployment {
                 name: "mainnet".to_string(),
@@ -142,7 +148,7 @@ mod test {
     "name": "mainnet"
   },
   "logging": {
-    "hosts": "es-1.domain.local:443 es-2.domain.local:443"
+    "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
   },
   "nns": {
     "url": "https://wiki.internetcomputer.org/"
@@ -154,7 +160,13 @@ mod test {
 }"#;
 
     static DEPLOYMENT_STRUCT_NO_MGMT_MAC: Lazy<DeploymentSettings> = Lazy::new(|| {
-        let hosts = ["es-1.domain.local:443", "es-2.domain.local:443"].join(" ");
+        let hosts = [
+            "elasticsearch-node-0.mercury.dfinity.systems:443",
+            "elasticsearch-node-1.mercury.dfinity.systems:443",
+            "elasticsearch-node-2.mercury.dfinity.systems:443",
+            "elasticsearch-node-3.mercury.dfinity.systems:443",
+        ]
+        .join(" ");
         DeploymentSettings {
             deployment: Deployment {
                 name: "mainnet".to_string(),
@@ -176,7 +188,7 @@ mod test {
     "name": "mainnet"
   },
   "logging": {
-    "hosts": "es-1.domain.local:443 es-2.domain.local:443"
+    "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
   },
   "nns": {
     "url": "https://wiki.internetcomputer.org/"
@@ -187,7 +199,13 @@ mod test {
 }"#;
 
     static DEPLOYMENT_STRUCT_NO_CPU_NO_MGMT_MAC: Lazy<DeploymentSettings> = Lazy::new(|| {
-        let hosts = ["es-1.domain.local:443", "es-2.domain.local:443"].join(" ");
+        let hosts = [
+            "elasticsearch-node-0.mercury.dfinity.systems:443",
+            "elasticsearch-node-1.mercury.dfinity.systems:443",
+            "elasticsearch-node-2.mercury.dfinity.systems:443",
+            "elasticsearch-node-3.mercury.dfinity.systems:443",
+        ]
+        .join(" ");
         DeploymentSettings {
             deployment: Deployment {
                 name: "mainnet".to_string(),
@@ -209,7 +227,7 @@ mod test {
     "name": "mainnet"
   },
   "logging": {
-    "hosts": "es-1.domain.local:443 es-2.domain.local:443"
+    "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
   },
   "nns": {
     "url": "https://wiki.internetcomputer.org/"
@@ -221,7 +239,13 @@ mod test {
 }"#;
 
     static QEMU_CPU_DEPLOYMENT_STRUCT: Lazy<DeploymentSettings> = Lazy::new(|| {
-        let hosts = ["es-1.domain.local:443", "es-2.domain.local:443"].join(" ");
+        let hosts = [
+            "elasticsearch-node-0.mercury.dfinity.systems:443",
+            "elasticsearch-node-1.mercury.dfinity.systems:443",
+            "elasticsearch-node-2.mercury.dfinity.systems:443",
+            "elasticsearch-node-3.mercury.dfinity.systems:443",
+        ]
+        .join(" ");
         DeploymentSettings {
             deployment: Deployment {
                 name: "mainnet".to_string(),
@@ -243,7 +267,7 @@ mod test {
     "name": "mainnet"
   },
   "logging": {
-    "hosts": "es-1.domain.local:443 es-2.domain.local:443"
+    "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
   },
   "nns": {
     "url": "http://[2001:920:401a:1710:5000:6aff:fee4:19cd]:8080/,http://[2600:3006:1400:1500:5000:19ff:fe38:c418]:8080/,http://[2600:2c01:21:0:5000:27ff:fe23:4839]:8080/"
@@ -258,7 +282,7 @@ mod test {
     "name": "mainnet"
   },
   "logging": {
-    "hosts": "es-1.domain.local:443 es-2.domain.local:443"
+    "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
   },
   "nns": {
     "url": "http://[2001:920:401a:1710:5000:6aff:fee4:19cd]:8080,http://[2600:3006:1400:1500:5000:19ff:fe38:c418]:8080,http://[2600:2c01:21:0:5000:27ff:fe23:4839]:8080"
@@ -269,7 +293,13 @@ mod test {
 }"#;
 
     static MULTI_URL_STRUCT: Lazy<DeploymentSettings> = Lazy::new(|| {
-        let hosts = ["es-1.domain.local:443", "es-2.domain.local:443"].join(" ");
+        let hosts = [
+            "elasticsearch-node-0.mercury.dfinity.systems:443",
+            "elasticsearch-node-1.mercury.dfinity.systems:443",
+            "elasticsearch-node-2.mercury.dfinity.systems:443",
+            "elasticsearch-node-3.mercury.dfinity.systems:443",
+        ]
+        .join(" ");
         DeploymentSettings {
             deployment: Deployment {
                 name: "mainnet".to_string(),
