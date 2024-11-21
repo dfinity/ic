@@ -29,7 +29,7 @@ impl Registry {
         let mut sorted_changelog_versions = self
             .changelog()
             .iter()
-            .map(|(encoded_version, _)| encoded_version.as_version())
+            .map(|(encoded_version, _)| encoded_version.as_timestamp())
             .collect::<Vec<u64>>();
         sorted_changelog_versions.sort_unstable();
 
@@ -153,7 +153,7 @@ impl Registry {
 
 #[cfg(test)]
 mod tests {
-    use crate::registry::EncodedVersion;
+    use crate::registry::EncodedTimestampNanos;
 
     use super::*;
     use ic_base_types::CanisterId;
@@ -196,16 +196,16 @@ mod tests {
         let mut registry = Registry::new();
         registry
             .changelog
-            .insert(EncodedVersion::from(1), empty_mutation());
+            .insert(EncodedTimestampNanos::from(1), empty_mutation());
 
         registry.check_changelog_version_invariants();
 
         registry
             .changelog
-            .insert(EncodedVersion::from(2), empty_mutation());
+            .insert(EncodedTimestampNanos::from(2), empty_mutation());
         registry
             .changelog
-            .insert(EncodedVersion::from(3), empty_mutation());
+            .insert(EncodedTimestampNanos::from(3), empty_mutation());
 
         registry.check_changelog_version_invariants();
     }
@@ -216,13 +216,13 @@ mod tests {
         let mut registry = Registry::new();
         registry
             .changelog
-            .insert(EncodedVersion::from(2), empty_mutation());
+            .insert(EncodedTimestampNanos::from(2), empty_mutation());
         registry
             .changelog
-            .insert(EncodedVersion::from(3), empty_mutation());
+            .insert(EncodedTimestampNanos::from(3), empty_mutation());
         registry
             .changelog
-            .insert(EncodedVersion::from(4), empty_mutation());
+            .insert(EncodedTimestampNanos::from(4), empty_mutation());
 
         registry.check_changelog_version_invariants();
     }
@@ -236,13 +236,13 @@ mod tests {
         let mut registry = Registry::new();
         registry
             .changelog
-            .insert(EncodedVersion::from(1), empty_mutation());
+            .insert(EncodedTimestampNanos::from(1), empty_mutation());
         registry
             .changelog
-            .insert(EncodedVersion::from(2), empty_mutation());
+            .insert(EncodedTimestampNanos::from(2), empty_mutation());
         registry
             .changelog
-            .insert(EncodedVersion::from(4), empty_mutation());
+            .insert(EncodedTimestampNanos::from(4), empty_mutation());
 
         registry.check_changelog_version_invariants();
     }

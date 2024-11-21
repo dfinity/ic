@@ -1,4 +1,4 @@
-use crate::registry::{Registry, Version};
+use crate::registry::{Registry, TimestampNanos};
 use candid::CandidType;
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
@@ -91,7 +91,7 @@ impl Registry {
         &self,
         source_subnet_ranges: &CanisterIdRanges,
         ranges_to_migrate: &CanisterIdRanges,
-        version: Version,
+        version: TimestampNanos,
     ) -> Result<(), PrepareCanisterMigrationError> {
         // Check if all the canister ID ranges to be migrated are from the source subnet.
         if !is_subset_of(ranges_to_migrate.iter(), source_subnet_ranges.iter()) {

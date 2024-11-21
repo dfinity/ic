@@ -2,7 +2,7 @@ use crate::chain_key::{InitialChainKeyConfigInternal, KeyConfigRequestInternal};
 use crate::{
     common::LOG_PREFIX,
     mutations::common::{get_subnet_ids_from_subnet_list, has_duplicates},
-    registry::{Registry, Version},
+    registry::{Registry, TimestampNanos},
 };
 use candid::Encode;
 use dfn_core::call;
@@ -48,7 +48,7 @@ impl Registry {
     pub fn get_subnet(
         &self,
         subnet_id: SubnetId,
-        version: Version,
+        version: TimestampNanos,
     ) -> Result<SubnetRecord, String> {
         let RegistryValue {
             value: subnet_record_vec,
@@ -134,7 +134,7 @@ impl Registry {
     pub fn get_subnet_catch_up_package(
         &self,
         subnet_id: SubnetId,
-        version: Option<Version>,
+        version: Option<TimestampNanos>,
     ) -> Result<CatchUpPackageContents, String> {
         let cup_contents_key = make_catch_up_package_contents_key(subnet_id);
 

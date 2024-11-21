@@ -22,6 +22,7 @@ use std::{
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use ic_types::time::current_time;
 
 /// The maximum size a registry delta, used to ensure that response payloads
 /// stay under `MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64`.
@@ -35,35 +36,35 @@ pub const MAX_REGISTRY_DELTAS_SIZE: usize =
 /// The Deque part is mostly future proofing for when we have garbage collection
 /// so that we're able to call pop_front().
 pub type RegistryMap = BTreeMap<Vec<u8>, VecDeque<RegistryValue>>;
-pub type Version = u64;
+pub type TimestampNanos = u64;
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Default)]
-pub struct EncodedVersion([u8; 8]);
+pub struct EncodedTimestampNanos([u8; 8]);
 
-impl EncodedVersion {
-    pub const fn as_version(&self) -> Version {
-        Version::from_be_bytes(self.0)
+impl EncodedTimestampNanos {
+    pub const fn as_timestamp(&self) -> TimestampNanos {
+        TimestampNanos::from_be_bytes(self.0)
     }
 }
 
-impl fmt::Debug for EncodedVersion {
+impl fmt::Debug for EncodedTimestampNanos {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_version())
+        write!(f, "{}", self.as_timestamp())
     }
 }
 
-impl From<Version> for EncodedVersion {
-    fn from(v: Version) -> Self {
+impl From<TimestampNanos> for EncodedTimestampNanos {
+    fn from(v: TimestampNanos) -> Self {
         Self(v.to_be_bytes())
     }
 }
 
-impl From<EncodedVersion> for Version {
-    fn from(v: EncodedVersion) -> Self {
-        v.as_version()
+impl From<EncodedTimestampNanos> for TimestampNanos {
+    fn from(v: EncodedTimestampNanos) -> Self {
+        v.as_timestamp()
     }
 }
 
-impl AsRef<[u8]> for EncodedVersion {
+impl AsRef<[u8]> for EncodedTimestampNanos {
     fn as_ref(&self) -> &[u8] {
         &self.0
     }
@@ -76,9 +77,9 @@ impl AsRef<[u8]> for EncodedVersion {
 /// TODO(NNS1-487): Garbage collection.
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Registry {
-    /// Global counter that is incremented each time a mutation is applied to
-    /// the registry. Each set of changes is tagged with this version.
-    version: Version,
+    /// Timestamp in nanoseconds which is persisted each time a mutation is applied to
+    /// the registry. Each set of changes is tagged with this timestamp.
+    timestamp: TimestampNanos,
 
     /// Registry contents represented as a versioned key/value store, where
     /// value versions are stored in a deque in ascending order (latest version
@@ -93,7 +94,7 @@ pub struct Registry {
     /// Each entry contains a blob which is a serialized
     /// RegistryAtomicMutateRequest.  We keep the serialized version around to
     /// make sure that hash trees stay the same even if protobuf schema evolves.
-    pub(crate) changelog: RbTree<EncodedVersion, Vec<u8>>,
+    pub(crate) changelog: RbTree<EncodedTimestampNanos, Vec<u8>>,
 }
 
 impl Registry {
@@ -135,7 +136,7 @@ impl Registry {
     /// Returns the highest version of value such that it is lower than or equal
     /// to 'version', or None if it does not exist or if the most recent update
     /// whose version is less than or equal to 'version' is a deletion marker.
-    pub fn get(&self, key: &[u8], version: Version) -> Option<&RegistryValue> {
+    pub fn get(&self, key: &[u8], version: TimestampNanos) -> Option<&RegistryValue> {
         let value = self
             .store
             .get(key)?
@@ -154,7 +155,7 @@ impl Registry {
     ///
     /// This function is used to determine the number of deltas to include into
     /// a response to avoid the going beyond the max response size limit.
-    pub fn count_fitting_deltas(&self, since_version: Version, max_bytes: usize) -> usize {
+    pub fn count_fitting_deltas(&self, since_version: TimestampNanos, max_bytes: usize) -> usize {
         self.changelog()
             .iter()
             .skip(since_version as usize)
@@ -177,20 +178,25 @@ impl Registry {
         self.store.get(key).and_then(VecDeque::back)
     }
 
-    /// Increments the latest version of the registry.
-    fn increment_version(&mut self) -> Version {
-        self.version += 1;
-        self.version
+    /// Increments the latest timestamp of the registry.
+    fn increment_timestamp(&mut self) -> TimestampNanos {
+        let now: TimestampNanos = current_time().as_nanos_since_unix_epoch();
+        if self.changelog().get(now.into()).is_none() {
+            self.timestamp = now;
+        } else {
+            self.timestamp = now + 1;
+        }
+        self.timestamp
     }
 
-    pub fn latest_version(&self) -> Version {
-        self.version
+    pub fn latest_version(&self) -> TimestampNanos {
+        self.timestamp
     }
 
-    fn apply_mutations_as_version(
+    fn apply_mutations_with_timestamp(
         &mut self,
         mut mutations: Vec<RegistryMutation>,
-        version: Version,
+        timestamp: TimestampNanos,
     ) {
         // We sort entries by key to eliminate the difference between changelog
         // produced by the new version of the registry canister starting from v1
@@ -219,11 +225,11 @@ impl Registry {
             mutations,
             preconditions: vec![],
         };
-        self.changelog_insert(version, &req);
+        self.changelog_insert(timestamp, &req);
 
         for mutation in req.mutations {
             (*self.store.entry(mutation.key).or_default()).push_back(RegistryValue {
-                version,
+                version: timestamp,
                 value: mutation.value,
                 deletion_marker: mutation.mutation_type == Type::Delete as i32,
             });
@@ -242,8 +248,8 @@ impl Registry {
             // global version is the max of all versions in the store.
             return;
         }
-        self.increment_version();
-        self.apply_mutations_as_version(mutations, self.version);
+        self.increment_timestamp();
+        self.apply_mutations_with_timestamp(mutations, self.timestamp);
     }
 
     /// Verifies the implicit precondition corresponding to the mutation_type
@@ -315,7 +321,7 @@ impl Registry {
                     .changelog
                     .iter()
                     .map(|(encoded_version, bytes)| ChangelogEntry {
-                        version: encoded_version.as_version(),
+                        version: encoded_version.as_timestamp(),
                         encoded_mutation: bytes.clone(),
                     })
                     .collect(),
@@ -339,14 +345,14 @@ impl Registry {
         self.serializable_form_at(ReprVersion::Version1)
     }
 
-    pub fn changelog(&self) -> &RbTree<EncodedVersion, Vec<u8>> {
+    pub fn changelog(&self) -> &RbTree<EncodedTimestampNanos, Vec<u8>> {
         &self.changelog
     }
 
     /// Inserts a changelog entry at the given version, while enforcing the
     /// [`MAX_REGISTRY_DELTAS_SIZE`] limit.
     fn changelog_insert(&mut self, version: u64, req: &RegistryAtomicMutateRequest) {
-        let version = EncodedVersion::from(version);
+        let version = EncodedTimestampNanos::from(version);
         let bytes = pb_encode(req);
 
         let delta_size = version.as_ref().len() + bytes.len();
@@ -374,7 +380,7 @@ impl Registry {
     pub fn from_serializable_form(&mut self, stable_repr: RegistryStableStorage) {
         assert!(self.store.is_empty());
         assert!(self.changelog.is_empty());
-        assert_eq!(self.version, 0);
+        assert_eq!(self.timestamp, 0);
 
         let repr_version = ReprVersion::try_from(stable_repr.version).unwrap_or_else(|_| {
             panic!(
@@ -400,8 +406,8 @@ impl Registry {
                             key: "_".into(),
                             value: "".into(),
                         }];
-                        self.apply_mutations_as_version(mutations, i);
-                        self.version = i;
+                        self.apply_mutations_with_timestamp(mutations, i);
+                        self.timestamp = i;
                     }
                     // End code to fix ICSUP-2589
 
@@ -409,16 +415,17 @@ impl Registry {
                         .unwrap_or_else(|err| {
                             panic!("Failed to decode mutation@{}: {}", entry.version, err)
                         });
-                    self.apply_mutations_as_version(req.mutations, entry.version);
-                    self.version = entry.version;
-                    current_version = self.version;
+                    self.apply_mutations_with_timestamp(req.mutations, entry.version);
+                    self.timestamp = entry.version;
+                    current_version = self.timestamp;
                 }
             }
             ReprVersion::Unspecified => {
-                let mut mutations_by_version = BTreeMap::<Version, Vec<RegistryMutation>>::new();
+                let mut mutations_by_version =
+                    BTreeMap::<TimestampNanos, Vec<RegistryMutation>>::new();
                 for delta in stable_repr.deltas.into_iter() {
-                    self.version = max(
-                        self.version,
+                    self.timestamp = max(
+                        self.timestamp,
                         delta
                             .values
                             .last()
@@ -1009,7 +1016,7 @@ mod tests {
         assert_eq!(1, registry.changelog().iter().count());
         assert!(registry
             .changelog()
-            .get(EncodedVersion::from(version).as_ref())
+            .get(EncodedTimestampNanos::from(version).as_ref())
             .is_some());
     }
 
@@ -1085,14 +1092,14 @@ mod tests {
         // Circumvent `changelog_insert()` to insert potentially oversized mutations.
         registry
             .changelog
-            .insert(EncodedVersion::from(version), pb_encode(&req));
+            .insert(EncodedTimestampNanos::from(version), pb_encode(&req));
 
         (*registry.store.entry(mutation.key).or_default()).push_back(RegistryValue {
             version,
             value: mutation.value,
             deletion_marker: mutation.mutation_type == Type::Delete as i32,
         });
-        registry.version = version;
+        registry.timestamp = version;
 
         // Serialize.
         let stable_repr = registry.serializable_form_at(repr_version);
@@ -1213,7 +1220,7 @@ Average length of the values: {} (desired: {})",
                 preconditions: vec![],
             };
 
-            let version = EncodedVersion::from(version);
+            let version = EncodedTimestampNanos::from(version);
             let bytes = pb_encode(&req);
 
             version.as_ref().len() + bytes.len()

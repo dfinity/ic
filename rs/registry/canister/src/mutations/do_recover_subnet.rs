@@ -9,7 +9,7 @@ use crate::chain_key::{InitialChainKeyConfigInternal, KeyConfigRequestInternal};
 use crate::{
     common::LOG_PREFIX,
     mutations::do_create_subnet::EcdsaInitialConfig,
-    registry::{Registry, Version},
+    registry::{Registry, TimestampNanos},
 };
 use candid::{CandidType, Deserialize, Encode};
 use dfn_core::api::{call, CanisterId};
@@ -481,8 +481,8 @@ impl TryFrom<KeyConfigRequest> for KeyConfigRequestInternal {
 fn panic_if_record_changed_across_versions(
     registry: &Registry,
     key: &str,
-    initial_registry_version: Version,
-    final_registry_version: Version,
+    initial_registry_version: TimestampNanos,
+    final_registry_version: TimestampNanos,
     panic_message: String,
 ) {
     let initial_record_version =
@@ -498,8 +498,8 @@ fn panic_if_record_changed_across_versions(
 fn get_record_version_as_of_registry_version(
     registry: &Registry,
     record_key: &str,
-    version: Version,
-) -> Version {
+    version: TimestampNanos,
+) -> TimestampNanos {
     registry
         .get(record_key.as_bytes(), version)
         .map(|record| record.version)

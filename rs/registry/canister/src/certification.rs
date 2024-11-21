@@ -22,13 +22,13 @@ use dfn_core::api::set_certified_data;
 use ic_certified_map::{labeled, HashTree};
 use ic_protobuf::messaging::xnet::v1 as pb;
 
-use crate::registry::{Registry, Version};
+use crate::registry::{Registry, TimestampNanos};
 
 /// The maximum amount of bytes a 64-bit number can occupy when encoded in
 /// LEB128.
 const MAX_U64_ENCODING_BYTES: usize = 10;
 
-pub fn current_version_tree(v: Version) -> HashTree<'static> {
+pub fn current_version_tree(v: TimestampNanos) -> HashTree<'static> {
     let mut buf = Vec::with_capacity(MAX_U64_ENCODING_BYTES);
     leb128::write::unsigned(&mut buf, v).unwrap();
     labeled(
