@@ -1,6 +1,5 @@
 //! Replica -- Internet Computer
 
-use anyhow::anyhow;
 use ic_async_utils::{abort_on_panic, shutdown_signal};
 use ic_config::Config;
 use ic_crypto_sha2::Sha256;
@@ -11,17 +10,16 @@ use ic_metrics::MetricsRegistry;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
 use ic_tracing::ReloadHandles;
+use ic_tracing_jaeger_exporter::jaeger_exporter;
 use ic_types::{
     consensus::CatchUpPackage, replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion,
     SubnetId,
 };
 use nix::unistd::{setpgid, Pid};
-use opentelemetry::{trace::TracerProvider, KeyValue};
-use opentelemetry_otlp::{SpanExporter, WithExportConfig};
-use opentelemetry_sdk::{trace, Resource};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{signal, SignalKind};
-use tracing_subscriber::{layer::SubscriberExt, Layer, Registry};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::Layer;
 
 #[cfg(target_os = "linux")]
 mod jemalloc_metrics;
@@ -41,43 +39,6 @@ use regex::Regex;
 use std::fs::File;
 #[cfg(feature = "profiler")]
 use std::io::Write;
-
-fn jaeger_exporter(
-    config: &Config,
-    rt_handle: &tokio::runtime::Handle,
-) -> Result<impl Layer<Registry> + Send + Sync, anyhow::Error> {
-    // TODO: the replica config has empty string instead of a None value for the 'jaeger_addr'. It needs to be fixed.
-    let jager_addr = config
-        .tracing
-        .jaeger_addr
-        .clone()
-        .ok_or(anyhow!("No jaeger addr."))?;
-    if jager_addr.is_empty() {
-        return Err(anyhow!("Empty jaeger addr."));
-    }
-
-    let _rt_enter = rt_handle.enter();
-
-    let span_exporter = SpanExporter::builder()
-        .with_tonic()
-        .with_endpoint(jager_addr)
-        .with_protocol(opentelemetry_otlp::Protocol::Grpc)
-        .build()?;
-
-    let tracer = opentelemetry_sdk::trace::TracerProvider::builder()
-        .with_config(
-            trace::Config::default()
-                .with_sampler(opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(0.01))
-                .with_resource(Resource::new(vec![KeyValue::new(
-                    "service.name",
-                    "replica",
-                )])),
-        )
-        .with_batch_exporter(span_exporter, opentelemetry_sdk::runtime::Tokio)
-        .build();
-
-    Ok(tracing_opentelemetry::OpenTelemetryLayer::new(tracer.tracer("jaeger")).boxed())
-}
 
 /// Determine sha256 hash of the current replica binary
 ///
@@ -276,14 +237,18 @@ fn main() -> io::Result<()> {
     let (logging_layer, _logging_drop_guard) =
         get_logging_layer(&config.logger, node_id, subnet_id);
 
-    let mut tracing_layers = vec![logging_layer];
+    let mut tracing_layers = vec![logging_layer];    
 
     let (reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(vec![]);
     let tracing_handle = ReloadHandles::new(reload_handle);
     tracing_layers.push(reload_layer.boxed());
 
-    if let Ok(jager_exporter_layer) = jaeger_exporter(&config, rt_main.handle()) {
-        tracing_layers.push(jager_exporter_layer.boxed());
+    // TODO: the replica config has empty string instead of a None value for the 'jaeger_addr'. It needs to be fixed.
+    if let Some(jaeger_addr) = &config.tracing.jaeger_addr {
+        match jaeger_exporter(jaeger_addr, "replica", rt_main.handle()) {
+            Ok(layer) => tracing_layers.push(layer.boxed()),
+            Err(err) => info!(logger, "{:?}", err),
+        }
     }
 
     let subscriber = tracing_subscriber::registry().with(tracing_layers);

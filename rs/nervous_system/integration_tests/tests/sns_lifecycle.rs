@@ -443,8 +443,10 @@ async fn test_sns_lifecycle(
 
     // Assert that the mode of SNS Governance is `PreInitializationSwap`.
     assert_eq!(
-        sns::governance::get_mode(&pocket_ic, sns.governance.canister_id)
+        sns.governance
+            .get_mode(&pocket_ic)
             .await
+            .unwrap()
             .mode
             .unwrap(),
         sns_pb::governance::Mode::PreInitializationSwap as i32
@@ -1111,16 +1113,20 @@ async fn test_sns_lifecycle(
     // Assert that the mode of SNS Governance is correct
     if swap_finalization_status == SwapFinalizationStatus::Aborted {
         assert_eq!(
-            sns::governance::get_mode(&pocket_ic, sns.governance.canister_id)
+            sns.governance
+                .get_mode(&pocket_ic)
                 .await
+                .unwrap()
                 .mode
                 .unwrap(),
             sns_pb::governance::Mode::PreInitializationSwap as i32,
         );
     } else {
         assert_eq!(
-            sns::governance::get_mode(&pocket_ic, sns.governance.canister_id)
+            sns.governance
+                .get_mode(&pocket_ic)
                 .await
+                .unwrap()
                 .mode
                 .unwrap(),
             sns_pb::governance::Mode::Normal as i32

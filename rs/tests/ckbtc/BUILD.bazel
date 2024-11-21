@@ -9,7 +9,6 @@ DEPENDENCIES = [
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/bitcoin/ckbtc/agent",
-    "//rs/bitcoin/ckbtc/kyt",
     "//rs/bitcoin/ckbtc/minter",
     "//rs/bitcoin/kyt:btc_kyt_lib",
     "//rs/canister_client",
@@ -60,8 +59,8 @@ system_test_nns(
     name = "ckbtc_minter_basics_test",
     env = {
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+        "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
         "IC_BTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/kyt:btc_kyt_canister)",
-        "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
@@ -77,10 +76,10 @@ system_test_nns(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
-            "//rs/bitcoin/ckbtc/kyt:kyt_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/bitcoin/kyt:btc_kyt_canister",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+            "//rs/tests:ckbtc_uvm_config_image",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
             "@btc_canister//file",
         ],
@@ -91,8 +90,8 @@ system_test_nns(
     name = "ckbtc_minter_deposit_and_withdrawal",
     env = {
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+        "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
         "IC_BTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/kyt:btc_kyt_canister)",
-        "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
@@ -107,10 +106,10 @@ system_test_nns(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
-            "//rs/bitcoin/ckbtc/kyt:kyt_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/bitcoin/kyt:btc_kyt_canister",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+            "//rs/tests:ckbtc_uvm_config_image",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
             "@btc_canister//file",
         ],
@@ -121,8 +120,8 @@ system_test_nns(
     name = "ckbtc_minter_kyt",
     env = {
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+        "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
         "IC_BTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/kyt:btc_kyt_canister)",
-        "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
@@ -138,10 +137,10 @@ system_test_nns(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
-            "//rs/bitcoin/ckbtc/kyt:kyt_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/bitcoin/kyt:btc_kyt_canister",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+            "//rs/tests:ckbtc_uvm_config_image",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
             "@btc_canister//file",
         ],
@@ -152,8 +151,8 @@ system_test_nns(
     name = "ckbtc_minter_update_balance",
     env = {
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+        "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
         "IC_BTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/kyt:btc_kyt_canister)",
-        "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
@@ -169,10 +168,10 @@ system_test_nns(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
-            "//rs/bitcoin/ckbtc/kyt:kyt_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/bitcoin/kyt:btc_kyt_canister",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+            "//rs/tests:ckbtc_uvm_config_image",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
             "@btc_canister//file",
         ],
@@ -183,8 +182,8 @@ system_test_nns(
     name = "ckbtc_minter_retrieve_btc",
     env = {
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+        "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
         "IC_BTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/kyt:btc_kyt_canister)",
-        "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
@@ -200,10 +199,10 @@ system_test_nns(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
-            "//rs/bitcoin/ckbtc/kyt:kyt_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/bitcoin/kyt:btc_kyt_canister",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+            "//rs/tests:ckbtc_uvm_config_image",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
             "@btc_canister//file",
         ],
@@ -215,6 +214,7 @@ system_test_nns(
     env = {
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
         "IC_BTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/kyt:btc_kyt_canister)",
+        "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
         "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
@@ -235,6 +235,7 @@ system_test_nns(
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/bitcoin/kyt:btc_kyt_canister",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+            "//rs/tests:ckbtc_uvm_config_image",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
             "@btc_canister//file",
         ],

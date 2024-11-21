@@ -13,6 +13,7 @@ use crate::{
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use canbench_rs::{bench, bench_fn, BenchResult};
+use futures::FutureExt;
 use ic_base_types::PrincipalId;
 use ic_nns_common::{
     pb::v1::{NeuronId as NeuronIdProto, ProposalId},
@@ -325,12 +326,10 @@ fn cast_vote_cascade_helper(strategy: SetUpStrategy, topic: Topic) -> BenchResul
 
     let proposal_id = ProposalId { id: 1 };
     bench_fn(|| {
-        governance.cast_vote_and_cascade_follow(proposal_id, neuron_id.into(), Vote::Yes, topic);
-        // let yes_votes = ballots
-        //     .iter()
-        //     .filter(|(id, ballot)| ballot.vote == Vote::Yes as i32)
-        //     .count();
-        // panic!("Number of cascaded votes: {}, {}", ballots.len(), yes_votes)
+        governance
+            .cast_vote_and_cascade_follow(proposal_id, neuron_id.into(), Vote::Yes, topic)
+            .now_or_never()
+            .unwrap();
     })
 }
 
