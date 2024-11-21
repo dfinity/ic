@@ -4827,6 +4827,7 @@ impl Governance {
             }
         }
     }
+
     /// Checks if an automatic upgrade is needed and initiates it.
     /// An automatic upgrade is needed if `target_version` is set to a future version on the upgrade path
     async fn initiate_upgrade_if_sns_behind_target_version(&mut self) {
