@@ -1,6 +1,6 @@
-use std::process::Command;
 use std::fmt;
 use std::io;
+use std::process::Command;
 use std::str::Utf8Error;
 
 pub static DEFAULT_SYSTEMD_NETWORK_DIR: &str = "/run/systemd/network";
@@ -11,7 +11,6 @@ pub fn restart_systemd_networkd() {
         .status();
     // Explicitly don't care about return code status...
 }
-
 
 #[derive(Debug)]
 pub enum VirtualizationDetectionError {
