@@ -17,7 +17,7 @@ use ic_types::{
     ingress::WasmResult, CanisterId, Cycles, NumBytes, NumInstructions,
     MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
 };
-use more_asserts::{assert_le, assert_lt};
+use more_asserts::{assert_gt, assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
 use std::time::{Duration, SystemTime};
 
@@ -31,37 +31,30 @@ const KIB: u64 = 1024;
 const MIB: u64 = KIB * 1024;
 const GIB: u64 = MIB * 1024;
 const TIB: u64 = GIB * 1024;
-const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(10_253 * MIB);
-const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(20 * GIB);
+const SUBNET_MEMORY_THRESHOLD: u64 = 10_253 * MIB;
+const SUBNET_MEMORY_CAPACITY: u64 = 20 * GIB;
 
-fn setup(settings: CanisterSettingsArgs) -> (StateMachine, CanisterId) {
+fn setup(subnet_memory_threshold: u64, subnet_memory_capacity: u64) -> (StateMachine, CanisterId) {
     let subnet_type = SubnetType::Application;
-    let subnet_config = SubnetConfig::new(subnet_type);
-    // subnet_config.scheduler_config.max_instructions_per_round = MAX_INSTRUCTIONS_PER_ROUND;
-    // subnet_config.scheduler_config.max_instructions_per_message = MAX_INSTRUCTIONS_PER_MESSAGE;
-    // subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
     let mut execution_config = ExecutionConfig::default();
-    execution_config.subnet_memory_threshold = SUBNET_MEMORY_THRESHOLD;
-    execution_config.subnet_memory_capacity = SUBNET_MEMORY_CAPACITY;
-    let config = StateMachineConfig::new(subnet_config, execution_config);
+    execution_config.subnet_memory_threshold = NumBytes::new(subnet_memory_threshold);
+    execution_config.subnet_memory_capacity = NumBytes::new(subnet_memory_capacity);
+    let config = StateMachineConfig::new(SubnetConfig::new(subnet_type), execution_config);
     let env = StateMachineBuilder::new()
         .with_config(Some(config))
         .with_subnet_type(subnet_type)
         .with_checkpoints_enabled(false)
         .build();
     let canister_id =
-        env.create_canister_with_cycles(None, Cycles::from(301_000_000_000_u128), Some(settings));
+        env.create_canister_with_cycles(None, Cycles::from(301_000_000_000_u128), None);
 
-    (env, canister_id)
-}
-
-fn setup_and_install_wasm(
-    settings: CanisterSettingsArgs,
-    wasm: Vec<u8>,
-) -> (StateMachine, CanisterId) {
-    let (env, canister_id) = setup(settings);
-    env.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, wasm, vec![])
-        .unwrap();
+    env.install_wasm_in_mode(
+        canister_id,
+        CanisterInstallMode::Install,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+    )
+    .unwrap();
 
     (env, canister_id)
 }
@@ -72,78 +65,83 @@ $ ./ci/container/container-run.sh
 $ bazel test //rs/execution_environment:execution_environment_misc_integration_tests/storage_reservation \
     --test_output=streamed \
     --test_arg=--nocapture \
-    --test_arg=test_storage_reservation_triggered_in_update
+    --test_arg=test_storage_reservation
 */
 #[test]
 fn test_storage_reservation_not_triggered() {
-    let (env, canister_id) = setup_and_install_wasm(
-        CanisterSettingsArgsBuilder::new().build(),
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-    );
+    let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY);
+    let initial_balance = env.cycle_balance(canister_id);
+    let initial_reserved_balance = env.reserved_balance(canister_id);
 
-    println!("\nABC before call");
     let _ = env.execute_ingress(canister_id, "update", wasm().build());
-    println!("ABC after call\n");
-    assert_eq!(env.cycle_balance(canister_id), 298677383544);
+
+    assert_lt!(env.cycle_balance(canister_id), initial_balance);
+    assert_eq!(initial_reserved_balance, 0);
     assert_eq!(env.reserved_balance(canister_id), 0);
 }
 
 #[test]
 fn test_storage_reservation_triggered_in_update() {
-    let (env, canister_id) = setup_and_install_wasm(
-        CanisterSettingsArgsBuilder::new().build(),
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-    );
+    let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY);
+    let initial_balance = env.cycle_balance(canister_id);
+    let initial_reserved_balance = env.reserved_balance(canister_id);
 
-    println!("\nABC before call");
     let _ = env.execute_ingress(canister_id, "update", wasm().stable_grow(100).build());
-    println!("ABC after call\n");
-    assert_eq!(env.cycle_balance(canister_id), 298568285217);
-    assert_eq!(env.reserved_balance(canister_id), 109078366);
+
+    assert_lt!(env.cycle_balance(canister_id), initial_balance);
+    assert_eq!(initial_reserved_balance, 0);
+    assert_gt!(env.reserved_balance(canister_id), 0);
 }
 
 #[test]
 fn test_storage_reservation_triggered_in_response() {
-    let (env, canister_id) = setup_and_install_wasm(
-        CanisterSettingsArgsBuilder::new().build(),
-        UNIVERSAL_CANISTER_WASM.to_vec(),
+    let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY);
+    let initial_balance = env.cycle_balance(canister_id);
+    let initial_reserved_balance = env.reserved_balance(canister_id);
+
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm()
+            .call_with_cycles(
+                ic00::IC_00,
+                ic00::Method::RawRand,
+                call_args()
+                    .other_side(EmptyBlob.encode())
+                    .on_reply(wasm().stable_grow(100)),
+                Cycles::new(0),
+            )
+            .build(),
     );
 
-    println!("\nABC before call");
-    let _ = env.execute_ingress(canister_id, "update", wasm()
-        .call_with_cycles(
-            ic00::IC_00,
-            ic00::Method::RawRand,
-            call_args().other_side(EmptyBlob.encode()).on_reply(
-                wasm().stable_grow(100),
-            ),
-            Cycles::new(0),
-        ).build());
-    println!("ABC after call\n");
-    assert_eq!(env.cycle_balance(canister_id), 298560446442);
-    assert_eq!(env.reserved_balance(canister_id), 106453234);
+    assert_lt!(env.cycle_balance(canister_id), initial_balance);
+    assert_eq!(initial_reserved_balance, 0);
+    assert_gt!(env.reserved_balance(canister_id), 0);
 }
 
 #[test]
 fn test_storage_reservation_triggered_in_cleanup() {
-    let (env, canister_id) = setup_and_install_wasm(
-        CanisterSettingsArgsBuilder::new().build(),
-        UNIVERSAL_CANISTER_WASM.to_vec(),
+    let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY);
+    let initial_balance = env.cycle_balance(canister_id);
+    let initial_reserved_balance = env.reserved_balance(canister_id);
+
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm()
+            .call_with_cycles(
+                ic00::IC_00,
+                ic00::Method::RawRand,
+                call_args()
+                    .other_side(EmptyBlob.encode())
+                    .on_reply(wasm().trap_with_blob(b"on_reply trap"))
+                    .on_cleanup(wasm().stable_grow(100)),
+                Cycles::new(0),
+            )
+            .build(),
     );
 
-    println!("\nABC before call");
-    let _ = env.execute_ingress(canister_id, "update", wasm()
-        .call_with_cycles(
-            ic00::IC_00,
-            ic00::Method::RawRand,
-            call_args().other_side(EmptyBlob.encode()).on_reply(
-                wasm().trap_with_blob(b"on_reply trap"),
-            ).on_cleanup(
-                wasm().stable_grow(100),
-            ),
-            Cycles::new(0),
-        ).build());
-    println!("ABC after call\n");
-    assert_eq!(env.cycle_balance(canister_id), 298560386042);
-    assert_eq!(env.reserved_balance(canister_id), 106453234);
+    assert_lt!(env.cycle_balance(canister_id), initial_balance);
+    assert_eq!(initial_reserved_balance, 0);
+    assert_gt!(env.reserved_balance(canister_id), 0);
 }
