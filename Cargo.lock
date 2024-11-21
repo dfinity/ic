@@ -16547,6 +16547,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_cbor",
+ "serde_json",
  "slog",
  "slog-async",
  "strum",

@@ -4,6 +4,7 @@ use crate::{
     process_manager::{Process, ProcessManager},
     registry_helper::RegistryHelper,
 };
+use ic_config::crypto::CryptoConfig;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{NodeId, ReplicaVersion};
 use std::{
@@ -40,6 +41,7 @@ pub(crate) struct BoundaryNodeManager {
     _metrics: Arc<OrchestratorMetrics>,
     process: Arc<Mutex<ProcessManager<BoundaryNodeProcess>>>,
     ic_binary_dir: PathBuf,
+    crypto_config: CryptoConfig,
     version: ReplicaVersion,
     logger: ReplicaLogger,
     node_id: NodeId,
@@ -53,6 +55,7 @@ impl BoundaryNodeManager {
         version: ReplicaVersion,
         node_id: NodeId,
         ic_binary_dir: PathBuf,
+        crypto_config: CryptoConfig,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
@@ -62,6 +65,7 @@ impl BoundaryNodeManager {
                 logger.clone().inner_logger.root,
             ))),
             ic_binary_dir,
+            crypto_config,
             version,
             logger,
             node_id,
@@ -156,29 +160,34 @@ impl BoundaryNodeManager {
 
         // TODO: Should these values be settable via config?
         let args = vec![
-            format!("--listen-https-port=443"),
-            format!("--tls-hostname={}", domain_name),
-            format!("--tls-cert-path=/var/lib/ic/data/ic-boundary-tls.crt"),
-            format!("--tls-pkey-path=/var/lib/ic/data/ic-boundary-tls.key"),
-            format!("--tls-acme-credentials-path=/var/lib/ic/data"),
+            format!("--bouncer-ban-time=5m"),
+            format!("--bouncer-bucket-ttl=1m"),
+            format!("--bouncer-burst-size=1200"),
+            format!("--bouncer-enable"),
+            format!("--bouncer-max-buckets=30000"),
+            format!("--bouncer-ratelimit=600"),
+            format!("--cache-max-item-size=10MB"),
+            format!("--cache-size=1GB"),
+            format!("--cache-ttl=1s"),
             format!("--http-client-timeout-connect=3s"),
-            format!("--registry-disable-replicator"),
-            format!("--registry-local-store-path=/var/lib/ic/data/ic_registry_local_store"),
+            format!("--listen-https-port=443"),
             format!("--obs-log-journald"),
             format!("--obs-metrics-addr=[::]:9324"),
             format!("--rate-limit-per-second-per-subnet=1000"),
-            format!("--bouncer-enable"),
-            format!("--bouncer-ratelimit=600"),
-            format!("--bouncer-burst-size=1200"),
-            format!("--bouncer-ban-time=5m"),
-            format!("--bouncer-max-buckets=30000"),
-            format!("--bouncer-bucket-ttl=1m"),
-            format!("--cache-size=1GB"),
-            format!("--cache-max-item-size=10MB"),
-            format!("--cache-ttl=1s"),
-            format!("--shed-system-ewma=0.9"),
+            format!("--registry-disable-replicator"),
+            format!("--registry-local-store-path=/var/lib/ic/data/ic_registry_local_store"),
             format!("--shed-system-cpu=0.9"),
+            format!("--shed-system-ewma=0.9"),
             format!("--shed-system-memory=0.9"),
+            format!("--tls-acme-credentials-path=/var/lib/ic/data"),
+            format!("--tls-cert-path=/var/lib/ic/data/ic-boundary-tls.crt"),
+            format!("--tls-hostname={}", domain_name),
+            format!("--tls-pkey-path=/var/lib/ic/data/ic-boundary-tls.key"),
+            format!(
+                "--crypto-config={}",
+                serde_json::to_string(&self.crypto_config)
+                    .map_err(OrchestratorError::SerializeCryptoConfigError)?
+            ),
         ];
 
         process

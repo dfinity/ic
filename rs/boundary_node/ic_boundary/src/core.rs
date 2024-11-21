@@ -35,13 +35,12 @@ use ic_bn_lib::{
     types::RequestType,
 };
 use ic_canister_client::{Agent, Sender};
-use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
 use ic_interfaces::crypto::{BasicSigner, KeyManager};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_logger::replica_logger::no_op_logger;
-use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId};
@@ -329,6 +328,20 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     let persister = Persister::new(Arc::clone(&routing_table));
 
+    // Registry Client
+    let local_store = Arc::new(LocalStoreImpl::new(
+        cli.registry.registry_local_store_path.clone().unwrap(),
+    ));
+
+    let registry_client = Arc::new(RegistryClientImpl::new(
+        local_store.clone(), // data_provider
+        None,                // metrics_registry
+    ));
+
+    registry_client
+        .fetch_and_start_polling()
+        .context("failed to start registry client")?;
+
     let (registry_replicator, nns_pub_key, mut registry_runners) =
         // Set up registry-related stuff if local store was specified
         if cli.registry.registry_local_store_path.is_some() {
@@ -360,76 +373,78 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     runners.append(&mut registry_runners);
 
     // HTTP Logs Anonymization
-    let rc = registry_replicator
-        .as_ref()
-        .map(|r| r.get_registry_client())
-        .unwrap(); // TODO(or.ricon): Clean this up!
+    let tracker = (cli.misc.crypto_config)
+        .zip(cli.obs.obs_log_anonymization_canister_id)
+        .map(|(crypto_config, log_anonymization_cid)| {
+            let c = Arc::new(CryptoComponent::new(
+                &crypto_config,                          // config
+                Some(tokio::runtime::Handle::current()), // tokio_runtime_handle
+                registry_client.clone(),                 // registry_client
+                no_op_logger(),                          // logger
+                None,                                    // metrics
+            ));
 
-    let c = Arc::new(CryptoComponent::new(
-        &CryptoConfig::new("/home/orricon/workspace/ic-cdk-logs/out/node-1/crypto".into()), // config
-        None,           // tokio_runtime_handle
-        rc.clone(),     // registry_client
-        no_op_logger(), // logger
-        None,           // metrics
-    ));
+            let pk = c
+                .current_node_public_keys()
+                .map_err(|err| anyhow!("failed to retrieve public key: {err:?}"))?
+                .node_signing_public_key
+                .context("missing node public key")?;
 
-    let pk = c
-        .current_node_public_keys()
-        .map_err(|err| anyhow!("failed to retrieve public key: {err:?}"))?
-        .node_signing_public_key
-        .context("missing node public key")?;
+            let nid = derive_node_id(&pk).expect("failed to derive node id");
 
-    let nid = derive_node_id(&pk).expect("failed to derive node id");
+            // Custom Signer
+            let s = Sender::Node {
+                pub_key: pk.key_value,
+                sign: Arc::new(move |msg: &MessageId| {
+                    let sig = c
+                        .sign_basic(
+                            msg,                                  // message
+                            nid,                                  // signer
+                            registry_client.get_latest_version(), // registry_version
+                        )
+                        .map_err(|err| anyhow!("failed to sign message: {err:?}"))?
+                        .get()
+                        .0;
 
-    // Custom Signer
-    let s = Sender::Node {
-        pub_key: pk.key_value,
-        sign: Arc::new(move |msg: &MessageId| {
-            let sig = c
-                .sign_basic(
-                    msg,                     // message
-                    nid,                     // signer
-                    rc.get_latest_version(), // registry_version
-                )
-                .map_err(|err| anyhow!("failed to sign message: {err:?}"))?
-                .get()
-                .0;
+                    Ok(sig)
+                }),
+            };
 
-            Ok(sig)
-        }),
-    };
+            // Agent
+            let (proto, port) = [
+                // HTTP
+                cli.listen.listen_http_port.map(|p| ("http", p)),
+                // HTTPS
+                #[cfg(feature = "tls")]
+                cli.listen.listen_https_port.map(|p| ("https", p)),
+            ]
+            .into_iter()
+            // Choose first non-none option
+            .flatten()
+            .next()
+            .ok_or(anyhow!("missing http and https listen ports"))?;
 
-    // Agent
-    let (proto, port) = [
-        // HTTP
-        cli.listen.listen_http_port.map(|p| ("http", p)),
-        // HTTPS
-        #[cfg(feature = "tls")]
-        cli.listen.listen_https_port.map(|p| ("https", p)),
-    ]
-    .into_iter()
-    // Choose first non-none option
-    .flatten()
-    .next()
-    .ok_or(anyhow!("missing http and https listen ports"))?;
+            let ag = Agent::new(
+                format!("{proto}://localhost:{port}").parse()?, // url
+                s,                                              // sender
+            );
 
-    let ag = Agent::new(
-        format!("{proto}://localhost:{port}").parse()?, // url
-        s,                                              // sender
-    );
+            // Canister
+            let c = AnonymizationCanister::new(
+                ag,                    // agent
+                log_anonymization_cid, // canister_id
+            );
 
-    // Canister
-    let c = AnonymizationCanister::new(
-        ag,                                                 // agent
-        cli.obs.obs_log_anonymization_canister_id.unwrap(), // canister_id
-    );
+            // Rng
+            let rng_seed = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+            let rng = Box::new(StdRng::seed_from_u64(rng_seed as u64));
 
-    // Rng
-    let rng_seed = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-    let rng = Box::new(StdRng::seed_from_u64(rng_seed as u64));
+            // Tracker
+            let tracker = AnonymizationTracker::new(rng, c.into())?;
 
-    // Tracker
-    let mut tracker = AnonymizationTracker::new(rng, c.into())?;
+            Ok::<_, Error>(tracker)
+        })
+        .transpose()?;
 
     TokioScope::scope_and_block(move |s| {
         if let Some(v) = registry_replicator {
@@ -445,13 +460,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         }
 
         // Anonymization Tracker
-        s.spawn(async move {
-            tracker
-                .track(|value| {
+        if let Some(mut t) = tracker {
+            s.spawn(async move {
+                t.track(|value| {
                     salt.store(Some(Arc::new(value)));
                 })
                 .await
-        });
+            });
+        }
 
         // HTTP servers
         s.spawn(async move {
