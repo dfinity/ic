@@ -108,6 +108,7 @@ package(default_visibility = ["//visibility:public"])
                 "icrc3-compatible-data-certificate",
             ],
             [
+                "//rs/ledger_suite/icrc1/tokens_u64",
             ],
         ),
     ]
