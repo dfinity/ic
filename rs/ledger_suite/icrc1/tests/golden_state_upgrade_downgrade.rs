@@ -13,7 +13,7 @@ use ic_ledger_suite_state_machine_tests::{
     TransactionGenerationParameters,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use std::str::FromStr;
@@ -44,7 +44,8 @@ lazy_static! {
         )),
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKBTC_IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH",
-        ))
+        )),
+        None,
     );
     pub static ref MAINNET_SNS_WASMS: Wasms = Wasms::new(
         Wasm::from_bytes(load_wasm_using_env_var(
@@ -55,12 +56,16 @@ lazy_static! {
         )),
         Wasm::from_bytes(load_wasm_using_env_var(
             "IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH",
-        ))
+        )),
+        Some(Wasm::from_bytes(load_wasm_using_env_var(
+            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_2_WASM_PATH"
+        ))),
     );
     pub static ref MASTER_WASMS: Wasms = Wasms::new(
         Wasm::from_bytes(index_ng_wasm()),
         Wasm::from_bytes(ledger_wasm()),
-        Wasm::from_bytes(archive_wasm())
+        Wasm::from_bytes(archive_wasm()),
+        None,
     );
 }
 
@@ -75,12 +80,14 @@ lazy_static! {
         )),
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKETH_IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH",
-        ))
+        )),
+        None,
     );
     pub static ref MASTER_WASMS: Wasms = Wasms::new(
         Wasm::from_bytes(index_ng_wasm()),
         Wasm::from_bytes(ledger_wasm()),
-        Wasm::from_bytes(archive_wasm())
+        Wasm::from_bytes(archive_wasm()),
+        None,
     );
 }
 
@@ -88,14 +95,21 @@ pub struct Wasms {
     index_wasm: Wasm,
     ledger_wasm: Wasm,
     archive_wasm: Wasm,
+    ledger_wasm_v2: Option<Wasm>,
 }
 
 impl Wasms {
-    fn new(index_wasm: Wasm, ledger_wasm: Wasm, archive_wasm: Wasm) -> Self {
+    fn new(
+        index_wasm: Wasm,
+        ledger_wasm: Wasm,
+        archive_wasm: Wasm,
+        ledger_wasm_v2: Option<Wasm>,
+    ) -> Self {
         Self {
             index_wasm,
             ledger_wasm,
             archive_wasm,
+            ledger_wasm_v2,
         }
     }
 }
@@ -188,7 +202,7 @@ impl LedgerSuiteConfig {
         }
     }
 
-    fn upgrade_archives(&self, state_machine: &StateMachine, wasm: &Wasm) {
+    fn upgrade_archives_or_panic(&self, state_machine: &StateMachine, wasm: &Wasm) {
         let canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
         let archives = list_archives(state_machine, canister_id);
@@ -208,7 +222,7 @@ impl LedgerSuiteConfig {
         println!("Upgraded {} archive(s)", num_archives);
     }
 
-    fn upgrade_index(&self, state_machine: &StateMachine, wasm: &Wasm) {
+    fn upgrade_index_or_panic(&self, state_machine: &StateMachine, wasm: &Wasm) {
         let canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.index_id).unwrap());
         let index_upgrade_arg = IndexArg::Upgrade(IndexUpgradeArg {
@@ -222,38 +236,70 @@ impl LedgerSuiteConfig {
         println!("Upgraded {} index '{}'", self.canister_name, self.index_id);
     }
 
-    fn upgrade_ledger(&self, state_machine: &StateMachine, wasm: &Wasm) {
+    fn upgrade_ledger(&self, state_machine: &StateMachine, wasm: &Wasm) -> Result<(), UserError> {
         let canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
         let args = ic_icrc1_ledger::LedgerArgument::Upgrade(None);
         let args = Encode!(&args).unwrap();
-        state_machine
-            .upgrade_canister(canister_id, wasm.clone().bytes(), args.clone())
-            .expect("should successfully upgrade ledger canister");
-        println!(
-            "Upgraded {} ledger '{}'",
-            self.canister_name, self.ledger_id
-        );
+        match state_machine.upgrade_canister(canister_id, wasm.clone().bytes(), args.clone()) {
+            Ok(_) => {
+                println!(
+                    "Upgraded {} ledger '{}'",
+                    self.canister_name, self.ledger_id
+                );
+                Ok(())
+            }
+            Err(e) => {
+                println!(
+                    "Error upgrading {} ledger '{}': {:?}",
+                    self.canister_name, self.ledger_id, e
+                );
+                Err(e)
+            }
+        }
     }
 
     fn upgrade_to_mainnet(&self, state_machine: &StateMachine) {
         // Upgrade each canister twice to exercise pre-upgrade
-        self.upgrade_index(state_machine, &self.mainnet_wasms.index_wasm);
-        self.upgrade_index(state_machine, &self.mainnet_wasms.index_wasm);
-        self.upgrade_ledger(state_machine, &self.mainnet_wasms.ledger_wasm);
-        self.upgrade_ledger(state_machine, &self.mainnet_wasms.ledger_wasm);
-        self.upgrade_archives(state_machine, &self.mainnet_wasms.archive_wasm);
-        self.upgrade_archives(state_machine, &self.mainnet_wasms.archive_wasm);
+        self.upgrade_index_or_panic(state_machine, &self.mainnet_wasms.index_wasm);
+        self.upgrade_index_or_panic(state_machine, &self.mainnet_wasms.index_wasm);
+        match self.upgrade_ledger(state_machine, &self.mainnet_wasms.ledger_wasm) {
+            Ok(_) => {
+                panic!("should not successfully downgrade ledger");
+            }
+            Err(user_error) => user_error.assert_contains(
+                ErrorCode::CanisterCalledTrap,
+                "Trying to downgrade from incompatible version",
+            ),
+        }
+        self.upgrade_archives_or_panic(state_machine, &self.mainnet_wasms.archive_wasm);
+        self.upgrade_archives_or_panic(state_machine, &self.mainnet_wasms.archive_wasm);
     }
 
     fn upgrade_to_master(&self, state_machine: &StateMachine) {
         // Upgrade each canister twice to exercise pre-upgrade
-        self.upgrade_index(state_machine, &self.master_wasms.index_wasm);
-        self.upgrade_index(state_machine, &self.master_wasms.index_wasm);
-        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm);
-        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm);
-        self.upgrade_archives(state_machine, &self.master_wasms.archive_wasm);
-        self.upgrade_archives(state_machine, &self.master_wasms.archive_wasm);
+        self.upgrade_index_or_panic(state_machine, &self.master_wasms.index_wasm);
+        self.upgrade_index_or_panic(state_machine, &self.master_wasms.index_wasm);
+        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm)
+            .or_else(|e| {
+                match (
+                    e.description().contains(
+                        "Cannot upgrade from scratch stable memory, please upgrade to memory manager first."
+                    ),
+                    &self.mainnet_wasms.ledger_wasm_v2
+                ) {
+                    // The upgrade may fail if the target canister is too old - in the case of
+                    // migration to stable structures, the ledger canister must be at least at V2,
+                    // i.e., the ledger state must be managed by the memory manager.
+                    (true, Some(wasm_v2)) => {self.upgrade_ledger(state_machine, wasm_v2)}
+                    _ => Err(e)
+                }
+            })
+            .expect("should successfully upgrade ledger");
+        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm)
+            .expect("should successfully upgrade ledger");
+        self.upgrade_archives_or_panic(state_machine, &self.master_wasms.archive_wasm);
+        self.upgrade_archives_or_panic(state_machine, &self.master_wasms.archive_wasm);
     }
 }
 
