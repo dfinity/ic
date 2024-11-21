@@ -23,9 +23,10 @@ pub fn generate_network_config(
 ) -> Result<()> {
     eprintln!("Generating ipv6 address");
     let ipv6_address = generate_ipv6_address(&network_info.ipv6_prefix, &generated_mac)?;
-    eprintln!("Using ipv6 address: {}", ipv6_address);
+    eprintln!("Using ipv6 address: {ipv6_address}");
 
     let formatted_mac = FormattedMacAddress::from(&generated_mac);
+
     generate_systemd_config_files(
         output_directory,
         network_info,
@@ -34,15 +35,33 @@ pub fn generate_network_config(
     )
 }
 
-fn parse_mac_line(line: &str) -> Result<FormattedMacAddress> {
-    let error_msg = format!("Could not parse mac address line: {}", line);
-    let re = Regex::new(r"MAC Address\s+:\s+(([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2}))")?;
-    let captures = re.captures(line).context(error_msg.clone())?;
-    let mac = captures.get(1).context(error_msg.clone())?;
-    FormattedMacAddress::try_from(mac.as_str())
+pub fn resolve_mgmt_mac(config_mac: Option<String>) -> Result<FormattedMacAddress> {
+    if let Some(config_mac) = config_mac {
+        // Take MAC address override from config
+        let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
+        eprintln!("Using mgmt_mac address found in deployment.json: {mgmt_mac}");
+
+        Ok(mgmt_mac)
+    } else {
+        // Retrieve the MAC address from the IPMI LAN interface
+        let output = Command::new("ipmitool").arg("lan").arg("print").output()?;
+        let ipmitool_output = String::from_utf8(output.stdout)?;
+
+        parse_mac_address_from_ipmitool_output(&ipmitool_output).with_context(|| {
+            // A bug in our version of ipmitool causes it to exit with an error
+            // status, but we have enough output to work with anyway. If
+            // parse_mac_address_from_ipmitool_output still fails, log the invocation details.
+            // https://github.com/ipmitool/ipmitool/issues/388
+            let stderr = std::str::from_utf8(&output.stderr).unwrap_or("[INVALID UTF8]");
+            format!(
+                "ipmitool status: {}, ipmitool stdout: {}\nipmitool stderr: {}",
+                output.status, ipmitool_output, stderr
+            )
+        })
+    }
 }
 
-pub fn get_mac_address_from_ipmitool_output(output: &str) -> Result<FormattedMacAddress> {
+fn parse_mac_address_from_ipmitool_output(output: &str) -> Result<FormattedMacAddress> {
     let mac_line = output
         .lines()
         .find(|line| line.trim().starts_with("MAC Address"))
@@ -50,41 +69,33 @@ pub fn get_mac_address_from_ipmitool_output(output: &str) -> Result<FormattedMac
             "Could not find mac address line in ipmitool output: {}",
             output
         ))?;
-    parse_mac_line(mac_line)
-}
 
-/// Retrieves the MAC address from the IPMI LAN interface
-pub fn get_ipmi_mac() -> Result<FormattedMacAddress> {
-    let output = Command::new("ipmitool").arg("lan").arg("print").output()?;
-    let ipmitool_output = String::from_utf8(output.stdout)?;
+    // Parse MAC line
+    let error_msg = format!("Could not parse mac address line: {}", mac_line);
+    let re = Regex::new(r"MAC Address\s+:\s+(([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2}))")?;
+    let captures = re.captures(mac_line).context(error_msg.clone())?;
+    let mac = captures.get(1).context(error_msg.clone())?;
 
-    get_mac_address_from_ipmitool_output(&ipmitool_output).with_context(|| {
-        // A bug in our version of ipmitool causes it to exit with an error
-        // status, but we have enough output to work with anyway. If
-        // get_mac_address_from_ipmitool_output still fails, log the invocation details.
-        // https://github.com/ipmitool/ipmitool/issues/388
-        let stderr = std::str::from_utf8(&output.stderr).unwrap_or("[INVALID UTF8]");
-        format!(
-            "ipmitool status: {}, ipmitool stdout: {}\nipmitool stderr: {}",
-            output.status, ipmitool_output, stderr
-        )
-    })
+    FormattedMacAddress::try_from(mac.as_str())
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::*;
 
     #[test]
-    fn test_get_mac_address_from_ipmitool_output() {
+    fn test_parse_mac_address_from_ipmitool_output() {
         assert_eq!(
-            get_mac_address_from_ipmitool_output(" MAC Address             : de:ad:be:ef:be:ef  ")
-                .unwrap()
-                .get(),
+            parse_mac_address_from_ipmitool_output(
+                " MAC Address             : de:ad:be:ef:be:ef  "
+            )
+            .unwrap()
+            .get(),
             FormattedMacAddress::try_from("de:ad:be:ef:be:ef")
                 .unwrap()
                 .get()
         );
+
         let ipmitool_output = "Set in Progress         : Set In Progress
 Auth Type Support       : NONE MD2 MD5 PASSWORD
 Auth Type Enable        : Callback : MD2 MD5 PASSWORD
@@ -117,8 +128,9 @@ Bad Password Threshold  : 3
 Invalid password disable: yes
 Attempt Count Reset Int.: 300
 User Lockout Interval   : 300";
+
         assert_eq!(
-            get_mac_address_from_ipmitool_output(ipmitool_output)
+            parse_mac_address_from_ipmitool_output(ipmitool_output)
                 .unwrap()
                 .get(),
             FormattedMacAddress::try_from("3c:ec:ef:2f:7a:79")
@@ -126,6 +138,6 @@ User Lockout Interval   : 300";
                 .get()
         );
 
-        assert!(get_mac_address_from_ipmitool_output("MAC Address : UNKNOWN").is_err());
+        assert!(parse_mac_address_from_ipmitool_output("MAC Address : UNKNOWN").is_err());
     }
 }

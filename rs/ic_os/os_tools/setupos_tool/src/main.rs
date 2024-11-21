@@ -6,12 +6,12 @@ use clap::{Parser, Subcommand};
 use config::config_ini::config_map_from_path;
 use config::deployment_json::get_deployment_settings;
 use config::{DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH};
-use mac_address::mac_address::{generate_mac_address, FormattedMacAddress};
+use mac_address::mac_address::generate_mac_address;
 use mac_address::node_type::NodeType;
 use network::info::NetworkInfo;
 use network::ipv6::generate_ipv6_address;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
-use network::{generate_network_config, get_ipmi_mac};
+use network::{generate_network_config, resolve_mgmt_mac};
 use utils::to_cidr;
 
 #[derive(Subcommand)]
@@ -67,17 +67,7 @@ pub fn main() -> Result<()> {
                 ))?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
-            let mgmt_mac = match deployment_settings.deployment.mgmt_mac {
-                Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
-                    eprintln!(
-                        "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac
-                    );
-                    mgmt_mac
-                }
-                None => get_ipmi_mac()?,
-            };
+            let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
             let generated_mac = generate_mac_address(
                 &mgmt_mac,
                 deployment_settings.deployment.name.as_str(),
@@ -105,17 +95,7 @@ pub fn main() -> Result<()> {
             eprintln!("Deployment config: {:?}", deployment_settings);
 
             let node_type = node_type.parse::<NodeType>()?;
-            let mgmt_mac = match deployment_settings.deployment.mgmt_mac {
-                Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
-                    eprintln!(
-                        "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac
-                    );
-                    mgmt_mac
-                }
-                None => get_ipmi_mac()?,
-            };
+            let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
             let generated_mac = generate_mac_address(
                 &mgmt_mac,
                 deployment_settings.deployment.name.as_str(),
