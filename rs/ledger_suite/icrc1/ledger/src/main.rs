@@ -214,14 +214,16 @@ fn post_upgrade(args: Option<LedgerArgument>) {
     ic_cdk::println!("Successfully read state from memory manager managed stable structures");
     LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
 
-    Access::with_ledger_mut(|ledger| {
+    let upgrade_from_version = Access::with_ledger_mut(|ledger| {
         if ledger.ledger_version > LEDGER_VERSION {
             panic!(
                 "Trying to downgrade from incompatible version {}. Current version is {}.",
                 ledger.ledger_version, LEDGER_VERSION
             );
         }
+        let upgrade_from_version = ledger.ledger_version;
         ledger.ledger_version = LEDGER_VERSION;
+        upgrade_from_version
     });
 
     if let Some(args) = args {
@@ -237,14 +239,18 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
-    set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
-    Access::with_ledger_mut(|ledger| {
-        ledger.clear_arrivals();
-    });
-    log_message("Migration started.");
-    migrate_next_part(
-        MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
-    );
+    if upgrade_from_version < LEDGER_VERSION {
+        set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
+        Access::with_ledger_mut(|ledger| {
+            ledger.clear_arrivals();
+        });
+        log_message("Migration started.");
+        migrate_next_part(
+            MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
+        );
+    } else {
+        set_ledger_state(LedgerState::Ready);
+    }
 
     let end = ic_cdk::api::instruction_counter();
     let instructions_consumed = end - start;
