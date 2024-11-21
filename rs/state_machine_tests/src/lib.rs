@@ -3574,6 +3574,11 @@ impl StateMachine {
             .get()
     }
 
+    /// Returns the reserved balance of the specified canister.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the specified canister does not exist.
     pub fn reserved_balance(&self, canister_id: CanisterId) -> u128 {
         let state = self.state_manager.get_latest_state().take();
         state
