@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::numeric::BlockNumber;
 use candid::Nat;
 use ic_ethereum_types::Address;
@@ -193,7 +196,7 @@ impl LogScrapingState {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct LogScrapingInfo {
     pub eth_helper_contract_address: Option<String>,
     pub last_eth_scraped_block_number: Option<Nat>,
