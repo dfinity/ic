@@ -141,9 +141,7 @@ fn pre_upgrade() {
             if !is_ready() {
                 // This means that migration did not complete and the correct state
                 // of the ledger is still in UPGRADES_MEMORY.
-                // We also have to clear incompletely migrated stable allowances data.
-                log_message("Ledger not ready, skipping write to UPGRADES_MEMORY and clearing stable allowance data.");
-                clear_stable_allowance_data();
+                log_message("Ledger not ready, skipping write to UPGRADES_MEMORY.");
                 return;
             }
             let writer = Writer::new(bs, 0);
@@ -240,6 +238,10 @@ fn post_upgrade(args: Option<LedgerArgument>) {
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
     if upgrade_from_version < LEDGER_VERSION {
+        if upgrade_from_version == 0 {
+            log_message("Upgrading from version 0 which does not use stable memory, clearing stable allowance data.");
+            clear_stable_allowance_data();
+        }
         set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
         Access::with_ledger_mut(|ledger| {
             ledger.clear_arrivals();
