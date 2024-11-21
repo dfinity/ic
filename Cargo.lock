@@ -305,7 +305,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_qs",
- "thiserror",
+ "thiserror 1.0.68",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -377,7 +377,7 @@ dependencies = [
  "lazy_static",
  "prometheus",
  "serde",
- "thiserror",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -392,7 +392,7 @@ dependencies = [
  "ic-types",
  "rand 0.8.5",
  "rsa",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
 ]
 
@@ -554,7 +554,7 @@ dependencies = [
  "nom",
  "num-traits",
  "rusticata-macros",
- "thiserror",
+ "thiserror 1.0.68",
  "time",
 ]
 
@@ -723,7 +723,7 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8da2537846e16b96d2972ee52a3b355663872a1a687ce6d57a3b6f6b6a181c89"
 dependencies = [
- "thiserror",
+ "thiserror 1.0.68",
  "tokio",
 ]
 
@@ -780,7 +780,7 @@ dependencies = [
  "lazy_static",
  "log",
  "rustls-pki-types",
- "thiserror",
+ "thiserror 1.0.68",
  "webpki-roots 0.26.6",
 ]
 
@@ -1609,7 +1609,7 @@ dependencies = [
  "hashbrown 0.14.5",
  "instant",
  "once_cell",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -1621,7 +1621,7 @@ dependencies = [
  "hashbrown 0.14.5",
  "instant",
  "once_cell",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -1634,7 +1634,7 @@ dependencies = [
  "hashbrown 0.14.5",
  "instant",
  "once_cell",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -1740,7 +1740,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "stacker",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -1771,7 +1771,7 @@ dependencies = [
  "logos",
  "num-bigint 0.4.6",
  "pretty 0.12.3",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -1947,7 +1947,7 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "sha2 0.10.8",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "tower 0.5.1",
  "tracing",
@@ -1979,7 +1979,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "sha2 0.10.8",
- "thiserror",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -1991,7 +1991,7 @@ dependencies = [
  "ic-stable-structures",
  "serde",
  "serde_bytes",
- "thiserror",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -2237,7 +2237,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "serde_with 2.3.3",
- "thiserror",
+ "thiserror 1.0.68",
  "url",
  "uuid",
 ]
@@ -2255,7 +2255,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "serde_with 2.3.3",
- "thiserror",
+ "thiserror 1.0.68",
  "url",
  "uuid",
 ]
@@ -3358,7 +3358,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.20",
  "ic-crypto-sha2",
- "thiserror",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -3539,7 +3539,7 @@ dependencies = [
  "rand 0.8.5",
  "ring 0.17.8",
  "simple_moving_average",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "tokio-util",
  "tracing",
@@ -3660,7 +3660,7 @@ dependencies = [
  "rand_core 0.6.4",
  "serde",
  "sha2 0.9.9",
- "thiserror",
+ "thiserror 1.0.68",
  "zeroize",
 ]
 
@@ -3930,7 +3930,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha3",
- "thiserror",
+ "thiserror 1.0.68",
  "uint",
 ]
 
@@ -3987,7 +3987,7 @@ dependencies = [
  "serde_json",
  "strum",
  "tempfile",
- "thiserror",
+ "thiserror 1.0.68",
  "tiny-keccak",
  "unicode-xid",
 ]
@@ -4033,7 +4033,7 @@ dependencies = [
  "ic-cdk 0.16.0",
  "mockall",
  "serde",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
 ]
 
@@ -4049,7 +4049,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "serde",
  "strum",
- "thiserror",
+ "thiserror 1.0.68",
  "url",
 ]
 
@@ -4305,7 +4305,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8835f84f38484cc86f110a805655697908257fb9a7af005234060891557198e9"
 dependencies = [
  "nonempty",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -4867,7 +4867,7 @@ dependencies = [
  "ring 0.16.20",
  "rustls 0.21.12",
  "rustls-pemfile 1.0.4",
- "thiserror",
+ "thiserror 1.0.68",
  "tinyvec",
  "tokio",
  "tokio-rustls 0.24.1",
@@ -4893,7 +4893,7 @@ dependencies = [
  "resolv-conf",
  "rustls 0.21.12",
  "smallvec",
- "thiserror",
+ "thiserror 1.0.68",
  "tokio",
  "tokio-rustls 0.24.1",
  "tracing",
@@ -5204,7 +5204,7 @@ dependencies = [
  "http 1.1.0",
  "hyper 1.5.0",
  "hyper-util",
- "thiserror",
+ "thiserror 1.0.68",
  "tokio",
  "tower-service",
 ]
@@ -5421,7 +5421,7 @@ dependencies = [
  "serde_repr",
  "sha2 0.10.8",
  "simple_asn1",
- "thiserror",
+ "thiserror 1.0.68",
  "time",
  "tokio",
  "tower 0.4.13",
@@ -5457,7 +5457,7 @@ dependencies = [
  "prost 0.13.3",
  "rand 0.8.5",
  "slog",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "tower 0.5.1",
  "tracing",
@@ -5677,7 +5677,7 @@ dependencies = [
  "strum_macros",
  "sync_wrapper 1.0.1",
  "systemstat",
- "thiserror",
+ "thiserror 1.0.68",
  "tokio",
  "tokio-io-timeout",
  "tokio-rustls 0.26.0",
@@ -5762,7 +5762,7 @@ dependencies = [
  "slog",
  "strum",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.3",
  "tikv-jemalloc-ctl",
  "tikv-jemallocator",
  "tokio",
@@ -5900,7 +5900,7 @@ dependencies = [
  "slog",
  "slog-async",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "tokio-socks",
  "tonic",
@@ -5973,7 +5973,7 @@ dependencies = [
  "proptest",
  "prost 0.13.3",
  "slog",
- "thiserror",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -6211,7 +6211,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "sha2 0.10.8",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -6278,7 +6278,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "scoped_threadpool",
- "thiserror",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -6301,7 +6301,7 @@ dependencies = [
  "ic-certification 2.6.0",
  "leb128",
  "nom",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -6456,7 +6456,7 @@ dependencies = [
  "nom",
  "parking_lot 0.12.3",
  "sha2 0.10.8",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -6675,7 +6675,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.3",
  "thousands",
  "time",
  "tokio",
@@ -7016,7 +7016,7 @@ dependencies = [
  "pem 1.1.1",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "thiserror",
+ "thiserror 2.0.3",
  "wycheproof",
  "zeroize",
 ]
@@ -7321,7 +7321,7 @@ dependencies = [
  "stubborn-io",
  "tarpc",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.3",
  "time",
  "tokio",
  "tokio-serde",
@@ -7563,7 +7563,7 @@ dependencies = [
  "serde_cbor",
  "strum",
  "strum_macros",
- "thiserror",
+ "thiserror 2.0.3",
  "zeroize",
 ]
 
@@ -7909,7 +7909,7 @@ version = "0.9.0"
 dependencies = [
  "ic-types",
  "mockall",
- "thiserror",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -7968,7 +7968,7 @@ dependencies = [
  "maplit",
  "rustls 0.23.16",
  "serde",
- "thiserror",
+ "thiserror 2.0.3",
  "x509-parser",
 ]
 
@@ -8000,7 +8000,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "thiserror",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -8012,7 +8012,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "proptest",
  "rand 0.8.5",
- "thiserror",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -8078,7 +8078,7 @@ name = "ic-crypto-utils-tls"
 version = "0.9.0"
 dependencies = [
  "ic-base-types",
- "thiserror",
+ "thiserror 2.0.3",
  "x509-parser",
 ]
 
@@ -8403,7 +8403,7 @@ dependencies = [
  "ic-certification 2.6.0",
  "ic-representation-independent-hash",
  "serde",
- "thiserror",
+ "thiserror 1.0.68",
  "urlencoding",
 ]
 
@@ -8419,7 +8419,7 @@ dependencies = [
  "prometheus",
  "reqwest 0.12.9",
  "slog",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "tokio-io-timeout",
  "tower 0.5.1",
@@ -8563,7 +8563,7 @@ dependencies = [
  "ic-http-certification",
  "ic-response-verification",
  "ic-utils 0.37.0",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -8617,7 +8617,7 @@ dependencies = [
  "serde_json",
  "slog",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "tokio-rustls 0.26.0",
  "tonic",
@@ -8902,7 +8902,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_bytes",
- "thiserror",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -9224,7 +9224,7 @@ dependencies = [
  "serde",
  "strum",
  "strum_macros",
- "thiserror",
+ "thiserror 2.0.3",
  "tower 0.5.1",
 ]
 
@@ -9233,7 +9233,7 @@ name = "ic-interfaces-adapter-client"
 version = "0.9.0"
 dependencies = [
  "strum_macros",
- "thiserror",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -9288,7 +9288,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-types",
  "phantom_newtype",
- "thiserror",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -9734,7 +9734,7 @@ dependencies = [
  "pocket-ic",
  "serde",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
 ]
 
@@ -10760,7 +10760,7 @@ dependencies = [
  "pprof",
  "prost 0.12.6",
  "regex",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
 ]
 
@@ -10807,7 +10807,7 @@ dependencies = [
  "serde_json",
  "slog",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.3",
  "url",
  "x509-cert",
 ]
@@ -10890,7 +10890,7 @@ dependencies = [
  "rustls 0.23.16",
  "slog",
  "socket2 0.5.7",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "tokio-metrics",
  "tokio-util",
@@ -10972,7 +10972,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "url",
 ]
@@ -10984,7 +10984,7 @@ dependencies = [
  "candid",
  "ic-base-types",
  "serde",
- "thiserror",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -11042,7 +11042,7 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-types",
  "serde_cbor",
- "thiserror",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -11091,7 +11091,7 @@ dependencies = [
  "ic-registry-transport",
  "ic-types",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "url",
 ]
@@ -11164,7 +11164,7 @@ dependencies = [
  "ic-registry-transport",
  "ic-sys",
  "ic-types",
- "thiserror",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -11557,7 +11557,7 @@ dependencies = [
  "log",
  "nom",
  "sha2 0.10.8",
- "thiserror",
+ "thiserror 1.0.68",
  "urlencoding",
 ]
 
@@ -11763,7 +11763,7 @@ dependencies = [
  "serde",
  "serde_json",
  "textplots",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
 ]
 
@@ -11800,7 +11800,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
 ]
 
@@ -12515,7 +12515,7 @@ dependencies = [
  "prost 0.13.3",
  "rand 0.8.5",
  "slog",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "tokio-metrics",
  "tokio-util",
@@ -12590,7 +12590,7 @@ dependencies = [
  "prost 0.13.3",
  "rand 0.8.5",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "wsl",
 ]
@@ -12769,7 +12769,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.3",
  "time",
  "tokio",
  "tokio-util",
@@ -13161,7 +13161,7 @@ dependencies = [
  "serde_bytes",
  "serde_repr",
  "sha2 0.10.8",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -13231,7 +13231,7 @@ dependencies = [
  "serde_with 1.14.0",
  "strum",
  "strum_macros",
- "thiserror",
+ "thiserror 2.0.3",
  "thousands",
 ]
 
@@ -13286,7 +13286,7 @@ dependencies = [
  "sha2 0.10.8",
  "strum",
  "strum_macros",
- "thiserror",
+ "thiserror 1.0.68",
  "time",
  "tokio",
 ]
@@ -13346,7 +13346,7 @@ dependencies = [
  "ic-types",
  "mockall",
  "rand 0.8.5",
- "thiserror",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
@@ -13483,7 +13483,7 @@ dependencies = [
  "rustc-demangle",
  "serde",
  "serde_json",
- "thiserror",
+ "thiserror 1.0.68",
  "walrus",
 ]
 
@@ -13613,7 +13613,7 @@ dependencies = [
  "reqwest 0.12.9",
  "slog",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "url",
 ]
@@ -13877,7 +13877,7 @@ dependencies = [
  "data-encoding",
  "serde",
  "sha2 0.10.8",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -14030,7 +14030,7 @@ dependencies = [
  "async-trait",
  "candid",
  "serde",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -14404,7 +14404,7 @@ dependencies = [
  "rustls-pki-types",
  "serde",
  "serde_json",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -14467,7 +14467,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ea1dc4bf0fb4904ba83ffdb98af3d9c325274e92e6e295e4151e86c96363e04"
 dependencies = [
  "serde",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -14522,7 +14522,7 @@ dependencies = [
  "combine",
  "jni-sys",
  "log",
- "thiserror",
+ "thiserror 1.0.68",
  "walkdir",
 ]
 
@@ -14584,7 +14584,7 @@ dependencies = [
  "pest_derive",
  "regex",
  "serde_json",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -14685,7 +14685,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "thiserror",
+ "thiserror 1.0.68",
  "tokio",
  "tokio-util",
  "tower 0.4.13",
@@ -14705,7 +14705,7 @@ dependencies = [
  "k8s-openapi",
  "serde",
  "serde_json",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -15157,7 +15157,7 @@ checksum = "612ed4ea9ce5acfb5d26339302528a5e1e59dfed95e9e11af3c083236ff1d15d"
 dependencies = [
  "libc",
  "neli",
- "thiserror",
+ "thiserror 1.0.68",
  "windows-sys 0.48.0",
 ]
 
@@ -15628,7 +15628,7 @@ dependencies = [
  "rustc_version",
  "smallvec",
  "tagptr",
- "thiserror",
+ "thiserror 1.0.68",
  "triomphe",
  "uuid",
 ]
@@ -15786,7 +15786,7 @@ dependencies = [
  "serde_path_to_error",
  "strum",
  "strum_macros",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -16205,7 +16205,7 @@ dependencies = [
  "byteorder",
  "md-5",
  "sha2 0.9.9",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -16257,7 +16257,7 @@ dependencies = [
  "js-sys",
  "once_cell",
  "pin-project-lite",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -16273,7 +16273,7 @@ dependencies = [
  "opentelemetry-proto",
  "opentelemetry_sdk 0.27.0",
  "prost 0.13.3",
- "thiserror",
+ "thiserror 1.0.68",
  "tokio",
  "tonic",
  "tracing",
@@ -16316,7 +16316,7 @@ dependencies = [
  "js-sys",
  "once_cell",
  "pin-project-lite",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -16331,7 +16331,7 @@ dependencies = [
  "js-sys",
  "once_cell",
  "pin-project-lite",
- "thiserror",
+ "thiserror 1.0.68",
  "urlencoding",
 ]
 
@@ -16350,7 +16350,7 @@ dependencies = [
  "opentelemetry_api 0.18.0",
  "percent-encoding",
  "rand 0.8.5",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -16370,7 +16370,7 @@ dependencies = [
  "percent-encoding",
  "rand 0.8.5",
  "regex",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -16389,7 +16389,7 @@ dependencies = [
  "percent-encoding",
  "rand 0.8.5",
  "serde_json",
- "thiserror",
+ "thiserror 1.0.68",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -16735,7 +16735,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "879952a81a83930934cbf1786752d6dedc3b1f29e8f8fb2ad1d0a36f377cf442"
 dependencies = [
  "memchr",
- "thiserror",
+ "thiserror 1.0.68",
  "ucd-trie",
 ]
 
@@ -16930,7 +16930,7 @@ checksum = "122ee1f5a6843bec84fcbd5c6ba3622115337a6b8965b93a61aad347648f4e8d"
 dependencies = [
  "rand 0.8.5",
  "socket2 0.4.10",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -17036,7 +17036,7 @@ dependencies = [
  "slog",
  "strum",
  "strum_macros",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "tracing",
  "tracing-appender",
@@ -17221,7 +17221,7 @@ dependencies = [
  "smallvec",
  "symbolic-demangle",
  "tempfile",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -17455,7 +17455,7 @@ dependencies = [
  "parking_lot 0.12.3",
  "procfs 0.16.0",
  "protobuf",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -17734,7 +17734,7 @@ dependencies = [
  "rustc-hash 2.0.0",
  "rustls 0.23.16",
  "socket2 0.5.7",
- "thiserror",
+ "thiserror 1.0.68",
  "tokio",
  "tracing",
 ]
@@ -17751,7 +17751,7 @@ dependencies = [
  "rustc-hash 2.0.0",
  "rustls 0.23.16",
  "slab",
- "thiserror",
+ "thiserror 1.0.68",
  "tinyvec",
  "tracing",
 ]
@@ -18021,7 +18021,7 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "strum",
- "thiserror",
+ "thiserror 2.0.3",
  "uuid",
 ]
 
@@ -18033,7 +18033,7 @@ checksum = "6c1bb13e2dcfa2232ac6887157aad8d9b3fe4ca57f7c8d4938ff5ea9be742300"
 dependencies = [
  "clocksource",
  "parking_lot 0.12.3",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -18114,7 +18114,7 @@ checksum = "ba009ff324d1fc1b900bd1fdb31564febe58a8ccc8a6fdbb93b543d33b13ca43"
 dependencies = [
  "getrandom",
  "libredox",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -18818,7 +18818,7 @@ dependencies = [
  "ring 0.17.8",
  "serde",
  "serde_json",
- "thiserror",
+ "thiserror 1.0.68",
  "webpki-roots 0.26.6",
  "x509-parser",
 ]
@@ -19329,7 +19329,7 @@ dependencies = [
  "futures",
  "percent-encoding",
  "serde",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -19622,7 +19622,7 @@ checksum = "adc4e5204eb1910f40f9cfa375f6f05b68c3abac4b6fd879c8ff5e7ae8a0a085"
 dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
- "thiserror",
+ "thiserror 1.0.68",
  "time",
 ]
 
@@ -20258,7 +20258,7 @@ dependencies = [
  "http 1.1.0",
  "itertools 0.12.1",
  "reqwest 0.12.9",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "url",
 ]
@@ -20340,7 +20340,7 @@ dependencies = [
  "serde",
  "static_assertions",
  "tarpc-plugins",
- "thiserror",
+ "thiserror 1.0.68",
  "tokio",
  "tokio-serde",
  "tokio-util",
@@ -20658,7 +20658,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.3",
  "time",
  "tokio",
  "tokio-util",
@@ -20693,7 +20693,16 @@ version = "1.0.68"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02dd99dc800bbb97186339685293e1cc5d9df1f8fae2d0aecd9ff1c77efea892"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 1.0.68",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c006c85c7651b3cf2ada4584faa36773bd07bac24acfb39f3c431b36d7e667aa"
+dependencies = [
+ "thiserror-impl 2.0.3",
 ]
 
 [[package]]
@@ -20701,6 +20710,17 @@ name = "thiserror-impl"
 version = "1.0.68"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7c61ec9a6f64d2793d8a45faba21efbe3ced62a886d44c36a009b2b519b4c7e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.87",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f077553d607adc1caf65430528a576c757a71ed73944b66ebb58ef2bbd243568"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -20989,7 +21009,7 @@ checksum = "0d4770b8024672c1101b3f6733eab95b18007dbe0847a8afe341fcf79e06043f"
 dependencies = [
  "either",
  "futures-util",
- "thiserror",
+ "thiserror 1.0.68",
  "tokio",
 ]
 
@@ -21238,7 +21258,7 @@ dependencies = [
  "governor",
  "http 1.1.0",
  "pin-project",
- "thiserror",
+ "thiserror 1.0.68",
  "tower 0.5.1",
  "tracing",
 ]
@@ -21262,7 +21282,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3566e8ce28cc0a3fe42519fc80e6b4c943cc4c8cef275620eb8dac2d3d4e06cf"
 dependencies = [
  "crossbeam-channel",
- "thiserror",
+ "thiserror 1.0.68",
  "time",
  "tracing-subscriber",
 ]
@@ -21428,7 +21448,7 @@ dependencies = [
  "lazy_static",
  "rand 0.8.5",
  "smallvec",
- "thiserror",
+ "thiserror 1.0.68",
  "tinyvec",
  "tokio",
  "tracing",
@@ -21449,7 +21469,7 @@ dependencies = [
  "parking_lot 0.12.3",
  "resolv-conf",
  "smallvec",
- "thiserror",
+ "thiserror 1.0.68",
  "tokio",
  "tracing",
  "trust-dns-proto",
@@ -21475,7 +21495,7 @@ dependencies = [
  "log",
  "rand 0.8.5",
  "sha1",
- "thiserror",
+ "thiserror 1.0.68",
  "url",
  "utf-8",
 ]
@@ -22166,7 +22186,7 @@ dependencies = [
  "object",
  "smallvec",
  "target-lexicon",
- "thiserror",
+ "thiserror 1.0.68",
  "wasmparser 0.218.0",
  "wasmtime-environ",
  "wasmtime-versioned-export-macros",
@@ -22695,7 +22715,7 @@ dependencies = [
  "nom",
  "oid-registry",
  "rusticata-macros",
- "thiserror",
+ "thiserror 1.0.68",
  "time",
 ]
 

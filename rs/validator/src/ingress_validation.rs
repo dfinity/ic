@@ -234,7 +234,7 @@ pub enum RequestValidationError {
     InvalidRequestExpiry(String),
     #[error("Invalid delegation expiry: {0}")]
     InvalidDelegationExpiry(String),
-    #[error("The user id '{0}' does not match the public key '{:?}'", hex::encode(.1))]
+    #[error("The user id '{0}' does not match the public key '{n}'", n=hex::encode(.1))]
     UserIdDoesNotMatchPublicKey(UserId, Vec<u8>),
     #[error("Invalid signature: {0}")]
     InvalidSignature(AuthenticationError),
@@ -401,8 +401,8 @@ impl CanisterIdSet {
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
 pub enum CanisterIdSetInstantiationError {
     #[error(
-        "Expected at most {} elements but got {0}",
-        MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION
+        "Expected at most {n} elements but got {0}",
+        n=MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION
     )]
     TooManyElements(usize),
 }

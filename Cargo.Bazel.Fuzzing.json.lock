@@ -1,5 +1,5 @@
 {
-  "checksum": "f00b607fa1d7819f2dbbe28bb84b9b112b02499c8c79c94848be7ebcb8a01c35",
+  "checksum": "eefb27c751d3bf2734e9a74e2a61b07e5507dbe0f114772a131188c432b83c62",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17522,6 +17522,73 @@
       ],
       "license_file": "LICENSE"
     },
+    "dashmap 6.1.0": {
+      "name": "dashmap",
+      "version": "6.1.0",
+      "package_url": "https://github.com/xacrimon/dashmap",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/dashmap/6.1.0/download",
+          "sha256": "5041cc499144891f3790297212f32a74fb938e5136a14943f338ef9e0ae276cf"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "dashmap",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "dashmap",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "crossbeam-utils 0.8.19",
+              "target": "crossbeam_utils"
+            },
+            {
+              "id": "hashbrown 0.14.5",
+              "target": "hashbrown"
+            },
+            {
+              "id": "lock_api 0.4.10",
+              "target": "lock_api"
+            },
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "parking_lot_core 0.9.8",
+              "target": "parking_lot_core"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "6.1.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "data-encoding 2.4.0": {
       "name": "data-encoding",
       "version": "2.4.0",
@@ -18856,7 +18923,7 @@
               "target": "indicatif"
             },
             {
-              "id": "inferno 0.11.19",
+              "id": "inferno 0.12.0",
               "target": "inferno"
             },
             {
@@ -19406,7 +19473,7 @@
               "target": "textplots"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.3",
               "target": "thiserror"
             },
             {
@@ -21286,6 +21353,54 @@
       ],
       "license_file": "LICENSE"
     },
+    "env_filter 0.1.2": {
+      "name": "env_filter",
+      "version": "0.1.2",
+      "package_url": "https://github.com/rust-cli/env_logger",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/env_filter/0.1.2/download",
+          "sha256": "4f2c92ceda6ceec50f43169f9ee8424fe2db276791afde7b2cd8bc084cb376ab"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "env_filter",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "env_filter",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.2"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "env_logger 0.8.4": {
       "name": "env_logger",
       "version": "0.8.4",
@@ -21344,14 +21459,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "env_logger 0.10.1": {
+    "env_logger 0.11.2": {
       "name": "env_logger",
-      "version": "0.10.1",
+      "version": "0.11.2",
       "package_url": "https://github.com/rust-cli/env_logger",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/env_logger/0.10.1/download",
-          "sha256": "95b3f3e67048839cb0d0781f445682a35113da7121f7c949db0e2be96a4fbece"
+          "url": "https://static.crates.io/crates/env_logger/0.11.2/download",
+          "sha256": "6c012a26a7f605efc424dd53697843a72be7dc86ad2d01f7814337794a12231d"
         }
       },
       "targets": [
@@ -21376,6 +21491,10 @@
         "deps": {
           "common": [
             {
+              "id": "env_filter 0.1.2",
+              "target": "env_filter"
+            },
+            {
               "id": "log 0.4.20",
               "target": "log"
             }
@@ -21383,7 +21502,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.10.1"
+        "version": "0.11.2"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -35201,15 +35320,7 @@
         ],
         "crate_features": {
           "common": [
-            "clap",
-            "cli",
-            "crossbeam-channel",
-            "crossbeam-utils",
-            "dashmap",
-            "default",
-            "env_logger",
             "indexmap",
-            "multithreaded",
             "nameattr"
           ],
           "selects": {}
@@ -35219,26 +35330,6 @@
             {
               "id": "ahash 0.8.11",
               "target": "ahash"
-            },
-            {
-              "id": "clap 4.5.20",
-              "target": "clap"
-            },
-            {
-              "id": "crossbeam-channel 0.5.13",
-              "target": "crossbeam_channel"
-            },
-            {
-              "id": "crossbeam-utils 0.8.19",
-              "target": "crossbeam_utils"
-            },
-            {
-              "id": "dashmap 5.5.3",
-              "target": "dashmap"
-            },
-            {
-              "id": "env_logger 0.10.1",
-              "target": "env_logger"
             },
             {
               "id": "indexmap 2.2.6",
@@ -35281,6 +35372,120 @@
         },
         "edition": "2021",
         "version": "0.11.19"
+      },
+      "license": "CDDL-1.0",
+      "license_ids": [
+        "CDDL-1.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "inferno 0.12.0": {
+      "name": "inferno",
+      "version": "0.12.0",
+      "package_url": "https://github.com/jonhoo/inferno.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/inferno/0.12.0/download",
+          "sha256": "75a5d75fee4d36809e6b021e4b96b686e763d365ffdb03af2bd00786353f84fe"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "inferno",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "inferno",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "clap",
+            "cli",
+            "crossbeam-channel",
+            "crossbeam-utils",
+            "dashmap",
+            "default",
+            "env_logger",
+            "indexmap",
+            "multithreaded",
+            "nameattr"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "ahash 0.8.11",
+              "target": "ahash"
+            },
+            {
+              "id": "clap 4.5.20",
+              "target": "clap"
+            },
+            {
+              "id": "crossbeam-channel 0.5.13",
+              "target": "crossbeam_channel"
+            },
+            {
+              "id": "crossbeam-utils 0.8.19",
+              "target": "crossbeam_utils"
+            },
+            {
+              "id": "dashmap 6.1.0",
+              "target": "dashmap"
+            },
+            {
+              "id": "env_logger 0.11.2",
+              "target": "env_logger"
+            },
+            {
+              "id": "indexmap 2.2.6",
+              "target": "indexmap"
+            },
+            {
+              "id": "itoa 1.0.9",
+              "target": "itoa"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "num-format 0.4.4",
+              "target": "num_format"
+            },
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "quick-xml 0.37.1",
+              "target": "quick_xml"
+            },
+            {
+              "id": "rgb 0.8.37",
+              "target": "rgb"
+            },
+            {
+              "id": "str_stack 0.1.0",
+              "target": "str_stack"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.12.0"
       },
       "license": "CDDL-1.0",
       "license_ids": [
@@ -52902,6 +53107,53 @@
         },
         "edition": "2018",
         "version": "0.26.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE-MIT.md"
+    },
+    "quick-xml 0.37.1": {
+      "name": "quick-xml",
+      "version": "0.37.1",
+      "package_url": "https://github.com/tafia/quick-xml",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/quick-xml/0.37.1/download",
+          "sha256": "f22f29bdff3987b4d8632ef95fd6424ec7e4e0a57e2f4fc63e489e75357f6a03"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "quick_xml",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "quick_xml",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "memchr 2.6.4",
+              "target": "memchr"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.37.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -71080,6 +71332,90 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "thiserror 2.0.3": {
+      "name": "thiserror",
+      "version": "2.0.3",
+      "package_url": "https://github.com/dtolnay/thiserror",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/thiserror/2.0.3/download",
+          "sha256": "c006c85c7651b3cf2ada4584faa36773bd07bac24acfb39f3c431b36d7e667aa"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "thiserror",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "thiserror",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "thiserror 2.0.3",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "thiserror-impl 2.0.3",
+              "target": "thiserror_impl"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "2.0.3"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "thiserror-impl 1.0.68": {
       "name": "thiserror-impl",
       "version": "1.0.68",
@@ -71128,6 +71464,62 @@
         },
         "edition": "2021",
         "version": "1.0.68"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "thiserror-impl 2.0.3": {
+      "name": "thiserror-impl",
+      "version": "2.0.3",
+      "package_url": "https://github.com/dtolnay/thiserror",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/thiserror-impl/2.0.3/download",
+          "sha256": "f077553d607adc1caf65430528a576c757a71ed73944b66ebb58ef2bbd243568"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "thiserror_impl",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "thiserror_impl",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.87",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.0.3"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -86697,7 +87089,7 @@
     "indexmap 2.2.6",
     "indicatif 0.17.7",
     "indoc 1.0.9",
-    "inferno 0.11.19",
+    "inferno 0.12.0",
     "insta 1.34.0",
     "instant-acme 0.7.2",
     "intmap 1.1.0",
@@ -86841,7 +87233,7 @@
     "test-strategy 0.3.1",
     "tester 0.7.0",
     "textplots 0.8.4",
-    "thiserror 1.0.68",
+    "thiserror 2.0.3",
     "thousands 0.2.0",
     "threadpool 1.8.1",
     "tikv-jemalloc-ctl 0.5.4",
