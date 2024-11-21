@@ -1,11 +1,10 @@
 //! Threshold ECDSA transcripts and references related definitions.
+use crate::crypto::ExtendedDerivationPath;
 use crate::crypto::{
     canister_threshold_sig::error::{
         EcdsaPresignatureQuadrupleCreationError, ThresholdEcdsaSigInputsCreationError,
     },
-    canister_threshold_sig::{
-        EcdsaPreSignatureQuadruple, ExtendedDerivationPath, ThresholdEcdsaSigInputs,
-    },
+    canister_threshold_sig::{EcdsaPreSignatureQuadruple, ThresholdEcdsaSigInputs},
 };
 use crate::{Height, Randomness};
 #[cfg(test)]

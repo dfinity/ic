@@ -1725,9 +1725,13 @@ fn evict_sandbox_processes(
     max_sandboxes_rss: NumBytes,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) {
+    let mut active_count = 0;
     // Remove the already terminated processes.
     backends.retain(|_id, backend| match backend {
-        Backend::Active { .. } => true,
+        Backend::Active { .. } => {
+            active_count += 1;
+            true
+        }
         Backend::Evicted {
             sandbox_process, ..
         } => {
@@ -1739,10 +1743,20 @@ fn evict_sandbox_processes(
         Backend::Empty => false,
     });
 
+    let total_sandboxes_rss = total_sandboxes_rss(backends);
+
+    // We have the same if statement in `sandbox_process_eviction::evict`, but
+    // if we return here we will skip the creation of `candidates` vector.
+    if active_count <= max_active_sandboxes && total_sandboxes_rss <= max_sandboxes_rss {
+        return;
+    }
+
     let scheduler_priorities = state_reader
         .get_latest_state()
         .get_ref()
         .get_scheduler_priorities();
+
+    let min_scheduler_priority = AccumulatedPriority::new(i64::MIN);
 
     let candidates: Vec<_> = backends
         .iter()
@@ -1753,7 +1767,7 @@ fn evict_sandbox_processes(
                 rss: stats.rss,
                 scheduler_priority: *scheduler_priorities
                     .get(id)
-                    .unwrap_or(&AccumulatedPriority::new(0)),
+                    .unwrap_or(&min_scheduler_priority),
             }),
             Backend::Evicted { .. } | Backend::Empty => None,
         })
@@ -1774,7 +1788,7 @@ fn evict_sandbox_processes(
 
     let evicted = sandbox_process_eviction::evict(
         candidates,
-        total_sandboxes_rss(backends),
+        total_sandboxes_rss,
         max_active_sandboxes,
         last_used_threshold,
         max_sandboxes_rss,

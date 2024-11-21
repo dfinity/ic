@@ -2,6 +2,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use strum::AsRefStr;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -29,6 +30,7 @@ pub struct ConfigResponse {
 #[derive(Clone)]
 pub struct OutputConfig {
     pub schema_version: SchemaVersion,
+    pub is_redacted: bool,
     pub rules: Vec<OutputRule>,
 }
 
@@ -79,6 +81,57 @@ impl From<OutputRule> for rate_limits_api::OutputRule {
     }
 }
 
+#[derive(Debug, Error, AsRefStr)]
+pub enum DiscloseRulesError {
+    /// Indicates an unauthorized attempt to disclose rules
+    #[error("Unauthorized operation")]
+    #[strum(serialize = "unauthorized_error")]
+    Unauthorized,
+    /// Signifies that an input ID provided for disclosure is not a valid UUID
+    #[error("Invalid UUID at index = {0}")]
+    InvalidUuidFormat(usize),
+    /// Signifies that a specified incident ID could not be found
+    #[error("Incident with ID={0} not found")]
+    #[strum(serialize = "incident_id_not_found_error")]
+    IncidentIdNotFound(IncidentId),
+    /// Signifies that a specified rule ID could not be found
+    #[error("Rule with ID={0} not found")]
+    #[strum(serialize = "rule_id_not_found_error")]
+    RuleIdNotFound(RuleId),
+    /// Captures unexpected internal errors during the disclosure process
+    #[error("An unexpected internal error occurred: {0}")]
+    #[strum(serialize = "internal_error")]
+    Internal(#[from] anyhow::Error),
+}
+
+impl From<DiscloseRulesError> for rate_limits_api::DiscloseRulesError {
+    fn from(value: DiscloseRulesError) -> Self {
+        match value {
+            DiscloseRulesError::Unauthorized => rate_limits_api::DiscloseRulesError::Unauthorized,
+            DiscloseRulesError::InvalidUuidFormat(idx) => {
+                rate_limits_api::DiscloseRulesError::InvalidUuidFormat(format!(
+                    "Invalid UUID at index = {idx}"
+                ))
+            }
+            DiscloseRulesError::IncidentIdNotFound(incident_id) => {
+                rate_limits_api::DiscloseRulesError::IncidentIdNotFound(format!(
+                    "Incident with ID={} not found",
+                    incident_id.0
+                ))
+            }
+            DiscloseRulesError::RuleIdNotFound(rule_id) => {
+                rate_limits_api::DiscloseRulesError::RuleIdNotFound(format!(
+                    "Rule with ID={0} not found",
+                    rule_id.0
+                ))
+            }
+            DiscloseRulesError::Internal(error) => {
+                rate_limits_api::DiscloseRulesError::Internal(error.to_string())
+            }
+        }
+    }
+}
+
 #[derive(Debug, Error, Clone)]
 pub enum InputConfigError {
     #[error("Invalid JSON encoding of rule_raw for rule at index = {0}")]
@@ -122,6 +175,7 @@ impl From<OutputConfig> for rate_limits_api::OutputConfig {
         rate_limits_api::OutputConfig {
             schema_version: value.schema_version,
             rules: value.rules.into_iter().map(|r| r.into()).collect(),
+            is_redacted: value.is_redacted,
         }
     }
 }
@@ -161,14 +215,8 @@ impl From<OutputRuleMetadata> for rate_limits_api::OutputRuleMetadata {
     }
 }
 
-#[derive(Debug, Error, Clone)]
-pub enum DiscloseRulesArgError {
-    #[error("Invalid UUID at index = {0}")]
-    InvalidUuidFormat(usize),
-}
-
 impl TryFrom<rate_limits_api::DiscloseRulesArg> for DiscloseRulesArg {
-    type Error = DiscloseRulesArgError;
+    type Error = DiscloseRulesError;
 
     fn try_from(value: rate_limits_api::DiscloseRulesArg) -> Result<DiscloseRulesArg, Self::Error> {
         match value {
@@ -176,7 +224,7 @@ impl TryFrom<rate_limits_api::DiscloseRulesArg> for DiscloseRulesArg {
                 let mut rules = Vec::with_capacity(rule_ids.len());
                 for (idx, rule_id) in rule_ids.into_iter().enumerate() {
                     let uuid = RuleId::try_from(rule_id)
-                        .map_err(|_| DiscloseRulesArgError::InvalidUuidFormat(idx))?;
+                        .map_err(|_| DiscloseRulesError::InvalidUuidFormat(idx))?;
                     rules.push(uuid);
                 }
                 Ok(DiscloseRulesArg::RuleIds(rules))
@@ -185,7 +233,7 @@ impl TryFrom<rate_limits_api::DiscloseRulesArg> for DiscloseRulesArg {
                 let mut incidents = Vec::with_capacity(incident_ids.len());
                 for (idx, incident_id) in incident_ids.into_iter().enumerate() {
                     let uuid = IncidentId::try_from(incident_id)
-                        .map_err(|_| DiscloseRulesArgError::InvalidUuidFormat(idx))?;
+                        .map_err(|_| DiscloseRulesError::InvalidUuidFormat(idx))?;
                     incidents.push(uuid);
                 }
                 Ok(DiscloseRulesArg::IncidentIds(incidents))
