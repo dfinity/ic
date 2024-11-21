@@ -320,6 +320,41 @@ mod test {
         }
     });
 
+    const DEPLOYMENT_STR_NO_LOGGING_HOSTS: &str = r#"{
+      "deployment": {
+        "name": "mainnet",
+        "mgmt_mac": null
+      },
+      "logging": {
+        "hosts": ""
+      },
+      "nns": {
+        "url": "https://wiki.internetcomputer.org/"
+      },
+      "resources": {
+        "memory": "490",
+        "cpu": "kvm"
+      }
+    }"#;
+
+    static DEPLOYMENT_STRUCT_NO_LOGGING_HOSTS: Lazy<DeploymentSettings> = Lazy::new(|| {
+        let hosts = [""].join(" ");
+        DeploymentSettings {
+            deployment: Deployment {
+                name: "mainnet".to_string(),
+                mgmt_mac: None,
+            },
+            logging: Logging { hosts },
+            nns: Nns {
+                url: vec![Url::parse("https://wiki.internetcomputer.org").unwrap()],
+            },
+            resources: Resources {
+                memory: 490,
+                cpu: Some("kvm".to_string()),
+            },
+        }
+    });
+
     #[test]
     fn deserialize_deployment() {
         let parsed_deployment = { serde_json::from_str(DEPLOYMENT_STR).unwrap() };
@@ -358,6 +393,10 @@ mod test {
         let parsed_deployment = { serde_json::from_value(DEPLOYMENT_VALUE.clone()).unwrap() };
 
         assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
+
+        let parsed_deployment = { serde_json::from_str(DEPLOYMENT_STR_NO_LOGGING_HOSTS).unwrap() };
+
+        assert_eq!(*DEPLOYMENT_STRUCT_NO_LOGGING_HOSTS, parsed_deployment);
     }
 
     #[test]
