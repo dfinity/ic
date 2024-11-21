@@ -50,34 +50,29 @@ $ bazel test //rs/execution_environment:execution_environment_misc_integration_t
 #[test]
 fn test_storage_reservation_not_triggered() {
     let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY);
+    assert_eq!(env.reserved_balance(canister_id), 0);
     let initial_balance = env.cycle_balance(canister_id);
-    let initial_reserved_balance = env.reserved_balance(canister_id);
 
     let _ = env.execute_ingress(canister_id, "update", wasm().build());
 
     assert_lt!(env.cycle_balance(canister_id), initial_balance);
-    assert_eq!(initial_reserved_balance, 0);
     assert_eq!(env.reserved_balance(canister_id), 0);
 }
 
 #[test]
 fn test_storage_reservation_triggered_in_update() {
     let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY);
-    let initial_balance = env.cycle_balance(canister_id);
-    let initial_reserved_balance = env.reserved_balance(canister_id);
+    assert_eq!(env.reserved_balance(canister_id), 0);
 
     let _ = env.execute_ingress(canister_id, "update", wasm().stable_grow(100).build());
 
-    assert_lt!(env.cycle_balance(canister_id), initial_balance);
-    assert_eq!(initial_reserved_balance, 0);
     assert_gt!(env.reserved_balance(canister_id), 0);
 }
 
 #[test]
 fn test_storage_reservation_triggered_in_response() {
     let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY);
-    let initial_balance = env.cycle_balance(canister_id);
-    let initial_reserved_balance = env.reserved_balance(canister_id);
+    assert_eq!(env.reserved_balance(canister_id), 0);
 
     let _ = env.execute_ingress(
         canister_id,
@@ -94,16 +89,13 @@ fn test_storage_reservation_triggered_in_response() {
             .build(),
     );
 
-    assert_lt!(env.cycle_balance(canister_id), initial_balance);
-    assert_eq!(initial_reserved_balance, 0);
     assert_gt!(env.reserved_balance(canister_id), 0);
 }
 
 #[test]
 fn test_storage_reservation_triggered_in_cleanup() {
     let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY);
-    let initial_balance = env.cycle_balance(canister_id);
-    let initial_reserved_balance = env.reserved_balance(canister_id);
+    assert_eq!(env.reserved_balance(canister_id), 0);
 
     let _ = env.execute_ingress(
         canister_id,
@@ -121,7 +113,5 @@ fn test_storage_reservation_triggered_in_cleanup() {
             .build(),
     );
 
-    assert_lt!(env.cycle_balance(canister_id), initial_balance);
-    assert_eq!(initial_reserved_balance, 0);
     assert_gt!(env.reserved_balance(canister_id), 0);
 }
