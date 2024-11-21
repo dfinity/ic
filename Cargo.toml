@@ -628,7 +628,7 @@ parking_lot = "0.12.3"
 paste = "1.0.15"
 ping = "0.5.0"
 pkcs8 = "0.10.2"
-pprof = { version = "0.13.0", default-features = false, features = [
+pprof = { version = "0.14.0", default-features = false, features = [
     "criterion",
     "flamegraph",
     "prost-codec",
@@ -704,6 +704,7 @@ tempfile = "3.12.0"
 thiserror = "1.0.62"
 threadpool = "1.8.1"
 time = { version = "0.3.36", features = ["formatting"] }
+tracing-flame = "0.2.0"
 tokio = { version = "1.41.1", features = ["full"] }
 tokio-metrics = "0.3.1"
 tokio-rustls = { version = "0.26.0", default-features = false, features = [
@@ -714,7 +715,7 @@ tokio-util = { version = "0.7.12", features = ["full"] }
 tonic = "0.12.3"
 tonic-build = "0.12.3"
 tower = { version = "0.5.1", features = ["full"] }
-tower-http = { version = "0.6.1", features = [
+tower-http = { version = "0.6.2", features = [
     "cors",
     "limit",
     "trace",

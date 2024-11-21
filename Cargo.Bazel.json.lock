@@ -1,5 +1,5 @@
 {
-  "checksum": "b61894d7da504d745642b2993d05928f240c7fdf4887db6ae02522a9f6e34804",
+  "checksum": "d5efb45dabc5261c031f3e201107807cee03b9b1fdc94433ac44a883c04b94b8",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1685,6 +1685,60 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "aligned-vec 0.6.1": {
+      "name": "aligned-vec",
+      "version": "0.6.1",
+      "package_url": "https://github.com/sarah-ek/aligned-vec/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/aligned-vec/0.6.1/download",
+          "sha256": "7e0966165eaf052580bd70eb1b32cb3d6245774c0104d1b2793e9650bf83b52a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "aligned_vec",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "aligned_vec",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "equator 0.2.2",
+              "target": "equator"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
     },
     "alloc-no-stdlib 2.0.4": {
       "name": "alloc-no-stdlib",
@@ -18851,7 +18905,7 @@
               "target": "pkg_config"
             },
             {
-              "id": "pprof 0.13.0",
+              "id": "pprof 0.14.0",
               "target": "pprof"
             },
             {
@@ -19252,7 +19306,7 @@
               "target": "tower"
             },
             {
-              "id": "tower-http 0.6.1",
+              "id": "tower-http 0.6.2",
               "target": "tower_http"
             },
             {
@@ -21165,6 +21219,108 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "equator 0.2.2": {
+      "name": "equator",
+      "version": "0.2.2",
+      "package_url": "https://github.com/sarah-ek/equator/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/equator/0.2.2/download",
+          "sha256": "c35da53b5a021d2484a7cc49b2ac7f2d840f8236a286f84202369bd338d761ea"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "equator",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "equator",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "equator-macro 0.2.1",
+              "target": "equator_macro"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.2.2"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "equator-macro 0.2.1": {
+      "name": "equator-macro",
+      "version": "0.2.1",
+      "package_url": "https://github.com/sarah-ek/equator/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/equator-macro/0.2.1/download",
+          "sha256": "3bf679796c0322556351f287a51b49e48f7c4986e727b5dd78c972d30e2e16cc"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "equator_macro",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "equator_macro",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.87",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": null
     },
     "equivalent 1.0.1": {
       "name": "equivalent",
@@ -49312,14 +49468,14 @@
       ],
       "license_file": "LICENSE-Apache"
     },
-    "pprof 0.13.0": {
+    "pprof 0.14.0": {
       "name": "pprof",
-      "version": "0.13.0",
+      "version": "0.14.0",
       "package_url": "https://github.com/tikv/pprof-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/pprof/0.13.0/download",
-          "sha256": "ef5c97c51bd34c7e742402e216abdeb44d415fbe6ae41d56b114723e953711cb"
+          "url": "https://static.crates.io/crates/pprof/0.14.0/download",
+          "sha256": "ebbe2f8898beba44815fdc9e5a4ae9c929e21c5dc29b0c774a15555f7f58d6d0"
         }
       },
       "targets": [
@@ -49370,6 +49526,10 @@
         "deps": {
           "common": [
             {
+              "id": "aligned-vec 0.6.1",
+              "target": "aligned_vec"
+            },
+            {
               "id": "backtrace 0.3.68",
               "target": "backtrace"
             },
@@ -49410,7 +49570,7 @@
               "target": "parking_lot"
             },
             {
-              "id": "pprof 0.13.0",
+              "id": "pprof 0.14.0",
               "target": "build_script_build"
             },
             {
@@ -49446,7 +49606,7 @@
           ],
           "selects": {}
         },
-        "version": "0.13.0"
+        "version": "0.14.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -74163,14 +74323,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tower-http 0.6.1": {
+    "tower-http 0.6.2": {
       "name": "tower-http",
-      "version": "0.6.1",
+      "version": "0.6.2",
       "package_url": "https://github.com/tower-rs/tower-http",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tower-http/0.6.1/download",
-          "sha256": "8437150ab6bbc8c5f0f519e3d5ed4aa883a83dd4cdd3d1b21f9482936046cb97"
+          "url": "https://static.crates.io/crates/tower-http/0.6.2/download",
+          "sha256": "403fa3b783d4b626a8ad51d766ab03cb6d2dbfc46b1c5d4448395e6628dc9697"
         }
       },
       "targets": [
@@ -74281,7 +74441,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.6.1"
+        "version": "0.6.2"
       },
       "license": "MIT",
       "license_ids": [
@@ -86474,7 +86634,7 @@
     "ping 0.5.0",
     "pkcs8 0.10.2",
     "pkg-config 0.3.27",
-    "pprof 0.13.0",
+    "pprof 0.14.0",
     "predicates 3.1.2",
     "pretty-bytes 0.2.2",
     "pretty_assertions 1.4.0",
@@ -86579,7 +86739,7 @@
     "tonic 0.12.3",
     "tonic-build 0.12.3",
     "tower 0.5.1",
-    "tower-http 0.6.1",
+    "tower-http 0.6.2",
     "tower-request-id 0.3.0",
     "tower-test 0.4.0",
     "tower_governor 0.4.2",
