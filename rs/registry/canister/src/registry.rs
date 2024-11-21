@@ -22,8 +22,8 @@ use std::{
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_types::Time;
 use ic_types::time::current_time as system_current_time;
+use ic_types::Time;
 
 /// The maximum size a registry delta, used to ensure that response payloads
 /// stay under `MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64`.
@@ -56,7 +56,12 @@ impl EncodedKey {
 
 impl fmt::Debug for EncodedKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Version: {} Timestamp:{}", Version::from_be_bytes(self.version), self.timestamp)
+        write!(
+            f,
+            "Version: {} Timestamp:{}",
+            Version::from_be_bytes(self.version),
+            self.timestamp
+        )
     }
 }
 
@@ -64,7 +69,7 @@ impl From<(Version, TimestampNanos)> for EncodedKey {
     fn from((v, t): (Version, TimestampNanos)) -> Self {
         Self {
             version: v.to_be_bytes(),
-            timestamp: t
+            timestamp: t,
         }
     }
 }
@@ -77,7 +82,10 @@ impl From<EncodedKey> for (Version, TimestampNanos) {
 
 impl AsRef<[u8]> for EncodedKey {
     fn as_ref(&self) -> &[u8] {
-        &self.version
+        let mut buffer = Vec::new();
+        buffer.extend_from_slice(&self.version);
+        buffer.extend_from_slice(&self.timestamp.to_be_bytes());
+        buffer.as_slice()
     }
 }
 
@@ -214,7 +222,7 @@ impl Registry {
         &mut self,
         mut mutations: Vec<RegistryMutation>,
         version: Version,
-        timestamp: Option<u64>
+        timestamp: Option<u64>,
     ) {
         // We sort entries by key to eliminate the difference between changelog
         // produced by the new version of the registry canister starting from v1
@@ -343,7 +351,7 @@ impl Registry {
                     .map(|(encoded_version, bytes)| ChangelogEntry {
                         version: encoded_version.version(),
                         encoded_mutation: bytes.clone(),
-                        timestamp: Some(encoded_version.timestamp())
+                        timestamp: Some(encoded_version.timestamp()),
                     })
                     .collect(),
             },
@@ -372,7 +380,12 @@ impl Registry {
 
     /// Inserts a changelog entry at the given version, while enforcing the
     /// [`MAX_REGISTRY_DELTAS_SIZE`] limit.
-    fn changelog_insert(&mut self, version: u64, timestamp: u64, req: &RegistryAtomicMutateRequest) {
+    fn changelog_insert(
+        &mut self,
+        version: u64,
+        timestamp: u64,
+        req: &RegistryAtomicMutateRequest,
+    ) {
         let version = EncodedKey::from((version, timestamp));
         let bytes = pb_encode(req);
 
@@ -436,7 +449,11 @@ impl Registry {
                         .unwrap_or_else(|err| {
                             panic!("Failed to decode mutation@{}: {}", entry.version, err)
                         });
-                    self.apply_mutations_as_version_with_ts(req.mutations, entry.version, entry.timestamp);
+                    self.apply_mutations_as_version_with_ts(
+                        req.mutations,
+                        entry.version,
+                        entry.timestamp,
+                    );
                     self.version = entry.version;
                     current_version = self.version;
                 }
@@ -1122,7 +1139,7 @@ mod tests {
             version,
             value: mutation.value,
             deletion_marker: mutation.mutation_type == Type::Delete as i32,
-            timestamp: Some(0)
+            timestamp: Some(0),
         });
         registry.version = version;
 
