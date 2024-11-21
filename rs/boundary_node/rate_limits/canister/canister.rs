@@ -128,18 +128,22 @@ fn get_rules_by_incident_id(incident_id: IncidentId) -> GetRulesByIncidentIdResp
     Ok(response)
 }
 
+/// Adds a new rate-limit configuration (containing a vector of rate-limit rules) to the canister
+///
+/// Newly added configuration (including confidential rate-limit rules) can be retrieved by the API boundary nodes and enforced on their side.
+/// This update method includes authorization check and metrics collection.
 #[update]
 fn add_config(config: InputConfig) -> AddConfigResponse {
     let caller_id = ic_cdk::api::caller();
     let current_time = ic_cdk::api::time();
-    with_canister_state(|state| {
+    let result = with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let adder = ConfigAdder::new(state);
         let adder = WithAuthorization::new(adder, access_resolver);
         let adder = WithMetrics::new(adder);
         adder.add_config(config, current_time)
     })?;
-    Ok(())
+    Ok(result)
 }
 
 /// Makes specified rules publicly accessible in the canister

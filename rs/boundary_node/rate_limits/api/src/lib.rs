@@ -12,7 +12,7 @@ pub type IncidentId = String;
 pub type SchemaVersion = u64;
 
 pub type GetConfigResponse = Result<ConfigResponse, String>;
-pub type AddConfigResponse = Result<(), String>;
+pub type AddConfigResponse = Result<(), AddConfigError>;
 pub type GetRuleByIdResponse = Result<OutputRuleMetadata, String>;
 pub type DiscloseRulesResponse = Result<(), DiscloseRulesError>;
 pub type GetRulesByIncidentIdResponse = Result<Vec<OutputRuleMetadata>, String>;
@@ -21,6 +21,18 @@ pub type GetRulesByIncidentIdResponse = Result<Vec<OutputRuleMetadata>, String>;
 pub enum DiscloseRulesArg {
     RuleIds(Vec<RuleId>),
     IncidentIds(Vec<IncidentId>),
+}
+
+#[derive(CandidType, Debug, Deserialize)]
+pub enum AddConfigError {
+    /// Indicates an unauthorized attempt to add a new config
+    Unauthorized,
+    /// Signifies that the provided input config is malformed
+    InvalidInputConfig(String),
+    /// Signifies that a new configuration cannot be added due to some policy infringement
+    PolicyViolation(String),
+    /// Captures all unexpected internal errors during the disclosure process
+    Internal(String),
 }
 
 #[derive(CandidType, Debug, Deserialize)]
@@ -51,13 +63,13 @@ pub struct OutputConfig {
     pub rules: Vec<OutputRule>,
 }
 
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(CandidType, Deserialize, Debug, Clone)]
 pub struct InputConfig {
     pub schema_version: SchemaVersion,
     pub rules: Vec<InputRule>,
 }
 
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(CandidType, Deserialize, Debug, Clone)]
 pub struct InputRule {
     pub incident_id: IncidentId,
     pub rule_raw: Vec<u8>,

@@ -33,7 +33,7 @@ pub struct StorableRuleId(pub Uuid);
 #[derive(Clone, Debug, Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
 pub struct StorableIncidentId(pub Uuid);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct StorableRuleMetadata {
     pub incident_id: IncidentId,
     pub rule_raw: Vec<u8>,

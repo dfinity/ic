@@ -1,8 +1,8 @@
 use crate::{
-    add_config::{AddConfigError, AddsConfig},
+    add_config::AddsConfig,
     disclose::DisclosesRules,
     state::CanisterApi,
-    types::{DiscloseRulesError, Timestamp},
+    types::{AddConfigError, DiscloseRulesError, Timestamp},
 };
 use ic_canisters_http_types::{HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::WASM_PAGE_SIZE_IN_BYTES;

@@ -72,7 +72,7 @@ fn disclose_rules(
     for (rule_id, mut metadata) in rules {
         if metadata.disclosed_at.is_none() {
             metadata.disclosed_at = Some(time);
-            let _ = canister_api.upsert_rule(*rule_id, metadata);
+            canister_api.upsert_rule(*rule_id, metadata);
         }
     }
 
@@ -103,7 +103,7 @@ fn disclose_incidents(
             disclose_rules(canister_api, time, &rule_ids)?;
             // Mark incident as disclosed too
             metadata.is_disclosed = true;
-            let _ = canister_api.upsert_incident(incident_id, metadata);
+            canister_api.upsert_incident(incident_id, metadata);
         }
     }
 

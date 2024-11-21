@@ -3,7 +3,7 @@ use mockall::automock;
 use std::collections::HashSet;
 
 use crate::{
-    add_config::{INIT_SCHEMA_VERSION, INIT_VERSION},
+    add_config::{INIT_JSON_SCHEMA_VERSION, INIT_VERSION},
     storage::{
         LocalRef, StableMap, StorableConfig, StorableIncidentId, StorableIncidentMetadata,
         StorablePrincipal, StorableRuleId, StorableRuleMetadata, StorableVersion,
@@ -21,17 +21,9 @@ pub trait CanisterApi {
     fn get_config(&self, version: Version) -> Option<StorableConfig>;
     fn get_rule(&self, rule_id: &RuleId) -> Option<StorableRuleMetadata>;
     fn get_incident(&self, incident_id: &IncidentId) -> Option<StorableIncidentMetadata>;
-    fn upsert_config(&self, version: Version, config: StorableConfig) -> Option<StorableConfig>;
-    fn upsert_rule(
-        &self,
-        rule_id: RuleId,
-        rule: StorableRuleMetadata,
-    ) -> Option<StorableRuleMetadata>;
-    fn upsert_incident(
-        &self,
-        incident_id: IncidentId,
-        rule_ids: StorableIncidentMetadata,
-    ) -> Option<StorableIncidentMetadata>;
+    fn add_config(&self, version: Version, config: StorableConfig);
+    fn upsert_rule(&self, rule_id: RuleId, rule: StorableRuleMetadata);
+    fn upsert_incident(&self, incident_id: IncidentId, rule_ids: StorableIncidentMetadata);
     fn is_api_boundary_node_principal(&self, principal: &Principal) -> bool;
     fn set_api_boundary_nodes_principals(&self, principals: Vec<Principal>);
     fn api_boundary_nodes_count(&self) -> u64;
@@ -113,29 +105,21 @@ impl CanisterApi for CanisterState {
             .with(|cell| cell.borrow().get(&StorableIncidentId(incident_id.0)))
     }
 
-    fn upsert_config(&self, version: Version, config: StorableConfig) -> Option<StorableConfig> {
+    fn add_config(&self, version: Version, config: StorableConfig) {
         self.configs
-            .with(|cell| cell.borrow_mut().insert(version, config))
+            .with(|cell| cell.borrow_mut().insert(version, config));
     }
 
-    fn upsert_rule(
-        &self,
-        rule_id: RuleId,
-        rule: StorableRuleMetadata,
-    ) -> Option<StorableRuleMetadata> {
+    fn upsert_rule(&self, rule_id: RuleId, rule: StorableRuleMetadata) {
         self.rules
-            .with(|cell| cell.borrow_mut().insert(StorableRuleId(rule_id.0), rule))
+            .with(|cell| cell.borrow_mut().insert(StorableRuleId(rule_id.0), rule));
     }
 
-    fn upsert_incident(
-        &self,
-        incident_id: IncidentId,
-        rule_ids: StorableIncidentMetadata,
-    ) -> Option<StorableIncidentMetadata> {
+    fn upsert_incident(&self, incident_id: IncidentId, rule_ids: StorableIncidentMetadata) {
         self.incidents.with(|cell| {
             cell.borrow_mut()
                 .insert(StorableIncidentId(incident_id.0), rule_ids)
-        })
+        });
     }
 
     fn is_api_boundary_node_principal(&self, principal: &Principal) -> bool {
@@ -173,14 +157,11 @@ impl CanisterApi for CanisterState {
 pub fn init_version_and_config(time: Timestamp, canister_api: impl CanisterApi) {
     // Initialize config with an empty vector of rules
     let config = StorableConfig {
-        schema_version: INIT_SCHEMA_VERSION,
+        schema_version: INIT_JSON_SCHEMA_VERSION,
         active_since: time,
         rule_ids: vec![],
     };
-    assert!(
-        canister_api.upsert_config(INIT_VERSION, config).is_none(),
-        "Config for version={INIT_VERSION} already exists!"
-    );
+    canister_api.add_config(INIT_VERSION, config);
 }
 
 pub fn with_canister_state<R>(f: impl FnOnce(CanisterState) -> R) -> R {

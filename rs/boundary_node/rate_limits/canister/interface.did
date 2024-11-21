@@ -57,9 +57,16 @@ type GetConfigResponse = variant {
   Err: text;
 };
 
+type AddConfigError = variant {
+    Unauthorized;                   // Indicates an unauthorized attempt to add a new config
+    InvalidInputConfig: text;       // Signifies that the provided input config is malformed
+    PolicyViolation: text;          // Signifies that a new configuration cannot be added due to some policy infringement
+    Internal: text;                 // Captures all unexpected internal errors during process
+};
+
 type AddConfigResponse = variant {
   Ok;
-  Err: text;
+  Err: AddConfigError;
 };
 
 type DiscloseRulesError = variant {

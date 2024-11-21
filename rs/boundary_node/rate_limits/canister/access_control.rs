@@ -2,10 +2,10 @@ use candid::Principal;
 use mockall::automock;
 
 use crate::{
-    add_config::{AddConfigError, AddsConfig},
+    add_config::AddsConfig,
     disclose::DisclosesRules,
     state::CanisterApi,
-    types::{DiscloseRulesError, Timestamp},
+    types::{AddConfigError, DiscloseRulesError, Timestamp},
 };
 
 #[automock]

@@ -58,7 +58,7 @@ async fn main() {
     })
     .unwrap();
 
-    let response: AddConfigResponse = canister_call(
+    let response: Result<(), String> = canister_call(
         &pocket_ic,
         "add_config",
         "update",
