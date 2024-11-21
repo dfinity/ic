@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Re-execute the script as root always to allow privileged boot state reporting
+# Transparently switch uid to root in order to perform the privileged function.
 # SELinux restrictions and standard permissions still apply, the script and
 # the calling user are restricted to being allowed to sudo only this
 if [ $(id -u) != 0 ]; then
