@@ -807,14 +807,14 @@ impl NeuronStore {
     }
     pub fn with_active_neurons_iter<R>(
         &self,
-        callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Neuron> + 'b>) -> R,
+        callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Cow<Neuron>> + 'b>) -> R,
     ) -> R {
         self.with_active_neurons_iter_sections(callback, NeuronSections::all())
     }
 
     fn with_active_neurons_iter_sections<R>(
         &self,
-        callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Neuron> + 'b>) -> R,
+        callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Cow<Neuron>> + 'b>) -> R,
         sections: NeuronSections,
     ) -> R {
         if self.use_stable_memory_for_all_neurons {
@@ -825,13 +825,13 @@ impl NeuronStore {
                     stable_store
                         .range_neurons_sections(.., sections)
                         .filter(|n| !n.is_inactive(now))
-                        .chain(self.heap_neurons.values().cloned()),
-                ) as Box<dyn Iterator<Item = Neuron>>;
+                        .map(Cow::Owned)
+                        .chain(self.heap_neurons.values().map(Cow::Borrowed)),
+                );
                 callback(iter)
             })
         } else {
-            let iter =
-                Box::new(self.heap_neurons.values().cloned()) as Box<dyn Iterator<Item = Neuron>>;
+            let iter = Box::new(self.heap_neurons.values().map(Cow::Borrowed));
             callback(iter)
         }
     }
@@ -870,9 +870,13 @@ impl NeuronStore {
     fn filter_map_active_neurons<R>(
         &self,
         filter: impl Fn(&Neuron) -> bool,
-        f: impl FnMut(Neuron) -> R,
+        f: impl Fn(&Neuron) -> R,
     ) -> Vec<R> {
-        self.with_active_neurons_iter(|iter| iter.filter(|n| filter(n)).map(f).collect())
+        self.with_active_neurons_iter(|iter| {
+            iter.filter(|n| filter(n.as_ref()))
+                .map(|n| f(n.as_ref()))
+                .collect()
+        })
     }
 
     fn is_active_neurons_fund_neuron(neuron: &Neuron, now: u64) -> bool {
@@ -932,7 +936,7 @@ impl NeuronStore {
         let mut deciding_voting_power: u128 = 0;
         let mut potential_voting_power: u128 = 0;
 
-        let mut process_neuron = |neuron: Neuron| {
+        let mut process_neuron = |neuron: &Neuron| {
             if neuron.is_inactive(now_seconds)
                 || neuron.dissolve_delay_seconds(now_seconds)
                     < MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
@@ -956,7 +960,7 @@ impl NeuronStore {
         self.with_active_neurons_iter_sections(
             |iter| {
                 for neuron in iter {
-                    process_neuron(neuron);
+                    process_neuron(neuron.as_ref());
                 }
             },
             NeuronSections::default(),
