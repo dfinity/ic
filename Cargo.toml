@@ -126,7 +126,6 @@ members = [
     "rs/http_endpoints/public",
     "rs/http_endpoints/xnet",
     "rs/http_utils",
-    "rs/ic_os/dev_test_tools/deterministic_ips",
     "rs/ic_os/build_tools/dflate",
     "rs/ic_os/build_tools/diroid",
     "rs/ic_os/config",

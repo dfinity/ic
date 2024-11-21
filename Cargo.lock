@@ -3343,16 +3343,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "deterministic_ips"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap 4.5.20",
- "ic-crypto-sha2",
- "thiserror 2.0.3",
-]
-
-[[package]]
 name = "dflate"
 version = "0.1.0"
 dependencies = [
@@ -20503,7 +20493,6 @@ dependencies = [
  "chrono",
  "crossbeam-channel",
  "cycles-minting-canister",
- "deterministic_ips",
  "dfn_candid",
  "dfn_json",
  "dfn_protobuf",
@@ -20601,6 +20590,7 @@ dependencies = [
  "leb128",
  "libflate",
  "lifeline",
+ "mac_address",
  "maplit",
  "nix 0.24.3",
  "num-traits",

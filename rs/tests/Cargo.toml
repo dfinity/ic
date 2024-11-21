@@ -21,7 +21,6 @@ canister-test = { path = "../rust_canisters/canister_test" }
 chrono = { workspace = true }
 crossbeam-channel = { workspace = true }
 cycles-minting-canister = { path = "../nns/cmc" }
-deterministic_ips = { path = "../ic_os/dev_test_tools/deterministic_ips" }
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_json = { path = "../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
@@ -117,6 +116,7 @@ lazy_static = { workspace = true }
 leb128 = "0.2.5"
 libflate = { workspace = true }
 lifeline = { path = "../nns/handlers/lifeline/impl" }
+mac_address = { path = "../ic_os/network/mac_address" }
 maplit = "1.0.2"
 nix = { workspace = true }
 num_cpus = "1.13.1"
