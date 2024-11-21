@@ -1903,6 +1903,8 @@ pub mod governance {
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
+        Eq,
+        std::hash::Hash,
         serde::Serialize,
         Clone,
         PartialEq,

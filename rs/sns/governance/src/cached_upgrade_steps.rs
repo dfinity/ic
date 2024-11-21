@@ -121,15 +121,18 @@ pub fn render_two_versions_as_markdown_table(
     )
 }
 
-fn render_sns_canister_type(sns_canister_type: SnsCanisterType) -> String {
-    match sns_canister_type {
-        SnsCanisterType::Unspecified => "Unspecified".to_string(),
-        SnsCanisterType::Root => "Root".to_string(),
-        SnsCanisterType::Governance => "Governance".to_string(),
-        SnsCanisterType::Swap => "Swap".to_string(),
-        SnsCanisterType::Index => "Index".to_string(),
-        SnsCanisterType::Ledger => "Ledger".to_string(),
-        SnsCanisterType::Archive => "Archive".to_string(),
+impl std::fmt::Display for SnsCanisterType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            SnsCanisterType::Unspecified => "Unspecified",
+            SnsCanisterType::Root => "Root",
+            SnsCanisterType::Governance => "Governance",
+            SnsCanisterType::Swap => "Swap",
+            SnsCanisterType::Index => "Index",
+            SnsCanisterType::Ledger => "Ledger",
+            SnsCanisterType::Archive => "Archive",
+        };
+        write!(f, "{}", value)
     }
 }
 
@@ -141,7 +144,7 @@ fn render_sns_canister_change(
         .map(|(sns_canister_type, wasm_hash)| {
             format!(
                 "{} @ {}",
-                render_sns_canister_type(sns_canister_type),
+                sns_canister_type,
                 format_full_hash(&wasm_hash[..])
             )
         })
@@ -211,6 +214,43 @@ impl CachedUpgradeSteps {
 
     pub fn is_current(&self, version: &Version) -> bool {
         version == self.current()
+    }
+
+    /// Returns whether there are no pending upgrades.
+    pub fn is_empty(&self) -> bool {
+        self.subsequent_versions.is_empty()
+    }
+
+    /// Returns a new instance of `Self` starting with `version` in the `Ok` result.
+    /// Returns `Err` if `!self.contains(version)`.
+    pub fn take_from(self, new_current_version: &Version) -> Result<Self, String> {
+        if self.is_current(new_current_version) {
+            return Ok(self);
+        }
+
+        let Self {
+            current_version: _current_version,
+            subsequent_versions,
+            response_timestamp_seconds,
+            requested_timestamp_seconds,
+        } = self;
+
+        let mut subsequent_versions = subsequent_versions.into_iter();
+        while let Some(current_version) = subsequent_versions.next() {
+            if new_current_version == &current_version {
+                return Ok(Self {
+                    current_version,
+                    subsequent_versions: subsequent_versions.collect(),
+                    response_timestamp_seconds,
+                    requested_timestamp_seconds,
+                });
+            }
+        }
+
+        Err(format!(
+            "Cannot take_from {} that is not one of the cached upgrade steps.",
+            new_current_version
+        ))
     }
 
     /// Approximate time at which this cache was valid.

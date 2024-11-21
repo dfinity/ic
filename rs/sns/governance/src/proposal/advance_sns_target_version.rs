@@ -6,6 +6,35 @@ use crate::types::test_helpers::NativeEnvironment;
 use futures::FutureExt;
 use ic_test_utilities_types::ids::canister_test_id;
 
+fn sns_version_for_tests() -> Version {
+    Version {
+        root_wasm_hash: vec![
+            73, 94, 49, 55, 11, 20, 250, 97, 199, 107, 209, 72, 60, 159, 155, 166, 103, 51, 121,
+            62, 226, 150, 62, 142, 68, 162, 49, 67, 106, 96, 188, 198,
+        ],
+        governance_wasm_hash: vec![
+            63, 235, 143, 247, 180, 127, 83, 218, 131, 35, 94, 76, 104, 103, 107, 182, 219, 84,
+            223, 30, 98, 223, 54, 129, 222, 148, 37, 173, 92, 244, 59, 229,
+        ],
+        swap_wasm_hash: vec![
+            59, 180, 144, 209, 151, 184, 207, 46, 125, 153, 72, 188, 181, 209, 252, 70, 116, 122,
+            131, 82, 148, 179, 255, 228, 123, 136, 45, 191, 165, 132, 85, 95,
+        ],
+        index_wasm_hash: vec![
+            8, 174, 80, 66, 200, 228, 19, 113, 109, 4, 160, 141, 184, 134, 184, 198, 176, 27, 182,
+            16, 184, 25, 124, 219, 224, 82, 197, 149, 56, 185, 36, 240,
+        ],
+        ledger_wasm_hash: vec![
+            232, 148, 47, 86, 249, 67, 155, 137, 177, 59, 216, 3, 127, 53, 113, 38, 226, 79, 30,
+            121, 50, 207, 3, 1, 130, 67, 52, 117, 5, 149, 159, 212,
+        ],
+        archive_wasm_hash: vec![
+            92, 89, 92, 42, 220, 127, 109, 153, 113, 41, 143, 238, 47, 166, 102, 146, 151, 17, 231,
+            51, 65, 25, 42, 183, 8, 4, 199, 131, 160, 238, 224, 63,
+        ],
+    }
+}
+
 fn standard_governance_proto_for_tests(deployed_version: Option<Version>) -> GovernancePb {
     GovernancePb {
         root_canister_id: Some(PrincipalId::from(canister_test_id(500))),
@@ -37,71 +66,101 @@ fn standard_governance_proto_for_tests(deployed_version: Option<Version>) -> Gov
 }
 
 #[test]
-fn test_can_be_submitted_without_args() {
+fn test_validate_and_render_advance_target_version_action() {
     // Prepare the world.
-    let governance_canister_id = canister_test_id(501);
-
+    let pre_deployed_version = sns_version_for_tests();
     let deployed_version = Version {
-        archive_wasm_hash: vec![
-            92, 89, 92, 42, 220, 127, 109, 153, 113, 41, 143, 238, 47, 166, 102, 146, 151, 17, 231,
-            51, 65, 25, 42, 183, 8, 4, 199, 131, 160, 238, 224, 63,
-        ],
-        governance_wasm_hash: vec![
-            63, 235, 143, 247, 180, 127, 83, 218, 131, 35, 94, 76, 104, 103, 107, 182, 219, 84,
-            223, 30, 98, 223, 54, 129, 222, 148, 37, 173, 92, 244, 59, 229,
-        ],
-        index_wasm_hash: vec![
-            8, 174, 80, 66, 200, 228, 19, 113, 109, 4, 160, 141, 184, 134, 184, 198, 176, 27, 182,
-            16, 184, 25, 124, 219, 224, 82, 197, 149, 56, 185, 36, 240,
-        ],
-        ledger_wasm_hash: vec![
-            232, 148, 47, 86, 249, 67, 155, 137, 177, 59, 216, 3, 127, 53, 113, 38, 226, 79, 30,
-            121, 50, 207, 3, 1, 130, 67, 52, 117, 5, 149, 159, 212,
-        ],
         root_wasm_hash: vec![
-            73, 94, 49, 55, 11, 20, 250, 97, 199, 107, 209, 72, 60, 159, 155, 166, 103, 51, 121,
-            62, 226, 150, 62, 142, 68, 162, 49, 67, 106, 96, 188, 198,
+            67, 28, 179, 51, 254, 179, 247, 98, 247, 66, 176, 222, 165, 135, 69, 99, 58, 42, 44,
+            164, 16, 117, 233, 147, 49, 131, 216, 80, 180, 221, 178, 89,
         ],
-        swap_wasm_hash: vec![
-            59, 180, 144, 209, 151, 184, 207, 46, 125, 153, 72, 188, 181, 209, 252, 70, 116, 122,
-            131, 82, 148, 179, 255, 228, 123, 136, 45, 191, 165, 132, 85, 95,
-        ],
+        ..pre_deployed_version.clone()
     };
-    let expected_target_version = deployed_version.clone();
+    let intermediate_version = Version {
+        governance_wasm_hash: vec![
+            131, 31, 108, 253, 195, 85, 209, 50, 78, 217, 59, 177, 168, 212, 177, 246, 163, 237,
+            165, 7, 14, 89, 228, 112, 205, 253, 15, 45, 53, 222, 138, 136,
+        ],
+        ..deployed_version.clone()
+    };
+    let expected_target_version = Version {
+        swap_wasm_hash: vec![
+            131, 19, 172, 34, 210, 239, 10, 12, 18, 144, 168, 91, 71, 242, 53, 207, 162, 76, 162,
+            201, 109, 9, 91, 141, 190, 213, 80, 36, 131, 185, 205, 24,
+        ],
+        ..intermediate_version.clone()
+    };
 
-    let mut governance_proto = standard_governance_proto_for_tests(Some(deployed_version.clone()));
+    // Smoke check: Make sure all versions are different
+    let versions = vec![
+        pre_deployed_version,
+        deployed_version.clone(),
+        intermediate_version.clone(),
+        expected_target_version.clone(),
+    ];
+    assert!(
+        versions.iter().collect::<HashSet::<_>>().len() == versions.len(),
+        "Duplicates!"
+    );
+
+    let mut governance_proto = standard_governance_proto_for_tests(Some(deployed_version));
     governance_proto.cached_upgrade_steps = Some(CachedUpgradeStepsPb {
-        upgrade_steps: Some(Versions {
-            versions: vec![deployed_version],
-        }),
-        response_timestamp_seconds: Some(0),
-        requested_timestamp_seconds: Some(0),
+        upgrade_steps: Some(Versions { versions }),
+        ..Default::default()
     });
-    let env = NativeEnvironment::new(Some(governance_canister_id));
+    let env = NativeEnvironment::new(Some(canister_test_id(501)));
 
     // Run code under test.
-    let action = Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion { new_target: None });
+    {
+        // Experiment A: Advance the target to the intermediate version.
+        let action = Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
+            new_target: Some(SnsVersion::from(intermediate_version.clone())),
+        });
 
-    let (actual_text, action_auxiliary) =
-        validate_and_render_action(&Some(action), &env, &governance_proto, vec![])
-            .now_or_never()
-            .unwrap()
-            .unwrap();
+        let (_, action_auxiliary) =
+            validate_and_render_action(&Some(action), &env, &governance_proto, vec![])
+                .now_or_never()
+                .unwrap()
+                .unwrap();
 
-    // Inspect the observed results.
-    assert_eq!(
-        action_auxiliary,
-        ActionAuxiliary::AdvanceSnsTargetVersion(expected_target_version)
-    );
-    assert_eq!(
-        actual_text,
-        r#"# Proposal to advance SNS target version
+        // Inspect the observed results.
+        assert_eq!(
+            action_auxiliary,
+            ActionAuxiliary::AdvanceSnsTargetVersion(intermediate_version)
+        );
+    }
+
+    // Experiments B, C: Advance the target to the latest available version (either implicitly
+    //  or explicitly).
+    for action in [
+        Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion { new_target: None }),
+        Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
+            new_target: Some(SnsVersion::from(expected_target_version.clone())),
+        }),
+    ] {
+        let expected_target_version = expected_target_version.clone();
+
+        let (actual_text, action_auxiliary) =
+            validate_and_render_action(&Some(action), &env, &governance_proto, vec![])
+                .now_or_never()
+                .unwrap()
+                .unwrap();
+
+        // Inspect the observed results.
+        assert_eq!(
+            action_auxiliary,
+            ActionAuxiliary::AdvanceSnsTargetVersion(expected_target_version)
+        );
+        // Notice that there are only 3 expected upgrade steps (pre_deployed_version is gone).
+        assert_eq!(
+            actual_text,
+            r#"# Proposal to advance SNS target version
 
 | Canister   | Current version's module hash                                    | New target version's module hash                                 |
 |------------|------------------------------------------------------------------|------------------------------------------------------------------|
-| Root       | 495e31370b14fa61c76bd1483c9f9ba66733793ee2963e8e44a231436a60bcc6 | 495e31370b14fa61c76bd1483c9f9ba66733793ee2963e8e44a231436a60bcc6 |
-| Governance | 3feb8ff7b47f53da83235e4c68676bb6db54df1e62df3681de9425ad5cf43be5 | 3feb8ff7b47f53da83235e4c68676bb6db54df1e62df3681de9425ad5cf43be5 |
-| Swap       | 3bb490d197b8cf2e7d9948bcb5d1fc46747a835294b3ffe47b882dbfa584555f | 3bb490d197b8cf2e7d9948bcb5d1fc46747a835294b3ffe47b882dbfa584555f |
+| Root       | 431cb333feb3f762f742b0dea58745633a2a2ca41075e9933183d850b4ddb259 | 431cb333feb3f762f742b0dea58745633a2a2ca41075e9933183d850b4ddb259 |
+| Governance | 3feb8ff7b47f53da83235e4c68676bb6db54df1e62df3681de9425ad5cf43be5 | 831f6cfdc355d1324ed93bb1a8d4b1f6a3eda5070e59e470cdfd0f2d35de8a88 |
+| Swap       | 3bb490d197b8cf2e7d9948bcb5d1fc46747a835294b3ffe47b882dbfa584555f | 8313ac22d2ef0a0c1290a85b47f235cfa24ca2c96d095b8dbed5502483b9cd18 |
 | Index      | 08ae5042c8e413716d04a08db886b8c6b01bb610b8197cdbe052c59538b924f0 | 08ae5042c8e413716d04a08db886b8c6b01bb610b8197cdbe052c59538b924f0 |
 | Ledger     | e8942f56f9439b89b13bd8037f357126e24f1e7932cf03018243347505959fd4 | e8942f56f9439b89b13bd8037f357126e24f1e7932cf03018243347505959fd4 |
 | Archive    | 5c595c2adc7f6d9971298fee2fa666929711e73341192ab70804c783a0eee03f | 5c595c2adc7f6d9971298fee2fa666929711e73341192ab70804c783a0eee03f |
@@ -110,7 +169,9 @@ fn test_can_be_submitted_without_args() {
 
 | Step | Root | Governance | Swap | Index | Ledger | Archive | Changes |
 |------|------|------------|------|-------|--------|---------|---------|
-|    0 | 495e31 | 3feb8f | 3bb490 | 08ae50 | e8942f | 5c595c | Current version |
+|    0 | 431cb3 | 3feb8f | 3bb490 | 08ae50 | e8942f | 5c595c | Current version |
+|    1 | 431cb3 | 831f6c | 3bb490 | 08ae50 | e8942f | 5c595c | Governance @ 831f6cfdc355d1324ed93bb1a8d4b1f6a3eda5070e59e470cdfd0f2d35de8a88 |
+|    2 | 431cb3 | 831f6c | 8313ac | 08ae50 | e8942f | 5c595c | Swap @ 8313ac22d2ef0a0c1290a85b47f235cfa24ca2c96d095b8dbed5502483b9cd18 |
 
 
 ### Monitoring the upgrade process
@@ -120,5 +181,123 @@ Please note: the upgrade steps above (valid around timestamp 0 seconds) might ch
 The **upgrade journal** provides up-to-date information on this SNS's upgrade process:
 
 https://qys37-7yaaa-aaaaa-aah2q-cai.raw.icp0.io/journal/json"#,
+        );
+    }
+}
+
+#[test]
+fn test_no_pending_upgrades() {
+    // Prepare the world.
+    let pre_deployed_version = sns_version_for_tests();
+    let deployed_version = Version {
+        root_wasm_hash: vec![
+            67, 28, 179, 51, 254, 179, 247, 98, 247, 66, 176, 222, 165, 135, 69, 99, 58, 42, 44,
+            164, 16, 117, 233, 147, 49, 131, 216, 80, 180, 221, 178, 89,
+        ],
+        ..pre_deployed_version.clone()
+    };
+    let non_existent_version = Version {
+        root_wasm_hash: vec![
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+            25, 26, 27, 28, 29, 30,
+        ],
+        ..deployed_version.clone()
+    };
+
+    // Smoke check: Make sure all versions are different
+    let versions = vec![pre_deployed_version.clone(), deployed_version.clone()];
+    assert!(
+        versions.iter().collect::<HashSet::<_>>().len() == versions.len(),
+        "Duplicates!"
     );
+
+    let mut governance_proto = standard_governance_proto_for_tests(Some(deployed_version.clone()));
+    governance_proto.cached_upgrade_steps = Some(CachedUpgradeStepsPb {
+        upgrade_steps: Some(Versions { versions }),
+        ..Default::default()
+    });
+    let env = NativeEnvironment::new(Some(canister_test_id(501)));
+
+    // Run code under test.
+    for action in [
+        Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion { new_target: None }),
+        Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
+            new_target: Some(SnsVersion::from(deployed_version)),
+        }),
+        Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
+            new_target: Some(SnsVersion::from(pre_deployed_version)),
+        }),
+        Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
+            new_target: Some(SnsVersion::from(non_existent_version)),
+        }),
+    ] {
+        let err = validate_and_render_action(&Some(action), &env, &governance_proto, vec![])
+            .now_or_never()
+            .unwrap()
+            .unwrap_err();
+
+        // Inspect the observed results.
+        assert_eq!(
+            err,
+            "Cannot advance SNS target version: there are no pending upgrades."
+        );
+    }
+}
+
+#[test]
+fn test_invalid_new_targets() {
+    // Prepare the world.
+    let deployed_version = sns_version_for_tests();
+    let next_version = Version {
+        root_wasm_hash: vec![
+            67, 28, 179, 51, 254, 179, 247, 98, 247, 66, 176, 222, 165, 135, 69, 99, 58, 42, 44,
+            164, 16, 117, 233, 147, 49, 131, 216, 80, 180, 221, 178, 89,
+        ],
+        ..deployed_version.clone()
+    };
+    let non_existent_version = Version {
+        root_wasm_hash: vec![
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+            25, 26, 27, 28, 29, 30,
+        ],
+        ..deployed_version.clone()
+    };
+
+    // Smoke check: Make sure all versions are different
+    let versions = vec![deployed_version.clone(), next_version.clone()];
+    assert!(
+        versions.iter().collect::<HashSet::<_>>().len() == versions.len(),
+        "Duplicates!"
+    );
+
+    let mut governance_proto = standard_governance_proto_for_tests(Some(deployed_version.clone()));
+    governance_proto.cached_upgrade_steps = Some(CachedUpgradeStepsPb {
+        upgrade_steps: Some(Versions { versions }),
+        ..Default::default()
+    });
+    let env = NativeEnvironment::new(Some(canister_test_id(501)));
+
+    // Run code under test.
+    for (action, expected_err) in [
+        (
+            Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
+                new_target: Some(SnsVersion::from(deployed_version)),
+            }),
+            "new_target_version must differ from the current version.",
+        ),
+        (
+            Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
+                new_target: Some(SnsVersion::from(non_existent_version)),
+            }),
+            "new_target_version must be among the upgrade steps.",
+        ),
+    ] {
+        let err = validate_and_render_action(&Some(action), &env, &governance_proto, vec![])
+            .now_or_never()
+            .unwrap()
+            .unwrap_err();
+
+        // Inspect the observed results.
+        assert_eq!(err, expected_err);
+    }
 }
