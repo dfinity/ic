@@ -69,10 +69,10 @@ pub struct ICOSSettings {
     /// "mainnet" or "testnet"
     pub deployment_environment: String,
     pub logging: Logging,
-    pub nns_public_key_exists: bool,
+    pub use_nns_public_key: bool,
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
-    pub node_operator_private_key_exists: bool,
+    pub use_node_operator_private_key: bool,
     /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`.
     /// The contents of these files serve as `authorized_keys` for their respective role account.
     /// This means that, for example, `accounts_ssh_authorized_keys/admin`
@@ -209,9 +209,9 @@ mod tests {
                     elasticsearch_hosts: String::new(),
                     elasticsearch_tags: None,
                 },
-                nns_public_key_exists: false,
+                use_nns_public_key: false,
                 nns_urls: vec![],
-                node_operator_private_key_exists: false,
+                use_node_operator_private_key: false,
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: ICOSDevSettings::default(),
             },
