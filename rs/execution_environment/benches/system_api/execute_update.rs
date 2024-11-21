@@ -878,7 +878,26 @@ pub fn execute_update_bench(c: &mut Criterion) {
             Module::Test.from_ic0("mint_cycles", Param1(1_i64), Result::I64, Wasm64::Enabled),
             18000006,
         ),
-        // TODO?
+        common::Benchmark(
+            "wasm32/ic0_mint_cycles128()".into(),
+            Module::Test.from_ic0(
+                "mint_cycles128",
+                Params3(1_i64, 2_i64, 3_i32),
+                Result::No,
+                Wasm64::Disabled,
+            ),
+            18000006,
+        ),
+        common::Benchmark(
+            "wasm64/ic0_mint_cycles128()".into(),
+            Module::Test.from_ic0(
+                "mint_cycles128",
+                Params3(1_i64, 2_i64, 3_i32),
+                Result::No,
+                Wasm64::Enabled,
+            ),
+            18000006,
+        ),
         common::Benchmark(
             "wasm32/ic0_is_controller()".into(),
             Module::Test.from_ic0(
@@ -923,7 +942,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
             "wasm32/ic0_cycles_burn128()".into(),
             Module::Test.from_ic0(
                 "cycles_burn128",
-                Params3(1_i64, 2_i64, 3),
+                Params3(1_i64, 2_i64, 3_i64),
                 Result::No,
                 Wasm64::Disabled,
             ),
