@@ -15,6 +15,8 @@ pub struct OrchestratorMetrics {
     pub master_public_key_changed_errors: IntCounterVec,
     pub failed_consecutive_upgrade_checks: IntCounter,
     pub critical_error_cup_deserialization_failed: IntCounter,
+    pub critical_error_state_removal_failed: IntCounter,
+    pub fstrim_duration: IntGauge,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, IntoStaticStr)]
@@ -81,6 +83,14 @@ impl OrchestratorMetrics {
             critical_error_cup_deserialization_failed: metrics_registry.int_counter(
                 "orchestrator_cup_deserialization_failed_total",
                 "Number of times the deserialization of the locally persisted CUP failed",
+            ),
+            critical_error_state_removal_failed: metrics_registry.int_counter(
+                "orchestrator_cup_deserialization_failed_total",
+                "Number of times the deserialization of the locally persisted CUP failed",
+            ),
+            fstrim_duration: metrics_registry.int_gauge(
+                "orchestrator_fstrim_duration_milliseconds",
+                "The duration of the last fstrim call, in milliseconds",
             ),
         }
     }

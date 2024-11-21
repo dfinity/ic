@@ -6,7 +6,6 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 use async_trait::async_trait;
-use ic_config::{Config, ConfigSource};
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
@@ -32,6 +31,7 @@ use std::{
     collections::BTreeMap,
     path::PathBuf,
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
@@ -270,8 +270,17 @@ impl Upgrade {
             &latest_cup,
         ) {
             self.stop_replica()?;
-            self.remove_state()?;
-            return Ok(None);
+            return match self.remove_state() {
+                Ok(()) => Ok(None),
+                Err(err) => {
+                    warn!(
+                        self.logger,
+                        "Removal of the node state failed with error {}", err
+                    );
+                    self.metrics.critical_error_state_removal_failed.inc();
+                    Err(err)
+                }
+            };
         }
 
         // If we arrived here, we have the newest CUP and we're still assigned.
@@ -363,29 +372,18 @@ impl Upgrade {
     fn remove_state(&self) -> OrchestratorResult<()> {
         // Reset the key changed errors counter to not raise alerts in other subnets
         self.metrics.master_public_key_changed_errors.reset();
-        let tmpdir = tempfile::Builder::new()
-            .prefix("ic_config")
-            .tempdir()
-            .map_err(|err| {
-                OrchestratorError::UpgradeError(format!(
-                    "Couldn't create a temporary directory: {:?}",
-                    err
-                ))
-            })?;
-        let config = Config::load_with_tmpdir(
-            ConfigSource::File(self.replica_config_file.clone()),
-            tmpdir.path().to_path_buf(),
-        );
-
         remove_node_state(
-            &config,
+            self.replica_config_file.clone(),
             self.cup_provider.get_cup_path(),
             self.orchestrator_data_directory.clone(),
         )
         .map_err(OrchestratorError::UpgradeError)?;
         info!(self.logger, "Subnet state removed");
 
-        sync_and_trim_fs(&config, &self.logger).map_err(OrchestratorError::UpgradeError)?;
+        let instant = Instant::now();
+        sync_and_trim_fs(&self.logger).map_err(OrchestratorError::UpgradeError)?;
+        let elapsed = instant.elapsed().as_millis();
+        self.metrics.fstrim_duration.set(elapsed as i64);
         info!(self.logger, "Filesystem synced and trimmed");
 
         Ok(())
@@ -641,44 +639,48 @@ fn should_node_become_unassigned(
     true
 }
 
-fn sync_and_trim_fs(config: &Config, logger: &ReplicaLogger) -> Result<(), String> {
-    let mut sync = std::process::Command::new("sync");
-    sync.arg("--file-system")
-        .arg(config.state_manager.state_root());
-    run_command(sync, logger)?;
-
-    let fstrim = std::process::Command::new("/opt/ic/bin/fstrim.sh");
-    run_command(fstrim, logger)
-}
-
-fn run_command(mut cmd: std::process::Command, logger: &ReplicaLogger) -> Result<(), String> {
-    info!(logger, "Running command '{:?}'...", cmd);
-    match cmd.status() {
+// Call `sync` and `fstrim` on the data partition
+fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
+    let mut fstrim_script = std::process::Command::new("/opt/ic/bin/sync_fstrim.sh");
+    info!(logger, "Running command '{:?}'...", fstrim_script);
+    match fstrim_script.status() {
         Ok(status) => {
             if status.success() {
                 Ok(())
             } else {
                 Err(format!(
                     "Failed to run command '{:?}', return value: {}",
-                    cmd, status
+                    fstrim_script, status
                 ))
             }
         }
-        Err(err) => Err(format!("Failed to run command '{:?}', error {}", cmd, err)),
+        Err(err) => Err(format!(
+            "Failed to run command '{:?}', error: {}",
+            fstrim_script, err
+        )),
     }
 }
 
 // Deletes the subnet state consisting of the consensus pool, execution state,
 // the local CUP and the persisted error metric of threshold key changes.
 fn remove_node_state(
-    config: &Config,
+    replica_config_file: PathBuf,
     cup_path: PathBuf,
     orchestrator_data_directory: PathBuf,
 ) -> Result<(), String> {
+    use ic_config::{Config, ConfigSource};
     use std::fs::{remove_dir_all, remove_file};
+    let tmpdir = tempfile::Builder::new()
+        .prefix("ic_config")
+        .tempdir()
+        .map_err(|err| format!("Couldn't create a temporary directory: {:?}", err))?;
+    let config = Config::load_with_tmpdir(
+        ConfigSource::File(replica_config_file),
+        tmpdir.path().to_path_buf(),
+    );
 
-    let consensus_pool_path = &config.artifact_pool.consensus_pool_path;
-    remove_dir_all(consensus_pool_path).map_err(|err| {
+    let consensus_pool_path = config.artifact_pool.consensus_pool_path;
+    remove_dir_all(&consensus_pool_path).map_err(|err| {
         format!(
             "Couldn't delete the consensus pool at {:?}: {:?}",
             consensus_pool_path, err

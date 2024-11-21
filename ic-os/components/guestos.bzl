@@ -153,5 +153,5 @@ component_files = {
     Label("upgrade/shared-resources/monitor-expand-shared-data/monitor-expand-shared-data.py"): "/opt/ic/bin/monitor-expand-shared-data.py",
 
     # fstrim
-    Label("fstrim/fstrim.sh"): "/opt/ic/bin/fstrim.sh",
+    Label("fstrim/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
 }
