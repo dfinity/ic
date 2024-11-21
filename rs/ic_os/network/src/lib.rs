@@ -11,7 +11,6 @@ use mac_address::mac_address::{FormattedMacAddress, UnformattedMacAddress};
 
 pub mod info;
 pub mod interfaces;
-pub mod ipv6;
 pub mod systemd;
 
 /// Write SetupOS or HostOS systemd network configuration.
