@@ -349,8 +349,8 @@ fn bip341_hash(pk_x: &[u8], ttr: &[u8]) -> Result<Scalar, InvalidTaprootHash> {
     let h_tag: [u8; 32] = sha2::Sha256::digest(tag).into();
 
     let mut sha256 = sha2::Sha256::new();
-    sha256.update(&h_tag);
-    sha256.update(&h_tag);
+    sha256.update(h_tag);
+    sha256.update(h_tag);
     sha256.update(pk_x);
     sha256.update(ttr);
     let bytes: [u8; 32] = sha256.finalize().into();
@@ -595,7 +595,7 @@ impl PrivateKey {
         rng: &mut R,
         taproot_tree_hash: &[u8],
     ) -> Result<[u8; 64], InvalidTaprootHash> {
-        if taproot_tree_hash.len() != 0 && taproot_tree_hash.len() != 32 {
+        if !taproot_tree_hash.empty() && taproot_tree_hash.len() != 32 {
             return Err(InvalidTaprootHash::InvalidLength);
         }
 
