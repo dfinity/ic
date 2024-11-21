@@ -195,7 +195,7 @@ impl Upgrade {
                                     // Otherwise we would have left the subnet before upgrading. This means
                                     // we will trust the registry and go ahead with removing the node's state
                                     // including the broken local CUP.
-                                    self.remove_state()?;
+                                    self.remove_state().await?;
                                     return Ok(None);
                                 }
                                 Err(other) => return Err(other),
@@ -270,7 +270,7 @@ impl Upgrade {
             &latest_cup,
         ) {
             self.stop_replica()?;
-            return match self.remove_state() {
+            return match self.remove_state().await {
                 Ok(()) => Ok(None),
                 Err(err) => {
                     warn!(
@@ -369,7 +369,7 @@ impl Upgrade {
         Ok(())
     }
 
-    fn remove_state(&self) -> OrchestratorResult<()> {
+    async fn remove_state(&self) -> OrchestratorResult<()> {
         // Reset the key changed errors counter to not raise alerts in other subnets
         self.metrics.master_public_key_changed_errors.reset();
         remove_node_state(
@@ -381,7 +381,9 @@ impl Upgrade {
         info!(self.logger, "Subnet state removed");
 
         let instant = Instant::now();
-        sync_and_trim_fs(&self.logger).map_err(OrchestratorError::UpgradeError)?;
+        sync_and_trim_fs(&self.logger)
+            .await
+            .map_err(OrchestratorError::UpgradeError)?;
         let elapsed = instant.elapsed().as_millis();
         self.metrics.fstrim_duration.set(elapsed as i64);
         info!(self.logger, "Filesystem synced and trimmed");
@@ -640,10 +642,10 @@ fn should_node_become_unassigned(
 }
 
 // Call `sync` and `fstrim` on the data partition
-fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
-    let mut fstrim_script = std::process::Command::new("/opt/ic/bin/sync_fstrim.sh");
+async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
+    let mut fstrim_script = tokio::process::Command::new("/opt/ic/bin/sync_fstrim.sh");
     info!(logger, "Running command '{:?}'...", fstrim_script);
-    match fstrim_script.status() {
+    match fstrim_script.status().await {
         Ok(status) => {
             if status.success() {
                 Ok(())
