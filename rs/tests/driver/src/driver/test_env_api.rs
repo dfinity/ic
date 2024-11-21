@@ -1151,7 +1151,7 @@ pub fn get_sha256_from_cas_url(img_name: &str, url: &Url) -> Result<String> {
 }
 
 pub fn get_ic_os_img_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
@@ -1160,8 +1160,7 @@ pub fn get_ic_os_img_sha256() -> Result<String> {
 }
 
 pub fn get_malicious_ic_os_img_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
@@ -1170,7 +1169,7 @@ pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
 }
 
 pub fn get_ic_os_update_img_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
@@ -1179,7 +1178,7 @@ pub fn get_ic_os_update_img_sha256() -> Result<String> {
 }
 
 pub fn get_ic_os_update_img_test_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
@@ -1188,8 +1187,7 @@ pub fn get_ic_os_update_img_test_sha256() -> Result<String> {
 }
 
 pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
@@ -1201,8 +1199,7 @@ pub fn get_malicious_ic_os_update_img_sha256() -> Result<String> {
 }
 
 pub fn get_boundary_node_img_url() -> Result<Url> {
-    let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.cas-url";
-    let url = read_dependency_to_string(dep_rel_path)?;
+    let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
