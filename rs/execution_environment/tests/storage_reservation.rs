@@ -15,6 +15,8 @@ const GIB: u64 = 1024 * MIB;
 const SUBNET_MEMORY_THRESHOLD: u64 = 10_253 * MIB;
 const SUBNET_MEMORY_CAPACITY: u64 = 20 * GIB;
 
+const PAGE_SIZE: usize = 64 * KIB as usize;
+
 fn setup(subnet_memory_threshold: u64, subnet_memory_capacity: u64) -> (StateMachine, CanisterId) {
     let subnet_type = SubnetType::Application;
     let mut execution_config = ExecutionConfig::default();
@@ -60,11 +62,25 @@ fn test_storage_reservation_not_triggered() {
 }
 
 #[test]
-fn test_storage_reservation_triggered_in_update() {
+fn test_storage_reservation_triggered_in_update_by_stable_grow() {
     let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY);
     assert_eq!(env.reserved_balance(canister_id), 0);
 
     let _ = env.execute_ingress(canister_id, "update", wasm().stable_grow(100).build());
+
+    assert_gt!(env.reserved_balance(canister_id), 0);
+}
+
+#[test]
+fn test_storage_reservation_triggered_in_update_by_growing_wasm_memory() {
+    let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY);
+    assert_eq!(env.reserved_balance(canister_id), 0);
+
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(&[0; 100 * PAGE_SIZE]).build(),
+    );
 
     assert_gt!(env.reserved_balance(canister_id), 0);
 }
