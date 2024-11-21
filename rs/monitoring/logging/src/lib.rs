@@ -1,5 +1,5 @@
-use ic_config::logger::{Config as LoggingConfig, LogDestination, LogFormat};
 use ic_base_types::{NodeId, SubnetId};
+use ic_config::logger::{Config as LoggingConfig, LogDestination, LogFormat};
 use time::format_description::well_known::Rfc3339;
 use tracing::Subscriber;
 use tracing_appender::{non_blocking, non_blocking::WorkerGuard};
