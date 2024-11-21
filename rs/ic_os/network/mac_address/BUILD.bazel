@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:hex",
+    "@crate_index//:macaddr",
     "@crate_index//:regex",
     "@crate_index//:serde",
     "@crate_index//:sha2",

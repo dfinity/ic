@@ -97,7 +97,7 @@ pub fn main() -> Result<()> {
 
             eprintln!(
                 "Using generated mac (unformatted) {}",
-                generated_mac.unformatted_string()
+                generated_mac.to_unformatted_string()
             );
 
             generate_network_config(&network_info, generated_mac, Path::new(&output_directory))

@@ -185,7 +185,7 @@ pub fn main() -> Result<()> {
             let generated_mac =
                 generate_deterministic_mac_address(&mgmt_mac, deployment, node_type, IpVariant::V6);
 
-            println!("{}", generated_mac.formatted_string());
+            println!("{generated_mac}");
             Ok(())
         }
         Some(Commands::FetchMacAddress {}) => {
@@ -207,7 +207,7 @@ pub fn main() -> Result<()> {
                 }
                 None => get_ipmi_mac()?,
             };
-            println!("{}", mgmt_mac.formatted_string());
+            println!("{mgmt_mac}");
             Ok(())
         }
         None => Err(anyhow!(

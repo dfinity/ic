@@ -7,7 +7,7 @@ use utils::intersperse;
 
 /// Generate a deterministic IPv6 address
 pub fn generate_ipv6_address(ipv6_prefix: &str, generated_mac: &MacAddress) -> Result<Ipv6Addr> {
-    let mac_unformatted = generated_mac.unformatted_string();
+    let mac_unformatted = generated_mac.to_unformatted_string();
 
     let mac_first6: String = mac_unformatted.chars().take(6).collect();
     let mac_last6: String = mac_unformatted

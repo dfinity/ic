@@ -85,7 +85,7 @@ fn generate_and_write_systemd_files(
     create_dir_all(output_directory)?;
 
     let mac_line = match generated_mac {
-        Some(mac) => format!("MACAddress={}", mac.get()),
+        Some(mac) => format!("MACAddress={}", mac),
         None => String::new(),
     };
 
