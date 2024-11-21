@@ -103,8 +103,7 @@ component_files = {
     Label("networking/hosts"): "/etc/hosts",
     Label("networking/dev-certs/canister_http_test_ca.cert"): "/dev-certs/canister_http_test_ca.cert",
     Label("networking/socks-proxy/danted.service"): "/etc/systemd/system/danted.service",
-    Label("networking/socks-proxy/generate-dante-config.service"): "/etc/systemd/system/generate-dante-config.service",
-    Label("networking/socks-proxy/generate-dante-config.sh"): "/opt/ic/bin/generate-dante-config.sh",
+    Label("networking/socks-proxy/danted.conf"): "/etc/danted.conf",
 
     # SELinux
     Label("selinux/dante/dante.fc"): "/prep/dante/dante.fc",

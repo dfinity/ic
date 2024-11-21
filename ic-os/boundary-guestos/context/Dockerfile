@@ -166,18 +166,19 @@ RUN addgroup --system nonconfidential && \
 # telemetry metrics of the GuestOS.
 RUN addgroup node_exporter && \
     adduser --system --disabled-password --shell /usr/sbin/nologin --no-create-home node_exporter && \
-    adduser node_exporter node_exporter && \
-    # The "socks" account for socks proxy
-    # Also set correct permissions for dante.
-    addgroup socks && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin --no-create-home socks && \
-    adduser socks socks && chmod +s /usr/sbin/danted
+    adduser node_exporter node_exporter
 
 # Install node_exporter
 RUN chown root:root /etc/node_exporter \
                     /usr/local/bin/node_exporter && \
     chmod 0755 /etc/node_exporter \
                /usr/local/bin/node_exporter
+
+# The "socks" account for socks proxy
+# Also set correct permissions for dante.
+RUN addgroup socks && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin --no-create-home socks && \
+    adduser socks socks && chmod +s /usr/sbin/danted
 
 # Install IC binaries and other data late -- this means everything above
 # will be cached when only the binaries change.

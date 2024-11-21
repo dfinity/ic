@@ -5,15 +5,13 @@ Wants=network-online.target
 After=network-online.target
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
-After=generate-dante-config.service
-Wants=generate-dante-config.service
 # Only start if configuration file exists
-ConditionPathExists=/run/ic-node/etc/danted.conf
+ConditionPathExists=/etc/danted.conf
 
 [Service]
 User=socks
 Group=socks
-ExecStart=/usr/sbin/danted -f /run/ic-node/etc/danted.conf
+ExecStart=/usr/sbin/danted -f /etc/danted.conf
 Restart=always
 RestartSec=10
 
