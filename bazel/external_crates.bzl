@@ -184,7 +184,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.7.1",
             ),
             "anyhow": crate.spec(
-                version = "^1",
+                version = "^1.0.93",
             ),
             "arrayvec": crate.spec(
                 version = "^0.7.4",
@@ -589,7 +589,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.16.0",
             ),
             "ic-cdk-timers": crate.spec(
-                version = "^0.7.0",
+                version = "^0.11.0",
             ),
             "ic-cdk-macros": crate.spec(
                 version = "^0.9.0",
@@ -837,7 +837,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "num_cpus": crate.spec(
-                version = "^1.13.1",
+                version = "^1.16.0",
             ),
             "once_cell": crate.spec(
                 version = "^1.8",
@@ -846,7 +846,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.0",
             ),
             "opentelemetry": crate.spec(
-                version = "^0.26.0",
+                version = "^0.27.0",
                 features = [
                     "metrics",
                     "trace",
@@ -861,13 +861,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "opentelemetry-otlp": crate.spec(
-                version = "^0.26.0",
+                version = "^0.27.0",
                 features = [
                     "grpc-tonic",
                 ],
             ),
             "opentelemetry_sdk": crate.spec(
-                version = "^0.26.0",
+                version = "^0.27.0",
                 features = [
                     "trace",
                     "rt-tokio",
@@ -1255,7 +1255,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8",
             ),
             "thiserror": crate.spec(
-                version = "^1.0.65",
+                version = "^2.0.3",
             ),
             "thousands": crate.spec(
                 version = "^0.2.0",
@@ -1354,7 +1354,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.0",
             ),
             "tracing-opentelemetry": crate.spec(
-                version = "^0.27.0",
+                version = "^0.28.0",
             ),
             "tracing-serde": crate.spec(
                 version = "^0.1.3",

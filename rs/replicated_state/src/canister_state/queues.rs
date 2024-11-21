@@ -1179,6 +1179,19 @@ impl CanisterQueues {
         Some(self.store.get(output_queue.peek()?))
     }
 
+    /// Pops the next message from the output queue to `dst_canister`.
+    pub(super) fn pop_canister_output(
+        &mut self,
+        dst_canister: &CanisterId,
+    ) -> Option<RequestOrResponse> {
+        let queue = &mut self.canister_queues.get_mut(dst_canister)?.1;
+        let msg = self.store.queue_pop_and_advance(queue);
+
+        debug_assert_eq!(Ok(()), self.test_invariants());
+        debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
+        msg
+    }
+
     /// Tries to induct a message from the output queue to `own_canister_id`
     /// into the input queue from `own_canister_id`. Returns `Err(())` if there
     /// was no message to induct or the input queue was full.
@@ -2021,8 +2034,7 @@ pub mod testing {
         /// Returns the number of messages in `ingress_queue`.
         fn ingress_queue_size(&self) -> usize;
 
-        /// Pops the next message from the output queue associated with
-        /// `dst_canister`.
+        /// Pops the next message from the output queue to `dst_canister`.
         fn pop_canister_output(&mut self, dst_canister: &CanisterId) -> Option<RequestOrResponse>;
 
         /// Returns the number of output queues, empty or not.
@@ -2058,8 +2070,7 @@ pub mod testing {
         }
 
         fn pop_canister_output(&mut self, dst_canister: &CanisterId) -> Option<RequestOrResponse> {
-            let queue = &mut self.canister_queues.get_mut(dst_canister).unwrap().1;
-            self.store.queue_pop_and_advance(queue)
+            self.pop_canister_output(dst_canister)
         }
 
         fn output_queues_len(&self) -> usize {

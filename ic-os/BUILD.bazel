@@ -1,4 +1,5 @@
 exports_files([
     "vuln-scan/vuln-scan.sh",
     "vuln-scan/vuln-scan.html",
+    "dev-tools/launch-remote-vm.sh",
 ])

@@ -22,6 +22,7 @@ use crate::crypto::threshold_sig::ni_dkg::NiDkgId;
 use crate::registry::RegistryClientError;
 use crate::{CountBytes, NodeId, RegistryVersion, SubnetId};
 use core::fmt::Formatter;
+use ic_base_types::PrincipalId;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::ThresholdSigPublicKeyBytesConversionError;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
@@ -798,5 +799,33 @@ impl CurrentNodePublicKeys {
             count += 1;
         }
         count
+    }
+}
+
+/// Metadata used to derive keys for tECDSA, tSchnorr, and vetKD.
+#[serde_with::serde_as]
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct ExtendedDerivationPath {
+    pub caller: PrincipalId,
+    #[serde_as(as = "Vec<serde_with::Bytes>")]
+    pub derivation_path: Vec<Vec<u8>>,
+}
+
+impl fmt::Debug for ExtendedDerivationPath {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "ExtendedDerivationPath {{ caller: {:?}", self.caller)?;
+        write!(f, ", derivation_path: {{ ")?;
+        let mut first_path = true;
+        for path in &self.derivation_path {
+            if !first_path {
+                write!(f, ", ")?;
+                first_path = false;
+            }
+            write!(f, "{}", hex::encode(path))?;
+        }
+        write!(f, " }}")?;
+        write!(f, " }}")?;
+        Ok(())
     }
 }

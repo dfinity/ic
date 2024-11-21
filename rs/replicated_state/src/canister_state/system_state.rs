@@ -1951,10 +1951,12 @@ impl SystemState {
         own_subnet_type: SubnetType,
     ) {
         // Bail out if the canister is not running.
-        match self.status {
-            CanisterStatus::Running { .. } => (),
+        let call_context_manager = match &self.status {
+            CanisterStatus::Running {
+                call_context_manager,
+            } => call_context_manager,
             CanisterStatus::Stopped | CanisterStatus::Stopping { .. } => return,
-        }
+        };
 
         let mut memory_usage = self.queues.guaranteed_response_memory_usage() as i64;
 
@@ -1966,16 +1968,26 @@ impl SystemState {
                 return;
             }
 
-            // Protect against enqueuing a second response for the currently executing
-            // (aborted or paused) callback.
+            // Protect against enqueuing duplicate responses.
             if let RequestOrResponse::Response(response) = &msg {
-                if let Some(aborted_or_paused_response) = self.aborted_or_paused_response() {
-                    if response.originator_reply_callback
-                        == aborted_or_paused_response.originator_reply_callback
-                    {
-                        // The callback is already executing, don't enqueue a second response for it.
-                        return;
+                match should_enqueue_input(
+                    response,
+                    call_context_manager,
+                    self.aborted_or_paused_response(),
+                ) {
+                    // Safe to induct.
+                    Ok(true) => {}
+
+                    // Best effort response whose callback is gone. Silently drop it.
+                    Ok(false) => {
+                        self.queues
+                            .pop_canister_output(&self.canister_id)
+                            .expect("Message peeked above so pop should not fail.");
+                        continue;
                     }
+
+                    // This should not happen. Bail out and let Message Routing deal with it.
+                    Err(_) => return,
                 }
             }
 
@@ -2161,12 +2173,10 @@ impl SystemState {
     /// Moves the given amount of cycles from the main balance to the reserved balance.
     /// Returns an error if the main balance is lower than the requested amount.
     pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), ReservationError> {
-        if let Some(reserved_balance_limit) = self.reserved_balance_limit {
-            if self.reserved_balance + amount > reserved_balance_limit {
-                return Err(ReservationError::ReservedLimitExceed {
-                    requested: self.reserved_balance + amount,
-                    limit: reserved_balance_limit,
-                });
+        if let Some(limit) = self.reserved_balance_limit {
+            let requested = self.reserved_balance + amount;
+            if requested > limit {
+                return Err(ReservationError::ReservedLimitExceed { requested, limit });
             }
         }
         if amount > self.cycles_balance {

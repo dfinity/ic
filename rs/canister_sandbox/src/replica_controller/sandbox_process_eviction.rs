@@ -24,12 +24,15 @@ pub(crate) fn evict(
     last_used_threshold: Instant,
     max_sandboxes_rss: NumBytes,
 ) -> Vec<EvictionCandidate> {
-    let evict_at_least: usize = candidates.len().saturating_sub(max_count_threshold);
-
-    if evict_at_least == 0 && total_rss <= max_sandboxes_rss {
+    // We have the same if statement in `evict_sandbox_processes` so this statement
+    // should not be true if we enter the function, but we keep it as a sanity check,
+    // and additionally some of the tests are testing this behavior.
+    if candidates.len() <= max_count_threshold && total_rss <= max_sandboxes_rss {
         // No need to evict any candidate.
         return vec![];
     }
+
+    let evict_at_least: usize = candidates.len().saturating_sub(max_count_threshold);
 
     let min_scheduler_priority = AccumulatedPriority::new(i64::MIN);
 
