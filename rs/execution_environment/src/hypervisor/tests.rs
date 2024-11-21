@@ -2339,7 +2339,7 @@ fn ic0_mint_cycles128_succeeds_on_cmc() {
         .reply()
         .build();
     let result = test.ingress(canister_id, "update", payload).unwrap();
-    // (high=1, low=2) => 2^64 + 2^1 as in the MINT_CYCLES128 wasm module
+    // (high=1, low=2) => 2^64 + 2^1
     assert_eq!(
         WasmResult::Reply(vec![2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]),
         result
