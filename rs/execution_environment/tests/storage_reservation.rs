@@ -19,9 +19,11 @@ const PAGE_SIZE: usize = 64 * KIB as usize;
 
 fn setup(subnet_memory_threshold: u64, subnet_memory_capacity: u64) -> (StateMachine, CanisterId) {
     let subnet_type = SubnetType::Application;
-    let mut execution_config = ExecutionConfig::default();
-    execution_config.subnet_memory_threshold = NumBytes::new(subnet_memory_threshold);
-    execution_config.subnet_memory_capacity = NumBytes::new(subnet_memory_capacity);
+    let execution_config = ExecutionConfig {
+        subnet_memory_threshold: NumBytes::new(subnet_memory_threshold),
+        subnet_memory_capacity: NumBytes::new(subnet_memory_capacity),
+        ..Default::default()
+    };
     let config = StateMachineConfig::new(SubnetConfig::new(subnet_type), execution_config);
     let env = StateMachineBuilder::new()
         .with_config(Some(config))
