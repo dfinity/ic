@@ -1185,7 +1185,11 @@ impl CanisterQueues {
         dst_canister: &CanisterId,
     ) -> Option<RequestOrResponse> {
         let queue = &mut self.canister_queues.get_mut(dst_canister)?.1;
-        self.store.queue_pop_and_advance(queue)
+        let msg = self.store.queue_pop_and_advance(queue);
+
+        debug_assert_eq!(Ok(()), self.test_invariants());
+        debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
+        msg
     }
 
     /// Tries to induct a message from the output queue to `own_canister_id`
