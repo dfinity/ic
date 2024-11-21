@@ -600,6 +600,7 @@ k256 = { version = "0.13.4", default-features = false, features = [
 # kube is used by our test driver
 kube = { version = "0.93.1" }
 lazy_static = "1.4.0"
+leb128 = "0.2.5"
 libc = "0.2.158"
 libflate = "2.1.0"
 libnss = "0.5.0"
