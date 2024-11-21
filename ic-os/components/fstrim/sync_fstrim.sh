@@ -8,12 +8,12 @@ if [ $(id -u) != 0 ]; then
     exec sudo "$0" "$@"
 fi
 
-PATH=/var/lib/ic/data
+DIR=/var/lib/ic/data
 
-echo "Executing sync on $PATH"
-sync --file-system $PATH
+echo "Executing sync on $DIR"
+sync --file-system $DIR
 
-echo "Executing fstrim on $PATH"
-/sbin/fstrim $PATH
+echo "Executing fstrim on $DIR"
+/sbin/fstrim $DIR
 
 echo "Finished sync & fstrim"
