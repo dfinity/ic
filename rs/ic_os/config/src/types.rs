@@ -14,12 +14,14 @@
 //! - **Removing Fields**: To prevent backwards-compatibility deserialization errors, required fields must not be removed directly: In a first step, they have to be made optional and code that reads the value must be removed/handle missing values. In a second step, after the first step has rolled out to all OSes and there is no risk of a rollback, the field can be removed. Additionally, to avoid reintroducing a previously removed field, add your removed field to the RESERVED_FIELD_NAMES list.
 //!
 //! - **Renaming Fields**: Avoid renaming fields unless absolutely necessary. If you must rename a field, use `#[serde(rename = "old_name")]`.
+use crate::types::firewall::FirewallSettings;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use mac_address::mac_address::FormattedMacAddress;
 use serde::{Deserialize, Serialize};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use url::Url;
 
+pub mod firewall;
 pub const CONFIG_VERSION: &str = "1.0.0";
 
 /// List of field names that have been removed and should not be reused.
@@ -154,6 +156,8 @@ pub struct NetworkSettings {
     pub ipv6_config: Ipv6Config,
     pub ipv4_config: Option<Ipv4Config>,
     pub domain_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub firewall: Option<FirewallSettings>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
@@ -200,6 +204,7 @@ mod tests {
                 ipv6_config: Ipv6Config::RouterAdvertisement,
                 ipv4_config: None,
                 domain_name: None,
+                firewall: None,
             },
             icos_settings: ICOSSettings {
                 node_reward_type: Some(String::new()),

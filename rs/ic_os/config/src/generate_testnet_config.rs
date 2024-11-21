@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use url::Url;
 
 use crate::serialize_and_write_config;
+use crate::types::firewall::FirewallSettings;
 use crate::types::*;
 
 #[derive(Default)]
@@ -20,6 +21,7 @@ pub struct GenerateTestnetConfigArgs {
     pub ipv4_gateway: Option<String>,
     pub ipv4_prefix_length: Option<u8>,
     pub domain_name: Option<String>,
+    pub firewall: Option<String>,
 
     // ICOSSettings arguments
     pub node_reward_type: Option<String>,
@@ -70,6 +72,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         ipv4_gateway,
         ipv4_prefix_length,
         domain_name,
+        firewall,
         node_reward_type,
         mgmt_mac,
         deployment_environment,
@@ -154,10 +157,20 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         }
     };
 
+    let firewall_settings: Option<FirewallSettings> = if let Some(firewall) = firewall {
+        Some(
+            serde_json::from_str(&firewall)
+                .map_err(|e| anyhow::anyhow!("Failed to parse firewall: {}", e))?,
+        )
+    } else {
+        None
+    };
+
     let network_settings = NetworkSettings {
         ipv6_config,
         ipv4_config,
         domain_name,
+        firewall: firewall_settings,
     };
 
     // Construct ICOSSettings

@@ -28,6 +28,21 @@ function copy_config_files() {
         log_and_halt_installation_on_error "1" "Configuration file 'config.ini' does not exist."
     fi
 
+    if [ -v FIREWALL_FILE ]; then
+        # This file has been checked for correctness before in check_firewall_rules.
+        echo "* Copying '${FIREWALL_FILE}' as firewall.json to hostOS config partition..."
+        cp ${FIREWALL_FILE} /media/firewall.json
+        log_and_halt_installation_on_error "${?}" "Unable to copy '${FIREWALL_FILE}' to hostOS config partition."
+    else
+        # This file is optional.  It will not be used if absent.  If present, it
+        # has already been checked for consistency before this step.
+        if [ -f "${CONFIG_DIR}/firewall.json" ]; then
+            echo "* Copying 'firewall.json' to hostOS config partition..."
+            cp ${CONFIG_DIR}/firewall.json /media/firewall.json
+            log_and_halt_installation_on_error "${?}" "Unable to copy 'firewall.json' to hostOS config partition."
+        fi
+    fi
+
     echo "* Copying SSH authorized keys..."
     if [ -d "${CONFIG_DIR}/ssh_authorized_keys" ]; then
         cp -r ${CONFIG_DIR}/ssh_authorized_keys /media/

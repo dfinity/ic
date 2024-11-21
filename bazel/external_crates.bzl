@@ -687,7 +687,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["serde"],
             ),
             "ipnet": crate.spec(
-                version = "^2.5.0",
+                version = "^2.8.0",
+                features = ["serde"],
             ),
             "isocountry": crate.spec(
                 version = "^0.3.2",

@@ -96,8 +96,10 @@ This configuration ensures that the physical CPU topology is reflected in the vi
 == Firewall
 
 The hard-coded firewall ruleset is rather restrictive. A new disk-image has to be proposed and blessed in order to update the rules.
+However, operators can alter the firewall rules in their deployment -- please see
+link:../docs/Network-Configuration.adoc[the documentation for network configuration] for more information.
 
-Please find the raw HostOS NFTables ruleset in `nftables.conf`
+Please find the default raw HostOS NFTables ruleset in `nftables.conf`
 
 === Filter
 
