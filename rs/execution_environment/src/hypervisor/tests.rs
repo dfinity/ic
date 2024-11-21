@@ -2272,31 +2272,17 @@ fn ic0_mint_cycles_succeeds_on_cmc() {
     );
 }
 
-const MINT_CYCLES128: &str = r#"
-    (module
-        (import "ic0" "msg_reply_data_append"
-            (func $msg_reply_data_append (param i32) (param i32))
-        )
-        (import "ic0" "mint_cycles128"
-            (func $mint_cycles128 (param i64) (param i64) (param i32))
-        )
-        (import "ic0" "msg_reply" (func $ic0_msg_reply))
-
-        (func (export "canister_update test")
-            ;; store at the beginning of the heap
-            (call $mint_cycles128 (i64.const 1) (i64.const 2) (i32.const 0))
-            (call $msg_reply_data_append (i32.const 0) (i32.const 16))
-            (call $ic0_msg_reply)
-        )
-        (memory 1 1)
-    )"#;
-
 #[test]
 fn ic0_mint_cycles128_fails_on_application_subnet() {
     let mut test = ExecutionTestBuilder::new().build();
-    let canister_id = test.canister_from_wat(MINT_CYCLES128).unwrap();
+    let canister_id = test.universal_canister().unwrap();
     let initial_cycles = test.canister_state(canister_id).system_state.balance();
-    let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
+    let payload = wasm()
+        .mint_cycles128(Cycles::from((1u128 << 64) + 2u128))
+        .reply_data_append()
+        .reply()
+        .build();
+    let err = test.ingress(canister_id, "update", payload).unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert!(err
         .description()
@@ -2315,9 +2301,14 @@ fn ic0_mint_cycles128_fails_on_system_subnet_non_cmc() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .build();
-    let canister_id = test.canister_from_wat(MINT_CYCLES128).unwrap();
+    let canister_id = test.universal_canister().unwrap();
     let initial_cycles = test.canister_state(canister_id).system_state.balance();
-    let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
+    let payload = wasm()
+        .mint_cycles128(Cycles::from((1u128 << 64) + 2u128))
+        .reply_data_append()
+        .reply()
+        .build();
+    let err = test.ingress(canister_id, "update", payload).unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert!(err
         .description()
@@ -2336,13 +2327,18 @@ fn ic0_mint_cycles128_succeeds_on_cmc() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .build();
-    let mut canister_id = test.canister_from_wat(MINT_CYCLES128).unwrap();
+    let mut canister_id = test.universal_canister().unwrap();
     // This loop should finish after four iterations.
     while canister_id != CYCLES_MINTING_CANISTER_ID {
-        canister_id = test.canister_from_wat(MINT_CYCLES128).unwrap();
+        canister_id = test.universal_canister().unwrap();
     }
     let initial_cycles = test.canister_state(canister_id).system_state.balance();
-    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    let payload = wasm()
+        .mint_cycles128(Cycles::from((1u128 << 64) + 2u128))
+        .reply_data_append()
+        .reply()
+        .build();
+    let result = test.ingress(canister_id, "update", payload).unwrap();
     // (high=1, low=2) => 2^64 + 2^1 as in the MINT_CYCLES128 wasm module
     assert_eq!(
         WasmResult::Reply(vec![2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]),
