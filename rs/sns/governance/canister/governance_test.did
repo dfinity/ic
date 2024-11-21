@@ -9,6 +9,7 @@ type Action = variant {
   ManageDappCanisterSettings : ManageDappCanisterSettings;
   RemoveGenericNervousSystemFunction : nat64;
   UpgradeSnsToNextVersion : record {};
+  AdvanceSnsTargetVersion : AdvanceSnsTargetVersion;
   RegisterDappCanisters : RegisterDappCanisters;
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
@@ -24,6 +25,7 @@ type Action = variant {
 type ActionAuxiliary = variant {
   TransferSnsTreasuryFunds : MintSnsTokensActionAuxiliary;
   MintSnsTokens : MintSnsTokensActionAuxiliary;
+  AdvanceSnsTargetVersion : AdvanceSnsTargetVersionActionAuxiliary;
 };
 
 type AddMaturityRequest = record {
@@ -304,7 +306,7 @@ type Governance = record {
   sns_metadata : opt ManageSnsMetadata;
   neurons : vec record { text; Neuron };
   genesis_timestamp_seconds : nat64;
-  target_version: opt Version;
+  target_version : opt Version;
   timers : opt Timers;
   upgrade_journal : opt UpgradeJournal;
 };
@@ -384,6 +386,19 @@ type ManageDappCanisterSettings = record {
   compute_allocation : opt nat64;
 };
 
+type SnsVersion = record {
+  governance_wasm_hash : opt blob;
+  swap_wasm_hash : opt blob;
+  root_wasm_hash : opt blob;
+  index_wasm_hash : opt blob;
+  ledger_wasm_hash : opt blob;
+  archive_wasm_hash : opt blob;
+};
+
+type AdvanceSnsTargetVersion = record {
+  new_target : opt SnsVersion;
+};
+
 type ManageLedgerParameters = record {
   token_symbol : opt text;
   transfer_fee : opt nat64;
@@ -435,6 +450,10 @@ type MintSnsTokens = record {
 
 type MintSnsTokensActionAuxiliary = record {
   valuation : opt Valuation;
+};
+
+type AdvanceSnsTargetVersionActionAuxiliary = record {
+  target_version : opt SnsVersion;
 };
 
 type MintTokensRequest = record {
@@ -828,13 +847,9 @@ service : (Governance) -> {
   get_proposal : (GetProposal) -> (GetProposalResponse) query;
   get_root_canister_status : (null) -> (CanisterStatusResultV2);
   get_running_sns_version : (record {}) -> (GetRunningSnsVersionResponse) query;
-  get_sns_initialization_parameters : (record {}) -> (
-      GetSnsInitializationParametersResponse,
-    ) query;
+  get_sns_initialization_parameters : (record {}) -> (GetSnsInitializationParametersResponse) query;
   get_upgrade_journal : (GetUpgradeJournalRequest) -> (GetUpgradeJournalResponse) query;
-  list_nervous_system_functions : () -> (
-      ListNervousSystemFunctionsResponse,
-    ) query;
+  list_nervous_system_functions : () -> (ListNervousSystemFunctionsResponse) query;
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
   list_proposals : (ListProposals) -> (ListProposalsResponse) query;
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
