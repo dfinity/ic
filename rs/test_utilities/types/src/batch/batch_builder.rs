@@ -20,7 +20,7 @@ impl Default for BatchBuilder {
                 requires_full_state_hash: false,
                 messages: BatchMessages::default(),
                 randomness: Randomness::from([0; 32]),
-                idkg_subnet_public_keys: BTreeMap::new(),
+                chain_key_subnet_public_keys: BTreeMap::new(),
                 idkg_pre_signature_ids: BTreeMap::new(),
                 registry_version: RegistryVersion::from(1),
                 time: UNIX_EPOCH,

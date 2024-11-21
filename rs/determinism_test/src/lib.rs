@@ -32,7 +32,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
             ..BatchMessages::default()
         },
         randomness: Randomness::from([0; 32]),
-        idkg_subnet_public_keys: BTreeMap::new(),
+        chain_key_subnet_public_keys: BTreeMap::new(),
         idkg_pre_signature_ids: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
@@ -49,7 +49,7 @@ fn build_batch_with_full_state_hash(message_routing: &dyn MessageRouting) -> Bat
         requires_full_state_hash: true,
         messages: BatchMessages::default(),
         randomness: Randomness::from([0; 32]),
-        idkg_subnet_public_keys: BTreeMap::new(),
+        chain_key_subnet_public_keys: BTreeMap::new(),
         idkg_pre_signature_ids: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,

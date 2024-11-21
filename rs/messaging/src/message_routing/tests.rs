@@ -472,16 +472,16 @@ impl RegistryFixture {
         )
     }
 
-    /// Writes the iDKG signing subnets into the registry.
+    /// Writes the chain key signing subnets into the registry.
     fn write_chain_key_signing_subnets(
         &self,
         chain_key_signing_subnets: &BTreeMap<MasterPublicKeyId, Integrity<Vec<SubnetId>>>,
     ) -> Result<(), ProtoRegistryDataProviderError> {
         use ic_types::subnet_id_into_protobuf;
 
-        for (idkg_key, subnet_ids) in chain_key_signing_subnets.iter() {
+        for (key_id, subnet_ids) in chain_key_signing_subnets.iter() {
             self.write_record(
-                &make_chain_key_signing_subnet_list_key(idkg_key),
+                &make_chain_key_signing_subnet_list_key(key_id),
                 subnet_ids
                     .as_ref()
                     .map(|subnet_ids| ChainKeySigningSubnetList {
@@ -1038,7 +1038,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             requires_full_state_hash: false,
             messages: BatchMessages::default(),
             randomness: Randomness::new([123; 32]),
-            idkg_subnet_public_keys: BTreeMap::default(),
+            chain_key_subnet_public_keys: BTreeMap::default(),
             idkg_pre_signature_ids: BTreeMap::new(),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
@@ -1838,7 +1838,7 @@ fn process_batch_updates_subnet_metrics() {
             requires_full_state_hash: false,
             messages: BatchMessages::default(),
             randomness: Randomness::new([123; 32]),
-            idkg_subnet_public_keys: BTreeMap::default(),
+            chain_key_subnet_public_keys: BTreeMap::default(),
             idkg_pre_signature_ids: BTreeMap::new(),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),

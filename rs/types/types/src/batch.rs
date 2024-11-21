@@ -53,7 +53,7 @@ pub struct Batch {
     /// A source of randomness for processing the Batch.
     pub randomness: Randomness,
     /// The Master public keys of the subnet.
-    pub idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    pub chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     /// The pre-signature Ids available to be matched with signature requests.
     pub idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
     /// The version of the registry to be referenced when processing the batch.

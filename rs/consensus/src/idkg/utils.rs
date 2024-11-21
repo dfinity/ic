@@ -508,7 +508,7 @@ pub(crate) fn get_pre_signature_ids_to_deliver(
 /// Additionally, we return `Err(string)` if we were unable to find a dkg summary block for the height
 /// of the given block (as the lower bound for past blocks to lookup the transcript in). In that case
 /// a newer CUP is already present in the pool and we should continue from there.
-pub(crate) fn get_idkg_subnet_public_keys(
+pub(crate) fn get_chain_key_subnet_public_keys(
     block: &Block,
     pool: &PoolReader<'_>,
     log: &ReplicaLogger,

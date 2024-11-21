@@ -232,7 +232,7 @@ impl Default for NetworkTopology {
 }
 
 impl NetworkTopology {
-    /// Returns a list of subnets where the iDKG feature is enabled.
+    /// Returns a list of subnets where the chain key feature is enabled.
     pub fn chain_key_signing_subnets(&self, key_id: &MasterPublicKeyId) -> &[SubnetId] {
         self.chain_key_signing_subnets
             .get(key_id)

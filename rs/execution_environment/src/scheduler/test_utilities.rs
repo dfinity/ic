@@ -113,8 +113,8 @@ pub(crate) struct SchedulerTest {
     registry_settings: RegistryExecutionSettings,
     // Metrics Registry.
     metrics_registry: MetricsRegistry,
-    // iDKG subnet public keys.
-    idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    // Chain key subnet master public keys.
+    chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     // Pre-signature IDs.
     idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
     // Version of the running replica, not the registry's Entry
@@ -518,7 +518,7 @@ impl SchedulerTest {
         let state = self.scheduler.execute_round(
             state,
             Randomness::from([0; 32]),
-            self.idkg_subnet_public_keys.clone(),
+            self.chain_key_subnet_public_keys.clone(),
             self.idkg_pre_signature_ids.clone(),
             &self.replica_version,
             self.round,
@@ -669,7 +669,7 @@ pub(crate) struct SchedulerTestBuilder {
     rate_limiting_of_heap_delta: bool,
     deterministic_time_slicing: bool,
     log: ReplicaLogger,
-    idkg_keys: Vec<MasterPublicKeyId>,
+    master_public_key_ids: Vec<MasterPublicKeyId>,
     metrics_registry: MetricsRegistry,
     round_summary: Option<ExecutionRoundSummary>,
     replica_version: ReplicaVersion,
@@ -696,7 +696,7 @@ impl Default for SchedulerTestBuilder {
             rate_limiting_of_heap_delta: false,
             deterministic_time_slicing: true,
             log: no_op_logger(),
-            idkg_keys: vec![],
+            master_public_key_ids: vec![],
             metrics_registry: MetricsRegistry::new(),
             round_summary: None,
             replica_version: ReplicaVersion::default(),
@@ -763,15 +763,18 @@ impl SchedulerTestBuilder {
         }
     }
 
-    pub fn with_idkg_key(self, idkg_key: MasterPublicKeyId) -> Self {
+    pub fn with_chain_key(self, key_id: MasterPublicKeyId) -> Self {
         Self {
-            idkg_keys: vec![idkg_key],
+            master_public_key_ids: vec![key_id],
             ..self
         }
     }
 
-    pub fn with_idkg_keys(self, idkg_keys: Vec<MasterPublicKeyId>) -> Self {
-        Self { idkg_keys, ..self }
+    pub fn with_chain_keys(self, master_public_key_ids: Vec<MasterPublicKeyId>) -> Self {
+        Self {
+            master_public_key_ids,
+            ..self
+        }
     }
 
     pub fn with_batch_time(self, batch_time: Time) -> Self {
@@ -816,12 +819,12 @@ impl SchedulerTestBuilder {
         state.metadata.batch_time = self.batch_time;
 
         let config = SubnetConfig::new(self.subnet_type).cycles_account_manager_config;
-        for idkg_key in &self.idkg_keys {
+        for key_id in &self.master_public_key_ids {
             state
                 .metadata
                 .network_topology
                 .chain_key_signing_subnets
-                .insert(idkg_key.clone(), vec![self.own_subnet_id]);
+                .insert(key_id.clone(), vec![self.own_subnet_id]);
             state
                 .metadata
                 .network_topology
@@ -829,18 +832,18 @@ impl SchedulerTestBuilder {
                 .get_mut(&self.own_subnet_id)
                 .unwrap()
                 .chain_keys_held
-                .insert(idkg_key.clone());
+                .insert(key_id.clone());
 
             registry_settings.chain_key_settings.insert(
-                idkg_key.clone(),
+                key_id.clone(),
                 ChainKeySettings {
                     max_queue_size: 20,
                     pre_signatures_to_create_in_advance: 5,
                 },
             );
         }
-        let idkg_subnet_public_keys: BTreeMap<_, _> = self
-            .idkg_keys
+        let chain_key_subnet_public_keys: BTreeMap<_, _> = self
+            .master_public_key_ids
             .into_iter()
             .map(|key_id| {
                 (
@@ -956,7 +959,7 @@ impl SchedulerTestBuilder {
             wasm_executor,
             registry_settings,
             metrics_registry: self.metrics_registry,
-            idkg_subnet_public_keys,
+            chain_key_subnet_public_keys,
             idkg_pre_signature_ids: BTreeMap::new(),
             replica_version: self.replica_version,
         }

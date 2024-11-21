@@ -1715,7 +1715,7 @@ fn test_consensus_queue_invariant_on_exceeding_heap_delta_limit() {
             subnet_config,
             HypervisorConfig::default(),
         )))
-        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
+        .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     let canister_id = env
         .install_canister_with_cycles(

@@ -248,7 +248,7 @@ impl SchedulerImpl {
         measurement_scope: &MeasurementScope,
         registry_settings: &RegistryExecutionSettings,
         replica_version: &ReplicaVersion,
-        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        chain_key_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> ReplicatedState {
         let ongoing_long_install_code =
             state
@@ -286,7 +286,7 @@ impl SchedulerImpl {
                     registry_settings,
                     replica_version,
                     measurement_scope,
-                    idkg_subnet_public_keys,
+                    chain_key_subnet_public_keys,
                 );
                 state = new_state;
 
@@ -318,7 +318,7 @@ impl SchedulerImpl {
         registry_settings: &RegistryExecutionSettings,
         replica_version: &ReplicaVersion,
         measurement_scope: &MeasurementScope,
-        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        chain_key_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> (ReplicatedState, Option<NumInstructions>) {
         let instruction_limits = get_instructions_limits_for_subnet_message(
             self.deterministic_time_slicing,
@@ -332,7 +332,7 @@ impl SchedulerImpl {
             state,
             instruction_limits,
             csprng,
-            idkg_subnet_public_keys,
+            chain_key_subnet_public_keys,
             replica_version,
             registry_settings,
             round_limits,
@@ -415,7 +415,7 @@ impl SchedulerImpl {
         scheduler_round_limits: &mut SchedulerRoundLimits,
         registry_settings: &RegistryExecutionSettings,
         replica_version: &ReplicaVersion,
-        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        chain_key_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> (ReplicatedState, BTreeSet<CanisterId>, BTreeSet<CanisterId>) {
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
@@ -456,7 +456,7 @@ impl SchedulerImpl {
                         &subnet_measurement_scope,
                         registry_settings,
                         replica_version,
-                        idkg_subnet_public_keys,
+                        chain_key_subnet_public_keys,
                     );
                     scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
                 }
@@ -1201,7 +1201,7 @@ impl Scheduler for SchedulerImpl {
         &self,
         mut state: ReplicatedState,
         randomness: Randomness,
-        idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
         idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
         replica_version: &ReplicaVersion,
         current_round: ExecutionRound,
@@ -1368,7 +1368,7 @@ impl Scheduler for SchedulerImpl {
                     registry_settings,
                     replica_version,
                     &measurement_scope,
-                    &idkg_subnet_public_keys,
+                    &chain_key_subnet_public_keys,
                 );
                 state = new_state;
             }
@@ -1427,7 +1427,7 @@ impl Scheduler for SchedulerImpl {
                     registry_settings,
                     replica_version,
                     &measurement_scope,
-                    &idkg_subnet_public_keys,
+                    &chain_key_subnet_public_keys,
                 );
                 state = new_state;
             }
@@ -1486,7 +1486,7 @@ impl Scheduler for SchedulerImpl {
             &mut scheduler_round_limits,
             registry_settings,
             replica_version,
-            &idkg_subnet_public_keys,
+            &chain_key_subnet_public_keys,
         );
 
         // Update [`SignWithThresholdContext`]s by assigning randomness and matching pre-signatures.

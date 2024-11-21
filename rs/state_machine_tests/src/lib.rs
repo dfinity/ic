@@ -278,7 +278,7 @@ pub fn finalize_registry(
 fn make_nodes_registry(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    idkg_keys_signing_enabled_status: &BTreeMap<MasterPublicKeyId, bool>,
+    chain_keys_signing_enabled_status: &BTreeMap<MasterPublicKeyId, bool>,
     features: SubnetFeatures,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     nodes: &Vec<StateMachineNode>,
@@ -299,7 +299,7 @@ fn make_nodes_registry(
             raw: subnet_id.get_ref().to_vec(),
         }),
     };
-    for (key_id, is_signing_enabled) in idkg_keys_signing_enabled_status {
+    for (key_id, is_signing_enabled) in chain_keys_signing_enabled_status {
         if !*is_signing_enabled {
             continue;
         }
@@ -407,7 +407,7 @@ fn make_nodes_registry(
         .with_max_block_payload_size(max_block_payload_size)
         .with_dkg_interval_length(u64::MAX / 2) // use the genesis CUP throughout the test
         .with_chain_key_config(ChainKeyConfig {
-            key_configs: idkg_keys_signing_enabled_status
+            key_configs: chain_keys_signing_enabled_status
                 .iter()
                 .map(|(key_id, _)| KeyConfig {
                     key_id: key_id.clone(),
@@ -838,8 +838,8 @@ pub struct StateMachine {
     // the time of the last round
     // (equal to `time` when this `StateMachine` is initialized)
     time_of_last_round: RwLock<Time>,
-    idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    idkg_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
+    chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    chain_key_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
     pub replica_logger: ReplicaLogger,
     pub log_level: Option<Level>,
     pub nodes: Vec<StateMachineNode>,
@@ -911,7 +911,7 @@ pub struct StateMachineBuilder {
     nns_subnet_id: Option<SubnetId>,
     subnet_id: Option<SubnetId>,
     routing_table: RoutingTable,
-    idkg_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
+    chain_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     ecdsa_signature_fee: Option<Cycles>,
     schnorr_signature_fee: Option<Cycles>,
     is_ecdsa_signing_enabled: bool,
@@ -940,7 +940,7 @@ impl StateMachineBuilder {
             nns_subnet_id: None,
             subnet_id: None,
             routing_table: RoutingTable::new(),
-            idkg_keys_signing_enabled_status: Default::default(),
+            chain_keys_signing_enabled_status: Default::default(),
             ecdsa_signature_fee: None,
             schnorr_signature_fee: None,
             is_ecdsa_signing_enabled: true,
@@ -1050,19 +1050,19 @@ impl StateMachineBuilder {
     }
 
     pub fn with_master_ecdsa_public_key(self) -> Self {
-        self.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        self.with_chain_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "master_ecdsa_public_key".to_string(),
         }))
     }
 
-    pub fn with_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
-        self.idkg_keys_signing_enabled_status.insert(key_id, true);
+    pub fn with_chain_key(mut self, key_id: MasterPublicKeyId) -> Self {
+        self.chain_keys_signing_enabled_status.insert(key_id, true);
         self
     }
 
-    pub fn with_signing_disabled_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
-        self.idkg_keys_signing_enabled_status.insert(key_id, false);
+    pub fn with_disabled_chain_key(mut self, key_id: MasterPublicKeyId) -> Self {
+        self.chain_keys_signing_enabled_status.insert(key_id, false);
         self
     }
 
@@ -1147,7 +1147,7 @@ impl StateMachineBuilder {
             self.subnet_type,
             self.subnet_size,
             self.subnet_id,
-            self.idkg_keys_signing_enabled_status,
+            self.chain_keys_signing_enabled_status,
             self.ecdsa_signature_fee,
             self.schnorr_signature_fee,
             self.is_ecdsa_signing_enabled,
@@ -1447,7 +1447,7 @@ impl StateMachine {
         subnet_type: SubnetType,
         subnet_size: usize,
         subnet_id: Option<SubnetId>,
-        idkg_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
+        chain_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
         ecdsa_signature_fee: Option<Cycles>,
         schnorr_signature_fee: Option<Cycles>,
         is_ecdsa_signing_enabled: bool,
@@ -1496,7 +1496,7 @@ impl StateMachine {
         let registry_client = make_nodes_registry(
             subnet_id,
             subnet_type,
-            &idkg_keys_signing_enabled_status,
+            &chain_keys_signing_enabled_status,
             features,
             registry_data_provider.clone(),
             &nodes,
@@ -1615,10 +1615,10 @@ impl StateMachine {
             name: "master_ecdsa_public_key".to_string(),
         };
 
-        let mut idkg_subnet_public_keys = BTreeMap::new();
-        let mut idkg_subnet_secret_keys = BTreeMap::new();
+        let mut chain_key_subnet_public_keys = BTreeMap::new();
+        let mut chain_key_subnet_secret_keys = BTreeMap::new();
 
-        for key_id in idkg_keys_signing_enabled_status.keys() {
+        for key_id in chain_keys_signing_enabled_status.keys() {
             let (public_key, private_key) = match key_id {
                 MasterPublicKeyId::Ecdsa(id) if *id == master_ecdsa_public_key => {
                     // ckETH tests rely on using the hard-coded ecdsa_secret_key
@@ -1716,9 +1716,9 @@ impl StateMachine {
                 }
             };
 
-            idkg_subnet_secret_keys.insert(key_id.clone(), private_key);
+            chain_key_subnet_secret_keys.insert(key_id.clone(), private_key);
 
-            idkg_subnet_public_keys.insert(key_id.clone(), public_key);
+            chain_key_subnet_public_keys.insert(key_id.clone(), public_key);
         }
 
         let time_source = FastForwardTimeSource::new();
@@ -1787,8 +1787,8 @@ impl StateMachine {
             nonce: AtomicU64::new(nonce),
             time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
             time_of_last_round: RwLock::new(time),
-            idkg_subnet_public_keys,
-            idkg_subnet_secret_keys,
+            chain_key_subnet_public_keys,
+            chain_key_subnet_secret_keys,
             replica_logger: replica_logger.clone(),
             log_level,
             nodes,
@@ -2111,7 +2111,7 @@ impl StateMachine {
         assert!(context.is_ecdsa());
 
         if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
-            self.idkg_subnet_secret_keys.get(&context.key_id())
+            self.chain_key_subnet_secret_keys.get(&context.key_id())
         {
             let path = ic_crypto_secp256k1::DerivationPath::from_canister_id_and_path(
                 context.request.sender.get().as_slice(),
@@ -2140,7 +2140,7 @@ impl StateMachine {
     ) -> Result<SignWithSchnorrReply, UserError> {
         assert!(context.is_schnorr());
 
-        let signature = match self.idkg_subnet_secret_keys.get(&context.key_id()) {
+        let signature = match self.chain_key_subnet_secret_keys.get(&context.key_id()) {
             Some(SignatureSecretKey::SchnorrBip340(k)) => {
                 let path = ic_crypto_secp256k1::DerivationPath::from_canister_id_and_path(
                     context.request.sender.get().as_slice(),
@@ -2328,7 +2328,7 @@ impl StateMachine {
                 query_stats: payload.query_stats,
             },
             randomness: Randomness::from(seed),
-            idkg_subnet_public_keys: self.idkg_subnet_public_keys.clone(),
+            chain_key_subnet_public_keys: self.chain_key_subnet_public_keys.clone(),
             idkg_pre_signature_ids: BTreeMap::new(),
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
