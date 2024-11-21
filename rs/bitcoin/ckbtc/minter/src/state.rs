@@ -261,7 +261,7 @@ impl UtxoCheckStatus {
 
 /// Relevant data for a checked UTXO. The UUID and `kyt_provider` are kept for
 /// backward-compatibility reasons. They should be set to `None` since
-/// we dont use KYT providers any more.
+/// we dont use KYT providers anymore.
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, serde::Deserialize)]
 pub struct CheckedUtxo {
     pub(crate) status: UtxoCheckStatus,
