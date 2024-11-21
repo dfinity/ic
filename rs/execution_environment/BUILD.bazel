@@ -114,10 +114,12 @@ rust_ic_test(
     aliases = ALIASES,
     crate = ":execution_environment",
     data = DATA + [
+        "//rs/universal_canister/impl:universal_canister.module",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = ENV | {
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+        "UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.module)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     # TODO(IDX-3164): enable on PR when flakiness issue is resolved

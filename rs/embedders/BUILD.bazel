@@ -97,7 +97,11 @@ rust_binary(
     srcs = ["bin/instrument_wasm.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":embedders"],
+    deps = DEPENDENCIES + [
+        ":embedders",
+        "@crate_index//:bincode",
+        "@crate_index//:clap",
+    ],
 )
 
 rust_test(
@@ -140,6 +144,7 @@ rust_ic_test_suite_with_extra_srcs(
     aliases = ALIASES,
     compile_data = glob(["tests/instrumentation-test-data/*"]),
     data = DATA + [
+        "//rs/universal_canister/impl:universal_canister.module",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
         "@wasm_spec_testsuite//:base_wast_files",
         "@wasm_spec_testsuite//:memory64_wast_files",
@@ -154,6 +159,7 @@ rust_ic_test_suite_with_extra_srcs(
         ("WASM_SPEC_BASE", "$(locations @wasm_spec_testsuite//:base_wast_files)"),
         ("WASM_SPEC_MULTI_MEMORY", "$(locations @wasm_spec_testsuite//:multi_memory_wast_files)"),
         ("WASM_SPEC_MEMORY64", "$(locations @wasm_spec_testsuite//:memory64_wast_files)"),
+        ("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.module)"),
         ("UNIVERSAL_CANISTER_WASM_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)"),
     ]),
     extra_srcs = [

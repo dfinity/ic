@@ -8,6 +8,8 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
+bincode = { workspace = true }
+ic-embedders = { path = "../../embedders" }
 lazy_static = { workspace = true }
 serde = { workspace = true }
 wee_alloc = "0.4.3"

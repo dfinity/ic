@@ -66,7 +66,7 @@ use ic_types::{
     CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
-use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
+use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
 use ic_wasm_types::BinaryEncodedWasm;
 use maplit::{btreemap, btreeset};
 use std::convert::TryFrom;
@@ -1739,6 +1739,7 @@ pub struct ExecutionTestBuilder {
     upload_wasm_chunk_instructions: NumInstructions,
     canister_snapshot_baseline_instructions: NumInstructions,
     replica_version: ReplicaVersion,
+    precompiled_universal_canister: bool,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1781,6 +1782,7 @@ impl Default for ExecutionTestBuilder {
             canister_snapshot_baseline_instructions: scheduler_config
                 .canister_snapshot_baseline_instructions,
             replica_version: ReplicaVersion::default(),
+            precompiled_universal_canister: true,
         }
     }
 }
@@ -2154,6 +2156,14 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_precompiled_universal_canister(
+        mut self,
+        precompiled_universal_canister: bool,
+    ) -> Self {
+        self.precompiled_universal_canister = precompiled_universal_canister;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
@@ -2299,6 +2309,13 @@ impl ExecutionTestBuilder {
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             Arc::new(FakeStateManager::new()),
         );
+        if self.precompiled_universal_canister {
+            hypervisor.compilation_cache_insert_for_testing(
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                bincode::deserialize(&UNIVERSAL_CANISTER_SERIALIZED_MODULE)
+                    .expect("Failed to deserialize universal canister module"),
+            )
+        }
         let hypervisor = Arc::new(hypervisor);
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let state_reader = Arc::new(FakeStateManager::new());
