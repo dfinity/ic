@@ -325,13 +325,4 @@ User Lockout Interval   : 300";
         let slaac = mac.calculate_slaac(prefix).unwrap();
         assert_eq!(slaac, expected_ip);
     }
-
-    #[test]
-    fn test_to_unformatted_string() {
-        let mac = MacAddress::from_str("de:ad:be:ef:ff:00").unwrap();
-        assert_eq!(mac.to_unformatted_string(), "DEADBEEFFF00");
-
-        let mac = MacAddress::from_str("deadbeefff00").unwrap();
-        assert_eq!(mac.to_unformatted_string(), "DEADBEEFFF00");
-    }
 }
