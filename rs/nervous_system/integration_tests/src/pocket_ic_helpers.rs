@@ -2,6 +2,7 @@ use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
+use ic_nervous_system_agent::pocketic_impl::PocketIcCallError;
 use ic_nervous_system_agent::sns::Sns;
 use ic_nervous_system_agent::CallCanisters;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
@@ -211,6 +212,18 @@ pub async fn propose_to_set_network_economics_and_wait(
 }
 
 pub type DeployedSnsStartingInfo = BTreeMap<SnsCanisterType, (ProposalInfo, SnsWasm)>;
+pub type SnsWasms = BTreeMap<SnsCanisterType, SnsWasm>;
+
+pub fn hash_sns_wasms(wasms: &SnsWasms) -> Version {
+    Version {
+        root_wasm_hash: wasms[&SnsCanisterType::Root].sha256_hash().to_vec(),
+        governance_wasm_hash: wasms[&SnsCanisterType::Governance].sha256_hash().to_vec(),
+        ledger_wasm_hash: wasms[&SnsCanisterType::Ledger].sha256_hash().to_vec(),
+        swap_wasm_hash: wasms[&SnsCanisterType::Swap].sha256_hash().to_vec(),
+        archive_wasm_hash: wasms[&SnsCanisterType::Archive].sha256_hash().to_vec(),
+        index_wasm_hash: wasms[&SnsCanisterType::Index].sha256_hash().to_vec(),
+    }
+}
 
 pub async fn add_wasms_to_sns_wasm(
     pocket_ic: &PocketIc,
@@ -1032,6 +1045,7 @@ pub mod nns {
 
     pub mod sns_wasm {
         use super::*;
+        use ic_nns_test_utils::sns_wasm::create_modified_sns_wasm;
         use ic_sns_wasm::pb::v1::{
             GetWasmRequest, GetWasmResponse, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
         };
@@ -1115,6 +1129,23 @@ pub mod nns {
                 .into();
 
             latest_version
+        }
+
+        /// Modify the WASM for a given canister type and add it to SNS-W.
+        /// Returns the new (modified) version that is now at the tip of SNS-W.
+        pub async fn modify_and_add_wasm(
+            pocket_ic: &PocketIc,
+            mut version: SnsWasms,
+            canister_type: SnsCanisterType,
+            nonce: u32,
+        ) -> SnsWasms {
+            let wasm = version.get(&canister_type).unwrap();
+            let wasm = create_modified_sns_wasm(wasm, Some(nonce));
+            add_wasm_via_nns_proposal(pocket_ic, wasm.clone())
+                .await
+                .unwrap();
+            version.insert(canister_type, wasm);
+            version
         }
     }
 }
@@ -1565,29 +1596,21 @@ pub mod sns {
             }
         }
 
+        pub async fn try_get_upgrade_journal(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+        ) -> std::result::Result<sns_pb::GetUpgradeJournalResponse, PocketIcCallError> {
+            let payload = sns_pb::GetUpgradeJournalRequest {};
+            pocket_ic.call(sns_governance_canister_id, payload).await
+        }
+
         pub async fn get_upgrade_journal(
             pocket_ic: &PocketIc,
             canister_id: PrincipalId,
         ) -> sns_pb::GetUpgradeJournalResponse {
-            let result = pocket_ic
-                .query_call(
-                    canister_id.into(),
-                    Principal::from(PrincipalId::new_anonymous()),
-                    "get_upgrade_journal",
-                    Encode!(&sns_pb::GetUpgradeJournalRequest {}).unwrap(),
-                )
+            try_get_upgrade_journal(pocket_ic, canister_id)
                 .await
-                .unwrap();
-            let result = match result {
-                WasmResult::Reply(reply) => reply,
-                WasmResult::Reject(reject) => {
-                    panic!(
-                        "get_upgrade_journal rejected by SNS governance: {:#?}",
-                        reject
-                    )
-                }
-            };
-            Decode!(&result, sns_pb::GetUpgradeJournalResponse).unwrap()
+                .unwrap()
         }
 
         pub async fn advance_target_version(

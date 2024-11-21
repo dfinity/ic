@@ -194,6 +194,7 @@ mod tests {
     use ic_stable_structures::Storable;
     use proptest::prelude::prop;
     use proptest::strategy::Strategy;
+    use std::borrow::Cow;
     use std::str::FromStr;
 
     use candid::Principal;
@@ -353,5 +354,44 @@ mod tests {
         proptest!(|(account in account_strategy())| {
             prop_assert_eq!(Account::from_bytes(account.to_bytes()), account);
         })
+    }
+
+    #[test]
+    fn test_account_serialization_stability() {
+        let owner =
+            Principal::from_str("k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae")
+                .unwrap();
+        let subaccount = Some(
+            hex::decode("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        );
+        let mut accounts = vec![Account { owner, subaccount }];
+        let mut serialized_accounts = vec![hex::decode("82581db56bf994b37ae8e79f5ce000be1727a6060ae4eef24736b7cc999c3c0258200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20").unwrap()];
+        let owner =
+            Principal::from_str("gjfkw-yiolw-ncij7-yzhg2-gq6ec-xi6jy-feyni-g26f4-x7afk-thx6z-6ae")
+                .unwrap();
+        let subaccount = Some(
+            hex::decode("0000000000000000000000000000000000000000000000000000000000000000")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        );
+        accounts.push(Account { owner, subaccount });
+        serialized_accounts.push(hex::decode("82581d0e5d9a2427f8c9cda343c415d1e4e0a4c3506d78bcbfc0554cf7f67c0258200000000000000000000000000000000000000000000000000000000000000000").unwrap());
+
+        let owner = Principal::from_str("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap();
+        let subaccount = None;
+        accounts.push(Account { owner, subaccount });
+        serialized_accounts.push(hex::decode("8149efcdab000000000001").unwrap());
+
+        for (i, account) in accounts.iter().enumerate() {
+            assert_eq!(account.to_bytes(), serialized_accounts[i].clone());
+            assert_eq!(
+                *account,
+                Account::from_bytes(Cow::Owned(serialized_accounts[i].clone()))
+            );
+        }
     }
 }

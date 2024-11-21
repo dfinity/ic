@@ -2418,27 +2418,27 @@ pub fn test_upgrade_serialization<Tokens>(
                 };
                 add_tx_and_verify();
 
-                let mut test_upgrade = |ledger_wasm: Vec<u8>| {
+                let mut test_upgrade = |ledger_wasm: Vec<u8>, expected_migration_steps: u64| {
                     env.upgrade_canister(ledger_id, ledger_wasm, upgrade_args.clone())
                         .unwrap();
                     if migration_to_stable_structures {
                         wait_ledger_ready(&env, ledger_id, 10);
                         let stable_upgrade_migration_steps =
                             parse_metric(&env, ledger_id, "ledger_stable_upgrade_migration_steps");
-                        assert_eq!(stable_upgrade_migration_steps, 1);
+                        assert_eq!(stable_upgrade_migration_steps, expected_migration_steps);
                     }
                     add_tx_and_verify();
                 };
 
                 // Test if the old serialized approvals and balances are correctly deserialized
-                test_upgrade(ledger_wasm_current.clone());
+                test_upgrade(ledger_wasm_current.clone(), 1);
                 // Test the new wasm serialization
-                test_upgrade(ledger_wasm_current.clone());
+                test_upgrade(ledger_wasm_current.clone(), 0);
                 // Test deserializing from memory manager
-                test_upgrade(ledger_wasm_current.clone());
+                test_upgrade(ledger_wasm_current.clone(), 0);
                 if !migration_to_stable_structures {
                     // Test downgrade to mainnet wasm
-                    test_upgrade(ledger_wasm_mainnet.clone());
+                    test_upgrade(ledger_wasm_mainnet.clone(), 0);
                 } else {
                     // Downgrade from stable structures to mainnet not possible.
                     match env.upgrade_canister(
@@ -2599,7 +2599,7 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     }
 
     // Test the new wasm serialization
-    test_upgrade(ledger_wasm_current_lowinstructionlimits, balances, 1);
+    test_upgrade(ledger_wasm_current_lowinstructionlimits, balances, 0);
 
     // See if the additional approvals are there
     for a1 in &accounts {
@@ -2821,7 +2821,7 @@ pub fn test_incomplete_migration<T>(
 
     send_approvals();
 
-    let check_approvals = || {
+    let check_approvals = |non_zero_from: u64| {
         for i in 2..2 + NUM_APPROVALS {
             let allowance = Account::get_allowance(
                 &env,
@@ -2829,15 +2829,20 @@ pub fn test_incomplete_migration<T>(
                 account,
                 Account::from(PrincipalId::new_user_test_id(i).0),
             );
-            assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+            let expected_allowance = if i < non_zero_from {
+                Nat::from(0u64)
+            } else {
+                Nat::from(APPROVE_AMOUNT)
+            };
+            assert_eq!(allowance.allowance, expected_allowance);
         }
     };
 
-    check_approvals();
+    check_approvals(2);
 
     env.upgrade_canister(
         canister_id,
-        ledger_wasm_current_lowinstructionlimits,
+        ledger_wasm_current_lowinstructionlimits.clone(),
         Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
     )
     .unwrap();
@@ -2860,7 +2865,25 @@ pub fn test_incomplete_migration<T>(
     .unwrap();
 
     // All approvals should still be in UPGRADES_MEMORY and downgrade should succeed.
-    check_approvals();
+    check_approvals(2);
+
+    for i in 2..5 {
+        let spender = Account::from(PrincipalId::new_user_test_id(i).0);
+        let approve_args = default_approve_args(spender, 0);
+        send_approval(&env, canister_id, account.owner, &approve_args).expect("approval failed");
+    }
+
+    check_approvals(5);
+
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_current_lowinstructionlimits,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .unwrap();
+    wait_ledger_ready(&env, canister_id, 20);
+
+    check_approvals(5);
 }
 
 pub fn test_migration_resumes_from_frozen<T>(

@@ -13,7 +13,7 @@ use serde::{
 use std::borrow::Cow;
 use std::fmt;
 
-pub mod encode_decode;
+pub mod minicbor_u256;
 
 /// The tag number for big positive integers.
 // See https://www.rfc-editor.org/rfc/rfc8949.html#name-bignums
@@ -29,7 +29,7 @@ struct U256Repr(#[serde(with = "ethnum::serde::compressed_bytes::be")] u256);
 
 /// 256-bit token amounts.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Decode, Encode)]
-pub struct U256(#[cbor(n(0), with = "encode_decode")] u256);
+pub struct U256(#[cbor(n(0), with = "minicbor_u256")] u256);
 
 impl U256 {
     pub const ZERO: Self = Self(u256::ZERO);

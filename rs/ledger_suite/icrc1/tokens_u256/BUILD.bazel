@@ -15,8 +15,8 @@ COMMON_DEPS = [
 rust_library(
     name = "tokens_u256",
     srcs = [
-        "src/encode_decode.rs",
         "src/lib.rs",
+        "src/minicbor_u256.rs",
     ],
     crate_name = "ic_icrc1_tokens_u256",
     version = "0.1.0",
