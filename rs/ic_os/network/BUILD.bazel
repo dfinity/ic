@@ -5,11 +5,11 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/ic_os/config:config_lib",
-    "//rs/ic_os/utils",
     "//rs/ic_os/systemd",
+    "//rs/ic_os/utils",
     "@crate_index//:anyhow",
-    "@crate_index//:ping",
     "@crate_index//:hex",
+    "@crate_index//:ping",
     "@crate_index//:rand",
     "@crate_index//:rayon",
     "@crate_index//:regex",
