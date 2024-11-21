@@ -20,12 +20,12 @@ rust_library(
     ),
     aliases = {},
     crate_name = "mac_address",
+    edition = "2021",
+    proc_macro_deps = [],
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
     ],
-    edition = "2021",
-    proc_macro_deps = [],
     deps = DEPENDENCIES,
 )
 
