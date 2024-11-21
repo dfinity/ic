@@ -95,10 +95,24 @@ pub enum LogScrapingStateError {
     InvalidContractAddress(String),
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
+#[repr(u8)]
 pub enum LogScrapingStatus {
     Active,
     Deprecated,
+}
+
+impl Display for LogScrapingStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LogScrapingStatus::Active => {
+                write!(f, "active 🟢")
+            }
+            LogScrapingStatus::Deprecated => {
+                write!(f, "deprecated 🟠")
+            }
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -140,5 +154,9 @@ impl LogScrapingState {
 
     pub fn contract_address(&self) -> Option<&Address> {
         self.contract_address.as_ref()
+    }
+
+    pub fn status(&self) -> LogScrapingStatus {
+        self.status
     }
 }
