@@ -3574,6 +3574,16 @@ impl StateMachine {
             .get()
     }
 
+    pub fn reserved_balance(&self, canister_id: CanisterId) -> u128 {
+        let state = self.state_manager.get_latest_state().take();
+        state
+            .canister_state(&canister_id)
+            .unwrap_or_else(|| panic!("Canister {} not found", canister_id))
+            .system_state
+            .reserved_balance()
+            .get()
+    }
+
     /// Tops up the specified canister with cycle amount and returns the resulting cycle balance.
     ///
     /// # Panics

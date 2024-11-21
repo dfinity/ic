@@ -370,6 +370,7 @@ impl ResponseHelper {
         if let Some(state_changes) = &canister_state_changes {
             let old_balance = self.canister.system_state.balance();
             let requested = state_changes.system_state_changes.removed_cycles();
+            println!("ABC handle_wasm_execution_of_response_callback");
             // Note that we ignore the freezing threshold as required by the spec.
             if old_balance < requested {
                 let reveal_top_up = self
@@ -459,6 +460,7 @@ impl ResponseHelper {
             let ingress_induction_cycles_debit =
                 self.canister.system_state.ingress_induction_cycles_debit();
             let removed_cycles = state_changes.system_state_changes.removed_cycles();
+            println!("ABC handle_wasm_execution_of_cleanup_callback");
             if self.canister.system_state.balance()
                 < ingress_induction_cycles_debit + removed_cycles
             {
