@@ -14,7 +14,8 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use deterministic_ips::{calculate_deterministic_mac, Deployment, HwAddr, IpVariant};
+use mac_address::mac_address::{generate_deterministic_mac_address, IpVariant, MacAddress};
+use mac_address::node_type::NodeType;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use ssh2::Session;
@@ -124,7 +125,7 @@ impl NestedVms for TestEnv {
 
     fn write_nested_vm(&self, name: &str, vm: &AllocatedVm) -> Result<()> {
         // Remap the IPv6 addresses based on their deterministic IPs
-        let seed_mac = vm.mac6.parse::<HwAddr>().unwrap();
+        let seed_mac = vm.mac6.parse::<MacAddress>().unwrap();
         let old_ip = vm.ipv6;
 
         // TODO: We transform the IPv6 to get this information, but it could be
@@ -135,10 +136,18 @@ impl NestedVms for TestEnv {
             segments[0], segments[1], segments[2], segments[3]
         );
 
-        let host_mac =
-            calculate_deterministic_mac(seed_mac, Deployment::Mainnet, IpVariant::V6, 0).unwrap();
-        let guest_mac =
-            calculate_deterministic_mac(seed_mac, Deployment::Mainnet, IpVariant::V6, 1).unwrap();
+        let host_mac = generate_deterministic_mac_address(
+            &seed_mac,
+            "mainnet",
+            NodeType::HostOS,
+            IpVariant::V6,
+        );
+        let guest_mac = generate_deterministic_mac_address(
+            &seed_mac,
+            "mainnet",
+            NodeType::GuestOS,
+            IpVariant::V6,
+        );
 
         let host_ip = host_mac.calculate_slaac(&prefix).unwrap();
         let guest_ip = guest_mac.calculate_slaac(&prefix).unwrap();
