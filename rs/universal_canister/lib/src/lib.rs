@@ -507,6 +507,14 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn mint_cycles128(mut self, amount: Cycles) -> Self {
+        let (amount_high, amount_low) = amount.into_parts();
+        self = self.push_int64(amount_high);
+        self = self.push_int64(amount_low);
+        self.0.push(Ops::MintCycles128 as u8);
+        self
+    }
+
     pub fn cycles_burn128(mut self, amount: Cycles) -> Self {
         let (amount_high, amount_low) = amount.into_parts();
         self = self.push_int64(amount_high);
