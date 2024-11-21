@@ -53,8 +53,8 @@ rand = { workspace = true }
 regex = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
-tikv-jemalloc-ctl = "0.5"
-tikv-jemallocator = "0.5"
+tikv-jemalloc-ctl = { workspace = true }
+tikv-jemallocator = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-flame = "0.2.0"

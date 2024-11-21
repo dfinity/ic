@@ -703,6 +703,8 @@ tar = "0.4.39"
 tempfile = "3.12.0"
 thiserror = "2.0.3"
 threadpool = "1.8.1"
+tikv-jemalloc-ctl = "0.6.0"
+tikv-jemallocator = "0.6.0"
 time = { version = "0.3.36", features = ["formatting"] }
 tokio = { version = "1.41.1", features = ["full"] }
 tokio-metrics = "0.3.1"
