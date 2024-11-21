@@ -313,9 +313,9 @@ mod tests {
             .expect_upsert_config()
             .returning(|_, _| None);
 
-        let writer = ConfigAdder::new(mock_canister_api);
+        let adder = ConfigAdder::new(mock_canister_api);
 
-        writer
+        adder
             .add_config(config, current_time)
             .expect("failed to add a new config");
     }

@@ -32,7 +32,7 @@ use ic_types::ingress::WasmResult;
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{AccumulatedPriority, CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::CanisterModule;
-use num_traits::ops::saturating::SaturatingSub;
+use num_traits::SaturatingSub;
 #[cfg(target_os = "linux")]
 use prometheus::IntGauge;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
@@ -77,6 +77,12 @@ const SANDBOX_PROCESSES_RSS_TO_EVICT: NumBytes = NumBytes::new(1024 * 1024 * 102
 /// The actual memory usage is updated asynchronously.
 /// See `monitor_and_evict_sandbox_processes`
 const DEFAULT_SANDBOX_PROCESS_RSS: NumBytes = NumBytes::new(50 * 1024 * 1024);
+
+/// To speedup synchronous operations, the sandbox RSS-based eviction
+/// is triggered only when the system's available memory falls below
+/// the specified byte threshold.
+pub(crate) const DEFAULT_MIN_MEM_AVAILABLE_TO_EVICT_SANDBOXES: NumBytes =
+    NumBytes::new(250 * 1024 * 1024 * 1024);
 
 const SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE: &str = "sandboxed_execution_invalid_memory_size";
 
@@ -1106,7 +1112,6 @@ impl SandboxedExecutionController {
                 metrics_copy,
                 max_sandbox_count,
                 max_sandbox_idle_time,
-                max_sandboxes_rss,
                 rx,
                 state_reader_copy,
             );
@@ -1158,14 +1163,13 @@ impl SandboxedExecutionController {
         metrics: Arc<SandboxedExecutionMetrics>,
         max_sandbox_count: usize,
         max_sandbox_idle_time: Duration,
-        max_sandboxes_rss: NumBytes,
         stop_request: Receiver<bool>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) {
         loop {
             let sandbox_processes = get_sandbox_process_stats(&backends);
             #[allow(unused_mut)] // for MacOS
-            let mut sandbox_processes_rss = HashMap::with_capacity(sandbox_processes.len());
+            let mut sandbox_processes_rss = Vec::with_capacity(sandbox_processes.len());
 
             #[cfg(target_os = "linux")]
             {
@@ -1185,7 +1189,7 @@ impl SandboxedExecutionController {
                             .sandboxed_execution_subprocess_anon_rss
                             .observe(kib as f64);
                         let bytes = NumBytes::new(kib * 1024);
-                        sandbox_processes_rss.insert(*canister_id, bytes);
+                        sandbox_processes_rss.push((*canister_id, bytes));
                     } else {
                         warn!(logger, "Unable to get anon RSS for pid {}", pid);
                     }
@@ -1257,9 +1261,14 @@ impl SandboxedExecutionController {
             {
                 let mut guard = backends.lock().unwrap();
                 update_sandbox_processes_rss(&mut guard, sandbox_processes_rss);
+
+                // Trigger eviction of idle sandboxes, as there may be no canister executions
+                // to trigger sync eviction.
+                let max_active_sandboxes = max_sandbox_count;
+                let max_sandboxes_rss = u64::MAX.into();
                 evict_sandbox_processes(
                     &mut guard,
-                    max_sandbox_count,
+                    max_active_sandboxes,
                     max_sandbox_idle_time,
                     max_sandboxes_rss,
                     Arc::clone(&state_reader),
@@ -1275,6 +1284,62 @@ impl SandboxedExecutionController {
                 break;
             }
         }
+    }
+
+    fn trigger_sandbox_eviction<F>(
+        &self,
+        backends: &mut HashMap<CanisterId, Backend>,
+        available_memory: F,
+    ) where
+        F: Fn() -> Option<NumBytes>,
+    {
+        let active_sandboxes = total_active_sandboxes(backends);
+        if active_sandboxes > self.max_sandbox_count {
+            // The number of sandboxes is exceeded.
+            // Reduce the number of active sandboxes regardless of their RSS.
+            let max_active_sandboxes = active_sandboxes.saturating_sub(SANDBOX_PROCESSES_TO_EVICT);
+            let max_sandboxes_rss = u64::MAX.into();
+
+            evict_sandbox_processes(
+                backends,
+                max_active_sandboxes,
+                self.max_sandbox_idle_time,
+                // Do not trigger RSS-based eviction, as it's mostly an estimation at this point.
+                max_sandboxes_rss,
+                Arc::clone(&self.state_reader),
+            );
+        } else {
+            // The total RSS is mostly an estimation at this point, so we use
+            // the available memory to confirm the eviction.
+            let total_sandboxes_rss = total_sandboxes_rss(backends);
+            if total_sandboxes_rss > self.max_sandboxes_rss
+                && available_memory().unwrap_or_default()
+                    < DEFAULT_MIN_MEM_AVAILABLE_TO_EVICT_SANDBOXES
+            {
+                // The total RSS is exceeded AND the available memory is low.
+                // Reduce the RSS of sandboxes, regardless of their number.
+                let max_active_sandboxes = backends.len();
+                let max_sandboxes_rss =
+                    total_sandboxes_rss.saturating_sub(&SANDBOX_PROCESSES_RSS_TO_EVICT);
+
+                evict_sandbox_processes(
+                    backends,
+                    max_active_sandboxes,
+                    self.max_sandbox_idle_time,
+                    max_sandboxes_rss,
+                    Arc::clone(&self.state_reader),
+                );
+            }
+        };
+    }
+
+    pub fn available_memory_wrapper() -> Option<NumBytes> {
+        #[cfg(target_os = "linux")]
+        let res = process_os_metrics::available_memory();
+        #[cfg(not(target_os = "linux"))]
+        let res = None;
+
+        res
     }
 
     fn get_sandbox_process(&self, canister_id: CanisterId) -> Arc<SandboxProcess> {
@@ -1312,30 +1377,14 @@ impl SandboxedExecutionController {
                         },
                     };
                 }
+                // The number of active sandboxes is increasing, so trigger the eviction.
+                self.trigger_sandbox_eviction(&mut guard, Self::available_memory_wrapper);
                 return sandbox_process;
             }
         }
 
         let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
-        let total_rss = total_sandboxes_rss(&guard);
-        if guard.len() > self.max_sandbox_count || total_rss > self.max_sandboxes_rss {
-            // Make room for a few sandboxes in one go, assuming each sandbox
-            // takes `DEFAULT_SANDBOX_PROCESS_RSS`.
-            let max_active_sandboxes = self
-                .max_sandbox_count
-                .saturating_sub(SANDBOX_PROCESSES_TO_EVICT);
-            let max_sandboxes_rss = self
-                .max_sandboxes_rss
-                .saturating_sub(&SANDBOX_PROCESSES_RSS_TO_EVICT);
-
-            evict_sandbox_processes(
-                &mut guard,
-                max_active_sandboxes,
-                self.max_sandbox_idle_time,
-                max_sandboxes_rss,
-                Arc::clone(&self.state_reader),
-            );
-        }
+        self.trigger_sandbox_eviction(&mut guard, Self::available_memory_wrapper);
 
         // No sandbox process found for this canister. Start a new one and register it.
         let reg = Arc::new(ActiveExecutionStateRegistry::new());
@@ -1694,7 +1743,7 @@ fn wrap_remote_memory(
 /// Updates sandbox processes RSS.
 fn update_sandbox_processes_rss(
     backends: &mut HashMap<CanisterId, Backend>,
-    sandbox_processes_rss: HashMap<CanisterId, NumBytes>,
+    sandbox_processes_rss: Vec<(CanisterId, NumBytes)>,
 ) {
     for (id, rss) in sandbox_processes_rss {
         backends.entry(id).and_modify(|backend| match backend {
@@ -1713,6 +1762,17 @@ fn total_sandboxes_rss(backends: &HashMap<CanisterId, Backend>) -> NumBytes {
             Backend::Evicted { .. } | Backend::Empty => 0.into(),
         })
         .sum()
+}
+
+/// Returns the total number of active sandboxes.
+fn total_active_sandboxes(backends: &HashMap<CanisterId, Backend>) -> usize {
+    backends
+        .values()
+        .filter(|backend| match backend {
+            Backend::Active { .. } => true,
+            Backend::Evicted { .. } | Backend::Empty => false,
+        })
+        .count()
 }
 
 // Evicts some sandbox process backends according to the heuristics of the
@@ -1756,6 +1816,8 @@ fn evict_sandbox_processes(
         .get_ref()
         .get_scheduler_priorities();
 
+    let min_scheduler_priority = AccumulatedPriority::new(i64::MIN);
+
     let candidates: Vec<_> = backends
         .iter()
         .filter_map(|(id, backend)| match backend {
@@ -1765,7 +1827,7 @@ fn evict_sandbox_processes(
                 rss: stats.rss,
                 scheduler_priority: *scheduler_priorities
                     .get(id)
-                    .unwrap_or(&AccumulatedPriority::new(0)),
+                    .unwrap_or(&min_scheduler_priority),
             }),
             Backend::Evicted { .. } | Backend::Empty => None,
         })
@@ -1915,6 +1977,7 @@ mod tests {
     use ic_test_utilities_types::ids::canister_test_id;
     use libc::kill;
     use slog::{o, Drain};
+    use tempfile::TempDir;
 
     #[test]
     #[should_panic(expected = "exited due to signal!")]
@@ -1941,8 +2004,9 @@ mod tests {
         panic_due_to_exit(output, pid);
     }
 
-    #[test]
-    fn sandbox_history_logged_on_sandbox_crash() {
+    fn sandboxed_execution_controller_dir_and_path(
+        max_sandbox_count: usize,
+    ) -> (SandboxedExecutionController, TempDir, PathBuf) {
         let tempdir = tempfile::tempdir().unwrap();
         let log_path = tempdir.path().join("log");
         let file = File::create(&log_path).unwrap();
@@ -1958,11 +2022,20 @@ mod tests {
         let controller = SandboxedExecutionController::new(
             logger,
             &MetricsRegistry::new(),
-            &EmbeddersConfig::default(),
+            &EmbeddersConfig {
+                max_sandbox_count,
+                ..EmbeddersConfig::default()
+            },
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             Arc::new(FakeStateManager::new()),
         )
         .unwrap();
+        (controller, tempdir, log_path)
+    }
+
+    #[test]
+    fn sandbox_history_logged_on_sandbox_crash() {
+        let (controller, _dir, log_path) = sandboxed_execution_controller_dir_and_path(usize::MAX);
 
         let wat = "(module)";
         let canister_module = CanisterModule::new(wat::parse_str(wat).unwrap());
@@ -2001,5 +2074,206 @@ mod tests {
             "History for canister {} with pid {}: CreateExecutionState",
             canister_id, sandbox_pid
         )));
+    }
+
+    fn add_controller_backends(
+        controller: &mut SandboxedExecutionController,
+        start_canister_id: u64,
+        active: usize,
+        evicted: usize,
+        empty: usize,
+    ) {
+        let mut i = start_canister_id;
+        for _ in 0..active {
+            let canister_id = CanisterId::from(i);
+            i += 1;
+            controller.get_sandbox_process(canister_id);
+        }
+
+        for _ in 0..evicted {
+            let canister_id = CanisterId::from(i);
+            i += 1;
+            controller.get_sandbox_process(canister_id);
+            // Transform active backend into evicted.
+            let mut guard = controller.backends.lock().unwrap();
+            let backend = guard.get_mut(&canister_id).unwrap();
+            if let Backend::Active {
+                sandbox_process,
+                stats,
+            } = backend
+            {
+                *backend = Backend::Evicted {
+                    sandbox_process: Arc::downgrade(sandbox_process),
+                    stats: stats.clone(),
+                }
+            }
+        }
+
+        let mut guard = controller.backends.lock().unwrap();
+        for _ in 0..empty {
+            let canister_id = CanisterId::from(i);
+            i += 1;
+            guard.insert(canister_id, Backend::Empty);
+        }
+    }
+
+    fn get_active_evicted_empty_backends(
+        controller: &SandboxedExecutionController,
+    ) -> (Vec<CanisterId>, Vec<CanisterId>, Vec<CanisterId>) {
+        let mut active = vec![];
+        let mut evicted = vec![];
+        let mut empty = vec![];
+        let guard = controller.backends.lock().unwrap();
+        for (canister_id, backend) in guard.iter() {
+            match backend {
+                Backend::Active { .. } => {
+                    active.push(*canister_id);
+                }
+                Backend::Evicted { .. } => {
+                    evicted.push(*canister_id);
+                }
+                Backend::Empty => {
+                    empty.push(*canister_id);
+                }
+            }
+        }
+        (active, evicted, empty)
+    }
+
+    #[test]
+    fn sandbox_eviction_is_triggered_by_count() {
+        let active = SANDBOX_PROCESSES_TO_EVICT * 2;
+        let evicted = 3;
+        let empty = 2;
+        let (mut controller, _dir, _path) = sandboxed_execution_controller_dir_and_path(active);
+
+        add_controller_backends(&mut controller, 0, active, evicted, empty);
+        let partitioned_backends = get_active_evicted_empty_backends(&controller);
+        assert_eq!(active, partitioned_backends.0.len());
+        assert_eq!(evicted, partitioned_backends.1.len());
+        assert_eq!(empty, partitioned_backends.2.len());
+
+        // Set big enough limit and trigger the eviction.
+        controller.max_sandbox_count = active;
+        controller.max_sandboxes_rss = NumBytes::from(u64::MAX);
+        {
+            let mut guard = controller.backends.lock().unwrap();
+            controller.trigger_sandbox_eviction(&mut guard, || None);
+        }
+        let partitioned_backends = get_active_evicted_empty_backends(&controller);
+        // No eviction should be triggered.
+        assert_eq!(active, partitioned_backends.0.len());
+        assert_eq!(evicted, partitioned_backends.1.len());
+        assert_eq!(empty, partitioned_backends.2.len());
+
+        // Trigger one active sandbox eviction.
+        controller.max_sandbox_count = active - 1;
+        {
+            let mut guard = controller.backends.lock().unwrap();
+            controller.trigger_sandbox_eviction(&mut guard, || None);
+        }
+        let partitioned_backends = get_active_evicted_empty_backends(&controller);
+        // A batch of active sandboxes should be evicted.
+        assert_eq!(
+            active - SANDBOX_PROCESSES_TO_EVICT,
+            partitioned_backends.0.len()
+        );
+        assert_eq!(SANDBOX_PROCESSES_TO_EVICT, partitioned_backends.1.len());
+        assert_eq!(0, partitioned_backends.2.len());
+    }
+
+    #[test]
+    fn sandbox_eviction_is_triggered_by_rss() {
+        let active = SANDBOX_PROCESSES_TO_EVICT * 2;
+        let evicted = 3;
+        let empty = 2;
+        let (mut controller, _dir, _path) = sandboxed_execution_controller_dir_and_path(active);
+
+        add_controller_backends(&mut controller, 0, active, evicted, empty);
+        let partitioned_backends = get_active_evicted_empty_backends(&controller);
+        assert_eq!(active, partitioned_backends.0.len());
+        assert_eq!(evicted, partitioned_backends.1.len());
+        assert_eq!(empty, partitioned_backends.2.len());
+
+        // Set big enough limit and trigger the eviction.
+        controller.max_sandbox_count = usize::MAX;
+        controller.max_sandboxes_rss =
+            NumBytes::from(active as u64 * DEFAULT_SANDBOX_PROCESS_RSS.get());
+        {
+            let mut guard = controller.backends.lock().unwrap();
+            controller.trigger_sandbox_eviction(&mut guard, || None);
+        }
+        let partitioned_backends = get_active_evicted_empty_backends(&controller);
+        // No eviction should be triggered.
+        assert_eq!(active, partitioned_backends.0.len());
+        assert_eq!(evicted, partitioned_backends.1.len());
+        assert_eq!(empty, partitioned_backends.2.len());
+
+        // Trigger one active sandbox eviction.
+        controller.max_sandboxes_rss =
+            NumBytes::from((active as u64 - 1) * DEFAULT_SANDBOX_PROCESS_RSS.get());
+        {
+            let mut guard = controller.backends.lock().unwrap();
+            controller.trigger_sandbox_eviction(&mut guard, || None);
+        }
+        let partitioned_backends = get_active_evicted_empty_backends(&controller);
+        // A batch of active sandboxes should be evicted.
+        assert_eq!(
+            active - 1 - (SANDBOX_PROCESSES_RSS_TO_EVICT / DEFAULT_SANDBOX_PROCESS_RSS) as usize,
+            partitioned_backends.0.len()
+        );
+        assert_eq!(
+            1 + (SANDBOX_PROCESSES_RSS_TO_EVICT / DEFAULT_SANDBOX_PROCESS_RSS) as usize,
+            partitioned_backends.1.len()
+        );
+        assert_eq!(0, partitioned_backends.2.len());
+    }
+
+    #[test]
+    fn sandbox_eviction_is_triggered_by_available_memory() {
+        let active = SANDBOX_PROCESSES_TO_EVICT * 2;
+        let evicted = 3;
+        let empty = 2;
+        let (mut controller, _dir, _path) = sandboxed_execution_controller_dir_and_path(active);
+
+        add_controller_backends(&mut controller, 0, active, evicted, empty);
+        let partitioned_backends = get_active_evicted_empty_backends(&controller);
+        assert_eq!(active, partitioned_backends.0.len());
+        assert_eq!(evicted, partitioned_backends.1.len());
+        assert_eq!(empty, partitioned_backends.2.len());
+
+        controller.max_sandbox_count = usize::MAX;
+        // The limit should trigger the eviction by RSS...
+        controller.max_sandboxes_rss =
+            NumBytes::from((active as u64 - 1) * DEFAULT_SANDBOX_PROCESS_RSS.get());
+        // ... but the available memory is big enough to skip the eviction.
+        let available_memory = || Some(DEFAULT_MIN_MEM_AVAILABLE_TO_EVICT_SANDBOXES);
+        {
+            let mut guard = controller.backends.lock().unwrap();
+            controller.trigger_sandbox_eviction(&mut guard, available_memory);
+        }
+        let partitioned_backends = get_active_evicted_empty_backends(&controller);
+        // No eviction should be triggered.
+        assert_eq!(active, partitioned_backends.0.len());
+        assert_eq!(evicted, partitioned_backends.1.len());
+        assert_eq!(empty, partitioned_backends.2.len());
+
+        // Now the available memory is not enough, so the eviction should be triggered.
+        let available_memory = || Some(DEFAULT_MIN_MEM_AVAILABLE_TO_EVICT_SANDBOXES - 1.into());
+        {
+            let mut guard = controller.backends.lock().unwrap();
+            controller.trigger_sandbox_eviction(&mut guard, available_memory);
+        }
+        let partitioned_backends = get_active_evicted_empty_backends(&controller);
+        // A batch of active sandboxes should be evicted.
+        assert_eq!(
+            active - 1 - (SANDBOX_PROCESSES_RSS_TO_EVICT / DEFAULT_SANDBOX_PROCESS_RSS) as usize,
+            partitioned_backends.0.len()
+        );
+        assert_eq!(
+            1 + (SANDBOX_PROCESSES_RSS_TO_EVICT / DEFAULT_SANDBOX_PROCESS_RSS) as usize,
+            partitioned_backends.1.len()
+        );
+        assert_eq!(0, partitioned_backends.2.len());
     }
 }
