@@ -14,10 +14,13 @@
 //! - **Removing Fields**: To prevent backwards-compatibility deserialization errors, required fields must not be removed directly: In a first step, they have to be made optional and code that reads the value must be removed/handle missing values. In a second step, after the first step has rolled out to all OSes and there is no risk of a rollback, the field can be removed. Additionally, to avoid reintroducing a previously removed field, add your removed field to the RESERVED_FIELD_NAMES list.
 //!
 //! - **Renaming Fields**: Avoid renaming fields unless absolutely necessary. If you must rename a field, use `#[serde(rename = "old_name")]`.
+use anyhow::{anyhow, Error, Result};
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use mac_address::mac_address::MacAddress;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::str::FromStr;
 use url::Url;
 
 pub const CONFIG_VERSION: &str = "1.0.0";
@@ -67,7 +70,7 @@ pub struct ICOSSettings {
     /// else found dynamically in call to config tool CreateSetuposConfig
     pub mgmt_mac: MacAddress,
     /// "mainnet" or "testnet"
-    pub deployment_environment: String,
+    pub deployment_environment: DeploymentEnvironment,
     pub logging: Logging,
     pub use_nns_public_key: bool,
     /// The URL (HTTP) of the NNS node(s).
@@ -82,6 +85,33 @@ pub struct ICOSSettings {
     /// use_ssh_authorized_keys triggers the use of the ssh keys directory
     pub use_ssh_authorized_keys: bool,
     pub icos_dev_settings: ICOSDevSettings,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub enum DeploymentEnvironment {
+    Mainnet,
+    Testnet,
+}
+
+impl fmt::Display for DeploymentEnvironment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DeploymentEnvironment::Mainnet => write!(f, "mainnet"),
+            DeploymentEnvironment::Testnet => write!(f, "testnet"),
+        }
+    }
+}
+
+impl FromStr for DeploymentEnvironment {
+    type Err = Error; // Now refers to anyhow::Error
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "mainnet" => Ok(DeploymentEnvironment::Mainnet),
+            "testnet" => Ok(DeploymentEnvironment::Testnet),
+            _ => Err(anyhow!("Invalid deployment: {}", s)),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
@@ -205,7 +235,7 @@ mod tests {
             icos_settings: ICOSSettings {
                 node_reward_type: Some(String::new()),
                 mgmt_mac: MacAddress::from_str("00:00:00:00:00:00")?,
-                deployment_environment: String::new(),
+                deployment_environment: DeploymentEnvironment::Mainnet,
                 logging: Logging {
                     elasticsearch_hosts: String::new(),
                     elasticsearch_tags: None,

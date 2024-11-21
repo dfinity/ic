@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use mac_address::mac_address::MacAddress;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
@@ -172,8 +172,10 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         }
     };
 
-    let deployment_environment = deployment_environment.unwrap_or_else(|| "testnet".to_string());
-
+    let deployment_environment_str =
+        deployment_environment.unwrap_or_else(|| "testnet".to_string());
+    let deployment_environment = DeploymentEnvironment::from_str(&deployment_environment_str)
+        .map_err(|e| anyhow!("Invalid deployment_environment: {}", e))?;
     let logging = Logging {
         elasticsearch_hosts: elasticsearch_hosts.unwrap_or_else(|| "".to_string()),
         elasticsearch_tags,

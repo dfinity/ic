@@ -76,7 +76,7 @@ mod tests {
         let icos_settings = ICOSSettings {
             node_reward_type: Some("type3.1".to_string()),
             mgmt_mac: MacAddress::from_str("ec:2a:72:31:a2:0c")?,
-            deployment_environment: "Mainnet".to_string(),
+            deployment_environment: DeploymentEnvironment::Mainnet,
             logging,
             use_nns_public_key: true,
             nns_urls: vec!["http://localhost".parse().unwrap()],

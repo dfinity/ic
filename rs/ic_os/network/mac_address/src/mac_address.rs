@@ -1,5 +1,5 @@
 use crate::node_type::NodeType;
-use anyhow::{anyhow, Context, Error, Result};
+use anyhow::{anyhow, Context, Result};
 use macaddr::MacAddr6;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -135,33 +135,6 @@ impl<'de> Deserialize<'de> for MacAddress {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum Deployment {
-    Mainnet,
-    Testnet,
-}
-
-impl fmt::Display for Deployment {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Deployment::Mainnet => write!(f, "mainnet"),
-            Deployment::Testnet => write!(f, "testnet"),
-        }
-    }
-}
-
-impl FromStr for Deployment {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        match s.to_ascii_lowercase().as_str() {
-            "mainnet" => Ok(Deployment::Mainnet),
-            "testnet" => Ok(Deployment::Testnet),
-            _ => Err(anyhow!("Invalid deployment: {}", s)),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
 pub enum IpVariant {
     V4,
     V6,
@@ -171,14 +144,14 @@ pub enum IpVariant {
 /// E.g., "6a:01:eb:49:a2:b0"
 pub fn generate_deterministic_mac_address(
     mgmt_mac: &MacAddress,
-    deployment: Deployment,
+    deployment_environment: impl fmt::Display,
     node_type: NodeType,
     ip_variant: IpVariant,
 ) -> MacAddress {
     // NOTE: In order to be backwards compatible with existing scripts, this seed
     // **MUST** have a newline.
     // Use the canonical form of the MAC address (lowercase with colons)
-    let seed = format!("{}{}\n", mgmt_mac.to_canonical(), deployment);
+    let seed = format!("{}{}\n", mgmt_mac.to_canonical(), deployment_environment);
 
     let hash = Sha256::digest(seed.as_bytes());
 
@@ -264,7 +237,7 @@ mod tests {
         let mgmt_mac = MacAddress::from_str("de:ad:de:ad:de:ad").unwrap();
         let mac_v4 = generate_deterministic_mac_address(
             &mgmt_mac,
-            Deployment::Mainnet,
+            "mainnet",
             NodeType::GuestOS,
             IpVariant::V4,
         );
@@ -272,7 +245,7 @@ mod tests {
 
         let mac_v6 = generate_deterministic_mac_address(
             &mgmt_mac,
-            Deployment::Mainnet,
+            "mainnet",
             NodeType::GuestOS,
             IpVariant::V6,
         );
@@ -345,7 +318,7 @@ User Lockout Interval   : 300";
 
         let mac = generate_deterministic_mac_address(
             &mgmt_mac,
-            Deployment::Mainnet,
+            "mainnet",
             NodeType::GuestOS,
             IpVariant::V6,
         );

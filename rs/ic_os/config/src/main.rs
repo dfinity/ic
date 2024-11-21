@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::{Args, Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
@@ -220,11 +220,14 @@ pub fn main() -> Result<()> {
                     node_reward_type
                 );
             }
+            let deployment_environment =
+                DeploymentEnvironment::from_str(&deployment_json_settings.deployment.name)
+                    .map_err(|e| anyhow!("Invalid deployment_environment: {}", e))?;
 
             let icos_settings = ICOSSettings {
                 node_reward_type: Some(node_reward_type),
                 mgmt_mac,
-                deployment_environment: deployment_json_settings.deployment.name,
+                deployment_environment,
                 logging,
                 use_nns_public_key,
                 nns_urls: deployment_json_settings.nns.url.clone(),

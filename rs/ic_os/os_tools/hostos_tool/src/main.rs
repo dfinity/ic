@@ -8,7 +8,7 @@ use config::config_ini::config_map_from_path;
 use config::deployment_json::get_deployment_settings;
 use config::{DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH, DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH};
 use mac_address::mac_address::{
-    generate_deterministic_mac_address, get_ipmi_mac, Deployment, IpVariant, MacAddress,
+    generate_deterministic_mac_address, get_ipmi_mac, IpVariant, MacAddress,
 };
 use mac_address::node_type::NodeType;
 use network::generate_network_config;
@@ -88,15 +88,9 @@ pub fn main() -> Result<()> {
                 None => get_ipmi_mac()?,
             };
 
-            let deployment = deployment_settings
-                .deployment
-                .name
-                .parse::<Deployment>()
-                .context("Invalid deployment name")?;
-
             let generated_mac = generate_deterministic_mac_address(
                 &mgmt_mac,
-                deployment,
+                deployment_settings.deployment.name,
                 NodeType::HostOS,
                 IpVariant::V6,
             );
@@ -133,14 +127,12 @@ pub fn main() -> Result<()> {
                 None => get_ipmi_mac()?,
             };
 
-            let deployment = deployment_settings
-                .deployment
-                .name
-                .parse::<Deployment>()
-                .context("Invalid deployment name")?;
-
-            let generated_mac =
-                generate_deterministic_mac_address(&mgmt_mac, deployment, node_type, IpVariant::V6);
+            let generated_mac = generate_deterministic_mac_address(
+                &mgmt_mac,
+                deployment_settings.deployment.name,
+                node_type,
+                IpVariant::V6,
+            );
 
             let ipv6_address = generate_ipv6_address(&network_info.ipv6_prefix, &generated_mac)?;
             println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
@@ -176,14 +168,12 @@ pub fn main() -> Result<()> {
                 None => get_ipmi_mac()?,
             };
 
-            let deployment = deployment_settings
-                .deployment
-                .name
-                .parse::<Deployment>()
-                .context("Invalid deployment name")?;
-
-            let generated_mac =
-                generate_deterministic_mac_address(&mgmt_mac, deployment, node_type, IpVariant::V6);
+            let generated_mac = generate_deterministic_mac_address(
+                &mgmt_mac,
+                deployment_settings.deployment.name,
+                node_type,
+                IpVariant::V6,
+            );
 
             println!("{generated_mac}");
             Ok(())
