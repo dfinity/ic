@@ -1,55 +1,55 @@
 benches:
   add_neuron_active_maximum:
     total:
-      instructions: 36127408
+      instructions: 36149096
       heap_increase: 1
       stable_memory_increase: 0
     scopes: {}
   add_neuron_active_typical:
     total:
-      instructions: 1833065
+      instructions: 1834158
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   add_neuron_inactive_maximum:
     total:
-      instructions: 96226506
+      instructions: 96285952
       heap_increase: 1
       stable_memory_increase: 0
     scopes: {}
   add_neuron_inactive_typical:
     total:
-      instructions: 7376265
+      instructions: 7381170
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   cascading_vote_all_heap:
     total:
-      instructions: 9211761
+      instructions: 31887311
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   cascading_vote_heap_neurons_stable_index:
     total:
-      instructions: 31533360
+      instructions: 54233977
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   cascading_vote_stable_everything:
     total:
-      instructions: 383305463
+      instructions: 160313292
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   cascading_vote_stable_neurons_with_heap_index:
     total:
-      instructions: 361014887
+      instructions: 138075846
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   centralized_following_all_stable:
     total:
-      instructions: 314266507
+      instructions: 66264382
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
@@ -79,13 +79,13 @@ benches:
     scopes: {}
   single_vote_all_stable:
     total:
-      instructions: 1962628
+      instructions: 364240
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   update_recent_ballots_stable_memory:
     total:
-      instructions: 1869918
+      instructions: 236573
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
