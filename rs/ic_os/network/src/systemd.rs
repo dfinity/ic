@@ -18,7 +18,7 @@ DNS=2001:4860:4860::8888
 DNS=2001:4860:4860::8844
 "#;
 
-fn generate_network_interface_content(interface_name: &str) -> String {
+fn generate_network_interface_content(interface_name: &str, mac_line: &str) -> String {
     format!(
         "
 [Match]
@@ -27,38 +27,15 @@ Name={interface_name}
 [Link]
 RequiredForOnline=no
 MTUBytes=1500
+{mac_line}
 
 [Network]
 LLDP=true
 EmitLLDP=true
-Bond=bond6
+Bridge=br6
 "
     )
 }
-
-// `mac_line` - Must be in format: "MACAddress=ff:ff:ff:ff:ff:ff". Potentially unnecessary.
-fn generate_bond6_netdev_content(mac_line: &str) -> String {
-    format!(
-        "
-[NetDev]
-Name=bond6
-Kind=bond
-{mac_line}
-
-[Bond]
-Mode=active-backup
-MIIMonitorSec=5
-UpDelaySec=10
-DownDelaySec=10"
-    )
-}
-
-static BOND6_NETWORK_CONTENT: &str = "
-[Match]
-Name=bond6
-
-[Network]
-Bridge=br6";
 
 static BRIDGE6_NETDEV_CONTENT: &str = "
 [NetDev]
@@ -107,26 +84,16 @@ fn generate_and_write_systemd_files(
     eprintln!("Creating directory: {}", output_directory.to_string_lossy());
     create_dir_all(output_directory)?;
 
-    let interface_filename = format!("20-{}.network", interface.name);
-    let interface_path = output_directory.join(interface_filename);
-    let interface_content = generate_network_interface_content(&interface.name);
-    eprintln!("Writing {}", interface_path.to_string_lossy());
-    write(interface_path, interface_content)?;
-
-    let bond6_filename = "20-bond6.network";
-    let bond6_path = output_directory.join(bond6_filename);
-    eprintln!("Writing {}", bond6_path.to_string_lossy());
-    write(bond6_path, BOND6_NETWORK_CONTENT)?;
-
-    let bond6_netdev_filename = "20-bond6.netdev";
-    let bond6_netdev_path = output_directory.join(bond6_netdev_filename);
     let mac_line = match generated_mac {
-        Some(mac) => format!("MACAddress={}", mac.formatted_string()),
+        Some(mac) => format!("MACAddress={}", mac.get()),
         None => String::new(),
     };
-    let bond6_netdev_content = generate_bond6_netdev_content(&mac_line);
-    eprintln!("Writing {}", bond6_netdev_path.to_string_lossy());
-    write(bond6_netdev_path, bond6_netdev_content)?;
+
+    let interface_filename = format!("20-{}.network", interface.name);
+    let interface_path = output_directory.join(interface_filename);
+    let interface_content = generate_network_interface_content(&interface.name, &mac_line);
+    eprintln!("Writing {}", interface_path.to_string_lossy());
+    write(interface_path, interface_content)?;
 
     let bridge6_netdev_filename = "20-br6.netdev";
     let bridge6_netdev_path = output_directory.join(bridge6_netdev_filename);
@@ -135,7 +102,6 @@ fn generate_and_write_systemd_files(
 
     let bridge6_filename = "20-br6.network";
     let bridge6_path = output_directory.join(bridge6_filename);
-
     let bridge6_content = generate_bridge6_network_content(
         ipv6_address,
         ipv6_gateway,
@@ -173,9 +139,7 @@ pub fn generate_systemd_config_files(
         })
         .collect();
 
-    // For now only assign the fastest interface to IPv6.
-    // TODO: Probe to make sure the interfaces are on the same network before doing active-backup bonding.
-    // TODO: Ensure IPv6 connectivity exists
+    // Only assign the fastest interface to ipv6.
     let fastest_interface = ipv6_interfaces
         .first()
         .context("Could not find any network interfaces")?;
@@ -192,7 +156,7 @@ pub fn generate_systemd_config_files(
         &network_info.ipv6_gateway.to_string(),
     )?;
 
-    print!("Restarting systemd networkd");
+    println!("Restarting systemd networkd");
     restart_systemd_networkd();
 
     Ok(())

@@ -111,7 +111,7 @@ pub const NAME_MAX_LEN: u32 = 253;
 
 #[derive(PartialEq, Debug, thiserror::Error)]
 pub enum NameError {
-    #[error("Name has size '{0}' but must not exceed size {}", NAME_MAX_LEN)]
+    #[error("Name has size '{0}' but must not exceed size {len}", len = NAME_MAX_LEN)]
     InvalidSize(usize),
 
     #[error("domains with a dot suffix are not supported")]
