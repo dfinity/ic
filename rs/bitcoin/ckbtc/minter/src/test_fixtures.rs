@@ -6,6 +6,7 @@ use ic_btc_interface::{GetUtxosResponse, OutPoint, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 
 pub const MINTER_CANISTER_ID: Principal = Principal::from_slice(&[0, 0, 0, 0, 2, 48, 0, 7, 1, 1]);
+pub const KYT_CANISTER_ID: Principal = Principal::from_slice(&[0, 0, 0, 0, 3, 49, 1, 8, 2, 2]);
 
 pub fn init_args() -> InitArgs {
     InitArgs {
@@ -108,12 +109,12 @@ pub fn get_uxos_response() -> GetUtxosResponse {
 
 pub mod mock {
     use crate::management::CallError;
-    use crate::state::UtxoCheckStatus;
-    use crate::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError};
+    use crate::updates::update_balance::UpdateBalanceError;
     use crate::CanisterRuntime;
     use async_trait::async_trait;
     use candid::Principal;
     use ic_btc_interface::{GetUtxosRequest, GetUtxosResponse, Utxo};
+    use ic_btc_kyt::CheckTransactionResponse;
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
     use mockall::mock;
@@ -129,7 +130,7 @@ pub mod mock {
             fn time(&self) -> u64;
             fn global_timer_set(&self, timestamp: u64);
             async fn bitcoin_get_utxos(&self, request: &GetUtxosRequest, cycles: u64) -> Result<GetUtxosResponse, CallError>;
-            async fn kyt_check_utxo( &self, utxo: &Utxo, args: &UpdateBalanceArgs) -> Result<UtxoCheckStatus, UpdateBalanceError>;
+            async fn check_transaction(&self, kyt_principal: Principal, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
             async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;
         }
     }

@@ -3,13 +3,14 @@ use crate::logs::{P0, P1};
 use crate::management::CallError;
 use crate::memo::Status;
 use crate::queries::WithdrawalFee;
-use crate::state::{ReimbursementReason, UtxoCheckStatus};
-use crate::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError};
+use crate::state::ReimbursementReason;
+use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
 use ic_btc_interface::{
     GetUtxosRequest, GetUtxosResponse, MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo,
 };
+use ic_btc_kyt::CheckTransactionResponse;
 use ic_canister_log::log;
 use ic_management_canister_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
@@ -1275,11 +1276,12 @@ pub trait CanisterRuntime {
         cycles: u64,
     ) -> Result<GetUtxosResponse, CallError>;
 
-    async fn kyt_check_utxo(
+    async fn check_transaction(
         &self,
+        kyt_principal: Principal,
         utxo: &Utxo,
-        args: &UpdateBalanceArgs,
-    ) -> Result<UtxoCheckStatus, UpdateBalanceError>;
+        cycle_payment: u128,
+    ) -> Result<CheckTransactionResponse, CallError>;
 
     async fn mint_ckbtc(
         &self,
@@ -1318,12 +1320,13 @@ impl CanisterRuntime for IcCanisterRuntime {
         management::call("bitcoin_get_utxos", cycles, &request).await
     }
 
-    async fn kyt_check_utxo(
+    async fn check_transaction(
         &self,
+        kyt_principal: Principal,
         utxo: &Utxo,
-        args: &UpdateBalanceArgs,
-    ) -> Result<UtxoCheckStatus, UpdateBalanceError> {
-        updates::update_balance::kyt_check_utxo(utxo, args).await
+        cycle_payment: u128,
+    ) -> Result<CheckTransactionResponse, CallError> {
+        management::check_transaction(kyt_principal, utxo, cycle_payment).await
     }
 
     async fn mint_ckbtc(

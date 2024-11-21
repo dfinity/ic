@@ -3,12 +3,12 @@ mod update_balance {
     use crate::storage;
     use crate::test_fixtures::{
         ecdsa_public_key, get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
-        mock::MockCanisterRuntime, quarantined_utxo, MINTER_CANISTER_ID,
+        mock::MockCanisterRuntime, quarantined_utxo, KYT_CANISTER_ID, MINTER_CANISTER_ID,
     };
     use crate::updates::update_balance;
     use crate::updates::update_balance::{UpdateBalanceArgs, UtxoStatus};
-    use candid::Principal;
     use ic_btc_interface::{GetUtxosResponse, Utxo};
+    use ic_btc_kyt::CheckTransactionResponse;
     use icrc_ledger_types::icrc1::account::Account;
 
     #[tokio::test]
@@ -47,11 +47,10 @@ mod update_balance {
 
         let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
-        expect_kyt_check_utxo_returning(
+        expect_check_transaction_returning(
             &mut runtime,
-            account.owner,
             ignored_utxo.clone(),
-            UtxoCheckStatus::Tainted,
+            CheckTransactionResponse::Failed(vec![]),
         );
         mock_schedule_now_process_logic(&mut runtime);
 
@@ -87,11 +86,10 @@ mod update_balance {
 
         let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
-        expect_kyt_check_utxo_returning(
+        expect_check_transaction_returning(
             &mut runtime,
-            account.owner,
             ignored_utxo.clone(),
-            UtxoCheckStatus::Clean,
+            CheckTransactionResponse::Passed,
         );
         runtime
             .expect_mint_ckbtc()
@@ -141,11 +139,10 @@ mod update_balance {
 
         let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![quarantined_utxo.clone()]);
-        expect_kyt_check_utxo_returning(
+        expect_check_transaction_returning(
             &mut runtime,
-            account.owner,
             quarantined_utxo.clone(),
-            UtxoCheckStatus::Tainted,
+            CheckTransactionResponse::Failed(vec![]),
         );
         mock_schedule_now_process_logic(&mut runtime);
 
@@ -174,11 +171,10 @@ mod update_balance {
 
         let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![quarantined_utxo.clone()]);
-        expect_kyt_check_utxo_returning(
+        expect_check_transaction_returning(
             &mut runtime,
-            account.owner,
             quarantined_utxo.clone(),
-            UtxoCheckStatus::Clean,
+            CheckTransactionResponse::Passed,
         );
         runtime
             .expect_mint_ckbtc()
@@ -218,7 +214,12 @@ mod update_balance {
     }
 
     fn init_state_with_ecdsa_public_key() {
-        init_state(init_args());
+        use crate::lifecycle::init::InitArgs;
+        use ic_base_types::CanisterId;
+        init_state(InitArgs {
+            new_kyt_principal: Some(CanisterId::unchecked_from_principal(KYT_CANISTER_ID.into())),
+            ..init_args()
+        });
         mutate_state(|s| s.ecdsa_public_key = Some(ecdsa_public_key()))
     }
 
@@ -238,18 +239,18 @@ mod update_balance {
             }));
     }
 
-    //TODO XC-230: mock kyt at a deeper level to avoid mocking caching.
-    fn expect_kyt_check_utxo_returning(
+    fn expect_check_transaction_returning(
         runtime: &mut MockCanisterRuntime,
-        caller: Principal,
         utxo: Utxo,
-        status: UtxoCheckStatus,
+        response: CheckTransactionResponse,
     ) {
         runtime
-            .expect_kyt_check_utxo()
+            .expect_check_transaction()
             .times(1)
-            .withf(move |u, args| args.owner.as_ref() == Some(&caller) && u == &utxo)
-            .return_const(Ok(status));
+            .withf(move |kyt_principal, utxo_, _cycles| {
+                kyt_principal == &KYT_CANISTER_ID && utxo_ == &utxo
+            })
+            .return_const(Ok(response));
     }
 
     fn mock_schedule_now_process_logic(runtime: &mut MockCanisterRuntime) {

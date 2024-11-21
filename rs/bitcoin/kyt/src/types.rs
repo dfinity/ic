@@ -19,7 +19,7 @@ pub struct CheckTransactionArgs {
     pub txid: Vec<u8>,
 }
 
-#[derive(CandidType, Debug, Deserialize, Serialize)]
+#[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
 pub enum CheckTransactionResponse {
     /// When check finishes and all input addresses passed KYT.
     Passed,
@@ -31,7 +31,7 @@ pub enum CheckTransactionResponse {
     Unknown(CheckTransactionStatus),
 }
 
-#[derive(CandidType, Debug, Deserialize, Serialize)]
+#[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
 pub enum CheckTransactionStatus {
     /// Caller should call with a minimum of `CHECK_TRANSACTION_CYCLES_REQUIRED` cycles.
     NotEnoughCycles,
@@ -41,7 +41,7 @@ pub enum CheckTransactionStatus {
     Error(CheckTransactionIrrecoverableError),
 }
 
-#[derive(CandidType, Debug, Deserialize, Serialize)]
+#[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
 pub enum CheckTransactionRetriable {
     /// Work is already in progress, and the result is pending.
     Pending,
@@ -51,7 +51,7 @@ pub enum CheckTransactionRetriable {
     TransientInternalError(String),
 }
 
-#[derive(CandidType, Debug, Deserialize, Serialize)]
+#[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
 pub enum CheckTransactionIrrecoverableError {
     /// Response size is too large (> `RETRY_MAX_RESPONSE_BYTES`) when fetching the transaction data of a txid.
     ResponseTooLarge { txid: Vec<u8> },

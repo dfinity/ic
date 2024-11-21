@@ -21,7 +21,7 @@ use super::get_btc_address::init_ecdsa_public_key;
 
 use crate::{
     guard::{balance_update_guard, GuardError},
-    management::{check_transaction, get_utxos, CallError, CallSource},
+    management::{get_utxos, CallError, CallSource},
     state,
     tx::{DisplayAmount, DisplayOutpoint},
     updates::get_btc_address,
@@ -244,7 +244,7 @@ pub async fn update_balance<R: CanisterRuntime>(
             utxo_statuses.push(UtxoStatus::ValueTooSmall(utxo));
             continue;
         }
-        let status = runtime.kyt_check_utxo(&utxo, &args).await?;
+        let status = kyt_check_utxo(&utxo, &args, runtime).await?;
         mutate_state(|s| {
             crate::state::audit::mark_utxo_checked(s, &utxo, None, status, None);
         });
@@ -303,9 +303,10 @@ pub async fn update_balance<R: CanisterRuntime>(
     Ok(utxo_statuses)
 }
 
-pub async fn kyt_check_utxo(
+pub async fn kyt_check_utxo<R: CanisterRuntime>(
     utxo: &Utxo,
     args: &UpdateBalanceArgs,
+    runtime: &R,
 ) -> Result<UtxoCheckStatus, UpdateBalanceError> {
     use ic_btc_kyt::{CheckTransactionStatus, CHECK_TRANSACTION_CYCLES_REQUIRED};
 
@@ -320,7 +321,8 @@ pub async fn kyt_check_utxo(
         return Ok(checked_utxo.status);
     }
     for i in 0..MAX_CHECK_TRANSACTION_RETRY {
-        match check_transaction(new_kyt_principal, utxo, CHECK_TRANSACTION_CYCLES_REQUIRED)
+        match runtime
+            .check_transaction(new_kyt_principal, utxo, CHECK_TRANSACTION_CYCLES_REQUIRED)
             .await
             .map_err(|call_err| {
                 UpdateBalanceError::TemporarilyUnavailable(format!(
