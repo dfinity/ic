@@ -220,7 +220,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     ));
 
     // HTTP Logs Anonymization
-    let salt = Arc::new(ArcSwapOption::<Vec<u8>>::empty());
+    let anonymization_salt = Arc::new(ArcSwapOption::<Vec<u8>>::empty());
 
     // Prepare Axum Router
     let router = setup_router(
@@ -232,7 +232,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         &cli,
         &metrics_registry,
         cache.clone(),
-        salt.clone(),
+        anonymization_salt.clone(),
     );
 
     // HTTP server metrics
@@ -463,7 +463,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         if let Some(mut t) = tracker {
             s.spawn(async move {
                 t.track(|value| {
-                    salt.store(Some(Arc::new(value)));
+                    anonymization_salt.store(Some(Arc::new(value)));
                 })
                 .await
             });
