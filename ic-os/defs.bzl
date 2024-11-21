@@ -532,37 +532,25 @@ EOF
 
     # -------------------- VM Developer Tools --------------------
 
-    native.genrule(
+    native.sh_binary(
         name = "launch-remote-vm",
-        srcs = [
-            "//rs/ic_os/dev_test_tools/launch-single-vm",
+        srcs = ["//ic-os/components:launch-remote-vm.sh"],
+        data = [
+            "//rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm",
+            "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
             ":disk-img.tar.zst.cas-url",
             ":disk-img.tar.zst.sha256",
-            "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
             ":version.txt",
         ],
-        outs = ["launch_remote_vm_script"],
-        cmd = """
-        BIN="$(location //rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm)"
-        VERSION="$$(cat $(location :version.txt))"
-        URL="$$(cat $(location :disk-img.tar.zst.cas-url))"
-        SHA="$$(cat $(location :disk-img.tar.zst.sha256))"
-        SCRIPT="$(location //ic-os/components:hostos-scripts/build-bootstrap-config-image.sh)"
-        cat <<EOF > $@
-#!/usr/bin/env bash
-set -euo pipefail
-cd "\\$$BUILD_WORKSPACE_DIRECTORY"
-# Hack to switch nested for SetupOS
-nested=""
-if [[ "$@" =~ "setupos" ]]; then
-    nested="--nested"
-fi
-$$BIN --version "$$VERSION" --url "$$URL" --sha256 "$$SHA" --build-bootstrap-script "$$SCRIPT" \\$${nested}
-EOF
-        """,
-        executable = True,
-        tags = ["manual"],
+        env = {
+            "BIN": "$(location //rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm)",
+            "SCRIPT": "$(location //ic-os/components:hostos-scripts/build-bootstrap-config-image.sh)",
+            "VERSION_FILE": "$(location :version.txt)",
+            "URL_FILE": "$(location :disk-img.tar.zst.cas-url)",
+            "SHA_FILE": "$(location :disk-img.tar.zst.sha256)",
+        },
         testonly = True,
+        tags = ["manual"],
     )
 
     native.genrule(
