@@ -674,7 +674,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.9",
             ),
             "inferno": crate.spec(
-                version = "^0.11.19",
+                version = "^0.12.0",
             ),
             "insta": crate.spec(
                 version = "^1.31.0",
@@ -914,7 +914,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3",
             ),
             "pprof": crate.spec(
-                version = "^0.13.0",
+                version = "^0.14.0",
                 features = [
                     "criterion",
                     "flamegraph",
@@ -1324,7 +1324,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["full"],
             ),
             "tower-http": crate.spec(
-                version = "^0.6.1",
+                version = "^0.6.2",
                 features = [
                     "cors",
                     "limit",
