@@ -2182,6 +2182,7 @@ impl SystemState {
     /// Removes all cycles from `cycles_balance` and `reserved_balance` as part
     /// of canister uninstallation due to it running out of cycles.
     pub fn burn_remaining_balance_for_uninstall(&mut self) {
+        println!("ABC burn_remaining_balance_for_uninstall");
         let balance = self.cycles_balance + self.reserved_balance;
         self.remove_cycles(balance, CyclesUseCase::Uninstall);
     }

@@ -41,14 +41,6 @@ fn setup(subnet_memory_threshold: u64, subnet_memory_capacity: u64) -> (StateMac
     (env, canister_id)
 }
 
-/*
-$ ./ci/container/container-run.sh
-
-$ bazel test //rs/execution_environment:execution_environment_misc_integration_tests/storage_reservation \
-    --test_output=streamed \
-    --test_arg=--nocapture \
-    --test_arg=test_storage_reservation
-*/
 #[test]
 fn test_storage_reservation_not_triggered() {
     let (env, canister_id) = setup(SUBNET_MEMORY_THRESHOLD, SUBNET_MEMORY_CAPACITY);
