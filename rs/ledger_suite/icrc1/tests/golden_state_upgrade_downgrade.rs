@@ -291,7 +291,11 @@ impl LedgerSuiteConfig {
                     // The upgrade may fail if the target canister is too old - in the case of
                     // migration to stable structures, the ledger canister must be at least at V2,
                     // i.e., the ledger state must be managed by the memory manager.
-                    (true, Some(wasm_v2)) => {self.upgrade_ledger(state_machine, wasm_v2)}
+                    (true, Some(wasm_v2)) => {
+                        self.upgrade_ledger(state_machine, wasm_v2)
+                            .expect("should successfully upgrade ledger to V2");
+                        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm)
+                    }
                     _ => Err(e)
                 }
             })
