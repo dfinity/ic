@@ -229,7 +229,7 @@ mod update_balance {
         });
     }
 
-    fn expect_bitcoing_get_utxos_returning(runtime: &mut MockCanisterRuntime, utxos: Vec<Utxo>) {
+    fn expect_bitcoin_get_utxos_returning(runtime: &mut MockCanisterRuntime, utxos: Vec<Utxo>) {
         runtime
             .expect_bitcoin_get_utxos()
             .times(1)
@@ -265,7 +265,7 @@ mod update_balance {
     ) {
         runtime.expect_caller().return_const(account.owner);
         runtime.expect_id().return_const(MINTER_CANISTER_ID);
-        expect_bitcoing_get_utxos_returning(runtime, utxos);
+        expect_bitcoin_get_utxos_returning(runtime, utxos);
     }
 
     fn assert_has_new_events(events_before: &[Event], expected_new_events: &[Event]) {
