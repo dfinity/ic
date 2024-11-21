@@ -56,29 +56,41 @@ impl MacAddress {
 
     /// Generates the SLAAC IPv6 address for the given prefix.
     pub fn calculate_slaac(&self, prefix: &str) -> Result<Ipv6Addr> {
-        let octets = self.octets();
+        let mac_octets = self.octets();
 
-        let mut eui64 = [0u8; 8];
+        // Create the EUI-64 interface identifier
+        let mut interface_id = [0u8; 8];
 
-        eui64[0] = octets[0] ^ 0x02; // invert the Universal/Local bit
-        eui64[1] = octets[1];
-        eui64[2] = octets[2];
-        eui64[3] = 0xff;
-        eui64[4] = 0xfe;
-        eui64[5] = octets[3];
-        eui64[6] = octets[4];
-        eui64[7] = octets[5];
+        // Flip the Universal/Local bit in the first octet
+        interface_id[0] = mac_octets[0] ^ 0x02;
+        interface_id[1] = mac_octets[1];
+        interface_id[2] = mac_octets[2];
+        interface_id[3] = 0xff;
+        interface_id[4] = 0xfe;
+        interface_id[5] = mac_octets[3];
+        interface_id[6] = mac_octets[4];
+        interface_id[7] = mac_octets[5];
 
-        let interface_id = format!(
-            "{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}",
-            eui64[0], eui64[1], eui64[2], eui64[3], eui64[4], eui64[5], eui64[6], eui64[7]
-        );
+        // Prepare the prefix by appending '::' if necessary
+        let full_prefix = if prefix.contains("::") || prefix.ends_with(':') {
+            prefix.to_string()
+        } else {
+            format!("{}::", prefix)
+        };
 
-        let address_str = format!("{}:{}", prefix.trim_end_matches(':'), interface_id);
+        // Parse the prefix into an Ipv6Addr
+        let prefix_addr = full_prefix
+            .parse::<Ipv6Addr>()
+            .map_err(|_| anyhow!("Invalid IPv6 prefix: {}", prefix))?;
 
-        address_str
-            .parse()
-            .map_err(|_| anyhow!("Invalid IPv6 address: {}", address_str))
+        // Extract the network prefix (first 64 bits)
+        let mut addr_octets = prefix_addr.octets();
+
+        // Combine the prefix with the interface identifier
+        addr_octets[8..].copy_from_slice(&interface_id);
+
+        // Construct the full IPv6 address
+        Ok(Ipv6Addr::from(addr_octets))
     }
 }
 
