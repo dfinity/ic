@@ -167,5 +167,6 @@ impl RegistryClient for CanisterRegistryClient {
     }
 }
 
+mod registry_data_provider;
 #[cfg(test)]
 mod tests;

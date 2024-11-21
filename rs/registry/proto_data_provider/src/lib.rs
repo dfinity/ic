@@ -51,6 +51,8 @@ impl ProtoRegistryDataProvider {
         T: RegistryValue,
     {
         assert!(version.get() > 0);
+
+        let c = self.records.clone();
         let mut records = self.records.write().unwrap();
 
         let search_key = &(&version.get(), key);
