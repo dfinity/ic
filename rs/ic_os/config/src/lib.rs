@@ -62,13 +62,7 @@ mod tests {
             domain_name: None,
         };
         let logging = Logging {
-            elasticsearch_hosts: [
-                "elasticsearch-node-0.mercury.dfinity.systems:443",
-                "elasticsearch-node-1.mercury.dfinity.systems:443",
-                "elasticsearch-node-2.mercury.dfinity.systems:443",
-                "elasticsearch-node-3.mercury.dfinity.systems:443",
-            ]
-            .join(" "),
+            elasticsearch_hosts: ["es-1.domain.local:443", "es-2.domain.local:443"].join(" "),
             elasticsearch_tags: None,
         };
         let icos_dev_settings = ICOSDevSettings::default();
@@ -166,7 +160,7 @@ mod tests {
             "mgmt_mac": "ec:2a:72:31:a2:0c",
             "deployment_environment": "Mainnet",
             "logging": {
-                "elasticsearch_hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443",
+                "elasticsearch_hosts": "es-1.domain.local:443 es-2.domain.local:443",
                 "elasticsearch_tags": "tag1 tag2"
             },
             "use_nns_public_key": true,
@@ -226,7 +220,7 @@ mod tests {
             "mgmt_mac": "ec:2a:72:31:a2:0c",
             "deployment_environment": "Mainnet",
             "logging": {
-                "elasticsearch_hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443",
+                "elasticsearch_hosts": "es-1.domain.local:443 es-2.domain.local:443",
                 "elasticsearch_tags": "tag1 tag2"
             },
             "use_nns_public_key": true,
