@@ -1,5 +1,5 @@
 {
-  "checksum": "ac3e147c667ab140301f316d0db740c6765985a1a23ee1705ec2dfc9badfd229",
+  "checksum": "850e5384eba93e6b805267782561c56b665c2f0bfb6c29875c97539b7a94a35e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18706,7 +18706,7 @@
               "target": "ic_cdk"
             },
             {
-              "id": "ic-cdk-timers 0.7.0",
+              "id": "ic-cdk-timers 0.11.0",
               "target": "ic_cdk_timers"
             },
             {
@@ -19352,7 +19352,7 @@
               "target": "textplots"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.3",
               "target": "thiserror"
             },
             {
@@ -31265,6 +31265,74 @@
       ],
       "license_file": "LICENSE"
     },
+    "ic-cdk 0.17.0": {
+      "name": "ic-cdk",
+      "version": "0.17.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk/0.17.0/download",
+          "sha256": "b2abdf9341da9f9f6b451a40609cb69645a05a8e9eb7784c16209f16f2c0f76f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_cdk",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.10",
+              "target": "candid"
+            },
+            {
+              "id": "ic0 0.23.0",
+              "target": "ic0"
+            },
+            {
+              "id": "serde 1.0.214",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ic-cdk-macros 0.17.0",
+              "target": "ic_cdk_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.17.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "ic-cdk-macros 0.8.4": {
       "name": "ic-cdk-macros",
       "version": "0.8.4",
@@ -31600,14 +31668,81 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk-timers 0.7.0": {
-      "name": "ic-cdk-timers",
-      "version": "0.7.0",
+    "ic-cdk-macros 0.17.0": {
+      "name": "ic-cdk-macros",
+      "version": "0.17.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-timers/0.7.0/download",
-          "sha256": "054727a3a1c486528b96349817d54290ff70df6addf417def456ea708a16f7fb"
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.17.0/download",
+          "sha256": "b8df41980e95dead28735ab0f748c75477b0c5eab37a09a5641c78ec406a1db0"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ic_cdk_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.10",
+              "target": "candid"
+            },
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "serde 1.0.214",
+              "target": "serde"
+            },
+            {
+              "id": "serde_tokenstream 0.2.1",
+              "target": "serde_tokenstream"
+            },
+            {
+              "id": "syn 2.0.87",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.17.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-cdk-timers 0.11.0": {
+      "name": "ic-cdk-timers",
+      "version": "0.11.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk-timers/0.11.0/download",
+          "sha256": "fb8fd812a9e26f6aa00594546f8fbf4d4853f39c3ba794c8ff11ecf86fd3c9e4"
         }
       },
       "targets": [
@@ -31636,11 +31771,11 @@
               "target": "futures"
             },
             {
-              "id": "ic-cdk 0.13.5",
+              "id": "ic-cdk 0.17.0",
               "target": "ic_cdk"
             },
             {
-              "id": "ic0 0.21.1",
+              "id": "ic0 0.23.0",
               "target": "ic0"
             },
             {
@@ -31659,7 +31794,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.7.0"
+        "version": "0.11.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -70785,6 +70920,90 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "thiserror 2.0.3": {
+      "name": "thiserror",
+      "version": "2.0.3",
+      "package_url": "https://github.com/dtolnay/thiserror",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/thiserror/2.0.3/download",
+          "sha256": "c006c85c7651b3cf2ada4584faa36773bd07bac24acfb39f3c431b36d7e667aa"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "thiserror",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "thiserror",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "thiserror 2.0.3",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "thiserror-impl 2.0.3",
+              "target": "thiserror_impl"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "2.0.3"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "thiserror-impl 1.0.68": {
       "name": "thiserror-impl",
       "version": "1.0.68",
@@ -70833,6 +71052,62 @@
         },
         "edition": "2021",
         "version": "1.0.68"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "thiserror-impl 2.0.3": {
+      "name": "thiserror-impl",
+      "version": "2.0.3",
+      "package_url": "https://github.com/dtolnay/thiserror",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/thiserror-impl/2.0.3/download",
+          "sha256": "f077553d607adc1caf65430528a576c757a71ed73944b66ebb58ef2bbd243568"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "thiserror_impl",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "thiserror_impl",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.87",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.0.3"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -86377,7 +86652,7 @@
     "ic-cbor 2.6.0",
     "ic-cdk 0.16.0",
     "ic-cdk-macros 0.9.0",
-    "ic-cdk-timers 0.7.0",
+    "ic-cdk-timers 0.11.0",
     "ic-certificate-verification 2.6.0",
     "ic-certification 2.6.0",
     "ic-certified-map 0.3.4",
@@ -86546,7 +86821,7 @@
     "test-strategy 0.3.1",
     "tester 0.7.0",
     "textplots 0.8.4",
-    "thiserror 1.0.68",
+    "thiserror 2.0.3",
     "thousands 0.2.0",
     "threadpool 1.8.1",
     "tikv-jemalloc-ctl 0.5.4",

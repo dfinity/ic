@@ -142,18 +142,22 @@ fn add_config(config: InputConfig) -> AddConfigResponse {
     Ok(())
 }
 
+/// Makes specified rules publicly accessible in the canister
+///
+/// This update method allows authorized callers to disclose rules or incidents (collection of rules),
+/// making them viewable by the public. It includes authorization check and metrics collection.
 #[update]
 fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
     let caller_id = ic_cdk::api::caller();
-    let current_time = ic_cdk::api::time();
-    with_canister_state(|state| {
+    let disclose_time = ic_cdk::api::time();
+    let result = with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let discloser = RulesDiscloser::new(state);
         let discloser = WithAuthorization::new(discloser, access_resolver);
         let discloser = WithMetrics::new(discloser);
-        discloser.disclose_rules(args, current_time)
+        discloser.disclose_rules(args, disclose_time)
     })?;
-    Ok(())
+    Ok(result)
 }
 
 #[query(decoding_quota = 10000)]

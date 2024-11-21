@@ -1,6 +1,6 @@
 use super::input_schedule::testing::InputScheduleTesting;
 use super::message_pool::{MessageStats, REQUEST_LIFETIME};
-use super::testing::{new_canister_output_queues_for_test, CanisterQueuesTesting};
+use super::testing::new_canister_output_queues_for_test;
 use super::*;
 use crate::{CanisterState, InputQueueType::*, SchedulerState, SystemState};
 use assert_matches::assert_matches;

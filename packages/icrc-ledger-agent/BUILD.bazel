@@ -16,5 +16,6 @@ rust_library(
         "@crate_index//:ic-agent",
         "@crate_index//:ic-cbor",
         "@crate_index//:ic-certification",
+        "@crate_index//:leb128",
     ],
 )
