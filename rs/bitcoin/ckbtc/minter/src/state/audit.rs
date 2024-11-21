@@ -74,9 +74,9 @@ pub fn confirm_transaction(state: &mut CkBtcMinterState, txid: &Txid) {
 pub fn mark_utxo_checked(
     state: &mut CkBtcMinterState,
     utxo: &Utxo,
-    uuid: String,
+    uuid: Option<String>,
     status: UtxoCheckStatus,
-    kyt_provider: Principal,
+    kyt_provider: Option<Principal>,
 ) {
     if state.utxo_checked_status(utxo) == Some(&status) {
         // no need to record an event if the status is unchanged
@@ -84,9 +84,9 @@ pub fn mark_utxo_checked(
     }
     record_event(&Event::CheckedUtxo {
         utxo: utxo.clone(),
-        uuid: uuid.clone(),
+        uuid: uuid.clone().unwrap_or_default(),
         clean: status.is_clean(),
-        kyt_provider: Some(kyt_provider),
+        kyt_provider,
     });
     state.mark_utxo_checked(utxo.clone(), uuid, status, kyt_provider);
 }

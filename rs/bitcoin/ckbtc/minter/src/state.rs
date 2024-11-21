@@ -264,6 +264,16 @@ impl UtxoCheckStatus {
     }
 }
 
+/// Relevant data for a checked UTXO. The UUID and `kyt_provider` are kept for
+/// backward-compatibility reasons. They should be set to `None` since
+/// we dont use KYT providers anymore.
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, serde::Deserialize)]
+pub struct CheckedUtxo {
+    pub(crate) status: UtxoCheckStatus,
+    uuid: Option<String>,
+    kyt_provider: Option<Principal>,
+}
+
 /// Indicates that fee distribution overdrafted.
 #[derive(Copy, Clone, Debug)]
 pub struct Overdraft(pub u64);
@@ -342,9 +352,6 @@ pub struct CkBtcMinterState {
     /// The CanisterId of the ckBTC Ledger.
     pub ledger_id: CanisterId,
 
-    /// The principal of the KYT canister.
-    pub kyt_principal: Option<CanisterId>,
-
     /// The new principal of the KYT canister.
     pub new_kyt_principal: Option<CanisterId>,
 
@@ -387,7 +394,7 @@ pub struct CkBtcMinterState {
     pub owed_kyt_amount: BTreeMap<Principal, u64>,
 
     /// A cache of UTXO KYT check statuses.
-    pub checked_utxos: BTreeMap<Utxo, (String, UtxoCheckStatus, Principal)>,
+    pub checked_utxos: BTreeMap<Utxo, CheckedUtxo>,
 
     /// UTXOs whose values are too small to pay the KYT check fee.
     pub ignored_utxos: BTreeSet<Utxo>,
@@ -439,8 +446,8 @@ impl CkBtcMinterState {
             min_confirmations,
             mode,
             kyt_fee,
-            kyt_principal,
             new_kyt_principal,
+            kyt_principal: _,
         }: InitArgs,
     ) {
         self.btc_network = btc_network.into();
@@ -450,7 +457,6 @@ impl CkBtcMinterState {
         self.ledger_id = ledger_id;
         self.max_time_in_queue_nanos = max_time_in_queue_nanos;
         self.mode = mode;
-        self.kyt_principal = kyt_principal;
         self.new_kyt_principal = new_kyt_principal;
         if let Some(kyt_fee) = kyt_fee {
             self.kyt_fee = kyt_fee;
@@ -468,8 +474,8 @@ impl CkBtcMinterState {
             min_confirmations,
             mode,
             new_kyt_principal,
-            kyt_principal,
             kyt_fee,
+            kyt_principal: _,
         }: UpgradeArgs,
     ) {
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
@@ -497,9 +503,6 @@ impl CkBtcMinterState {
         if let Some(new_kyt_principal) = new_kyt_principal {
             self.new_kyt_principal = Some(new_kyt_principal);
         }
-        if let Some(kyt_principal) = kyt_principal {
-            self.kyt_principal = Some(kyt_principal);
-        }
         if let Some(kyt_fee) = kyt_fee {
             self.kyt_fee = kyt_fee;
         }
@@ -511,9 +514,6 @@ impl CkBtcMinterState {
         }
         if self.ecdsa_key_name.is_empty() {
             ic_cdk::trap("ecdsa_key_name is not set");
-        }
-        if self.kyt_principal.is_none() {
-            ic_cdk::trap("KYT principal is not set");
         }
         if self.new_kyt_principal.is_none() {
             ic_cdk::trap("New KYT principal is not set");
@@ -1010,16 +1010,16 @@ impl CkBtcMinterState {
     }
 
     /// Marks the given UTXO as checked.
-    /// If the UTXO is clean, we increase the owed KYT amount and remember that UTXO until we see it
-    /// again in a [add_utxos] call.
+    /// If the UTXO is clean, we increase the owed KYT amount if there is a KYT provider, and
+    /// remember that UTXO until we see it again in an [add_utxos] call.
     /// If the UTXO is tainted, we put it in the quarantine area without increasing the owed KYT
     /// amount.
     fn mark_utxo_checked(
         &mut self,
         utxo: Utxo,
-        uuid: String,
+        uuid: Option<String>,
         status: UtxoCheckStatus,
-        kyt_provider: Principal,
+        kyt_provider: Option<Principal>,
     ) {
         match status {
             UtxoCheckStatus::Clean => {
@@ -1027,12 +1027,21 @@ impl CkBtcMinterState {
                 self.quarantined_utxos.remove(&utxo);
                 if self
                     .checked_utxos
-                    .insert(utxo, (uuid, status, kyt_provider))
+                    .insert(
+                        utxo,
+                        CheckedUtxo {
+                            uuid,
+                            status,
+                            kyt_provider,
+                        },
+                    )
                     .is_none()
                 {
                     // Updated the owed amount only if it's the first time we mark this UTXO as
                     // clean.
-                    *self.owed_kyt_amount.entry(kyt_provider).or_insert(0) += self.kyt_fee;
+                    if let Some(provider) = kyt_provider {
+                        *self.owed_kyt_amount.entry(provider).or_insert(0) += self.kyt_fee;
+                    }
                 }
             }
             UtxoCheckStatus::Tainted => {
@@ -1173,9 +1182,9 @@ impl CkBtcMinterState {
         );
 
         ensure_eq!(
-            self.kyt_principal,
-            other.kyt_principal,
-            "kyt_principal does not match"
+            self.new_kyt_principal,
+            other.new_kyt_principal,
+            "new_kyt_principal does not match"
         );
 
         ensure_eq!(
@@ -1298,7 +1307,6 @@ impl From<InitArgs> for CkBtcMinterState {
             tokens_minted: 0,
             tokens_burned: 0,
             ledger_id: args.ledger_id,
-            kyt_principal: args.kyt_principal,
             new_kyt_principal: args.new_kyt_principal,
             available_utxos: Default::default(),
             outpoint_account: Default::default(),
