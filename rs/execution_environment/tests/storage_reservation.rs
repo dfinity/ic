@@ -1,36 +1,17 @@
-use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
-use ic_management_canister_types::{
-    self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
-    CanisterSettingsArgs, CanisterSettingsArgsBuilder, DataSize, EmptyBlob,
-    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, Payload,
-};
+use ic_management_canister_types::{self as ic00, CanisterInstallMode, EmptyBlob, Payload};
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{
-    ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, SubmitIngressError, UserError,
-};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use ic_test_utilities_execution_environment::{get_reply, wat_canister, wat_fn};
-use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
-use ic_types::{
-    ingress::WasmResult, CanisterId, Cycles, NumBytes, NumInstructions,
-    MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
-};
-use more_asserts::{assert_gt, assert_le, assert_lt};
-use proptest::{prelude::ProptestConfig, prop_assume};
-use std::time::{Duration, SystemTime};
+use ic_types::{CanisterId, Cycles, NumBytes};
+use more_asserts::{assert_gt, assert_lt};
 
-// Change limits in order not to duplicate prod values.
-const B: u64 = 1_000_000_000;
-const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(5 * B);
-const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(20 * B);
-const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(B);
+const T: u128 = 1_000_000_000_000;
 
 const KIB: u64 = 1024;
-const MIB: u64 = KIB * 1024;
-const GIB: u64 = MIB * 1024;
-const TIB: u64 = GIB * 1024;
+const MIB: u64 = 1024 * KIB;
+const GIB: u64 = 1024 * MIB;
 const SUBNET_MEMORY_THRESHOLD: u64 = 10_253 * MIB;
 const SUBNET_MEMORY_CAPACITY: u64 = 20 * GIB;
 
@@ -45,8 +26,7 @@ fn setup(subnet_memory_threshold: u64, subnet_memory_capacity: u64) -> (StateMac
         .with_subnet_type(subnet_type)
         .with_checkpoints_enabled(false)
         .build();
-    let canister_id =
-        env.create_canister_with_cycles(None, Cycles::from(301_000_000_000_u128), None);
+    let canister_id = env.create_canister_with_cycles(None, Cycles::from(100 * T), None);
 
     env.install_wasm_in_mode(
         canister_id,
@@ -134,7 +114,7 @@ fn test_storage_reservation_triggered_in_cleanup() {
                 ic00::Method::RawRand,
                 call_args()
                     .other_side(EmptyBlob.encode())
-                    .on_reply(wasm().trap_with_blob(b"on_reply trap"))
+                    .on_reply(wasm().trap())
                     .on_cleanup(wasm().stable_grow(100)),
                 Cycles::new(0),
             )
