@@ -1280,7 +1280,6 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
 pub mod testing {
     use super::*;
     use crate::metadata_state::testing::StreamsTesting;
-    use crate::testing::CanisterQueuesTesting;
 
     /// Exposes `ReplicatedState` internals for use in other crates' unit tests.
     pub trait ReplicatedStateTesting {
@@ -1332,9 +1331,9 @@ pub mod testing {
         fn output_message_count(&self) -> usize {
             self.canister_states
                 .values()
-                .map(|canister| canister.system_state.queues().output_message_count())
+                .map(|canister| canister.system_state.queues().output_queues_message_count())
                 .sum::<usize>()
-                + self.subnet_queues.output_message_count()
+                + self.subnet_queues.output_queues_message_count()
         }
     }
 

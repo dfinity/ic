@@ -808,13 +808,13 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
         if subnet_type == SubnetType::Application {
             // Only two messages should have been inducted. After two self-inductions on the
             // source canister, the subnet message memory is exhausted.
-            assert_eq!(1, source_canister_queues.output_message_count());
+            assert_eq!(1, source_canister_queues.output_queues_message_count());
             assert_eq!(2, source_canister_queues.input_queues_message_count());
             assert_eq!(1, dest_canister_queues.input_queues_message_count());
         } else {
             // On a system subnet, with no message memory limits, all messages should have
             // been inducted.
-            assert_eq!(0, source_canister_queues.output_message_count());
+            assert_eq!(0, source_canister_queues.output_queues_message_count());
             assert_eq!(2, source_canister_queues.input_queues_message_count());
             assert_eq!(2, dest_canister_queues.input_queues_message_count());
         }

@@ -2028,9 +2028,6 @@ pub mod testing {
         /// Returns the number of output queues, empty or not.
         fn output_queues_len(&self) -> usize;
 
-        /// Returns the number of messages in `output_queues`.
-        fn output_message_count(&self) -> usize;
-
         /// Publicly exposes `CanisterQueues::push_input()`.
         fn push_input(
             &mut self,
@@ -2064,10 +2061,6 @@ pub mod testing {
 
         fn output_queues_len(&self) -> usize {
             self.canister_queues.len()
-        }
-
-        fn output_message_count(&self) -> usize {
-            self.message_stats().outbound_message_count
         }
 
         fn push_input(

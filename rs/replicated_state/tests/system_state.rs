@@ -398,7 +398,10 @@ fn induct_messages_to_self_full_queue() {
     }
 
     assert_eq!(None, fixture.pop_input());
-    assert_eq!(0, fixture.system_state.queues().output_message_count());
+    assert_eq!(
+        0,
+        fixture.system_state.queues().output_queues_message_count()
+    );
 }
 
 /// Simulates an outbound call with the given deadline, by registering a

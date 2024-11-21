@@ -1599,7 +1599,7 @@ fn test_output_into_iter() {
     let other_3 = canister_test_id(3);
 
     let mut queues = CanisterQueues::default();
-    assert_eq!(0, queues.output_message_count());
+    assert_eq!(0, queues.output_queues_message_count());
 
     let destinations = [other_1, other_2, other_1, other_3, other_2, other_1];
     for (i, id) in destinations.iter().enumerate() {
@@ -1624,7 +1624,7 @@ fn test_output_into_iter() {
         (&other_2, 4),
         (&other_1, 5),
     ];
-    assert_eq!(expected.len(), queues.output_message_count());
+    assert_eq!(expected.len(), queues.output_queues_message_count());
 
     for (i, msg) in queues.output_into_iter().enumerate() {
         match msg {
@@ -1637,7 +1637,7 @@ fn test_output_into_iter() {
         }
     }
 
-    assert_eq!(0, queues.output_message_count());
+    assert_eq!(0, queues.output_queues_message_count());
     assert!(queues.store.is_empty());
 }
 
@@ -2943,7 +2943,7 @@ fn output_into_iter_leaves_non_consumed_messages_untouched(
         }
 
         prop_assert_eq!(
-            canister_queues.output_message_count(),
+            canister_queues.output_queues_message_count(),
             num_requests - num_requests / 2
         );
     }
@@ -2959,7 +2959,7 @@ fn output_into_iter_leaves_non_consumed_messages_untouched(
     }
 
     // Ensure that there are no messages left in the canister queues.
-    prop_assert_eq!(canister_queues.output_message_count(), 0);
+    prop_assert_eq!(canister_queues.output_queues_message_count(), 0);
     // And the pool is empty.
     prop_assert!(canister_queues.store.is_empty());
 }
@@ -3000,7 +3000,7 @@ fn output_into_iter_with_exclude_leaves_excluded_queues_untouched(
             prop_assert_eq!(&popped_message, &expected_message);
         }
 
-        prop_assert_eq!(canister_queues.output_message_count(), excluded);
+        prop_assert_eq!(canister_queues.output_queues_message_count(), excluded);
     }
 
     // Ensure that the messages that have not been consumed above are still in the queues
@@ -3014,7 +3014,7 @@ fn output_into_iter_with_exclude_leaves_excluded_queues_untouched(
     }
 
     // Ensure that there are no messages left in the canister queues.
-    prop_assert_eq!(canister_queues.output_message_count(), 0);
+    prop_assert_eq!(canister_queues.output_queues_message_count(), 0);
     // And the pool is empty.
     prop_assert!(canister_queues.store.is_empty());
 }
