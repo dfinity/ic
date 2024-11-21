@@ -1,5 +1,5 @@
 {
-  "checksum": "b380db00754bcdd8abfe3956f6cd73bd3d15967f8b617f22002bf6196c647a0a",
+  "checksum": "8e8f0f03e090527280e3b354c019a0b87fc75a7a63a6a067eb198de6261d7616",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -71286,7 +71286,8 @@
         ],
         "crate_features": {
           "common": [
-            "default"
+            "default",
+            "stats"
           ],
           "selects": {}
         },
@@ -71366,7 +71367,8 @@
         "crate_features": {
           "common": [
             "background_threads_runtime_support",
-            "default"
+            "default",
+            "stats"
           ],
           "selects": {}
         },

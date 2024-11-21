@@ -1265,6 +1265,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "tikv-jemalloc-ctl": crate.spec(
                 version = "^0.6.0",
+                features = [
+                    "stats",
+                ]
             ),
             "tikv-jemallocator": crate.spec(
                 version = "^0.6.0",
