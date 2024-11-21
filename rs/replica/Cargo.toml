@@ -57,7 +57,6 @@ tikv-jemalloc-ctl = "0.5"
 tikv-jemallocator = "0.5"
 tokio = { workspace = true }
 tracing = { workspace = true }
-tracing-flame = "0.2.0"
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
