@@ -163,9 +163,9 @@ pub fn generate_deterministic_mac_address(
     node_type: NodeType,
     ip_variant: IpVariant,
 ) -> MacAddress {
-    // Use the canonical form of the MAC address (lowercase with colons)
     // NOTE: In order to be backwards compatible with existing scripts, this seed
     // **MUST** have a newline.
+    // Use the canonical form of the MAC address (lowercase with colons)
     let seed = format!("{}{}\n", mgmt_mac.to_canonical(), deployment);
 
     let hash = Sha256::digest(seed.as_bytes());
@@ -183,7 +183,7 @@ pub fn generate_deterministic_mac_address(
 }
 
 /// Parses the MAC address from `ipmitool` output.
-pub fn get_mac_address_from_ipmitool_output(output: &str) -> Result<MacAddress> {
+fn get_mac_address_from_ipmitool_output(output: &str) -> Result<MacAddress> {
     let mac_line = output
         .lines()
         .find(|line| line.trim().starts_with("MAC Address"))
