@@ -1987,7 +1987,10 @@ impl SystemState {
                     }
 
                     // This should not happen. Bail out and let Message Routing deal with it.
-                    Err(_) => return,
+                    Err(e) => {
+                        debug_assert!(false, "Failed to induct message to self: {:?}", e);
+                        return;
+                    }
                 }
             }
 
