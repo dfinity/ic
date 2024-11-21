@@ -1269,7 +1269,7 @@ pub trait CanisterRuntime {
     /// See the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#global-timer-1).
     fn global_timer_set(&self, timestamp: u64);
 
-    /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified Bitcoin network .
+    /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified Bitcoin network.
     async fn bitcoin_get_utxos(
         &self,
         request: &GetUtxosRequest,
