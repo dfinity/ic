@@ -50,6 +50,7 @@ fn test_storage_reservation_not_triggered() {
     let _ = env.execute_ingress(canister_id, "update", wasm().build());
 
     assert_lt!(env.cycle_balance(canister_id), initial_balance);
+    // Assert reserved balance is 0.
     assert_eq!(env.reserved_balance(canister_id), 0);
 }
 
@@ -60,6 +61,7 @@ fn test_storage_reservation_triggered_in_update_by_stable_grow() {
 
     let _ = env.execute_ingress(canister_id, "update", wasm().stable_grow(100).build());
 
+    // Assert reserved balance is greater than 0.
     assert_gt!(env.reserved_balance(canister_id), 0);
 }
 
@@ -74,6 +76,7 @@ fn test_storage_reservation_triggered_in_update_by_growing_wasm_memory() {
         wasm().debug_print(&[0; 100 * PAGE_SIZE]).build(),
     );
 
+    // Assert reserved balance is greater than 0.
     assert_gt!(env.reserved_balance(canister_id), 0);
 }
 
@@ -97,6 +100,7 @@ fn test_storage_reservation_triggered_in_response() {
             .build(),
     );
 
+    // Assert reserved balance is greater than 0.
     assert_gt!(env.reserved_balance(canister_id), 0);
 }
 
@@ -121,5 +125,6 @@ fn test_storage_reservation_triggered_in_cleanup() {
             .build(),
     );
 
+    // Assert reserved balance is greater than 0.
     assert_gt!(env.reserved_balance(canister_id), 0);
 }
