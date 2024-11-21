@@ -1,4 +1,4 @@
-use crate::{InitArgs, Ledger};
+use crate::{InitArgs, Ledger, StorableAllowance};
 use ic_base_types::PrincipalId;
 use ic_canister_log::Sink;
 use ic_icrc1::{Operation, Transaction};
@@ -6,8 +6,11 @@ use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
+use ic_stable_structures::Storable;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::Account;
+use proptest::prelude::{any, prop_assert_eq, proptest};
+use proptest::strategy::Strategy;
 
 use ic_ledger_suite_state_machine_tests::{
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
@@ -629,4 +632,43 @@ fn test_approval_burn_from() {
     assert_eq!(ctx.balances().account_balance(&from), tokens(90_000));
     assert_eq!(ctx.balances().account_balance(&spender), Tokens::ZERO);
     assert_eq!(tokens_to_u64(ctx.balances().total_supply()), 90_000);
+}
+
+#[cfg(not(feature = "u256-tokens"))]
+fn arb_token() -> impl Strategy<Value = Tokens> {
+    any::<u64>().prop_map(Tokens::new)
+}
+
+#[cfg(feature = "u256-tokens")]
+fn arb_token() -> impl Strategy<Value = Tokens> {
+    (any::<u128>(), any::<u128>()).prop_map(|(hi, lo)| Tokens::from_words(hi, lo))
+}
+
+#[test]
+fn allowance_serialization() {
+    fn arb_timestamp() -> impl Strategy<Value = TimeStamp> {
+        any::<u64>().prop_map(TimeStamp::from_nanos_since_unix_epoch)
+    }
+    fn arb_opt_expiration() -> impl Strategy<Value = Option<TimeStamp>> {
+        proptest::option::of(any::<u64>().prop_map(TimeStamp::from_nanos_since_unix_epoch))
+    }
+    fn arb_allowance() -> impl Strategy<Value = Allowance<Tokens>> {
+        (arb_token(), arb_opt_expiration(), arb_timestamp()).prop_map(
+            |(amount, expires_at, arrived_at)| Allowance {
+                amount,
+                expires_at,
+                arrived_at,
+            },
+        )
+    }
+    proptest!(|(allowance in arb_allowance())| {
+        let storable_allowance: StorableAllowance = allowance.clone().into();
+        let new_allowance: Allowance<Tokens> = StorableAllowance::from_bytes(storable_allowance.to_bytes()).into();
+        prop_assert_eq!(new_allowance.amount, allowance.amount);
+        prop_assert_eq!(new_allowance.expires_at, allowance.expires_at);
+        prop_assert_eq!(
+            new_allowance.arrived_at,
+            TimeStamp::from_nanos_since_unix_epoch(0)
+        );
+    })
 }

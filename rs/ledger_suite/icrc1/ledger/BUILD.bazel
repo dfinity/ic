@@ -313,23 +313,39 @@ rust_test(
     ]
 ]
 
-rust_test(
-    name = "ledger_unit_test",
-    compile_data = [
-        "//rs/ledger_suite/icrc1/archive:archive_canister.wasm.gz",
-    ],
-    crate = "ledger",
-    deps = [
-        # Keep sorted.
-        ":ledger",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/ledger_suite/common/ledger_canister_core",
-        "//rs/ledger_suite/common/ledger_core",
-        "//rs/ledger_suite/icrc1",
-        "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
-        "//rs/types/base_types",
-    ],
-)
+[
+    rust_test(
+        name = "ledger_unit_test" + name_suffix,
+        compile_data = [
+            "//rs/ledger_suite/icrc1/archive:archive_canister.wasm.gz",
+        ],
+        crate = "ledger",
+        crate_features = features,
+        deps = [
+            # Keep sorted.
+            ":ledger" + name_suffix,
+            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/ledger_suite/common/ledger_canister_core",
+            "//rs/ledger_suite/common/ledger_core",
+            "//rs/ledger_suite/icrc1",
+            "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
+            "//rs/types/base_types",
+            "@crate_index//:proptest",
+        ] + extra_deps,
+    )
+    for (name_suffix, features, extra_deps) in [
+        (
+            "",
+            [],
+            [],
+        ),
+        (
+            "_u256",
+            ["u256-tokens"],
+            ["//rs/ledger_suite/icrc1/tokens_u256"],
+        ),
+    ]
+]
 
 # Usage:
 # Benchmarking:
