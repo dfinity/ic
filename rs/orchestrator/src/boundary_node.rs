@@ -158,6 +158,8 @@ impl BoundaryNodeManager {
             .as_ref()
             .ok_or_else(|| OrchestratorError::DomainNameMissingError(self.node_id))?;
 
+        const LOG_ANONYMIZATION_CID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+
         // TODO: Should these values be settable via config?
         let args = vec![
             format!("--bouncer-ban-time=5m"),
@@ -171,6 +173,7 @@ impl BoundaryNodeManager {
             format!("--cache-ttl=1s"),
             format!("--http-client-timeout-connect=3s"),
             format!("--listen-https-port=443"),
+            format!("--obs-log-anonymization-canister-id={LOG_ANONYMIZATION_CID}"),
             format!("--obs-log-journald"),
             format!("--obs-metrics-addr=[::]:9324"),
             format!("--rate-limit-per-second-per-subnet=1000"),
@@ -181,7 +184,7 @@ impl BoundaryNodeManager {
             format!("--shed-system-memory=0.9"),
             format!("--tls-acme-credentials-path=/var/lib/ic/data"),
             format!("--tls-cert-path=/var/lib/ic/data/ic-boundary-tls.crt"),
-            format!("--tls-hostname={}", domain_name),
+            format!("--tls-hostname={domain_name}"),
             format!("--tls-pkey-path=/var/lib/ic/data/ic-boundary-tls.key"),
             format!(
                 "--crypto-config={}",
