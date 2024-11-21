@@ -208,6 +208,22 @@ impl CachedUpgradeSteps {
         &self.current_version == version || self.subsequent_versions.contains(version)
     }
 
+    pub fn contains_in_order(&self, left: &Version, right: &Version) -> Result<bool, String> {
+        if !self.contains(left) {
+            return Err(format!("{:?} does not contain {:?}", self, left));
+        }
+        if !self.contains(right) {
+            return Err(format!("{:?} does not contain {:?}", self, right));
+        }
+
+        // Check if we have `current_version` -> ... -> `left` -> `right` -> ...
+        let upgrade_steps_starting_from_left = self.clone().take_from(left)?;
+
+        let contains_in_order = upgrade_steps_starting_from_left.contains(right);
+
+        Ok(contains_in_order)
+    }
+
     pub fn current(&self) -> &Version {
         &self.current_version
     }
@@ -221,8 +237,8 @@ impl CachedUpgradeSteps {
         self.subsequent_versions.is_empty()
     }
 
-    /// Returns a new instance of `Self` starting with `version` in the `Ok` result.
-    /// Returns `Err` if `!self.contains(version)`.
+    /// Returns a new instance of `Self` starting with `version` in the `Ok` result
+    /// or `Err` if `!self.contains(version)`.
     pub fn take_from(self, new_current_version: &Version) -> Result<Self, String> {
         if self.is_current(new_current_version) {
             return Ok(self);

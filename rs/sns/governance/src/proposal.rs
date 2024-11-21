@@ -492,6 +492,7 @@ pub(crate) async fn validate_and_render_action(
             return validate_and_render_advance_sns_target_version_proposal(
                 env.canister_id(),
                 upgrade_steps,
+                governance_proto.target_version.clone(),
                 advance_sns_target_version,
             );
         }
@@ -1722,11 +1723,14 @@ fn validate_and_render_manage_dapp_canister_settings(
 }
 
 /// Attempts to validate an `AdvanceSnsTargetVersion` action and render its human-readable text.
-/// Invalidates the action if there are no pending upgrades or the new_target is current_version.
+/// Invalidates the action in the following cases:
+/// - There are no pending upgrades.
+/// - `new_target` is equal to `current_version`.
+/// - `new_target` comes before `current_target_version` along the `upgrade_steps`.
 ///
 /// Details:
 /// 1. Validates the action's `new_target` field, if it is `Some(new_target)`.
-/// 2. Identifies the `new_target`, either based on the above, or using `cached_upgrade_steps`.
+/// 2. Identifies the `new_target`, either based on the above, or using `upgrade_steps`.
 /// 3. Renders the Markdown proposal description.
 /// 4. Returns the rendering and the identified `new_target` (guaranteed to be `Some`)
 ///    as `ActionAuxiliary`. This returned `new_target` should be used for executing this action,
@@ -1734,6 +1738,7 @@ fn validate_and_render_manage_dapp_canister_settings(
 fn validate_and_render_advance_sns_target_version_proposal(
     sns_governance_canister_id: CanisterId,
     upgrade_steps: CachedUpgradeSteps,
+    current_target_version: Option<Version>,
     advance_sns_target_version: &AdvanceSnsTargetVersion,
 ) -> Result<(String, ActionAuxiliary), String> {
     if upgrade_steps.is_empty() {
@@ -1756,6 +1761,17 @@ fn validate_and_render_advance_sns_target_version_proposal(
     } else {
         upgrade_steps.last().clone()
     };
+
+    if let Some(current_target_version) = current_target_version {
+        let new_target_is_not_ahead_of_current_target =
+            upgrade_steps.contains_in_order(&new_target, &current_target_version)?;
+        if new_target_is_not_ahead_of_current_target {
+            return Err(format!(
+                "SNS target already set to version {}.",
+                current_target_version
+            ));
+        }
+    }
 
     let valid_timestamp_seconds = upgrade_steps.approximate_time_of_validity_timestamp_seconds();
 

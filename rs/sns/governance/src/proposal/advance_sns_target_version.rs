@@ -255,6 +255,13 @@ fn test_invalid_new_targets() {
         ],
         ..deployed_version.clone()
     };
+    let next_next_version = Version {
+        index_wasm_hash: vec![
+            103, 181, 240, 191, 18, 142, 128, 26, 223, 74, 149, 158, 162, 108, 60, 156, 160, 205,
+            57, 153, 64, 225, 105, 162, 106, 46, 178, 55, 137, 154, 148, 221,
+        ],
+        ..deployed_version.clone()
+    };
     let non_existent_version = Version {
         root_wasm_hash: vec![
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
@@ -264,40 +271,83 @@ fn test_invalid_new_targets() {
     };
 
     // Smoke check: Make sure all versions are different
-    let versions = vec![deployed_version.clone(), next_version.clone()];
+    let versions = vec![
+        deployed_version.clone(),
+        next_version.clone(),
+        next_next_version.clone(),
+    ];
     assert!(
         versions.iter().collect::<HashSet::<_>>().len() == versions.len(),
         "Duplicates!"
     );
 
-    let mut governance_proto = standard_governance_proto_for_tests(Some(deployed_version.clone()));
-    governance_proto.cached_upgrade_steps = Some(CachedUpgradeStepsPb {
-        upgrade_steps: Some(Versions { versions }),
-        ..Default::default()
-    });
-    let env = NativeEnvironment::new(Some(canister_test_id(501)));
-
     // Run code under test.
-    for (action, expected_err) in [
+
+    for (label, current_target_version, action, expected_result) in [
         (
+            "Scenario A: `new_target` is equal to `deployed_version`.",
+            None,
             Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
-                new_target: Some(SnsVersion::from(deployed_version)),
+                new_target: Some(SnsVersion::from(deployed_version.clone())),
             }),
-            "new_target_version must differ from the current version.",
+            Err("new_target_version must differ from the current version.".to_string()),
         ),
         (
+            "Scenario B: `new_target` is not a known version.",
+            None,
             Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
                 new_target: Some(SnsVersion::from(non_existent_version)),
             }),
-            "new_target_version must be among the upgrade steps.",
+            Err("new_target_version must be among the upgrade steps.".to_string()),
+        ),
+        (
+            "Scenario C: `new_target` is equal to `current_target_version`.",
+            Some(next_version.clone()),
+            Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
+                new_target: Some(SnsVersion::from(next_version.clone())),
+            }),
+            Err(format!(
+                "SNS target already set to version {}.",
+                next_version
+            )),
+        ),
+        (
+            "Scenario D: `new_target` is behind `current_target_version`.",
+            Some(next_next_version.clone()),
+            Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
+                new_target: Some(SnsVersion::from(next_version.clone())),
+            }),
+            Err(format!(
+                "SNS target already set to version {}.",
+                next_next_version
+            )),
+        ),
+        (
+            "Scenario E: `new_target` is ahead of `current_target_version`.",
+            Some(next_version),
+            Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
+                new_target: Some(SnsVersion::from(next_next_version.clone())),
+            }),
+            Ok(ActionAuxiliary::AdvanceSnsTargetVersion(next_next_version)),
         ),
     ] {
-        let err = validate_and_render_action(&Some(action), &env, &governance_proto, vec![])
+        let mut governance_proto =
+            standard_governance_proto_for_tests(Some(deployed_version.clone()));
+        governance_proto.target_version = current_target_version;
+        governance_proto.cached_upgrade_steps = Some(CachedUpgradeStepsPb {
+            upgrade_steps: Some(Versions {
+                versions: versions.clone(),
+            }),
+            ..Default::default()
+        });
+        let env = NativeEnvironment::new(Some(canister_test_id(501)));
+
+        let result = validate_and_render_action(&Some(action), &env, &governance_proto, vec![])
             .now_or_never()
             .unwrap()
-            .unwrap_err();
+            .map(|(_, action_auxiliary)| action_auxiliary);
 
         // Inspect the observed results.
-        assert_eq!(err, expected_err);
+        assert_eq!(result, expected_result, "{}", label);
     }
 }
