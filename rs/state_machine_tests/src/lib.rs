@@ -464,9 +464,10 @@ fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
 
 fn replica_logger(log_level: Option<Level>) -> ReplicaLogger {
     use slog::Drain;
-    if let Some(log_level) = log_level.or(std::env::var("RUST_LOG")
+    if let Some(log_level) = std::env::var("RUST_LOG")
         .ok()
-        .and_then(|level| Level::from_str(&level).ok()))
+        .and_then(|level| Level::from_str(&level).ok())
+        .or(log_level)
     {
         let writer: Box<dyn io::Write + Sync + Send> = if std::env::var("LOG_TO_STDERR").is_ok() {
             Box::new(stderr())
