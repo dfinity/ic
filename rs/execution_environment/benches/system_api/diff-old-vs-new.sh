@@ -17,6 +17,11 @@ set -ue
 ##   | update/ic0_canister_status()           |   1.27G |   1.34G |     +5% |      3.73s |
 ##   | inspect/ic0_msg_method_name_size()     |       - |   1.28G |       - |     23.92s |
 
+if ! which bazel rg >/dev/null; then
+    echo "Error checking dependencies: please ensure 'bazel' and 'rg' are installed"
+    exit 1
+fi
+
 ## To quickly assess the new changes, run benchmarks just once
 QUICK=${QUICK:-}
 if [ -n "${QUICK}" ]; then

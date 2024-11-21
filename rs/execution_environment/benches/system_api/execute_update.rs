@@ -886,7 +886,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Disabled,
             ),
-            18000006,
+            19001006,
         ),
         common::Benchmark(
             "wasm64/ic0_mint_cycles128()".into(),
@@ -896,7 +896,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            18000006,
+            19001006,
         ),
         common::Benchmark(
             "wasm32/ic0_is_controller()".into(),
