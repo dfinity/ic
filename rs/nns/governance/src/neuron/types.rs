@@ -77,8 +77,6 @@ pub struct Neuron {
     /// Map `Topic` to followees. The key is represented by an integer as
     /// Protobuf does not support enum keys in maps.
     pub followees: HashMap<i32, Followees>,
-    // TODO DO NOT MERGE - we will need to add an accessor for this field
-    // because the order is different than before...
     /// Information about how this neuron voted in the recent past. It
     /// only contains proposals that the neuron voted yes or no on.
     pub recent_ballots: Vec<BallotInfo>,
@@ -438,6 +436,21 @@ impl Neuron {
         std::cmp::min(ad_stake, u64::MAX as u128) as u64
     }
 
+    pub(crate) fn recent_ballots(&self) -> Vec<BallotInfo> {
+        if self.recent_ballots_next_entry_index.is_none() {
+            self.recent_ballots.clone()
+        } else {
+            let recent_ballots = &self.recent_ballots;
+            let index = self.recent_ballots_next_entry_index.unwrap();
+            recent_ballots[index..]
+                .iter()
+                .chain(recent_ballots[..index].iter())
+                .rev()
+                .cloned()
+                .collect()
+        }
+    }
+
     /// Given the specified `ballots`: determine how this neuron would
     /// vote on a proposal of `topic` based on which neurons this
     /// neuron follows on this topic (or on the default topic if this
@@ -498,6 +511,7 @@ impl Neuron {
     /// Register that this neuron has cast a ballot for a
     /// proposal. Don't include votes on "real time" topics (such as
     /// setting the ICP/SDR exchange rate).
+    /// TODO(NNS1-3479) delete this method after all neurons are migrated to stable memory
     pub(crate) fn register_recent_ballot(
         &mut self,
         topic: Topic,
@@ -892,7 +906,7 @@ impl Neuron {
             || self.visibility() == Some(Visibility::Public)
             || self.is_hotkey_or_controller(&requester);
         if show_full {
-            recent_ballots.append(&mut self.recent_ballots.clone());
+            recent_ballots.append(&mut self.recent_ballots());
             joined_community_fund_timestamp_seconds = self.joined_community_fund_timestamp_seconds;
         }
 
@@ -1115,7 +1129,6 @@ impl Neuron {
 impl From<Neuron> for NeuronProto {
     fn from(neuron: Neuron) -> Self {
         let visibility = neuron.visibility().map(|visibility| visibility as i32);
-
         let Neuron {
             id,
             subaccount,

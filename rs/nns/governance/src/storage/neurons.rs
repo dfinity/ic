@@ -249,14 +249,14 @@ where
 
         let recent_entry_index = main_neuron_part.recent_ballots_next_entry_index;
 
-        let next_entry_index = if recent_entry_index.is_none() {
+        let next_entry_index = if let Some(recent_entry_index) = recent_entry_index {
+            recent_entry_index as usize
+        } else {
             let mut ballots = read_repeated_field(neuron_id, &self.recent_ballots_map);
             ballots.reverse();
             let next_entry = ballots.len() % MAX_NEURON_RECENT_BALLOTS;
             update_repeated_field(neuron_id, ballots, &mut self.recent_ballots_map);
             next_entry
-        } else {
-            recent_entry_index.unwrap() as usize
         };
         // We cannot error after this, or we risk creating some chaos with the ordering
         // of the ballots b/c of the migration code above.
