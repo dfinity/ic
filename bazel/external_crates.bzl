@@ -674,7 +674,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.9",
             ),
             "inferno": crate.spec(
-                version = "^0.11.19",
+                version = "^0.12.0",
             ),
             "insta": crate.spec(
                 version = "^1.31.0",

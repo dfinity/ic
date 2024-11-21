@@ -43,7 +43,7 @@ ic-replicated-state = { path = "../../replicated_state" }
 ic-tracing = { path = "../../monitoring/tracing" }
 ic-types = { path = "../../types/types" }
 ic-validator = { path = "../../validator" }
-inferno = "0.11.19"
+inferno = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
