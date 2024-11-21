@@ -129,8 +129,8 @@ rust_test(
             "@mainnet_cketh_ic-icrc1-ledger-u256//file",
             "@mainnet_ic-icrc1-archive//file",
             "@mainnet_ic-icrc1-index-ng//file",
-            "@mainnet_ic-icrc1-ledger//file",
             "@mainnet_ic-icrc1-ledger-v2//file",
+            "@mainnet_ic-icrc1-ledger//file",
         ],
         env = {
             "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1",
