@@ -249,7 +249,6 @@ async fn get_minter_info() -> MinterInfo {
             erc20_balances,
             last_eth_scraped_block_number,
             last_erc20_scraped_block_number,
-            last_deposit_with_subaccount_scraped_block_number,
             cketh_ledger_id: Some(s.cketh_ledger_id),
             evm_rpc_id: s.evm_rpc_id,
         }
