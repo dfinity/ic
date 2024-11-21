@@ -886,7 +886,6 @@ impl SchedulerImpl {
         state: &mut ReplicatedState,
         subnet_size: usize,
     ) {
-        println!("ABC charge_canisters_for_resource_allocation_and_usage #1");
         let state_time = state.time();
         let mut all_rejects = Vec::new();
         let mut uninstalled_canisters = Vec::new();
@@ -907,7 +906,6 @@ impl SchedulerImpl {
                 // since the last charge happened.
                 continue;
             } else {
-                println!("ABC charge_canisters_for_resource_allocation_and_usage #2");
                 self.observe_canister_metrics(canister);
                 let duration_since_last_charge =
                     canister.duration_since_last_allocation_charge(state_time);
