@@ -1,5 +1,5 @@
 {
-  "checksum": "dbb5d5b83ac85f9d54ba9f88df7a5ae4982c2d9d8e3d72203e3ec90acd205ada",
+  "checksum": "db09b89a04b7e371e2cec02acc5110095f470a98c42cb7112f709a3351cdc3fa",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -19180,7 +19180,7 @@
               "target": "textplots"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.3",
               "target": "thiserror"
             },
             {
@@ -70766,6 +70766,90 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "thiserror 2.0.3": {
+      "name": "thiserror",
+      "version": "2.0.3",
+      "package_url": "https://github.com/dtolnay/thiserror",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/thiserror/2.0.3/download",
+          "sha256": "c006c85c7651b3cf2ada4584faa36773bd07bac24acfb39f3c431b36d7e667aa"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "thiserror",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "thiserror",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "thiserror 2.0.3",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "thiserror-impl 2.0.3",
+              "target": "thiserror_impl"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "2.0.3"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "thiserror-impl 1.0.68": {
       "name": "thiserror-impl",
       "version": "1.0.68",
@@ -70814,6 +70898,62 @@
         },
         "edition": "2021",
         "version": "1.0.68"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "thiserror-impl 2.0.3": {
+      "name": "thiserror-impl",
+      "version": "2.0.3",
+      "package_url": "https://github.com/dtolnay/thiserror",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/thiserror-impl/2.0.3/download",
+          "sha256": "f077553d607adc1caf65430528a576c757a71ed73944b66ebb58ef2bbd243568"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "thiserror_impl",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "thiserror_impl",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.87",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.0.3"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -86566,7 +86706,7 @@
     "test-strategy 0.3.1",
     "tester 0.7.0",
     "textplots 0.8.4",
-    "thiserror 1.0.68",
+    "thiserror 2.0.3",
     "thousands 0.2.0",
     "threadpool 1.8.1",
     "tikv-jemalloc-ctl 0.5.4",

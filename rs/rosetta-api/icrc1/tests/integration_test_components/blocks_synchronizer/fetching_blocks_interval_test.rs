@@ -1,7 +1,9 @@
 #![allow(clippy::disallowed_types)]
-use crate::common::local_replica;
-use crate::common::local_replica::{create_and_install_icrc_ledger, test_identity};
+use crate::common::local_replica::{self, icrc_ledger_wasm};
+use crate::common::local_replica::{create_and_install_icrc_ledger, test_identity, create_and_install_custom_icrc_ledger};
 use ic_agent::Identity;
+use candid::{Encode};
+use ic_icrc1_ledger::{LedgerArgument};
 use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::InitArgsBuilder;
 use ic_icrc1_test_utils::{transfer_args_with_sender, DEFAULT_TRANSFER_FEE};
@@ -14,8 +16,10 @@ use lazy_static::lazy_static;
 use pocket_ic::PocketIcBuilder;
 use proptest::prelude::*;
 use std::sync::Arc;
+use icrc_ledger_types::icrc1::transfer::TransferArg;
 use tokio::runtime::Runtime;
 use tokio::sync::Mutex as AsyncMutex;
+use crate::integration_test_components::blocks_synchronizer::fetching_blocks_interval_test::local_replica::icrc_ledger_old_certificate_wasm;
 
 lazy_static! {
     pub static ref TEST_ACCOUNT: Account = test_identity().sender().unwrap().into();
@@ -171,6 +175,66 @@ proptest! {
             // Check that the full sync of all blocks generated is valid
             check_storage_validity(storage_client.clone(),transfer_args.len() as u64);
 
+        });
+    }
+
+    #[test]
+    fn test_icrc3_certificate(transfer_args in transfer_args_with_sender(*MAX_NUM_GENERATED_BLOCKS, *TEST_ACCOUNT).no_shrink()) {
+        // Create a tokio environment to conduct async calls
+        let rt = Runtime::new().unwrap();
+        let mut pocket_ic = PocketIcBuilder::new().with_nns_subnet().with_sns_subnet().build();
+        let init_args = InitArgsBuilder::for_tests()
+        .with_minting_account(*TEST_ACCOUNT)
+        .with_transfer_fee(DEFAULT_TRANSFER_FEE)
+        .build();
+        let ledger_wasm = icrc_ledger_old_certificate_wasm();
+        let icrc_ledger_canister_id = create_and_install_custom_icrc_ledger(&pocket_ic, init_args.clone(), ledger_wasm);
+        let endpoint = pocket_ic.make_live(None);
+        let port = endpoint.port().unwrap();
+
+        async fn check_blocks_synchronization_and_certificate(agent: Arc<Icrc1Agent>, transfer_args: Vec<TransferArg>) {
+            for transfer_arg in transfer_args.iter() {
+                agent.transfer(transfer_arg.clone()).await.unwrap().unwrap();
+            }
+
+            let storage_client = Arc::new(StorageClient::new_in_memory().unwrap());
+            blocks_synchronizer::start_synching_blocks(agent.clone(), storage_client.clone(),10,Arc::new(AsyncMutex::new(vec![]))).await.unwrap();
+            check_storage_validity(storage_client.clone(),transfer_args.len().saturating_sub(1) as u64);
+
+            // Now we check the certificate of the ledger
+            let (hash,tip_index) = agent.get_certified_chain_tip().await.unwrap().unwrap();
+            assert_eq!(tip_index,transfer_args.len().saturating_sub(1) as u64);
+            let tip_block = storage_client.get_block_with_highest_block_idx().unwrap().unwrap();
+            assert_eq!(tip_block.get_block_hash(),hash);
+        }
+
+        // We are only interested in the scenario when there are blocks to be fetched
+        if transfer_args.is_empty() {
+            return Ok(());
+        }
+        rt.block_on(async {
+            let agent = Arc::new(Icrc1Agent {
+                agent: local_replica::get_testing_agent(port).await,
+                ledger_canister_id: icrc_ledger_canister_id,
+            });
+
+            // If we fetch the certificate now we should get an empty certificate
+            let certificate = agent.get_certified_chain_tip().await.unwrap();
+            assert!(certificate.is_none());
+
+            check_blocks_synchronization_and_certificate(agent.clone(),transfer_args.clone()).await;
+        });
+
+        // Now we install the newer version of the ledger
+        let ledger_wasm = icrc_ledger_wasm();
+        pocket_ic.reinstall_canister(icrc_ledger_canister_id, ledger_wasm,Encode!(&(LedgerArgument::Init(init_args.clone()))).unwrap(),None).unwrap();
+        rt.block_on(async {
+            let agent = Arc::new(Icrc1Agent {
+                agent: local_replica::get_testing_agent(port).await,
+                ledger_canister_id: icrc_ledger_canister_id,
+            });
+            // Now we check the blocks synchronizer again
+            check_blocks_synchronization_and_certificate(agent.clone(),transfer_args.clone()).await;
         });
     }
 }

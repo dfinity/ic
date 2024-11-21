@@ -184,7 +184,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.7.1",
             ),
             "anyhow": crate.spec(
-                version = "^1",
+                version = "^1.0.93",
             ),
             "arrayvec": crate.spec(
                 version = "^0.7.4",
@@ -1255,7 +1255,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8",
             ),
             "thiserror": crate.spec(
-                version = "^1.0.65",
+                version = "^2.0.3",
             ),
             "thousands": crate.spec(
                 version = "^0.2.0",

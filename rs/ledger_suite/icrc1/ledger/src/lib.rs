@@ -10,7 +10,10 @@ use candid::{
 };
 use ic_base_types::PrincipalId;
 use ic_canister_log::{log, Sink};
-use ic_crypto_tree_hash::{Label, MixedHashTree};
+use ic_certification::{
+    hash_tree::{empty, fork, label, leaf, Label},
+    HashTree,
+};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerAllowances, LedgerBalances, Transaction};
 use ic_ledger_canister_core::archive::Archive;
@@ -62,7 +65,8 @@ const MAX_TRANSACTIONS_PER_REQUEST: usize = 2_000;
 const ACCOUNTS_OVERFLOW_TRIM_QUANTITY: usize = 100_000;
 const MAX_TRANSACTIONS_IN_WINDOW: usize = 3_000_000;
 const MAX_TRANSACTIONS_TO_PURGE: usize = 100_000;
-
+#[allow(dead_code)]
+const MAX_U64_ENCODING_BYTES: usize = 10;
 const DEFAULT_MAX_MEMO_LENGTH: u16 = 32;
 
 /// The ledger versions represent backwards incompatible versions of the ledger.
@@ -704,25 +708,40 @@ impl<Tokens: TokensType> Ledger<Tokens> {
     /// The canister code must call set_certified_data with the value this function returns after
     /// each successful modification of the ledger.
     pub fn root_hash(&self) -> [u8; 32] {
-        self.construct_hash_tree().digest().0
+        self.construct_hash_tree().digest()
     }
 
-    pub fn construct_hash_tree(&self) -> MixedHashTree {
+    pub fn construct_hash_tree(&self) -> HashTree {
         match self.blockchain().last_hash {
-            Some(hash) => {
+            Some(last_block_hash) => {
                 let last_block_index = self.blockchain().chain_length().checked_sub(1).unwrap();
-                MixedHashTree::Fork(Box::new((
-                    MixedHashTree::Labeled(
-                        Label::from("last_block_index"),
-                        Box::new(MixedHashTree::Leaf(last_block_index.to_be_bytes().to_vec())),
-                    ),
-                    MixedHashTree::Labeled(
-                        Label::from("tip_hash"),
-                        Box::new(MixedHashTree::Leaf(hash.as_slice().to_vec())),
-                    ),
-                )))
+                let last_block_index_label = Label::from("last_block_index");
+
+                #[cfg(feature = "icrc3-compatible-data-certificate")]
+                {
+                    let last_block_hash_label = Label::from("last_block_hash");
+                    let mut last_block_index_encoded = Vec::with_capacity(MAX_U64_ENCODING_BYTES);
+                    leb128::write::unsigned(&mut last_block_index_encoded, last_block_index)
+                        .expect("Failed to write LEB128");
+                    return fork(
+                        label(
+                            last_block_hash_label,
+                            leaf(last_block_hash.as_slice().to_vec()),
+                        ),
+                        label(last_block_index_label, leaf(last_block_index_encoded)),
+                    );
+                }
+                #[cfg(not(feature = "icrc3-compatible-data-certificate"))]
+                {
+                    let tip_hash_label = Label::from("tip_hash");
+                    let last_block_index_encoded = last_block_index.to_be_bytes().to_vec();
+                    return fork(
+                        label(last_block_index_label, leaf(last_block_index_encoded)),
+                        label(tip_hash_label, leaf(last_block_hash.as_slice().to_vec())),
+                    );
+                }
             }
-            None => MixedHashTree::Empty,
+            None => empty(),
         }
     }
 
