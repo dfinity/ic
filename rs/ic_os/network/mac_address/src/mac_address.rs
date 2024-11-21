@@ -56,30 +56,29 @@ impl MacAddress {
 
     /// Generates the SLAAC IPv6 address for the given prefix.
     pub fn calculate_slaac(&self, prefix: &str) -> Result<Ipv6Addr> {
-        let mac_octets = self.octets();
+        let octets = self.octets();
 
-        // Create the EUI-64 interface identifier
-        let mut interface_id = [0u8; 8];
+        let mut eui64 = [0u8; 8];
 
-        // Flip the Universal/Local bit in the first octet
-        interface_id[0] = mac_octets[0] ^ 0x02;
-        interface_id[1] = mac_octets[1];
-        interface_id[2] = mac_octets[2];
-        interface_id[3] = 0xff;
-        interface_id[4] = 0xfe;
-        interface_id[5] = mac_octets[3];
-        interface_id[6] = mac_octets[4];
-        interface_id[7] = mac_octets[5];
+        eui64[0] = octets[0] ^ 0x02; // invert the Universal/Local bit
+        eui64[1] = octets[1];
+        eui64[2] = octets[2];
+        eui64[3] = 0xff;
+        eui64[4] = 0xfe;
+        eui64[5] = octets[3];
+        eui64[6] = octets[4];
+        eui64[7] = octets[5];
 
-        // Parse the prefix into an Ipv6Addr
-        let prefix_addr = prefix.parse::<Ipv6Addr>()?;
+        let interface_id = format!(
+            "{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}",
+            eui64[0], eui64[1], eui64[2], eui64[3], eui64[4], eui64[5], eui64[6], eui64[7]
+        );
 
-        // Extract the network prefix (first 64 bits)
-        let mut addr_octets = prefix_addr.octets();
-        addr_octets[8..].copy_from_slice(&interface_id);
+        let address_str = format!("{}:{}", prefix.trim_end_matches(':'), interface_id);
 
-        // Construct the full IPv6 address
-        Ok(Ipv6Addr::from(addr_octets))
+        address_str
+            .parse()
+            .map_err(|_| anyhow!("Invalid IPv6 address: {}", address_str))
     }
 }
 
@@ -164,9 +163,9 @@ pub fn generate_deterministic_mac_address(
     node_type: NodeType,
     ip_variant: IpVariant,
 ) -> MacAddress {
+    // Use the canonical form of the MAC address (lowercase with colons)
     // NOTE: In order to be backwards compatible with existing scripts, this seed
     // **MUST** have a newline.
-    // Use the canonical form of the MAC address (lowercase with colons)
     let seed = format!("{}{}\n", mgmt_mac.to_canonical(), deployment);
 
     let hash = Sha256::digest(seed.as_bytes());
@@ -184,7 +183,7 @@ pub fn generate_deterministic_mac_address(
 }
 
 /// Parses the MAC address from `ipmitool` output.
-fn get_mac_address_from_ipmitool_output(output: &str) -> Result<MacAddress> {
+pub fn get_mac_address_from_ipmitool_output(output: &str) -> Result<MacAddress> {
     let mac_line = output
         .lines()
         .find(|line| line.trim().starts_with("MAC Address"))
