@@ -8481,7 +8481,7 @@ dependencies = [
  "ic-tracing",
  "ic-types",
  "ic-validator",
- "inferno",
+ "inferno 0.12.0",
  "maplit",
  "mockall",
  "pretty_assertions",
@@ -14328,18 +14328,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "232929e1d75fe899576a3d5c7416ad0d88dbfbb3c3d6aa00873a7408a50ddb88"
 dependencies = [
  "ahash 0.8.11",
- "clap 4.5.20",
- "crossbeam-channel",
- "crossbeam-utils",
- "dashmap 6.1.0",
- "env_logger 0.11.5",
  "indexmap 2.6.0",
  "is-terminal",
  "itoa",
  "log",
  "num-format",
  "once_cell",
- "quick-xml",
+ "quick-xml 0.26.0",
+ "rgb",
+ "str_stack",
+]
+
+[[package]]
+name = "inferno"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75a5d75fee4d36809e6b021e4b96b686e763d365ffdb03af2bd00786353f84fe"
+dependencies = [
+ "ahash 0.8.11",
+ "clap 4.5.20",
+ "crossbeam-channel",
+ "crossbeam-utils",
+ "dashmap 6.1.0",
+ "env_logger 0.11.5",
+ "indexmap 2.6.0",
+ "itoa",
+ "log",
+ "num-format",
+ "once_cell",
+ "quick-xml 0.37.1",
  "rgb",
  "str_stack",
 ]
@@ -17208,7 +17225,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "criterion",
  "findshlibs",
- "inferno",
+ "inferno 0.11.21",
  "libc",
  "log",
  "nix 0.26.4",
@@ -17706,6 +17723,15 @@ name = "quick-xml"
 version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f50b1c63b38611e7d4d7f68b82d3ad0cc71a2ad2e7f61fc10f1328d917c93cd"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
+name = "quick-xml"
+version = "0.37.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f22f29bdff3987b4d8632ef95fd6424ec7e4e0a57e2f4fc63e489e75357f6a03"
 dependencies = [
  "memchr",
 ]
