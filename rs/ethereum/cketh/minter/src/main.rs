@@ -26,7 +26,7 @@ use ic_cketh_minter::logs::INFO;
 use ic_cketh_minter::memo::BurnMemo;
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{process_event, Event, EventType};
-use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
+use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
 use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
     ReimbursementRequest,
@@ -222,18 +222,18 @@ async fn get_minter_info() -> MinterInfo {
             (None, None)
         };
 
-        let eth_helper_contract_address = s
-            .log_scrapings
-            .contract_address(LogScrapingId::EthDepositWithoutSubaccount)
-            .map(|a| a.to_string());
+        let LogScrapingInfo {
+            eth_helper_contract_address,
+            last_eth_scraped_block_number,
+            erc20_helper_contract_address,
+            last_erc20_scraped_block_number,
+        } = s.log_scrapings.info();
+
         MinterInfo {
             minter_address: s.minter_address().map(|a| a.to_string()),
             smart_contract_address: eth_helper_contract_address.clone(),
             eth_helper_contract_address,
-            erc20_helper_contract_address: s
-                .log_scrapings
-                .contract_address(LogScrapingId::Erc20DepositWithoutSubaccount)
-                .map(|a| a.to_string()),
+            erc20_helper_contract_address,
             supported_ckerc20_tokens,
             minimum_withdrawal_amount: Some(s.cketh_minimum_withdrawal_amount.into()),
             ethereum_block_height: Some(s.ethereum_block_height.into()),
@@ -247,21 +247,9 @@ async fn get_minter_info() -> MinterInfo {
                 },
             ),
             erc20_balances,
-            last_eth_scraped_block_number: Some(
-                s.log_scrapings
-                    .last_scraped_block_number(LogScrapingId::EthDepositWithoutSubaccount)
-                    .into(),
-            ),
-            last_erc20_scraped_block_number: Some(
-                s.log_scrapings
-                    .last_scraped_block_number(LogScrapingId::Erc20DepositWithoutSubaccount)
-                    .into(),
-            ),
-            last_deposit_with_subaccount_scraped_block_number: Some(
-                s.log_scrapings
-                    .last_scraped_block_number(LogScrapingId::EthOrErc20DepositWithSubaccount)
-                    .into(),
-            ),
+            last_eth_scraped_block_number,
+            last_erc20_scraped_block_number,
+            last_deposit_with_subaccount_scraped_block_number,
             cketh_ledger_id: Some(s.cketh_ledger_id),
             evm_rpc_id: s.evm_rpc_id,
         }

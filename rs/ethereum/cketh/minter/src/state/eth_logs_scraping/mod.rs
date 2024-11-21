@@ -1,4 +1,5 @@
 use crate::numeric::BlockNumber;
+use candid::Nat;
 use ic_ethereum_types::Address;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter};
@@ -57,6 +58,37 @@ impl LogScrapings {
         self.scrapings
             .get(&id)
             .expect("BUG: LogScrapings should contain all LogScrapingId")
+    }
+
+    pub fn info(&self) -> LogScrapingInfo {
+        let to_info = |state: &LogScrapingState| {
+            let contract_address = state.contract_address().map(|a| a.to_string());
+            let last_scraped_block_number = Some(Nat::from(state.last_scraped_block_number()));
+            (contract_address, last_scraped_block_number)
+        };
+        let (
+            deposit_with_subaccount_contract_address,
+            deposit_with_subaccount_last_scraped_block_number,
+        ) = to_info(self.get(LogScrapingId::EthOrErc20DepositWithSubaccount));
+        if deposit_with_subaccount_contract_address.is_some() {
+            return LogScrapingInfo {
+                eth_helper_contract_address: deposit_with_subaccount_contract_address.clone(),
+                last_eth_scraped_block_number: deposit_with_subaccount_last_scraped_block_number
+                    .clone(),
+                erc20_helper_contract_address: deposit_with_subaccount_contract_address,
+                last_erc20_scraped_block_number: deposit_with_subaccount_last_scraped_block_number,
+            };
+        }
+        let (eth_helper_contract_address, last_eth_scraped_block_number) =
+            to_info(self.get(LogScrapingId::EthDepositWithoutSubaccount));
+        let (erc20_helper_contract_address, last_erc20_scraped_block_number) =
+            to_info(self.get(LogScrapingId::Erc20DepositWithoutSubaccount));
+        LogScrapingInfo {
+            eth_helper_contract_address,
+            last_eth_scraped_block_number,
+            erc20_helper_contract_address,
+            last_erc20_scraped_block_number,
+        }
     }
 }
 
@@ -159,4 +191,12 @@ impl LogScrapingState {
     pub fn status(&self) -> LogScrapingStatus {
         self.status
     }
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct LogScrapingInfo {
+    pub eth_helper_contract_address: Option<String>,
+    pub last_eth_scraped_block_number: Option<Nat>,
+    pub erc20_helper_contract_address: Option<String>,
+    pub last_erc20_scraped_block_number: Option<Nat>,
 }
