@@ -18,7 +18,7 @@ use axum::{
     middleware,
     response::IntoResponse,
     routing::method_routing::{get, post},
-    Extension, Router,
+    Router,
 };
 use axum_extra::middleware::option_layer;
 use candid::DecoderConfig;
@@ -41,7 +41,7 @@ use ic_interfaces::crypto::{BasicSigner, KeyManager};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
-use ic_registry_local_store::{LocalStore, LocalStoreImpl, LocalStoreReader};
+use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId};
 use nix::unistd::{getpgid, setpgid, Pid};
@@ -762,7 +762,7 @@ pub fn setup_router(
     cli: &Cli,
     metrics_registry: &Registry,
     cache: Option<Arc<Cache>>,
-    salt: Arc<ArcSwapOption<Vec<u8>>>,
+    anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
 ) -> Router {
     let proxy_router = ProxyRouter::new(
         http_client.clone(),
@@ -837,6 +837,7 @@ pub fn setup_router(
                 metrics_registry,
                 "http_request",
                 cli.obs.obs_log_failed_requests_only,
+                anonymization_salt,
             ),
             metrics::metrics_middleware,
         ),
@@ -962,7 +963,6 @@ pub fn setup_router(
         .merge(subnet_read_state_route)
         .merge(status_route)
         .merge(health_route)
-        .layer(Extension(salt))
 }
 
 #[async_trait]

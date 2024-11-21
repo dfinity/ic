@@ -360,10 +360,16 @@ pub struct HttpMetricParams {
     pub durationer: HistogramVec,
     pub request_sizer: HistogramVec,
     pub response_sizer: HistogramVec,
+    pub anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
 }
 
 impl HttpMetricParams {
-    pub fn new(registry: &Registry, action: &str, log_failed_requests_only: bool) -> Self {
+    pub fn new(
+        registry: &Registry,
+        action: &str,
+        log_failed_requests_only: bool,
+        anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
+    ) -> Self {
         const LABELS_HTTP: &[&str] = &[
             "request_type",
             "status_code",
@@ -412,6 +418,8 @@ impl HttpMetricParams {
                 registry
             )
             .unwrap(),
+
+            anonymization_salt,
         }
     }
 }
@@ -485,7 +493,6 @@ pub async fn metrics_middleware_status(
 pub async fn metrics_middleware(
     State(metric_params): State<HttpMetricParams>,
     Extension(request_id): Extension<RequestId>,
-    Extension(salt): Extension<Arc<ArcSwapOption<Vec<u8>>>>,
     request: Request,
     next: Next,
 ) -> impl IntoResponse {
@@ -572,6 +579,7 @@ pub async fn metrics_middleware(
         durationer,
         request_sizer,
         response_sizer,
+        anonymization_salt,
     } = metric_params;
 
     let (parts, body) = response.into_parts();
@@ -636,7 +644,7 @@ pub async fn metrics_middleware(
 
         // Anonymization
         let hash_fn = |v: &str| -> String {
-            let s = salt.load();
+            let s = anonymization_salt.load();
             if s.is_none() {
                 return "N/A".to_string();
             }
