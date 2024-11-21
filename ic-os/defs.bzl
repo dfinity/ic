@@ -534,7 +534,7 @@ EOF
 
     native.sh_binary(
         name = "launch-remote-vm",
-        srcs = ["//ic-os/components:launch-remote-vm.sh"],
+        srcs = ["//ic-os:dev-tools/launch-remote-vm.sh"],
         data = [
             "//rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm",
             "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
