@@ -243,6 +243,7 @@ impl WasmtimeEmbedder {
             &self.created_memories,
         )));
         config.with_host_memory(mem_creator);
+        config.parallel_compilation(false);
 
         wasmtime::Engine::new(&config).map_err(|_| {
             HypervisorError::WasmEngineError(WasmEngineError::FailedToInitializeEngine)
