@@ -15,7 +15,10 @@ impl LogScrapings {
     pub fn new(last_scraped_block_number: BlockNumber) -> Self {
         let mut scrapings = BTreeMap::new();
         for id in LogScrapingId::iter() {
-            scrapings.insert(id, LogScrapingState::new(last_scraped_block_number));
+            scrapings.insert(
+                id,
+                LogScrapingState::new(last_scraped_block_number, id.status()),
+            );
         }
         Self { scrapings }
     }
@@ -65,6 +68,16 @@ pub enum LogScrapingId {
     EthOrErc20DepositWithSubaccount,
 }
 
+impl LogScrapingId {
+    fn status(&self) -> LogScrapingStatus {
+        match self {
+            LogScrapingId::EthDepositWithoutSubaccount => LogScrapingStatus::Deprecated,
+            LogScrapingId::Erc20DepositWithoutSubaccount => LogScrapingStatus::Deprecated,
+            LogScrapingId::EthOrErc20DepositWithSubaccount => LogScrapingStatus::Active,
+        }
+    }
+}
+
 impl Display for LogScrapingId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -83,16 +96,24 @@ pub enum LogScrapingStateError {
 }
 
 #[derive(Clone, PartialEq, Debug)]
+pub enum LogScrapingStatus {
+    Active,
+    Deprecated,
+}
+
+#[derive(Clone, PartialEq, Debug)]
 pub struct LogScrapingState {
     contract_address: Option<Address>,
     last_scraped_block_number: BlockNumber,
+    status: LogScrapingStatus,
 }
 
 impl LogScrapingState {
-    pub fn new(last_scraped_block_number: BlockNumber) -> Self {
+    pub fn new(last_scraped_block_number: BlockNumber, status: LogScrapingStatus) -> Self {
         Self {
             contract_address: None,
             last_scraped_block_number,
+            status,
         }
     }
 
