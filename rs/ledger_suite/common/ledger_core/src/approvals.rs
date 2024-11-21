@@ -82,8 +82,6 @@ pub trait AllowancesData {
     fn len_arrivals(&self) -> usize;
 
     fn clear_arrivals(&mut self);
-
-    fn clear_all(&mut self);
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -207,10 +205,6 @@ where
 
     fn clear_arrivals(&mut self) {
         self.arrival_queue.clear();
-    }
-
-    fn clear_all(&mut self) {
-        panic!("The method `clear_all` should not be called for HeapAllowancesData")
     }
 }
 

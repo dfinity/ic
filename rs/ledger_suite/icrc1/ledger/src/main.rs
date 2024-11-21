@@ -16,7 +16,8 @@ use ic_icrc1::{
     Operation, Transaction,
 };
 use ic_icrc1_ledger::{
-    is_ready, ledger_state, panic_if_not_ready, set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
+    clear_stable_allowance_data, is_ready, ledger_state, panic_if_not_ready, set_ledger_state,
+    LEDGER_VERSION, UPGRADES_MEMORY,
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_ledger_canister_core::ledger::{
@@ -136,13 +137,13 @@ fn pre_upgrade() {
 
     let start = ic_cdk::api::instruction_counter();
     UPGRADES_MEMORY.with_borrow_mut(|bs| {
-        Access::with_ledger_mut(|ledger| {
+        Access::with_ledger(|ledger| {
             if !is_ready() {
                 // This means that migration did not complete and the correct state
                 // of the ledger is still in UPGRADES_MEMORY.
                 // We also have to clear incompletely migrated stable allowances data.
                 log_message("Ledger not ready, skipping write to UPGRADES_MEMORY and clearing stable allowance data.");
-                ledger.clear_stable_allowance_data();
+                clear_stable_allowance_data();
                 return;
             }
             let writer = Writer::new(bs, 0);
