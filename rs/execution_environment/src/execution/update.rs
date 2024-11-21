@@ -424,7 +424,6 @@ impl UpdateHelper {
         if let Some(state_changes) = &canister_state_changes {
             let old_balance = self.canister.system_state.balance();
             let requested = state_changes.system_state_changes.removed_cycles();
-            println!("ABC UpdateHelper::finish()");
             let reveal_top_up = self
                 .canister
                 .controllers()

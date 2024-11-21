@@ -2161,7 +2161,6 @@ impl SystemState {
     /// Moves the given amount of cycles from the main balance to the reserved balance.
     /// Returns an error if the main balance is lower than the requested amount.
     pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), ReservationError> {
-        println!("ABC reserve_cycles: {amount:?}");
         if let Some(limit) = self.reserved_balance_limit {
             let requested = self.reserved_balance + amount;
             if requested > limit {
