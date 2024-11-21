@@ -960,7 +960,7 @@ impl CkBtcMinterState {
 
     /// Marks the given UTXO as checked.
     /// If the UTXO is clean, we increase the owed KYT amount if there is a KYT provider, and
-    /// remember that UTXO until we see it again in a [add_utxos] call.
+    /// remember that UTXO until we see it again in an [add_utxos] call.
     /// If the UTXO is tainted, we put it in the quarantine area without increasing the owed KYT
     /// amount.
     fn mark_utxo_checked(
