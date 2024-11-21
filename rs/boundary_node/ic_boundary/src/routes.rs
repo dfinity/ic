@@ -155,7 +155,9 @@ impl ErrorCause {
 impl IntoResponse for ErrorCause {
     fn into_response(self) -> Response {
         let client_facing_error = self.to_client_facing_error();
-        client_facing_error.into_response()
+        let mut resp = client_facing_error.into_response();
+        resp.extensions_mut().insert(self);
+        resp
     }
 }
 
@@ -224,9 +226,7 @@ impl IntoResponse for ErrorClientFacing {
         let headers = [(X_IC_ERROR_CAUSE, error_cause.clone())];
         let body = format!("error: {}\ndetails: {}", error_cause, self.details());
 
-        let mut resp = (self.status_code(), headers, body).into_response();
-        resp.extensions_mut().insert(self);
-        resp
+        (self.status_code(), headers, body).into_response()
     }
 }
 
