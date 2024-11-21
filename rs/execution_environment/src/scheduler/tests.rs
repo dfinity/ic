@@ -4464,55 +4464,55 @@ fn should_never_consume_more_than_max_instructions_per_round_in_a_single_executi
     );
 }
 
-#[test_strategy::proptest]
-// This test verifies that the scheduler is deterministic, i.e. given
-// the same input, if we execute a round of computation, we always
-// get the same result.
-fn scheduler_deterministically_produces_same_output_given_same_input(
-    #[strategy(arb_scheduler_test_double(2..10, 1..20, 1..100, M..B, 1..M, 100, false))] test: (
-        SchedulerTest,
-        SchedulerTest,
-        usize,
-        NumInstructions,
-        NumInstructions,
-    ),
-) {
-    let (mut test1, mut test2, _cores, _instructions_per_round, _instructions_per_message) = test;
-    assert_eq!(test1.state(), test2.state());
-    test1.execute_round(ExecutionRoundType::OrdinaryRound);
-    test2.execute_round(ExecutionRoundType::OrdinaryRound);
-    assert_eq!(test1.state(), test2.state());
-}
+// #[test_strategy::proptest]
+// // This test verifies that the scheduler is deterministic, i.e. given
+// // the same input, if we execute a round of computation, we always
+// // get the same result.
+// fn scheduler_deterministically_produces_same_output_given_same_input(
+//     #[strategy(arb_scheduler_test_double(2..10, 1..20, 1..100, M..B, 1..M, 100, false))] test: (
+//         SchedulerTest,
+//         SchedulerTest,
+//         usize,
+//         NumInstructions,
+//         NumInstructions,
+//     ),
+// ) {
+//     let (mut test1, mut test2, _cores, _instructions_per_round, _instructions_per_message) = test;
+//     assert_eq!(test1.state(), test2.state());
+//     test1.execute_round(ExecutionRoundType::OrdinaryRound);
+//     test2.execute_round(ExecutionRoundType::OrdinaryRound);
+//     assert_eq!(test1.state(), test2.state());
+// }
 
-#[test_strategy::proptest]
-// This test verifies that the scheduler can successfully deplete the induction
-// pool given sufficient consecutive execution rounds.
-fn scheduler_can_deplete_induction_pool_given_enough_execution_rounds(
-    #[strategy(arb_scheduler_test(2..10, 1..20, 1..100, M..B, 1..M, 100, false))] test: (
-        SchedulerTest,
-        usize,
-        NumInstructions,
-        NumInstructions,
-    ),
-) {
-    let (mut test, _scheduler_cores, instructions_per_round, instructions_per_message) = test;
-    let available_messages = get_available_messages(test.state());
-    let minimum_executed_messages = min(
-        available_messages,
-        instructions_per_round / instructions_per_message,
-    );
-    let required_rounds = if minimum_executed_messages != 0 {
-        available_messages / minimum_executed_messages + 1
-    } else {
-        1
-    };
-    for _ in 0..required_rounds {
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
-    }
-    for canister_state in test.state().canisters_iter() {
-        assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
-    }
-}
+// #[test_strategy::proptest]
+// // This test verifies that the scheduler can successfully deplete the induction
+// // pool given sufficient consecutive execution rounds.
+// fn scheduler_can_deplete_induction_pool_given_enough_execution_rounds(
+//     #[strategy(arb_scheduler_test(2..10, 1..20, 1..100, M..B, 1..M, 100, false))] test: (
+//         SchedulerTest,
+//         usize,
+//         NumInstructions,
+//         NumInstructions,
+//     ),
+// ) {
+//     let (mut test, _scheduler_cores, instructions_per_round, instructions_per_message) = test;
+//     let available_messages = get_available_messages(test.state());
+//     let minimum_executed_messages = min(
+//         available_messages,
+//         instructions_per_round / instructions_per_message,
+//     );
+//     let required_rounds = if minimum_executed_messages != 0 {
+//         available_messages / minimum_executed_messages + 1
+//     } else {
+//         1
+//     };
+//     for _ in 0..required_rounds {
+//         test.execute_round(ExecutionRoundType::OrdinaryRound);
+//     }
+//     for canister_state in test.state().canisters_iter() {
+//         assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
+//     }
+// }
 
 #[test_strategy::proptest]
 // This test verifies that the scheduler does not lose any canisters

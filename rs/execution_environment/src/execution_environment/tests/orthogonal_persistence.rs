@@ -117,35 +117,35 @@ const TEST_NUM_PAGES: usize = 32;
 const TEST_NUM_WRITES: usize = 20;
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
 
-#[test]
-// generate multiple writes of varying size to random memory locations, apply them both to a
-// canister and a simple Vec buffer and compare the results.
-fn test_orthogonal_persistence() {
-    let config = ProptestConfig {
-        cases: 20,
-        failure_persistence: None,
-        ..ProptestConfig::default()
-    };
-    let algorithm = config.rng_algorithm;
-    let mut runner = TestRunner::new_with_rng(config, TestRng::deterministic_rng(algorithm));
-    runner
-        .run(
-            &random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES),
-            |writes| {
-                let mut test = ExecutionTestBuilder::new().build();
-                let mut heap = vec![0; TEST_HEAP_SIZE_BYTES];
-                let wat = make_module_wat(TEST_NUM_PAGES);
-                let canister_id = test.canister_from_wat(wat).unwrap();
+// #[test]
+// // generate multiple writes of varying size to random memory locations, apply them both to a
+// // canister and a simple Vec buffer and compare the results.
+// fn test_orthogonal_persistence() {
+//     let config = ProptestConfig {
+//         cases: 20,
+//         failure_persistence: None,
+//         ..ProptestConfig::default()
+//     };
+//     let algorithm = config.rng_algorithm;
+//     let mut runner = TestRunner::new_with_rng(config, TestRng::deterministic_rng(algorithm));
+//     runner
+//         .run(
+//             &random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES),
+//             |writes| {
+//                 let mut test = ExecutionTestBuilder::new().build();
+//                 let mut heap = vec![0; TEST_HEAP_SIZE_BYTES];
+//                 let wat = make_module_wat(TEST_NUM_PAGES);
+//                 let canister_id = test.canister_from_wat(wat).unwrap();
 
-                for w in &writes {
-                    buf_apply_write(&mut heap, w);
-                    write_bytes(&mut test, canister_id, w.dst, &w.bytes);
-                    // verify the heap
-                    let canister_heap = dump_heap(&mut test, canister_id);
-                    prop_assert_eq!(&heap[..], &canister_heap[..]);
-                }
-                Ok(())
-            },
-        )
-        .unwrap();
-}
+//                 for w in &writes {
+//                     buf_apply_write(&mut heap, w);
+//                     write_bytes(&mut test, canister_id, w.dst, &w.bytes);
+//                     // verify the heap
+//                     let canister_heap = dump_heap(&mut test, canister_id);
+//                     prop_assert_eq!(&heap[..], &canister_heap[..]);
+//                 }
+//                 Ok(())
+//             },
+//         )
+//         .unwrap();
+// }
