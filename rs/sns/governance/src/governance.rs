@@ -4827,6 +4827,7 @@ impl Governance {
             }
         }
     }
+
     /// Checks if an automatic upgrade is needed and initiates it.
     /// An automatic upgrade is needed if `target_version` is set to a future version on the upgrade path
     async fn initiate_upgrade_if_sns_behind_target_version(&mut self) {
@@ -6030,3 +6031,6 @@ mod assorted_governance_tests;
 
 #[cfg(test)]
 mod fail_stuck_upgrade_in_progress_tests;
+
+#[cfg(test)]
+mod advance_target_sns_version_tests;
