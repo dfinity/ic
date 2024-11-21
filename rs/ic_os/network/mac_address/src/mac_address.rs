@@ -1,7 +1,7 @@
 use crate::node_type::NodeType;
 use anyhow::{anyhow, Context, Error, Result};
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 use std::fmt;
 use std::fmt::Write;
@@ -9,7 +9,7 @@ use std::net::Ipv6Addr;
 use std::process::Command;
 use std::str::FromStr;
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MacAddress([u8; 6]);
 
 impl MacAddress {
@@ -104,6 +104,27 @@ impl fmt::Display for MacAddressParseError {
             MacAddressParseError::InvalidFormat => write!(f, "Invalid MAC address format"),
             MacAddressParseError::InvalidLength => write!(f, "Invalid MAC address length"),
         }
+    }
+}
+
+// Custom serialization and deserialization
+impl Serialize for MacAddress {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mac_str = self.formatted_string();
+        serializer.serialize_str(&mac_str)
+    }
+}
+
+impl<'de> Deserialize<'de> for MacAddress {
+    fn deserialize<D>(deserializer: D) -> Result<MacAddress, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        MacAddress::from_str(&s).map_err(de::Error::custom)
     }
 }
 
