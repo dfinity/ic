@@ -170,12 +170,13 @@ pub async fn update_balance<R: CanisterRuntime>(
     .await?
     .utxos;
 
-    let new_utxos = state::read_state(|s| s.processable_utxos_for_account(utxos, &caller_account));
+    let processable_utxos =
+        state::read_state(|s| s.processable_utxos_for_account(utxos, &caller_account));
 
     // Remove pending finalized transactions for the affected principal.
     state::mutate_state(|s| s.finalized_utxos.remove(&caller_account.owner));
 
-    let satoshis_to_mint = new_utxos.iter().map(|u| u.value).sum::<u64>();
+    let satoshis_to_mint = processable_utxos.iter().map(|u| u.value).sum::<u64>();
 
     if satoshis_to_mint == 0 {
         // We bail out early if there are no UTXOs to avoid creating a new entry
@@ -231,7 +232,7 @@ pub async fn update_balance<R: CanisterRuntime>(
 
     let kyt_fee = read_state(|s| s.kyt_fee);
     let mut utxo_statuses: Vec<UtxoStatus> = vec![];
-    for utxo in new_utxos {
+    for utxo in processable_utxos {
         if utxo.value <= kyt_fee {
             mutate_state(|s| crate::state::audit::ignore_utxo(s, utxo.clone()));
             log!(
@@ -303,7 +304,7 @@ pub async fn update_balance<R: CanisterRuntime>(
     Ok(utxo_statuses)
 }
 
-pub async fn kyt_check_utxo<R: CanisterRuntime>(
+async fn kyt_check_utxo<R: CanisterRuntime>(
     utxo: &Utxo,
     args: &UpdateBalanceArgs,
     runtime: &R,
