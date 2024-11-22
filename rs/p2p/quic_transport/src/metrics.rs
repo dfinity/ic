@@ -237,7 +237,6 @@ pub fn observe_write_error(err: &WriteError, op: &str, counter: &IntCounterVec) 
 pub fn observe_read_error(err: &ReadError, op: &str, counter: &IntCounterVec) {
     match err {
         // This can happen if the peer reset the stream due to aborting the future that writes to the stream.
-        // E.g. On the send side, the RPC method is part of a select branch. Hence the receive side will observe closed stream.
         ReadError::Reset(_) => counter.with_label_values(&[op, ERROR_RESET_STREAM]).inc(),
         ReadError::ConnectionLost(conn_err) => observe_conn_error(conn_err, op, counter),
         // If any of the following errors occur it means that we have a bug in the protocol implementation or
