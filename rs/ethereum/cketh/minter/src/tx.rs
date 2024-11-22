@@ -194,9 +194,9 @@ impl rlp::Encodable for Eip1559TransactionRequest {
 pub struct Eip1559Signature {
     #[n(0)]
     pub signature_y_parity: bool,
-    #[cbor(n(1), with = "crate::cbor::u256")]
+    #[cbor(n(1), with = "ic_cross_chain_cbor::u256")]
     pub r: u256,
-    #[cbor(n(2), with = "crate::cbor::u256")]
+    #[cbor(n(2), with = "ic_cross_chain_cbor::u256")]
     pub s: u256,
 }
 

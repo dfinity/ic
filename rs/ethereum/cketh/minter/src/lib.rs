@@ -1,6 +1,5 @@
 pub mod address;
 pub mod blocklist;
-mod cbor;
 pub mod checked_amount;
 pub mod deposit;
 pub mod endpoints;

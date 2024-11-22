@@ -1,4 +1,3 @@
-use crate::cbor::tests::check_roundtrip;
 use crate::eth_logs::{ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc::Hash;
 use crate::memo::BurnMemo;
@@ -7,6 +6,7 @@ use crate::numeric::{BlockNumber, CkTokenAmount, LedgerBurnIndex, LogIndex, Wei}
 use crate::state::transactions::ReimbursementRequest;
 use arbitrary::{arb_burn_memo, arb_mint_memo, arb_reimbursement_request};
 use candid::Principal;
+use ic_cross_chain_cbor::tests::check_roundtrip;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use proptest::prelude::*;
 use std::str::FromStr;

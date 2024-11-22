@@ -23,7 +23,7 @@ pub struct CkErc20Token {
     pub erc20_contract_address: Address,
     #[n(2)]
     pub ckerc20_token_symbol: CkTokenSymbol,
-    #[cbor(n(3), with = "crate::cbor::principal")]
+    #[cbor(n(3), with = "ic_cross_chain_cbor::principal")]
     pub ckerc20_ledger_id: Principal,
 }
 

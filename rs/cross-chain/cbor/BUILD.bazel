@@ -10,12 +10,11 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
-        "@crate_index//:curve25519-dalek",
-        "@crate_index//:ed25519-dalek",
-        "@crate_index//:hkdf",
-        "@crate_index//:pem",
-        "@crate_index//:rand",
-        "@crate_index//:thiserror",
-        "@crate_index//:zeroize",
+        "//rs/phantom_newtype",
+        "@crate_index//:candid",
+        "@crate_index//:ethnum",
+        "@crate_index//:minicbor",
+        "@crate_index//:num-bigint",
+        "@crate_index//:num-traits",
     ],
 )
