@@ -7,6 +7,7 @@ use crate::state::{
 };
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit, ReimbursementReason};
 use candid::Principal;
+pub use event::Event;
 use ic_btc_interface::{Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
@@ -17,172 +18,181 @@ pub struct GetEventsArg {
     pub length: u64,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
-pub enum Event {
-    /// Indicates the minter initialization with the specified arguments.  Must be
-    /// the first event in the event log.
-    #[serde(rename = "init")]
-    Init(InitArgs),
+// Some events are deprecated and this doesn't play well with generated code via `derive`
+// that triggers some deprecation warnings that cannot be whitelisted.
+// The trick is to put the whole Event definition under a module and allow usage of deprecated code inside that module.
+// For convenience, the module is not visible to the outside.
+#[allow(deprecated)]
+mod event {
+    use super::*;
 
-    /// Indicates the minter upgrade with specified arguments.
-    #[serde(rename = "upgrade")]
-    Upgrade(UpgradeArgs),
+    #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
+    pub enum Event {
+        /// Indicates the minter initialization with the specified arguments.  Must be
+        /// the first event in the event log.
+        #[serde(rename = "init")]
+        Init(InitArgs),
 
-    /// Indicates that the minter received new UTXOs to the specified account.
-    /// The minter emits this event _after_ it minted ckBTC.
-    #[serde(rename = "received_utxos")]
-    ReceivedUtxos {
-        /// The index of the transaction that mints ckBTC corresponding to the
-        /// received UTXOs.
-        #[serde(rename = "mint_txid")]
-        #[serde(skip_serializing_if = "Option::is_none")]
-        mint_txid: Option<u64>,
-        /// That minter's account owning the UTXOs.
-        #[serde(rename = "to_account")]
-        to_account: Account,
-        #[serde(rename = "utxos")]
-        utxos: Vec<Utxo>,
-    },
+        /// Indicates the minter upgrade with specified arguments.
+        #[serde(rename = "upgrade")]
+        Upgrade(UpgradeArgs),
 
-    /// Indicates that the minter accepted a new retrieve_btc request.
-    /// The minter emits this event _after_ it burnt ckBTC.
-    #[serde(rename = "accepted_retrieve_btc_request")]
-    AcceptedRetrieveBtcRequest(RetrieveBtcRequest),
+        /// Indicates that the minter received new UTXOs to the specified account.
+        /// The minter emits this event _after_ it minted ckBTC.
+        #[serde(rename = "received_utxos")]
+        ReceivedUtxos {
+            /// The index of the transaction that mints ckBTC corresponding to the
+            /// received UTXOs.
+            #[serde(rename = "mint_txid")]
+            #[serde(skip_serializing_if = "Option::is_none")]
+            mint_txid: Option<u64>,
+            /// That minter's account owning the UTXOs.
+            #[serde(rename = "to_account")]
+            to_account: Account,
+            #[serde(rename = "utxos")]
+            utxos: Vec<Utxo>,
+        },
 
-    /// Indicates that the minter removed a previous retrieve_btc request
-    /// because the retrieval amount was not enough to cover the transaction
-    /// fees.
-    #[serde(rename = "removed_retrieve_btc_request")]
-    RemovedRetrieveBtcRequest {
-        #[serde(rename = "block_index")]
-        block_index: u64,
-    },
+        /// Indicates that the minter accepted a new retrieve_btc request.
+        /// The minter emits this event _after_ it burnt ckBTC.
+        #[serde(rename = "accepted_retrieve_btc_request")]
+        AcceptedRetrieveBtcRequest(RetrieveBtcRequest),
 
-    /// Indicates that the minter sent out a new transaction to the Bitcoin
-    /// network.
-    #[serde(rename = "sent_transaction")]
-    SentBtcTransaction {
-        /// Block indices of retrieve_btc requests that caused the transaction.
-        #[serde(rename = "requests")]
-        request_block_indices: Vec<u64>,
-        /// The Txid of the Bitcoin transaction.
-        #[serde(rename = "txid")]
-        txid: Txid,
-        /// UTXOs used for the transaction.
-        #[serde(rename = "utxos")]
-        utxos: Vec<Utxo>,
-        /// The output with the minter's change, if any.
-        #[serde(rename = "change_output")]
-        #[serde(skip_serializing_if = "Option::is_none")]
-        change_output: Option<ChangeOutput>,
-        /// The IC time at which the minter submitted the transaction.
-        #[serde(rename = "submitted_at")]
-        submitted_at: u64,
-        /// The fee per vbyte (in millisatoshi) that we used for the transaction.
-        #[serde(rename = "fee")]
-        #[serde(skip_serializing_if = "Option::is_none")]
-        fee_per_vbyte: Option<u64>,
-    },
+        /// Indicates that the minter removed a previous retrieve_btc request
+        /// because the retrieval amount was not enough to cover the transaction
+        /// fees.
+        #[serde(rename = "removed_retrieve_btc_request")]
+        RemovedRetrieveBtcRequest {
+            #[serde(rename = "block_index")]
+            block_index: u64,
+        },
 
-    /// Indicates that the minter sent out a new transaction to replace an older transaction
-    /// because the old transaction did not appear on the Bitcoin blockchain.
-    #[serde(rename = "replaced_transaction")]
-    ReplacedBtcTransaction {
-        /// The Txid of the old Bitcoin transaction.
-        #[serde(rename = "old_txid")]
-        old_txid: Txid,
-        /// The Txid of the new Bitcoin transaction.
-        #[serde(rename = "new_txid")]
-        new_txid: Txid,
-        /// The output with the minter's change.
-        #[serde(rename = "change_output")]
-        change_output: ChangeOutput,
-        /// The IC time at which the minter submitted the transaction.
-        #[serde(rename = "submitted_at")]
-        submitted_at: u64,
-        /// The fee per vbyte (in millisatoshi) that we used for the transaction.
-        #[serde(rename = "fee")]
-        fee_per_vbyte: u64,
-    },
+        /// Indicates that the minter sent out a new transaction to the Bitcoin
+        /// network.
+        #[serde(rename = "sent_transaction")]
+        SentBtcTransaction {
+            /// Block indices of retrieve_btc requests that caused the transaction.
+            #[serde(rename = "requests")]
+            request_block_indices: Vec<u64>,
+            /// The Txid of the Bitcoin transaction.
+            #[serde(rename = "txid")]
+            txid: Txid,
+            /// UTXOs used for the transaction.
+            #[serde(rename = "utxos")]
+            utxos: Vec<Utxo>,
+            /// The output with the minter's change, if any.
+            #[serde(rename = "change_output")]
+            #[serde(skip_serializing_if = "Option::is_none")]
+            change_output: Option<ChangeOutput>,
+            /// The IC time at which the minter submitted the transaction.
+            #[serde(rename = "submitted_at")]
+            submitted_at: u64,
+            /// The fee per vbyte (in millisatoshi) that we used for the transaction.
+            #[serde(rename = "fee")]
+            #[serde(skip_serializing_if = "Option::is_none")]
+            fee_per_vbyte: Option<u64>,
+        },
 
-    /// Indicates that the minter received enough confirmations for a bitcoin
-    /// transaction.
-    #[serde(rename = "confirmed_transaction")]
-    ConfirmedBtcTransaction {
-        #[serde(rename = "txid")]
-        txid: Txid,
-    },
+        /// Indicates that the minter sent out a new transaction to replace an older transaction
+        /// because the old transaction did not appear on the Bitcoin blockchain.
+        #[serde(rename = "replaced_transaction")]
+        ReplacedBtcTransaction {
+            /// The Txid of the old Bitcoin transaction.
+            #[serde(rename = "old_txid")]
+            old_txid: Txid,
+            /// The Txid of the new Bitcoin transaction.
+            #[serde(rename = "new_txid")]
+            new_txid: Txid,
+            /// The output with the minter's change.
+            #[serde(rename = "change_output")]
+            change_output: ChangeOutput,
+            /// The IC time at which the minter submitted the transaction.
+            #[serde(rename = "submitted_at")]
+            submitted_at: u64,
+            /// The fee per vbyte (in millisatoshi) that we used for the transaction.
+            #[serde(rename = "fee")]
+            fee_per_vbyte: u64,
+        },
 
-    /// Indicates that the given UTXO went through a KYT check.
-    #[serde(rename = "checked_utxo")]
-    CheckedUtxo {
-        utxo: Utxo,
-        uuid: String,
-        clean: bool,
-        kyt_provider: Option<Principal>,
-    },
+        /// Indicates that the minter received enough confirmations for a bitcoin
+        /// transaction.
+        #[serde(rename = "confirmed_transaction")]
+        ConfirmedBtcTransaction {
+            #[serde(rename = "txid")]
+            txid: Txid,
+        },
 
-    /// Indicates that the given UTXO's value is too small to pay for a KYT check.
-    #[serde(rename = "ignored_utxo")]
-    #[deprecated(note = "Use IgnoredUtxoForAccount")]
-    IgnoredUtxo { utxo: Utxo },
+        /// Indicates that the given UTXO went through a KYT check.
+        #[serde(rename = "checked_utxo")]
+        CheckedUtxo {
+            utxo: Utxo,
+            uuid: String,
+            clean: bool,
+            kyt_provider: Option<Principal>,
+        },
 
-    /// Indicates that the given UTXO's value is too small to pay for a KYT check.
-    #[serde(rename = "ignored_utxo_for_account")]
-    IgnoredUtxoForAccount { utxo: Utxo, account: Account },
+        /// Indicates that the given UTXO's value is too small to pay for a KYT check.
+        #[serde(rename = "ignored_utxo")]
+        #[deprecated(note = "Use IgnoredUtxoForAccount")]
+        IgnoredUtxo { utxo: Utxo },
 
-    /// Indicates that the given KYT provider received owed fees.
-    #[serde(rename = "distributed_kyt_fee")]
-    DistributedKytFee {
-        /// The beneficiary.
-        #[serde(rename = "kyt_provider")]
-        kyt_provider: Principal,
-        /// The token amount minted.
-        #[serde(rename = "amount")]
-        amount: u64,
-        /// The mint block on the ledger.
-        #[serde(rename = "block_index")]
-        block_index: u64,
-    },
+        /// Indicates that the given UTXO's value is too small to pay for a KYT check.
+        #[serde(rename = "ignored_utxo_for_account")]
+        IgnoredUtxoForAccount { utxo: Utxo, account: Account },
 
-    /// Indicates that the KYT check for the specified address failed.
-    #[serde(rename = "retrieve_btc_kyt_failed")]
-    RetrieveBtcKytFailed {
-        /// The owner of the address.
-        owner: Principal,
-        /// The address that failed the KYT check.
-        address: String,
-        /// The amount associated with the failed KYT check.
-        amount: u64,
-        /// Unique identifier for the failed check.
-        uuid: String,
-        /// The KYT provider responsible for the failed check.
-        kyt_provider: Principal,
-        /// The block index where the failed check occurred.
-        block_index: u64,
-    },
+        /// Indicates that the given KYT provider received owed fees.
+        #[serde(rename = "distributed_kyt_fee")]
+        DistributedKytFee {
+            /// The beneficiary.
+            #[serde(rename = "kyt_provider")]
+            kyt_provider: Principal,
+            /// The token amount minted.
+            #[serde(rename = "amount")]
+            amount: u64,
+            /// The mint block on the ledger.
+            #[serde(rename = "block_index")]
+            block_index: u64,
+        },
 
-    /// Indicates a reimbursement.
-    #[serde(rename = "schedule_deposit_reimbursement")]
-    ScheduleDepositReimbursement {
-        /// The beneficiary.
-        account: Account,
-        /// The token amount to reimburse.
-        amount: u64,
-        /// The reason of the reimbursement.
-        reason: ReimbursementReason,
-        /// The corresponding burn block on the ledger.
-        burn_block_index: u64,
-    },
+        /// Indicates that the KYT check for the specified address failed.
+        #[serde(rename = "retrieve_btc_kyt_failed")]
+        RetrieveBtcKytFailed {
+            /// The owner of the address.
+            owner: Principal,
+            /// The address that failed the KYT check.
+            address: String,
+            /// The amount associated with the failed KYT check.
+            amount: u64,
+            /// Unique identifier for the failed check.
+            uuid: String,
+            /// The KYT provider responsible for the failed check.
+            kyt_provider: Principal,
+            /// The block index where the failed check occurred.
+            block_index: u64,
+        },
 
-    /// Indicates that a reimbursement has been executed.
-    #[serde(rename = "reimbursed_failed_deposit")]
-    ReimbursedFailedDeposit {
-        /// The burn block on the ledger.
-        burn_block_index: u64,
-        /// The mint block on the ledger.
-        mint_block_index: u64,
-    },
+        /// Indicates a reimbursement.
+        #[serde(rename = "schedule_deposit_reimbursement")]
+        ScheduleDepositReimbursement {
+            /// The beneficiary.
+            account: Account,
+            /// The token amount to reimburse.
+            amount: u64,
+            /// The reason of the reimbursement.
+            reason: ReimbursementReason,
+            /// The corresponding burn block on the ledger.
+            burn_block_index: u64,
+        },
+
+        /// Indicates that a reimbursement has been executed.
+        #[serde(rename = "reimbursed_failed_deposit")]
+        ReimbursedFailedDeposit {
+            /// The burn block on the ledger.
+            burn_block_index: u64,
+            /// The mint block on the ledger.
+            mint_block_index: u64,
+        },
+    }
 }
 
 #[derive(Debug)]
@@ -332,6 +342,7 @@ pub fn replay<I: CheckInvariants>(
                     kyt_provider,
                 );
             }
+            #[allow(deprecated)] //need to replay past events
             Event::IgnoredUtxo { utxo } => {
                 state.ignore_utxo(utxo, None);
             }
