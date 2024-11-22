@@ -18,6 +18,7 @@ use deterministic_ips::{Deployment, HwAddr};
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
+use std::collections::HashMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use url::Url;
 
@@ -25,6 +26,8 @@ pub const CONFIG_VERSION: &str = "1.0.0";
 
 /// List of field names that have been removed and should not be reused.
 pub static RESERVED_FIELD_NAMES: &[&str] = &["DUMMY_RESERVED_VALUE"];
+
+pub type ConfigMap = HashMap<String, String>;
 
 /// SetupOS configuration. User-facing configuration files
 /// (e.g., `config.ini`, `deployment.json`) are transformed into `SetupOSConfig`.

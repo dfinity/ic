@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
-use config::types::*;
+use config_types::*;
 
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]

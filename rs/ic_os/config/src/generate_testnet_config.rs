@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use url::Url;
 
 use crate::serialize_and_write_config;
-use crate::types::*;
+use config_types::*;
 
 #[derive(Default)]
 pub struct GenerateTestnetConfigArgs {

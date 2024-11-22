@@ -5,12 +5,8 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/ic_os/deterministic_ips",
-    "//rs/ic_os/utils",
-    "//rs/ic_os/config_types",
     "//rs/types/types",
     "@crate_index//:anyhow",
-    "@crate_index//:clap",
-    "@crate_index//:regex",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
@@ -28,29 +24,19 @@ MACRO_DEPENDENCIES = []
 ALIASES = {}
 
 rust_library(
-    name = "config_lib",
+    name = "config_types",
     srcs = glob(
         ["src/**/*.rs"],
         exclude = ["src/main.rs"],
     ),
-    crate_name = "config",
+    crate_name = "config_types",
     edition = "2021",
     deps = DEPENDENCIES,
 )
 
-rust_binary(
-    name = "config",
-    srcs = ["src/main.rs"],
-    aliases = ALIASES,
-    crate_name = "config",
-    edition = "2021",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [":config_lib", "//rs/ic_os/network"] + DEPENDENCIES,
-)
-
 rust_test(
-    name = "config_lib_test",
-    crate = ":config_lib",
+    name = "config_types_test",
+    crate = ":config_types",
     # You may add other deps that are specific to the test configuration
     deps = DEV_DEPENDENCIES,
 )

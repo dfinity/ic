@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 use config::config_ini::config_map_from_path;
 use config::deployment_json::get_deployment_settings;
 use config::{DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH, DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH};
-use deterministic_ips::{calculate_deterministic_mac, Deployment, IpVariant};
+use deterministic_ips::{calculate_deterministic_mac, IpVariant};
 use network::info::NetworkInfo;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use network::{generate_network_config, resolve_mgmt_mac};

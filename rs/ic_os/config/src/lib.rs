@@ -1,7 +1,6 @@
 pub mod config_ini;
 pub mod deployment_json;
 pub mod generate_testnet_config;
-pub mod types;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -45,9 +44,8 @@ pub fn deserialize_config<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(file_pat
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use config_types::*;
     use deterministic_ips::Deployment;
-    use types::*;
 
     #[test]
     fn test_serialize_and_deserialize() {
