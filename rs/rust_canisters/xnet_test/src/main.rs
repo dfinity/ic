@@ -111,11 +111,6 @@ impl MessagingState {
     }
 }
 
-/// Returns system time in nanoseconds.
-fn time_nanos() -> u64 {
-    time()
-}
-
 /// Returns true if this canister should continue generating traffic.
 fn is_running() -> bool {
     RUNNING.with(|r| *r.borrow())
@@ -198,7 +193,7 @@ async fn fanout() {
             let payload_size = PAYLOAD_SIZE.with(|p| *p.borrow()) as usize;
             let payload = Request {
                 seq_no,
-                time_nanos: time_nanos(),
+                time_nanos: time(),
                 padding: vec![0; payload_size.saturating_sub(16)],
             };
 
@@ -215,7 +210,7 @@ async fn fanout() {
         for res in results {
             match res {
                 Ok((reply,)) => {
-                    let elapsed = Duration::from_nanos(time_nanos() - reply.time_nanos);
+                    let elapsed = Duration::from_nanos(time() - reply.time_nanos);
                     METRICS.with(move |m| m.borrow_mut().requests_sent += 1);
                     METRICS.with(|m| m.borrow_mut().latency_distribution.observe(elapsed));
                 }
@@ -227,7 +222,7 @@ async fn fanout() {
                     if err_message.contains("Couldn't send message") {
                         log(&format!(
                             "{} call failed with {:?}",
-                            time_nanos() / 1_000_000,
+                            time() / 1_000_000,
                             err_code
                         ));
                         METRICS.with(|m| m.borrow_mut().call_errors += 1);
