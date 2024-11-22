@@ -70,6 +70,7 @@ struct Request {
     seq_no: u64,
     /// Local time observed in the round when this message was sent.
     time_nanos: u64,
+    padding: Vec<u8>,
 }
 
 /// A `Reply` to the `Request` message, sent from the "handle_request" method.
@@ -78,6 +79,7 @@ struct Reply {
     /// Time copied from the corresponding request.  It's used to compute the
     /// roundtrip latency on the caller side.
     time_nanos: u64,
+    padding: Vec<u8>,
 }
 
 /// State of the XNet messaging.
@@ -204,9 +206,11 @@ async fn fanout() {
 
             let seq_no = STATE.with(|s| s.borrow_mut().next_out_seq_no(canister.clone()));
 
+            let payload_size = PAYLOAD_SIZE.with(|p| *p.borrow()) as usize;
             let payload = Request {
                 seq_no,
                 time_nanos: time_nanos(),
+                padding: vec![0; payload_size.saturating_sub(16)],
             };
 
             let res = call::<(Request,), (Reply,)>(
@@ -257,8 +261,10 @@ fn handle_request(req: Request) -> Reply {
         METRICS.with(|m| m.borrow_mut().seq_errors += 1);
     }
 
+    let payload_size = PAYLOAD_SIZE.with(|p| *p.borrow()) as usize;
     Reply {
         time_nanos: req.time_nanos,
+        padding: vec![0; payload_size.saturating_sub(8)],
     }
 }
 

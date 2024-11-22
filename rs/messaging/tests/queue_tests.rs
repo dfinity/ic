@@ -346,7 +346,7 @@ fn call_stop_on_xnet_canister(
     env: &StateMachine,
     canister_id: CanisterId,
 ) -> Result<(), UserError> {
-    let wasm = env.execute_ingress(canister_id, "stop", Vec::new())?;
+    let wasm = env.execute_ingress(canister_id, "stop", Encode!().unwrap())?;
     assert_eq!(
         "stopped".to_string(),
         Decode!(&wasm.bytes(), String).unwrap()
