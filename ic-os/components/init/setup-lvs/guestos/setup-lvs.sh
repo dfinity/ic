@@ -65,3 +65,18 @@ lvs /dev/store/shared-backup >/dev/null 2>&1 || (
     fi
     retry lvcreate --yes -L "$LV_SIZE"M -n shared-backup store
 )
+
+# Set up swap space if it does not exist yet.
+lvs /dev/store/shared-swap >/dev/null 2>&1 || (
+    echo "Logical volume 'shared-swap' does not exist yet (first boot?), creating it."
+    TOTAL_SIZE=$(($(blockdev --getsz /dev/mapper/vda10-crypt) * 512))
+    # Limit to 64G or 14% of capacity, whichever is lower.
+    # Note: The odd percentage makes calculation easier, and allows for a
+    # smaller swap when testing.
+    LV_SIZE=$(("$TOTAL_SIZE" / 7 / 1024 / 1024))
+    LV_SIZE_LIMIT=64000
+    if [ "${LV_SIZE}" -gt "${LV_SIZE_LIMIT}" ]; then
+        LV_SIZE="${LV_SIZE_LIMIT}"
+    fi
+    retry lvcreate --yes -L "$LV_SIZE"M -n shared-swap store
+)
