@@ -336,7 +336,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ), // 10B max
-            529001006,
+            529004006,
         ),
         common::Benchmark(
             "wasm32/ic0_debug_print()/1B".into(),
@@ -736,7 +736,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            517001006,
+            517004006,
         ),
         common::Benchmark(
             "wasm32/ic0_msg_cycles_available()".into(),
@@ -886,7 +886,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Disabled,
             ),
-            19004006,
+            19001006,
         ),
         common::Benchmark(
             "wasm64/ic0_mint_cycles128()".into(),
@@ -896,7 +896,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            19001006,
+            19004006,
         ),
         common::Benchmark(
             "wasm32/ic0_is_controller()".into(),
@@ -942,7 +942,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
             "wasm32/ic0_cycles_burn128()".into(),
             Module::Test.from_ic0(
                 "cycles_burn128",
-                Params3(1_i64, 2_i64, 3_i64),
+                Params3(1_i64, 2_i64, 3_i32),
                 Result::No,
                 Wasm64::Disabled,
             ),
