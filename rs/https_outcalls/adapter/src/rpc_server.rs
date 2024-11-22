@@ -276,7 +276,7 @@ impl HttpsOutcallsService for CanisterHttp {
                             }
                         };
 
-                        self.metrics.socks_connections_attempts.inc();                        
+                        self.metrics.socks_connections_attempts.inc();
                         match socks_client.request(http_req_clone.clone()).await.map_err(|e| {
                             format!("Request failed direct connect {direct_err} and connect through socks {e}")
                         }) {
