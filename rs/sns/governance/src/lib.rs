@@ -1,6 +1,7 @@
 use crate::pb::v1::Subaccount as SubaccountProto;
 use std::{convert::TryInto, fmt::Debug};
 
+mod cached_upgrade_steps;
 pub mod canister_control;
 pub mod governance;
 pub mod init;

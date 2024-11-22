@@ -186,19 +186,29 @@ pub fn test_kyt(env: TestEnv) {
             .await
             .expect("Error while calling update_balance")
             .expect("Expected to have at least one utxo result.");
-        assert_eq!(update_balance_new_utxos.len(), 1);
+        assert_eq!(
+            update_balance_new_utxos.len(),
+            2,
+            "BUG: should re-evaluate all UTXOs {:?}",
+            update_balance_new_utxos
+        );
 
-        if let UtxoStatus::Minted { block_index, .. } = &update_balance_new_utxos[0] {
-            assert_mint_transaction(
-                &ledger_agent,
-                &logger,
-                *block_index,
-                &account1,
-                first_transfer_amount - KYT_FEE - BITCOIN_NETWORK_TRANSFER_FEE,
-            )
-            .await;
-        } else {
-            panic!("expected the minter to see one not tainted utxo");
+        for utxo_status in update_balance_new_utxos {
+            match utxo_status {
+                UtxoStatus::Minted { block_index, .. } => {
+                    assert_mint_transaction(
+                        &ledger_agent,
+                        &logger,
+                        block_index,
+                        &account1,
+                        first_transfer_amount - KYT_FEE - BITCOIN_NETWORK_TRANSFER_FEE,
+                    )
+                    .await;
+                }
+                _ => {
+                    panic!("expected the minter to see one not tainted utxo");
+                }
+            }
         }
 
         stop_canister(&ledger_canister).await;
@@ -321,7 +331,7 @@ pub fn test_kyt(env: TestEnv) {
             .await
             .expect("Error while calling retrieve_btc")
             .expect("Error in retrieve_btc");
-        assert_eq!(3, retrieve_result.block_index);
+        assert_eq!(4, retrieve_result.block_index);
         let _mempool_txids = wait_for_mempool_change(&btc_rpc, &logger).await;
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
         // We can compute the minter's fee
