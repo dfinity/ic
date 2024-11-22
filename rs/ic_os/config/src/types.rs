@@ -14,9 +14,10 @@
 //! - **Removing Fields**: To prevent backwards-compatibility deserialization errors, required fields must not be removed directly: In a first step, they have to be made optional and code that reads the value must be removed/handle missing values. In a second step, after the first step has rolled out to all OSes and there is no risk of a rollback, the field can be removed. Additionally, to avoid reintroducing a previously removed field, add your removed field to the RESERVED_FIELD_NAMES list.
 //!
 //! - **Renaming Fields**: Avoid renaming fields unless absolutely necessary. If you must rename a field, use `#[serde(rename = "old_name")]`.
+use deterministic_ips::{Deployment, HwAddr};
 use ic_types::malicious_behaviour::MaliciousBehaviour;
-use mac_address::mac_address::FormattedMacAddress;
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DisplayFromStr};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use url::Url;
 
@@ -59,15 +60,18 @@ pub struct GuestOSConfig {
     pub guestos_settings: GuestOSSettings,
 }
 
+#[serde_as]
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct ICOSSettings {
     /// The node reward type determines node rewards
     pub node_reward_type: Option<String>,
+    #[serde_as(as = "DisplayFromStr")]
     /// In nested testing, mgmt_mac is set in deployment.json.template,
     /// else found dynamically in call to config tool CreateSetuposConfig
-    pub mgmt_mac: FormattedMacAddress,
+    pub mgmt_mac: HwAddr,
+    #[serde_as(as = "DisplayFromStr")]
     /// "mainnet" or "testnet"
-    pub deployment_environment: String,
+    pub deployment_environment: Deployment,
     pub logging: Logging,
     pub use_nns_public_key: bool,
     /// The URL (HTTP) of the NNS node(s).
@@ -203,8 +207,8 @@ mod tests {
             },
             icos_settings: ICOSSettings {
                 node_reward_type: Some(String::new()),
-                mgmt_mac: FormattedMacAddress::try_from("00:00:00:00:00:00")?,
-                deployment_environment: String::new(),
+                mgmt_mac: "00:00:00:00:00:00".parse()?,
+                deployment_environment: Deployment::Testnet,
                 logging: Logging {
                     elasticsearch_hosts: String::new(),
                     elasticsearch_tags: None,

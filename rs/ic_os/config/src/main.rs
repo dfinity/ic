@@ -3,6 +3,7 @@ use clap::{Args, Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
+use deterministic_ips::{Deployment, HwAddr};
 use network::resolve_mgmt_mac;
 use regex::Regex;
 use std::fs::File;
@@ -90,9 +91,9 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub node_reward_type: Option<String>,
     #[arg(long)]
-    pub mgmt_mac: Option<String>,
+    pub mgmt_mac: Option<HwAddr>,
     #[arg(long)]
-    pub deployment_environment: Option<String>,
+    pub deployment_environment: Option<Deployment>,
     #[arg(long)]
     pub elasticsearch_hosts: Option<String>,
     #[arg(long)]
@@ -213,7 +214,7 @@ pub fn main() -> Result<()> {
             let icos_settings = ICOSSettings {
                 node_reward_type: Some(node_reward_type),
                 mgmt_mac,
-                deployment_environment: deployment_json_settings.deployment.name,
+                deployment_environment: deployment_json_settings.deployment.name.parse()?,
                 logging,
                 use_nns_public_key,
                 nns_urls: deployment_json_settings.nns.url.clone(),

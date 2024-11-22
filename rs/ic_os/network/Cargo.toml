@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 config = { path = "../config" }
-mac_address = { path = "./mac_address" }
+deterministic_ips = { path = "../deterministic_ips" }
 ping = { version = "^0.5.0" }
 rayon = { workspace = true }
 regex = { workspace = true }

@@ -5,9 +5,8 @@ use anyhow::{Context, Result};
 use regex::Regex;
 
 use crate::systemd::generate_systemd_config_files;
+use deterministic_ips::HwAddr;
 use info::NetworkInfo;
-use ipv6::generate_ipv6_address;
-use mac_address::mac_address::{FormattedMacAddress, UnformattedMacAddress};
 
 pub mod info;
 pub mod interfaces;
@@ -17,27 +16,25 @@ pub mod systemd;
 /// Requires superuser permissions to run `ipmitool` and write to the systemd directory
 pub fn generate_network_config(
     network_info: &NetworkInfo,
-    generated_mac: UnformattedMacAddress,
+    generated_mac: &HwAddr,
     output_directory: &Path,
 ) -> Result<()> {
     eprintln!("Generating ipv6 address");
-    let ipv6_address = generate_ipv6_address(&network_info.ipv6_prefix, &generated_mac)?;
+    let ipv6_address = generated_mac.calculate_slaac(&network_info.ipv6_prefix)?;
     eprintln!("Using ipv6 address: {ipv6_address}");
-
-    let formatted_mac = FormattedMacAddress::from(&generated_mac);
 
     generate_systemd_config_files(
         output_directory,
         network_info,
-        Some(&formatted_mac),
+        Some(generated_mac),
         &ipv6_address,
     )
 }
 
-pub fn resolve_mgmt_mac(config_mac: Option<String>) -> Result<FormattedMacAddress> {
+pub fn resolve_mgmt_mac(config_mac: Option<String>) -> Result<HwAddr> {
     if let Some(config_mac) = config_mac {
         // Take MAC address override from config
-        let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
+        let mgmt_mac = config_mac.parse()?;
         eprintln!("Using mgmt_mac address found in deployment.json: {mgmt_mac}");
 
         Ok(mgmt_mac)
@@ -60,7 +57,7 @@ pub fn resolve_mgmt_mac(config_mac: Option<String>) -> Result<FormattedMacAddres
     }
 }
 
-fn parse_mac_address_from_ipmitool_output(output: &str) -> Result<FormattedMacAddress> {
+fn parse_mac_address_from_ipmitool_output(output: &str) -> Result<HwAddr> {
     let mac_line = output
         .lines()
         .find(|line| line.trim().starts_with("MAC Address"))
@@ -75,7 +72,7 @@ fn parse_mac_address_from_ipmitool_output(output: &str) -> Result<FormattedMacAd
     let captures = re.captures(mac_line).context(error_msg.clone())?;
     let mac = captures.get(1).context(error_msg.clone())?;
 
-    FormattedMacAddress::try_from(mac.as_str())
+    Ok(mac.as_str().parse()?)
 }
 
 #[cfg(test)]
@@ -88,11 +85,8 @@ mod tests {
             parse_mac_address_from_ipmitool_output(
                 " MAC Address             : de:ad:be:ef:be:ef  "
             )
-            .unwrap()
-            .get(),
-            FormattedMacAddress::try_from("de:ad:be:ef:be:ef")
-                .unwrap()
-                .get()
+            .unwrap(),
+            "de:ad:be:ef:be:ef".parse().unwrap()
         );
 
         let ipmitool_output = "Set in Progress         : Set In Progress
@@ -129,12 +123,8 @@ Attempt Count Reset Int.: 300
 User Lockout Interval   : 300";
 
         assert_eq!(
-            parse_mac_address_from_ipmitool_output(ipmitool_output)
-                .unwrap()
-                .get(),
-            FormattedMacAddress::try_from("3c:ec:ef:2f:7a:79")
-                .unwrap()
-                .get()
+            parse_mac_address_from_ipmitool_output(ipmitool_output).unwrap(),
+            "3c:ec:ef:2f:7a:79".parse().unwrap()
         );
 
         assert!(parse_mac_address_from_ipmitool_output("MAC Address : UNKNOWN").is_err());
