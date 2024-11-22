@@ -378,13 +378,16 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let tracker = (cli.misc.crypto_config)
         .zip(cli.obs.obs_log_anonymization_canister_id)
         .map(|(crypto_config, log_anonymization_cid)| {
-            let c = Arc::new(CryptoComponent::new(
-                &crypto_config,                          // config
-                Some(tokio::runtime::Handle::current()), // tokio_runtime_handle
-                registry_client.clone(),                 // registry_client
-                no_op_logger(),                          // logger
-                None,                                    // metrics
-            ));
+            #[allow(clippy::disallowed_methods)]
+            let c = tokio::task::block_in_place(|| {
+                Arc::new(CryptoComponent::new(
+                    &crypto_config,                          // config
+                    Some(tokio::runtime::Handle::current()), // tokio_runtime_handle
+                    registry_client.clone(),                 // registry_client
+                    no_op_logger(),                          // logger
+                    None,                                    // metrics
+                ))
+            });
 
             let pk = c
                 .current_node_public_keys()
