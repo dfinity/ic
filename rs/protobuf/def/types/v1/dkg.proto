@@ -15,11 +15,11 @@ message DkgMessage {
 message DkgPayload {
   oneof val {
     Summary summary = 1;
-    Dealings dealings = 2;
+    DataPayload data_payload = 2;
   }
 }
 
-message Dealings {
+message DataPayload {
   repeated DkgMessage dealings = 1;
   uint64 summary_height = 2;
 }

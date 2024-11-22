@@ -7,7 +7,7 @@ use ic_types::{
     artifact::{ConsensusMessageId, IngressMessageId},
     batch::{BatchPayload, IngressPayload},
     consensus::{
-        dkg::{Dealings, Summary},
+        dkg::{DataPayload, Summary},
         Block, BlockPayload, BlockProposal, ConsensusMessage, ConsensusMessageHash, DataPayload,
         Payload, Rank,
     },
@@ -65,7 +65,7 @@ pub(crate) fn fake_block_proposal_with_ingresses(
                     ingress: IngressPayload::from(ingress_messages),
                     ..BatchPayload::default()
                 },
-                dealings: Dealings::new_empty(Height::from(0)),
+                dealings: DataPayload::new_empty(Height::from(0)),
                 idkg: None,
             }),
         ),

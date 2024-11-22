@@ -107,7 +107,7 @@ pub fn create_payload(
         .take(max_dealings_per_block)
         .cloned()
         .collect();
-    Ok(dkg::Payload::Dealings(dkg::Dealings::new(
+    Ok(dkg::Payload::Dealings(dkg::DataPayload::new(
         last_summary_block.height,
         new_validated_dealings,
     )))

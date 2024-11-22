@@ -357,11 +357,11 @@ pub mod dkg_payload {
         #[prost(message, tag = "1")]
         Summary(super::Summary),
         #[prost(message, tag = "2")]
-        Dealings(super::Dealings),
+        DataPayload(super::DataPayload),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Dealings {
+pub struct DataPayload {
     #[prost(message, repeated, tag = "1")]
     pub dealings: ::prost::alloc::vec::Vec<DkgMessage>,
     #[prost(uint64, tag = "2")]

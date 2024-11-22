@@ -527,7 +527,7 @@ pub enum Payload {
     /// DKG Summary payload
     Summary(Summary),
     /// DKG Dealings payload
-    Dealings(Dealings),
+    Dealings(DataPayload),
 }
 
 /// DealingMessages is a vector of DKG messages
@@ -537,20 +537,20 @@ pub type DealingMessages = Vec<Message>;
 /// started
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct Dealings {
+pub struct DataPayload {
     /// The height of the DKG interval that this object belongs to
     pub start_height: Height,
     /// The dealing messages
     pub messages: DealingMessages,
 }
 
-impl TryFrom<pb::Dealings> for Dealings {
+impl TryFrom<pb::DataPayload> for DataPayload {
     type Error = ProxyDecodeError;
 
-    fn try_from(dealings: pb::Dealings) -> Result<Self, Self::Error> {
+    fn try_from(data_payload: pb::DataPayload) -> Result<Self, Self::Error> {
         Ok(Self {
-            start_height: Height::from(dealings.summary_height),
-            messages: dealings
+            start_height: Height::from(data_payload.summary_height),
+            messages: data_payload
                 .dealings
                 .into_iter()
                 .map(Message::try_from)
@@ -559,7 +559,7 @@ impl TryFrom<pb::Dealings> for Dealings {
     }
 }
 
-impl Dealings {
+impl DataPayload {
     /// Return an empty DealingsPayload using the given start_height.
     pub fn new_empty(start_height: Height) -> Self {
         Self::new(start_height, vec![])
@@ -595,18 +595,18 @@ impl From<&Summary> for pb::DkgPayload {
     }
 }
 
-impl From<&Dealings> for pb::DkgPayload {
-    fn from(dealings: &Dealings) -> Self {
+impl From<&DataPayload> for pb::DkgPayload {
+    fn from(data_payload: &DataPayload) -> Self {
         Self {
-            val: Some(pb::dkg_payload::Val::Dealings(pb::Dealings {
+            val: Some(pb::dkg_payload::Val::DataPayload(pb::DataPayload {
                 // TODO do we need this clone
-                dealings: dealings
+                dealings: data_payload
                     .messages
                     .iter()
                     .cloned()
                     .map(pb::DkgMessage::from)
                     .collect(),
-                summary_height: dealings.start_height.get(),
+                summary_height: data_payload.start_height.get(),
             })),
         }
     }
@@ -623,8 +623,8 @@ impl TryFrom<pb::DkgPayload> for Payload {
             pb::dkg_payload::Val::Summary(summary) => {
                 Ok(Payload::Summary(Summary::try_from(summary)?))
             }
-            pb::dkg_payload::Val::Dealings(dealings) => {
-                Ok(Payload::Dealings(Dealings::try_from(dealings)?))
+            pb::dkg_payload::Val::DataPayload(data_payload) => {
+                Ok(Payload::Dealings(DataPayload::try_from(data_payload)?))
             }
         }
     }

@@ -349,7 +349,7 @@ impl BlockMaker {
                         // Use empty payload and empty DKG dealings if the replica is halting.
                         Status::Halting => (
                             BatchPayload::default(),
-                            dkg::Dealings::new_empty(dealings.start_height),
+                            dkg::DataPayload::new_empty(dealings.start_height),
                             /*idkg_data=*/ None,
                         ),
                         Status::Running => {
@@ -700,7 +700,7 @@ mod tests {
             let expected_payloads = PoolReader::new(&pool)
                 .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
             let returned_payload =
-                dkg::Payload::Dealings(dkg::Dealings::new_empty(Height::from(0)));
+                dkg::Payload::Dealings(dkg::DataPayload::new_empty(Height::from(0)));
             let pool_reader = PoolReader::new(&pool);
             let expected_time = expected_payloads[0].1
                 + get_block_maker_delay(

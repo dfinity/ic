@@ -276,7 +276,7 @@ fn add_past_blocks(
                     ingress,
                     ..BatchPayload::default()
                 },
-                dealings: dkg::Dealings::new_empty(
+                dealings: dkg::DataPayload::new_empty(
                     block.payload.as_ref().dkg_interval_start_height(),
                 ),
                 idkg: None,
@@ -353,7 +353,7 @@ fn validate_payload_benchmark(criterion: &mut Criterion) {
                             ingress,
                             ..BatchPayload::default()
                         },
-                        dealings: dkg::Dealings::new_empty(
+                        dealings: dkg::DataPayload::new_empty(
                             tip.payload.as_ref().dkg_interval_start_height(),
                         ),
                         idkg: None,

@@ -13,7 +13,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        dkg::{self, Dealings, Summary},
+        dkg::{self, DataPayload, Summary},
         Block, BlockPayload,
     },
     crypto::{
@@ -202,7 +202,7 @@ fn validate_dealings_payload(
     pool_reader: &PoolReader<'_>,
     dkg_pool: &dyn DkgPool,
     last_summary: &Summary,
-    dealings: &Dealings,
+    dealings: &DataPayload,
     max_dealings_per_payload: usize,
     parent: &Block,
     metrics: &IntCounterVec,
@@ -531,7 +531,7 @@ mod tests {
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Data(DataPayload {
                     batch: BatchPayload::default(),
-                    dealings: dkg::Dealings::new(Height::from(0), parent_dealings),
+                    dealings: dkg::DataPayload::new(Height::from(0), parent_dealings),
                     idkg: idkg::Payload::default(),
                 }),
             );
@@ -544,7 +544,7 @@ mod tests {
 
             let block_payload = BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dealings: dkg::Dealings::new(Height::from(0), dealings_to_validate),
+                dealings: dkg::DataPayload::new(Height::from(0), dealings_to_validate),
                 idkg: idkg::Payload::default(),
             });
 
