@@ -61,7 +61,7 @@ else
     # Upload the dep
     dep_sha256=$(sha256sum "$dep_filename" | cut -d' ' -f1)
     dep_upload_url="$UPLOAD_URL/$dep_sha256"
-    curl --silent --fail "$dep_upload_url" --upload-file "$dep_filename" -w 'Total time: %{time_total}s' >&2
+    curl --silent --fail "$dep_upload_url" --upload-file "$dep_filename" -w 'Total time: %{time_total}s\n' >&2
 
     # Check that it was actually uploaded and can be served (this sometimes takes a minute)
     attempt=1
