@@ -5,7 +5,7 @@ use ic_config::Config;
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_logger::{info, new_replica_logger_from_config};
-use ic_logging::get_logging_layer;
+use ic_tracing_logging_layer::logging_layer;
 use ic_metrics::MetricsRegistry;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
@@ -234,10 +234,10 @@ fn main() -> io::Result<()> {
     //   2. Layers for generating flamegraphs
     //   3. Jeager exporter if enabled
 
-    let (logging_layer, _logging_drop_guard) =
-        get_logging_layer(&config.logger, node_id, subnet_id);
+    let (logging, _logging_drop_guard) =
+        logging_layer(&config.logger, node_id, subnet_id);
 
-    let mut tracing_layers = vec![logging_layer];    
+    let mut tracing_layers = vec![logging.boxed()];    
 
     let (reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(vec![]);
     let tracing_handle = ReloadHandles::new(reload_handle);
