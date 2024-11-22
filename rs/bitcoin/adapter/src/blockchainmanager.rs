@@ -5,11 +5,11 @@ use crate::{
     Channel, Command, ProcessBitcoinNetworkMessageError,
 };
 use bitcoin::{
-    network::{
+    p2p::{
         message::{NetworkMessage, MAX_INV_SIZE},
         message_blockdata::{GetHeadersMessage, Inventory},
     },
-    Block, BlockHash, BlockHeader,
+    Block, BlockHash, block::Header as BlockHeader,
 };
 use hashlink::{LinkedHashMap, LinkedHashSet};
 use ic_btc_validation::ValidateHeaderError;
@@ -778,7 +778,7 @@ pub mod test {
     use bitcoin::consensus::deserialize;
     use bitcoin::Network;
     use bitcoin::{
-        network::message::NetworkMessage, network::message_blockdata::Inventory, BlockHash,
+        p2p::message::NetworkMessage, network::message_blockdata::Inventory, BlockHash,
     };
     use hex::FromHex;
     use ic_btc_adapter_test_utils::{

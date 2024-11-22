@@ -1,7 +1,7 @@
 use bitcoin::{
     consensus::serialize,
-    network::message::RawNetworkMessage,
-    {consensus::encode, network::message::NetworkMessage},
+    p2p::message::RawNetworkMessage,
+    {consensus::encode, p2p::message::NetworkMessage},
 };
 use futures::TryFutureExt;
 use http::Uri;

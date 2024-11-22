@@ -1,4 +1,4 @@
-use bitcoin::{Block, BlockHash, BlockHeader, Network};
+use bitcoin::{Block, BlockHash, block::Header as BlockHeader, Network};
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_btc_adapter::config::IncomingSource;
 use ic_btc_adapter::start_server;

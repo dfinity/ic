@@ -1,14 +1,14 @@
 //! The module is responsible for keeping track of the blockchain state.
 //!
 use crate::{common::BlockHeight, config::Config, metrics::BlockchainStateMetrics};
-use bitcoin::{blockdata::constants::genesis_block, Block, BlockHash, BlockHeader, Network};
+use bitcoin::{blockdata::constants::genesis_block, Block, BlockHash, block::Header as BlockHeader, Network};
 use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
 use std::collections::HashMap;
 use thiserror::Error;
 
 /// This field contains the datatype used to store "work" of a Bitcoin blockchain
-pub type Work = bitcoin::util::uint::Uint256;
+pub type Work = primitive_types::U256;
 
 /// Contains the necessary information about a tip.
 #[derive(Clone, Debug)]
@@ -333,12 +333,19 @@ impl BlockchainState {
 }
 
 impl HeaderStore for BlockchainState {
-    fn get_header(&self, hash: &BlockHash) -> Option<(BlockHeader, BlockHeight)> {
+    fn get_with_block_hash(&self, hash: &BlockHash) -> Option<BlockHeader> {
         self.get_cached_header(hash)
-            .map(|cached| (cached.header, cached.height))
+            .map(|cached| cached.header)
     }
 
-    fn get_height(&self) -> BlockHeight {
+    fn get_with_height(&self, height: u32) -> Option<BlockHeader> {
+        self.header_cache
+            .values()
+            .find(|cached| cached.height == height)
+            .map(|cached| cached.header)
+    }
+
+    fn height(&self) -> BlockHeight {
         self.get_active_chain_tip().height
     }
 

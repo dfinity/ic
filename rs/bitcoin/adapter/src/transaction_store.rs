@@ -4,8 +4,8 @@ use std::{time::Duration, time::SystemTime};
 
 use bitcoin::consensus::deserialize;
 use bitcoin::{
-    blockdata::transaction::Transaction, hash_types::Txid, network::message::NetworkMessage,
-    network::message_blockdata::Inventory,
+    blockdata::transaction::Transaction, hash_types::Txid, p2p::message::NetworkMessage,
+    p2p::message_blockdata::Inventory,
 };
 use hashlink::LinkedHashMap;
 use ic_logger::{debug, info, trace, ReplicaLogger};

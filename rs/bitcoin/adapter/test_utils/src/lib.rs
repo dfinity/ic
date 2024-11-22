@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use bitcoin::{
-    consensus::deserialize, util::uint::Uint256, Block, BlockHash, BlockHeader, Transaction,
+    consensus::deserialize, util::uint::Uint256, Block, BlockHash, block::Header as BlockHeader, Transaction,
     TxMerkleNode,
 };
 use hex::FromHex;

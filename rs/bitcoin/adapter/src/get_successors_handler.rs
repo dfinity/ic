@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use bitcoin::{Block, BlockHash, BlockHeader, Network};
+use bitcoin::{Block, BlockHash, block::Header as BlockHeader, Network};
 use ic_metrics::MetricsRegistry;
 use tokio::sync::mpsc::Sender;
 use tonic::Status;

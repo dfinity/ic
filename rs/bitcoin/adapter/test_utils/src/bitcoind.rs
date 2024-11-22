@@ -5,15 +5,16 @@ use std::{
     sync::Arc,
 };
 
+use bitcoin::p2p::ServiceFlags;
+
 use bitcoin::{
     consensus::{deserialize_partial, encode, serialize},
-    network::{
-        constants::ServiceFlags,
+    p2p::{
         message::{NetworkMessage, RawNetworkMessage},
         message_blockdata::{GetHeadersMessage, Inventory},
         message_network::VersionMessage,
     },
-    Block, BlockHash, BlockHeader,
+    Block, BlockHash, block::Header as BlockHeader,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
