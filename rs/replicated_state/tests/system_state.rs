@@ -315,14 +315,14 @@ fn induct_messages_to_self_memory_limit_test_impl(
     // Make a slot reservation for `response``.
     fixture
         .push_input(
-            RequestOrResponse::Request(request0.into()),
+            RequestOrResponse::Request(request0),
             InputQueueType::RemoteSubnet,
         )
         .unwrap();
     fixture.pop_input().unwrap();
 
     // Pushing an outgoing response will release `MAX_RESPONSE_COUNT_BYTES`.
-    fixture.push_output_response(response.clone().into());
+    fixture.push_output_response(response.clone());
     // So there should be memory for this request.
     fixture.push_output_request(request.clone()).unwrap();
     // But potentially not for this one (if guaranteed response; and on an
@@ -475,7 +475,7 @@ fn simulate_outbound_call(fixture: &mut SystemStateFixture, deadline: CoarseTime
     let (request, response) = fixture.prepare_call(OTHER_CANISTER_ID, deadline);
 
     // Reserve a response slot.
-    fixture.push_output_request(request.into()).unwrap();
+    fixture.push_output_request(request).unwrap();
     fixture.pop_output().unwrap();
 
     response
