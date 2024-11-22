@@ -1264,10 +1264,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.8.1",
             ),
             "tikv-jemalloc-ctl": crate.spec(
-                version = "^0.5",
+                version = "^0.6.0",
+                features = [
+                    "stats",
+                ]
             ),
             "tikv-jemallocator": crate.spec(
-                version = "^0.5",
+                version = "^0.6.0",
             ),
             "time": crate.spec(
                 version = "^0.3.36",

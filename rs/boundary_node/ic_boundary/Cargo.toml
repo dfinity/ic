@@ -78,8 +78,8 @@ simple_moving_average = "1.0.2"
 slog = { workspace = true }
 strum = { workspace = true }
 thiserror = { workspace = true }
-tikv-jemalloc-ctl = "0.5"
-tikv-jemallocator = "0.5"
+tikv-jemalloc-ctl = { workspace = true }
+tikv-jemallocator = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tower = { workspace = true }
