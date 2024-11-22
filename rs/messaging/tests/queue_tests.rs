@@ -530,7 +530,7 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
     induct_from_head_of_stream(
         &subnets.remote_env,
         &subnets.local_env,
-        Some(metrics.requests_sent),
+        Some(metrics.calls_made.saturating_sub(metrics.call_errors)),
     )
     .unwrap();
 
@@ -543,7 +543,10 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
         "type".to_string() => "request".to_string()
     });
 
-    assert_eq!(metrics.requests_sent, *requests_inducted.unwrap() as usize);
+    assert_eq!(
+        metrics.calls_made.saturating_sub(metrics.call_errors),
+        *requests_inducted.unwrap() as usize
+    );
 }
 
 /// Snapshot of a message in a stream or a queue that includes only the message variant and the callback id.
