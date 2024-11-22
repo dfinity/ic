@@ -6,6 +6,7 @@
 //! cargo build --target wasm32-unknown-unknown --release
 //! ```
 use candid::{CandidType, Deserialize, Principal};
+use futures::future::join_all;
 use ic_cdk::api::management_canister::provisional::CanisterId;
 use ic_cdk::{
     api::{
@@ -112,8 +113,19 @@ fn time_nanos() -> u64 {
 }
 
 /// Returns true if this canister should continue generating traffic.
+#[query]
 fn is_running() -> bool {
     RUNNING.with(|r| *r.borrow())
+}
+
+#[query]
+fn network_topology() -> NetworkTopology {
+    NETWORK_TOPOLOGY.with(|r| r.borrow().clone())
+}
+
+#[query]
+fn canister_to_subnet_rate() -> u64 {
+    PER_SUBNET_RATE.with(|r| *r.borrow())
 }
 
 /// Canister heartbeat, calls `fanout()` if `RUNNING` is `true`.
@@ -146,6 +158,8 @@ fn log(message: &str) {
 /// requests to other canisters.
 #[update]
 fn start(start_args: StartArgs) -> String {
+    log(&format!("{:?}", start_args));
+
     NETWORK_TOPOLOGY.with(move |canisters| {
         *canisters.borrow_mut() = start_args.network_topology;
     });
@@ -183,6 +197,7 @@ async fn fanout() {
             continue;
         }
 
+        let mut futures = vec![];
         for _ in 0..PER_SUBNET_RATE.with(|r| *r.borrow()) {
             let idx = RNG.with(|rng| rng.borrow_mut().gen_range(0..canisters.len()));
             let canister = canisters[idx].clone();
@@ -198,23 +213,34 @@ async fn fanout() {
                 Principal::try_from(canister.clone()).unwrap(),
                 "handle_request",
                 (payload,),
-            )
-            .await;
+            );
+            futures.push(res);
+        }
 
+        let results = join_all(futures).await;
+
+        for res in results {
             match res {
                 Ok((reply,)) => {
                     let elapsed = Duration::from_nanos(time_nanos() - reply.time_nanos);
                     METRICS.with(move |m| m.borrow_mut().requests_sent += 1);
                     METRICS.with(|m| m.borrow_mut().latency_distribution.observe(elapsed));
                 }
-                Err((err_code, _)) => {
-                    log(&format!(
-                        "{} call failed with {:?}",
-                        time_nanos() / 1_000_000,
-                        err_code
-                    ));
-                    METRICS.with(|m| m.borrow_mut().call_errors += 1);
-                    METRICS.with(|m| m.borrow_mut().reject_responses += 1);
+                Err((err_code, err_message)) => {
+                    // Catch whether the call failed due to a synchronous or
+                    // asynchronous error. Based on the current implementation of
+                    // the Rust CDK, a synchronous error will contain a specific
+                    // error message.
+                    if err_message.contains("Couldn't send message") {
+                        log(&format!(
+                            "{} call failed with {:?}",
+                            time_nanos() / 1_000_000,
+                            err_code
+                        ));
+                        METRICS.with(|m| m.borrow_mut().call_errors += 1);
+                    } else {
+                        METRICS.with(|m| m.borrow_mut().reject_responses += 1);
+                    }
                 }
             }
         }
