@@ -401,15 +401,16 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             let s = Sender::Node {
                 pub_key: pk.key_value,
                 sign: Arc::new(move |msg: &MessageId| {
-                    let sig = c
-                        .sign_basic(
+                    #[allow(clippy::disallowed_methods)]
+                    let sig = tokio::task::block_in_place(|| {
+                        c.sign_basic(
                             msg,                                  // message
                             nid,                                  // signer
                             registry_client.get_latest_version(), // registry_version
                         )
-                        .map_err(|err| anyhow!("failed to sign message: {err:?}"))?
-                        .get()
-                        .0;
+                        .map(|value| value.get().0)
+                        .map_err(|err| anyhow!("failed to sign message: {err:?}"))
+                    })?;
 
                     Ok(sig)
                 }),
