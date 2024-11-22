@@ -25,7 +25,7 @@ use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use rand::{seq::SliceRandom, thread_rng};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -44,6 +44,8 @@ const USER_AGENT_ADAPTER: &str = "ic/1.0";
 /// We should support at least 48 KB in headers and values according to the IC spec:
 /// "the total number of bytes representing the header names and values must not exceed 48KiB".
 const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
+
+const MAX_SOCKS_PROXY_RETRIES: usize = 3;
 
 type OutboundRequestBody = Full<Bytes>;
 
@@ -208,6 +210,8 @@ impl HttpsOutcallsService for CanisterHttp {
             .map(|(name, value)| name.as_str().len() + value.len())
             .sum::<usize>();
 
+        println!("debuggg");
+
         // If we are allowed to use socks and condition described in `should_use_socks_proxy` hold,
         // we do the requests through the socks proxy. If not we use the default IPv6 route.
         let http_resp = if req.socks_proxy_allowed {
@@ -226,10 +230,18 @@ impl HttpsOutcallsService for CanisterHttp {
                     let mut api_bn_ips = req.api_bn_ips;
                     api_bn_ips.shuffle(&mut thread_rng());
 
+                    let request_ips: HashSet<&String> = api_bn_ips.iter().collect();
+
                     let mut response = None;
 
-                    // We try all the IPs only once in random order until we get a response
-                    for api_bn_ip in api_bn_ips {
+                    let mut tries = 0;
+
+                    // We try the IPs only once in random order until we get a response
+                    for api_bn_ip in &api_bn_ips {
+                        tries += 1;
+                        if tries > MAX_SOCKS_PROXY_RETRIES {
+                            break;
+                        }
                         let next_socks_proxy_ip = api_bn_ip.clone();
 
                         let socks_client = {
@@ -240,37 +252,54 @@ impl HttpsOutcallsService for CanisterHttp {
                                 client.clone()
                             } else {
                                 let mut cache_guard = RwLockUpgradableReadGuard::upgrade(cache_guard);
+                                self.metrics.socks_cache_miss.inc();
+                                // Remove clients that are not in the request_ips
+                                for ip in cache_guard.keys().cloned().collect::<Vec<String>>() {
+                                    if !request_ips.contains(&ip) {
+                                        cache_guard.remove(&ip);
+                                        debug!(self.logger, "Removed SOCKS client for IP {}", ip);
+                                    }
+                                }
+
                                 // Create a new client and insert it into the cache
                                 match self.create_socks_client_for_ip(&next_socks_proxy_ip) {
                                     Some(client) => {
                                         cache_guard.insert(next_socks_proxy_ip.clone(), client.clone());
+                                        debug!(self.logger, "Created SOCKS client for IP {}", next_socks_proxy_ip);
                                         client
                                     }
                                     None => {
                                         debug!(self.logger, "Failed to create SOCKS client for IP {}", next_socks_proxy_ip);
-                                        //TODO(mihailjianu): add some metrics
                                         continue;
                                     }
                                 }
                             }
                         };
 
+                        self.metrics.socks_connections_attempts.inc();                        
                         match socks_client.request(http_req_clone.clone()).await.map_err(|e| {
                             format!("Request failed direct connect {direct_err} and connect through socks {e}")
                         }) {
                             Ok(resp) => {
                                 response = Some(resp);
+                                self.metrics.succesful_socks_connections.with_label_values(&[&tries.to_string()]).inc();
                                 break;
                             }
                             Err(socks_err) => {
                                 debug!(self.logger, "Failed to connect through SOCKS with IP {}: {}", next_socks_proxy_ip, socks_err);
-                                //TODO(mihailjianu): add some metrics
+                                println!("debuggg Failed to connect through SOCKS with IP {}: {}", next_socks_proxy_ip, socks_err);
+                                // Retry with a different socks client
+                                // TODO: only retry if the error couldn've been caused by the proxy itself
                             }
                         }
                     }
+                    self.metrics.socks_cache_size.set(self.cache.read().len() as i64);
                     response.ok_or_else(|| {
-                        debug!(self.logger, "Failed to connect through SOCKS with all IPs");
-                        "Failed to connect through SOCKS with all IPs".to_string()
+                        if api_bn_ips.is_empty() {
+                            "No IPs to connect through SOCKS in the request".to_string()
+                        } else {
+                            "Failed to connect through SOCKS with all IPs".to_string()
+                        }
                     })
                 }
                 Ok(resp) => Ok(resp),
