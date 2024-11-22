@@ -17,11 +17,13 @@ use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces::idkg::{IDkgChangeAction, IDkgPool};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId};
+use ic_management_canister_types::{
+    EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdKeyId,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    EcdsaArguments, IDkgDealingsContext, SchnorrArguments, SignWithThresholdContext,
-    ThresholdArguments,
+    EcdsaArguments, IDkgDealingsContext, IDkgSignWithThresholdContext, SchnorrArguments,
+    SignWithThresholdContext, ThresholdArguments, VetKdArguments,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
@@ -54,11 +56,15 @@ use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare, ThresholdSchnorrSigInputs,
     ThresholdSchnorrSigShare,
 };
+use ic_types::crypto::threshold_sig::ni_dkg::{
+    NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
+};
 use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::messages::CallbackId;
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{signature::*, time};
 use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
+use ic_types_test_utils::ids::subnet_test_id;
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
@@ -87,8 +93,8 @@ pub(crate) fn empty_response() -> ic_types::batch::ConsensusResponse {
     )
 }
 
-fn fake_signature_request_args(key_id: IDkgMasterPublicKeyId) -> ThresholdArguments {
-    match key_id.into() {
+fn fake_signature_request_args(key_id: MasterPublicKeyId) -> ThresholdArguments {
+    match key_id {
         MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
             key_id,
             message_hash: [0; 32],
@@ -97,7 +103,13 @@ fn fake_signature_request_args(key_id: IDkgMasterPublicKeyId) -> ThresholdArgume
             key_id,
             message: Arc::new(vec![1; 48]),
         }),
-        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
+        MasterPublicKeyId::VetKd(key_id) => ThresholdArguments::VetKd(VetKdArguments {
+            key_id: key_id.clone(),
+            derivation_id: vec![1; 32],
+            encryption_public_key: vec![1; 32],
+            ni_dkg_id: fake_dkg_id(key_id),
+            height: Height::from(0),
+        }),
     }
 }
 
@@ -109,7 +121,7 @@ pub fn request_id(id: u64, height: Height) -> RequestId {
 }
 
 pub fn fake_signature_request_context(
-    key_id: IDkgMasterPublicKeyId,
+    key_id: MasterPublicKeyId,
     pseudo_random_id: [u8; 32],
 ) -> SignWithThresholdContext {
     SignWithThresholdContext {
@@ -130,7 +142,7 @@ pub fn fake_signature_request_context_with_pre_sig(
 ) -> (CallbackId, SignWithThresholdContext) {
     let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
-        args: fake_signature_request_args(key_id),
+        args: fake_signature_request_args(key_id.into()),
         derivation_path: vec![],
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [request_id.callback_id.get() as u8; 32],
@@ -148,7 +160,7 @@ pub fn fake_signature_request_context_from_id(
     let height = request_id.height;
     let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
-        args: fake_signature_request_args(key_id),
+        args: fake_signature_request_args(key_id.into()),
         derivation_path: vec![],
         batch_time: UNIX_EPOCH,
         pseudo_random_id: [request_id.callback_id.get() as u8; 32],
@@ -175,6 +187,15 @@ where
         height,
         state: Arc::new(state),
     }
+}
+
+pub fn into_idkg_contexts(
+    contexts: &BTreeMap<CallbackId, SignWithThresholdContext>,
+) -> BTreeMap<CallbackId, IDkgSignWithThresholdContext<'_>> {
+    contexts
+        .iter()
+        .flat_map(|(id, ctxt)| IDkgSignWithThresholdContext::try_from(ctxt).map(|ctxt| (*id, ctxt)))
+        .collect()
 }
 
 pub fn insert_test_sig_inputs<T>(
@@ -1634,6 +1655,23 @@ pub(crate) fn schnorr_algorithm(algorithm: AlgorithmId) -> SchnorrAlgorithm {
         AlgorithmId::ThresholdSchnorrBip340 => SchnorrAlgorithm::Bip340Secp256k1,
         AlgorithmId::ThresholdEd25519 => SchnorrAlgorithm::Ed25519,
         other => panic!("Unexpected algorithm: {other:?}"),
+    }
+}
+
+pub(crate) fn fake_vetkd_key_id() -> VetKdKeyId {
+    VetKdKeyId::from_str("bls12_381_g2:some_key").unwrap()
+}
+
+pub(crate) fn fake_vetkd_master_public_key_id() -> MasterPublicKeyId {
+    MasterPublicKeyId::VetKd(fake_vetkd_key_id())
+}
+
+pub(crate) fn fake_dkg_id(key_id: VetKdKeyId) -> NiDkgId {
+    NiDkgId {
+        start_block_height: Height::from(0),
+        dealer_subnet: subnet_test_id(0),
+        dkg_tag: NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(key_id)),
+        target_subnet: NiDkgTargetSubnet::Local,
     }
 }
 

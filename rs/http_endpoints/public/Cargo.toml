@@ -43,7 +43,7 @@ ic-replicated-state = { path = "../../replicated_state" }
 ic-tracing = { path = "../../monitoring/tracing" }
 ic-types = { path = "../../types/types" }
 ic-validator = { path = "../../validator" }
-inferno = "0.11.19"
+inferno = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
@@ -57,7 +57,7 @@ tokio-rustls = { workspace = true }
 tokio-util = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
-tracing-flame = "0.2.0"
+tracing-flame = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]

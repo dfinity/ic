@@ -1469,9 +1469,11 @@ pub trait SshSession {
         channel.send_eof()?;
         let mut out = String::new();
         channel.read_to_string(&mut out)?;
+        let mut err = String::new();
+        channel.stderr().read_to_string(&mut err)?;
         let exit_status = channel.exit_status()?;
         if exit_status != 0 {
-            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out}");
+            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
         }
         Ok(out)
     }
