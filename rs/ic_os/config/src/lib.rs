@@ -1,7 +1,6 @@
 pub mod config_ini;
 pub mod deployment_json;
 pub mod generate_testnet_config;
-pub mod types;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -43,12 +42,11 @@ pub fn deserialize_config<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(file_pat
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use mac_address::mac_address::FormattedMacAddress;
-    use types::*;
+    use config_types::*;
+    use deterministic_ips::Deployment;
 
     #[test]
-    fn test_serialize_and_deserialize() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_serialize_and_deserialize() {
         let ipv6_config = Ipv6Config::Deterministic(DeterministicIpv6Config {
             prefix: "2a00:fb01:400:200".to_string(),
             prefix_length: 64_u8,
@@ -72,8 +70,8 @@ mod tests {
         let icos_dev_settings = ICOSDevSettings::default();
         let icos_settings = ICOSSettings {
             node_reward_type: Some("type3.1".to_string()),
-            mgmt_mac: FormattedMacAddress::try_from("ec:2a:72:31:a2:0c")?,
-            deployment_environment: "Mainnet".to_string(),
+            mgmt_mac: "ec:2a:72:31:a2:0c".parse().unwrap(),
+            deployment_environment: Deployment::Mainnet,
             logging,
             use_nns_public_key: true,
             nns_urls: vec!["http://localhost".parse().unwrap()],
@@ -136,8 +134,6 @@ mod tests {
         serialize_and_deserialize(&setupos_config_struct);
         serialize_and_deserialize(&hostos_config_struct);
         serialize_and_deserialize(&guestos_config_struct);
-
-        Ok(())
     }
 
     // Test config version 1.0.0
@@ -257,21 +253,19 @@ mod tests {
     "#;
 
     #[test]
-    fn test_deserialize_hostos_config_v1_0_0() -> Result<(), Box<dyn std::error::Error>> {
-        let config: HostOSConfig = serde_json::from_str(HOSTOS_CONFIG_JSON_V1_0_0)?;
+    fn test_deserialize_hostos_config_v1_0_0() {
+        let config: HostOSConfig = serde_json::from_str(HOSTOS_CONFIG_JSON_V1_0_0).unwrap();
         assert_eq!(config.config_version, "1.0.0");
         assert_eq!(config.hostos_settings.vm_cpu, "kvm");
-        Ok(())
     }
 
     #[test]
-    fn test_deserialize_guestos_config_v1_0_0() -> Result<(), Box<dyn std::error::Error>> {
-        let config: GuestOSConfig = serde_json::from_str(GUESTOS_CONFIG_JSON_V1_0_0)?;
+    fn test_deserialize_guestos_config_v1_0_0() {
+        let config: GuestOSConfig = serde_json::from_str(GUESTOS_CONFIG_JSON_V1_0_0).unwrap();
         assert_eq!(config.config_version, "1.0.0");
         assert_eq!(
             config.icos_settings.mgmt_mac.to_string(),
             "ec:2a:72:31:a2:0c"
         );
-        Ok(())
     }
 }

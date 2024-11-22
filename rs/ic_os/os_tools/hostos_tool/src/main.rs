@@ -3,12 +3,10 @@ use std::path::Path;
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 
-use config::types::{HostOSConfig, Ipv6Config};
 use config::{deserialize_config, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH};
-use mac_address::mac_address::{generate_mac_address, FormattedMacAddress};
-use mac_address::node_type::NodeType;
+use config_types::{HostOSConfig, Ipv6Config};
+use deterministic_ips::{calculate_deterministic_mac, IpVariant};
 use network::generate_network_config;
-use network::ipv6::generate_ipv6_address;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use utils::to_cidr;
 
@@ -21,12 +19,12 @@ pub enum Commands {
         output_directory: String,
     },
     GenerateIpv6Address {
-        #[arg(short, long, default_value = "HostOS")]
-        node_type: String,
+        #[arg(short, long, default_value = "0")]
+        node_type: u8,
     },
     GenerateMacAddress {
-        #[arg(short, long, default_value = "HostOS")]
-        node_type: String,
+        #[arg(short, long, default_value = "0")]
+        node_type: u8,
     },
     FetchMacAddress {},
 }
@@ -56,16 +54,17 @@ pub fn main() -> Result<()> {
                 &hostos_config.network_settings
             );
 
-            let generated_mac = generate_mac_address(
-                &hostos_config.icos_settings.mgmt_mac,
-                &hostos_config.icos_settings.deployment_environment,
-                &NodeType::HostOS,
+            let generated_mac = calculate_deterministic_mac(
+                hostos_config.icos_settings.mgmt_mac,
+                hostos_config.icos_settings.deployment_environment,
+                IpVariant::V6,
+                0x1,
             )?;
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
 
             generate_network_config(
                 &hostos_config.network_settings,
-                generated_mac,
+                &generated_mac,
                 Path::new(&output_directory),
             )
         }
@@ -78,11 +77,11 @@ pub fn main() -> Result<()> {
                 &hostos_config.network_settings
             );
 
-            let node_type = node_type.parse::<NodeType>()?;
-            let generated_mac = generate_mac_address(
-                &hostos_config.icos_settings.mgmt_mac,
-                &hostos_config.icos_settings.deployment_environment,
-                &node_type,
+            let generated_mac = calculate_deterministic_mac(
+                hostos_config.icos_settings.mgmt_mac,
+                hostos_config.icos_settings.deployment_environment,
+                IpVariant::V6,
+                node_type,
             )?;
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
 
@@ -96,7 +95,7 @@ pub fn main() -> Result<()> {
                 ));
             };
 
-            let ipv6_address = generate_ipv6_address(&ipv6_config.prefix, &generated_mac)?;
+            let ipv6_address = generated_mac.calculate_slaac(&ipv6_config.prefix)?;
             println!("{}", to_cidr(ipv6_address, ipv6_config.prefix_length));
 
             Ok(())
@@ -110,15 +109,13 @@ pub fn main() -> Result<()> {
                 &hostos_config.network_settings
             );
 
-            let node_type = node_type.parse::<NodeType>()?;
-            let generated_mac = generate_mac_address(
-                &hostos_config.icos_settings.mgmt_mac,
-                &hostos_config.icos_settings.deployment_environment,
-                &node_type,
+            let generated_mac = calculate_deterministic_mac(
+                hostos_config.icos_settings.mgmt_mac,
+                hostos_config.icos_settings.deployment_environment,
+                IpVariant::V6,
+                node_type,
             )?;
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
-
-            let generated_mac = FormattedMacAddress::from(&generated_mac);
 
             println!("{}", generated_mac);
             Ok(())
