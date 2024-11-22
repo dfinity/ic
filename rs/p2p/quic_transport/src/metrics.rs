@@ -3,7 +3,7 @@ use ic_metrics::{
     buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry,
 };
 use prometheus::{GaugeVec, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
-use quinn::{Connection, ConnectionError, ReadError, WriteError};
+use quinn::{Connection, ConnectionError, ReadError, ReadToEndError, StoppedError, WriteError};
 use tokio_metrics::TaskMonitor;
 
 const CONNECTION_RESULT_LABEL: &str = "status";
@@ -15,17 +15,13 @@ const ERROR_TYPE_LABEL: &str = "error";
 const REQUEST_TYPE_LABEL: &str = "request";
 pub(crate) const CONNECTION_RESULT_SUCCESS_LABEL: &str = "success";
 pub(crate) const CONNECTION_RESULT_FAILED_LABEL: &str = "failed";
-pub(crate) const ERROR_TYPE_ACCEPT: &str = "accept";
 pub(crate) const ERROR_TYPE_APP: &str = "app";
-pub(crate) const ERROR_TYPE_FINISH: &str = "finish";
-pub(crate) const ERROR_TYPE_STOPPED: &str = "stopped";
-pub(crate) const ERROR_TYPE_READ: &str = "read";
 pub(crate) const INFALIBBLE: &str = "infallible";
-pub(crate) const ERROR_TYPE_WRITE: &str = "write";
 const ERROR_CLOSED_STREAM: &str = "closed_stream";
 const ERROR_RESET_STREAM: &str = "reset_stream";
 const ERROR_STOPPED_STREAM: &str = "stopped_stream";
 const ERROR_APP_CLOSED_CONN: &str = "app_closed_conn";
+const ERROR_TIMED_OUT_CONN: &str = "timed_out_conn";
 const ERROR_LOCALLY_CLOSED_CONN: &str = "locally_closed_conn";
 const ERROR_QUIC_CLOSED_CONN: &str = "quic_closed_conn";
 
@@ -209,13 +205,14 @@ impl QuicTransportMetrics {
 
 pub fn observe_conn_error(err: &ConnectionError, op: &str, counter: &IntCounterVec) {
     match err {
-        // TODO: most likely this can be made infallible
         ConnectionError::LocallyClosed => counter
             .with_label_values(&[op, ERROR_LOCALLY_CLOSED_CONN])
             .inc(),
         ConnectionError::ApplicationClosed(_) => counter
             .with_label_values(&[op, ERROR_APP_CLOSED_CONN])
             .inc(),
+        // Can happen if peer crashes or there are connectivity problems.
+        ConnectionError::TimedOut => counter.with_label_values(&[op, ERROR_TIMED_OUT_CONN]).inc(),
         // A connection was closed by the QUIC protocol.
         _ => counter
             .with_label_values(&[op, ERROR_QUIC_CLOSED_CONN])
@@ -245,5 +242,19 @@ pub fn observe_read_error(err: &ReadError, op: &str, counter: &IntCounterVec) {
         ReadError::IllegalOrderedRead | ReadError::ClosedStream | ReadError::ZeroRttRejected => {
             counter.with_label_values(&[op, INFALIBBLE]).inc()
         }
+    }
+}
+
+pub fn observe_stopped_error(err: &StoppedError, op: &str, counter: &IntCounterVec) {
+    match err {
+        StoppedError::ConnectionLost(conn_err) => observe_conn_error(conn_err, op, counter),
+        StoppedError::ZeroRttRejected => counter.with_label_values(&[op, INFALIBBLE]).inc(),
+    }
+}
+
+pub fn observe_read_to_end_error(err: &ReadToEndError, op: &str, counter: &IntCounterVec) {
+    match err {
+        ReadToEndError::TooLong => counter.with_label_values(&[op, INFALIBBLE]).inc(),
+        ReadToEndError::Read(read_err) => observe_read_error(read_err, op, counter),
     }
 }

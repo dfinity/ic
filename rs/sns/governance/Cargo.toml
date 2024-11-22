@@ -61,6 +61,7 @@ ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nns-constants = { path = "../../nns/constants" }
+ic-sns-governance-api = { path = "./api" }
 ic-sns-governance-proposal-criticality = { path = "./proposal_criticality" }
 ic-sns-governance-proposals-amount-total-limit = { path = "./proposals_amount_total_limit" }
 ic-sns-governance-token-valuation = { path = "./token_valuation" }

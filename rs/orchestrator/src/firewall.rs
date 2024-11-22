@@ -638,7 +638,7 @@ mod tests {
     use super::*;
 
     const CFG_TEMPLATE_BYTES: &[u8] =
-        include_bytes!("../../../ic-os/components/ic/ic.json5.template");
+        include_bytes!("../../../ic-os/components/ic/generate-ic-config/ic.json5.template");
     const NFTABLES_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_assigned_replica.conf.golden");
     const NFTABLES_BOUNDARY_NODE_GOLDEN_BYTES: &[u8] =
@@ -828,7 +828,6 @@ mod tests {
         // Make the string parsable by filling the template placeholders with dummy values
         let cfg = String::from_utf8(CFG_TEMPLATE_BYTES.to_vec())
             .unwrap()
-            .replace("{{ node_index }}", "0")
             .replace("{{ ipv6_address }}", "::")
             .replace("{{ backup_retention_time_secs }}", "0")
             .replace("{{ backup_purging_interval_secs }}", "0")

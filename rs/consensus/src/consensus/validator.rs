@@ -23,7 +23,6 @@ use ic_interfaces::{
     consensus::{InvalidPayloadReason, PayloadBuilder, PayloadValidationFailure},
     consensus_pool::*,
     dkg::DkgPool,
-    ingress_manager::IngressSelector,
     messaging::MessageRouting,
     time_source::TimeSource,
     validation::{ValidationError, ValidationResult},
@@ -687,7 +686,6 @@ pub struct Validator {
     metrics: ValidatorMetrics,
     schedule: RoundRobin,
     time_source: Arc<dyn TimeSource>,
-    ingress_selector: Option<Arc<dyn IngressSelector>>,
 }
 
 impl Validator {
@@ -705,7 +703,6 @@ impl Validator {
         log: ReplicaLogger,
         metrics: ValidatorMetrics,
         time_source: Arc<dyn TimeSource>,
-        ingress_selector: Option<Arc<dyn IngressSelector>>,
     ) -> Validator {
         Validator {
             replica_config,
@@ -720,7 +717,6 @@ impl Validator {
             metrics,
             schedule: RoundRobin::default(),
             time_source,
-            ingress_selector,
         }
     }
 
@@ -1143,8 +1139,7 @@ impl Validator {
         for action in &change_set {
             if let ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal)) = action
             {
-                self.metrics
-                    .observe_data_payload(proposal, self.ingress_selector.as_deref());
+                self.metrics.observe_data_payload(proposal);
                 self.metrics.observe_block(pool_reader, proposal);
             }
         }
@@ -1903,7 +1898,7 @@ pub mod test {
         consensus::block_maker::get_block_maker_delay,
         idkg::test_utils::{
             add_available_quadruple_to_payload, empty_idkg_payload,
-            fake_ecdsa_master_public_key_id, fake_signature_request_context_with_pre_sig,
+            fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
             fake_state_with_signature_requests,
         },
     };
@@ -1997,7 +1992,6 @@ pub mod test {
                 no_op_logger(),
                 ValidatorMetrics::new(MetricsRegistry::new()),
                 Arc::clone(&dependencies.time_source) as Arc<_>,
-                /*ingress_selector=*/ None,
             );
             Self {
                 validator,
@@ -2151,7 +2145,7 @@ pub mod test {
                 .return_const(Ok(state_hash.clone()));
 
             let height = Height::from(0);
-            let key_id = fake_ecdsa_master_public_key_id();
+            let key_id = fake_ecdsa_idkg_master_public_key_id();
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
             let pre_sig_id1 = PreSigId(1);
             let pre_sig_id2 = PreSigId(2);

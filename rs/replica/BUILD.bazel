@@ -27,6 +27,7 @@ DEPENDENCIES = [
     "//rs/monitoring/metrics",
     "//rs/monitoring/pprof",
     "//rs/monitoring/tracing",
+    "//rs/monitoring/tracing/jaeger_exporter",
     "//rs/protobuf",
     "//rs/registry/client",
     "//rs/registry/helpers",
@@ -42,9 +43,6 @@ DEPENDENCIES = [
     "@crate_index//:libc",
     "@crate_index//:nix",
     "@crate_index//:num_cpus",
-    "@crate_index//:opentelemetry",
-    "@crate_index//:opentelemetry-otlp",
-    "@crate_index//:opentelemetry_sdk",
     "@crate_index//:pprof",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
@@ -56,7 +54,6 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:tracing",
     "@crate_index//:tracing-flame",
-    "@crate_index//:tracing-opentelemetry",
     "@crate_index//:tracing-subscriber",
 ]
 

@@ -52,6 +52,12 @@ const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * 
 /// The number of bytes reserved for response callback executions.
 const SUBNET_MEMORY_RESERVATION: NumBytes = NumBytes::new(10 * GIB);
 
+/// The soft limit on the subnet-wide number of callbacks.
+pub const SUBNET_CALLBACK_SOFT_LIMIT: usize = 1_000_000;
+
+/// The number of callbacks that are guaranteed to each canister.
+pub const CANISTER_GUARANTEED_CALLBACK_QUOTA: usize = 50;
+
 /// The duration a stop_canister has to stop the canister before timing out.
 pub const STOP_CANISTER_TIMEOUT_DURATION: Duration = Duration::from_secs(5 * 60); // 5 minutes
 
@@ -200,6 +206,17 @@ pub struct Config {
     /// The maximum amount of memory that can be utilized by a single canister.
     pub max_canister_memory_size: NumBytes,
 
+    /// The soft limit on the subnet-wide number of callbacks. Beyond this limit,
+    /// canisters are only allowed to make downstream calls up to their individual
+    /// guaranteed quota.
+    pub subnet_callback_soft_limit: usize,
+
+    /// The number of callbacks that are guaranteed to each canister. Beyond
+    /// this quota, canisters are only allowed to make downstream calls if the
+    /// subnet's shared callback pool has not been exhausted (i.e. the subnet-wide
+    /// soft limit has not been exceeded).
+    pub canister_guaranteed_callback_quota: usize,
+
     /// The default value used when provisioning a canister
     /// if amount of cycles was not specified.
     pub default_provisional_cycles_balance: Cycles,
@@ -328,6 +345,8 @@ impl Default for Config {
             max_canister_memory_size: NumBytes::new(
                 MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES,
             ),
+            subnet_callback_soft_limit: SUBNET_CALLBACK_SOFT_LIMIT,
+            canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA,
             default_provisional_cycles_balance: Cycles::new(100_000_000_000_000),
             // The default freeze threshold is 30 days.
             default_freeze_threshold: NumSeconds::from(30 * 24 * 60 * 60),

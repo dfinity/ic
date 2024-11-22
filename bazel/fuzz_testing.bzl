@@ -56,11 +56,13 @@ def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_f
         FUZZER_LIB = [
             "-Clink-arg=/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.fuzzer_no_main-x86_64.a",
         ]
+        TAGS = ["sandbox_libfuzzer"]
     else:
         # default
         FUZZER_LIB = [
             "-Clink-arg=/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.fuzzer-x86_64.a",
         ]
+        TAGS = []
 
     RUSTC_FLAGS_LIBFUZZER = DEFAULT_RUSTC_FLAGS + FUZZER_LIB
 
@@ -78,7 +80,7 @@ def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_f
             # Makes sure this target is not run in normal CI builds. It would fail due to non-nightly Rust toolchain.
             "fuzz_test",
             "libfuzzer",
-        ],
+        ] + TAGS,
         **kwargs
     )
 

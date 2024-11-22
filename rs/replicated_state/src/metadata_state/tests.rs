@@ -1016,52 +1016,26 @@ fn ingress_history_insert_beyond_limit_will_succeed() {
         let (inserted_message_id, inserted_status) = insert_status(&mut ingress_history, i, 1);
 
         assert_eq!(ingress_history.statuses().count(), i as usize);
-        if CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V8 {
-            assert_eq!(
-                ingress_history.get(&inserted_message_id).unwrap(),
-                &inserted_status
-            );
-            assert_eq!(
-                ingress_history
-                    .statuses()
-                    .filter(|(_, status)| matches!(
-                        status,
-                        IngressStatus::Known {
-                            state: IngressState::Completed(_),
-                            ..
-                        } | IngressStatus::Known {
-                            state: IngressState::Failed(_),
-                            ..
-                        }
-                    ))
-                    .count(),
-                1
-            );
-        } else {
-            assert_eq!(
-                ingress_history
-                    .statuses()
-                    .filter(|(_, status)| matches!(
-                        status,
-                        IngressStatus::Known {
-                            state: IngressState::Completed(_),
-                            ..
-                        } | IngressStatus::Known {
-                            state: IngressState::Failed(_),
-                            ..
-                        }
-                    ))
-                    .count(),
-                i as usize
-            );
-            assert!(!ingress_history.statuses().any(|(_, status)| matches!(
-                status,
-                IngressStatus::Known {
-                    state: IngressState::Done,
-                    ..
-                }
-            )));
-        }
+        assert_eq!(
+            ingress_history.get(&inserted_message_id).unwrap(),
+            &inserted_status
+        );
+        assert_eq!(
+            ingress_history
+                .statuses()
+                .filter(|(_, status)| matches!(
+                    status,
+                    IngressStatus::Known {
+                        state: IngressState::Completed(_),
+                        ..
+                    } | IngressStatus::Known {
+                        state: IngressState::Failed(_),
+                        ..
+                    }
+                ))
+                .count(),
+            1
+        );
     }
 
     // Inserting without available space will directly transition inserted status
@@ -1070,53 +1044,27 @@ fn ingress_history_insert_beyond_limit_will_succeed() {
         let (inserted_message_id, _) = insert_status(&mut ingress_history, i, 0);
 
         assert_eq!(ingress_history.statuses().count(), i as usize);
-        if CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V8 {
-            assert_eq!(
-                ingress_history.get(&inserted_message_id).unwrap(),
-                &test_status_done(i),
-            );
+        assert_eq!(
+            ingress_history.get(&inserted_message_id).unwrap(),
+            &test_status_done(i),
+        );
 
-            assert_eq!(
-                ingress_history
-                    .statuses()
-                    .filter(|(_, status)| matches!(
-                        status,
-                        IngressStatus::Known {
-                            state: IngressState::Completed(_),
-                            ..
-                        } | IngressStatus::Known {
-                            state: IngressState::Failed(_),
-                            ..
-                        }
-                    ))
-                    .count(),
-                0
-            );
-        } else {
-            assert_eq!(
-                ingress_history
-                    .statuses()
-                    .filter(|(_, status)| matches!(
-                        status,
-                        IngressStatus::Known {
-                            state: IngressState::Completed(_),
-                            ..
-                        } | IngressStatus::Known {
-                            state: IngressState::Failed(_),
-                            ..
-                        }
-                    ))
-                    .count(),
-                i as usize
-            );
-            assert!(!ingress_history.statuses().any(|(_, status)| matches!(
-                status,
-                IngressStatus::Known {
-                    state: IngressState::Done,
-                    ..
-                }
-            )));
-        }
+        assert_eq!(
+            ingress_history
+                .statuses()
+                .filter(|(_, status)| matches!(
+                    status,
+                    IngressStatus::Known {
+                        state: IngressState::Completed(_),
+                        ..
+                    } | IngressStatus::Known {
+                        state: IngressState::Failed(_),
+                        ..
+                    }
+                ))
+                .count(),
+            0
+        );
     }
 }
 
@@ -1167,12 +1115,9 @@ fn ingress_history_forget_completed_does_not_touch_other_statuses() {
     // Forgetting terminal statuses when the ingress history only contains non-terminal
     // statuses should be a no-op.
     ingress_history_limit.forget_terminal_statuses(NumBytes::from(0));
-    // ... except that if current certification version >= 8, the next_terminal_time
-    // is updated to the first key in the pruning_times map
-    if CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V8 {
-        ingress_history_before.next_terminal_time =
-            *ingress_history_limit.pruning_times().next().unwrap().0;
-    }
+    // ... except the next_terminal_time is updated to the first key in the `pruning_times` map.
+    ingress_history_before.next_terminal_time =
+        *ingress_history_limit.pruning_times().next().unwrap().0;
 
     assert_eq!(ingress_history_before, ingress_history_limit);
 }
@@ -1224,13 +1169,8 @@ fn ingress_history_respects_limits() {
                 })
                 .count();
 
-            if CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V8 {
-                assert_eq!(terminal_count, i.min(max_num_terminal) as usize);
-                assert_eq!(done_count, i.saturating_sub(max_num_terminal) as usize);
-            } else {
-                assert_eq!(terminal_count, i as usize);
-                assert_eq!(done_count, 0);
-            }
+            assert_eq!(terminal_count, i.min(max_num_terminal) as usize);
+            assert_eq!(done_count, i.saturating_sub(max_num_terminal) as usize);
 
             assert_eq!(
                 terminal_count + done_count,
@@ -1247,10 +1187,6 @@ fn ingress_history_respects_limits() {
 
 #[test]
 fn ingress_history_insert_before_next_complete_time_resets_it() {
-    if CURRENT_CERTIFICATION_VERSION < CertificationVersion::V8 {
-        return;
-    }
-
     let mut ingress_history = IngressHistoryState::new();
 
     // Fill the ingress history with 10 terminal entries...
@@ -1312,10 +1248,6 @@ fn ingress_history_insert_before_next_complete_time_resets_it() {
 
 #[test]
 fn ingress_history_forget_behaves_the_same_with_reset_next_complete_time() {
-    if CURRENT_CERTIFICATION_VERSION < CertificationVersion::V8 {
-        return;
-    }
-
     let mut ingress_history = IngressHistoryState::new();
 
     // Fill the ingress history with 10 terminal entries...

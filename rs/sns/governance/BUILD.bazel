@@ -34,6 +34,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/canister_profiler",
     "//rs/rust_canisters/http_types",
+    "//rs/sns/governance/api",
     "//rs/sns/governance/proposal_criticality",
     "//rs/sns/governance/proposals_amount_total_limit",
     "//rs/sns/governance/token_valuation",

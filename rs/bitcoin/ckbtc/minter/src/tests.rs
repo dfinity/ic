@@ -1,7 +1,8 @@
+use crate::state::invariants::CheckInvariantsImpl;
 use crate::MINTER_FEE_CONSTANT;
 use crate::{
-    address::BitcoinAddress, build_unsigned_transaction, estimate_fee, fake_sign, greedy,
-    signature::EncodedSignature, tx, BuildTxError,
+    address::BitcoinAddress, build_unsigned_transaction, estimate_retrieve_btc_fee, fake_sign,
+    greedy, signature::EncodedSignature, tx, BuildTxError,
 };
 use crate::{
     lifecycle::init::InitArgs,
@@ -28,6 +29,21 @@ use proptest::{prop_assert, prop_assert_eq, prop_assume, prop_oneof};
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::str::FromStr;
+
+fn default_init_args() -> InitArgs {
+    InitArgs {
+        btc_network: Network::Regtest.into(),
+        ecdsa_key_name: "".to_string(),
+        retrieve_btc_min_amount: 0,
+        ledger_id: CanisterId::from_u64(42),
+        max_time_in_queue_nanos: 0,
+        min_confirmations: None,
+        mode: Mode::GeneralAvailability,
+        kyt_fee: None,
+        kyt_principal: None,
+        new_kyt_principal: None,
+    }
+}
 
 fn dummy_utxo_from_value(v: u64) -> Utxo {
     let mut bytes = [0u8; 32];
@@ -373,17 +389,6 @@ fn test_no_dust_outputs() {
     assert_eq!(available_utxos.len(), 1);
 }
 
-#[test]
-fn blocklist_is_sorted() {
-    use crate::blocklist::BTC_ADDRESS_BLOCKLIST;
-    for (l, r) in BTC_ADDRESS_BLOCKLIST
-        .iter()
-        .zip(BTC_ADDRESS_BLOCKLIST.iter().skip(1))
-    {
-        assert!(l < r, "the block list is not sorted: {} >= {}", l, r);
-    }
-}
-
 fn arb_amount() -> impl Strategy<Value = Satoshi> {
     1..10_000_000_000u64
 }
@@ -500,32 +505,6 @@ fn arb_retrieve_btc_requests(
 }
 
 proptest! {
-    #[test]
-    fn queue_holds_one_copy_of_each_task(
-        timestamps in pvec(1_000_000_u64..1_000_000_000, 2..100),
-    ) {
-        use crate::tasks::{Task, TaskQueue, TaskType};
-
-        let mut task_queue: TaskQueue = Default::default();
-        for (i, ts) in timestamps.iter().enumerate() {
-            task_queue.schedule_at(*ts, TaskType::ProcessLogic);
-            prop_assert_eq!(task_queue.len(), 1, "queue: {:?}", task_queue);
-
-            let task = task_queue.pop_if_ready(u64::MAX).unwrap();
-
-            prop_assert_eq!(task_queue.len(), 0);
-
-            prop_assert_eq!(&task, &Task{
-                execute_at: timestamps[0..=i].iter().cloned().min().unwrap(),
-                task_type: TaskType::ProcessLogic
-            });
-            task_queue.schedule_at(task.execute_at, task.task_type);
-
-            prop_assert_eq!(task_queue.len(), 1);
-        }
-    }
-
-
     #[test]
     fn greedy_solution_properties(
         values in pvec(1u64..1_000_000_000, 1..10),
@@ -685,8 +664,8 @@ proptest! {
 
         let target = total_value / 2;
 
-        let fee_estimate = estimate_fee(&utxos, Some(target), fee_per_vbyte, crate::lifecycle::init::DEFAULT_KYT_FEE);
-        let fee_estimate = fee_estimate.minter_fee + fee_estimate.bitcoin_fee - crate::lifecycle::init::DEFAULT_KYT_FEE;
+        let fee_estimate = estimate_retrieve_btc_fee(&utxos, Some(target), fee_per_vbyte);
+        let fee_estimate = fee_estimate.minter_fee + fee_estimate.bitcoin_fee;
 
         let (unsigned_tx, _, _) = build_unsigned_transaction(
             &mut utxos,
@@ -830,18 +809,11 @@ proptest! {
         accounts in pvec(arb_account(), 5),
     ) {
         let mut state = CkBtcMinterState::from(InitArgs {
-            btc_network: Network::Regtest.into(),
-            ecdsa_key_name: "".to_string(),
-            retrieve_btc_min_amount: 0,
-            ledger_id: CanisterId::from_u64(42),
-            max_time_in_queue_nanos: 0,
-            min_confirmations: None,
-            mode: Mode::GeneralAvailability,
-            kyt_fee: None,
-            kyt_principal: None
+            retrieve_btc_min_amount: 1000,
+            ..default_init_args()
         });
         for (utxo, acc_idx) in utxos_acc_idx {
-            state.add_utxos(accounts[acc_idx], vec![utxo]);
+            state.add_utxos::<CheckInvariantsImpl>(accounts[acc_idx], vec![utxo]);
             state.check_invariants().expect("invariant check failed");
         }
     }
@@ -854,21 +826,13 @@ proptest! {
         limit in 1..25usize,
     ) {
         let mut state = CkBtcMinterState::from(InitArgs {
-            btc_network: Network::Regtest.into(),
-            ecdsa_key_name: "".to_string(),
-            retrieve_btc_min_amount: 5_000u64,
-            ledger_id: CanisterId::from_u64(42),
-            max_time_in_queue_nanos: 0,
-            min_confirmations: None,
-            mode: Mode::GeneralAvailability,
-            kyt_fee: None,
-            kyt_principal: None
+            retrieve_btc_min_amount: 5000,
+            ..default_init_args()
         });
-
         let mut available_amount = 0;
         for (utxo, acc_idx) in utxos_acc_idx {
             available_amount += utxo.value;
-            state.add_utxos(accounts[acc_idx], vec![utxo]);
+            state.add_utxos::<CheckInvariantsImpl>(accounts[acc_idx], vec![utxo]);
         }
         for req in requests {
             let block_index = req.block_index;
@@ -897,19 +861,11 @@ proptest! {
         resubmission_chain_length in 1..=5,
     ) {
         let mut state = CkBtcMinterState::from(InitArgs {
-            btc_network: Network::Regtest.into(),
-            ecdsa_key_name: "".to_string(),
             retrieve_btc_min_amount: 100_000,
-            ledger_id: CanisterId::from_u64(42),
-            max_time_in_queue_nanos: 0,
-            min_confirmations: None,
-            mode: Mode::GeneralAvailability,
-            kyt_fee: None,
-            kyt_principal: None
+            ..default_init_args()
         });
-
         for (utxo, acc_idx) in utxos_acc_idx {
-            state.add_utxos(accounts[acc_idx], vec![utxo]);
+            state.add_utxos::<CheckInvariantsImpl>(accounts[acc_idx], vec![utxo]);
         }
         let fee_per_vbyte = 100_000u64;
 
@@ -1107,9 +1063,8 @@ proptest! {
     ) {
         const SMALLEST_TX_SIZE_VBYTES: u64 = 140; // one input, two outputs
         const MIN_MINTER_FEE: u64 = 312;
-        let kyt_fee: u64 = crate::lifecycle::init::DEFAULT_KYT_FEE;
 
-        let estimate = estimate_fee(&utxos, amount, fee_per_vbyte, kyt_fee);
+        let estimate = estimate_retrieve_btc_fee(&utxos, amount, fee_per_vbyte);
         let lower_bound = MIN_MINTER_FEE + SMALLEST_TX_SIZE_VBYTES * fee_per_vbyte / 1000;
         let estimate_amount = estimate.minter_fee + estimate.bitcoin_fee;
         prop_assert!(
@@ -1124,15 +1079,8 @@ proptest! {
 #[test]
 fn can_form_a_batch_conditions() {
     let mut state = CkBtcMinterState::from(InitArgs {
-        btc_network: Network::Regtest.into(),
-        ecdsa_key_name: "".to_string(),
-        retrieve_btc_min_amount: 0,
-        ledger_id: CanisterId::from_u64(42),
         max_time_in_queue_nanos: 1000,
-        min_confirmations: None,
-        mode: Mode::GeneralAvailability,
-        kyt_fee: None,
-        kyt_principal: None,
+        ..default_init_args()
     });
     // no request, can't form a batch, fail.
     assert!(!state.can_form_a_batch(1, 0));
@@ -1181,15 +1129,8 @@ fn test_build_account_to_utxos_table_pagination() {
     use crate::dashboard;
 
     let mut state = CkBtcMinterState::from(InitArgs {
-        btc_network: Network::Regtest.into(),
-        ecdsa_key_name: "".to_string(),
         retrieve_btc_min_amount: 5_000u64,
-        ledger_id: CanisterId::from_u64(42),
-        max_time_in_queue_nanos: 0,
-        min_confirmations: None,
-        mode: Mode::GeneralAvailability,
-        kyt_fee: None,
-        kyt_principal: None,
+        ..default_init_args()
     });
     let account1 = Account::from(
         Principal::from_str("gjfkw-yiolw-ncij7-yzhg2-gq6ec-xi6jy-feyni-g26f4-x7afk-thx6z-6ae")
@@ -1202,8 +1143,8 @@ fn test_build_account_to_utxos_table_pagination() {
     let mut utxos = (1..=30).map(dummy_utxo_from_value).collect::<Vec<_>>();
     utxos.sort_unstable();
 
-    state.add_utxos(account1, utxos[..10].to_vec());
-    state.add_utxos(account2, utxos[10..].to_vec());
+    state.add_utxos::<CheckInvariantsImpl>(account1, utxos[..10].to_vec());
+    state.add_utxos::<CheckInvariantsImpl>(account2, utxos[10..].to_vec());
 
     // Check if all pages combined together would give the full utxos set.
     let pages = [

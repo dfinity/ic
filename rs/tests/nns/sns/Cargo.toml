@@ -15,10 +15,7 @@ ic-system-test-driver = { path = "../../driver" }
 rust_decimal = "1.36.0"
 slog = { workspace = true }
 tests = { path = "../../" }
-
-[lib]
-name = "ic_sns_tests"
-path = "src/lib.rs"
+sns_system_test_lib = { path = "./lib" }
 
 [[bin]]
 name = "ic-systest-sns-sale-simple-load-test"

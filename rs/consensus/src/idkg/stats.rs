@@ -198,7 +198,7 @@ impl IDkgStats for IDkgStatsImpl {
                 .entry(pre_sig_id)
                 .or_insert(PreSignatureStats {
                     start_time: Instant::now(),
-                    key_id,
+                    key_id: key_id.into(),
                 });
         }
 

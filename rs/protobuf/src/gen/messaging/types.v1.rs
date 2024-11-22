@@ -35,6 +35,8 @@ pub struct NiDkgId {
     pub dkg_tag: i32,
     #[prost(message, optional, tag = "5")]
     pub remote_target_id: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(message, optional, tag = "6")]
+    pub key_id: ::core::option::Option<MasterPublicKeyId>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, ::prost::Message)]
 pub struct NominalCycles {
@@ -100,6 +102,7 @@ pub enum NiDkgTag {
     Unspecified = 0,
     LowThreshold = 1,
     HighThreshold = 2,
+    HighThresholdForKey = 3,
 }
 impl NiDkgTag {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -111,6 +114,7 @@ impl NiDkgTag {
             Self::Unspecified => "NI_DKG_TAG_UNSPECIFIED",
             Self::LowThreshold => "NI_DKG_TAG_LOW_THRESHOLD",
             Self::HighThreshold => "NI_DKG_TAG_HIGH_THRESHOLD",
+            Self::HighThresholdForKey => "NI_DKG_TAG_HIGH_THRESHOLD_FOR_KEY",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -119,6 +123,7 @@ impl NiDkgTag {
             "NI_DKG_TAG_UNSPECIFIED" => Some(Self::Unspecified),
             "NI_DKG_TAG_LOW_THRESHOLD" => Some(Self::LowThreshold),
             "NI_DKG_TAG_HIGH_THRESHOLD" => Some(Self::HighThreshold),
+            "NI_DKG_TAG_HIGH_THRESHOLD_FOR_KEY" => Some(Self::HighThresholdForKey),
             _ => None,
         }
     }

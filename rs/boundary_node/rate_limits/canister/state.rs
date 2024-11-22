@@ -1,12 +1,13 @@
 use candid::Principal;
 use mockall::automock;
+use std::collections::HashSet;
 
 use crate::{
     add_config::{INIT_SCHEMA_VERSION, INIT_VERSION},
     storage::{
         LocalRef, StableMap, StorableConfig, StorableIncidentId, StorableIncidentMetadata,
         StorablePrincipal, StorableRuleId, StorableRuleMetadata, StorableVersion,
-        AUTHORIZED_PRINCIPAL, CONFIGS, INCIDENTS, RULES,
+        API_BOUNDARY_NODE_PRINCIPALS, AUTHORIZED_PRINCIPAL, CONFIGS, INCIDENTS, RULES,
     },
     types::{IncidentId, InputConfig, InputRule, RuleId, Timestamp, Version},
 };
@@ -31,6 +32,12 @@ pub trait CanisterApi {
         incident_id: IncidentId,
         rule_ids: StorableIncidentMetadata,
     ) -> Option<StorableIncidentMetadata>;
+    fn is_api_boundary_node_principal(&self, principal: &Principal) -> bool;
+    fn set_api_boundary_nodes_principals(&self, principals: Vec<Principal>);
+    fn api_boundary_nodes_count(&self) -> u64;
+    fn incidents_count(&self) -> u64;
+    fn active_rules_count(&self) -> u64;
+    fn configs_count(&self) -> u64;
 }
 
 #[derive(Clone)]
@@ -39,6 +46,7 @@ pub struct CanisterState {
     rules: LocalRef<StableMap<StorableRuleId, StorableRuleMetadata>>,
     incidents: LocalRef<StableMap<StorableIncidentId, StorableIncidentMetadata>>,
     authorized_principal: LocalRef<StableMap<(), StorablePrincipal>>,
+    api_boundary_node_principals: LocalRef<HashSet<Principal>>,
 }
 
 impl CanisterState {
@@ -48,6 +56,7 @@ impl CanisterState {
             rules: &RULES,
             incidents: &INCIDENTS,
             authorized_principal: &AUTHORIZED_PRINCIPAL,
+            api_boundary_node_principals: &API_BOUNDARY_NODE_PRINCIPALS,
         }
     }
 }
@@ -127,6 +136,37 @@ impl CanisterApi for CanisterState {
             cell.borrow_mut()
                 .insert(StorableIncidentId(incident_id.0), rule_ids)
         })
+    }
+
+    fn is_api_boundary_node_principal(&self, principal: &Principal) -> bool {
+        self.api_boundary_node_principals
+            .with(|cell| cell.borrow().contains(principal))
+    }
+
+    fn set_api_boundary_nodes_principals(&self, principals: Vec<Principal>) {
+        API_BOUNDARY_NODE_PRINCIPALS
+            .with(|cell| *cell.borrow_mut() = HashSet::from_iter(principals));
+    }
+
+    fn api_boundary_nodes_count(&self) -> u64 {
+        API_BOUNDARY_NODE_PRINCIPALS.with(|cell| cell.borrow().len()) as u64
+    }
+
+    fn incidents_count(&self) -> u64 {
+        self.incidents.with(|cell| cell.borrow().len())
+    }
+
+    fn active_rules_count(&self) -> u64 {
+        self.configs.with(|cell| {
+            let configs = cell.borrow();
+            configs
+                .last_key_value()
+                .map_or(0, |(_, value)| value.rule_ids.len() as u64)
+        })
+    }
+
+    fn configs_count(&self) -> u64 {
+        self.configs.with(|cell| cell.borrow().len())
     }
 }
 

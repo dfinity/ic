@@ -16,6 +16,7 @@ use ic_embedders::{
     wasm_utils::WasmImportsDetails, CompilationCache, CompilationResult, WasmExecutionInput,
 };
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
+use ic_interfaces_state_manager::StateReader;
 #[cfg(target_os = "linux")]
 use ic_logger::warn;
 use ic_logger::{error, info, ReplicaLogger};
@@ -24,10 +25,12 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::canister_state::execution_state::{
     SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary,
 };
-use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap};
+use ic_replicated_state::{
+    EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap, ReplicatedState,
+};
 use ic_types::ingress::WasmResult;
 use ic_types::methods::{FuncRef, WasmMethod};
-use ic_types::{CanisterId, NumBytes, NumInstructions};
+use ic_types::{AccumulatedPriority, CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::CanisterModule;
 use num_traits::ops::saturating::SaturatingSub;
 #[cfg(target_os = "linux")]
@@ -661,6 +664,7 @@ pub struct SandboxedExecutionController {
     metrics: Arc<SandboxedExecutionMetrics>,
     launcher_service: Box<dyn LauncherService>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     stop_monitoring_thread: std::sync::mpsc::Sender<bool>,
 }
 
@@ -672,7 +676,13 @@ impl Drop for SandboxedExecutionController {
 
         // Evict all the sandbox processes.
         let mut guard = self.backends.lock().unwrap();
-        evict_sandbox_processes(&mut guard, 0, Duration::default(), 0.into());
+        evict_sandbox_processes(
+            &mut guard,
+            0,
+            Duration::default(),
+            0.into(),
+            Arc::clone(&self.state_reader),
+        );
 
         // Terminate the Sandbox Launcher process.
         self.launcher_service
@@ -1070,6 +1080,7 @@ impl SandboxedExecutionController {
         metrics_registry: &MetricsRegistry,
         embedder_config: &EmbeddersConfig,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> std::io::Result<Self> {
         let launcher_exec_argv =
             create_launcher_argv(embedder_config).expect("No sandbox_launcher binary found");
@@ -1084,6 +1095,7 @@ impl SandboxedExecutionController {
 
         let backends_copy = Arc::clone(&backends);
         let metrics_copy = Arc::clone(&metrics);
+        let state_reader_copy = Arc::clone(&state_reader);
         let logger_copy = logger.clone();
         let (tx, rx) = std::sync::mpsc::channel();
 
@@ -1096,6 +1108,7 @@ impl SandboxedExecutionController {
                 max_sandbox_idle_time,
                 max_sandboxes_rss,
                 rx,
+                state_reader_copy,
             );
         });
 
@@ -1131,6 +1144,7 @@ impl SandboxedExecutionController {
             launcher_service,
             fd_factory: Arc::clone(&fd_factory),
             stop_monitoring_thread: tx,
+            state_reader: Arc::clone(&state_reader),
         })
     }
 
@@ -1146,6 +1160,7 @@ impl SandboxedExecutionController {
         max_sandbox_idle_time: Duration,
         max_sandboxes_rss: NumBytes,
         stop_request: Receiver<bool>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) {
         loop {
             let sandbox_processes = get_sandbox_process_stats(&backends);
@@ -1247,6 +1262,7 @@ impl SandboxedExecutionController {
                     max_sandbox_count,
                     max_sandbox_idle_time,
                     max_sandboxes_rss,
+                    Arc::clone(&state_reader),
                 );
             }
 
@@ -1317,6 +1333,7 @@ impl SandboxedExecutionController {
                 max_active_sandboxes,
                 self.max_sandbox_idle_time,
                 max_sandboxes_rss,
+                Arc::clone(&self.state_reader),
             );
         }
 
@@ -1706,10 +1723,15 @@ fn evict_sandbox_processes(
     max_active_sandboxes: usize,
     max_sandbox_idle_time: Duration,
     max_sandboxes_rss: NumBytes,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) {
+    let mut active_count = 0;
     // Remove the already terminated processes.
     backends.retain(|_id, backend| match backend {
-        Backend::Active { .. } => true,
+        Backend::Active { .. } => {
+            active_count += 1;
+            true
+        }
         Backend::Evicted {
             sandbox_process, ..
         } => {
@@ -1721,6 +1743,21 @@ fn evict_sandbox_processes(
         Backend::Empty => false,
     });
 
+    let total_sandboxes_rss = total_sandboxes_rss(backends);
+
+    // We have the same if statement in `sandbox_process_eviction::evict`, but
+    // if we return here we will skip the creation of `candidates` vector.
+    if active_count <= max_active_sandboxes && total_sandboxes_rss <= max_sandboxes_rss {
+        return;
+    }
+
+    let scheduler_priorities = state_reader
+        .get_latest_state()
+        .get_ref()
+        .get_scheduler_priorities();
+
+    let min_scheduler_priority = AccumulatedPriority::new(i64::MIN);
+
     let candidates: Vec<_> = backends
         .iter()
         .filter_map(|(id, backend)| match backend {
@@ -1728,6 +1765,9 @@ fn evict_sandbox_processes(
                 id: *id,
                 last_used: stats.last_used,
                 rss: stats.rss,
+                scheduler_priority: *scheduler_priorities
+                    .get(id)
+                    .unwrap_or(&min_scheduler_priority),
             }),
             Backend::Evicted { .. } | Backend::Empty => None,
         })
@@ -1748,7 +1788,7 @@ fn evict_sandbox_processes(
 
     let evicted = sandbox_process_eviction::evict(
         candidates,
-        total_sandboxes_rss(backends),
+        total_sandboxes_rss,
         max_active_sandboxes,
         last_used_threshold,
         max_sandboxes_rss,
@@ -1873,6 +1913,7 @@ mod tests {
         execution_environment::MAX_COMPILATION_CACHE_SIZE, logger::Config as LoggerConfig,
     };
     use ic_logger::{new_replica_logger, replica_logger::no_op_logger};
+    use ic_test_utilities::state_manager::FakeStateManager;
     use ic_test_utilities_types::ids::canister_test_id;
     use libc::kill;
     use slog::{o, Drain};
@@ -1921,6 +1962,7 @@ mod tests {
             &MetricsRegistry::new(),
             &EmbeddersConfig::default(),
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+            Arc::new(FakeStateManager::new()),
         )
         .unwrap();
 

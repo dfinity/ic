@@ -281,6 +281,18 @@ pub enum RemoveRegistrationResponse {
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum ListRegistrationsError {
+    Unauthorized,
+    UnexpectedError(String),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum ListRegistrationsResponse {
+    Ok(Vec<(String, Registration)>),
+    Err(ListRegistrationsError),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum GetCertificateError {
     NotFound,
     Unauthorized,
@@ -369,6 +381,31 @@ pub enum DispenseTaskError {
 pub enum DispenseTaskResponse {
     Ok(Id),
     Err(DispenseTaskError),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum RemoveTaskError {
+    NotFound,
+    Unauthorized,
+    UnexpectedError(String),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum RemoveTaskResponse {
+    Ok,
+    Err(RemoveTaskError),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum ListTasksError {
+    Unauthorized,
+    UnexpectedError(String),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum ListTasksResponse {
+    Ok(Vec<(String, u64, Registration)>),
+    Err(ListTasksError),
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]

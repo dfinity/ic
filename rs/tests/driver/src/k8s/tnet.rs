@@ -157,6 +157,7 @@ pub struct TNet {
     pub unique_name: Option<String>,
     pub version: String,
     pub image_url: String,
+    pub image_sha: String,
     pub config_url: Option<String>,
     pub access_key: Option<String>,
     pub nodes: Vec<TNode>,
@@ -201,6 +202,11 @@ impl TNet {
 
     pub fn image_url(mut self, url: &str) -> Self {
         self.image_url = url.to_string();
+        self
+    }
+
+    pub fn image_sha(mut self, sha: &str) -> Self {
+        self.image_sha = sha.to_string();
         self
     }
 
@@ -291,7 +297,7 @@ impl TNet {
     }
 
     pub async fn deploy_guestos_image(&self) -> Result<()> {
-        let image_name = &format!("{}-image-guestos", self.owner.name_any());
+        let image_name = &format!("image-guestos-{}", self.image_sha);
         self.deploy_image(image_name, &self.image_url).await?;
         Ok(())
     }

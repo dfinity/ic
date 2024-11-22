@@ -3022,6 +3022,17 @@ impl StateMachine {
             .contains_key(&canister)
     }
 
+    /// Returns true if the canister with the specified id exists and is not empty.
+    pub fn canister_not_empty(&self, canister: CanisterId) -> bool {
+        self.state_manager
+            .get_latest_state()
+            .take()
+            .canister_states
+            .get(&canister)
+            .map(|canister| canister.execution_state.is_some())
+            .unwrap_or_default()
+    }
+
     /// Queries the canister with the specified ID using the anonymous principal.
     pub fn query(
         &self,

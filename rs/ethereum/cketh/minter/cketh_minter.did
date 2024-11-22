@@ -362,6 +362,12 @@ type WithdrawErc20Arg = record {
 
     // Ethereum address to withdraw to.
     recipient : text;
+
+    // The subaccount to burn ckETH from to pay for the transaction fee.
+    from_cketh_subaccount : opt Subaccount;
+
+    // The subaccount to burn ckERC20 from.
+    from_ckerc20_subaccount : opt Subaccount;
 };
 
 type RetrieveErc20Request = record {

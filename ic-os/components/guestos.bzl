@@ -34,8 +34,9 @@ component_files = {
     Label("ic/ic-https-outcalls-adapter/ic-https-outcalls-adapter.socket"): "/etc/systemd/system/ic-https-outcalls-adapter.socket",
     Label("ic/ic-https-outcalls-adapter/generate-https-outcalls-adapter-config.sh"): "/opt/ic/bin/generate-https-outcalls-adapter-config.sh",
     Label("ic/ic-replica.service"): "/etc/systemd/system/ic-replica.service",
-    Label("ic/generate-replica-config.sh"): "/opt/ic/bin/generate-replica-config.sh",
-    Label("ic/ic.json5.template"): "/opt/ic/share/ic.json5.template",
+    Label("ic/generate-ic-config/generate-ic-config.sh"): "/opt/ic/bin/generate-ic-config.sh",
+    Label("ic/generate-ic-config/generate-ic-config.service"): "/etc/systemd/system/generate-ic-config.service",
+    Label("ic/generate-ic-config/ic.json5.template"): "/opt/ic/share/ic.json5.template",
 
     # init
     Label("init/bootstrap-ic-node/bootstrap-ic-node.sh"): "/opt/ic/bin/bootstrap-ic-node.sh",
@@ -59,6 +60,7 @@ component_files = {
     Label("misc/guestos/sysctl.d/dfn-max-map-count.conf"): "/etc/sysctl.d/dfn-max-map-count.conf",
     Label("misc/guestos/sysctl.d/privileged-ports.conf"): "/etc/sysctl.d/privileged-ports.conf",
     Label("misc/guestos/sysfs.d/hugepage.conf"): "/etc/sysfs.d/hugepage.conf",
+    Label("misc/guestos/hsm/pcscd"): "/etc/default/pcscd",
 
     # monitoring
     Label("monitoring/filebeat/setup-filebeat-permissions.sh"): "/opt/ic/bin/setup-filebeat-permissions.sh",

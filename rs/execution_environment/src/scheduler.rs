@@ -41,6 +41,7 @@ use ic_types::{
     MAX_WASM_MEMORY_IN_BYTES,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
+use more_asserts::{debug_assert_ge, debug_assert_le};
 use num_rational::Ratio;
 use prometheus::Histogram;
 use std::{
@@ -93,6 +94,10 @@ struct SchedulerRoundLimits {
     /// - Wasm execution pushes a new request to the output queue.
     subnet_available_memory: SubnetAvailableMemory,
 
+    /// Keeps track of the number of outgoing calls that can still be made across
+    /// the subnet before canisters are limited to their own callback quota only.
+    subnet_available_callbacks: i64,
+
     // Keeps track of the compute allocation limit.
     compute_allocation_used: u64,
 }
@@ -102,6 +107,7 @@ impl SchedulerRoundLimits {
         RoundLimits {
             instructions: self.subnet_instructions,
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used: self.compute_allocation_used,
         }
     }
@@ -110,6 +116,7 @@ impl SchedulerRoundLimits {
         RoundLimits {
             instructions: self.instructions,
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used: self.compute_allocation_used,
         }
     }
@@ -117,12 +124,14 @@ impl SchedulerRoundLimits {
     fn update_subnet_round_limits(&mut self, round_limits: &RoundLimits) {
         self.subnet_instructions = round_limits.instructions;
         self.subnet_available_memory = round_limits.subnet_available_memory;
+        self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.compute_allocation_used = round_limits.compute_allocation_used;
     }
 
     pub fn update_canister_round_limits(&mut self, round_limits: &RoundLimits) {
         self.instructions = round_limits.instructions;
         self.subnet_available_memory = round_limits.subnet_available_memory;
+        self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.compute_allocation_used = round_limits.compute_allocation_used;
     }
 }
@@ -541,6 +550,11 @@ impl SchedulerImpl {
                     * state.num_canisters() as u64,
             );
             scheduler_round_limits.update_canister_round_limits(&round_limits);
+            debug_assert_le!(
+                scheduler_round_limits.subnet_available_callbacks,
+                self.exec_env.subnet_available_callbacks(&state),
+                "`subnet_available_callbacks` is a lower bound estimate for the number of available callbacks"
+            );
 
             if instructions_consumed == RoundInstructions::from(0) {
                 break state;
@@ -687,6 +701,10 @@ impl SchedulerImpl {
             instructions: round_limits.instructions,
             subnet_available_memory: (round_limits.subnet_available_memory
                 / self.config.scheduler_cores as i64),
+            // This is a soft cap, it is unnecessary to strictly divide the pool among
+            // the threads. If it is exceeded, canisters can still rely on their guaranteed
+            // callback quota.
+            subnet_available_callbacks: round_limits.subnet_available_callbacks,
             compute_allocation_used: round_limits.compute_allocation_used,
         };
         // Run canisters in parallel. The results will be stored in `results_by_thread`.
@@ -705,11 +723,7 @@ impl SchedulerImpl {
                 let logger = new_logger!(self.log; messaging.round => round_id.get());
                 let rate_limiting_of_heap_delta = self.rate_limiting_of_heap_delta;
                 let deterministic_time_slicing = self.deterministic_time_slicing;
-                let round_limits = RoundLimits {
-                    instructions: round_limits.instructions,
-                    subnet_available_memory: round_limits_per_thread.subnet_available_memory,
-                    compute_allocation_used: round_limits.compute_allocation_used,
-                };
+                let round_limits = round_limits_per_thread.clone();
                 let config = &self.config;
                 scope.execute(move || {
                     *result = execute_canisters_on_thread(
@@ -740,6 +754,7 @@ impl SchedulerImpl {
         let mut total_instructions_executed = NumInstructions::from(0);
         let mut max_instructions_executed_per_thread = NumInstructions::from(0);
         let mut heap_delta = NumBytes::from(0);
+        let mut callbacks_created = 0;
         for mut result in results_by_thread.into_iter() {
             canisters.append(&mut result.canisters);
             executed_canister_ids.extend(result.executed_canister_ids);
@@ -765,11 +780,20 @@ impl SchedulerImpl {
                 result.messages_executed,
             );
             heap_delta += result.heap_delta;
+
+            debug_assert_ge!(
+                round_limits_per_thread.subnet_available_callbacks,
+                result.round_limits.subnet_available_callbacks,
+            );
+            callbacks_created += round_limits_per_thread.subnet_available_callbacks
+                - result.round_limits.subnet_available_callbacks;
         }
 
         // Since there are multiple threads, we update the global limit using
         // the thread that executed the most instructions.
         round_limits.instructions -= as_round_instructions(max_instructions_executed_per_thread);
+
+        round_limits.subnet_available_callbacks -= callbacks_created;
 
         self.metrics
             .instructions_consumed_per_round
@@ -1304,6 +1328,7 @@ impl Scheduler for SchedulerImpl {
                     self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
                 ),
                 subnet_available_memory: self.exec_env.subnet_available_memory(&state),
+                subnet_available_callbacks: self.exec_env.subnet_available_callbacks(&state),
                 compute_allocation_used: state.total_compute_allocation(),
             }
         };
@@ -2178,8 +2203,11 @@ fn can_execute_subnet_msg(
         | Ic00Method::UninstallCode
         | Ic00Method::UpdateSettings
         | Ic00Method::ComputeInitialIDkgDealings
+        | Ic00Method::ReshareChainKey
         | Ic00Method::SchnorrPublicKey
         | Ic00Method::SignWithSchnorr
+        | Ic00Method::VetKdPublicKey
+        | Ic00Method::VetKdDeriveEncryptedKey
         | Ic00Method::BitcoinGetBalance
         | Ic00Method::BitcoinGetUtxos
         | Ic00Method::BitcoinGetBlockHeaders
@@ -2238,8 +2266,11 @@ fn get_instructions_limits_for_subnet_message(
             | SetupInitialDKG
             | SignWithECDSA
             | ComputeInitialIDkgDealings
+            | ReshareChainKey
             | SchnorrPublicKey
             | SignWithSchnorr
+            | VetKdPublicKey
+            | VetKdDeriveEncryptedKey
             | StartCanister
             | StopCanister
             | UninstallCode

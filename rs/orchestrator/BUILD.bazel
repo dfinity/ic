@@ -89,7 +89,7 @@ rust_test(
     data = [
         "testdata/nftables_assigned_replica.conf.golden",
         "testdata/nftables_boundary_node.conf.golden",
-        "//ic-os/components:ic/ic.json5.template",
+        "//ic-os/components:ic/generate-ic-config/ic.json5.template",
     ],
     deps = [
         # Keep sorted.

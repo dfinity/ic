@@ -910,6 +910,7 @@ async fn test_cascade_following_new() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     // The fee should now be 1 ICP since the fees are charged upfront.
@@ -1356,6 +1357,7 @@ async fn test_cascade_following() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 
     // The fee should now be 1 ICP since the fees are charged upfront.
@@ -1481,6 +1483,7 @@ async fn test_minimum_icp_xdr_conversion_rate() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap_err()
         .error_type
     );
@@ -1505,6 +1508,7 @@ async fn test_minimum_icp_xdr_conversion_rate() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
@@ -1654,6 +1658,7 @@ async fn test_node_provider_must_be_registered() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap_err()
         .error_type
     );
@@ -1676,6 +1681,7 @@ async fn test_node_provider_must_be_registered() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
@@ -1712,6 +1718,7 @@ async fn test_sufficient_stake() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap_err()
         .error_type
     );
@@ -1735,6 +1742,7 @@ async fn test_sufficient_stake() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
@@ -1824,6 +1832,7 @@ async fn test_all_follow_proposer() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     // The proposal should now be accepted and executed.
     assert_eq!(
@@ -1866,6 +1875,7 @@ async fn test_follow_negative() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     // Vote for 4 with a wrong controller.
     let result = fake::register_vote(
@@ -1953,6 +1963,7 @@ async fn test_no_default_follow_for_governance() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     // Now vote yes for neurons 5-7.
     for i in 5..=7 {
@@ -2022,6 +2033,7 @@ async fn test_no_voting_after_deadline() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
     let proposal_data = gov.get_proposal_data(proposal_id).unwrap();
     let deadline_seconds = proposal_data
@@ -2394,6 +2406,7 @@ async fn test_manage_neuron() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     assert_eq!(
         ProposalStatus::Open,
@@ -2507,6 +2520,7 @@ async fn test_manage_neuron() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     // Now process the proposals: proposal should be executed as
     // neuron 2 is the sole followee of neuron 1 on the manage neuron
@@ -2586,6 +2600,7 @@ async fn test_sufficient_stake_for_manage_neuron() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap_err();
     assert_eq!(
         ErrorType::InsufficientFunds,
@@ -2617,6 +2632,7 @@ async fn test_sufficient_stake_for_manage_neuron() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
@@ -2684,6 +2700,7 @@ async fn test_invalid_proposals_fail() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
@@ -2722,6 +2739,7 @@ async fn test_compute_tally_while_open() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     // Tally should have the smaller neuron voting yes.
@@ -2765,6 +2783,7 @@ async fn test_compute_tally_after_decided() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     // Tally should have the larger neuron voting yes, and the proposal is decided.
@@ -2829,6 +2848,7 @@ async fn test_no_compute_tally_after_deadline() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     // Advance time past the deadline.
@@ -2938,6 +2958,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     // Let's advance time by two reward periods, but less than the
@@ -3123,6 +3144,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 
     {
@@ -3328,6 +3350,7 @@ async fn test_genesis_in_the_future_in_supported() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
     let short_proposal_pid = gov
         .make_proposal(
@@ -3350,6 +3373,7 @@ async fn test_genesis_in_the_future_in_supported() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
@@ -3415,6 +3439,7 @@ async fn test_genesis_in_the_future_in_supported() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
@@ -6535,49 +6560,53 @@ async fn test_not_for_profit_neurons() {
 
     // A normal neuron can't issue a manage neuron proposal to disburse,
     // split or disburse-to-neuron.
-    let result = gov.make_proposal(
-        normal_neuron.id.as_ref().unwrap(),
-        normal_neuron.controller.as_ref().unwrap(),
-        &Proposal {
-            title: Some("A Reasonable Title".to_string()),
-            action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                    normal_neuron.id.unwrap(),
-                )),
-                id: None,
-                command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
-                    amount: None,
-                    to_account: None,
-                })),
-            }))),
-            summary: "".to_string(),
-            url: "".to_string(),
-        },
-    );
+    let result = gov
+        .make_proposal(
+            normal_neuron.id.as_ref().unwrap(),
+            normal_neuron.controller.as_ref().unwrap(),
+            &Proposal {
+                title: Some("A Reasonable Title".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                        normal_neuron.id.unwrap(),
+                    )),
+                    id: None,
+                    command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
+                        amount: None,
+                        to_account: None,
+                    })),
+                }))),
+                summary: "".to_string(),
+                url: "".to_string(),
+            },
+        )
+        .await;
     assert!(result.is_err());
     assert_eq!(result.err().unwrap().error_type(), ErrorType::NotAuthorized);
 
     // A not for profit neuron, on the other hand, can.
     // The followee of the managed neuron must make the proposal, in this case.
-    let result = gov.make_proposal(
-        normal_neuron.id.as_ref().unwrap(),
-        normal_neuron.controller.as_ref().unwrap(),
-        &Proposal {
-            title: Some("A Reasonable Title".to_string()),
-            action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                    not_for_profit_neuron.id.unwrap(),
-                )),
-                id: None,
-                command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
-                    amount: None,
-                    to_account: None,
-                })),
-            }))),
-            summary: "".to_string(),
-            url: "".to_string(),
-        },
-    );
+    let result = gov
+        .make_proposal(
+            normal_neuron.id.as_ref().unwrap(),
+            normal_neuron.controller.as_ref().unwrap(),
+            &Proposal {
+                title: Some("A Reasonable Title".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                        not_for_profit_neuron.id.unwrap(),
+                    )),
+                    id: None,
+                    command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
+                        amount: None,
+                        to_account: None,
+                    })),
+                }))),
+                summary: "".to_string(),
+                url: "".to_string(),
+            },
+        )
+        .await;
 
     result.expect("Failed.");
 }
@@ -6793,30 +6822,35 @@ fn test_are_set_visibility_proposals_enabled_flag() {
     );
 
     let mut make_set_visibility_proposal = || -> Result<ProposalId, GovernanceError> {
-        governance.make_proposal(
-            leader.id.as_ref().unwrap(),
-            leader.controller.as_ref().unwrap(),
-            &Proposal {
-                title: Some("SetVisibility of puppet to Public".to_string()),
-                summary: "SetVisibility of puppet to Public".to_string(),
-                url: "https://forum.dfinity.org/set_visibility".to_string(),
-                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                        puppet.id.unwrap(),
-                    )),
-                    command: Some(manage_neuron::Command::Configure(
-                        manage_neuron::Configure {
-                            operation: Some(manage_neuron::configure::Operation::SetVisibility(
-                                SetVisibility {
-                                    visibility: Some(Visibility::Public as i32),
-                                },
-                            )),
-                        },
-                    )),
-                    id: None,
-                }))),
-            },
-        )
+        governance
+            .make_proposal(
+                leader.id.as_ref().unwrap(),
+                leader.controller.as_ref().unwrap(),
+                &Proposal {
+                    title: Some("SetVisibility of puppet to Public".to_string()),
+                    summary: "SetVisibility of puppet to Public".to_string(),
+                    url: "https://forum.dfinity.org/set_visibility".to_string(),
+                    action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                            puppet.id.unwrap(),
+                        )),
+                        command: Some(manage_neuron::Command::Configure(
+                            manage_neuron::Configure {
+                                operation: Some(
+                                    manage_neuron::configure::Operation::SetVisibility(
+                                        SetVisibility {
+                                            visibility: Some(Visibility::Public as i32),
+                                        },
+                                    ),
+                                ),
+                            },
+                        )),
+                        id: None,
+                    }))),
+                },
+            )
+            .now_or_never()
+            .unwrap()
     };
 
     // Case A: SetVisibility (ManageNeuron) proposals are disabled. When we
@@ -8787,6 +8821,7 @@ async fn test_max_number_of_proposals_with_ballots() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
     }
     assert_eq!(
@@ -8806,7 +8841,7 @@ async fn test_max_number_of_proposals_with_ballots() {
             })),
             ..Default::default()
         },
-    ), Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
+    ).await, Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
     // Let's try an Installcode for Governance itself. This proposal type is whitelisted, so it can
     // be submitted even though the max is reached.
     assert_matches!(
@@ -8827,7 +8862,8 @@ async fn test_max_number_of_proposals_with_ballots() {
                 })),
                 ..Default::default()
             },
-        ),
+        )
+        .await,
         Ok(_)
     );
 
@@ -8858,7 +8894,7 @@ async fn test_max_number_of_proposals_with_ballots() {
             })),
             ..Default::default()
         },
-    ), Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
+    ).await, Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
 
     // Let's make a reward event happen
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
@@ -8878,6 +8914,7 @@ async fn test_max_number_of_proposals_with_ballots() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
@@ -9036,6 +9073,7 @@ async fn test_id_v1_works() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     assert_eq!(
         ProposalStatus::Open,
@@ -10295,6 +10333,8 @@ fn wait_for_quiet_test_helper(
                 ..Default::default()
             },
         )
+        .now_or_never()
+        .unwrap()
         .unwrap();
     let expected_initial_deadline_seconds =
         DEFAULT_TEST_START_TIMESTAMP_SECONDS + initial_expiration_seconds;
@@ -11210,6 +11250,7 @@ async fn test_known_neurons() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 
     gov.make_proposal(
@@ -11228,6 +11269,7 @@ async fn test_known_neurons() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     assert_eq!(
         gov.get_neuron_info(&NeuronId { id: 1 }, *RANDOM_PRINCIPAL_ID)
@@ -11276,6 +11318,7 @@ async fn test_known_neurons() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     assert_eq!(
@@ -11308,6 +11351,7 @@ async fn test_known_neurons() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     assert_eq!(
         gov.get_neuron_info(&NeuronId { id: 2 }, *RANDOM_PRINCIPAL_ID)
@@ -12247,6 +12291,7 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_sns_w_fail
             &principal(1),
             &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
         )
+        .await
         .unwrap();
 
     // Step 3: Inspect results.
@@ -12381,6 +12426,7 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_ledger_fai
             &principal(1),
             &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
         )
+        .await
         .unwrap();
 
     // Step 3: Inspect results.
@@ -12517,6 +12563,7 @@ async fn test_create_service_nervous_system_failure_due_to_swap_deployment_error
         &principal(1),
         &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
     )
+    .await
     .unwrap();
 
     // Step 3: Inspect results.
@@ -12618,6 +12665,7 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
         &principal(1),
         &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
     )
+    .await
     .unwrap();
 
     // Step 3: Inspect results.
@@ -12764,6 +12812,7 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
         &principal(1),
         &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
     )
+    .await
     .unwrap();
 
     // Step 3: Inspect results.
@@ -12921,6 +12970,7 @@ async fn test_create_service_nervous_system_proposal_execution_fails() {
         &principal(1),
         &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
     )
+    .await
     .unwrap();
 
     // Step 3: Inspect results.
@@ -13023,6 +13073,7 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
             &principal(1),
             &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
         )
+        .await
         .unwrap();
 
     let proposal = gov.get_proposal_data(proposal_id).unwrap();
@@ -13365,6 +13416,7 @@ async fn test_proposal_url_not_on_list_fails() {
             url: "https://foo.com".to_string(),
         },
     )
+    .await
     .unwrap_err();
 
     // Submit a proposal with a URL on the whitelist
@@ -13381,6 +13433,7 @@ async fn test_proposal_url_not_on_list_fails() {
             url: "https://forum.dfinity.org/anything".to_string(),
         },
     )
+    .await
     .unwrap();
 }
 

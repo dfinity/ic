@@ -473,7 +473,7 @@ fn get_running_sns_version(_: GetRunningSnsVersionRequest) -> GetRunningSnsVersi
         target_version: upgrade_in_progress.target_version.clone(),
         mark_failed_at_seconds: upgrade_in_progress.mark_failed_at_seconds,
         checking_upgrade_lock: upgrade_in_progress.checking_upgrade_lock,
-        proposal_id: upgrade_in_progress.proposal_id,
+        proposal_id: upgrade_in_progress.proposal_id.unwrap_or(0),
     });
     GetRunningSnsVersionResponse {
         deployed_version: governance().proto.deployed_version.clone(),
