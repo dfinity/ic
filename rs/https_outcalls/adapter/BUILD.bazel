@@ -8,7 +8,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/https_outcalls/service",
     "//rs/monitoring/logger",
-    "//rs/monitoring/metrics",    
+    "//rs/monitoring/metrics",
     "@crate_index//:byte-unit",
     "@crate_index//:clap",
     "@crate_index//:futures",
