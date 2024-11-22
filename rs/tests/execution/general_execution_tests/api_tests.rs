@@ -207,6 +207,45 @@ pub fn test_cycles_burn(env: TestEnv) {
     })
 }
 
+pub fn node_metrics_history_query_fails(env: TestEnv) {
+    // Arrange.
+    let (app_node, agent) = setup_app_node_and_agent(&env);
+    let logger = env.logger();
+    let subnet_id = app_node.subnet_id().unwrap().get();
+    block_on({
+        async move {
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                app_node.effective_canister_id(),
+                &logger,
+            )
+            .await;
+            // Act.
+            let result = canister
+                .query(
+                    wasm().call_simple(
+                        ic00::IC_00,
+                        Method::NodeMetricsHistory,
+                        call_args().other_side(
+                            ic00::NodeMetricsHistoryArgs {
+                                subnet_id,
+                                start_at_timestamp_nanos: 0,
+                            }
+                            .encode(),
+                        ),
+                    ),
+                )
+                .await;
+            // Assert.
+            assert_reject_msg(
+                result,
+                RejectCode::CanisterError,
+                "cannot be executed in non replicated query mode",
+            );
+        }
+    })
+}
+
 pub fn node_metrics_history_another_subnet_succeeds(env: TestEnv) {
     // Arrange.
     let (app_node_1, agent_1) = setup_app_node_and_agent(&env);

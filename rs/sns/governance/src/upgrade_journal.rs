@@ -73,9 +73,9 @@ impl upgrade_journal_entry::UpgradeStarted {
 
 impl upgrade_journal_entry::UpgradeOutcome {
     /// Creates a new successful upgrade outcome
-    pub fn success(message: Option<String>) -> Self {
+    pub fn success(message: String) -> Self {
         Self {
-            human_readable: message,
+            human_readable: Some(message),
             status: Some(upgrade_outcome::Status::Success(Empty {})),
         }
     }
@@ -158,5 +158,33 @@ impl From<upgrade_journal_entry::TargetVersionSet> for upgrade_journal_entry::Ev
 impl From<upgrade_journal_entry::TargetVersionReset> for upgrade_journal_entry::Event {
     fn from(event: upgrade_journal_entry::TargetVersionReset) -> Self {
         upgrade_journal_entry::Event::TargetVersionReset(event)
+    }
+}
+
+impl upgrade_journal_entry::Event {
+    /// Useful for specifying expected states of the SNS upgrade journal in a way that isn't
+    /// overly fragile.
+    pub fn redact_human_readable(self) -> Self {
+        match self {
+            Self::UpgradeOutcome(upgrade_outcome) => {
+                Self::UpgradeOutcome(upgrade_journal_entry::UpgradeOutcome {
+                    human_readable: None,
+                    ..upgrade_outcome
+                })
+            }
+            Self::UpgradeStepsReset(upgrade_steps_reset) => {
+                Self::UpgradeStepsReset(upgrade_journal_entry::UpgradeStepsReset {
+                    human_readable: None,
+                    ..upgrade_steps_reset
+                })
+            }
+            Self::TargetVersionReset(target_version_reset) => {
+                Self::TargetVersionReset(upgrade_journal_entry::TargetVersionReset {
+                    human_readable: None,
+                    ..target_version_reset
+                })
+            }
+            event => event,
+        }
     }
 }

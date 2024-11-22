@@ -1,29 +1,21 @@
 use ic_system_test_driver::{
     driver::{
-        boundary_node::{BoundaryNode, BoundaryNodeVm},
+        boundary_node::BoundaryNode,
         ic::{InternetComputer, Subnet},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-            RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            await_boundary_node_healthy, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            NnsInstallationBuilder,
         },
     },
-    util::block_on,
+    util::timeit,
 };
-use std::{convert::TryFrom, str::FromStr};
-
-use anyhow::Context;
+use std::str::FromStr;
 
 use ic_base_types::PrincipalId;
-use ic_interfaces_registry::RegistryValue;
-use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
-use ic_registry_keys::make_routing_table_record_key;
-use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 
-use slog::{debug, info};
+use slog::info;
 
 use crate::helpers::BoundaryNodeHttpsConfig;
 
@@ -35,91 +27,74 @@ gc2Q0JiGrqKks1AVi+8wzmZ+2PQXXA==
 -----END EC PRIVATE KEY-----";
 
 pub fn setup_ic_with_bn(bn_name: &str, bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
-    let log = env.logger();
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
-    InternetComputer::new()
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
-        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
-    let nns_node = env
-        .topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap();
-    NnsInstallationBuilder::new()
-        .install(&nns_node, &env)
-        .expect("could not install NNS canisters");
-    let nns_node_urls = {
-        let mut bn = BoundaryNode::new(bn_name.to_string())
-            .allocate_vm(&env)
-            .unwrap()
-            .for_ic(&env, "");
-        if let BoundaryNodeHttpsConfig::UseRealCertsAndDns = bn_https_config {
-            bn = bn.use_real_certs_and_dns();
-        }
-        bn.start(&env).expect("failed to setup BoundaryNode VM");
-        bn.nns_node_urls
-    };
-    info!(&log, "Checking readiness of all replica nodes ...");
-    for subnet in env.topology_snapshot().subnets() {
-        for node in subnet.nodes() {
-            node.await_status_is_healthy()
-                .expect("Replica did not come up healthy.");
-        }
-    }
-    info!(log, "Polling registry ...");
-    let registry = RegistryCanister::new(nns_node_urls);
-    let (latest, routes) = block_on(ic_system_test_driver::retry_with_msg_async!(
-        "polling registry",
-        &log,
-        READY_WAIT_TIMEOUT,
-        RETRY_BACKOFF,
-        || async {
-            let (bytes, latest) = registry
-                .get_value(make_routing_table_record_key().into(), None)
-                .await
-                .context("Failed to `get_value` from registry")?;
-            let routes = PbRoutingTable::decode(bytes.as_slice())
-                .context("Failed to decode registry routes")?;
-            let routes =
-                RoutingTable::try_from(routes).context("Failed to convert registry routes")?;
-            Ok((latest, routes))
-        }
-    ))
-    .unwrap_or_else(|_| panic!("Failed to poll registry. This is not an Boundary Node error. It is a test environment issue."));
-    info!(log, "Latest registry {latest}: {routes:?}");
-    let bn = env
-        .get_deployed_boundary_node(bn_name)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-    info!(log, "Boundary node {bn_name} has IPv6 {:?}", bn.ipv6());
-    info!(
-        log,
-        "Boundary node {bn_name} has IPv4 {:?}",
-        bn.block_on_ipv4().unwrap()
+    let cloned_env = env.clone();
+    timeit(cloned_env.logger(), "deploying IC", move || {
+        InternetComputer::new()
+            .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+            .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
+            .setup_and_start(&cloned_env)
+            .expect("failed to setup IC under test");
+    });
+
+    let cloned_env: TestEnv = env.clone();
+    timeit(
+        cloned_env.logger(),
+        "installing NNS & starting BN concurrently",
+        move || {
+            std::thread::scope(|s| {
+                s.spawn(|| {
+                    let nns_node = cloned_env
+                        .topology_snapshot()
+                        .root_subnet()
+                        .nodes()
+                        .next()
+                        .unwrap();
+                    NnsInstallationBuilder::new()
+                        .install(&nns_node, &cloned_env)
+                        .expect("NNS canisters not installed");
+                    info!(cloned_env.logger(), "NNS canisters are installed.");
+                });
+                s.spawn(|| {
+                    let mut bn = BoundaryNode::new(bn_name.to_string())
+                        .allocate_vm(&cloned_env)
+                        .unwrap()
+                        .for_ic(&cloned_env, "");
+                    if let BoundaryNodeHttpsConfig::UseRealCertsAndDns = bn_https_config {
+                        bn = bn.use_real_certs_and_dns();
+                    }
+                    bn.start(&cloned_env)
+                        .expect("failed to setup BoundaryNode VM");
+                });
+            });
+        },
     );
-    info!(log, "Checking BN health");
-    bn.await_status_is_healthy()
-        .expect("Boundary node did not come up healthy.");
-    let list_dependencies = bn
-        .block_on_bash_script(
-            "systemctl list-dependencies systemd-sysusers.service --all --reverse --no-pager",
-        )
-        .unwrap();
-    debug!(log, "systemctl {bn_name} = '{list_dependencies}'");
-    env.sync_with_prometheus_by_name("", env.get_playnet_url(bn_name));
+
+    let cloned_env = env.clone();
+    timeit(
+        cloned_env.logger(),
+        "waiting until all IC nodes are healthy",
+        move || {
+            cloned_env.topology_snapshot().subnets().for_each(|subnet| {
+                subnet.nodes().for_each(|node| {
+                    node.await_status_is_healthy()
+                        .expect("Replica did not come up healthy.")
+                })
+            });
+        },
+    );
+
+    let cloned_env = env.clone();
+    timeit(
+        cloned_env.logger(),
+        "waiting until Boundary Node is healthy",
+        move || {
+            await_boundary_node_healthy(&cloned_env, bn_name);
+        },
+    );
 }
 
 pub fn setup_ic(env: TestEnv) {
     let log = env.logger();
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .with_node_provider(PrincipalId::from_str(TEST_PRINCIPAL).unwrap())
@@ -144,5 +119,4 @@ pub fn setup_ic(env: TestEnv) {
                 .expect("Replica did not come up healthy.");
         }
     }
-    env.sync_with_prometheus();
 }

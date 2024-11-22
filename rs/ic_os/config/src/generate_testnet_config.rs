@@ -22,13 +22,14 @@ pub struct GenerateTestnetConfigArgs {
     pub domain_name: Option<String>,
 
     // ICOSSettings arguments
+    pub node_reward_type: Option<String>,
     pub mgmt_mac: Option<String>,
     pub deployment_environment: Option<String>,
     pub elasticsearch_hosts: Option<String>,
     pub elasticsearch_tags: Option<String>,
-    pub nns_public_key_exists: Option<bool>,
+    pub use_nns_public_key: Option<bool>,
     pub nns_urls: Option<Vec<String>>,
-    pub node_operator_private_key_exists: Option<bool>,
+    pub use_node_operator_private_key: Option<bool>,
     pub use_ssh_authorized_keys: Option<bool>,
 
     // GuestOSSettings arguments
@@ -69,13 +70,14 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         ipv4_gateway,
         ipv4_prefix_length,
         domain_name,
+        node_reward_type,
         mgmt_mac,
         deployment_environment,
         elasticsearch_hosts,
         elasticsearch_tags,
-        nns_public_key_exists,
+        use_nns_public_key,
         nns_urls,
-        node_operator_private_key_exists,
+        use_node_operator_private_key,
         use_ssh_authorized_keys,
         inject_ic_crypto,
         inject_ic_state,
@@ -159,6 +161,8 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
     };
 
     // Construct ICOSSettings
+    let node_reward_type = node_reward_type.unwrap_or_else(|| "type3.1".to_string());
+
     let mgmt_mac = match mgmt_mac {
         Some(mac_str) => FormattedMacAddress::try_from(mac_str.as_str())?,
         None => {
@@ -174,7 +178,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         elasticsearch_tags,
     };
 
-    let nns_public_key_exists = nns_public_key_exists.unwrap_or(true);
+    let use_nns_public_key = use_nns_public_key.unwrap_or(true);
 
     let nns_urls = match nns_urls {
         Some(urls) => urls
@@ -184,17 +188,18 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         None => vec![Url::parse("https://wiki.internetcomputer.org")?],
     };
 
-    let node_operator_private_key_exists = node_operator_private_key_exists.unwrap_or(false);
+    let use_node_operator_private_key = use_node_operator_private_key.unwrap_or(false);
 
     let use_ssh_authorized_keys = use_ssh_authorized_keys.unwrap_or(true);
 
     let icos_settings = ICOSSettings {
+        node_reward_type: Some(node_reward_type),
         mgmt_mac,
         deployment_environment,
         logging,
-        nns_public_key_exists,
+        use_nns_public_key,
         nns_urls,
-        node_operator_private_key_exists,
+        use_node_operator_private_key,
         use_ssh_authorized_keys,
         icos_dev_settings: ICOSDevSettings::default(),
     };

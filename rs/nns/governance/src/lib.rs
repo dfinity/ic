@@ -171,6 +171,7 @@ pub mod proposals;
 mod reward;
 pub mod storage;
 mod subaccount_index;
+mod voting;
 
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.

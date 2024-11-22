@@ -90,3 +90,8 @@ manage_files_pattern(ssh_keygen_t, initrc_tmp_t, initrc_tmp_t)
 # allow reading from /dev/urandom
 require { type iptables_t; }
 dev_read_urand(iptables_t)
+
+###############################################################################
+# pcscd_t policy breaks HSM deployments, setting persmissive for now
+require { type pcscd_t; }
+permissive pcscd_t;

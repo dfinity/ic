@@ -61,16 +61,18 @@ pub struct GuestOSConfig {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct ICOSSettings {
+    /// The node reward type determines node rewards
+    pub node_reward_type: Option<String>,
     /// In nested testing, mgmt_mac is set in deployment.json.template,
     /// else found dynamically in call to config tool CreateSetuposConfig
     pub mgmt_mac: FormattedMacAddress,
     /// "mainnet" or "testnet"
     pub deployment_environment: String,
     pub logging: Logging,
-    pub nns_public_key_exists: bool,
+    pub use_nns_public_key: bool,
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
-    pub node_operator_private_key_exists: bool,
+    pub use_node_operator_private_key: bool,
     /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`.
     /// The contents of these files serve as `authorized_keys` for their respective role account.
     /// This means that, for example, `accounts_ssh_authorized_keys/admin`
@@ -200,15 +202,16 @@ mod tests {
                 domain_name: None,
             },
             icos_settings: ICOSSettings {
+                node_reward_type: Some(String::new()),
                 mgmt_mac: FormattedMacAddress::try_from("00:00:00:00:00:00")?,
                 deployment_environment: String::new(),
                 logging: Logging {
                     elasticsearch_hosts: String::new(),
                     elasticsearch_tags: None,
                 },
-                nns_public_key_exists: false,
+                use_nns_public_key: false,
                 nns_urls: vec![],
-                node_operator_private_key_exists: false,
+                use_node_operator_private_key: false,
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: ICOSDevSettings::default(),
             },

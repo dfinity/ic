@@ -18,7 +18,6 @@ use crate::{Height, RegistryVersion};
 use ic_base_types::{NodeId, PrincipalId};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
@@ -39,6 +38,7 @@ use super::{
         PreSignatureTranscriptRef, ThresholdSchnorrSigInputsError, ThresholdSchnorrSigInputsRef,
         TranscriptInCreation,
     },
+    IDkgMasterPublicKeyId,
 };
 
 /// PseudoRandomId is defined in execution context as plain 32-byte vector, we give it a synonym here.
@@ -645,7 +645,7 @@ pub trait IDkgBlockReader: Send + Sync {
     /// Returns the IDs of pre-signatures in creation by the tip.
     fn pre_signatures_in_creation(
         &self,
-    ) -> Box<dyn Iterator<Item = (PreSigId, MasterPublicKeyId)> + '_>;
+    ) -> Box<dyn Iterator<Item = (PreSigId, IDkgMasterPublicKeyId)> + '_>;
 
     /// For the given pre-signature ID, returns the pre-signature ref if available.
     fn available_pre_signature(&self, id: &PreSigId) -> Option<&PreSignatureRef>;

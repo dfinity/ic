@@ -69,7 +69,7 @@ use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPA
 use ic_nns_constants::{LEDGER_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 
-use crate::nns_tests::{neurons_fund::NnsNfNeuron, sns_aggregator::AggregatorClient};
+use crate::{neurons_fund::NnsNfNeuron, sns_aggregator::AggregatorClient};
 
 const WORKLOAD_GENERATION_DURATION: Duration = Duration::from_secs(60);
 

@@ -80,6 +80,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/utils/basic_sig",
     "//rs/test_utilities/in_memory_logger",
     "//rs/test_utilities/time",
+    "//rs/types/management_canister_types",
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
     "@crate_index//:lazy_static",

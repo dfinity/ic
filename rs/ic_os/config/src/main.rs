@@ -4,6 +4,7 @@ use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
 use mac_address::mac_address::{get_ipmi_mac, FormattedMacAddress};
+use regex::Regex;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
@@ -24,13 +25,13 @@ pub enum Commands {
         deployment_json_path: PathBuf,
 
         #[arg(long, default_value_t = true)]
-        nns_public_key_exists: bool,
+        use_nns_public_key: bool,
 
         #[arg(long, default_value_t = false)]
         use_ssh_authorized_keys: bool,
 
         #[arg(long, default_value_t = true)]
-        node_operator_private_key_exists: bool,
+        use_node_operator_private_key: bool,
 
         #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         setupos_config_json_path: PathBuf,
@@ -87,6 +88,8 @@ pub struct GenerateTestnetConfigClapArgs {
 
     // ICOSSettings arguments
     #[arg(long)]
+    pub node_reward_type: Option<String>,
+    #[arg(long)]
     pub mgmt_mac: Option<String>,
     #[arg(long)]
     pub deployment_environment: Option<String>,
@@ -95,11 +98,11 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub elasticsearch_tags: Option<String>,
     #[arg(long)]
-    pub nns_public_key_exists: Option<bool>,
+    pub use_nns_public_key: Option<bool>,
     #[arg(long)]
     pub nns_urls: Option<Vec<String>>,
     #[arg(long)]
-    pub node_operator_private_key_exists: Option<bool>,
+    pub use_node_operator_private_key: Option<bool>,
     #[arg(long)]
     pub use_ssh_authorized_keys: Option<bool>,
 
@@ -143,9 +146,9 @@ pub fn main() -> Result<()> {
         Some(Commands::CreateSetuposConfig {
             config_ini_path,
             deployment_json_path,
-            nns_public_key_exists,
+            use_nns_public_key,
             use_ssh_authorized_keys,
-            node_operator_private_key_exists,
+            use_node_operator_private_key,
             setupos_config_json_path,
         }) => {
             // get config.ini settings
@@ -158,6 +161,7 @@ pub fn main() -> Result<()> {
                 ipv4_prefix_length,
                 domain_name,
                 verbose,
+                node_reward_type,
             } = get_config_ini_settings(&config_ini_path)?;
 
             // create NetworkSettings
@@ -206,13 +210,24 @@ pub fn main() -> Result<()> {
                 None => get_ipmi_mac()?,
             };
 
+            let node_reward_type = node_reward_type.expect("Node reward type is required.");
+
+            let node_reward_type_pattern = Regex::new(r"^type[0-9]+(\.[0-9])?$")?;
+            if !node_reward_type_pattern.is_match(&node_reward_type) {
+                anyhow::bail!(
+                    "Invalid node_reward_type '{}'. It must match the pattern ^type[0-9]+(\\.[0-9])?$",
+                    node_reward_type
+                );
+            }
+
             let icos_settings = ICOSSettings {
+                node_reward_type: Some(node_reward_type),
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name,
                 logging,
-                nns_public_key_exists,
+                use_nns_public_key,
                 nns_urls: deployment_json_settings.nns.url.clone(),
-                node_operator_private_key_exists,
+                use_node_operator_private_key,
                 use_ssh_authorized_keys,
                 icos_dev_settings: ICOSDevSettings::default(),
             };
@@ -336,13 +351,14 @@ pub fn main() -> Result<()> {
                 ipv4_gateway: clap_args.ipv4_gateway,
                 ipv4_prefix_length: clap_args.ipv4_prefix_length,
                 domain_name: clap_args.domain_name,
+                node_reward_type: clap_args.node_reward_type,
                 mgmt_mac: clap_args.mgmt_mac,
                 deployment_environment: clap_args.deployment_environment,
                 elasticsearch_hosts: clap_args.elasticsearch_hosts,
                 elasticsearch_tags: clap_args.elasticsearch_tags,
-                nns_public_key_exists: clap_args.nns_public_key_exists,
+                use_nns_public_key: clap_args.use_nns_public_key,
                 nns_urls: clap_args.nns_urls,
-                node_operator_private_key_exists: clap_args.node_operator_private_key_exists,
+                use_node_operator_private_key: clap_args.use_node_operator_private_key,
                 use_ssh_authorized_keys: clap_args.use_ssh_authorized_keys,
                 inject_ic_crypto: clap_args.inject_ic_crypto,
                 inject_ic_state: clap_args.inject_ic_state,

@@ -41,6 +41,7 @@ message Summary {
 message TaggedNiDkgTranscript {
   NiDkgTranscript transcript = 1;
   NiDkgTag tag = 2;
+  optional MasterPublicKeyId key_id = 3;
 }
 
 message CallbackIdedNiDkgTranscript {

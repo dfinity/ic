@@ -73,12 +73,13 @@ mod tests {
         };
         let icos_dev_settings = ICOSDevSettings::default();
         let icos_settings = ICOSSettings {
+            node_reward_type: Some("type3.1".to_string()),
             mgmt_mac: FormattedMacAddress::try_from("ec:2a:72:31:a2:0c")?,
             deployment_environment: "Mainnet".to_string(),
             logging,
-            nns_public_key_exists: true,
+            use_nns_public_key: true,
             nns_urls: vec!["http://localhost".parse().unwrap()],
-            node_operator_private_key_exists: true,
+            use_node_operator_private_key: true,
             use_ssh_authorized_keys: false,
             icos_dev_settings,
         };
@@ -161,17 +162,18 @@ mod tests {
             "domain_name": "example.com"
         },
         "icos_settings": {
+            "node_reward_type": "type3.1",
             "mgmt_mac": "ec:2a:72:31:a2:0c",
             "deployment_environment": "Mainnet",
             "logging": {
                 "elasticsearch_hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443",
                 "elasticsearch_tags": "tag1 tag2"
             },
-            "nns_public_key_exists": true,
+            "use_nns_public_key": true,
             "nns_urls": [
                 "http://localhost"
             ],
-            "node_operator_private_key_exists": true,
+            "use_node_operator_private_key": true,
             "use_ssh_authorized_keys": false,
             "icos_dev_settings": {}
         },
@@ -220,17 +222,18 @@ mod tests {
             "domain_name": "example.com"
         },
         "icos_settings": {
+            "node_reward_type": "type3.1",
             "mgmt_mac": "ec:2a:72:31:a2:0c",
             "deployment_environment": "Mainnet",
             "logging": {
                 "elasticsearch_hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443",
                 "elasticsearch_tags": "tag1 tag2"
             },
-            "nns_public_key_exists": true,
+            "use_nns_public_key": true,
             "nns_urls": [
                 "http://localhost"
             ],
-            "node_operator_private_key_exists": true,
+            "use_node_operator_private_key": true,
             "use_ssh_authorized_keys": false,
             "icos_dev_settings": {}
         },

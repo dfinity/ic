@@ -1,6 +1,6 @@
 use ic_btc_replica_types::{GetSuccessorsRequestInitial, SendTransactionRequest};
 use ic_logger::{info, ReplicaLogger};
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId};
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId, VetKdKeyId};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::queues::v1 as pb_queues,
@@ -9,8 +9,8 @@ use ic_protobuf::{
 };
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
-    consensus::idkg::PreSigId,
-    crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgTargetId},
+    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId},
+    crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgId, NiDkgTargetId},
     messages::{CallbackId, CanisterCall, Request, StopCanisterCallId},
     node_id_into_protobuf, node_id_try_from_option, CanisterId, ExecutionRound, Height, NodeId,
     RegistryVersion, Time,
@@ -433,6 +433,9 @@ impl SubnetCallContextManager {
                 (MasterPublicKeyId::Schnorr(schnorr_key_id), ThresholdArguments::Schnorr(args)) => {
                     args.key_id == *schnorr_key_id
                 }
+                (MasterPublicKeyId::VetKd(vetkd_key_id), ThresholdArguments::VetKd(args)) => {
+                    args.key_id == *vetkd_key_id
+                }
                 _ => false,
             })
             .count()
@@ -803,9 +806,44 @@ impl TryFrom<pb_metadata::SchnorrArguments> for SchnorrArguments {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
+pub struct VetKdArguments {
+    pub key_id: VetKdKeyId,
+    pub derivation_id: Vec<u8>,
+    pub encryption_public_key: Vec<u8>,
+    pub ni_dkg_id: NiDkgId,
+    pub height: Height,
+}
+
+impl From<&VetKdArguments> for pb_metadata::VetKdArguments {
+    fn from(args: &VetKdArguments) -> Self {
+        Self {
+            key_id: Some((&args.key_id).into()),
+            derivation_id: args.derivation_id.to_vec(),
+            encryption_public_key: args.encryption_public_key.to_vec(),
+            ni_dkg_id: Some((args.ni_dkg_id.clone()).into()),
+            height: args.height.get(),
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::VetKdArguments> for VetKdArguments {
+    type Error = ProxyDecodeError;
+    fn try_from(context: pb_metadata::VetKdArguments) -> Result<Self, Self::Error> {
+        Ok(VetKdArguments {
+            key_id: try_from_option_field(context.key_id, "VetKdArguments::key_id")?,
+            derivation_id: context.derivation_id.to_vec(),
+            encryption_public_key: context.encryption_public_key.to_vec(),
+            ni_dkg_id: try_from_option_field(context.ni_dkg_id, "VetKdArguments::ni_dkg_id")?,
+            height: Height::from(context.height),
+        })
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ThresholdArguments {
     Ecdsa(EcdsaArguments),
     Schnorr(SchnorrArguments),
+    VetKd(VetKdArguments),
 }
 
 impl ThresholdArguments {
@@ -814,6 +852,7 @@ impl ThresholdArguments {
         match self {
             ThresholdArguments::Ecdsa(args) => MasterPublicKeyId::Ecdsa(args.key_id.clone()),
             ThresholdArguments::Schnorr(args) => MasterPublicKeyId::Schnorr(args.key_id.clone()),
+            ThresholdArguments::VetKd(args) => MasterPublicKeyId::VetKd(args.key_id.clone()),
         }
     }
 }
@@ -826,6 +865,9 @@ impl From<&ThresholdArguments> for pb_metadata::ThresholdArguments {
             }
             ThresholdArguments::Schnorr(args) => {
                 pb_metadata::threshold_arguments::ThresholdScheme::Schnorr(args.into())
+            }
+            ThresholdArguments::VetKd(args) => {
+                pb_metadata::threshold_arguments::ThresholdScheme::Vetkd(args.into())
             }
         };
         Self {
@@ -848,7 +890,51 @@ impl TryFrom<pb_metadata::ThresholdArguments> for ThresholdArguments {
             pb_metadata::threshold_arguments::ThresholdScheme::Schnorr(args) => Ok(
                 ThresholdArguments::Schnorr(SchnorrArguments::try_from(args)?),
             ),
+            pb_metadata::threshold_arguments::ThresholdScheme::Vetkd(args) => {
+                Ok(ThresholdArguments::VetKd(VetKdArguments::try_from(args)?))
+            }
         }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct IDkgSignWithThresholdContext<'a>(&'a SignWithThresholdContext);
+
+impl<'a> TryFrom<&'a SignWithThresholdContext> for IDkgSignWithThresholdContext<'a> {
+    type Error = ();
+
+    fn try_from(val: &'a SignWithThresholdContext) -> Result<Self, Self::Error> {
+        if !val.is_idkg() {
+            Err(())
+        } else {
+            Ok(Self(val))
+        }
+    }
+}
+
+impl<'a> From<IDkgSignWithThresholdContext<'a>> for &'a SignWithThresholdContext {
+    fn from(val: IDkgSignWithThresholdContext<'a>) -> Self {
+        val.0
+    }
+}
+
+impl IDkgSignWithThresholdContext<'_> {
+    pub fn inner(&self) -> &SignWithThresholdContext {
+        self.0
+    }
+}
+
+impl std::ops::Deref for IDkgSignWithThresholdContext<'_> {
+    type Target = SignWithThresholdContext;
+
+    fn deref(&self) -> &<Self as std::ops::Deref>::Target {
+        self.inner()
+    }
+}
+
+impl std::borrow::Borrow<SignWithThresholdContext> for IDkgSignWithThresholdContext<'_> {
+    fn borrow(&self) -> &SignWithThresholdContext {
+        self.inner()
     }
 }
 
@@ -869,6 +955,7 @@ impl SignWithThresholdContext {
         match &self.args {
             ThresholdArguments::Ecdsa(args) => MasterPublicKeyId::Ecdsa(args.key_id.clone()),
             ThresholdArguments::Schnorr(args) => MasterPublicKeyId::Schnorr(args.key_id.clone()),
+            ThresholdArguments::VetKd(args) => MasterPublicKeyId::VetKd(args.key_id.clone()),
         }
     }
 
@@ -880,6 +967,19 @@ impl SignWithThresholdContext {
     /// Returns true if arguments are for Schnorr.
     pub fn is_schnorr(&self) -> bool {
         matches!(&self.args, ThresholdArguments::Schnorr(_))
+    }
+
+    /// Returns true if arguments are for VetKd.
+    pub fn is_vetkd(&self) -> bool {
+        matches!(&self.args, ThresholdArguments::VetKd(_))
+    }
+
+    /// Returns true if arguments are for a context handled by IDKG.
+    pub fn is_idkg(&self) -> bool {
+        match &self.args {
+            ThresholdArguments::Ecdsa(_) | ThresholdArguments::Schnorr(_) => true,
+            ThresholdArguments::VetKd(_) => false,
+        }
     }
 
     /// Returns ECDSA arguments.
@@ -899,6 +999,16 @@ impl SignWithThresholdContext {
         match &self.args {
             ThresholdArguments::Schnorr(args) => args,
             _ => panic!("Schnorr arguments not found."),
+        }
+    }
+
+    /// Returns VetKd arguments.
+    /// Panics if arguments are not for VetKd
+    /// Should only be called if `is_vetkd` returns true.
+    pub fn vetkd_args(&self) -> &VetKdArguments {
+        match &self.args {
+            ThresholdArguments::VetKd(args) => args,
+            _ => panic!("VetKd arguments not found."),
         }
     }
 }
@@ -944,7 +1054,7 @@ impl TryFrom<pb_metadata::SignWithThresholdContext> for SignWithThresholdContext
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct IDkgDealingsContext {
     pub request: Request,
-    pub key_id: MasterPublicKeyId,
+    pub key_id: IDkgMasterPublicKeyId,
     pub nodes: BTreeSet<NodeId>,
     pub registry_version: RegistryVersion,
     pub time: Time,
@@ -954,7 +1064,7 @@ impl From<&IDkgDealingsContext> for pb_metadata::IDkgDealingsContext {
     fn from(context: &IDkgDealingsContext) -> Self {
         Self {
             request: Some(pb_queues::Request::from(&context.request)),
-            key_id: Some(pb_types::MasterPublicKeyId::from(&context.key_id)),
+            key_id: Some(pb_types::MasterPublicKeyId::from(context.key_id.inner())),
             nodes: context
                 .nodes
                 .iter()
@@ -973,9 +1083,13 @@ impl TryFrom<(Time, pb_metadata::IDkgDealingsContext)> for IDkgDealingsContext {
     fn try_from(
         (time, context): (Time, pb_metadata::IDkgDealingsContext),
     ) -> Result<Self, Self::Error> {
+        let key_id: MasterPublicKeyId =
+            try_from_option_field(context.key_id, "IDkgDealingsContext::key_id")?;
+        let key_id = key_id.try_into().map_err(ProxyDecodeError::Other)?;
+
         Ok(Self {
             request: try_from_option_field(context.request, "IDkgDealingsContext::request")?,
-            key_id: try_from_option_field(context.key_id, "IDkgDealingsContext::key_id")?,
+            key_id,
             nodes: context
                 .nodes
                 .into_iter()

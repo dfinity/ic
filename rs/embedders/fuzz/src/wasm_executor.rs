@@ -34,7 +34,19 @@ use ic_types::{
     ComputeAllocation, MemoryAllocation, NumBytes,
 };
 use ic_wasm_types::CanisterModule;
+use lazy_static::lazy_static;
 use std::{collections::BTreeSet, path::PathBuf, sync::Arc};
+
+const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
+
+lazy_static! {
+    pub(crate) static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
+        SubnetAvailableMemory::new(
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY
+        );
+}
 
 #[inline(always)]
 pub fn run_fuzzer(module: ICWasmModule) {
@@ -84,63 +96,17 @@ pub fn run_fuzzer(module: ICWasmModule) {
 
 #[inline(always)]
 fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
-    let time = UNIX_EPOCH;
-    let api_type = ApiType::init(time, vec![], user_test_id(24).get());
-
-    let system_state = SystemStateBuilder::default().build();
-    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
-    let network_topology = NetworkTopology::default();
-
-    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
-        &system_state,
-        cycles_account_manager,
-        &network_topology,
-        dirty_page_overhead,
-        ComputeAllocation::default(),
-        HypervisorConfig::default().subnet_callback_soft_limit as u64,
-        RequestMetadata::new(0, UNIX_EPOCH),
-        api_type.caller(),
-        api_type.call_context_id(),
-    );
-
+    let api_type = ApiType::init(UNIX_EPOCH, vec![], user_test_id(24).get());
     let canister_current_memory_usage = NumBytes::new(0);
     let canister_current_message_memory_usage = NumBytes::new(0);
-
-    let subnet_memory_capacity = i64::MAX / 2;
-
-    let execution_parameters = ExecutionParameters {
-        instruction_limits: InstructionLimits::new(
-            FlagStatus::Disabled,
-            DEFAULT_NUM_INSTRUCTIONS,
-            DEFAULT_NUM_INSTRUCTIONS,
-        ),
-        canister_memory_limit: NumBytes::from(4 << 30),
-        wasm_memory_limit: None,
-        memory_allocation: MemoryAllocation::default(),
-        canister_guaranteed_callback_quota: HypervisorConfig::default()
-            .canister_guaranteed_callback_quota as u64,
-        compute_allocation: ComputeAllocation::default(),
-        subnet_type: SubnetType::Application,
-        execution_mode: ExecutionMode::Replicated,
-        subnet_memory_saturation: ResourceSaturation::default(),
-    };
-
-    let subnet_available_memory = SubnetAvailableMemory::new(
-        subnet_memory_capacity,
-        subnet_memory_capacity,
-        subnet_memory_capacity,
-    );
-
     let compilation_cache = Arc::new(CompilationCache::new(NumBytes::new(0)));
-
     WasmExecutionInput {
-        api_type,
-        sandbox_safe_system_state,
+        api_type: api_type.clone(),
+        sandbox_safe_system_state: get_system_state(api_type),
         canister_current_memory_usage,
         canister_current_message_memory_usage,
-        execution_parameters,
-        subnet_available_memory,
+        execution_parameters: get_execution_parameters(),
+        subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,
         func_ref,
         compilation_cache,
     }
@@ -161,6 +127,44 @@ fn setup_execution_state(
         persisted_globals,
         WasmMetadata::default(),
     )
+}
+
+pub(crate) fn get_system_state(api_type: ApiType) -> SandboxSafeSystemState {
+    let system_state = SystemStateBuilder::default().build();
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
+    let network_topology = NetworkTopology::default();
+
+    SandboxSafeSystemState::new_for_testing(
+        &system_state,
+        cycles_account_manager,
+        &network_topology,
+        dirty_page_overhead,
+        ComputeAllocation::default(),
+        HypervisorConfig::default().subnet_callback_soft_limit as u64,
+        RequestMetadata::new(0, UNIX_EPOCH),
+        api_type.caller(),
+        api_type.call_context_id(),
+    )
+}
+
+pub(crate) fn get_execution_parameters() -> ExecutionParameters {
+    ExecutionParameters {
+        instruction_limits: InstructionLimits::new(
+            FlagStatus::Disabled,
+            DEFAULT_NUM_INSTRUCTIONS,
+            DEFAULT_NUM_INSTRUCTIONS,
+        ),
+        canister_memory_limit: NumBytes::from(4 << 30),
+        wasm_memory_limit: None,
+        memory_allocation: MemoryAllocation::default(),
+        canister_guaranteed_callback_quota: HypervisorConfig::default()
+            .canister_guaranteed_callback_quota as u64,
+        compute_allocation: ComputeAllocation::default(),
+        subnet_type: SubnetType::Application,
+        execution_mode: ExecutionMode::Replicated,
+        subnet_memory_saturation: ResourceSaturation::default(),
+    }
 }
 
 #[cfg(test)]
