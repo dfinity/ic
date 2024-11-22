@@ -234,7 +234,7 @@ pub async fn update_balance<R: CanisterRuntime>(
     let mut utxo_statuses: Vec<UtxoStatus> = vec![];
     for utxo in processable_utxos {
         if utxo.value <= kyt_fee {
-            mutate_state(|s| crate::state::audit::ignore_utxo(s, utxo.clone()));
+            mutate_state(|s| crate::state::audit::ignore_utxo(s, utxo.clone(), caller_account));
             log!(
                 P1,
                 "Ignored UTXO {} for account {caller_account} because UTXO value {} is lower than the KYT fee {}",

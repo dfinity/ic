@@ -91,14 +91,17 @@ pub fn mark_utxo_checked(
     state.mark_utxo_checked(utxo.clone(), uuid, status, kyt_provider);
 }
 
-pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo) {
+pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo, account: Account) {
     if state.has_ignored_utxo(&utxo) {
         // ignored UTXOs are periodically re-evaluated and should not trigger
         // an event if they are still ignored.
         return;
     }
-    record_event(&Event::IgnoredUtxo { utxo: utxo.clone() });
-    state.ignore_utxo(utxo);
+    record_event(&Event::IgnoredUtxoForAccount {
+        utxo: utxo.clone(),
+        account,
+    });
+    state.ignore_utxo(utxo, Some(account));
 }
 
 pub fn replace_transaction(

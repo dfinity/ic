@@ -1004,7 +1004,8 @@ impl CkBtcMinterState {
     }
 
     /// Adds given UTXO to the set of ignored UTXOs.
-    fn ignore_utxo(&mut self, utxo: Utxo) {
+    fn ignore_utxo(&mut self, utxo: Utxo, _account: Option<Account>) {
+        //TODO XC-230: use account
         assert!(utxo.value <= self.kyt_fee);
         self.ignored_utxos.insert(utxo);
     }

@@ -16,7 +16,7 @@ mod update_balance {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
         let ignored_utxo = ignored_utxo();
-        mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone()));
+        mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone(), account));
         let events_before: Vec<_> = storage::events().collect();
 
         let mut runtime = MockCanisterRuntime::new();
@@ -41,7 +41,7 @@ mod update_balance {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
         let ignored_utxo = ignored_utxo();
-        mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone()));
+        mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone(), account));
         mutate_state(|s| s.kyt_fee = ignored_utxo.value - 1);
         let events_before: Vec<_> = storage::events().collect();
 
@@ -80,7 +80,7 @@ mod update_balance {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
         let ignored_utxo = ignored_utxo();
-        mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone()));
+        mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone(), account));
         mutate_state(|s| s.kyt_fee = ignored_utxo.value - 1);
         let events_before: Vec<_> = storage::events().collect();
 

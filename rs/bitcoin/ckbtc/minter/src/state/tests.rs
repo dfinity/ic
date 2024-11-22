@@ -30,16 +30,19 @@ mod processable_utxos_for_account {
         };
         assert_ne!(account, other_account);
         let mut state = CkBtcMinterState::from(init_args());
-        state.ignore_utxo(ignored_utxo());
-        state.ignore_utxo(Utxo {
-            outpoint: OutPoint {
-                txid: "2e0bf7c2d9db13143cbb317ad4726ee2d39a83275b275be83c989ea956202410"
-                    .parse()
-                    .unwrap(),
-                vout: 504,
+        state.ignore_utxo(ignored_utxo(), Some(account));
+        state.ignore_utxo(
+            Utxo {
+                outpoint: OutPoint {
+                    txid: "2e0bf7c2d9db13143cbb317ad4726ee2d39a83275b275be83c989ea956202410"
+                        .parse()
+                        .unwrap(),
+                    vout: 504,
+                },
+                ..ignored_utxo()
             },
-            ..ignored_utxo()
-        });
+            Some(other_account),
+        );
         assert_eq!(state.ignored_utxos.len(), 2);
 
         state.quarantined_utxos.insert(quarantined_utxo());

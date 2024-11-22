@@ -124,7 +124,12 @@ pub enum Event {
 
     /// Indicates that the given UTXO's value is too small to pay for a KYT check.
     #[serde(rename = "ignored_utxo")]
+    #[deprecated(note = "Use IgnoredUtxoForAccount")]
     IgnoredUtxo { utxo: Utxo },
+
+    /// Indicates that the given UTXO's value is too small to pay for a KYT check.
+    #[serde(rename = "ignored_utxo_for_account")]
+    IgnoredUtxoForAccount { utxo: Utxo, account: Account },
 
     /// Indicates that the given KYT provider received owed fees.
     #[serde(rename = "distributed_kyt_fee")]
@@ -328,7 +333,10 @@ pub fn replay<I: CheckInvariants>(
                 );
             }
             Event::IgnoredUtxo { utxo } => {
-                state.ignore_utxo(utxo);
+                state.ignore_utxo(utxo, None);
+            }
+            Event::IgnoredUtxoForAccount { utxo, account } => {
+                state.ignore_utxo(utxo, Some(account));
             }
             Event::DistributedKytFee {
                 kyt_provider,
