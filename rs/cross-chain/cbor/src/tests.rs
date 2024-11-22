@@ -1,4 +1,3 @@
-use crate::checked_amount::CheckedAmountOf;
 use candid::{Nat, Principal};
 use ethnum::{u256, U256};
 use minicbor::{Decode, Encode};
@@ -18,7 +17,6 @@ where
 }
 
 enum IdTag {}
-type U256Newtype = CheckedAmountOf<IdTag>;
 type U64Newtype = Id<IdTag, u64>;
 
 #[derive(Eq, PartialEq, Debug, Decode, Encode)]
@@ -53,8 +51,8 @@ struct OptPrincipalContainer {
 
 #[derive(Eq, PartialEq, Debug, Decode, Encode)]
 struct U256NewtypeContainer {
-    #[cbor(n(0))]
-    pub value: U256Newtype,
+    #[cbor(n(0), with = "crate::u256")]
+    pub value: u256,
 }
 
 #[derive(Eq, PartialEq, Debug, Decode, Encode)]
@@ -81,7 +79,7 @@ proptest! {
     #[test]
     fn checked_amount_of_encoding_roundtrip((hi, lo) in (any::<u128>(), any::<u128>())) {
         check_roundtrip(&U256NewtypeContainer {
-            value: U256Newtype::from_words(hi, lo),
+            value: u256::from_words(hi, lo),
         })?;
     }
 
