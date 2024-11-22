@@ -32,7 +32,7 @@ genrule(
     name = "commit_timestamp_txt",
     # Depend on .git/index so that the commit timestamp is regenerated whenever
     # a new branch is checked out.
-    srcs = ["//:.git/index"],
+    srcs = ["//:bazel-timestamp"],
     outs = ["commit_timestamp.txt"],
     cmd = select({
         "//bazel:is_release_build": "git show -s --format=%ct > $@",
