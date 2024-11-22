@@ -49,6 +49,11 @@
       "image": "jaegertracing/all-in-one",
       "repo": "docker.io",
       "sha256": "836e9b69c88afbedf7683ea7162e179de63b1f981662e83f5ebb68badadc710f"
+    },
+    {
+      "image": "nginxproxy/nginx-proxy",
+      "repo": "docker.io",
+      "sha256": "c9ba1ba8a93223305a8bce2ae09024060797698121cd01a48e5cd7462b22faa1"
     }
   ]
 }

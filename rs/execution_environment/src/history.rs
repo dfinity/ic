@@ -108,19 +108,19 @@ impl IngressHistoryWriterImpl {
             received_time: RwLock::new(HashMap::new()),
             message_state_transition_received_duration_seconds: metrics_registry.histogram(
                 "message_state_transition_received_duration_seconds",
-                "Time taken by messages to get from block maker into ingress queue",
+                "Per-ingress-message wall-clock duration between block maker and ingress queue",
                 // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
                 decimal_buckets(-2,2),
             ),
             message_state_transition_processing_duration_seconds: metrics_registry.histogram(
                 "message_state_transition_processing_duration_seconds",
-                "Time taken by messages to get from block maker to execution",
+                "Per-ingress-message wall-clock duration between block maker and completed (message, not call) execution",
                 // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
                 decimal_buckets(-2,2),
             ),
             message_state_transition_received_to_processing_duration_seconds: metrics_registry.histogram(
                 "message_state_transition_received_to_processing_duration_seconds",
-                "Time spent by messages between induction and execution",
+                "Per-ingress-message wall-clock duration between induction and completed (message, not call) execution",
                 // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
                 decimal_buckets(-2,2),
             ),
@@ -190,21 +190,6 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
         use IngressState::*;
         use IngressStatus::*;
 
-        // Computes the duration elapsed since the time when a message was included into
-        // a block (approximated by block time); and since its induction.
-        let message_latencies_seconds = |message_id| {
-            let received_time = self.received_time.read().unwrap();
-            received_time.get(message_id).map(|timer| {
-                (
-                    system_time_now()
-                        .saturating_duration_since(timer.ic_time)
-                        .as_secs_f64(),
-                    Instant::now()
-                        .saturating_duration_since(timer.system_time)
-                        .as_secs_f64(),
-                )
-            })
-        };
         // Latency instrumentation.
         match (&current_status, &status) {
             // Newly received message: observe its induction latency.
@@ -214,27 +199,30 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                     state: Received, ..
                 },
             ) => {
-                if let Some((seconds_since_block_made, _)) = message_latencies_seconds(&message_id)
-                {
-                    self.message_state_transition_received_duration_seconds
-                        .observe(seconds_since_block_made);
-                }
+                // Wall clock duration since the message was included into a block.
+                let duration_since_block_made = system_time_now().saturating_duration_since(time);
+                self.message_state_transition_received_duration_seconds
+                    .observe(duration_since_block_made.as_secs_f64());
             }
 
-            // Message popped from ingress queue: observe its processing latency.
+            // Message popped from ingress queue: observe its processing latencies.
             (
                 Known {
                     state: Received, ..
                 },
                 Known { state, .. },
             ) if state != &Received => {
-                if let Some((seconds_since_block_made, seconds_since_induction)) =
-                    message_latencies_seconds(&message_id)
-                {
+                if let Some(timer) = self.received_time.read().unwrap().get(&message_id) {
+                    // Wall clock duration since the message was included into a block.
+                    let duration_since_block_made =
+                        system_time_now().saturating_duration_since(timer.ic_time);
+                    // Wall clock duration since the message was inducted.
+                    let duration_since_induction =
+                        Instant::now().saturating_duration_since(timer.system_time);
                     self.message_state_transition_processing_duration_seconds
-                        .observe(seconds_since_block_made);
+                        .observe(duration_since_block_made.as_secs_f64());
                     self.message_state_transition_received_to_processing_duration_seconds
-                        .observe(seconds_since_induction);
+                        .observe(duration_since_induction.as_secs_f64());
                 }
             }
             _ => {}

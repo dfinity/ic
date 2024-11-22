@@ -930,7 +930,7 @@ impl SandboxSafeSystemState {
         let mut new_balance = self.cycles_balance();
 
         // It is safe to unwrap since msg_cycles_accept and msg_cycles_accept128 are
-        // available only forApiType::{Update, RepyCallback, RejectCallBack} and all of
+        // available only for ApiType::{Update, ReplyCallback, RejectCallback} and all of
         // them have CallContextId, hence SystemStateChanges::call_context_balance_taken
         // will never be `None`.
         debug_assert!(self

@@ -145,8 +145,8 @@ mod tests {
             max_time_in_queue_nanos: 0,
             min_confirmations: None,
             mode: crate::state::Mode::GeneralAvailability,
+            kyt_principal: None,
             new_kyt_principal: Some(CanisterId::from(0)),
-            kyt_principal: Some(CanisterId::from(0)),
             kyt_fee: None,
         }
     }

@@ -490,10 +490,10 @@ pub fn make_registry_cup_from_cup_contents(
         Err(err) => {
             warn!(
                 logger,
-                "Failed constructing IDKG summary block from CUP contents: {}", err
+                "Failed constructing IDKG summary block from CUP contents: {}.", err
             );
 
-            None
+            return None;
         }
     };
 

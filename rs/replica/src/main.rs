@@ -9,14 +9,12 @@ use ic_metrics::MetricsRegistry;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
 use ic_tracing::ReloadHandles;
+use ic_tracing_jaeger_exporter::jaeger_exporter;
 use ic_types::{
     consensus::CatchUpPackage, replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion,
     SubnetId,
 };
 use nix::unistd::{setpgid, Pid};
-use opentelemetry::{trace::TracerProvider, KeyValue};
-use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::{trace, Resource};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{signal, SignalKind};
 use tracing_subscriber::layer::SubscriberExt;
@@ -234,39 +232,11 @@ fn main() -> io::Result<()> {
     let mut tracing_layers = vec![];
 
     // TODO: the replica config has empty string instead of a None value for the 'jaeger_addr'. It needs to be fixed.
-    match config.tracing.jaeger_addr.as_ref() {
-        Some(jaeger_collector_addr) if !jaeger_collector_addr.is_empty() => {
-            let _rt_guard = rt_main.enter();
-
-            let span_exporter = opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_endpoint(jaeger_collector_addr)
-                .with_protocol(opentelemetry_otlp::Protocol::Grpc);
-
-            match opentelemetry_otlp::new_pipeline()
-                .tracing()
-                .with_trace_config(
-                    trace::Config::default()
-                        .with_sampler(opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(0.01))
-                        .with_resource(Resource::new(vec![KeyValue::new(
-                            "service.name",
-                            "replica",
-                        )])),
-                )
-                .with_exporter(span_exporter)
-                .install_batch(opentelemetry_sdk::runtime::Tokio)
-            {
-                Ok(tracer) => {
-                    let otel_layer =
-                        tracing_opentelemetry::OpenTelemetryLayer::new(tracer.tracer("jaeger"));
-                    tracing_layers.push(otel_layer.boxed());
-                }
-                Err(err) => {
-                    tracing::warn!("Failed to create the opentelemetry tracer: {:#?}", err);
-                }
-            }
+    if let Some(jaeger_addr) = &config.tracing.jaeger_addr {
+        match jaeger_exporter(jaeger_addr, "replica", rt_main.handle()) {
+            Ok(layer) => tracing_layers.push(layer.boxed()),
+            Err(err) => info!(logger, "{:?}", err),
         }
-        _ => {}
     }
 
     let (reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(vec![]);

@@ -299,17 +299,15 @@ impl PocketIc {
             .map(|res| Url::parse(&format!("http://{}:{}/", LOCALHOST, res.port)).unwrap())
     }
 
-    /// Creates an HTTP gateway for this IC instance
-    /// listening on an optionally specified port
-    /// and configures the IC instance to make progress
-    /// automatically, i.e., periodically update the time
-    /// of the IC to the real time and execute rounds on the subnets.
+    /// Creates an HTTP gateway for this PocketIC instance listening
+    /// on an optionally specified port (defaults to choosing an arbitrary unassigned port)
+    /// and configures the PocketIC instance to make progress automatically, i.e.,
+    /// periodically update the time of the PocketIC instance to the real time and execute rounds on the subnets.
     /// Returns the URL at which `/api/v2` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn make_live(&mut self, listen_at: Option<u16>) -> Url {
-        self.auto_progress().await;
-        self.start_http_gateway(listen_at, None, None).await
+        self.make_live_with_params(listen_at, None, None).await
     }
 
     /// Creates an HTTP gateway for this PocketIC instance listening
@@ -327,6 +325,9 @@ impl PocketIc {
         domains: Option<Vec<String>>,
         https_config: Option<HttpsConfig>,
     ) -> Url {
+        if let Some(url) = self.url() {
+            return url;
+        }
         self.auto_progress().await;
         self.start_http_gateway(listen_at, domains, https_config)
             .await
@@ -338,9 +339,6 @@ impl PocketIc {
         domains: Option<Vec<String>>,
         https_config: Option<HttpsConfig>,
     ) -> Url {
-        if let Some(url) = self.url() {
-            return url;
-        }
         let endpoint = self.server_url.join("http_gateway").unwrap();
         let http_gateway_config = HttpGatewayConfig {
             ip_addr: None,

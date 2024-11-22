@@ -34,7 +34,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
+    image: ghcr.io/dfinity/ic-build@sha256:1d775e6d161dee883d10f082ab7fdde3e3d26061e1209255fb6514f8b62b206b
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
