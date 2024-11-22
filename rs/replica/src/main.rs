@@ -236,7 +236,7 @@ fn main() -> io::Result<()> {
 
     let (logging, _logging_drop_guard) = logging_layer(&config.logger, node_id, subnet_id);
 
-    let mut tracing_layers = vec![logging.boxed()];
+    let mut tracing_layers = vec![logging.with_filter(tracing::level_filters::LevelFilter::from(tracing::level_filters::LevelFilter::INFO)).boxed()];
 
     let (reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(vec![]);
     let tracing_handle = ReloadHandles::new(reload_handle);
@@ -257,6 +257,7 @@ fn main() -> io::Result<()> {
     }
 
     info!(logger, "Replica Started");
+    tracing::info!("Rosti replica started!");
     info!(logger, "Running in subnetwork {:?}", subnet_id);
     if let Ok((path, hash)) = get_replica_binary_hash() {
         info!(logger, "Running replica binary: {:?} {}", path, hash);
