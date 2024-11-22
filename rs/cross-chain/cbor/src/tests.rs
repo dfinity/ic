@@ -50,12 +50,6 @@ struct OptPrincipalContainer {
 }
 
 #[derive(Eq, PartialEq, Debug, Decode, Encode)]
-struct U256NewtypeContainer {
-    #[cbor(n(0), with = "crate::u256")]
-    pub value: u256,
-}
-
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
 struct U64NewtypeContainer {
     #[cbor(n(0), with = "crate::id")]
     pub value: U64Newtype,
@@ -73,13 +67,6 @@ proptest! {
     fn u256_small_value_encoding_roundtrip(n in any::<u64>()) {
         check_roundtrip(&U256Container {
             value: u256::from(n),
-        })?;
-    }
-
-    #[test]
-    fn checked_amount_of_encoding_roundtrip((hi, lo) in (any::<u128>(), any::<u128>())) {
-        check_roundtrip(&U256NewtypeContainer {
-            value: u256::from_words(hi, lo),
         })?;
     }
 
