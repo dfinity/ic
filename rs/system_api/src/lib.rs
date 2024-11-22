@@ -3229,7 +3229,7 @@ impl SystemApi for SystemApiImpl {
                 }
             }
         };
-        trace_syscall!(self, MintCycles, result, cycles);
+        trace_syscall!(self, MintCycles128, result, cycles);
         result
     }
 
