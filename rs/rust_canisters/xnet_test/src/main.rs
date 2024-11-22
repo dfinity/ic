@@ -149,8 +149,6 @@ fn log(message: &str) {
 /// requests to other canisters.
 #[update]
 fn start(start_args: StartArgs) -> String {
-    log(&format!("{:?}", start_args));
-
     NETWORK_TOPOLOGY.with(move |canisters| {
         *canisters.borrow_mut() = start_args.network_topology;
     });
