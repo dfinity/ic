@@ -595,7 +595,7 @@ impl PrivateKey {
         rng: &mut R,
         taproot_tree_hash: &[u8],
     ) -> Result<[u8; 64], InvalidTaprootHash> {
-        if !taproot_tree_hash.empty() && taproot_tree_hash.len() != 32 {
+        if !taproot_tree_hash.is_empty() && taproot_tree_hash.len() != 32 {
             return Err(InvalidTaprootHash::InvalidLength);
         }
 
