@@ -79,7 +79,7 @@ pub struct PocketIc {
     server_url: Url,
     reqwest_client: reqwest::Client,
     // do not delete the instance when dropping this handle if this handle was created for an existing instance
-    keep: bool,
+    owns_instance: bool,
     _log_guard: Option<WorkerGuard>,
 }
 
@@ -114,7 +114,7 @@ impl PocketIc {
             http_gateway: None,
             server_url,
             reqwest_client,
-            keep: true,
+            owns_instance: true,
             _log_guard: log_guard,
         }
     }
@@ -167,7 +167,7 @@ impl PocketIc {
             http_gateway: None,
             server_url,
             reqwest_client,
-            keep: false,
+            owns_instance: false,
             _log_guard: log_guard,
         }
     }
@@ -1300,7 +1300,7 @@ impl PocketIc {
 
     pub(crate) async fn do_drop(&mut self) {
         self.stop_http_gateway().await;
-        if !self.keep {
+        if !self.owns_instance {
             self.reqwest_client
                 .delete(self.instance_url())
                 .send()
