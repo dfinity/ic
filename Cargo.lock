@@ -19963,6 +19963,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "stable_data_provider"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "candid",
+ "ic-cdk 0.16.0",
+ "ic-interfaces-registry",
+ "ic-nns-common",
+ "ic-nns-constants",
+ "ic-registry-common-proto",
+ "ic-registry-keys",
+ "ic-registry-transport",
+ "ic-stable-structures",
+ "ic-sys",
+ "ic-types",
+ "itertools 0.12.1",
+ "lazy_static",
+ "prost 0.13.3",
+ "thiserror 2.0.3",
+]
+
+[[package]]
 name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

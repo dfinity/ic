@@ -433,6 +433,7 @@ members = [
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
+    "rs/registry/stable_data_provider",
 ]
 
 resolver = "2"

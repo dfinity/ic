@@ -1,0 +1,21 @@
+[package]
+name = "stable_data_provider"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+
+[dependencies]
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-registry-common-proto = { path = "../proto" }
+ic-registry-transport = { path = "../transport" }
+ic-types = { path = "../../types/types" }
+ic-stable-structures = { workspace = true }
+ic-nns-constants = { path = "../../nns/constants" }
+itertools = { workspace = true }
+prost = { workspace = true }
+ic-nns-common = { path = "../../nns/common" }
+anyhow = { workspace = true }
+ic-cdk = { workspace = true }
+candid = { workspace = true }
