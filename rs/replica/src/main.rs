@@ -18,8 +18,7 @@ use ic_types::{
 use nix::unistd::{setpgid, Pid};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{signal, SignalKind};
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::Layer;
+use tracing_subscriber::{filter::filter_fn, layer::SubscriberExt, Layer};
 
 #[cfg(target_os = "linux")]
 mod jemalloc_metrics;
@@ -235,6 +234,8 @@ fn main() -> io::Result<()> {
     //   3. Jeager exporter if enabled
 
     let (logging, _logging_drop_guard) = logging_layer(&config.logger, node_id, subnet_id);
+    // TARPC is way to verbose. Turn it off for now.
+    let logging = logging.with_filter(filter_fn(|metadata| metadata.target() != "tarpc::client"));
 
     let mut tracing_layers = vec![logging.boxed()];
 
@@ -257,6 +258,7 @@ fn main() -> io::Result<()> {
     }
 
     info!(logger, "Replica Started");
+    tracing::info!("Rosti replica started!");
     info!(logger, "Running in subnetwork {:?}", subnet_id);
     if let Ok((path, hash)) = get_replica_binary_hash() {
         info!(logger, "Running replica binary: {:?} {}", path, hash);
