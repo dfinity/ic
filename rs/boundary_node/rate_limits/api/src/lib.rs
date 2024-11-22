@@ -2,7 +2,6 @@ use candid::CandidType;
 use candid::Principal;
 use schema_versions::v1::RateLimitRule;
 use serde::{Deserialize, Serialize};
-
 mod schema_versions;
 pub use schema_versions::v1;
 
@@ -15,13 +14,27 @@ pub type SchemaVersion = u64;
 pub type GetConfigResponse = Result<ConfigResponse, String>;
 pub type AddConfigResponse = Result<(), String>;
 pub type GetRuleByIdResponse = Result<OutputRuleMetadata, String>;
-pub type DiscloseRulesResponse = Result<(), String>;
+pub type DiscloseRulesResponse = Result<(), DiscloseRulesError>;
 pub type GetRulesByIncidentIdResponse = Result<Vec<OutputRuleMetadata>, String>;
 
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(CandidType, Deserialize, Debug, Clone)]
 pub enum DiscloseRulesArg {
     RuleIds(Vec<RuleId>),
     IncidentIds(Vec<IncidentId>),
+}
+
+#[derive(CandidType, Debug, Deserialize)]
+pub enum DiscloseRulesError {
+    /// Indicates an unauthorized attempt to disclose rules
+    Unauthorized,
+    /// Signifies that an input ID provided for disclosure is not a valid UUID
+    InvalidUuidFormat(String),
+    /// Signifies that a specified incident ID could not be found
+    IncidentIdNotFound(String),
+    /// Signifies that a specified rule ID could not be found
+    RuleIdNotFound(String),
+    /// Captures all unexpected internal errors during the disclosure process
+    Internal(String),
 }
 
 #[derive(CandidType, Deserialize, Debug)]
@@ -34,6 +47,7 @@ pub struct ConfigResponse {
 #[derive(CandidType, Deserialize, Debug)]
 pub struct OutputConfig {
     pub schema_version: SchemaVersion,
+    pub is_redacted: bool,
     pub rules: Vec<OutputRule>,
 }
 
@@ -99,6 +113,7 @@ impl std::fmt::Display for ConfigResponse {
 impl std::fmt::Display for OutputConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Schema version: {}", self.schema_version)?;
+        writeln!(f, "{INDENT}Is redacted: {}", self.is_redacted)?;
         for (i, rule) in self.rules.iter().enumerate() {
             writeln!(f, "{DOUBLE_INDENT}Rule {}:", i + 1)?;
             writeln!(f, "{DOUBLE_INDENT}ID: {}", rule.id)?;

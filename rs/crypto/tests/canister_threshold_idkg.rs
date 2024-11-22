@@ -33,8 +33,8 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealers, IDkgReceivers, IDkgTranscript, IDkgTranscriptOperation, IDkgTranscriptParams,
     InitialIDkgDealings, SignedIDkgDealing,
 };
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
-use ic_types::crypto::{AlgorithmId, CryptoError};
+use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
+use ic_types::crypto::{AlgorithmId, CryptoError, ExtendedDerivationPath};
 use ic_types::{NodeId, Randomness};
 use maplit::hashset;
 use rand::prelude::*;

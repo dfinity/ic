@@ -28,6 +28,7 @@ ic-sns-root = { path = "../../sns/root" }
 ic-sns-swap = { path = "../../sns/swap" }
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+itertools = { workspace = true }
 lazy_static = { workspace = true }
 lifeline = { path = "../../nns/handlers/lifeline/impl" }
 pocket-ic = { path = "../../../packages/pocket-ic" }

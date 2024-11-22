@@ -1,7 +1,7 @@
-use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use crate::crypto::impl_display_using_debug;
 use crate::crypto::threshold_sig::errors::threshold_sig_data_not_found_error::ThresholdSigDataNotFoundError;
 use crate::crypto::threshold_sig::ni_dkg::NiDkgId;
+use crate::crypto::ExtendedDerivationPath;
 use crate::crypto::HexEncoding;
 use crate::NodeId;
 use serde::{Deserialize, Serialize};

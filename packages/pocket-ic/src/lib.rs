@@ -166,8 +166,12 @@ impl PocketIcBuilder {
     }
 
     pub fn with_bitcoind_addr(self, bitcoind_addr: SocketAddr) -> Self {
+        self.with_bitcoind_addrs(vec![bitcoind_addr])
+    }
+
+    pub fn with_bitcoind_addrs(self, bitcoind_addrs: Vec<SocketAddr>) -> Self {
         Self {
-            bitcoind_addr: Some(vec![bitcoind_addr]),
+            bitcoind_addr: Some(bitcoind_addrs),
             ..self
         }
     }
@@ -344,9 +348,35 @@ impl PocketIc {
         PocketIcBuilder::new().with_application_subnet().build()
     }
 
-    /// Returns the instance ID.
-    pub fn instance_id(&self) -> InstanceId {
-        self.pocket_ic.instance_id
+    /// Creates a PocketIC handle to an existing instance on a running server.
+    /// Note that this handle does not extend the lifetime of the existing instance,
+    /// i.e., the existing instance is deleted and this handle stops working
+    /// when the PocketIC handle that created the existing instance is dropped.
+    pub fn new_from_existing_instance(
+        server_url: Url,
+        instance_id: InstanceId,
+        max_request_time_ms: Option<u64>,
+    ) -> Self {
+        let (tx, rx) = channel();
+        let thread = thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            tx.send(rt).unwrap();
+        });
+        let runtime = rx.recv().unwrap();
+
+        let pocket_ic = runtime.block_on(async {
+            PocketIcAsync::new_from_existing_instance(server_url, instance_id, max_request_time_ms)
+                .await
+        });
+
+        Self {
+            pocket_ic,
+            runtime: Arc::new(runtime),
+            thread: Some(thread),
+        }
     }
 
     pub(crate) fn from_components(
@@ -386,6 +416,16 @@ impl PocketIc {
             runtime: Arc::new(runtime),
             thread: Some(thread),
         }
+    }
+
+    /// Returns the URL of the PocketIC server on which this PocketIC instance is running.
+    pub fn get_server_url(&self) -> Url {
+        self.pocket_ic.get_server_url()
+    }
+
+    /// Returns the instance ID.
+    pub fn instance_id(&self) -> InstanceId {
+        self.pocket_ic.instance_id
     }
 
     /// Returns the topology of the different subnets of this PocketIC instance.

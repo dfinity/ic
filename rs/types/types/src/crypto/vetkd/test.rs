@@ -1,6 +1,6 @@
-use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use crate::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet};
 use crate::crypto::vetkd::{VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare};
+use crate::crypto::ExtendedDerivationPath;
 use crate::Height;
 use ic_base_types::PrincipalId;
 use ic_base_types::SubnetId;

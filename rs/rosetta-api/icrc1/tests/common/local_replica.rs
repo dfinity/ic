@@ -75,7 +75,7 @@ pub fn icrc_ledger_default_args_builder() -> InitArgsBuilder {
 }
 
 // Return the wasm of the icrc ledger
-fn icrc_ledger_wasm() -> Vec<u8> {
+pub fn icrc_ledger_wasm() -> Vec<u8> {
     let icrc_ledger_project_path =
         std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
             .parent()
@@ -87,12 +87,32 @@ fn icrc_ledger_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(icrc_ledger_project_path, "ic-icrc1-ledger", &[])
 }
 
+pub fn icrc_ledger_old_certificate_wasm() -> Vec<u8> {
+    let ledger_wasm_path = std::env::var("IC_ICRC1_LEDGER_WASM_PATH_OLD_CERTIFICATE").expect(
+        "The Ledger wasm path must be set using the env variable IC_ICRC1_LEDGER_WASM_PATH_OLD_CERTIFICATE",
+    );
+    std::fs::read(&ledger_wasm_path).unwrap_or_else(|e| {
+        panic!(
+            "failed to load Wasm file from path {} (env var IC_ICRC1_LEDGER_WASM_PATH_OLD_CERTIFICATE): {}",
+            ledger_wasm_path, e
+        )
+    })
+}
+
 const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
 
 pub fn create_and_install_icrc_ledger(pocket_ic: &PocketIc, init_args: InitArgs) -> Principal {
     let wasm_module = local_replica::icrc_ledger_wasm();
-    let canister_id = Principal::from_str("2ouva-viaaa-aaaaq-aaamq-cai").unwrap();
+    create_and_install_custom_icrc_ledger(pocket_ic, init_args, wasm_module)
+}
+
+pub fn create_and_install_custom_icrc_ledger(
+    pocket_ic: &PocketIc,
+    init_args: InitArgs,
+    wasm_module: Vec<u8>,
+) -> Principal {
     let custom_encoded_init_args = Encode!(&(LedgerArgument::Init(init_args.clone()))).unwrap();
+    let canister_id = Principal::from_str("2ouva-viaaa-aaaaq-aaamq-cai").unwrap();
     pocket_ic
         .create_canister_with_id(None, None, canister_id)
         .unwrap();

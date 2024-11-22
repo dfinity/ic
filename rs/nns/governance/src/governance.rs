@@ -135,7 +135,7 @@ mod benches;
 pub mod tla_macros;
 #[cfg(feature = "tla")]
 pub mod tla;
-use crate::voting::cast_vote_and_cascade_follow;
+
 #[cfg(feature = "tla")]
 pub use tla::{
     claim_neuron_desc, split_neuron_desc, tla_update_method, InstrumentationState, ToTla,
@@ -5073,19 +5073,6 @@ impl Governance {
             .expect("NetworkEconomics not present")
     }
 
-    /// Inserts a proposals that has already been validated in the state.
-    ///
-    /// This is a low-level function that makes no verification whatsoever.
-    fn insert_proposal(&mut self, pid: u64, data: ProposalData) {
-        let voting_period_seconds = self.voting_period_seconds()(data.topic());
-        self.closest_proposal_deadline_timestamp_seconds = std::cmp::min(
-            data.proposal_timestamp_seconds + voting_period_seconds,
-            self.closest_proposal_deadline_timestamp_seconds,
-        );
-        self.heap_data.proposals.insert(pid, data);
-        self.process_proposal(pid);
-    }
-
     /// The proposal id of the next proposal.
     fn next_proposal_id(&self) -> u64 {
         // Correctness is based on the following observations:
@@ -5400,7 +5387,7 @@ impl Governance {
             .collect()
     }
 
-    pub fn make_proposal(
+    pub async fn make_proposal(
         &mut self,
         proposer_id: &NeuronId,
         caller: &PrincipalId,
@@ -5575,7 +5562,7 @@ impl Governance {
         };
 
         // Create the proposal.
-        let mut proposal_data = ProposalData {
+        let proposal_data = ProposalData {
             id: Some(proposal_id),
             proposer: Some(*proposer_id),
             reject_cost_e8s,
@@ -5597,17 +5584,18 @@ impl Governance {
         })
         .expect("Proposer not found.");
 
-        // Cast self-vote, including following.
-        cast_vote_and_cascade_follow(
-            &proposal_id,
-            &mut proposal_data.ballots,
-            proposer_id,
-            Vote::Yes,
-            topic,
-            &mut self.neuron_store,
-        );
         // Finally, add this proposal as an open proposal.
-        self.insert_proposal(proposal_num, proposal_data);
+        let voting_period_seconds = self.voting_period_seconds()(proposal_data.topic());
+        self.closest_proposal_deadline_timestamp_seconds = std::cmp::min(
+            proposal_data.proposal_timestamp_seconds + voting_period_seconds,
+            self.closest_proposal_deadline_timestamp_seconds,
+        );
+        self.heap_data.proposals.insert(proposal_num, proposal_data);
+
+        self.cast_vote_and_cascade_follow(proposal_id, *proposer_id, Vote::Yes, topic)
+            .await;
+
+        self.process_proposal(proposal_num);
 
         self.refresh_voting_power(proposer_id);
 
@@ -5757,7 +5745,7 @@ impl Governance {
         }
     }
 
-    fn register_vote(
+    async fn register_vote(
         &mut self,
         neuron_id: &NeuronId,
         caller: &PrincipalId,
@@ -5823,15 +5811,14 @@ impl Governance {
             ));
         }
 
-        cast_vote_and_cascade_follow(
+        self.cast_vote_and_cascade_follow(
             // Actually update the ballot, including following.
-            proposal_id,
-            &mut proposal.ballots,
-            neuron_id,
+            *proposal_id,
+            *neuron_id,
             vote,
             topic,
-            &mut self.neuron_store,
-        );
+        )
+        .await;
 
         self.process_proposal(proposal_id.id);
 
@@ -6343,7 +6330,7 @@ impl Governance {
                 .follow(&id, caller, f)
                 .map(|_| ManageNeuronResponse::follow_response()),
             Some(Command::MakeProposal(p)) => {
-                self.make_proposal(&id, caller, p).map(|proposal_id| {
+                self.make_proposal(&id, caller, p).await.map(|proposal_id| {
                     ManageNeuronResponse::make_proposal_response(
                         proposal_id,
                         "The proposal has been created successfully.".to_string(),
@@ -6352,6 +6339,7 @@ impl Governance {
             }
             Some(Command::RegisterVote(v)) => self
                 .register_vote(&id, caller, v)
+                .await
                 .map(|_| ManageNeuronResponse::register_vote_response()),
             Some(Command::ClaimOrRefresh(_)) => {
                 panic!("This should have already returned")
@@ -6977,6 +6965,11 @@ impl Governance {
                 latest_round_available_e8s_equivalent_float as u64,
             ),
         })
+    }
+
+    pub fn batch_adjust_neurons_storage(&mut self, start_neuron_id: NeuronId) -> Option<NeuronId> {
+        self.neuron_store
+            .batch_adjust_neurons_storage(start_neuron_id)
     }
 
     /// Recompute cached metrics once per day
