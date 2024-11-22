@@ -61,7 +61,9 @@ else
     # Upload the dep
     dep_sha256=$(sha256sum "$dep_filename" | cut -d' ' -f1)
     dep_upload_url="$UPLOAD_URL/$dep_sha256"
-    curl --silent --fail "$dep_upload_url" --upload-file "$dep_filename" -w 'Uploaded %{size_upload}B in: %{time_total}s (%{speed_upload}B/s)\n' >&2
+    # read & pretty print 3 metrics: upload size, upload time & upload speed
+    read -ra metrics < <(curl --silent --fail "$dep_upload_url" --upload-file "$dep_filename" -w '%{size_upload} %{time_total} %{speed_upload}')
+    echo "Uploaded $(numfmt --to=iec-i --suffix=B "${metrics[0]}") in ${metrics[1]}s ($(numfmt --to=iec-i --suffix=B "${metrics[2]}")/s)" >&2
 
     # Check that it was actually uploaded and can be served (this sometimes takes a minute)
     attempt=1
