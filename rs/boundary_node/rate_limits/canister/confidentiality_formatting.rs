@@ -1,13 +1,10 @@
-use mockall::automock;
-
 use crate::types::{OutputConfig, OutputRuleMetadata};
 
 /// Trait for formatting confidential data based on access levels
-#[automock(type Input = OutputConfig;)]
-pub trait ConfidentialityFormatting<Input = OutputConfig> {
-    type Input: Clone;
+pub trait ConfidentialityFormatting {
+    type Input;
 
-    fn format(&self, value: &Self::Input) -> Self::Input;
+    fn format(&self, value: Self::Input) -> Self::Input;
 }
 
 pub struct ConfigConfidentialityFormatter;
@@ -17,8 +14,8 @@ pub struct RuleConfidentialityFormatter;
 impl ConfidentialityFormatting for ConfigConfidentialityFormatter {
     type Input = OutputConfig;
 
-    fn format(&self, config: &OutputConfig) -> OutputConfig {
-        let mut config = config.clone();
+    fn format(&self, config: OutputConfig) -> OutputConfig {
+        let mut config = config;
         config.is_redacted = true;
         // Redact (hide) fields of non-disclosed rules
         config.rules.iter_mut().for_each(|rule| {
@@ -34,8 +31,8 @@ impl ConfidentialityFormatting for ConfigConfidentialityFormatter {
 impl ConfidentialityFormatting for RuleConfidentialityFormatter {
     type Input = OutputRuleMetadata;
 
-    fn format(&self, rule: &OutputRuleMetadata) -> OutputRuleMetadata {
-        let mut rule = rule.clone();
+    fn format(&self, rule: OutputRuleMetadata) -> OutputRuleMetadata {
+        let mut rule = rule;
         // Redact (hide) fields of non-disclosed rule
         if rule.disclosed_at.is_none() {
             rule.description = None;

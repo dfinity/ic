@@ -133,7 +133,7 @@ impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputConfig>, A: Reso
 
         // Hide non-disclosed rules from unauthorized viewers.
         if !is_authorized_viewer {
-            config = self.formatter.format(&config);
+            config = self.formatter.format(config);
         }
 
         let config_response = api::ConfigResponse {
@@ -188,7 +188,7 @@ impl<
                 == AccessLevel::FullAccess
                 || self.access_resolver.get_access_level() == AccessLevel::FullRead;
             if !is_authorized_viewer {
-                output_rule = self.formatter.format(&output_rule);
+                output_rule = self.formatter.format(output_rule);
             }
 
             output_rules.push(output_rule.into());
@@ -233,7 +233,7 @@ impl<
             || self.access_resolver.get_access_level() == AccessLevel::FullRead;
 
         if !is_authorized_viewer {
-            output_rule = self.formatter.format(&output_rule);
+            output_rule = self.formatter.format(output_rule);
         }
 
         Ok(output_rule.into())
