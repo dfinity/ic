@@ -13,7 +13,7 @@ pub trait ResolveAccessLevel {
     fn get_access_level(&self) -> AccessLevel;
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum AccessLevel {
     FullAccess,
     FullRead,

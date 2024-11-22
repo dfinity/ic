@@ -4,7 +4,7 @@ use crate::confidentiality_formatting::{
     ConfigConfidentialityFormatter, RuleConfidentialityFormatter,
 };
 use crate::disclose::{DisclosesRules, RulesDiscloser};
-use crate::fetcher::{ConfigFetcher, EntityFetcher, IncidentFetcher, RuleFetcher};
+use crate::getter::{ConfigGetter, EntityGetter, IncidentGetter, RuleGetter};
 use crate::metrics::{
     export_metrics_as_http_response, with_metrics_registry, WithMetrics, LAST_CANISTER_CHANGE_TIME,
     LAST_SUCCESSFUL_REGISTRY_POLL_TIME, REGISTRY_POLL_CALLS_COUNTER,
@@ -92,38 +92,44 @@ fn post_upgrade(init_arg: InitArg) {
     init(init_arg);
 }
 
+/// Retrieves the rate-limit configuration from the canister, applying confidentiality formatting based on caller's access level and rules confidentiality statuses
+///
+/// This query method fetches either the latest configuration or a specific version, if provided in the input.
+/// The response includes the config containing all rate-limit rules and the JSON schema version needed for decoding the rules.
 #[query]
 fn get_config(version: Option<Version>) -> GetConfigResponse {
     let caller_id = ic_cdk::api::caller();
     let response = with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let formatter = ConfigConfidentialityFormatter;
-        let fetcher = ConfigFetcher::new(state, formatter, access_resolver);
-        fetcher.fetch(version)
+        let getter = ConfigGetter::new(state, formatter, access_resolver);
+        getter.get(&version)
     })?;
     Ok(response)
 }
 
+/// Retrieves a specific rate-limit rule by its ID, applying confidentiality formatting, based on caller's access level and rule's confidentiality status
 #[query]
 fn get_rule_by_id(rule_id: RuleId) -> GetRuleByIdResponse {
     let caller_id = ic_cdk::api::caller();
     let response = with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let formatter = RuleConfidentialityFormatter;
-        let fetcher = RuleFetcher::new(state, formatter, access_resolver);
-        fetcher.fetch(rule_id)
+        let getter = RuleGetter::new(state, formatter, access_resolver);
+        getter.get(&rule_id)
     })?;
     Ok(response)
 }
 
+/// Retrieves all rate-limit rules associated with a specific incident ID, applying confidentiality formatting, based on caller's access level and rule's confidentiality status
 #[query]
 fn get_rules_by_incident_id(incident_id: IncidentId) -> GetRulesByIncidentIdResponse {
     let caller_id = ic_cdk::api::caller();
     let response = with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let formatter = RuleConfidentialityFormatter;
-        let fetcher = IncidentFetcher::new(state, formatter, access_resolver);
-        fetcher.fetch(incident_id)
+        let getter = IncidentGetter::new(state, formatter, access_resolver);
+        getter.get(&incident_id)
     })?;
     Ok(response)
 }
@@ -146,7 +152,7 @@ fn add_config(config: InputConfig) -> AddConfigResponse {
     Ok(result)
 }
 
-/// Makes specified rules publicly accessible in the canister
+/// Makes specified rules publicly accessible for viewing
 ///
 /// This update method allows authorized callers to disclose rules or incidents (collection of rules),
 /// making them viewable by the public. It includes authorization check and metrics collection.

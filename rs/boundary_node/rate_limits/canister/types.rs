@@ -83,6 +83,60 @@ impl From<OutputRule> for api::OutputRule {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum GetConfigError {
+    #[error("Config for version={0} not found")]
+    NotFound(Version),
+    #[error("No existing configs found")]
+    NoExistingConfigsFound,
+    #[error(transparent)]
+    Internal(#[from] anyhow::Error),
+}
+
+impl From<GetConfigError> for api::GetConfigError {
+    fn from(value: GetConfigError) -> Self {
+        match value {
+            GetConfigError::NotFound(_) => api::GetConfigError::NotFound,
+            GetConfigError::NoExistingConfigsFound => api::GetConfigError::NoExistingConfigsFound,
+            GetConfigError::Internal(error) => api::GetConfigError::Internal(error.to_string()),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum GetEntityError {
+    #[error("The provided id={0} not found")]
+    NotFound(String),
+    #[error("The provided id={0} is not a valid UUID")]
+    InvalidUuidFormat(String),
+    #[error(transparent)]
+    Internal(#[from] anyhow::Error),
+}
+
+impl From<GetEntityError> for api::GetRuleByIdError {
+    fn from(value: GetEntityError) -> Self {
+        match value {
+            GetEntityError::NotFound(_) => api::GetRuleByIdError::NotFound,
+            GetEntityError::InvalidUuidFormat(_) => api::GetRuleByIdError::InvalidUuidFormat,
+            GetEntityError::Internal(error) => api::GetRuleByIdError::Internal(error.to_string()),
+        }
+    }
+}
+
+impl From<GetEntityError> for api::GetRulesByIncidentIdError {
+    fn from(value: GetEntityError) -> Self {
+        match value {
+            GetEntityError::NotFound(_) => api::GetRulesByIncidentIdError::NotFound,
+            GetEntityError::InvalidUuidFormat(_) => {
+                api::GetRulesByIncidentIdError::InvalidUuidFormat
+            }
+            GetEntityError::Internal(error) => {
+                api::GetRulesByIncidentIdError::Internal(error.to_string())
+            }
+        }
+    }
+}
+
 #[derive(Debug, Error, AsRefStr)]
 pub enum AddConfigError {
     /// Indicates an unauthorized attempt to add a new config

@@ -19,7 +19,8 @@ impl ConfidentialityFormatting for ConfigConfidentialityFormatter {
 
     fn format(&self, config: &OutputConfig) -> OutputConfig {
         let mut config = config.clone();
-        // Redact output of undisclosed rules
+        config.is_redacted = true;
+        // Redact (hide) fields of non-disclosed rules
         config.rules.iter_mut().for_each(|rule| {
             if rule.disclosed_at.is_none() {
                 rule.description = None;
@@ -35,7 +36,7 @@ impl ConfidentialityFormatting for RuleConfidentialityFormatter {
 
     fn format(&self, rule: &OutputRuleMetadata) -> OutputRuleMetadata {
         let mut rule = rule.clone();
-        // Redact output of undisclosed rules
+        // Redact (hide) fields of non-disclosed rule
         if rule.disclosed_at.is_none() {
             rule.description = None;
             rule.rule_raw = None;
