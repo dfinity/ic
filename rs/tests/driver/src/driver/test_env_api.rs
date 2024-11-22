@@ -1223,8 +1223,7 @@ pub fn get_mainnet_ic_os_update_img_url() -> Result<Url> {
 }
 
 pub fn get_hostos_update_img_test_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
