@@ -369,6 +369,7 @@ type Event = variant {
     };
     ignored_utxo : record { utxo: Utxo; };
     ignored_utxo_for_account : record { utxo: Utxo; account: Account; };
+    quarantined_utxo_for_account : record { utxo: Utxo; account: Account; };
     retrieve_btc_kyt_failed : record {
         address : text;
         amount : nat64;

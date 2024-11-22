@@ -140,6 +140,10 @@ mod event {
         #[serde(rename = "ignored_utxo_for_account")]
         IgnoredUtxoForAccount { utxo: Utxo, account: Account },
 
+        /// Indicates that the given UTXO failed KYT and is quarantined.
+        #[serde(rename = "quarantined_utxo_for_account")]
+        QuarantinedUtxoForAccount { utxo: Utxo, account: Account },
+
         /// Indicates that the given KYT provider received owed fees.
         #[serde(rename = "distributed_kyt_fee")]
         DistributedKytFee {
@@ -348,6 +352,9 @@ pub fn replay<I: CheckInvariants>(
             }
             Event::IgnoredUtxoForAccount { utxo, account } => {
                 state.ignore_utxo(utxo, Some(account));
+            }
+            Event::QuarantinedUtxoForAccount { utxo, account } => {
+                state.quarantine_utxo(utxo, account);
             }
             Event::DistributedKytFee {
                 kyt_provider,

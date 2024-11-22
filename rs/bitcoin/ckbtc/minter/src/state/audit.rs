@@ -91,6 +91,19 @@ pub fn mark_utxo_checked(
     state.mark_utxo_checked(utxo.clone(), uuid, status, kyt_provider);
 }
 
+pub fn quarantine_utxo(state: &mut CkBtcMinterState, utxo: Utxo, account: Account) {
+    if state.has_quarantined_utxo(&utxo) {
+        // quarantined UTXOs are periodically re-evaluated and should not trigger
+        // an event if they are still ignored.
+        return;
+    }
+    record_event(&Event::QuarantinedUtxoForAccount {
+        utxo: utxo.clone(),
+        account,
+    });
+    state.quarantine_utxo(utxo, account);
+}
+
 pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo, account: Account) {
     if state.has_ignored_utxo(&utxo) {
         // ignored UTXOs are periodically re-evaluated and should not trigger

@@ -66,7 +66,10 @@ mod update_balance {
         assert_eq!(result, Ok(vec![UtxoStatus::Tainted(ignored_utxo.clone())]));
         assert_has_new_events(
             &events_before,
-            &[checked_utxo_event(ignored_utxo.clone(), false)],
+            &[Event::QuarantinedUtxoForAccount {
+                utxo: ignored_utxo.clone(),
+                account,
+            }],
         );
         assert!(!read_state(|s| s.has_ignored_utxo(&ignored_utxo)));
         assert_eq!(

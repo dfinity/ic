@@ -999,6 +999,10 @@ impl CkBtcMinterState {
         }
     }
 
+    pub fn has_quarantined_utxo(&self, utxo: &Utxo) -> bool {
+        self.quarantined_utxos.contains(utxo)
+    }
+
     pub fn has_ignored_utxo(&self, utxo: &Utxo) -> bool {
         self.ignored_utxos.contains(utxo)
     }
@@ -1008,6 +1012,12 @@ impl CkBtcMinterState {
         //TODO XC-230: use account
         assert!(utxo.value <= self.kyt_fee);
         self.ignored_utxos.insert(utxo);
+    }
+
+    fn quarantine_utxo(&mut self, utxo: Utxo, _account: Account) {
+        //TODO XC-230: use account
+        self.ignored_utxos.remove(&utxo);
+        self.quarantined_utxos.insert(utxo);
     }
 
     /// Marks the given UTXO as checked.
@@ -1045,6 +1055,7 @@ impl CkBtcMinterState {
                     }
                 }
             }
+            //TODO XC-230: clean-up duplicate logic with quarantine_utxo
             UtxoCheckStatus::Tainted => {
                 self.ignored_utxos.remove(&utxo);
                 self.quarantined_utxos.insert(utxo);
