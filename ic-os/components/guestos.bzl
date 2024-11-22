@@ -105,8 +105,13 @@ component_files = {
     Label("networking/network-tweaks.conf"): "/etc/sysctl.d/network-tweaks.conf",
     Label("networking/hosts"): "/etc/hosts",
     Label("networking/dev-certs/canister_http_test_ca.cert"): "/dev-certs/canister_http_test_ca.cert",
+    Label("networking/socks-proxy/danted.service"): "/etc/systemd/system/danted.service",
+    Label("networking/socks-proxy/danted.conf"): "/etc/danted.conf",
 
     # SELinux
+    Label("selinux/dante/dante.fc"): "/prep/dante/dante.fc",
+    Label("selinux/dante/dante.if"): "/prep/dante/dante.if",
+    Label("selinux/dante/dante.te"): "/prep/dante/dante.te",
     Label("selinux/filebeat/filebeat.fc"): "/prep/filebeat/filebeat.fc",
     Label("selinux/filebeat/filebeat.if"): "/prep/filebeat/filebeat.if",
     Label("selinux/filebeat/filebeat.te"): "/prep/filebeat/filebeat.te",
@@ -154,4 +159,7 @@ component_files = {
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
     Label("upgrade/shared-resources/monitor-expand-shared-data/monitor-expand-shared-data.py"): "/opt/ic/bin/monitor-expand-shared-data.py",
+
+    # fstrim
+    Label("fstrim/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
 }

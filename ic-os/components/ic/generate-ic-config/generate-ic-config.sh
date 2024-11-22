@@ -57,6 +57,12 @@ function configure_ipv6() {
         echo "Cannot determine an IPv6 address, aborting"
         exit 1
     fi
+
+    # TODO: Should pass prefix directly
+    if ! IPV6_PREFIX=$(echo "${IPV6_ADDRESS}" | sed -E -e 's/:/#/4' -e '/#/!q1' -e 's/#.*/::\/64/'); then
+        # If address does not substitute correctly, fallback to loopback for easy templating
+        IPV6_PREFIX="::1/128"
+    fi
 }
 
 function configure_ipv4() {
@@ -143,6 +149,7 @@ read_config_variables
 set_default_config_values
 
 sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
+    -e "s@{{ ipv6_prefix }}@${IPV6_PREFIX}@" \
     -e "s@{{ ipv4_address }}@${IPV4_ADDRESS}@" \
     -e "s@{{ ipv4_gateway }}@${IPV4_GATEWAY}@" \
     -e "s@{{ domain_name }}@${DOMAIN_NAME}@" \

@@ -2,6 +2,7 @@ use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
+use ic_nervous_system_agent::pocketic_impl::PocketIcCallError;
 use ic_nervous_system_agent::sns::Sns;
 use ic_nervous_system_agent::CallCanisters;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
@@ -57,6 +58,8 @@ use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{TransferArg, TransferError},
 };
+use itertools::EitherOrBoth;
+use itertools::Itertools;
 use maplit::btreemap;
 use pocket_ic::{
     management_canister::CanisterSettings, nonblocking::PocketIc, ErrorCode, PocketIcBuilder,
@@ -211,6 +214,18 @@ pub async fn propose_to_set_network_economics_and_wait(
 }
 
 pub type DeployedSnsStartingInfo = BTreeMap<SnsCanisterType, (ProposalInfo, SnsWasm)>;
+pub type SnsWasms = BTreeMap<SnsCanisterType, SnsWasm>;
+
+pub fn hash_sns_wasms(wasms: &SnsWasms) -> Version {
+    Version {
+        root_wasm_hash: wasms[&SnsCanisterType::Root].sha256_hash().to_vec(),
+        governance_wasm_hash: wasms[&SnsCanisterType::Governance].sha256_hash().to_vec(),
+        ledger_wasm_hash: wasms[&SnsCanisterType::Ledger].sha256_hash().to_vec(),
+        swap_wasm_hash: wasms[&SnsCanisterType::Swap].sha256_hash().to_vec(),
+        archive_wasm_hash: wasms[&SnsCanisterType::Archive].sha256_hash().to_vec(),
+        index_wasm_hash: wasms[&SnsCanisterType::Index].sha256_hash().to_vec(),
+    }
+}
 
 pub async fn add_wasms_to_sns_wasm(
     pocket_ic: &PocketIc,
@@ -690,6 +705,59 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
     );
 }
 
+/// Advances time by up to `timeout_seconds` seconds and `timeout_seconds` tickets (1 tick = 1 second).
+/// Each tick, it observes the state using the provided `observe` function.
+/// If the observed state matches the `expected` state, it returns `Ok(())`.
+/// If the timeout is reached, it returns an error.
+///
+/// Example:
+/// ```
+/// let upgrade_journal_interval_seconds = 60 * 60;
+/// await_with_timeout(
+///     &pocket_ic,
+///     upgrade_journal_interval_seconds,
+///     |pocket_ic| async {
+///         sns::governance::get_upgrade_journal(pocket_ic, sns.governance.canister_id)
+///             .await
+///             .upgrade_steps
+///             .unwrap()
+///             .versions
+///     },
+///     &vec![initial_sns_version.clone()],
+/// )
+/// .await
+/// .unwrap();
+/// ```
+pub async fn await_with_timeout<'a, T, F, Fut>(
+    pocket_ic: &'a PocketIc,
+    timeout_seconds: u64,
+    observe: F,
+    expected: &T,
+) -> Result<(), String>
+where
+    T: std::cmp::PartialEq + std::fmt::Debug,
+    F: Fn(&'a PocketIc) -> Fut,
+    Fut: std::future::Future<Output = T>,
+{
+    let mut counter = 0;
+    loop {
+        pocket_ic.advance_time(Duration::from_secs(1)).await;
+        pocket_ic.tick().await;
+
+        let observed = observe(pocket_ic).await;
+        if observed == *expected {
+            return Ok(());
+        }
+        if counter == timeout_seconds {
+            return Err(format!(
+                "Observed state: {:?}\n!= Expected state {:?}\nafter {} seconds / rounds",
+                observed, expected, timeout_seconds,
+            ));
+        }
+        counter += 1;
+    }
+}
+
 pub mod nns {
     use super::*;
     pub mod governance {
@@ -1032,6 +1100,7 @@ pub mod nns {
 
     pub mod sns_wasm {
         use super::*;
+        use ic_nns_test_utils::sns_wasm::create_modified_sns_wasm;
         use ic_sns_wasm::pb::v1::{
             GetWasmRequest, GetWasmResponse, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
         };
@@ -1115,6 +1184,23 @@ pub mod nns {
                 .into();
 
             latest_version
+        }
+
+        /// Modify the WASM for a given canister type and add it to SNS-W.
+        /// Returns the new (modified) version that is now at the tip of SNS-W.
+        pub async fn modify_and_add_wasm(
+            pocket_ic: &PocketIc,
+            mut version: SnsWasms,
+            canister_type: SnsCanisterType,
+            nonce: u32,
+        ) -> SnsWasms {
+            let wasm = version.get(&canister_type).unwrap();
+            let wasm = create_modified_sns_wasm(wasm, Some(nonce));
+            add_wasm_via_nns_proposal(pocket_ic, wasm.clone())
+                .await
+                .unwrap();
+            version.insert(canister_type, wasm);
+            version
         }
     }
 }
@@ -1438,7 +1524,8 @@ pub mod sns {
             Decode!(&result, sns_pb::ListNeuronsResponse).unwrap()
         }
 
-        /// Searches for the ID and controller principal of an SNS neuron that can submit proposals.
+        /// Searches for the ID and controller principal of an SNS neuron that can submit proposals,
+        /// i.e., a neuron whose `dissolve_delay_seconds` is greater that or equal 6 months.
         pub async fn find_neuron_with_majority_voting_power(
             pocket_ic: &PocketIc,
             canister_id: PrincipalId,
@@ -1483,14 +1570,49 @@ pub mod sns {
             Decode!(&result, sns_pb::NervousSystemParameters).unwrap()
         }
 
+        pub async fn propose_to_advance_sns_target_version(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+        ) -> Result<sns_pb::ProposalData, String> {
+            // Get an ID of an SNS neuron that can submit proposals. We rely on the fact that this
+            // neuron either holds the majority of the voting power or the follow graph is set up
+            // s.t. when this neuron submits a proposal, that proposal gets through without the need
+            // for any voting.
+            let (sns_neuron_id, sns_neuron_principal_id) =
+                sns::governance::find_neuron_with_majority_voting_power(
+                    pocket_ic,
+                    sns_governance_canister_id,
+                )
+                .await
+                .expect("cannot find SNS neuron with dissolve delay over 6 months.");
+
+            sns::governance::propose_and_wait(
+                pocket_ic,
+                sns_governance_canister_id,
+                sns_neuron_principal_id,
+                sns_neuron_id.clone(),
+                sns_pb::Proposal {
+                    title: "Advance SNS target version.".to_string(),
+                    summary: "".to_string(),
+                    url: "".to_string(),
+                    action: Some(sns_pb::proposal::Action::AdvanceSnsTargetVersion(
+                        sns_pb::AdvanceSnsTargetVersion { new_target: None },
+                    )),
+                },
+            )
+            .await
+            .map_err(|err| err.to_string())
+        }
+
         // Upgrade; one canister at a time.
         pub async fn propose_to_upgrade_sns_to_next_version_and_wait(
             pocket_ic: &PocketIc,
             sns_governance_canister_id: PrincipalId,
         ) {
-            // Get an ID of an SNS neuron that can submit proposals. We rely on the fact that this neuron
-            // either holds the majority of the voting power or the follow graph is set up s.t. when this
-            // neuron submits a proposal, that proposal gets through without the need for any voting.
+            // Get an ID of an SNS neuron that can submit proposals. We rely on the fact that this
+            // neuron either holds the majority of the voting power or the follow graph is set up
+            // s.t. when this neuron submits a proposal, that proposal gets through without the need
+            // for any voting.
             let (sns_neuron_id, sns_neuron_principal_id) =
                 find_neuron_with_majority_voting_power(pocket_ic, sns_governance_canister_id)
                     .await
@@ -1565,29 +1687,21 @@ pub mod sns {
             }
         }
 
+        pub async fn try_get_upgrade_journal(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+        ) -> std::result::Result<sns_pb::GetUpgradeJournalResponse, PocketIcCallError> {
+            let payload = sns_pb::GetUpgradeJournalRequest {};
+            pocket_ic.call(sns_governance_canister_id, payload).await
+        }
+
         pub async fn get_upgrade_journal(
             pocket_ic: &PocketIc,
             canister_id: PrincipalId,
         ) -> sns_pb::GetUpgradeJournalResponse {
-            let result = pocket_ic
-                .query_call(
-                    canister_id.into(),
-                    Principal::from(PrincipalId::new_anonymous()),
-                    "get_upgrade_journal",
-                    Encode!(&sns_pb::GetUpgradeJournalRequest {}).unwrap(),
-                )
+            try_get_upgrade_journal(pocket_ic, canister_id)
                 .await
-                .unwrap();
-            let result = match result {
-                WasmResult::Reply(reply) => reply,
-                WasmResult::Reject(reject) => {
-                    panic!(
-                        "get_upgrade_journal rejected by SNS governance: {:#?}",
-                        reject
-                    )
-                }
-            };
-            Decode!(&result, sns_pb::GetUpgradeJournalResponse).unwrap()
+                .unwrap()
         }
 
         pub async fn advance_target_version(
@@ -1602,6 +1716,47 @@ pub mod sns {
                 .call(sns_governance_canister_id, payload)
                 .await
                 .unwrap()
+        }
+
+        /// Verifies that the upgrade journal has the expected entries.
+        pub async fn assert_upgrade_journal(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+            expected_entries: &[sns_pb::upgrade_journal_entry::Event],
+        ) {
+            let sns_pb::GetUpgradeJournalResponse {
+                upgrade_journal, ..
+            } = sns::governance::get_upgrade_journal(pocket_ic, sns_governance_canister_id).await;
+
+            let upgrade_journal = upgrade_journal.unwrap().entries;
+
+            for (index, either_or_both) in upgrade_journal
+                .iter()
+                .zip_longest(expected_entries.iter())
+                .enumerate()
+            {
+                let (actual, expected) = match either_or_both {
+                    EitherOrBoth::Both(actual, expected) => (actual, expected),
+                    EitherOrBoth::Left(actual) => panic!(
+                        "Observed an unexpected journal entry at index {}: {:?}",
+                        index, actual
+                    ),
+                    EitherOrBoth::Right(expected) => panic!(
+                        "Did not observe an expected entry at index {}: {:?}",
+                        index, expected
+                    ),
+                };
+                assert!(actual.timestamp_seconds.is_some());
+                assert_eq!(
+                    &actual
+                        .event
+                        .clone()
+                        .map(|event| event.redact_human_readable()),
+                    &Some(expected.clone().redact_human_readable()),
+                    "Upgrade journal entry at index {} does not match",
+                    index
+                );
+            }
         }
     }
 
