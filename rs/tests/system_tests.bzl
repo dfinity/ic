@@ -7,7 +7,7 @@ load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
-load("//rs/tests:common.bzl", "GUESTOS_DEV_VERSION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "GUESTOS_DEV_VERSION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
@@ -218,11 +218,12 @@ def system_test(
         )
         test_driver_target = bin_name
 
-    # Automatically detect system tests that use guestos dev for back compatibility.
+    # Automatically detect system tests that use guestos dev & boundary node guestos for back compatibility.
     for _d in runtime_deps:
         if _d == GUESTOS_DEV_VERSION:
             uses_guestos_dev = True
             break
+    uses_boundary_guestos = uses_boundary_guestos or all([dep in runtime_deps for dep in BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS])
 
     # Environment variable names to targets (targets are resolved)
     _env_deps = {}

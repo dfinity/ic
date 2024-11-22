@@ -1204,10 +1204,10 @@ pub fn get_boundary_node_img_url() -> Result<Url> {
 }
 
 pub fn get_boundary_node_img_sha256() -> Result<String> {
-    let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.sha256";
-    let sha256 = read_dependency_to_string(dep_rel_path)?;
-    bail_if_sha256_invalid(&sha256, "boundary_node_img_sha256")?;
-    Ok(sha256)
+    get_sha256_from_cas_url(
+        "ic_os_boudndary_guestos_img_sha256",
+        &get_boundary_node_img_url()?,
+    )
 }
 
 pub fn get_mainnet_ic_os_img_url() -> Result<Url> {
