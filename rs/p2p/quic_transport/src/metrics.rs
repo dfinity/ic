@@ -212,7 +212,7 @@ pub fn observe_conn_error(err: &ConnectionError, op: &str, counter: &IntCounterV
         ConnectionError::ApplicationClosed(_) => counter
             .with_label_values(&[op, ERROR_APP_CLOSED_CONN])
             .inc(),
-        // This can occur if a peer crashes or experiences connectivity issues.
+        // This can occur if the peer crashes or experiences connectivity issues.
         ConnectionError::TimedOut => counter.with_label_values(&[op, ERROR_TIMED_OUT_CONN]).inc(),
         // A connection was closed by the QUIC protocol. Overall should be infallible.
         _ => counter
