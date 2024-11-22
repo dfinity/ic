@@ -8548,6 +8548,7 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "once_cell",
+ "parking_lot 0.12.3",
  "prometheus",
  "rand 0.8.5",
  "rstest",

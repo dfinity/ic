@@ -21,6 +21,7 @@ ic-config = { path = "../../config" }
 ic-https-outcalls-service = { path = "../service" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
+parking_lot = { workspace = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
@@ -30,6 +31,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
+
 
 [dev-dependencies]
 async-stream = { workspace = true }

@@ -23,6 +23,7 @@ use ic_https_outcalls_service::{
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use rand::{seq::SliceRandom, thread_rng};
 use std::collections::BTreeMap;
 use std::str::FromStr;
@@ -49,11 +50,9 @@ type OutboundRequestBody = Full<Bytes>;
 type Cache =
     BTreeMap<String, Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>;
 
-use std::sync::Mutex;
-
 pub struct CanisterHttp {
     client: Client<HttpsConnector<HttpConnector>, OutboundRequestBody>,
-    cache: Arc<Mutex<Cache>>,
+    cache: Arc<RwLock<Cache>>,
     logger: ReplicaLogger,
     metrics: AdapterMetrics,
     http_connect_timeout_secs: u64,
@@ -84,7 +83,7 @@ impl CanisterHttp {
 
         Self {
             client,
-            cache: Arc::new(Mutex::new(BTreeMap::new())),
+            cache: Arc::new(RwLock::new(BTreeMap::new())),
             logger,
             metrics: AdapterMetrics::new(metrics),
             http_connect_timeout_secs: config.http_connect_timeout_secs,
@@ -234,12 +233,13 @@ impl HttpsOutcallsService for CanisterHttp {
                         let next_socks_proxy_ip = api_bn_ip.clone();
 
                         let socks_client = {
-                            let mut cache_guard = self.cache.lock().unwrap();
+                            let cache_guard = self.cache.upgradable_read();
 
                             // Check if the client already exists in the cache
                             if let Some(client) = cache_guard.get(&next_socks_proxy_ip) {
                                 client.clone()
                             } else {
+                                let mut cache_guard = RwLockUpgradableReadGuard::upgrade(cache_guard);
                                 // Create a new client and insert it into the cache
                                 match self.create_socks_client_for_ip(&next_socks_proxy_ip) {
                                     Some(client) => {
