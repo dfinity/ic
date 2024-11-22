@@ -203,6 +203,7 @@ async fn fanout() {
                 (payload,),
             );
             futures.push(res);
+            METRICS.with(move |m| m.borrow_mut().calls_attempted += 1);
         }
 
         let results = join_all(futures).await;
@@ -211,7 +212,6 @@ async fn fanout() {
             match res {
                 Ok((reply,)) => {
                     let elapsed = Duration::from_nanos(time() - reply.time_nanos);
-                    METRICS.with(move |m| m.borrow_mut().calls_made += 1);
                     METRICS.with(|m| m.borrow_mut().latency_distribution.observe(elapsed));
                 }
                 Err((err_code, err_message)) => {

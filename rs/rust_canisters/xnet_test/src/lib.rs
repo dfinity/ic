@@ -22,8 +22,8 @@ pub struct StartArgs {
 /// This message is used as reply payload for "metrics" query.
 #[derive(Default, Clone, CandidType, Serialize, Deserialize, Debug)]
 pub struct Metrics {
-    /// Number of calls made successfully.
-    pub calls_made: usize,
+    /// Number of calls attempted (whether successful or not).
+    pub calls_attempted: usize,
 
     /// Number of times a call failed synchronously (e.g. due to a full canister
     /// output queue or running out of cycles).
@@ -46,7 +46,7 @@ pub struct Metrics {
 impl Metrics {
     /// Adds the observations of `other` to `self`.
     pub fn merge(&mut self, other: &Metrics) {
-        self.calls_made += other.calls_made;
+        self.calls_attempted += other.calls_attempted;
         self.call_errors += other.call_errors;
         self.reject_responses += other.reject_responses;
         self.seq_errors += other.seq_errors;

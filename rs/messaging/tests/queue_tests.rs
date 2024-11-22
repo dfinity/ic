@@ -530,7 +530,7 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
     induct_from_head_of_stream(
         &subnets.remote_env,
         &subnets.local_env,
-        Some(metrics.calls_made.saturating_sub(metrics.call_errors)),
+        Some(metrics.calls_attempted - metrics.call_errors),
     )
     .unwrap();
 
@@ -544,7 +544,7 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
     });
 
     assert_eq!(
-        metrics.calls_made.saturating_sub(metrics.call_errors),
+        metrics.calls_attempted - metrics.call_errors,
         *requests_inducted.unwrap() as usize
     );
 }
