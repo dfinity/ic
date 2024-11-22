@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Upload a dependency to shared storage and returns the download URL.
+# Uploads a dependency to shared storage and returns the download URL.
 #
 # The path to the dependency should be specified as the first (and only) argument.
 #
@@ -42,8 +42,7 @@ lookup_dep_url() {
     echo "$result_url"
 }
 
-dep="${1:?Dependency not specified}"
-dep_filename=${dep#*:}
+dep_filename="${1:?Dependency not specified}"
 
 echo "Found dep to upload $dep_filename ($dep_sha256)" >&2
 result_url=$(lookup_dep_url "$dep_sha256")
@@ -55,12 +54,8 @@ if [ -n "$result_url" ]; then
 else
     echo "dep '$dep_filename': not uploaded yet, uploading to $dep_upload_url" >&2
 
-    # Here we figure out the best URL where to upload the dependency. We use the hash of the
-    # empty blob, which will always be found by bazel-remote (baked in) and expect the redirect
-    # server to return the best URL (in practice, the fastest to complete the request)
-    EMPTY_SHA=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-    empty_sha_url=$(lookup_dep_url "$EMPTY_SHA")
-    UPLOAD_URL="${empty_sha_url%"/$EMPTY_SHA"}" # strip the empty blob key from the url
+    # We use bazel-remote as a CAS storage
+    UPLOAD_URL="http://server.bazel-remote.svc.cluster.local:8080/cas"
     echo "Using upload URL: '$UPLOAD_URL'" >&2
 
     # Upload the dep

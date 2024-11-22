@@ -105,7 +105,6 @@ system_test_nns(
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    uses_boundary_guestos = True,
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
                    GUESTOS_RUNTIME_DEPS +
                    UNIVERSAL_VM_RUNTIME_DEPS +
