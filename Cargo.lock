@@ -402,7 +402,7 @@ dependencies = [
  "lazy_static",
  "prometheus",
  "serde",
- "thiserror",
+ "thiserror 2.0.3",
 ]
 
 [[package]]
