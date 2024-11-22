@@ -1,4 +1,4 @@
-use candid::{Decode, Encode, Principal};
+use candid::{Decode, Encode};
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
 use ic_ledger_core::block::BlockType;
@@ -6,13 +6,11 @@ use ic_ledger_core::Tokens;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
     BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
-use ic_ledger_suite_state_machine_tests::{
-    generate_transactions, get_blocks, TransactionGenerationParameters,
-};
+use ic_ledger_suite_state_machine_tests::{generate_transactions, TransactionGenerationParameters};
 use ic_ledger_test_utils::state_machine_helpers::index::{
     get_all_blocks, wait_until_sync_is_completed,
 };
-use ic_ledger_test_utils::state_machine_helpers::ledger::icp_get_blocks;
+use ic_ledger_test_utils::state_machine_helpers::ledger::{icp_get_blocks, icp_ledger_tip};
 use ic_ledger_test_utils::{
     build_ledger_archive_wasm, build_ledger_index_wasm, build_ledger_wasm,
     build_mainnet_ledger_archive_wasm, build_mainnet_ledger_index_wasm, build_mainnet_ledger_wasm,
@@ -41,12 +39,12 @@ struct FetchedBlocks {
     #[allow(dead_code)]
     blocks: Vec<Block>,
     #[allow(dead_code)]
-    start_index: u64,
+    start_index: usize,
 }
 
 struct LedgerState {
     in_memory_ledger: InMemoryLedger<AccountIdentifier, Tokens>,
-    num_blocks: u64,
+    num_blocks: usize,
 }
 
 impl LedgerState {
@@ -70,22 +68,22 @@ impl LedgerState {
         &mut self,
         state_machine: &StateMachine,
         canister_id: CanisterId,
-        total_num_blocks: Option<u64>,
+        total_num_blocks: Option<usize>,
     ) -> FetchedBlocks {
         let num_blocks = total_num_blocks
-            .unwrap_or(u64::MAX)
+            .unwrap_or(u32::MAX as usize)
             .saturating_sub(self.num_blocks);
         let start_index = self.num_blocks;
         let blocks = icp_get_blocks(
             state_machine,
             canister_id,
-            Some(start_index),
+            Some(start_index as u64),
             Some(num_blocks),
         );
         self.num_blocks = self
             .num_blocks
-            .checked_add(blocks.len() as u64)
-            .expect("number of blocks should fit in u64");
+            .checked_add(blocks.len())
+            .expect("number of blocks should fit in usize");
         self.in_memory_ledger.consume_blocks(&blocks);
         FetchedBlocks {
             blocks,
@@ -106,8 +104,7 @@ impl LedgerState {
         state_machine: &StateMachine,
         canister_id: CanisterId,
     ) {
-        let num_ledger_blocks =
-            get_blocks(state_machine, Principal::from(canister_id), 0, 0).chain_length;
+        let num_ledger_blocks = icp_ledger_tip(state_machine, canister_id) + 1;
         self.in_memory_ledger.verify_balances_and_allowances(
             state_machine,
             canister_id,
