@@ -247,7 +247,9 @@ mod tests {
             } else {
                 assert_matches!(
                     server_result,
-                    Err(ReadToEndError::Read(ReadError::Reset { .. }))
+                    Err(ReadToEndError::Read(ReadError::Reset(quinn::VarInt(
+                        0x80000006
+                    ))))
                 );
             }
             client_completed_clone.wait().await;
