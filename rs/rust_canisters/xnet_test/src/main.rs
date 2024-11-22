@@ -70,6 +70,7 @@ struct Request {
     seq_no: u64,
     /// Local time observed in the round when this message was sent.
     time_nanos: u64,
+    /// Optional padding, to bring the payload to the desired byte size.
     padding: Vec<u8>,
 }
 
@@ -79,6 +80,7 @@ struct Reply {
     /// Time copied from the corresponding request.  It's used to compute the
     /// roundtrip latency on the caller side.
     time_nanos: u64,
+    /// Optional padding, to bring the payload to the desired byte size.
     padding: Vec<u8>,
 }
 
@@ -255,8 +257,7 @@ fn handle_request(req: Request) -> Reply {
     }
 }
 
-/// Deposits the cycles this canister has minus 1T according to the given
-/// `DepositCyclesArgs`
+/// Deposits the cycles this canister has minus 1T at the given destination.
 #[update]
 async fn return_cycles(canister_id_record: CanisterIdRecord) -> String {
     let cycle_refund = canister_balance().saturating_sub(1_000_000_000_000);
