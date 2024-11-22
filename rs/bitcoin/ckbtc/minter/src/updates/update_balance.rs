@@ -1,6 +1,6 @@
 use crate::logs::{P0, P1};
 use crate::memo::MintMemo;
-use crate::state::{mutate_state, read_state, UtxoCheckStatus};
+use crate::state::{mutate_state, read_state, DiscardedReason, UtxoCheckStatus};
 use crate::tasks::{schedule_now, TaskType};
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_btc_interface::{GetUtxosError, GetUtxosResponse, OutPoint, Utxo};
@@ -234,7 +234,7 @@ pub async fn update_balance<R: CanisterRuntime>(
     let mut utxo_statuses: Vec<UtxoStatus> = vec![];
     for utxo in processable_utxos {
         if utxo.value <= kyt_fee {
-            mutate_state(|s| crate::state::audit::ignore_utxo(s, utxo.clone(), caller_account));
+            mutate_state(|s| state::audit::ignore_utxo(s, utxo.clone(), caller_account));
             log!(
                 P1,
                 "Ignored UTXO {} for account {caller_account} because UTXO value {} is lower than the KYT fee {}",
@@ -248,7 +248,7 @@ pub async fn update_balance<R: CanisterRuntime>(
         let status = kyt_check_utxo(&utxo, &args, runtime).await?;
         mutate_state(|s| match status {
             UtxoCheckStatus::Clean => {
-                crate::state::audit::mark_utxo_checked(s, &utxo, None, status, None);
+                state::audit::mark_utxo_checked(s, &utxo, None, None);
             }
             UtxoCheckStatus::Tainted => {
                 state::audit::quarantine_utxo(s, utxo.clone(), caller_account);

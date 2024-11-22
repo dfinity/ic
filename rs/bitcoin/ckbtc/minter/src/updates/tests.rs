@@ -1,5 +1,7 @@
 mod update_balance {
-    use crate::state::{audit, eventlog::Event, mutate_state, read_state, UtxoCheckStatus};
+    use crate::state::{
+        audit, eventlog::Event, mutate_state, read_state, DiscardedReason, UtxoCheckStatus,
+    };
     use crate::storage;
     use crate::test_fixtures::{
         ecdsa_public_key, get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
@@ -66,16 +68,13 @@ mod update_balance {
         assert_eq!(result, Ok(vec![UtxoStatus::Tainted(ignored_utxo.clone())]));
         assert_has_new_events(
             &events_before,
-            &[Event::QuarantinedUtxoForAccount {
+            &[Event::DiscardedUtxo {
                 utxo: ignored_utxo.clone(),
                 account,
+                reason: DiscardedReason::Quarantined,
             }],
         );
-        assert!(!read_state(|s| s.has_ignored_utxo(&ignored_utxo)));
-        assert_eq!(
-            read_state(|s| s.utxo_checked_status(&ignored_utxo).cloned()),
-            Some(UtxoCheckStatus::Tainted)
-        );
+        assert_has_ignored_utxo(&ignored_utxo);
     }
 
     #[tokio::test]
@@ -110,7 +109,7 @@ mod update_balance {
         )
         .await;
 
-        assert!(!read_state(|s| s.has_ignored_utxo(&ignored_utxo)));
+        assert_has_ignored_utxo(&ignored_utxo);
         assert_eq!(
             result,
             Ok(vec![UtxoStatus::Minted {
@@ -137,7 +136,7 @@ mod update_balance {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
         let quarantined_utxo = quarantined_utxo();
-        register_utxo_checked(&quarantined_utxo, UtxoCheckStatus::Tainted);
+        quarantine_utxo(quarantined_utxo.clone(), account);
         let events_before: Vec<_> = storage::events().collect();
 
         let mut runtime = MockCanisterRuntime::new();
@@ -167,7 +166,7 @@ mod update_balance {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
         let quarantined_utxo = quarantined_utxo();
-        register_utxo_checked(&quarantined_utxo, UtxoCheckStatus::Tainted);
+        quarantine_utxo(quarantined_utxo.clone(), account);
         let kyt_fee = read_state(|s| s.kyt_fee);
         let minted_amount = quarantined_utxo.value - kyt_fee;
         let events_before: Vec<_> = storage::events().collect();
@@ -194,7 +193,10 @@ mod update_balance {
         )
         .await;
 
-        assert!(!read_state(|s| s.has_ignored_utxo(&quarantined_utxo)));
+        assert_eq!(
+            read_state(|s| s.discarded_utxos.get(&quarantined_utxo).cloned()),
+            None
+        );
         assert_eq!(
             result,
             Ok(vec![UtxoStatus::Minted {
@@ -226,9 +228,9 @@ mod update_balance {
         mutate_state(|s| s.ecdsa_public_key = Some(ecdsa_public_key()))
     }
 
-    fn register_utxo_checked(utxo: &Utxo, status: UtxoCheckStatus) {
+    fn quarantine_utxo(utxo: Utxo, account: Account) {
         mutate_state(|s| {
-            audit::mark_utxo_checked(s, utxo, None, status, None);
+            audit::quarantine_utxo(s, utxo, account);
         });
     }
 
@@ -293,5 +295,15 @@ mod update_balance {
             clean,
             kyt_provider: None,
         }
+    }
+
+    fn assert_has_ignored_utxo(utxo: &Utxo) {
+        let reason = read_state(|s| s.discarded_utxos.get(utxo).cloned());
+        assert_eq!(
+            reason,
+            Some(DiscardedReason::ValueTooSmall),
+            "BUG: unexpected discarded reason. Discarded UTXOs {:?}",
+            read_state(|s| s.discarded_utxos.clone())
+        );
     }
 }

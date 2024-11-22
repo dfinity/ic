@@ -2,8 +2,8 @@ use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::state::invariants::CheckInvariants;
 use crate::state::{
-    ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, Overdraft,
-    RetrieveBtcRequest, SubmittedBtcTransaction, UtxoCheckStatus,
+    ChangeOutput, CkBtcMinterState, DiscardedReason, FinalizedBtcRetrieval, FinalizedStatus,
+    Overdraft, RetrieveBtcRequest, SubmittedBtcTransaction, UtxoCheckStatus,
 };
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit, ReimbursementReason};
 use candid::Principal;
@@ -25,6 +25,7 @@ pub struct GetEventsArg {
 #[allow(deprecated)]
 mod event {
     use super::*;
+    use crate::state::DiscardedReason;
 
     #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
     pub enum Event {
@@ -133,16 +134,15 @@ mod event {
 
         /// Indicates that the given UTXO's value is too small to pay for a KYT check.
         #[serde(rename = "ignored_utxo")]
-        #[deprecated(note = "Use IgnoredUtxoForAccount")]
+        #[deprecated(note = "Use DiscardedUtxo")]
         IgnoredUtxo { utxo: Utxo },
 
-        /// Indicates that the given UTXO's value is too small to pay for a KYT check.
-        #[serde(rename = "ignored_utxo_for_account")]
-        IgnoredUtxoForAccount { utxo: Utxo, account: Account },
-
-        /// Indicates that the given UTXO failed KYT and is quarantined.
-        #[serde(rename = "quarantined_utxo_for_account")]
-        QuarantinedUtxoForAccount { utxo: Utxo, account: Account },
+        #[serde(rename = "discarded_utxo")]
+        DiscardedUtxo {
+            utxo: Utxo,
+            account: Account,
+            reason: DiscardedReason,
+        },
 
         /// Indicates that the given KYT provider received owed fees.
         #[serde(rename = "distributed_kyt_fee")]
@@ -338,23 +338,29 @@ pub fn replay<I: CheckInvariants>(
                 uuid,
                 clean,
                 kyt_provider,
-            } => {
-                state.mark_utxo_checked(
-                    utxo,
-                    if uuid.is_empty() { None } else { Some(uuid) },
-                    UtxoCheckStatus::from_clean_flag(clean),
-                    kyt_provider,
-                );
-            }
+            } => match UtxoCheckStatus::from_clean_flag(clean) {
+                UtxoCheckStatus::Clean => {
+                    state.mark_utxo_checked(
+                        utxo,
+                        if uuid.is_empty() { None } else { Some(uuid) },
+                        kyt_provider,
+                    );
+                }
+                #[allow(deprecated)] //need to replay past events
+                UtxoCheckStatus::Tainted => {
+                    state.discard_utxo_without_account(utxo, DiscardedReason::Quarantined);
+                }
+            },
             #[allow(deprecated)] //need to replay past events
             Event::IgnoredUtxo { utxo } => {
-                state.ignore_utxo(utxo, None);
+                state.discard_utxo_without_account(utxo, DiscardedReason::ValueTooSmall);
             }
-            Event::IgnoredUtxoForAccount { utxo, account } => {
-                state.ignore_utxo(utxo, Some(account));
-            }
-            Event::QuarantinedUtxoForAccount { utxo, account } => {
-                state.quarantine_utxo(utxo, account);
+            Event::DiscardedUtxo {
+                utxo,
+                account,
+                reason,
+            } => {
+                state.discarded_utxos.insert(account, utxo, reason);
             }
             Event::DistributedKytFee {
                 kyt_provider,

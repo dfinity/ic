@@ -1,6 +1,6 @@
 mod processable_utxos_for_account {
     use crate::state::invariants::CheckInvariantsImpl;
-    use crate::state::{CkBtcMinterState, ProcessableUtxos};
+    use crate::state::{CkBtcMinterState, DiscardedReason, ProcessableUtxos};
     use crate::test_fixtures::{ignored_utxo, init_args, ledger_account, quarantined_utxo, utxo};
     use candid::Principal;
     use ic_btc_interface::{OutPoint, Utxo};
@@ -30,8 +30,8 @@ mod processable_utxos_for_account {
         };
         assert_ne!(account, other_account);
         let mut state = CkBtcMinterState::from(init_args());
-        state.ignore_utxo(ignored_utxo(), Some(account));
-        state.ignore_utxo(
+        state.discard_utxo(ignored_utxo(), account, DiscardedReason::ValueTooSmall);
+        state.discard_utxo(
             Utxo {
                 outpoint: OutPoint {
                     txid: "2e0bf7c2d9db13143cbb317ad4726ee2d39a83275b275be83c989ea956202410"
@@ -41,21 +41,26 @@ mod processable_utxos_for_account {
                 },
                 ..ignored_utxo()
             },
-            Some(other_account),
+            other_account,
+            DiscardedReason::ValueTooSmall,
         );
-        assert_eq!(state.ignored_utxos.len(), 2);
+        assert_eq!(state.discarded_utxos.num_utxos(), 2);
 
-        state.quarantined_utxos.insert(quarantined_utxo());
-        state.quarantined_utxos.insert(Utxo {
-            outpoint: OutPoint {
-                txid: "017ad4dc53443f81c35996e553ff0c913d3873b98cbbdea12f5418b13877cd65"
-                    .parse()
-                    .unwrap(),
-                vout: 1,
+        state.discard_utxo(quarantined_utxo(), account, DiscardedReason::Quarantined);
+        state.discard_utxo(
+            Utxo {
+                outpoint: OutPoint {
+                    txid: "017ad4dc53443f81c35996e553ff0c913d3873b98cbbdea12f5418b13877cd65"
+                        .parse()
+                        .unwrap(),
+                    vout: 1,
+                },
+                ..quarantined_utxo()
             },
-            ..quarantined_utxo()
-        });
-        assert_eq!(state.quarantined_utxos.len(), 2);
+            other_account,
+            DiscardedReason::Quarantined,
+        );
+        assert_eq!(state.discarded_utxos.num_utxos(), 4);
 
         state.add_utxos::<CheckInvariantsImpl>(account, vec![utxo()]);
         state.add_utxos::<CheckInvariantsImpl>(

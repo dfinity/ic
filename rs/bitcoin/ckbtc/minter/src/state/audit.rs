@@ -1,8 +1,8 @@
 //! State modifications that should end up in the event log.
 
 use super::{
-    eventlog::Event, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, RetrieveBtcRequest,
-    SubmittedBtcTransaction, UtxoCheckStatus,
+    eventlog::Event, CkBtcMinterState, DiscardedReason, FinalizedBtcRetrieval, FinalizedStatus,
+    RetrieveBtcRequest, SubmittedBtcTransaction, UtxoCheckStatus,
 };
 use crate::state::invariants::CheckInvariantsImpl;
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit};
@@ -75,46 +75,40 @@ pub fn mark_utxo_checked(
     state: &mut CkBtcMinterState,
     utxo: &Utxo,
     uuid: Option<String>,
-    status: UtxoCheckStatus,
     kyt_provider: Option<Principal>,
 ) {
-    if state.utxo_checked_status(utxo) == Some(&status) {
-        // no need to record an event if the status is unchanged
-        return;
-    }
     record_event(&Event::CheckedUtxo {
         utxo: utxo.clone(),
         uuid: uuid.clone().unwrap_or_default(),
-        clean: status.is_clean(),
+        clean: UtxoCheckStatus::Clean.is_clean(),
         kyt_provider,
     });
-    state.mark_utxo_checked(utxo.clone(), uuid, status, kyt_provider);
+    state.mark_utxo_checked(utxo.clone(), uuid, kyt_provider);
 }
 
 pub fn quarantine_utxo(state: &mut CkBtcMinterState, utxo: Utxo, account: Account) {
-    if state.has_quarantined_utxo(&utxo) {
-        // quarantined UTXOs are periodically re-evaluated and should not trigger
-        // an event if they are still ignored.
-        return;
-    }
-    record_event(&Event::QuarantinedUtxoForAccount {
-        utxo: utxo.clone(),
-        account,
-    });
-    state.quarantine_utxo(utxo, account);
+    discard_utxo(state, utxo, account, DiscardedReason::Quarantined);
 }
 
 pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo, account: Account) {
-    if state.has_ignored_utxo(&utxo) {
-        // ignored UTXOs are periodically re-evaluated and should not trigger
-        // an event if they are still ignored.
-        return;
+    discard_utxo(state, utxo, account, DiscardedReason::ValueTooSmall);
+}
+
+fn discard_utxo(
+    state: &mut CkBtcMinterState,
+    utxo: Utxo,
+    account: Account,
+    reason: DiscardedReason,
+) {
+    // ignored UTXOs are periodically re-evaluated and should not trigger
+    // an event if they are still ignored.
+    if state.discard_utxo(utxo.clone(), account, reason) {
+        record_event(&Event::DiscardedUtxo {
+            utxo,
+            account,
+            reason,
+        })
     }
-    record_event(&Event::IgnoredUtxoForAccount {
-        utxo: utxo.clone(),
-        account,
-    });
-    state.ignore_utxo(utxo, Some(account));
 }
 
 pub fn replace_transaction(
