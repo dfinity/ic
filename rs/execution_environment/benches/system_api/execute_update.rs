@@ -886,13 +886,13 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Disabled,
             ),
-            19001006,
+            19004006,
         ),
         common::Benchmark(
             "wasm64/ic0_mint_cycles128()".into(),
             Module::Test.from_ic0(
                 "mint_cycles128",
-                Params3(1_i64, 2_i64, 3_i32),
+                Params3(1_i64, 2_i64, 3_i64),
                 Result::No,
                 Wasm64::Enabled,
             ),

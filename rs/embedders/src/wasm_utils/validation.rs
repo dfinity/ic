@@ -532,7 +532,7 @@ fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, F
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I64, ValType::I64, ValType::I32],
+                    param_types: vec![ValType::I64, ValType::I64, I],
                     return_type: vec![],
                 },
             )],
