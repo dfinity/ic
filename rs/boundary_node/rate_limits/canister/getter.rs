@@ -249,7 +249,7 @@ mod tests {
         ConfigConfidentialityFormatter, RuleConfidentialityFormatter,
     };
     use crate::state::CanisterState;
-    use crate::storage::{StorableConfig, StorableIncidentMetadata, StorableRuleMetadata};
+    use crate::storage::{StorableConfig, StorableIncident, StorableRule};
     use std::collections::HashSet;
 
     use super::*;
@@ -286,7 +286,7 @@ mod tests {
         // One rule is not disclosed
         canister_state.upsert_rule(
             rule_id_1,
-            StorableRuleMetadata {
+            StorableRule {
                 incident_id,
                 rule_raw: b"{\"a\": 1}".to_vec(),
                 description: "verbose description 1".to_string(),
@@ -299,7 +299,7 @@ mod tests {
         // One rule is disclosed
         canister_state.upsert_rule(
             rule_id_2,
-            StorableRuleMetadata {
+            StorableRule {
                 incident_id,
                 rule_raw: b"{\"b\": 2}".to_vec(),
                 description: "verbose description 2".to_string(),
@@ -388,7 +388,7 @@ mod tests {
 
         canister_state.upsert_rule(
             rule_id,
-            StorableRuleMetadata {
+            StorableRule {
                 incident_id,
                 rule_raw: b"{\"a\": 1}".to_vec(),
                 description: "verbose description".to_string(),
@@ -453,7 +453,7 @@ mod tests {
         // One rule is not disclosed
         canister_state.upsert_rule(
             rule_id_1,
-            StorableRuleMetadata {
+            StorableRule {
                 incident_id,
                 rule_raw: b"{\"a\": 1}".to_vec(),
                 description: "verbose description 1".to_string(),
@@ -465,7 +465,7 @@ mod tests {
         // One rule is disclosed
         canister_state.upsert_rule(
             rule_id_2,
-            StorableRuleMetadata {
+            StorableRule {
                 incident_id,
                 rule_raw: b"{\"b\": 2}".to_vec(),
                 description: "verbose description 2".to_string(),
@@ -476,7 +476,7 @@ mod tests {
         );
         canister_state.upsert_incident(
             incident_id,
-            StorableIncidentMetadata {
+            StorableIncident {
                 is_disclosed: false,
                 rule_ids: HashSet::from_iter(vec![rule_id_1, rule_id_2]),
             },

@@ -1,5 +1,5 @@
 use crate::{
-    storage::StorableIncidentMetadata,
+    storage::StorableIncident,
     types::{self, AddConfigError, IncidentId, Timestamp},
 };
 use anyhow::{anyhow, Context};
@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     state::CanisterApi,
-    storage::{StorableConfig, StorableRuleMetadata},
+    storage::{StorableConfig, StorableRule},
     types::{InputConfig, RuleId, Version},
 };
 
@@ -94,8 +94,8 @@ impl<A: CanisterApi> AddsConfig for ConfigAdder<A> {
 
         // Ordered IDs of all rules in the submitted config
         let mut rule_ids = Vec::<RuleId>::new();
-        // Metadata of the newly submitted rules
-        let mut new_rules_metadata = Vec::<(RuleId, StorableRuleMetadata)>::new();
+        // Newly submitted rules
+        let mut new_rules = Vec::<(RuleId, StorableRule)>::new();
         // Hashmap of the submitted incident IDs
         let mut incidents_map = HashMap::<IncidentId, HashSet<RuleId>>::new();
 
@@ -130,7 +130,7 @@ impl<A: CanisterApi> AddsConfig for ConfigAdder<A> {
                     }
                 }
 
-                let rule_metadata = StorableRuleMetadata {
+                let rule = StorableRule {
                     incident_id: input_rule.incident_id,
                     rule_raw: input_rule.rule_raw.clone(),
                     description: input_rule.description.clone(),
@@ -139,7 +139,7 @@ impl<A: CanisterApi> AddsConfig for ConfigAdder<A> {
                     removed_in_version: None,
                 };
 
-                new_rules_metadata.push((rule_id, rule_metadata));
+                new_rules.push((rule_id, rule));
 
                 rule_id
             };
@@ -172,7 +172,7 @@ impl<A: CanisterApi> AddsConfig for ConfigAdder<A> {
             next_version,
             storable_config,
             removed_rule_ids,
-            new_rules_metadata,
+            new_rules,
             incidents_map,
         );
 
@@ -194,38 +194,38 @@ fn commit_changes(
     next_version: u64,
     storable_config: StorableConfig,
     removed_rules: Vec<RuleId>,
-    new_rules_metadata: Vec<(RuleId, StorableRuleMetadata)>,
+    new_rules: Vec<(RuleId, StorableRule)>,
     incidents_map: HashMap<IncidentId, HashSet<RuleId>>,
 ) {
     // Update metadata of the removed rules in the stable memory
     for rule_id in removed_rules {
         // Rule should exist, it was already checked before.
-        let mut rule_metadata = canister_api
+        let mut rule = canister_api
             .get_rule(&rule_id)
             .expect("inconsistent state, rule_id={rule_id} not found");
-        rule_metadata.removed_in_version = Some(next_version);
-        canister_api.upsert_rule(rule_id, rule_metadata);
+        rule.removed_in_version = Some(next_version);
+        canister_api.upsert_rule(rule_id, rule);
     }
 
     // Add new rules to the stable memory
-    for (rule_id, rule_metadata) in new_rules_metadata {
-        canister_api.upsert_rule(rule_id, rule_metadata);
+    for (rule_id, rule) in new_rules {
+        canister_api.upsert_rule(rule_id, rule);
     }
 
     // Upsert incidents to the stable memory, some of the incidents can be new, some already existed before
     for (incident_id, rule_ids) in incidents_map {
-        let incident_metadata = canister_api
+        let incident = canister_api
             .get_incident(&incident_id)
-            .map(|mut metadata| {
-                metadata.rule_ids.extend(rule_ids.clone());
-                metadata
+            .map(|mut stored_incident| {
+                stored_incident.rule_ids.extend(rule_ids.clone());
+                stored_incident
             })
-            .unwrap_or_else(|| StorableIncidentMetadata {
+            .unwrap_or_else(|| StorableIncident {
                 is_disclosed: false,
                 rule_ids: rule_ids.clone(),
             });
 
-        canister_api.upsert_incident(incident_id, incident_metadata);
+        canister_api.upsert_incident(incident_id, incident);
     }
 
     // Add a new config to the stable memory
@@ -243,7 +243,7 @@ mod tests {
     struct FullConfig {
         schema_version: api::SchemaVersion,
         active_since: api::Timestamp,
-        rules: Vec<StorableRuleMetadata>,
+        rules: Vec<StorableRule>,
     }
 
     fn retrieve_full_config(canister_api: impl CanisterApi, version: u64) -> FullConfig {
@@ -408,7 +408,7 @@ mod tests {
                 schema_version: 1,
                 active_since: current_time,
                 rules: vec![
-                    StorableRuleMetadata {
+                    StorableRule {
                         incident_id: incident_id_1,
                         rule_raw: b"{\"a\": 1, \"b\": 2}".to_vec(),
                         description: "best rule #1 ever".to_string(),
@@ -416,7 +416,7 @@ mod tests {
                         added_in_version: 2,
                         removed_in_version: Some(5),
                     },
-                    StorableRuleMetadata {
+                    StorableRule {
                         incident_id: incident_id_1,
                         rule_raw: b"{\"c\": 3, \"d\": 4}".to_vec(),
                         description: "best rule #2 ever".to_string(),
@@ -435,7 +435,7 @@ mod tests {
                 schema_version: 2,
                 active_since: current_time + 1,
                 rules: vec![
-                    StorableRuleMetadata {
+                    StorableRule {
                         incident_id: incident_id_1,
                         rule_raw: b"{\"c\": 3, \"d\": 4}".to_vec(),
                         description: "best rule #2 ever".to_string(),
@@ -443,7 +443,7 @@ mod tests {
                         added_in_version: 2,
                         removed_in_version: Some(6),
                     },
-                    StorableRuleMetadata {
+                    StorableRule {
                         incident_id: incident_id_1,
                         rule_raw: b"{\"a\": 1, \"b\": 2}".to_vec(),
                         description: "best rule #1 ever".to_string(),
@@ -462,7 +462,7 @@ mod tests {
                 schema_version: 2,
                 active_since: current_time + 2,
                 rules: vec![
-                    StorableRuleMetadata {
+                    StorableRule {
                         incident_id: incident_id_1,
                         rule_raw: b"{\"a\": 1, \"b\": 2}".to_vec(),
                         description: "best rule #1 ever".to_string(),
@@ -470,7 +470,7 @@ mod tests {
                         added_in_version: 2,
                         removed_in_version: Some(5),
                     },
-                    StorableRuleMetadata {
+                    StorableRule {
                         incident_id: incident_id_2,
                         rule_raw: b"{}".to_vec(),
                         description: "best rule #3 ever".to_string(),
@@ -478,7 +478,7 @@ mod tests {
                         added_in_version: 4,
                         removed_in_version: Some(5),
                     },
-                    StorableRuleMetadata {
+                    StorableRule {
                         incident_id: incident_id_1,
                         rule_raw: b"{\"c\": 3, \"d\": 4}".to_vec(),
                         description: "best rule #2 ever".to_string(),
@@ -497,7 +497,7 @@ mod tests {
                 schema_version: 2,
                 active_since: current_time + 3,
                 rules: vec![
-                    StorableRuleMetadata {
+                    StorableRule {
                         incident_id: incident_id_2,
                         rule_raw: b"{\"e\": 5, \"f\": 6}".to_vec(),
                         description: "best rate-limit rule #4 ever".to_string(),
@@ -505,7 +505,7 @@ mod tests {
                         added_in_version: 5,
                         removed_in_version: Some(6),
                     },
-                    StorableRuleMetadata {
+                    StorableRule {
                         incident_id: incident_id_1,
                         rule_raw: b"{\"c\": 3, \"d\": 4}".to_vec(),
                         description: "best rule #2 ever".to_string(),
@@ -513,7 +513,7 @@ mod tests {
                         added_in_version: 2,
                         removed_in_version: Some(6),
                     },
-                    StorableRuleMetadata {
+                    StorableRule {
                         incident_id: incident_id_3,
                         rule_raw: b"{\"g\": 7, \"e\": 8}".to_vec(),
                         description: "best rate-limit rule #5 ever".to_string(),
@@ -615,12 +615,12 @@ mod tests {
         );
         let incident_id_1 = IncidentId(Uuid::new_v4());
         let incident_id_2 = IncidentId(Uuid::new_v4());
-        let storable_incident_1 = StorableIncidentMetadata {
+        let storable_incident_1 = StorableIncident {
             is_disclosed: false,
             rule_ids: HashSet::new(),
         };
         // This incident is disclosed, new rules can't be linked to it anymore. \
-        let storable_incident_2 = StorableIncidentMetadata {
+        let storable_incident_2 = StorableIncident {
             is_disclosed: true,
             rule_ids: HashSet::new(),
         };

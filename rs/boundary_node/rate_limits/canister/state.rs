@@ -5,8 +5,8 @@ use std::collections::HashSet;
 use crate::{
     add_config::{INIT_JSON_SCHEMA_VERSION, INIT_VERSION},
     storage::{
-        LocalRef, StableMap, StorableConfig, StorableIncidentId, StorableIncidentMetadata,
-        StorablePrincipal, StorableRuleId, StorableRuleMetadata, StorableVersion,
+        LocalRef, StableMap, StorableConfig, StorableIncident, StorableIncidentId,
+        StorablePrincipal, StorableRule, StorableRuleId, StorableVersion,
         API_BOUNDARY_NODE_PRINCIPALS, AUTHORIZED_PRINCIPAL, CONFIGS, INCIDENTS, RULES,
     },
     types::{IncidentId, InputConfig, InputRule, RuleId, Timestamp, Version},
@@ -19,11 +19,11 @@ pub trait CanisterApi {
     fn get_version(&self) -> Option<StorableVersion>;
     fn get_full_config(&self, version: Version) -> Option<InputConfig>;
     fn get_config(&self, version: Version) -> Option<StorableConfig>;
-    fn get_rule(&self, rule_id: &RuleId) -> Option<StorableRuleMetadata>;
-    fn get_incident(&self, incident_id: &IncidentId) -> Option<StorableIncidentMetadata>;
+    fn get_rule(&self, rule_id: &RuleId) -> Option<StorableRule>;
+    fn get_incident(&self, incident_id: &IncidentId) -> Option<StorableIncident>;
     fn add_config(&self, version: Version, config: StorableConfig);
-    fn upsert_rule(&self, rule_id: RuleId, rule: StorableRuleMetadata);
-    fn upsert_incident(&self, incident_id: IncidentId, rule_ids: StorableIncidentMetadata);
+    fn upsert_rule(&self, rule_id: RuleId, rule: StorableRule);
+    fn upsert_incident(&self, incident_id: IncidentId, rule_ids: StorableIncident);
     fn is_api_boundary_node_principal(&self, principal: &Principal) -> bool;
     fn set_api_boundary_nodes_principals(&self, principals: Vec<Principal>);
     fn api_boundary_nodes_count(&self) -> u64;
@@ -35,8 +35,8 @@ pub trait CanisterApi {
 #[derive(Clone)]
 pub struct CanisterState {
     configs: LocalRef<StableMap<StorableVersion, StorableConfig>>,
-    rules: LocalRef<StableMap<StorableRuleId, StorableRuleMetadata>>,
-    incidents: LocalRef<StableMap<StorableIncidentId, StorableIncidentMetadata>>,
+    rules: LocalRef<StableMap<StorableRuleId, StorableRule>>,
+    incidents: LocalRef<StableMap<StorableIncidentId, StorableIncident>>,
     authorized_principal: LocalRef<StableMap<(), StorablePrincipal>>,
     api_boundary_node_principals: LocalRef<HashSet<Principal>>,
 }
@@ -95,12 +95,12 @@ impl CanisterApi for CanisterState {
         })
     }
 
-    fn get_rule(&self, rule_id: &RuleId) -> Option<StorableRuleMetadata> {
+    fn get_rule(&self, rule_id: &RuleId) -> Option<StorableRule> {
         self.rules
             .with(|cell| cell.borrow().get(&StorableRuleId(rule_id.0)))
     }
 
-    fn get_incident(&self, incident_id: &IncidentId) -> Option<StorableIncidentMetadata> {
+    fn get_incident(&self, incident_id: &IncidentId) -> Option<StorableIncident> {
         self.incidents
             .with(|cell| cell.borrow().get(&StorableIncidentId(incident_id.0)))
     }
@@ -110,12 +110,12 @@ impl CanisterApi for CanisterState {
             .with(|cell| cell.borrow_mut().insert(version, config));
     }
 
-    fn upsert_rule(&self, rule_id: RuleId, rule: StorableRuleMetadata) {
+    fn upsert_rule(&self, rule_id: RuleId, rule: StorableRule) {
         self.rules
             .with(|cell| cell.borrow_mut().insert(StorableRuleId(rule_id.0), rule));
     }
 
-    fn upsert_incident(&self, incident_id: IncidentId, rule_ids: StorableIncidentMetadata) {
+    fn upsert_incident(&self, incident_id: IncidentId, rule_ids: StorableIncident) {
         self.incidents.with(|cell| {
             cell.borrow_mut()
                 .insert(StorableIncidentId(incident_id.0), rule_ids)

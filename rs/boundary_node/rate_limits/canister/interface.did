@@ -54,7 +54,7 @@ type DiscloseRulesArg = variant {
 
 // Configuration containing a list of rules that replaces the current configuration
 type InputConfig = record {
-  schema_version: SchemaVersion; // schema version used to serialized the rules
+  schema_version: SchemaVersion; // JSON schema version of the rate-limit rules
   rules: vec InputRule;
 };
 
