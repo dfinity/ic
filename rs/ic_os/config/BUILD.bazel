@@ -4,9 +4,9 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/ic_os/config_types",
     "//rs/ic_os/deterministic_ips",
     "//rs/ic_os/utils",
-    "//rs/ic_os/config_types",
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
@@ -45,7 +45,10 @@ rust_binary(
     crate_name = "config",
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [":config_lib", "//rs/ic_os/network"] + DEPENDENCIES,
+    deps = [
+        ":config_lib",
+        "//rs/ic_os/network",
+    ] + DEPENDENCIES,
 )
 
 rust_test(

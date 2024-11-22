@@ -133,7 +133,6 @@ impl FromStr for Deployment {
             "testnet" => Ok(Deployment::Testnet),
             _ => Err(DeploymentParseError::InvalidVariant),
         }
-        .into()
     }
 }
 

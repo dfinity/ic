@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -18,10 +18,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:once_cell",
     "@crate_index//:tempfile",
 ]
-
-MACRO_DEPENDENCIES = []
-
-ALIASES = {}
 
 rust_library(
     name = "config_types",

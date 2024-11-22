@@ -4,9 +4,9 @@ use std::path::Path;
 
 use config_types::ConfigMap;
 
-use regex::Regex;
 use anyhow::bail;
 use anyhow::{Context, Result};
+use regex::Regex;
 
 pub struct ConfigIniSettings {
     pub ipv6_prefix: String,

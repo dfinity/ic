@@ -169,7 +169,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         None => "00:00:00:00:00:00".parse()?,
     };
 
-    let deployment_environment = deployment_environment.unwrap_or_else(|| Deployment::Testnet);
+    let deployment_environment = deployment_environment.unwrap_or(Deployment::Testnet);
 
     let logging = Logging {
         elasticsearch_hosts: elasticsearch_hosts.unwrap_or_else(|| "".to_string()),
