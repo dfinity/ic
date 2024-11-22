@@ -705,10 +705,13 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
     );
 }
 
-/// Advances time by up to `timeout_seconds` seconds and `timeout_seconds` tickets (1 tick = 1 second unless timeout_seconds is very large).
-/// Each tick, it observes the state using the provided `observe` function.
-/// If the observed state matches the `expected` state, it returns `Ok(())`.
-/// If the timeout is reached, it returns an error.
+/// Gradually advances time by up to `timeout_seconds` seconds, observing the state using
+/// the provided `observe` function after each (evenly-timed) tick.
+/// - If the observed state matches the `expected` state, it returns `Ok(())`.
+/// - If the timeout is reached, it returns an error with the last observation.
+///
+/// The frequency of ticks is 1 per second for small values of `timeout_seconds`, and gradually
+/// lower for larger `timeout_seconds` to guarantee at most 500 ticks.
 ///
 /// Example:
 /// ```
@@ -740,7 +743,7 @@ where
     Fut: std::future::Future<Output = T>,
 {
     let mut counter = 0;
-    let num_ticks = timeout_seconds.min(1000);
+    let num_ticks = timeout_seconds.min(500);
     let seconds_per_tick = (timeout_seconds as f64 / num_ticks as f64).ceil() as u64;
 
     loop {
