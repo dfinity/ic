@@ -748,7 +748,7 @@ fn test_recent_ballots_accessor_pre_and_post_migration() {
     .build();
     neuron.recent_ballots_next_entry_index = None;
 
-    assert_eq!(neuron.recent_ballots(), recent_ballots);
+    assert_eq!(neuron.sorted_recent_ballots(), recent_ballots);
 
     neuron.register_recent_ballot(Topic::NetworkEconomics, &ProposalId { id: 100 }, Vote::No);
     assert_eq!(neuron.recent_ballots_next_entry_index, Some(1));
@@ -766,5 +766,5 @@ fn test_recent_ballots_accessor_pre_and_post_migration() {
         recent_ballots
     };
 
-    assert_eq!(neuron.recent_ballots(), expected_updated_ballots);
+    assert_eq!(neuron.sorted_recent_ballots(), expected_updated_ballots);
 }

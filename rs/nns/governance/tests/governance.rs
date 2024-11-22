@@ -4495,7 +4495,6 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             kyc_verified: true,
             visibility,
             voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
-            recent_ballots_next_entry_index: Some(0),
             ..Default::default()
         }
     );

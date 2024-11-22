@@ -16,7 +16,7 @@ use maplit::hashmap;
 use prost::Message;
 use std::{
     borrow::Cow,
-    collections::{BTreeMap as HeapBTreeMap, BTreeSet as HeapBTreeSet, HashMap},
+    collections::{btree_map::Entry, BTreeMap as HeapBTreeMap, HashMap},
     iter::Peekable,
     ops::{Bound as RangeBound, RangeBounds},
 };
@@ -897,15 +897,21 @@ fn update_range<Key, Value, Memory>(
     Value: Storable + PartialEq,
     Memory: ic_stable_structures::Memory,
 {
-    let new_keys = new_entries.keys().cloned().collect::<HeapBTreeSet<Key>>();
-
     let mut to_remove = vec![];
     for (key, value) in map.range(range) {
-        if !new_keys.contains(&key) {
-            to_remove.push(key.clone());
-        } else if new_entries.get(&key).expect("We just checked it's there") == &value {
-            new_entries.remove(&key);
-        }
+        match new_entries.entry(key.clone()) {
+            // If our new entries do not include a key in existing, we remove it from existing.
+            Entry::Vacant(_) => {
+                to_remove.push(key);
+            }
+            Entry::Occupied(entry) => {
+                // If our new entries have the same value as what exists, we do not want to insert
+                // it, but instead remove it from the list of new entries, since it's present.
+                if *entry.get() == value {
+                    entry.remove();
+                }
+            }
+        };
     }
 
     for (new_key, new_value) in new_entries {

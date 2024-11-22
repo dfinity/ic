@@ -184,7 +184,7 @@ fn update_recent_ballots_stable_memory() -> BenchResult {
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
     let mut neuron = build_neuron(&mut rng, NeuronLocation::Heap, NeuronSize::Maximum);
-    neuron.recent_ballots_next_entry_index = Some(0);
+
     let id = neuron.id();
 
     assert_eq!(neuron.recent_ballots.len(), MAX_NEURON_RECENT_BALLOTS);

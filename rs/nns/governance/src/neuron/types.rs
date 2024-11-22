@@ -436,18 +436,20 @@ impl Neuron {
         std::cmp::min(ad_stake, u64::MAX as u128) as u64
     }
 
-    pub(crate) fn recent_ballots(&self) -> Vec<BallotInfo> {
-        if self.recent_ballots_next_entry_index.is_none() {
-            self.recent_ballots.clone()
-        } else {
+    /// Get the recent ballots, with most recent ballots first
+    pub(crate) fn sorted_recent_ballots(&self) -> Vec<BallotInfo> {
+        if let Some(index) = self.recent_ballots_next_entry_index {
+            // We store ballots in a circular buffer with oldest first, so we need to reverse
+            // this as well as rearrange it before returning it.
             let recent_ballots = &self.recent_ballots;
-            let index = self.recent_ballots_next_entry_index.unwrap();
             recent_ballots[index..]
                 .iter()
                 .chain(recent_ballots[..index].iter())
                 .rev()
                 .cloned()
                 .collect()
+        } else {
+            self.recent_ballots.clone()
         }
     }
 
@@ -525,11 +527,12 @@ impl Neuron {
         }
 
         // Data migration for updating the recent ballots so we can use a circular buffer here.
-        if self.recent_ballots_next_entry_index.is_none() {
+        let next_entry_index = if let Some(index) = self.recent_ballots_next_entry_index {
+            index
+        } else {
             self.recent_ballots.reverse();
-            self.recent_ballots_next_entry_index =
-                Some(self.recent_ballots.len() % MAX_NEURON_RECENT_BALLOTS);
-        }
+            self.recent_ballots.len() % MAX_NEURON_RECENT_BALLOTS
+        };
 
         let ballot_info = BallotInfo {
             proposal_id: Some(*proposal_id),
@@ -538,13 +541,13 @@ impl Neuron {
 
         // Vector is full
         if self.recent_ballots.len() >= MAX_NEURON_RECENT_BALLOTS {
-            self.recent_ballots[self.recent_ballots_next_entry_index.unwrap()] = ballot_info;
+            self.recent_ballots[next_entry_index] = ballot_info;
         } else {
             self.recent_ballots.push(ballot_info);
         }
         // Advance the index
         self.recent_ballots_next_entry_index =
-            Some((self.recent_ballots_next_entry_index.unwrap() + 1) % MAX_NEURON_RECENT_BALLOTS);
+            Some((next_entry_index + 1) % MAX_NEURON_RECENT_BALLOTS);
     }
 
     pub(crate) fn refresh_voting_power(&mut self, now_seconds: u64) {
@@ -906,7 +909,7 @@ impl Neuron {
             || self.visibility() == Some(Visibility::Public)
             || self.is_hotkey_or_controller(&requester);
         if show_full {
-            recent_ballots.append(&mut self.recent_ballots());
+            recent_ballots.append(&mut self.sorted_recent_ballots());
             joined_community_fund_timestamp_seconds = self.joined_community_fund_timestamp_seconds;
         }
 
@@ -1394,7 +1397,15 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             dissolve_state,
             visibility,
             voting_power_refreshed_timestamp_seconds,
-            recent_ballots_next_entry_index: recent_ballots_next_entry_index.map(|x| x as u32),
+            // Conversion to u32 is safe because the value cannot be very large.  If it overflowed
+            // u32 max, we would have spent 68GB on recent ballots for this single neuron.
+            recent_ballots_next_entry_index: recent_ballots_next_entry_index
+                .map(|x| {
+                    u32::try_from(x).map_err(|e| NeuronStoreError::InvalidData {
+                        reason: format!("Failed to convert recent_ballots_next_entry_index: {}", e),
+                    })
+                })
+                .transpose()?,
         };
 
         Ok(Self {
@@ -1484,6 +1495,7 @@ impl From<DecomposedNeuron> for Neuron {
             neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds,
+            // usize is always at least u32, so this is safe.
             recent_ballots_next_entry_index: recent_ballots_next_entry_index.map(|x| x as usize),
         }
     }
@@ -1731,9 +1743,6 @@ impl NeuronBuilder {
         #[cfg(not(test))]
         let known_neuron_data = None;
 
-        let recent_ballots_next_entry_index =
-            Some(recent_ballots.len() % MAX_NEURON_RECENT_BALLOTS);
-
         Neuron {
             id,
             subaccount,
@@ -1757,7 +1766,7 @@ impl NeuronBuilder {
             neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds,
-            recent_ballots_next_entry_index,
+            recent_ballots_next_entry_index: None,
         }
     }
 }
