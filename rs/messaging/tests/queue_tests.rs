@@ -200,14 +200,8 @@ impl SubnetPairProxy {
     ///
     /// This function panics if the minimum number of messages is not reached within `MAX_TICKS`
     /// ticks.
-    fn build_local_backpressure_until(&self, min_num_messages: usize, subnets: &SubnetPairProxy) {
+    fn build_local_backpressure_until(&self, min_num_messages: usize) {
         do_until_or_panic(MAX_TICKS, |_| {
-            let reply = subnets
-                .query_local_canister("metrics", Encode!().unwrap())
-                .unwrap();
-            let decoded_deply = Decode!(&reply.bytes(), Metrics).unwrap();
-            println!("log buffer in canister {:?}", decoded_deply.log);
-            println!("call_errors {:?}", decoded_deply.call_errors);
             let exit_condition = self
                 .local_output_queue_snapshot()
                 .map_or(false, |q| q.len() >= min_num_messages);
@@ -332,7 +326,6 @@ fn call_start_on_xnet_canister(
     canister_id: CanisterId,
     payload: Vec<u8>,
 ) -> Result<(), UserError> {
-    println!("{:?}", Decode!(&payload, StartArgs).unwrap());
     let wasm = env.execute_ingress(canister_id, "start", payload)?;
     assert_eq!(
         "started".to_string(),
@@ -402,7 +395,7 @@ fn test_timeout_removes_requests_from_output_queues() {
     subnets
         .call_start_on_local_canister(canister_to_subnet_rate, payload_size_bytes)
         .unwrap();
-    subnets.build_local_backpressure_until(1, &subnets);
+    subnets.build_local_backpressure_until(1);
     subnets.call_stop_on_local_canister().unwrap();
     execute_round_with_timeout(&subnets.local_env);
 
@@ -435,7 +428,7 @@ fn test_response_in_output_queue_causes_backpressure() {
     subnets
         .call_start_on_local_canister(canister_to_subnet_rate, payload_size_bytes)
         .unwrap();
-    subnets.build_local_backpressure_until(1, &subnets);
+    subnets.build_local_backpressure_until(1);
     subnets.call_stop_on_local_canister().unwrap();
     execute_round_with_timeout(&subnets.local_env);
 

@@ -115,19 +115,8 @@ fn time_nanos() -> u64 {
 }
 
 /// Returns true if this canister should continue generating traffic.
-#[query]
 fn is_running() -> bool {
     RUNNING.with(|r| *r.borrow())
-}
-
-#[query]
-fn network_topology() -> NetworkTopology {
-    NETWORK_TOPOLOGY.with(|r| r.borrow().clone())
-}
-
-#[query]
-fn canister_to_subnet_rate() -> u64 {
-    PER_SUBNET_RATE.with(|r| *r.borrow())
 }
 
 /// Canister heartbeat, calls `fanout()` if `RUNNING` is `true`.
