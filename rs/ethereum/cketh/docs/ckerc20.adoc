@@ -120,7 +120,7 @@ The ERC-20 -> ckERC-20 flow involves the following steps:
 . The user calls the link:https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e00E68#writeContract[minter helper contract] `depositErc20` method of the helper smart contract (just as `approve` this method can be called from contract's Etherscan page) specifying
 .. The ERC-20 smart contract address. This identifies the ERC-20 token being deposited.
 .. The amount of ERC-20 tokens being deposited.
-.. The IC principal.
+.. The IC principal encoded as a `bytes32`.
 .. The IC ledger subaccount, use `0x` to use the default subaccount. Together with the IC principal, they uniquely identify an IC ledger account to which the amount of ckERC-20 should be minted.
 . The helper smart contract does the following steps within the *same* Ethereum transaction
 .. Call `transferFrom` on the ERC-20 smart contract to transfer the given amount of ERC-20 tokens from the user’s address to the minter’s address. (This requires that the smart contract’s address was previously approved as in step 2).
