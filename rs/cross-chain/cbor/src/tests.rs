@@ -23,31 +23,31 @@ type U64Newtype = Id<IdTag, u64>;
 
 #[derive(Eq, PartialEq, Debug, Decode, Encode)]
 struct U256Container {
-    #[cbor(n(0), with = "crate::cbor::u256")]
+    #[cbor(n(0), with = "crate::u256")]
     pub value: u256,
 }
 
 #[derive(Eq, PartialEq, Debug, Decode, Encode)]
 struct NatContainer {
-    #[cbor(n(0), with = "crate::cbor::nat")]
+    #[cbor(n(0), with = "crate::nat")]
     pub value: Nat,
 }
 
 #[derive(Eq, PartialEq, Debug, Decode, Encode)]
 struct OptNatContainer {
-    #[cbor(n(0), with = "crate::cbor::nat::option")]
+    #[cbor(n(0), with = "crate::nat::option")]
     pub value: Option<Nat>,
 }
 
 #[derive(Eq, PartialEq, Debug, Decode, Encode)]
 struct PrincipalContainer {
-    #[cbor(n(0), with = "crate::cbor::principal")]
+    #[cbor(n(0), with = "crate::principal")]
     pub value: Principal,
 }
 
 #[derive(Eq, PartialEq, Debug, Decode, Encode)]
 struct OptPrincipalContainer {
-    #[cbor(n(0), with = "crate::cbor::principal::option")]
+    #[cbor(n(0), with = "crate::principal::option")]
     pub value: Option<Principal>,
 }
 
@@ -59,7 +59,7 @@ struct U256NewtypeContainer {
 
 #[derive(Eq, PartialEq, Debug, Decode, Encode)]
 struct U64NewtypeContainer {
-    #[cbor(n(0), with = "crate::cbor::id")]
+    #[cbor(n(0), with = "crate::id")]
     pub value: U64Newtype,
 }
 

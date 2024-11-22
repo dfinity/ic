@@ -6898,6 +6898,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
  "phantom_newtype",
+ "proptest",
 ]
 
 [[package]]

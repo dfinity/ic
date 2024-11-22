@@ -13,3 +13,6 @@ minicbor = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 phantom_newtype = { path = "../../phantom_newtype" }
+
+[dev-dependencies]
+proptest = { workspace = true }
