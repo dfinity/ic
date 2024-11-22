@@ -1293,7 +1293,7 @@ mod assertions {
         pub fn has_last_synced_block_href(&self, id: LogScrapingId, expected_href: &str) -> &Self {
             self.has_href_value(
                 &format!(
-                    "#helper-smart-contract-{} > td:nth-child(3) > code > a",
+                    "#helper-smart-contract-{} > td:nth-child(4) > code > a",
                     lower_alphanumeric(id).unwrap()
                 ),
                 expected_href,

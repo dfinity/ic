@@ -8776,7 +8776,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc-rosetta"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "anyhow",
  "axum",
@@ -16459,6 +16459,7 @@ dependencies = [
  "ic-registry-local-store",
  "ic-registry-proto-data-provider",
  "ic-registry-replicator",
+ "ic-registry-subnet-type",
  "ic-sys",
  "ic-test-utilities",
  "ic-test-utilities-consensus",
