@@ -7,10 +7,15 @@ use icp_ledger::{
 };
 use on_wire::FromWire;
 
-pub fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::Block> {
+pub fn icp_get_blocks(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    start_index: Option<u64>,
+    num_blocks: Option<u64>,
+) -> Vec<icp_ledger::Block> {
     let req = GetBlocksArgs {
-        start: 0u64,
-        length: u32::MAX as usize,
+        start: start_index.unwrap_or(0u64),
+        length: num_blocks.unwrap_or(u32::MAX as u64) as usize,
     };
     let req = Encode!(&req).expect("Failed to encode GetBlocksArgs");
     let res = env
