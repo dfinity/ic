@@ -9,7 +9,6 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConf
 use ic_types::{CanisterId, Cycles, NumBytes};
 
 use libfuzzer_sys::fuzz_target;
-use slog::Level;
 use std::cell::RefCell;
 use wasm_fuzzers::ic_wasm::ICWasmModule;
 
@@ -77,7 +76,7 @@ fn setup_env() -> (StateMachine, CanisterId) {
         .with_config(Some(config))
         .with_subnet_type(subnet_type)
         .with_checkpoints_enabled(false)
-        .with_log_level(Some(Level::Critical))
+        .with_log_level(None)
         .build();
     let canister_id = env.create_canister_with_cycles(
         None,

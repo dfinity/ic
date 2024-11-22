@@ -78,6 +78,10 @@ pub fn mark_utxo_checked(
     status: UtxoCheckStatus,
     kyt_provider: Option<Principal>,
 ) {
+    if state.utxo_checked_status(utxo) == Some(&status) {
+        // no need to record an event if the status is unchanged
+        return;
+    }
     record_event(&Event::CheckedUtxo {
         utxo: utxo.clone(),
         uuid: uuid.clone().unwrap_or_default(),
@@ -88,6 +92,11 @@ pub fn mark_utxo_checked(
 }
 
 pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo) {
+    if state.has_ignored_utxo(&utxo) {
+        // ignored UTXOs are periodically re-evaluated and should not trigger
+        // an event if they are still ignored.
+        return;
+    }
     record_event(&Event::IgnoredUtxo { utxo: utxo.clone() });
     state.ignore_utxo(utxo);
 }
