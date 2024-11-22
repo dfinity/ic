@@ -236,7 +236,7 @@ fn main() -> io::Result<()> {
 
     let (logging, _logging_drop_guard) = logging_layer(&config.logger, node_id, subnet_id);
 
-    let mut tracing_layers = vec![logging.with_filter(tracing::level_filters::LevelFilter::from(tracing::level_filters::LevelFilter::INFO)).boxed()];
+    let mut tracing_layers = vec![logging.boxed()];
 
     let (reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(vec![]);
     let tracing_handle = ReloadHandles::new(reload_handle);
