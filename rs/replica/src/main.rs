@@ -258,7 +258,6 @@ fn main() -> io::Result<()> {
     }
 
     info!(logger, "Replica Started");
-    tracing::info!("Rosti replica started!");
     info!(logger, "Running in subnetwork {:?}", subnet_id);
     if let Ok((path, hash)) = get_replica_binary_hash() {
         info!(logger, "Running replica binary: {:?} {}", path, hash);
