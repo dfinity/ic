@@ -9522,18 +9522,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-logging"
-version = "0.9.0"
-dependencies = [
- "ic-base-types",
- "ic-config",
- "time",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "ic-mainnet-nns-recovery"
 version = "0.9.0"
 dependencies = [
@@ -11354,7 +11342,6 @@ dependencies = [
  "ic-interfaces-registry-mocks",
  "ic-interfaces-state-manager",
  "ic-logger",
- "ic-logging",
  "ic-management-canister-types",
  "ic-messaging",
  "ic-metrics",
@@ -11387,11 +11374,6 @@ dependencies = [
  "tikv-jemallocator",
  "tokio",
  "tracing",
-<<<<<<< HEAD
- "tracing-appender",
- "tracing-flame",
-=======
->>>>>>> origin/master
  "tracing-subscriber",
  "wat",
 ]
@@ -21443,7 +21425,6 @@ dependencies = [
  "sharded-slab",
  "smallvec",
  "thread_local",
- "time",
  "tracing",
  "tracing-core",
  "tracing-log",
