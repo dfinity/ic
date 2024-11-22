@@ -65,7 +65,7 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
                     ingress,
                     ..BatchPayload::default()
                 },
-                dealings: dkg::DataPayload::new_empty(
+                dkg: dkg::DataPayload::new_empty(
                     parent.payload.as_ref().dkg_interval_start_height(),
                 ),
                 idkg: None,

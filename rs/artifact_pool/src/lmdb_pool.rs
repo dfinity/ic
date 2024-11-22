@@ -1037,7 +1037,7 @@ impl PoolArtifact for ConsensusMessage {
                     }),
                     PayloadType::Data => BlockPayload::Data(DataPayload {
                         batch: BatchPayload::default(),
-                        dealings: dkg::DataPayload::new_empty(start_height),
+                        dkg: dkg::DataPayload::new_empty(start_height),
                         idkg: None,
                     }),
                 }),

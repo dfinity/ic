@@ -3473,7 +3473,7 @@ pub mod test {
                     ingress,
                     ..BatchPayload::default()
                 },
-                dealings: dkg::DataPayload::new_empty(Height::new(0)),
+                dkg: dkg::DataPayload::new_empty(Height::new(0)),
                 idkg: None,
             }),
         );
@@ -3487,7 +3487,7 @@ pub mod test {
                     ingress: IngressPayload::from(vec![]),
                     ..BatchPayload::default()
                 },
-                dealings: dkg::DataPayload::new_empty(Height::new(0)),
+                dkg: dkg::DataPayload::new_empty(Height::new(0)),
                 idkg: None,
             }),
         );

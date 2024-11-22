@@ -334,7 +334,7 @@ impl BlockMaker {
                         idkg: idkg_summary,
                     })
                 }
-                dkg::Payload::Dealings(dealings) => {
+                dkg::Payload::Data(dealings) => {
                     let (batch_payload, dealings, idkg_data) = match status::get_status(
                         height,
                         self.registry_client.as_ref(),
@@ -391,7 +391,7 @@ impl BlockMaker {
 
                     BlockPayload::Data(DataPayload {
                         batch: batch_payload,
-                        dealings,
+                        dkg: dealings,
                         idkg: idkg_data,
                     })
                 }
@@ -699,8 +699,7 @@ mod tests {
             let start_hash = start.content.get_hash();
             let expected_payloads = PoolReader::new(&pool)
                 .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
-            let returned_payload =
-                dkg::Payload::Dealings(dkg::DataPayload::new_empty(Height::from(0)));
+            let returned_payload = dkg::Payload::Data(dkg::DataPayload::new_empty(Height::from(0)));
             let pool_reader = PoolReader::new(&pool);
             let expected_time = expected_payloads[0].1
                 + get_block_maker_delay(

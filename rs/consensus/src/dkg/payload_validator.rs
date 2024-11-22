@@ -187,7 +187,7 @@ pub(crate) fn validate_payload(
                 pool_reader,
                 dkg_pool,
                 last_dkg_summary,
-                &data_payload.dealings,
+                &data_payload.dkg,
                 max_dealings_per_block,
                 &parent,
                 metrics,
@@ -531,7 +531,7 @@ mod tests {
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Data(DataPayload {
                     batch: BatchPayload::default(),
-                    dealings: dkg::DataPayload::new(Height::from(0), parent_dealings),
+                    dkg: dkg::DataPayload::new(Height::from(0), parent_dealings),
                     idkg: idkg::Payload::default(),
                 }),
             );
@@ -544,7 +544,7 @@ mod tests {
 
             let block_payload = BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dealings: dkg::DataPayload::new(Height::from(0), dealings_to_validate),
+                dkg: dkg::DataPayload::new(Height::from(0), dealings_to_validate),
                 idkg: idkg::Payload::default(),
             });
 

@@ -1309,7 +1309,7 @@ impl From<&Block> for pb::Block {
         } else {
             let batch = &payload.as_data().batch;
             (
-                pb::DkgPayload::from(&payload.as_data().dealings),
+                pb::DkgPayload::from(&payload.as_data().dkg),
                 Some(pb::XNetPayload::from(&batch.xnet)),
                 Some(pb::IngressPayload::from(&batch.ingress)),
                 Some(pb::SelfValidatingPayload::from(&batch.self_validating)),
@@ -1388,7 +1388,7 @@ impl TryFrom<pb::Block> for Block {
 
                 BlockPayload::Summary(SummaryPayload { dkg: summary, idkg })
             }
-            dkg::Payload::Dealings(dealings) => {
+            dkg::Payload::Data(dealings) => {
                 let idkg = block
                     .idkg_payload
                     .as_ref()
@@ -1397,7 +1397,7 @@ impl TryFrom<pb::Block> for Block {
 
                 BlockPayload::Data(DataPayload {
                     batch,
-                    dealings,
+                    dkg: dealings,
                     idkg,
                 })
             }

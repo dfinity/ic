@@ -784,7 +784,7 @@ mod tests {
         }
         BlockPayload::Data(DataPayload {
             batch: BatchPayload::default(),
-            dealings: dkg::DataPayload::new_empty(dkg_interval_start_height),
+            dkg: dkg::DataPayload::new_empty(dkg_interval_start_height),
             idkg: Some(idkg_payload),
         })
     }
@@ -1306,7 +1306,7 @@ mod tests {
                 idkg::KeyTranscriptCreation::Created(key_transcript_ref);
             let parent_block_payload = BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dealings: dkg::DataPayload::new_empty(summary_height),
+                dkg: dkg::DataPayload::new_empty(summary_height),
                 idkg: Some(data_payload),
             });
             let parent_block = add_block(
@@ -1571,7 +1571,7 @@ mod tests {
                 idkg::KeyTranscriptCreation::Begin;
             let parent_block_payload = BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dealings: dkg::DataPayload::new_empty(summary_height),
+                dkg: dkg::DataPayload::new_empty(summary_height),
                 idkg: Some(data_payload),
             });
             let parent_block = add_block(

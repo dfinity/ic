@@ -527,7 +527,7 @@ pub enum Payload {
     /// DKG Summary payload
     Summary(Summary),
     /// DKG Dealings payload
-    Dealings(DataPayload),
+    Data(DataPayload),
 }
 
 /// DealingMessages is a vector of DKG messages
@@ -624,7 +624,7 @@ impl TryFrom<pb::DkgPayload> for Payload {
                 Ok(Payload::Summary(Summary::try_from(summary)?))
             }
             pb::dkg_payload::Val::DataPayload(data_payload) => {
-                Ok(Payload::Dealings(DataPayload::try_from(data_payload)?))
+                Ok(Payload::Data(DataPayload::try_from(data_payload)?))
             }
         }
     }

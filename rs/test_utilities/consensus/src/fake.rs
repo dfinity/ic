@@ -39,7 +39,7 @@ impl Fake for DataPayload {
     fn fake() -> Self {
         Self {
             batch: BatchPayload::default(),
-            dealings: dkg::DataPayload::new_empty(Height::from(0)),
+            dkg: dkg::DataPayload::new_empty(Height::from(0)),
             idkg: None,
         }
     }
@@ -267,7 +267,7 @@ impl FromParent for Block {
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Data(DataPayload {
                     batch: BatchPayload::default(),
-                    dealings: dkg::DataPayload::new_empty(dkg_start),
+                    dkg: dkg::DataPayload::new_empty(dkg_start),
                     idkg: parent.payload.as_ref().as_idkg().cloned(),
                 }),
             ),
@@ -319,7 +319,7 @@ fn test_fake_block_is_binary_compatible() {
             ic_types::crypto::crypto_hash,
             BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dealings: dkg::DataPayload::new_empty(Height::from(1)),
+                dkg: dkg::DataPayload::new_empty(Height::from(1)),
                 idkg: None,
             }),
         ),
@@ -346,7 +346,7 @@ fn test_fake_block() {
             ic_types::crypto::crypto_hash,
             BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dealings: dkg::DataPayload::new_empty(Height::from(1)),
+                dkg: dkg::DataPayload::new_empty(Height::from(1)),
                 idkg: None,
             }),
         ),
