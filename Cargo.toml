@@ -39,6 +39,7 @@ members = [
     "rs/boundary_node/systemd_journal_gatewayd_shim",
     "rs/canister_client",
     "rs/canister_client/sender",
+    "rs/cross-chain/cbor",
     "rs/cross-chain/proposal-cli",
     "rs/cycles_account_manager",
     "rs/ethereum/cketh/minter",

@@ -6647,6 +6647,7 @@ dependencies = [
  "ic-cdk-timers",
  "ic-cketh-test-utils",
  "ic-config",
+ "ic-cross-chain-cbor",
  "ic-crypto-secp256k1",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-ethereum-types",
@@ -6885,6 +6886,18 @@ dependencies = [
  "ic-types",
  "rand 0.8.5",
  "slog",
+]
+
+[[package]]
+name = "ic-cross-chain-cbor"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ethnum",
+ "minicbor",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "phantom_newtype",
 ]
 
 [[package]]

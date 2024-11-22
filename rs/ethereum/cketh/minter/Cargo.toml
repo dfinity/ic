@@ -24,6 +24,7 @@ ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
+ic-cross-chain-cbor = { path = "../../../cross-chain/cbor" }
 ic-crypto-secp256k1 = { path = "../../../crypto/secp256k1" }
 ic-ethereum-types = { path = "../../../../packages/ic-ethereum-types" }
 ic-management-canister-types = { path = "../../../types/management_canister_types" }
