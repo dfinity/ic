@@ -23,7 +23,7 @@ use util::{check_hostos_version, elect_hostos_version, update_nodes_hostos_versi
 
 const HOST_VM_NAME: &str = "host-1";
 
-const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 6000);
+const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Prepare the environment for nested tests.
@@ -72,8 +72,6 @@ fn setup_nested_vms(env: TestEnv) {
 
     setup_and_start_nested_vms(&nodes, &env, &farm, &group_name, &nns_url, &nns_public_key)
         .expect("Unable to start nested VMs.");
-
-    std::thread::sleep(std::time::Duration::from_secs(10 * 6000));
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can
