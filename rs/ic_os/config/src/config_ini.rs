@@ -1,13 +1,13 @@
+use regex::Regex;
+use std::collections::HashMap;
 use std::fs::read_to_string;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::Path;
 
-use config_types::ConfigMap;
-
 use anyhow::bail;
 use anyhow::{Context, Result};
-use regex::Regex;
 
+pub type ConfigMap = HashMap<String, String>;
 pub struct ConfigIniSettings {
     pub ipv6_prefix: String,
     pub ipv6_prefix_length: u8,
