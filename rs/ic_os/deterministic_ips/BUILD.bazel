@@ -16,10 +16,10 @@ rust_library(
     ],
     deps = [
         # Keep sorted.
+        "@crate_index//:anyhow",
         "@crate_index//:hex",
         "@crate_index//:sha2",
         "@crate_index//:thiserror",
-        "@crate_index//:anyhow",
     ],
 )
 
