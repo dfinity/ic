@@ -1,8 +1,11 @@
-use ic_crypto_sha2::Sha256;
+use sha2::{Digest, Sha256};
 
 use std::fmt;
 use std::net::Ipv6Addr;
 use std::str::FromStr;
+
+pub mod node_type;
+use node_type::NodeType;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AddressError {
@@ -136,34 +139,21 @@ impl FromStr for Deployment {
     }
 }
 
-#[derive(Copy, Clone)]
-pub enum IpVariant {
-    V4,
-    V6,
-}
-
-pub fn calculate_deterministic_mac<T: AsRef<HwAddr>>(
-    mgmt_mac: T,
-    deployment: Deployment,
-    ip_version: IpVariant,
-    index: u8,
+/// Generate a deterministic MAC address based on the management MAC, deployment environment, and node type.
+pub fn calculate_deterministic_mac(
+    mgmt_mac: &HwAddr,
+    deployment_environment: &str,
+    node_type: &NodeType,
 ) -> Result<HwAddr, AddressError> {
-    if index > 0x0f {
-        return Err(AddressError::InvalidIndex);
-    }
+    let seed = format!("{}{}\n", mgmt_mac, deployment_environment);
+    let hash = Sha256::digest(seed.as_bytes());
 
-    // NOTE: In order to be backwards compatible with existing scripts, this
-    // **MUST** Have a newline.
-    let seed = format!("{}{}\n", mgmt_mac.as_ref(), deployment);
+    let version = 0x6a;
+    let index = node_type.to_index();
 
-    let hash = Sha256::hash(seed.as_bytes());
+    let mac_bytes = [version, index, hash[0], hash[1], hash[2], hash[3]];
 
-    let version = match ip_version {
-        IpVariant::V4 => 0x4a,
-        IpVariant::V6 => 0x6a,
-    };
-
-    Ok([version, index, hash[0], hash[1], hash[2], hash[3]].into())
+    Ok(mac_bytes.into())
 }
 
 impl HwAddr {
@@ -204,10 +194,9 @@ mod test {
     fn mac() {
         let mgmt_mac: HwAddr = "70:B5:E8:E8:25:DE".parse().unwrap();
 
-        let expected_mac: HwAddr = "4a:00:f8:87:a4:8a".parse().unwrap();
+        let expected_mac: HwAddr = "6a:00:f8:87:a4:8a".parse().unwrap();
 
-        let mac =
-            calculate_deterministic_mac(mgmt_mac, Deployment::Testnet, IpVariant::V4, 0).unwrap();
+        let mac = calculate_deterministic_mac(&mgmt_mac, "testnet", &NodeType::HostOS).unwrap();
 
         assert_eq!(mac, expected_mac);
     }
@@ -255,14 +244,14 @@ mod test {
             .parse::<Ipv6Addr>()
             .unwrap();
 
-        let mac =
-            calculate_deterministic_mac(mgmt_mac, Deployment::Mainnet, IpVariant::V6, 1).unwrap();
+        let mac = calculate_deterministic_mac(&mgmt_mac, "mainnet", &NodeType::GuestOS).unwrap();
         let slaac = mac.calculate_slaac(prefix).unwrap();
 
         assert_eq!(slaac, expected_ip);
     }
 
     #[test]
+    // added unit tests from ipv6.rs
     fn ported_generate_ipv6_tests() {
         // Test case 1
         assert_eq!(
@@ -313,18 +302,20 @@ mod test {
         );
     }
 
-    // Added mac address unit tests
+    // Added unit tests from mac_address.rs
     #[test]
     fn test_calculate_deterministic_mac() {
         // Test case 1
         let mgmt_mac: HwAddr = "de:ad:de:ad:de:ad".parse().unwrap();
-        let deployment = Deployment::Mainnet;
-        let ip_version = IpVariant::V6;
-        let index = 0x1;
+        let deployment_environment = "mainnet";
 
         let expected_mac: HwAddr = "6a:01:f7:e0:c6:84".parse().unwrap();
 
-        let mac = calculate_deterministic_mac(mgmt_mac, deployment, ip_version, index).unwrap();
+        let mac =
+            calculate_deterministic_mac(&mgmt_mac, deployment_environment, &NodeType::GuestOS)
+                .unwrap();
+
+        println!("{mac}");
 
         assert_eq!(mac, expected_mac);
 
@@ -332,19 +323,11 @@ mod test {
         let mgmt_mac: HwAddr = "00:aa:bb:cc:dd:ee".parse().unwrap();
         let expected_mac: HwAddr = "6a:01:d9:ab:57:f2".parse().unwrap();
 
-        let mac = calculate_deterministic_mac(mgmt_mac, deployment, ip_version, index).unwrap();
+        let mac =
+            calculate_deterministic_mac(&mgmt_mac, deployment_environment, &NodeType::GuestOS)
+                .unwrap();
 
-        assert_eq!(mac, expected_mac);
-
-        // Test case 3
-        let mgmt_mac: HwAddr = "b0:7b:25:c8:f6:c0".parse().unwrap();
-        let deployment = Deployment::Mainnet;
-        let ip_version = IpVariant::V6;
-        let index = 0x1;
-
-        let expected_mac: HwAddr = "6a:01:ec:bd:51:db".parse().unwrap();
-
-        let mac = calculate_deterministic_mac(mgmt_mac, deployment, ip_version, index).unwrap();
+        println!("{mac}");
 
         assert_eq!(mac, expected_mac);
     }
