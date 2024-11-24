@@ -6,7 +6,8 @@ use clap::{Parser, Subcommand};
 use config::config_ini::config_map_from_path;
 use config::deployment_json::get_deployment_settings;
 use config::{DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH};
-use deterministic_ips::{calculate_deterministic_mac, IpVariant};
+use deterministic_ips::calculate_deterministic_mac;
+use deterministic_ips::node_type::NodeType;
 use network::info::NetworkInfo;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use network::{generate_network_config, resolve_mgmt_mac};
@@ -21,8 +22,8 @@ pub enum Commands {
         output_directory: String,
     },
     GenerateIpv6Address {
-        #[arg(short, long, default_value = "0xf")]
-        node_type: u8,
+        #[arg(short, long, default_value = "SetupOS")]
+        node_type: String,
     },
 }
 
@@ -67,10 +68,9 @@ pub fn main() -> Result<()> {
 
             let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
             let generated_mac = calculate_deterministic_mac(
-                mgmt_mac,
-                deployment_settings.deployment.name.parse()?,
-                IpVariant::V6,
-                0xf,
+                &mgmt_mac,
+                deployment_settings.deployment.name.as_str(),
+                &NodeType::SetupOS,
             )?;
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
 
@@ -93,12 +93,12 @@ pub fn main() -> Result<()> {
                 ))?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
+            let node_type = node_type.parse::<NodeType>()?;
             let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
             let generated_mac = calculate_deterministic_mac(
-                mgmt_mac,
-                deployment_settings.deployment.name.parse()?,
-                IpVariant::V6,
-                node_type,
+                &mgmt_mac,
+                deployment_settings.deployment.name.as_str(),
+                &node_type,
             )?;
             let ipv6_address = generated_mac.calculate_slaac(&network_info.ipv6_prefix)?;
             println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
