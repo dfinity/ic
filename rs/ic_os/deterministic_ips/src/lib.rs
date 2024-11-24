@@ -261,4 +261,91 @@ mod test {
 
         assert_eq!(slaac, expected_ip);
     }
+
+    #[test]
+    fn ported_generate_ipv6_tests() {
+        // Test case 1
+        assert_eq!(
+            "4a0ff7e0c684"
+                .parse::<HwAddr>()
+                .unwrap()
+                .calculate_slaac("2a00:1111:1111:1111")
+                .unwrap(),
+            "2a00:1111:1111:1111:480f:f7ff:fee0:c684"
+                .parse::<Ipv6Addr>()
+                .unwrap()
+        );
+
+        // Test case 2
+        assert_eq!(
+            "111111111111"
+                .parse::<HwAddr>()
+                .unwrap()
+                .calculate_slaac("1111:1111:1111:1111")
+                .unwrap(),
+            "1111:1111:1111:1111:1311:11ff:fe11:1111"
+                .parse::<Ipv6Addr>()
+                .unwrap()
+        );
+
+        // Test case 3
+        assert_eq!(
+            "a1b2c3d4e5f6"
+                .parse::<HwAddr>()
+                .unwrap()
+                .calculate_slaac("2a00:fb01:400:100")
+                .unwrap(),
+            "2a00:fb01:400:100:a3b2:c3ff:fed4:e5f6"
+                .parse::<Ipv6Addr>()
+                .unwrap()
+        );
+
+        // Test case 4
+        assert_eq!(
+            "6a01f7e0c684"
+                .parse::<HwAddr>()
+                .unwrap()
+                .calculate_slaac("2a00:fb01:400:100")
+                .unwrap(),
+            "2a00:fb01:400:100:6801:f7ff:fee0:c684"
+                .parse::<Ipv6Addr>()
+                .unwrap()
+        );
+    }
+
+    // Added mac address unit tests
+    #[test]
+    fn test_calculate_deterministic_mac() {
+        // Test case 1
+        let mgmt_mac: HwAddr = "de:ad:de:ad:de:ad".parse().unwrap();
+        let deployment = Deployment::Mainnet;
+        let ip_version = IpVariant::V6;
+        let index = 0x1;
+
+        let expected_mac: HwAddr = "6a:01:f7:e0:c6:84".parse().unwrap();
+
+        let mac = calculate_deterministic_mac(mgmt_mac, deployment, ip_version, index).unwrap();
+
+        assert_eq!(mac, expected_mac);
+
+        // Test case 2
+        let mgmt_mac: HwAddr = "00:aa:bb:cc:dd:ee".parse().unwrap();
+        let expected_mac: HwAddr = "6a:01:d9:ab:57:f2".parse().unwrap();
+
+        let mac = calculate_deterministic_mac(mgmt_mac, deployment, ip_version, index).unwrap();
+
+        assert_eq!(mac, expected_mac);
+
+        // Test case 3
+        let mgmt_mac: HwAddr = "b0:7b:25:c8:f6:c0".parse().unwrap();
+        let deployment = Deployment::Mainnet;
+        let ip_version = IpVariant::V6;
+        let index = 0x1;
+
+        let expected_mac: HwAddr = "6a:01:ec:bd:51:db".parse().unwrap();
+
+        let mac = calculate_deterministic_mac(mgmt_mac, deployment, ip_version, index).unwrap();
+
+        assert_eq!(mac, expected_mac);
+    }
 }
