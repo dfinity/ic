@@ -3374,7 +3374,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap 4.5.20",
+ "hex",
  "ic-crypto-sha2",
+ "sha2 0.10.8",
  "thiserror 2.0.3",
 ]
 
