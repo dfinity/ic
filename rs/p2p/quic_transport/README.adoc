@@ -6,25 +6,50 @@
 
 The IC Transport layer enables message delivery between nodes within a subnet.
 
-== High Level Application Requirements ==
+== Requirements ==
 
-1. RPC-like library that abstracts away communication between nodes.
-2. Supports multitenancy of application protocols.
-3. Works in P2P network with Byzantine peers.
-4. Scalable and reliable.
+[cols="3,3,3"]
+|===
+| **What ?**
+| **Why ?**
+| **Required property by the implementation**
+
+| RPC-like library
+| Abstracts away communication between nodes so applications on top of the transport library are simpler to implement. E.g. applications don't need to re-implement TCP or QUIC.
+| https://en.wikipedia.org/wiki/Reliability_(computer_networking)[Reliable data delivery] - the sender knows if a message was delivered succesfully to the recepient.
+
+| Multitenancy of applications
+| Multiple applications can safely use the library. E.g. No head-of-line blocking delays. If one application stops consuming messages the rest should be unaffected.
+| https://en.wikipedia.org/wiki/Multiplexing[Multiplexing] - allowing messages to reach all the endpoints independently, and hence independent of packet losses involving other messages.
+
+| Works in P2P network with Byzantine peers
+| This is the real world production environment. 
+| Backpressure ?!
+
+| Scalable and reliable
+| ?! CPU, file descriptors are shared resource.
+| Single connection between peers?!
+
+|===
 
 == Technical Requirements ==
 
 [cols="1,1"]
 |===
 | **What ?**
-| **Why ?**
+| **Required by**
 
-| https://en.wikipedia.org/wiki/Reliability_(computer_networking)[Reliable data delivery] - the sender knows if a message was delivered succesfully to the recepient.
-| Applications on top of the transport layer are simpler to implement when this abstraction exists. E.g. they don't need to re-implement TCP or QUIC.
+| f 
+| 1.
 
-| https://en.wikipedia.org/wiki/Multiplexing[Multiplexing] - allowing messages to reach all the endpoints independently, and hence independent of packet losses involving other messages.
-| No head-of-line blocking delays. The transport layer implements a RPC-like abstraction that can process requests concurrently and independently.
+| f
+| 2.
+
+| Persistent connections.
+| 3.
+
+| P2P applications require fast exchange of data (e.g. ICP consensus protocol) so opening, closing and performing TLS handshake often introduces prohibitive high latency overhead.
+| 4.
 
 | https://en.wikipedia.org/wiki/Network_congestion#Congestion_control[Fair congestion control] - if a server is at capacity regardless of the reason then messages should be processed fairly across different connections.
 | In cases where a replica receives more requests than it can handle (e.g. malicious peer, bug, or it just cannot keep up with processing), messages from particular peer should not be favoured over other messages because it is unknown which peers are malicious.
@@ -32,8 +57,6 @@ The IC Transport layer enables message delivery between nodes within a subnet.
 | TLS
 | Security.
 
-| Persistent connections.
-| P2P applications require fast exchange of data (e.g. ICP consensus protocol) so opening, closing and performing TLS handshake often introduces prohibitive high latency overhead.
 
 | Bounded memory.
 | There should be no operational burden. Having unbounded data structures implies there is high risk of nodes OOMing. If an OOM event happens most likely an operation mitigation is required in order to decrease the memory usage.
@@ -114,4 +137,4 @@ Since the QUIC transport is a lightweight library, no IDL is used.
 The QUIC transport library directly exposes the HTTP request and response to the client instead of introducing a custom type that wraps the payload.
 There are two main reasons for this design decision:
 * Reuse the HTTP request and response types to keep the code compact. This also eliminates the need to implement https://docs.rs/axum/latest/axum/index.html#extractors[extractors].
-* Existing HTTP client-server can be transitioned more easily to the QUIC transport. For example, the server router can be completely reused; request building and response handling on the client stay unchanged
+* Existing HTTP client-server can be transitioned more easily to the QUIC transport. For example, the server router can be completely reused; request building and response handling on the client stay unchanged.
