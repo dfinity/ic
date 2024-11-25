@@ -76,7 +76,7 @@ pub fn main() -> Result<()> {
                 mgmt_mac,
                 deployment_settings.deployment.name.parse()?,
                 IpVariant::V6,
-                0x1,
+                0x0,
             )?;
 
             generate_network_config(&network_info, &generated_mac, Path::new(&output_directory))
