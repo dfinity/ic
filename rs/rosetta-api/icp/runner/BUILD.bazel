@@ -8,8 +8,6 @@ rust_library(
     crate_name = "ic_icp_rosetta_runner",
     deps = [
         # Keep sorted.
-        "//packages/icrc-ledger-types:icrc_ledger_types",
-        "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:reqwest",
         "@crate_index//:tempfile",

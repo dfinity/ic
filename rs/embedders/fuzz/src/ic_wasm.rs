@@ -1,9 +1,10 @@
-use crate::imports::SYSTEM_API_IMPORTS;
+use crate::imports::system_api_imports;
 use arbitrary::{Arbitrary, Result, Unstructured};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::wasm_utils::validation::{RESERVED_SYMBOLS, WASM_FUNCTION_SIZE_LIMIT};
 use ic_replicated_state::Global;
 use ic_types::methods::WasmMethod;
+use lazy_static::lazy_static;
 use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::fmt::Write;
@@ -13,6 +14,10 @@ use wasm_encoder::{
 };
 use wasm_smith::{Config, Module};
 use wasmparser::*;
+
+lazy_static! {
+    static ref SYSTEM_API_IMPORTS: Vec<u8> = system_api_imports();
+}
 
 #[derive(Debug)]
 pub struct ICWasmModule {
@@ -150,9 +155,7 @@ fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
         canonicalize_nans: false,
         exceptions_enabled: false,
 
-        available_imports: Some(
-            wat::parse_str(SYSTEM_API_IMPORTS).expect("Unable to parse SYSTEM API imports"),
-        ),
+        available_imports: Some(SYSTEM_API_IMPORTS.to_vec()),
         ..Default::default()
     }
 }

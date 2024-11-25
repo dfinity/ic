@@ -60,8 +60,9 @@ use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
     crypto::{
-        canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey, PublicKey},
+        canister_threshold_sig::{MasterPublicKey, PublicKey},
         threshold_sig::ni_dkg::NiDkgTargetId,
+        ExtendedDerivationPath,
     },
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
@@ -1241,6 +1242,16 @@ impl ExecutionEnvironment {
                 CanisterCall::Ingress(_) => {
                     self.reject_unexpected_ingress(Ic00Method::SignWithSchnorr)
                 }
+            },
+
+            Ok(Ic00Method::ReshareChainKey)
+            | Ok(Ic00Method::VetKdPublicKey)
+            | Ok(Ic00Method::VetKdDeriveEncryptedKey) => ExecuteSubnetMessageResult::Finished {
+                response: Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!("{} API is not yet implemented.", msg.method_name()),
+                )),
+                refund: msg.take_cycles(),
             },
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
@@ -2628,6 +2639,7 @@ impl ExecutionEnvironment {
         match args {
             ThresholdArguments::Ecdsa(_) => cam.ecdsa_signature_fee(subnet_size),
             ThresholdArguments::Schnorr(_) => cam.schnorr_signature_fee(subnet_size),
+            ThresholdArguments::VetKd(_) => cam.vetkd_fee(subnet_size),
         }
     }
 
@@ -2665,6 +2677,7 @@ impl ExecutionEnvironment {
                         CyclesUseCase::ECDSAOutcalls
                     }
                     ThresholdArguments::Schnorr(_) => CyclesUseCase::SchnorrOutcalls,
+                    ThresholdArguments::VetKd(_) => CyclesUseCase::VetKd,
                 };
                 state
                     .metadata

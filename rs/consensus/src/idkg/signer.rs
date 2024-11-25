@@ -14,7 +14,9 @@ use ic_interfaces::idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+    SignWithThresholdContext, ThresholdArguments,
+};
 use ic_replicated_state::ReplicatedState;
 use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::idkg::common::{
@@ -551,11 +553,17 @@ impl ThresholdSigner for ThresholdSignerImpl {
             .get_state()
             .signature_request_contexts()
             .iter()
-            .flat_map(|(callback_id, context)| {
-                context.matched_pre_signature.map(|(_, height)| RequestId {
+            .flat_map(|(callback_id, context)| match &context.args {
+                ThresholdArguments::Ecdsa(_) | ThresholdArguments::Schnorr(_) => {
+                    context.matched_pre_signature.map(|(_, height)| RequestId {
+                        callback_id: *callback_id,
+                        height,
+                    })
+                }
+                ThresholdArguments::VetKd(args) => Some(RequestId {
                     callback_id: *callback_id,
-                    height,
-                })
+                    height: args.height,
+                }),
             })
             .collect();
         idkg_pool
@@ -820,7 +828,7 @@ mod tests {
     };
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::consensus::idkg::*;
-    use ic_types::crypto::{canister_threshold_sig::ExtendedDerivationPath, AlgorithmId};
+    use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{Height, Randomness};
     use std::ops::Deref;

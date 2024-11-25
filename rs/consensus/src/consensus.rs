@@ -259,7 +259,6 @@ impl ConsensusImpl {
                 logger.clone(),
                 ValidatorMetrics::new(metrics_registry.clone()),
                 Arc::clone(&time_source),
-                Some(ingress_selector.clone()),
             ),
             aggregator: ShareAggregator::new(
                 membership,

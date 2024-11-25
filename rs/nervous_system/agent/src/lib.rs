@@ -1,6 +1,6 @@
-mod agent_impl;
+pub mod agent_impl;
 pub mod nns;
-mod pocketic_impl;
+pub mod pocketic_impl;
 pub mod sns;
 
 use candid::Principal;

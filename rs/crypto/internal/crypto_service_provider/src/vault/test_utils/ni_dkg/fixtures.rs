@@ -10,19 +10,17 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_management_canister_types::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
-    VetKdKeyId,
-};
+use ic_management_canister_types::{VetKdCurve, VetKdKeyId};
 use ic_types::crypto::threshold_sig::ni_dkg::config::dealers::NiDkgDealers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet};
+use ic_types::crypto::threshold_sig::ni_dkg::{
+    NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
+};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{Height, NodeId, NodeIndex, NumberOfNodes, SubnetId};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
-use rand::seq::IteratorRandom;
-use rand::Rng;
+use rand::{distributions::Alphanumeric, seq::IteratorRandom, Rng};
 use rand_chacha::ChaCha20Rng;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -37,41 +35,27 @@ pub fn random_height(rng: &mut ChaCha20Rng) -> Height {
 pub fn random_subnet_id(rng: &mut ChaCha20Rng) -> SubnetId {
     subnet_test_id(rng.gen::<u64>())
 }
-pub fn random_master_public_key_id(rng: &mut ChaCha20Rng) -> MasterPublicKeyId {
-    assert_eq!(MasterPublicKeyId::COUNT, 3);
-    assert_eq!(EcdsaCurve::iter().count(), 1);
-    assert_eq!(SchnorrAlgorithm::iter().count(), 2);
+pub fn random_ni_dkg_master_public_key_id(rng: &mut ChaCha20Rng) -> NiDkgMasterPublicKeyId {
+    assert_eq!(NiDkgMasterPublicKeyId::COUNT, 1);
     assert_eq!(VetKdCurve::iter().count(), 1);
 
-    use rand::prelude::SliceRandom;
-    [
-        MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
-            name: "some key".to_string(),
-        }),
-        MasterPublicKeyId::Schnorr(SchnorrKeyId {
-            algorithm: SchnorrAlgorithm::Bip340Secp256k1,
-            name: "some key".to_string(),
-        }),
-        MasterPublicKeyId::Schnorr(SchnorrKeyId {
-            algorithm: SchnorrAlgorithm::Ed25519,
-            name: "some key".to_string(),
-        }),
-        MasterPublicKeyId::VetKd(VetKdKeyId {
-            curve: VetKdCurve::Bls12_381_G2,
-            name: "some key".to_string(),
-        }),
-    ]
-    .choose(rng)
-    .cloned()
-    .expect("Could not choose a MasterPublicKeyId")
+    let name: String = rng
+        .sample_iter(&Alphanumeric)
+        .take(20)
+        .map(char::from)
+        .collect();
+
+    NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+        curve: VetKdCurve::Bls12_381_G2,
+        name,
+    })
 }
 pub fn random_ni_dkg_tag(rng: &mut ChaCha20Rng) -> NiDkgTag {
     use rand::prelude::SliceRandom;
     [
         NiDkgTag::LowThreshold,
         NiDkgTag::HighThreshold,
-        NiDkgTag::HighThresholdForKey(random_master_public_key_id(rng)),
+        NiDkgTag::HighThresholdForKey(random_ni_dkg_master_public_key_id(rng)),
     ]
     .choose(rng)
     .cloned()

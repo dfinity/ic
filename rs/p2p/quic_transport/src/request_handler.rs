@@ -12,8 +12,7 @@
 //!
 use std::time::Duration;
 
-use anyhow::Context;
-use axum::{body::Body, Router};
+use axum::{body::Body, Router}; // TODO: try to remove the axum dep here
 use bytes::Bytes;
 use http::{Method, Request, Response, Version};
 use ic_base_types::NodeId;
@@ -34,7 +33,8 @@ use crate::{
 
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
 
-pub async fn run_stream_acceptor(
+/// Note: The event loop is cancel-safe.
+pub async fn start_stream_acceptor(
     log: ReplicaLogger,
     peer_id: NodeId,
     conn_handle: ConnectionHandle,
@@ -71,7 +71,7 @@ pub async fn run_stream_acceptor(
                         );
                     }
                     Err(err) => {
-                        info!(log, "Error accepting bi stream {:?}", err.to_string());
+                        info!(log, "Exiting request handler event loop due to conn error {:?}", err.to_string());
                         observe_conn_error(&err, "accept_bi", &metrics.request_handle_errors_total);
                         break;
                     }
@@ -94,9 +94,6 @@ pub async fn run_stream_acceptor(
             },
         }
     }
-    info!(log, "Shutting down request handler for peer {:?}", peer_id);
-
-    inflight_requests.shutdown().await;
 }
 
 /// Note: The method is cancel-safe.
@@ -115,11 +112,11 @@ async fn handle_bi_stream(
 
     let send_stream = &mut send_stream_guard.send_stream;
     let svc = router.oneshot(request);
-    let stopped = send_stream.stopped();
+    let stopped_fut = send_stream.stopped();
     let response = tokio::select! {
         response = svc => response.expect("Infallible"),
-        stopped_res = stopped => {
-            return stopped_res.map(|_| ()).with_context(|| "stopped.");
+        stopped = stopped_fut => {
+            return Ok(stopped.map(|_| ()).inspect_err(|err| observe_stopped_error(err, "request_handler", &metrics.request_handle_errors_total))?);
         }
     };
 
@@ -192,18 +189,14 @@ async fn read_request(
     }
     // This consumes the body without requiring allocation or cloning the whole content.
     let body_bytes = Bytes::from(request_proto.body);
-    request_builder
-        .body(Body::from(body_bytes))
-        .with_context(|| "Failed to build request.")
+    Ok(request_builder.body(Body::from(body_bytes))?)
 }
 
 async fn to_response_bytes(response: Response<Body>) -> Result<Vec<u8>, anyhow::Error> {
     let (parts, body) = response.into_parts();
     // Check for axum error in body
     // TODO: Think about this. What is the error that can happen here?
-    let body = axum::body::to_bytes(body, MAX_MESSAGE_SIZE_BYTES)
-        .await
-        .with_context(|| "Failed to read response from body.")?;
+    let body = axum::body::to_bytes(body, MAX_MESSAGE_SIZE_BYTES).await?;
     let response_proto = pb::HttpResponse {
         status_code: parts.status.as_u16().into(),
         headers: parts

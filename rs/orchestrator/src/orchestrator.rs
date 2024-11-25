@@ -123,6 +123,8 @@ impl Orchestrator {
             1,
         );
 
+        UtilityCommand::notify_host("Please wait for a 'Join request successful!' message confirming a successful onboarding.", 3);
+
         let version = replica_version.clone();
         thread::spawn(move || loop {
             // Sleep early because IPv4 takes several minutes to configure
