@@ -645,25 +645,6 @@ impl StateLayout {
         }
     }
 
-    pub fn sync_and_mark_checkpoint_ro(
-        &self,
-        layout: &CheckpointLayout<ReadOnly>,
-        thread_pool: Option<&mut scoped_threadpool::Pool>,
-    ) -> Result<(), LayoutError> {
-        let path = layout.raw_path();
-        sync_and_mark_files_readonly(&self.log, path, &self.metrics, thread_pool).map_err(
-            |err| LayoutError::IoError {
-                path: path.to_path_buf(),
-                message: format!(
-                    "Could not sync and mark readonly scratchpad for checkpoint {}",
-                    layout.height(),
-                ),
-                io_err: err,
-            },
-        )?;
-        Ok(())
-    }
-
     pub fn scratchpad_to_checkpoint<T>(
         &self,
         layout: CheckpointLayout<RwPolicy<'_, T>>,
@@ -674,6 +655,16 @@ impl StateLayout {
         let scratchpad = layout.raw_path();
         let checkpoints_path = self.checkpoints();
         let cp_path = checkpoints_path.join(Self::checkpoint_name(height));
+        sync_and_mark_files_readonly(&self.log, scratchpad, &self.metrics, thread_pool).map_err(
+            |err| LayoutError::IoError {
+                path: scratchpad.to_path_buf(),
+                message: format!(
+                    "Could not sync and mark readonly scratchpad for checkpoint {}",
+                    height
+                ),
+                io_err: err,
+            },
+        )?;
         std::fs::rename(scratchpad, cp_path).map_err(|err| {
             if is_already_exists_err(&err) {
                 LayoutError::AlreadyExists(height)
