@@ -28,7 +28,7 @@ The IC Transport layer enables message delivery between nodes within a subnet.
 
 | Scalable and reliable
 | CPU, file descriptors are shared resource and they should be used with care. E.g. to many connection between the same set of peers consume the finire resource of file descriptors. Or too many TLS handshake between consume CPU which impacts latency.
-| Single persistent/reusable connection between peers.
+| https://en.wikipedia.org/wiki/Connection-oriented_communication[Connection-oriented communication] between peers a.k.a. single connection.
 
 |===
 
