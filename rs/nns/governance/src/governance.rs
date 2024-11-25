@@ -2313,7 +2313,13 @@ impl Governance {
                             && neuron.visibility() == Some(Visibility::Public)
                         );
                 if let_caller_read_full_neuron {
-                    full_neurons.push(NeuronProto::from(neuron.clone()));
+                    let mut proto = NeuronProto::from(neuron.clone());
+                    // We get the recent_ballots from the neuron itself, because
+                    // we are using a circular buffer to store them.  This solution is not ideal, but
+                    // we need to do a larger refactoring to use the correct API types instead of the internal
+                    // governance proto at this level.
+                    proto.recent_ballots = neuron.sorted_recent_ballots();
+                    full_neurons.push(proto);
                 }
             });
         }
