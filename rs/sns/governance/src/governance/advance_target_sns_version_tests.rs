@@ -250,3 +250,104 @@ async fn test_initiate_upgrade_blocked_by_pending_upgrade() {
         Some(Version::from(target_version))
     );
 }
+
+#[test]
+fn test_perform_advance_target_version() {
+    let deployed_version = Version {
+        root_wasm_hash: vec![1, 0, 1],
+        governance_wasm_hash: vec![1, 0, 2],
+        swap_wasm_hash: vec![1, 0, 3],
+        index_wasm_hash: vec![1, 0, 4],
+        ledger_wasm_hash: vec![1, 0, 5],
+        archive_wasm_hash: vec![1, 0, 6],
+    };
+    let next_version = Version {
+        root_wasm_hash: vec![2, 0, 1],
+        ..deployed_version.clone()
+    };
+    let next_next_version = Version {
+        index_wasm_hash: vec![2, 0, 4],
+        ..deployed_version.clone()
+    };
+    // Smoke check: Make sure all versions are different
+    let versions = vec![
+        deployed_version.clone(),
+        next_version.clone(),
+        next_next_version.clone(),
+    ];
+    assert!(
+        versions.iter().collect::<HashSet::<_>>().len() == versions.len(),
+        "Duplicates!"
+    );
+
+    let make_governance = |versions: Vec<Version>, current_target| {
+        let mut governance_proto = basic_governance_proto();
+        governance_proto.deployed_version = versions.first().cloned();
+        governance_proto.target_version = current_target;
+        governance_proto.cached_upgrade_steps = Some(CachedUpgradeStepsPb {
+            upgrade_steps: Some(Versions { versions }),
+            ..Default::default()
+        });
+        let env = NativeEnvironment::new(Some(*TEST_GOVERNANCE_CANISTER_ID));
+        let mut governance = crate::governance::Governance::new(
+            governance_proto.try_into().unwrap(),
+            Box::new(env),
+            Box::new(DoNothingLedger {}),
+            Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
+        );
+        // TODO[NNS1-3365]: Enable the AdvanceSnsTargetVersionFeature.
+        governance.test_features_enabled = true;
+        governance
+    };
+
+    for (label, current_target, new_target, expected_result) in [
+        (
+            "Scenario A. Cannot advance SNS target to deployed version.",
+            None,
+            deployed_version,
+            Err(
+                "InvalidProposal: new_target_version must differ from the current version."
+                    .to_string(),
+            ),
+        ),
+        (
+            "Scenario B. Can advance SNS target to next version.",
+            None,
+            next_version.clone(),
+            Ok(()),
+        ),
+        (
+            "Scenario C. Can advance SNS target to next next version (current target is not set).",
+            None,
+            next_next_version.clone(),
+            Ok(()),
+        ),
+        (
+            "Scenario D. Can advance SNS target to next next version (current target is set).",
+            Some(next_version.clone()),
+            next_next_version.clone(),
+            Ok(()),
+        ),
+        (
+            "Scenario E. Cannot advance SNS target to next version since current target is ahead.",
+            Some(next_next_version),
+            next_version.clone(),
+            Err("InvalidProposal: SNS target already set to SnsVersion { \
+                    root:010001, \
+                    governance:010002, \
+                    swap:010003, \
+                    index:020004, \
+                    ledger:010005, \
+                    archive:010006 \
+                }."
+            .to_string()),
+        ),
+    ] {
+        let mut governance = make_governance(versions.clone(), current_target);
+        let result = governance
+            .perform_advance_target_version(new_target)
+            .map_err(|err| err.to_string());
+        assert_eq!(result, expected_result, "{}", label);
+    }
+}

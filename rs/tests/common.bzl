@@ -315,8 +315,6 @@ GRAFANA_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
 ]
 
 BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
-    "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst.cas-url",
-    "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst.sha256",
     "//ic-os/boundary-guestos:scripts/build-bootstrap-config-image.sh",
 ]
 

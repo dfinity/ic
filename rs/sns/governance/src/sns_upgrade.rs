@@ -416,6 +416,7 @@ impl Version {
 
         differences
     }
+
     pub(crate) fn version_has_expected_hashes(
         &self,
         expected_hashes: &[(SnsCanisterType, Vec<u8> /* wasm hash*/)],
