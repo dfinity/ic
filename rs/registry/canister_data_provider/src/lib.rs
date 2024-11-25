@@ -23,7 +23,7 @@ use std::marker::PhantomData;
 
 const BYTE: u32 = 1;
 const KB: u32 = 1024 * BYTE;
-
+const MB: u32 = 1024 * KB;
 pub struct StorableRegistryRecord(ProtoRegistryRecord);
 
 impl Storable for StorableRegistryRecord {
@@ -36,7 +36,7 @@ impl Storable for StorableRegistryRecord {
     }
 
     const BOUND: Bound = Bound::Bounded {
-        max_size: KB,
+        max_size: 2 * MB,
         is_fixed_size: false,
     };
 }
