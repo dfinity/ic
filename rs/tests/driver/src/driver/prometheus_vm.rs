@@ -181,7 +181,7 @@ impl PrometheusVm {
             .arg("main")
             .current_dir(&k8s_repo)
             .output()?;
-        info!(logger, "Pulled from origin");
+        info!(logger, "Pulled dashboards from dfinity-ops/k8s repo");
 
         let dashboards_root = k8s_repo.join("bases").join("apps").join("ic-dashboards");
         let k8s_dashboards = k8s_repo.join("k8s-dashboards");
