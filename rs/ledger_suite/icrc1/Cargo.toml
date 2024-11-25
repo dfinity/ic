@@ -37,7 +37,7 @@ ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-types = { path = "../../types/types" }
 lazy_static = { workspace = true }
-leb128 = "0.2.4"
+leb128 = { workspace = true }
 proptest = { workspace = true }
 rand = { workspace = true }
 

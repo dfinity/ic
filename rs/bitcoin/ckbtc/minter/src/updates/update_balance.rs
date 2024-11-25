@@ -4,8 +4,8 @@ use crate::state::{mutate_state, read_state, UtxoCheckStatus};
 use crate::tasks::{schedule_now, TaskType};
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_btc_interface::{GetUtxosError, GetUtxosResponse, OutPoint, Utxo};
+use ic_btc_kyt::CheckTransactionResponse;
 use ic_canister_log::log;
-use ic_ckbtc_kyt::Error as KytError;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -13,15 +13,19 @@ use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use num_traits::ToPrimitive;
 use serde::Serialize;
 
+// Max number of times of calling check_transaction with cycle payment, to avoid spending too
+// many cycles.
+const MAX_CHECK_TRANSACTION_RETRY: usize = 10;
+
 use super::get_btc_address::init_ecdsa_public_key;
 
 use crate::{
     guard::{balance_update_guard, GuardError},
-    management::{fetch_utxo_alerts, get_utxos, CallError, CallSource},
+    management::{get_utxos, CallError, CallSource},
     state,
     tx::{DisplayAmount, DisplayOutpoint},
     updates::get_btc_address,
-    IC_CANISTER_RUNTIME,
+    CanisterRuntime,
 };
 
 /// The argument of the [update_balance] endpoint.
@@ -57,6 +61,7 @@ pub enum UtxoStatus {
 
 pub enum ErrorCode {
     ConfigurationError = 1,
+    KytError = 2,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -125,11 +130,12 @@ impl From<CallError> for UpdateBalanceError {
 }
 
 /// Notifies the ckBTC minter to update the balance of the user subaccount.
-pub async fn update_balance(
+pub async fn update_balance<R: CanisterRuntime>(
     args: UpdateBalanceArgs,
+    runtime: &R,
 ) -> Result<Vec<UtxoStatus>, UpdateBalanceError> {
-    let caller = ic_cdk::caller();
-    if args.owner.unwrap_or(caller) == ic_cdk::id() {
+    let caller = runtime.caller();
+    if args.owner.unwrap_or(caller) == runtime.id() {
         ic_cdk::trap("cannot update minter's balance");
     }
 
@@ -154,16 +160,23 @@ pub async fn update_balance(
     let (btc_network, min_confirmations) =
         state::read_state(|s| (s.btc_network, s.min_confirmations));
 
-    let utxos = get_utxos(btc_network, &address, min_confirmations, CallSource::Client)
-        .await?
-        .utxos;
+    let utxos = get_utxos(
+        btc_network,
+        &address,
+        min_confirmations,
+        CallSource::Client,
+        runtime,
+    )
+    .await?
+    .utxos;
 
-    let new_utxos = state::read_state(|s| s.new_utxos_for_account(utxos, &caller_account));
+    let processable_utxos =
+        state::read_state(|s| s.processable_utxos_for_account(utxos, &caller_account));
 
     // Remove pending finalized transactions for the affected principal.
     state::mutate_state(|s| s.finalized_utxos.remove(&caller_account.owner));
 
-    let satoshis_to_mint = new_utxos.iter().map(|u| u.value).sum::<u64>();
+    let satoshis_to_mint = processable_utxos.iter().map(|u| u.value).sum::<u64>();
 
     if satoshis_to_mint == 0 {
         // We bail out early if there are no UTXOs to avoid creating a new entry
@@ -182,6 +195,7 @@ pub async fn update_balance(
             &address,
             /*min_confirmations=*/ 0,
             CallSource::Client,
+            runtime,
         )
         .await?;
 
@@ -218,7 +232,7 @@ pub async fn update_balance(
 
     let kyt_fee = read_state(|s| s.kyt_fee);
     let mut utxo_statuses: Vec<UtxoStatus> = vec![];
-    for utxo in new_utxos {
+    for utxo in processable_utxos {
         if utxo.value <= kyt_fee {
             mutate_state(|s| crate::state::audit::ignore_utxo(s, utxo.clone()));
             log!(
@@ -231,13 +245,16 @@ pub async fn update_balance(
             utxo_statuses.push(UtxoStatus::ValueTooSmall(utxo));
             continue;
         }
-        let (uuid, status, kyt_provider) = kyt_check_utxo(caller_account.owner, &utxo).await?;
+        let status = kyt_check_utxo(&utxo, &args, runtime).await?;
         mutate_state(|s| {
-            crate::state::audit::mark_utxo_checked(s, &utxo, uuid.clone(), status, kyt_provider);
+            crate::state::audit::mark_utxo_checked(s, &utxo, None, status, None);
         });
-        if status == UtxoCheckStatus::Tainted {
-            utxo_statuses.push(UtxoStatus::Tainted(utxo.clone()));
-            continue;
+        match status {
+            UtxoCheckStatus::Tainted => {
+                utxo_statuses.push(UtxoStatus::Tainted(utxo.clone()));
+                continue;
+            }
+            UtxoCheckStatus::Clean => {}
         }
         let amount = utxo.value - kyt_fee;
         let memo = MintMemo::Convert {
@@ -246,7 +263,10 @@ pub async fn update_balance(
             kyt_fee: Some(kyt_fee),
         };
 
-        match mint(amount, caller_account, crate::memo::encode(&memo).into()).await {
+        match runtime
+            .mint_ckbtc(amount, caller_account, crate::memo::encode(&memo).into())
+            .await
+        {
             Ok(block_index) => {
                 log!(
                     P1,
@@ -280,14 +300,17 @@ pub async fn update_balance(
         }
     }
 
-    schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::ProcessLogic, runtime);
     Ok(utxo_statuses)
 }
 
-async fn kyt_check_utxo(
-    caller: Principal,
+async fn kyt_check_utxo<R: CanisterRuntime>(
     utxo: &Utxo,
-) -> Result<(String, UtxoCheckStatus, Principal), UpdateBalanceError> {
+    args: &UpdateBalanceArgs,
+    runtime: &R,
+) -> Result<UtxoCheckStatus, UpdateBalanceError> {
+    use ic_btc_kyt::{CheckTransactionStatus, CHECK_TRANSACTION_CYCLES_REQUIRED};
+
     let kyt_principal = read_state(|s| {
         s.kyt_principal
             .expect("BUG: upgrade procedure must ensure that the KYT principal is set")
@@ -295,52 +318,62 @@ async fn kyt_check_utxo(
             .into()
     });
 
-    if let Some((uuid, status, api_key_owner)) = read_state(|s| s.checked_utxos.get(utxo).cloned())
-    {
-        return Ok((uuid, status, api_key_owner));
+    if let Some(checked_utxo) = read_state(|s| s.checked_utxos.get(utxo).cloned()) {
+        return Ok(checked_utxo.status);
     }
-
-    match fetch_utxo_alerts(kyt_principal, caller, utxo)
-        .await
-        .map_err(|call_err| {
-            UpdateBalanceError::TemporarilyUnavailable(format!(
-                "Failed to call KYT canister: {}",
-                call_err
-            ))
-        })? {
-        Ok(response) => {
-            if !response.alerts.is_empty() {
+    for i in 0..MAX_CHECK_TRANSACTION_RETRY {
+        match runtime
+            .check_transaction(kyt_principal, utxo, CHECK_TRANSACTION_CYCLES_REQUIRED)
+            .await
+            .map_err(|call_err| {
+                UpdateBalanceError::TemporarilyUnavailable(format!(
+                    "Failed to call KYT canister: {}",
+                    call_err
+                ))
+            })? {
+            CheckTransactionResponse::Failed(addresses) => {
                 log!(
                     P0,
-                    "Discovered a tainted UTXO {} (external id {})",
+                    "Discovered a tainted UTXO {} (due to input addresses {}) for update_balance({:?}) call",
                     DisplayOutpoint(&utxo.outpoint),
-                    response.external_id
+                    addresses.join(","),
+                    args,
                 );
-                Ok((
-                    response.external_id,
-                    UtxoCheckStatus::Tainted,
-                    response.provider,
-                ))
-            } else {
-                Ok((
-                    response.external_id,
-                    UtxoCheckStatus::Clean,
-                    response.provider,
-                ))
+                return Ok(UtxoCheckStatus::Tainted);
+            }
+            CheckTransactionResponse::Passed => return Ok(UtxoCheckStatus::Clean),
+            CheckTransactionResponse::Unknown(CheckTransactionStatus::NotEnoughCycles) => {
+                log!(
+                    P1,
+                    "The KYT canister requires more cycles, Remaining tries: {}",
+                    MAX_CHECK_TRANSACTION_RETRY - i - 1
+                );
+                continue;
+            }
+            CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(status)) => {
+                log!(
+                    P1,
+                    "The KYT canister is temporarily unavailable: {:?}",
+                    status
+                );
+                return Err(UpdateBalanceError::TemporarilyUnavailable(format!(
+                    "The KYT canister is temporarily unavailable: {:?}",
+                    status
+                )));
+            }
+            CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(error)) => {
+                log!(P1, "KYT error: {:?}", error);
+                return Err(UpdateBalanceError::GenericError {
+                    error_code: ErrorCode::KytError as u64,
+                    error_message: format!("KYT error: {:?}", error),
+                });
             }
         }
-        Err(KytError::TemporarilyUnavailable(reason)) => {
-            log!(
-                P1,
-                "The KYT provider is temporarily unavailable: {}",
-                reason
-            );
-            Err(UpdateBalanceError::TemporarilyUnavailable(format!(
-                "The KYT provider is temporarily unavailable: {}",
-                reason
-            )))
-        }
     }
+    Err(UpdateBalanceError::GenericError {
+        error_code: ErrorCode::KytError as u64,
+        error_message: "The KYT canister required too many calls to check_transaction".to_string(),
+    })
 }
 
 /// Mint an amount of ckBTC to an Account.

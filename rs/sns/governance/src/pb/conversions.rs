@@ -496,6 +496,46 @@ impl From<pb_api::ManageDappCanisterSettings> for pb::ManageDappCanisterSettings
     }
 }
 
+impl From<pb_api::SnsVersion> for pb::SnsVersion {
+    fn from(item: pb_api::SnsVersion) -> Self {
+        Self {
+            governance_wasm_hash: item.governance_wasm_hash,
+            swap_wasm_hash: item.swap_wasm_hash,
+            root_wasm_hash: item.root_wasm_hash,
+            index_wasm_hash: item.index_wasm_hash,
+            ledger_wasm_hash: item.ledger_wasm_hash,
+            archive_wasm_hash: item.archive_wasm_hash,
+        }
+    }
+}
+impl From<pb::SnsVersion> for pb_api::SnsVersion {
+    fn from(item: pb::SnsVersion) -> Self {
+        Self {
+            governance_wasm_hash: item.governance_wasm_hash,
+            swap_wasm_hash: item.swap_wasm_hash,
+            root_wasm_hash: item.root_wasm_hash,
+            index_wasm_hash: item.index_wasm_hash,
+            ledger_wasm_hash: item.ledger_wasm_hash,
+            archive_wasm_hash: item.archive_wasm_hash,
+        }
+    }
+}
+
+impl From<pb_api::AdvanceSnsTargetVersion> for pb::AdvanceSnsTargetVersion {
+    fn from(item: pb_api::AdvanceSnsTargetVersion) -> Self {
+        Self {
+            new_target: item.new_target.map(pb::SnsVersion::from),
+        }
+    }
+}
+impl From<pb::AdvanceSnsTargetVersion> for pb_api::AdvanceSnsTargetVersion {
+    fn from(item: pb::AdvanceSnsTargetVersion) -> Self {
+        Self {
+            new_target: item.new_target.map(pb_api::SnsVersion::from),
+        }
+    }
+}
+
 impl From<pb::Proposal> for pb_api::Proposal {
     fn from(item: pb::Proposal) -> Self {
         Self {
@@ -561,6 +601,9 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             pb::proposal::Action::ManageDappCanisterSettings(v) => {
                 pb_api::proposal::Action::ManageDappCanisterSettings(v.into())
             }
+            pb::proposal::Action::AdvanceSnsTargetVersion(v) => {
+                pb_api::proposal::Action::AdvanceSnsTargetVersion(v.into())
+            }
         }
     }
 }
@@ -607,6 +650,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             }
             pb_api::proposal::Action::ManageDappCanisterSettings(v) => {
                 pb::proposal::Action::ManageDappCanisterSettings(v.into())
+            }
+            pb_api::proposal::Action::AdvanceSnsTargetVersion(v) => {
+                pb::proposal::Action::AdvanceSnsTargetVersion(v.into())
             }
         }
     }
@@ -914,6 +960,25 @@ impl From<pb_api::proposal_data::MintSnsTokensActionAuxiliary>
     }
 }
 
+impl From<pb::proposal_data::AdvanceSnsTargetVersionActionAuxiliary>
+    for pb_api::proposal_data::AdvanceSnsTargetVersionActionAuxiliary
+{
+    fn from(item: pb::proposal_data::AdvanceSnsTargetVersionActionAuxiliary) -> Self {
+        Self {
+            target_version: item.target_version.map(pb_api::SnsVersion::from),
+        }
+    }
+}
+impl From<pb_api::proposal_data::AdvanceSnsTargetVersionActionAuxiliary>
+    for pb::proposal_data::AdvanceSnsTargetVersionActionAuxiliary
+{
+    fn from(item: pb_api::proposal_data::AdvanceSnsTargetVersionActionAuxiliary) -> Self {
+        Self {
+            target_version: item.target_version.map(pb::SnsVersion::from),
+        }
+    }
+}
+
 impl From<pb::proposal_data::ActionAuxiliary> for pb_api::proposal_data::ActionAuxiliary {
     fn from(item: pb::proposal_data::ActionAuxiliary) -> Self {
         match item {
@@ -923,9 +988,13 @@ impl From<pb::proposal_data::ActionAuxiliary> for pb_api::proposal_data::ActionA
             pb::proposal_data::ActionAuxiliary::MintSnsTokens(v) => {
                 pb_api::proposal_data::ActionAuxiliary::MintSnsTokens(v.into())
             }
+            pb::proposal_data::ActionAuxiliary::AdvanceSnsTargetVersion(v) => {
+                pb_api::proposal_data::ActionAuxiliary::AdvanceSnsTargetVersion(v.into())
+            }
         }
     }
 }
+
 impl From<pb_api::proposal_data::ActionAuxiliary> for pb::proposal_data::ActionAuxiliary {
     fn from(item: pb_api::proposal_data::ActionAuxiliary) -> Self {
         match item {
@@ -934,6 +1003,9 @@ impl From<pb_api::proposal_data::ActionAuxiliary> for pb::proposal_data::ActionA
             }
             pb_api::proposal_data::ActionAuxiliary::MintSnsTokens(v) => {
                 pb::proposal_data::ActionAuxiliary::MintSnsTokens(v.into())
+            }
+            pb_api::proposal_data::ActionAuxiliary::AdvanceSnsTargetVersion(v) => {
+                pb::proposal_data::ActionAuxiliary::AdvanceSnsTargetVersion(v.into())
             }
         }
     }

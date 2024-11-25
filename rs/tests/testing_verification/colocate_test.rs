@@ -102,6 +102,11 @@ fn setup(env: TestEnv) {
         .arg("--dereference")
         .arg("--exclude=rs/tests/colocate_test_bin")
         .arg("--exclude=rs/tests/colocate_uvm_config_image.zst")
+        // Avoid packing in ic-os images. Those are runtime dependencies for the
+        // top-level test runner which uploads them to shared storage; after that
+        // they are not used anymore and are only referenced by URL (propagated
+        // through env vars).
+        .arg("--exclude=**/*.tar.zst")
         .arg(".")
         .output()
         .unwrap_or_else(|e| panic!("Failed to tar the runfiles directory because: {e}"));

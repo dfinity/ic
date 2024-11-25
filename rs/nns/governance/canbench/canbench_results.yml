@@ -59,6 +59,30 @@ benches:
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
+  list_neurons_ready_to_unstake_maturity_heap:
+    total:
+      instructions: 3441869
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  list_neurons_ready_to_unstake_maturity_stable:
+    total:
+      instructions: 710546759
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  list_ready_to_spawn_neuron_ids_heap:
+    total:
+      instructions: 3438794
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  list_ready_to_spawn_neuron_ids_stable:
+    total:
+      instructions: 710543948
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
   neuron_metrics_calculation_heap:
     total:
       instructions: 837546

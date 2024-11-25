@@ -163,7 +163,7 @@ sh_test(
 )
 
 sh_binary(
-    name = "sha256sum2url_sh",
-    srcs = ["sha256sum2url.sh"],
+    name = "upload_systest_dep",
+    srcs = ["upload_systest_dep.sh"],
     visibility = ["//visibility:public"],
 )

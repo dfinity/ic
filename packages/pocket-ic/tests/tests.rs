@@ -1944,3 +1944,57 @@ fn get_subnet() {
     let nns_subnet_config = topology.subnet_configs.get(&nns_subnet).unwrap();
     assert_eq!(nns_subnet_config.subnet_kind, SubnetKind::NNS);
 }
+
+#[test]
+fn make_live_twice() {
+    // create PocketIC instance
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // create HTTP gateway
+    let url = pic.make_live(None);
+
+    let same_url = pic.make_live(None);
+    assert_eq!(same_url, url);
+}
+
+#[test]
+fn create_instance_from_existing() {
+    let pic = PocketIc::new();
+
+    // Create a canister and charge it with 2T cycles.
+    let can_id = pic.create_canister();
+    pic.add_cycles(can_id, INIT_CYCLES);
+
+    // Install the counter canister wasm file on the canister.
+    let counter_wasm = counter_wasm();
+    pic.install_canister(can_id, counter_wasm, vec![], None);
+
+    // Bump and check the counter value;
+    let reply = call_counter_can(&pic, can_id, "write");
+    assert_eq!(reply, WasmResult::Reply(vec![1, 0, 0, 0]));
+    let reply = call_counter_can(&pic, can_id, "read");
+    assert_eq!(reply, WasmResult::Reply(vec![1, 0, 0, 0]));
+
+    // Create a new PocketIC handle to the existing PocketIC instance.
+    let pic_handle =
+        PocketIc::new_from_existing_instance(pic.get_server_url(), pic.instance_id(), None);
+
+    // Bump and check the counter value;
+    let reply = call_counter_can(&pic_handle, can_id, "write");
+    assert_eq!(reply, WasmResult::Reply(vec![2, 0, 0, 0]));
+    let reply = call_counter_can(&pic_handle, can_id, "read");
+    assert_eq!(reply, WasmResult::Reply(vec![2, 0, 0, 0]));
+
+    // Drop the newly created PocketIC handle.
+    // This should not delete the existing PocketIC instance.
+    drop(pic_handle);
+
+    // Bump and check the counter value;
+    let reply = call_counter_can(&pic, can_id, "write");
+    assert_eq!(reply, WasmResult::Reply(vec![3, 0, 0, 0]));
+    let reply = call_counter_can(&pic, can_id, "read");
+    assert_eq!(reply, WasmResult::Reply(vec![3, 0, 0, 0]));
+}
