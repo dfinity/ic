@@ -705,7 +705,7 @@ mod tests {
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, user_test_id};
     use ic_types::batch::BatchPayload;
-    use ic_types::consensus::dkg::{self, Summary};
+    use ic_types::consensus::dkg::{DkgDataPayload, Summary};
     use ic_types::consensus::idkg::IDkgPayload;
     use ic_types::consensus::idkg::PreSigId;
     use ic_types::consensus::idkg::ReshareOfUnmaskedParams;
@@ -784,7 +784,7 @@ mod tests {
         }
         BlockPayload::Data(DataPayload {
             batch: BatchPayload::default(),
-            dkg: dkg::DataPayload::new_empty(dkg_interval_start_height),
+            dkg: DkgDataPayload::new_empty(dkg_interval_start_height),
             idkg: Some(idkg_payload),
         })
     }
@@ -1306,7 +1306,7 @@ mod tests {
                 idkg::KeyTranscriptCreation::Created(key_transcript_ref);
             let parent_block_payload = BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dkg: dkg::DataPayload::new_empty(summary_height),
+                dkg: DkgDataPayload::new_empty(summary_height),
                 idkg: Some(data_payload),
             });
             let parent_block = add_block(
@@ -1571,7 +1571,7 @@ mod tests {
                 idkg::KeyTranscriptCreation::Begin;
             let parent_block_payload = BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dkg: dkg::DataPayload::new_empty(summary_height),
+                dkg: DkgDataPayload::new_empty(summary_height),
                 idkg: Some(data_payload),
             });
             let parent_block = add_block(

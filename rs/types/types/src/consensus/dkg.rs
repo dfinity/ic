@@ -527,7 +527,7 @@ pub enum Payload {
     /// DKG Summary payload
     Summary(Summary),
     /// DKG Dealings payload
-    Data(DataPayload),
+    Data(DkgDataPayload),
 }
 
 /// DealingMessages is a vector of DKG messages
@@ -537,17 +537,17 @@ pub type DealingMessages = Vec<Message>;
 /// started
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct DataPayload {
+pub struct DkgDataPayload {
     /// The height of the DKG interval that this object belongs to
     pub start_height: Height,
     /// The dealing messages
     pub messages: DealingMessages,
 }
 
-impl TryFrom<pb::DataPayload> for DataPayload {
+impl TryFrom<pb::DkgDataPayload> for DkgDataPayload {
     type Error = ProxyDecodeError;
 
-    fn try_from(data_payload: pb::DataPayload) -> Result<Self, Self::Error> {
+    fn try_from(data_payload: pb::DkgDataPayload) -> Result<Self, Self::Error> {
         Ok(Self {
             start_height: Height::from(data_payload.summary_height),
             messages: data_payload
@@ -559,7 +559,7 @@ impl TryFrom<pb::DataPayload> for DataPayload {
     }
 }
 
-impl DataPayload {
+impl DkgDataPayload {
     /// Return an empty DealingsPayload using the given start_height.
     pub fn new_empty(start_height: Height) -> Self {
         Self::new(start_height, vec![])
@@ -595,10 +595,10 @@ impl From<&Summary> for pb::DkgPayload {
     }
 }
 
-impl From<&DataPayload> for pb::DkgPayload {
-    fn from(data_payload: &DataPayload) -> Self {
+impl From<&DkgDataPayload> for pb::DkgPayload {
+    fn from(data_payload: &DkgDataPayload) -> Self {
         Self {
-            val: Some(pb::dkg_payload::Val::DataPayload(pb::DataPayload {
+            val: Some(pb::dkg_payload::Val::DataPayload(pb::DkgDataPayload {
                 // TODO do we need this clone
                 dealings: data_payload
                     .messages
@@ -624,7 +624,7 @@ impl TryFrom<pb::DkgPayload> for Payload {
                 Ok(Payload::Summary(Summary::try_from(summary)?))
             }
             pb::dkg_payload::Val::DataPayload(data_payload) => {
-                Ok(Payload::Data(DataPayload::try_from(data_payload)?))
+                Ok(Payload::Data(DkgDataPayload::try_from(data_payload)?))
             }
         }
     }

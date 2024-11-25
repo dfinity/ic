@@ -12,7 +12,8 @@ use ic_types::{
     consensus::{
         block_maker::SubnetRecords,
         certification::{Certification, CertificationContent},
-        dkg, BlockPayload, DataPayload, Payload,
+        dkg::DkgDataPayload,
+        BlockPayload, DataPayload, Payload,
     },
     crypto::{CryptoHash, Signed},
     messages::SignedIngress,
@@ -143,7 +144,7 @@ fn wrap_batch_payload(height: u64, payload: BatchPayload) -> Payload {
         ic_types::crypto::crypto_hash,
         BlockPayload::Data(DataPayload {
             batch: payload,
-            dkg: dkg::DataPayload::new_empty(Height::from(height)),
+            dkg: DkgDataPayload::new_empty(Height::from(height)),
             idkg: None,
         }),
     )

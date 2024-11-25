@@ -23,7 +23,7 @@ use ic_types::{
     batch::BatchPayload,
     consensus::{
         certification::{Certification, CertificationMessage, CertificationShare},
-        dkg,
+        dkg::{self, DkgDataPayload},
         idkg::{
             EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefix, IDkgPrefixOf,
             SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening,
@@ -1037,7 +1037,7 @@ impl PoolArtifact for ConsensusMessage {
                     }),
                     PayloadType::Data => BlockPayload::Data(DataPayload {
                         batch: BatchPayload::default(),
-                        dkg: dkg::DataPayload::new_empty(start_height),
+                        dkg: DkgDataPayload::new_empty(start_height),
                         idkg: None,
                     }),
                 }),

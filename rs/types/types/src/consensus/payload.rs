@@ -17,7 +17,7 @@ use std::sync::Arc;
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DataPayload {
     pub batch: BatchPayload,
-    pub dkg: dkg::DataPayload,
+    pub dkg: dkg::DkgDataPayload,
     pub idkg: idkg::Payload,
 }
 
