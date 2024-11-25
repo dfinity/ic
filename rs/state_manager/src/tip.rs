@@ -190,7 +190,7 @@ pub(crate) fn spawn_tip_thread(
                             debug_assert!(have_latest_manifest);
                             tip_state = TipState::Empty;
                             have_latest_manifest = false;
-                            let _timer =
+                            let mut timer =
                                 request_timer(&metrics, "tip_to_checkpoint_send_checkpoint");
                             let tip = tip_handler.tip(height);
                             match tip {
@@ -224,6 +224,11 @@ pub(crate) fn spawn_tip_thread(
                                             sender
                                                 .send(Ok((cp.clone(), tip_downgrade.clone())))
                                                 .expect("Failed to return TipToCheckpoint result");
+                                            timer =
+                                                request_timer(&metrics, "tip_to_checkpoint_sync_and_ro");
+                                            state_layout.sync_and_mark_checkpoint_ro(&cp, Some(&mut thread_pool)).unwrap_or_else(|err| {
+                                                fatal!(log, "Failed to sync and mark RO checkpoint #{}: {}", cp.height(), err);
+                                            });
                                         }
                                     }
                                 }

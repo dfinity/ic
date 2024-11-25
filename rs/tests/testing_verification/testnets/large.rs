@@ -86,9 +86,9 @@ pub fn setup(env: TestEnv) {
     let mut ic = InternetComputer::new().with_default_vm_resources(vm_resources);
     ic = ic.add_subnet(
         Subnet::new(SubnetType::System)
-            .with_required_host_features(vec![HostFeature::Host(
-                "se1-dll02.se1.dfinity.network".to_string(),
-            )])
+            //.with_required_host_features(vec![HostFeature::Host(
+            //"se1-dll02.se1.dfinity.network".to_string(),
+            //)])
             .add_nodes(1),
     );
     for _ in 0..NUM_FULL_CONSENSUS_APP_SUBNETS {
@@ -97,9 +97,9 @@ pub fn setup(env: TestEnv) {
     for _ in 0..NUM_SINGLE_NODE_APP_SUBNETS {
         ic = ic.add_subnet(
             Subnet::new(SubnetType::Application)
-                //.with_required_host_features(vec![HostFeature::Host(
-                //"se1-dll02.se1.dfinity.network".to_string(),
-                //)])
+                .with_required_host_features(vec![HostFeature::Host(
+                    "se1-dll02.se1.dfinity.network".to_string(),
+                )])
                 .add_nodes(1),
         );
     }
