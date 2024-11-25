@@ -22,7 +22,7 @@ pub struct HealthArgs {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Cycles {
-    cycles: u64,
+    cycles: u128,
     freezing_threshold: u64,
 }
 
@@ -40,16 +40,21 @@ impl TableRow for SnsHealthInfo {
     }
 
     fn column_values(&self) -> Vec<String> {
+        const MEMORY_THRESHOLD_GIB: f64 = 2.5;
+        const CYCLES_THRESHOLD_TC: f64 = 10.0;
+        const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
+        const TC: f64 = 1000.0 * 1000.0 * 1000.0 * 1000.0;
+
         let high_memory_consumption = self
             .memory_consumption
             .iter()
             .filter(|(memory_consumption, _)| {
-                (*memory_consumption as f64) > 2.5 * 1024.0 * 1024.0 * 1024.0
+                (*memory_consumption as f64) > MEMORY_THRESHOLD_GIB * GIB
             })
             .map(|(memory_consumption, canister_type)| {
                 format!(
                     "{canister_type}: ({:.2} GiB)",
-                    *memory_consumption as f64 / 1024.0 / 1024.0 / 1024.0
+                    *memory_consumption as f64 / GIB
                 )
             })
             .join(", ");
@@ -63,12 +68,12 @@ impl TableRow for SnsHealthInfo {
         let low_cycles = self
             .cycles
             .iter()
-            .filter(|(cycles, _)| (cycles.cycles as f64) < 10.0 * 1000.0 * 1000.0 * 1000.0 * 1000.0)
+            .filter(|(cycles, _)| (cycles.cycles as f64) < CYCLES_THRESHOLD_TC * TC)
             .map(|(cycles, canister_type)| {
                 format!(
                     "{canister_type}: ({:.2} TC{frozen})",
-                    cycles.cycles as f64 / 1000.0 / 1000.0 / 1000.0 / 1000.0,
-                    frozen = if cycles.freezing_threshold > cycles.cycles {
+                    cycles.cycles as f64 / TC,
+                    frozen = if (cycles.freezing_threshold as u128) > cycles.cycles {
                         " 🥶".to_string()
                     } else {
                         "".to_string()
@@ -145,7 +150,7 @@ pub async fn exec(args: HealthArgs, agent: &Agent) -> Result<()> {
                                     canister_status.settings.freezing_threshold.0,
                                 )
                                 .unwrap(),
-                                cycles: 0,
+                                cycles: u128::try_from(canister_status.cycles.0).unwrap(),
                             },
                             ctype,
                         ),
