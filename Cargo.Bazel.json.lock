@@ -1,5 +1,5 @@
 {
-  "checksum": "5fe33a03e161d581dd1c16252cc679e87b45a95f5cab67b27dc2d7b185b59ccc",
+  "checksum": "bcf8141a2dd5fdac247edec5e2ed6e45f320012f07e86173971b2d847b1996e3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -75449,6 +75449,7 @@
             "smallvec",
             "std",
             "thread_local",
+            "time",
             "tracing",
             "tracing-log",
             "tracing-serde"
@@ -75492,6 +75493,10 @@
             {
               "id": "thread_local 1.1.7",
               "target": "thread_local"
+            },
+            {
+              "id": "time 0.3.36",
+              "target": "time"
             },
             {
               "id": "tracing 0.1.40",
