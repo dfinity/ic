@@ -963,7 +963,7 @@ impl NeuronStore {
                     process_neuron(neuron.as_ref());
                 }
             },
-            NeuronSections::default(),
+            NeuronSections::ALL,
         );
 
         (ballots, deciding_voting_power, potential_voting_power)
