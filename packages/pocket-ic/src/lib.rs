@@ -367,10 +367,8 @@ impl PocketIc {
         });
         let runtime = rx.recv().unwrap();
 
-        let pocket_ic = runtime.block_on(async {
-            PocketIcAsync::new_from_existing_instance(server_url, instance_id, max_request_time_ms)
-                .await
-        });
+        let pocket_ic =
+            PocketIcAsync::new_from_existing_instance(server_url, instance_id, max_request_time_ms);
 
         Self {
             pocket_ic,
@@ -1073,7 +1071,11 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.get_subnet_metrics(subnet_id).await })
     }
 
-    fn update_call_with_effective_principal(
+    /// Execute an update call on a canister explicitly specifying an effective principal to route the request:
+    /// this API is useful for making generic calls (including management canister calls) without using dedicated functions from this library
+    /// (e.g., making generic calls in dfx to a PocketIC instance).
+    #[instrument(skip(self, payload), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), effective_principal = %effective_principal.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
+    pub fn update_call_with_effective_principal(
         &self,
         canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,
@@ -1085,6 +1087,32 @@ impl PocketIc {
         runtime.block_on(async {
             self.pocket_ic
                 .update_call_with_effective_principal(
+                    canister_id,
+                    effective_principal,
+                    sender,
+                    method,
+                    payload,
+                )
+                .await
+        })
+    }
+
+    /// Execute a query call on a canister explicitly specifying an effective principal to route the request:
+    /// this API is useful for making generic calls (including management canister calls) without using dedicated functions from this library
+    /// (e.g., making generic calls in dfx to a PocketIC instance).
+    #[instrument(skip(self, payload), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), effective_principal = %effective_principal.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
+    pub fn query_call_with_effective_principal(
+        &self,
+        canister_id: CanisterId,
+        effective_principal: RawEffectivePrincipal,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+    ) -> Result<WasmResult, UserError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .query_call_with_effective_principal(
                     canister_id,
                     effective_principal,
                     sender,
