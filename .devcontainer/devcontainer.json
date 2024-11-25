@@ -57,7 +57,7 @@
         "vadimcn.vscode-lldb",
         "bazelbuild.vscode-bazel",
         "stackbuild.bazel-stack-vscode",
-        "bungcip.better-toml"
+        "tamasfe.even-better-toml"
       ],
       "settings": {
         // Exclude bazel output directories from search
