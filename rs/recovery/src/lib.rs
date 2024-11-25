@@ -485,7 +485,7 @@ impl Recovery {
 
     /// Return an [UploadAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
-    pub fn get_upload_and_restart_step(&self, node_ip: IpAddr) -> impl Step {
+    pub fn get_upload_and_restart_step(&self, node_ip: Option<IpAddr>) -> impl Step {
         self.get_upload_and_restart_step_with_data_src(node_ip, self.work_dir.join(IC_STATE_DIR))
     }
 
@@ -493,7 +493,7 @@ impl Recovery {
     /// a node and restart it.
     pub fn get_upload_and_restart_step_with_data_src(
         &self,
-        node_ip: IpAddr,
+        node_ip: Option<IpAddr>,
         data_src: PathBuf,
     ) -> impl Step {
         UploadAndRestartStep {

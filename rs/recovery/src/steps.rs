@@ -509,7 +509,7 @@ impl Step for ValidateReplayStep {
 
 pub struct UploadAndRestartStep {
     pub logger: Logger,
-    pub node_ip: IpAddr,
+    pub node_ip: Option<IpAddr>,
     pub work_dir: PathBuf,
     pub data_src: PathBuf,
     pub require_confirmation: bool,
@@ -517,28 +517,57 @@ pub struct UploadAndRestartStep {
     pub check_ic_replay_height: bool,
 }
 
+impl UploadAndRestartStep {
+    fn get_state_replacement_command(ic_state_path: String, upload_dir: String) -> String {
+        let mut replace_state = String::new();
+        replace_state.push_str("sudo systemctl stop ic-replica;");
+        replace_state.push_str(&format!(
+            "sudo chmod -R --reference={} {};",
+            ic_state_path, upload_dir
+        ));
+        replace_state.push_str(&format!(
+            "sudo chown -R --reference={} {};",
+            ic_state_path, upload_dir
+        ));
+        replace_state.push_str(&format!("sudo rm -r {};", ic_state_path));
+        replace_state.push_str(&format!("sudo mv {} {};", upload_dir, ic_state_path));
+        replace_state.push_str(&format!(
+            r"sudo find {} -type f -exec chmod a-x {{}} \;;",
+            ic_state_path
+        ));
+        replace_state.push_str(&format!(
+            r"sudo find {} -type f -exec chmod go+r {{}} \;;",
+            ic_state_path
+        ));
+        // Note that on older versions of IC-OS this service does not exist.
+        // So try this operation, but ignore possible failure if service
+        // does not exist on the affected version.
+        replace_state.push_str("(sudo systemctl restart setup-permissions || true);");
+        replace_state.push_str("sudo systemctl start ic-replica;");
+        replace_state.push_str("sudo systemctl status ic-replica;");
+        replace_state
+    }
+}
 impl Step for UploadAndRestartStep {
     fn descr(&self) -> String {
+        let replica = if let Some(ip) = self.node_ip {
+            &format!("replica {ip}")
+        } else {
+            "local replica"
+        };
         format!(
-            "Stopping replica {}, uploading and replacing state from {}, set access rights, \
-            restart replica.",
-            self.node_ip,
+            "Stopping {replica}, uploading and replacing state from {}, set access \
+            rights, restart replica.",
             self.data_src.display()
         )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
+        info!(self.logger, "starting exec!");
         let account = ADMIN;
-        let ssh_helper = SshHelper::new(
-            self.logger.clone(),
-            account.to_string(),
-            self.node_ip,
-            self.require_confirmation,
-            self.key_file.clone(),
-        );
-
         let checkpoint_path = self.data_src.join(CHECKPOINTS);
         let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
+        info!(self.logger, "finished getting checkpoint names");
 
         let [max_checkpoint] = checkpoints.as_slice() else {
             return Err(RecoveryError::invalid_output_error(
@@ -571,59 +600,63 @@ impl Step for UploadAndRestartStep {
         let copy_to = format!("{}/{}/{}", upload_dir, CHECKPOINTS, max_checkpoint);
         let cp = format!("sudo cp -r {} {}", copy_from, copy_to);
 
-        info!(
-            self.logger,
-            "Creating remote directory and copying previous checkpoint..."
-        );
-        if let Some(res) = ssh_helper.ssh(format!(
+        let cmd_create_and_copy_checkpoint_dir = format!(
             "sudo mkdir -p {}/{}; {}; sudo chown -R {} {};",
             upload_dir, CHECKPOINTS, cp, account, upload_dir
-        ))? {
-            info!(self.logger, "{}", res);
-        }
-
-        let target = format!("{}@[{}]:{}/", account, self.node_ip, upload_dir);
-        let src = format!("{}/", self.data_src.display());
-        info!(self.logger, "Uploading state...");
-        rsync(
-            &self.logger,
-            IC_STATE_EXCLUDES.to_vec(),
-            &src,
-            &target,
-            self.require_confirmation,
-            self.key_file.as_ref(),
-        )?;
+        );
 
         let ic_state_path = format!("{}/{}", IC_DATA_PATH, IC_STATE);
-        info!(self.logger, "Restarting replica...");
-        let mut replace_state = String::new();
-        replace_state.push_str("sudo systemctl stop ic-replica;");
-        replace_state.push_str(&format!(
-            "sudo chmod -R --reference={} {};",
-            ic_state_path, upload_dir
-        ));
-        replace_state.push_str(&format!(
-            "sudo chown -R --reference={} {};",
-            ic_state_path, upload_dir
-        ));
-        replace_state.push_str(&format!("sudo rm -r {};", ic_state_path));
-        replace_state.push_str(&format!("sudo mv {} {};", upload_dir, ic_state_path));
-        replace_state.push_str(&format!(
-            r"sudo find {} -type f -exec chmod a-x {{}} \;;",
-            ic_state_path
-        ));
-        replace_state.push_str(&format!(
-            r"sudo find {} -type f -exec chmod go+r {{}} \;;",
-            ic_state_path
-        ));
-        // Note that on older versions of IC-OS this service does not exist.
-        // So try this operation, but ignore possible failure if service
-        // does not exist on the affected version.
-        replace_state.push_str("(sudo systemctl restart setup-permissions || true);");
-        replace_state.push_str("sudo systemctl start ic-replica;");
-        replace_state.push_str("sudo systemctl status ic-replica;");
+        let cmd_replace_state =
+            Self::get_state_replacement_command(ic_state_path, upload_dir.clone());
 
-        ssh_helper.ssh(replace_state)?;
+        // Only for remote recoveries do we upload state via rsync.
+        let src = format!("{}/", self.data_src.display());
+        if let Some(node_ip) = self.node_ip {
+            let ssh_helper = SshHelper::new(
+                self.logger.clone(),
+                account.to_string(),
+                node_ip,
+                self.require_confirmation,
+                self.key_file.clone(),
+            );
+            info!(
+                self.logger,
+                "Creating remote directory and copying previous checkpoint..."
+            );
+            if let Some(res) = ssh_helper.ssh(cmd_create_and_copy_checkpoint_dir)? {
+                info!(self.logger, "{}", res);
+            }
+            let target = format!("{}@[{}]:{}/", account, node_ip, upload_dir);
+            info!(self.logger, "Uploading state...");
+            rsync(
+                &self.logger,
+                IC_STATE_EXCLUDES.to_vec(),
+                &src,
+                &target,
+                self.require_confirmation,
+                self.key_file.as_ref(),
+            )?;
+            info!(self.logger, "Restarting replica...");
+            ssh_helper.ssh(cmd_replace_state)?;
+        }
+        // For local recoveries we simply `mv` state to the upload directory.
+        else {
+            info!(self.logger, "Moving state locally...");
+            let mut mv_to_target = Command::new("sudo");
+            mv_to_target.arg("mv");
+            mv_to_target.arg(src);
+            mv_to_target.arg(upload_dir);
+            exec_cmd(&mut mv_to_target)?;
+
+            info!(self.logger, "Restarting replica...");
+
+            exec_cmd(
+                &mut Command::new("bash")
+                    .arg("-c")
+                    .arg(cmd_replace_state),
+            )?;
+        }
+
         Ok(())
     }
 }

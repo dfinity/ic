@@ -186,6 +186,7 @@ mod tests {
                 pub_key: Some(String::from("Fake public key")),
                 download_node: None,
                 keep_downloaded_state: Some(false),
+                local_upload: None,
                 upload_node: None,
                 chain_key_subnet_id: Some(fake_subnet_id()),
                 next_step: None,

@@ -347,7 +347,7 @@ impl SubnetSplitting {
         match self.upload_node(target_subnet) {
             Some(node_ip) => Ok(UploadAndRestartStep {
                 logger: self.recovery.logger.clone(),
-                node_ip,
+                node_ip: Some(node_ip),
                 work_dir: self.layout.work_dir(target_subnet),
                 data_src: self.layout.ic_state_dir(target_subnet),
                 require_confirmation: !self.recovery_args.skip_prompts,

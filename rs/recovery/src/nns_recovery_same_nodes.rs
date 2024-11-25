@@ -65,6 +65,12 @@ pub struct NNSRecoverySameNodesArgs {
     #[clap(long)]
     pub download_node: Option<IpAddr>,
 
+    /// If we're performing a local recovery. That means we're running the recovery
+    /// tool directly on a node of the targeted subnet. This allows us to skip a few
+    /// potentially expensive data transfers.
+    #[clap(long)]
+    pub local_upload: Option<bool>,
+
     /// IP address of the node to upload the new subnet state to
     #[clap(long)]
     pub upload_node: Option<IpAddr>,
@@ -265,10 +271,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
 
             StepType::UploadState => {
-                if let Some(node_ip) = self.params.upload_node {
+                if self.params.local_upload.is_some() {
                     Ok(Box::new(
                         self.recovery.get_upload_and_restart_step_with_data_src(
-                            node_ip,
+                            self.params.upload_node,
                             self.new_state_dir.clone(),
                         ),
                     ))
