@@ -28,19 +28,19 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .add_parallel(
             SystemTestSubGroup::new()
-                // .add_test(systest!(api_status_test))
-                // .add_test(systest!(api_query_test))
-                .add_test(systest!(api_call_test)),
-            // .add_test(systest!(api_sync_call_test))
-            // .add_test(systest!(api_canister_read_state_test))
-            // .add_test(systest!(api_subnet_read_state_test))
-            // .add_test(systest!(asset_canister_test))
-            // .add_test(systest!(content_type_headers_test))
-            // .add_test(systest!(cors_headers_test))
-            // .add_test(systest!(proxy_http_canister_test))
-            // .add_test(systest!(redirect_http_to_https_test))
-            // .add_test(systest!(redirect_to_dashboard_test))
-            // .add_test(systest!(http_endpoints_test)),
+                .add_test(systest!(api_status_test))
+                .add_test(systest!(api_query_test))
+                .add_test(systest!(api_call_test))
+                .add_test(systest!(api_sync_call_test))
+                .add_test(systest!(api_canister_read_state_test))
+                .add_test(systest!(api_subnet_read_state_test))
+                .add_test(systest!(asset_canister_test))
+                .add_test(systest!(content_type_headers_test))
+                .add_test(systest!(cors_headers_test))
+                .add_test(systest!(proxy_http_canister_test))
+                .add_test(systest!(redirect_http_to_https_test))
+                .add_test(systest!(redirect_to_dashboard_test))
+                .add_test(systest!(http_endpoints_test)),
         )
         .add_test(systest!(canister_denylist_test))
         .execute_from_args()?;
