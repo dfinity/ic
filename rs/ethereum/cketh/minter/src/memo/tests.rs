@@ -8,7 +8,6 @@ use crate::state::transactions::ReimbursementRequest;
 use arbitrary::{arb_burn_memo, arb_mint_memo, arb_reimbursement_request};
 use candid::Principal;
 use icrc_ledger_types::icrc1::transfer::Memo;
-use minicbor::{Decode, Encode};
 use proptest::prelude::*;
 use std::str::FromStr;
 

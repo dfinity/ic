@@ -32,6 +32,7 @@ rust_library(
             "src/dashboard/tests.rs",
         ],
     ),
+    crate_features = ["u256"],
     crate_name = "ic_cketh_minter",
     proc_macro_deps = [
         # Keep sorted.
