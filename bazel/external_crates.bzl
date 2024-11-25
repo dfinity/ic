@@ -558,13 +558,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.18.11",
             ),
             "ic-agent": crate.spec(
-                version = "^0.37.1",
-                features = [
-                    "experimental_sync_call",
-                    "hyper",
-                    "reqwest",
-                    "pem",
-                ],
+                version = "^0.39.1",
+                features = ["pem"],
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
