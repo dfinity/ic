@@ -4433,7 +4433,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f2f12607f92c69b12ed746fabf9ca4f5c482cba46679c1a75b874ed7c26adb"
 dependencies = [
  "futures-io",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "rustls-pki-types",
 ]
 
@@ -5056,7 +5056,7 @@ dependencies = [
  "clap 4.5.20",
  "hyper 1.5.0",
  "hyper-util",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "rustls-pemfile 2.2.0",
  "serde_json",
  "tokio",
@@ -5185,7 +5185,7 @@ dependencies = [
  "hyper 1.5.0",
  "hyper-util",
  "log",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "rustls-native-certs 0.8.0",
  "rustls-pki-types",
  "tokio",
@@ -5629,7 +5629,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=526d34d15cfbf369d8baf2dae9932aa18d570a1d#526d34d15cfbf369d8baf2dae9932aa18d570a1d"
+source = "git+https://github.com/dfinity/ic-bn-lib?rev=2496803db52d8182f578f098a3ffe4fcb9573fcd#2496803db52d8182f578f098a3ffe4fcb9573fcd"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -5665,7 +5665,7 @@ dependencies = [
  "rand 0.8.5",
  "rcgen",
  "reqwest 0.12.9",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "rustls-acme",
  "rustls-pemfile 2.2.0",
  "rustls-platform-verifier",
@@ -5677,7 +5677,7 @@ dependencies = [
  "strum_macros",
  "sync_wrapper 1.0.1",
  "systemstat",
- "thiserror 1.0.68",
+ "thiserror 2.0.3",
  "tokio",
  "tokio-io-timeout",
  "tokio-rustls 0.26.0",
@@ -5750,7 +5750,7 @@ dependencies = [
  "rcgen",
  "regex",
  "reqwest 0.12.9",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "rustls-pemfile 2.2.0",
  "serde",
  "serde_bytes",
@@ -6084,7 +6084,7 @@ dependencies = [
  "prost 0.13.3",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "serde",
  "serde_cbor",
  "tokio",
@@ -6974,7 +6974,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rsa",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "serde",
  "sha2 0.10.8",
  "simple_asn1",
@@ -7732,7 +7732,7 @@ dependencies = [
  "ic-types-test-utils",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "tempfile",
  "tokio",
 ]
@@ -7932,7 +7932,7 @@ dependencies = [
  "ic-types",
  "pkcs8",
  "rand 0.8.5",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "signature",
  "time",
  "tokio",
@@ -7968,7 +7968,7 @@ dependencies = [
  "ic-types",
  "json5",
  "maplit",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "serde",
  "thiserror 2.0.3",
  "x509-parser",
@@ -7981,7 +7981,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-tls-interfaces",
  "mockall",
- "rustls 0.23.16",
+ "rustls 0.23.17",
 ]
 
 [[package]]
@@ -8493,7 +8493,7 @@ dependencies = [
  "rand 0.8.5",
  "reqwest 0.12.9",
  "rstest",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -8613,7 +8613,7 @@ dependencies = [
  "prometheus",
  "rand 0.8.5",
  "rstest",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "rustls-pemfile 2.2.0",
  "serde",
  "serde_json",
@@ -10726,7 +10726,7 @@ dependencies = [
  "quinn",
  "quinn-udp",
  "rcgen",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "serde",
  "slog",
  "tempfile",
@@ -10890,7 +10890,7 @@ dependencies = [
  "prost 0.13.3",
  "quinn",
  "rstest",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "slog",
  "socket2 0.5.7",
  "thiserror 2.0.3",
@@ -11359,6 +11359,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-tracing",
  "ic-tracing-jaeger-exporter",
+ "ic-tracing-logging-layer",
  "ic-types",
  "ic-xnet-payload-builder",
  "libc",
@@ -13151,6 +13152,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-tracing-logging-layer"
+version = "0.9.0"
+dependencies = [
+ "ic-base-types",
+ "ic-config",
+ "time",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "ic-transport-types"
 version = "0.37.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14711,7 +14724,7 @@ dependencies = [
  "k8s-openapi",
  "kube-core",
  "pem 3.0.4",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "rustls-pemfile 2.2.0",
  "secrecy",
  "serde",
@@ -17774,7 +17787,7 @@ dependencies = [
  "quinn-proto",
  "quinn-udp",
  "rustc-hash 2.0.0",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "socket2 0.5.7",
  "thiserror 1.0.68",
  "tokio",
@@ -17791,7 +17804,7 @@ dependencies = [
  "rand 0.8.5",
  "ring 0.17.8",
  "rustc-hash 2.0.0",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "slab",
  "thiserror 1.0.68",
  "tinyvec",
@@ -18409,7 +18422,7 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "quinn",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "rustls-native-certs 0.8.0",
  "rustls-pemfile 2.2.0",
  "rustls-pki-types",
@@ -18824,9 +18837,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.16"
+version = "0.23.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eee87ff5d9b36712a58574e12e9f0ea80f915a5b0ac518d322b24a465617925e"
+checksum = "7f1a745511c54ba6d4465e8d5dfbd81b45791756de28d4981af70d6dca128f1e"
 dependencies = [
  "brotli 7.0.0",
  "brotli-decompressor",
@@ -18926,7 +18939,7 @@ dependencies = [
  "jni",
  "log",
  "once_cell",
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "rustls-native-certs 0.7.3",
  "rustls-platform-verifier-android",
  "rustls-webpki 0.102.8",
@@ -21022,7 +21035,7 @@ version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c7bc40d0e5a97695bb96e27995cd3a08538541b0a846f65bba7a359f36700d4"
 dependencies = [
- "rustls 0.23.16",
+ "rustls 0.23.17",
  "rustls-pki-types",
  "tokio",
 ]
@@ -21439,6 +21452,7 @@ dependencies = [
  "sharded-slab",
  "smallvec",
  "thread_local",
+ "time",
  "tracing",
  "tracing-core",
  "tracing-log",

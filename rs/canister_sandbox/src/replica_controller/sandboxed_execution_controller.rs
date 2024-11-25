@@ -1803,14 +1803,6 @@ fn evict_sandbox_processes(
         Backend::Empty => false,
     });
 
-    let total_sandboxes_rss = total_sandboxes_rss(backends);
-
-    // We have the same if statement in `sandbox_process_eviction::evict`, but
-    // if we return here we will skip the creation of `candidates` vector.
-    if active_count <= max_active_sandboxes && total_sandboxes_rss <= max_sandboxes_rss {
-        return;
-    }
-
     let scheduler_priorities = state_reader
         .get_latest_state()
         .get_ref()
@@ -1827,6 +1819,7 @@ fn evict_sandbox_processes(
                 rss: stats.rss,
                 scheduler_priority: *scheduler_priorities
                     .get(id)
+                    // This should happen only if the canister is deleted.
                     .unwrap_or(&min_scheduler_priority),
             }),
             Backend::Evicted { .. } | Backend::Empty => None,
@@ -1848,7 +1841,7 @@ fn evict_sandbox_processes(
 
     let evicted = sandbox_process_eviction::evict(
         candidates,
-        total_sandboxes_rss,
+        total_sandboxes_rss(backends),
         max_active_sandboxes,
         last_used_threshold,
         max_sandboxes_rss,

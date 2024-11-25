@@ -36,7 +36,7 @@ impl LoggerImpl {
             LogDestination::Stdout => Self::new_internal(std::io::stdout(), config, thread_name),
             LogDestination::Stderr => Self::new_internal(std::io::stderr(), config, thread_name),
             LogDestination::File(f) => Self::new_internal(
-                std::fs::File::create(f).expect("Couldn't open/create log file"),
+                std::fs::File::create(f).expect("Creating a file must succeed."),
                 config,
                 thread_name,
             ),
