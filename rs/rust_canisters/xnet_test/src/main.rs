@@ -20,7 +20,6 @@ use rand::Rng;
 use rand_pcg::Lcg64Xsh32;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::convert::TryFrom;
 use std::str::FromStr;
 use std::time::Duration;
 use xnet_test::{Metrics, NetworkTopology, StartArgs};
@@ -197,11 +196,7 @@ async fn fanout() {
                 padding: vec![0; payload_size.saturating_sub(16)],
             };
 
-            let res = call::<(Request,), (Reply,)>(
-                Principal::try_from(canister).unwrap(),
-                "handle_request",
-                (payload,),
-            );
+            let res = call::<(Request,), (Reply,)>(canister, "handle_request", (payload,));
             futures.push(res);
             METRICS.with(move |m| m.borrow_mut().calls_attempted += 1);
         }
