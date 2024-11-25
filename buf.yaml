@@ -21,6 +21,7 @@ lint:
     - DEFAULT
 breaking:
   ignore:
+    - rs/protobuf/state/queues/v1/queues.proto
   use:
     - WIRE
   except:
