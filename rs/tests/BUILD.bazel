@@ -292,8 +292,8 @@ exports_files([
 uvm_config_image(
     name = "jaeger_uvm_config_image",
     srcs = [
+        ":jaeger.tar",
         ":jaeger_activate.sh",
-        ":jaeger_image",
     ],
     remap_paths = {
         "jaeger_activate.sh": "activate",
@@ -369,4 +369,39 @@ oci_tar(
     name = "jaeger.tar",
     image = "@jaeger",
     repo_tags = ["jaegertracing/all-in-one:1.58"],
+)
+
+oci_tar(
+    name = "minica.tar",
+    image = "@minica",
+    repo_tags = ["minica:image"],
+)
+
+oci_tar(
+    name = "bitcoind.tar",
+    image = "@bitcoind",
+    repo_tags = ["bitcoind:image"],
+)
+
+oci_tar(
+    name = "nginx-proxy.tar",
+    image = "@nginx-proxy",
+    repo_tags = ["nginx-proxy:image"],
+)
+
+uvm_config_image(
+    name = "ckbtc_uvm_config_image",
+    srcs = [
+        ":bitcoind.tar",
+        ":minica.tar",
+        ":nginx-proxy.tar",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.key",
+        "//rs/tests/httpbin-rs:httpbin.tar",
+    ],
+    remap_paths = {
+        "canister_http_test_ca.cert": "cert.pem",
+        "canister_http_test_ca.key": "key.pem",
+    },
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
 )

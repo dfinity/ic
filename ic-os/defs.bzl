@@ -3,7 +3,7 @@ A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
 """
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
+load("//bazel:defs.bzl", "gzip_compress", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
@@ -356,20 +356,6 @@ def icos_build(
         tags = ["manual"],
     )
 
-    sha256sum(
-        name = "disk-img.tar.zst.sha256",
-        srcs = [":disk-img.tar.zst"],
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
-    sha256sum2url(
-        name = "disk-img.tar.zst.cas-url",
-        src = ":disk-img.tar.zst.sha256",
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
     # -------------------- Assemble upgrade image --------------------
 
     if upgrades:
@@ -391,20 +377,6 @@ def icos_build(
             tags = ["manual"],
         )
 
-        sha256sum(
-            name = "update-img.tar.zst.sha256",
-            srcs = [":update-img.tar.zst"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        sha256sum2url(
-            name = "update-img.tar.zst.cas-url",
-            src = ":update-img.tar.zst.sha256",
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
         upgrade_image(
             name = "update-img-test.tar",
             boot_partition = ":partition-boot-test.tzst",
@@ -419,20 +391,6 @@ def icos_build(
         zstd_compress(
             name = "update-img-test.tar.zst",
             srcs = [":update-img-test.tar"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        sha256sum(
-            name = "update-img-test.tar.zst.sha256",
-            srcs = [":update-img-test.tar.zst"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        sha256sum2url(
-            name = "update-img-test.tar.zst.cas-url",
-            src = ":update-img-test.tar.zst.sha256",
             visibility = visibility,
             tags = ["manual"],
         )
@@ -532,37 +490,25 @@ EOF
 
     # -------------------- VM Developer Tools --------------------
 
-    native.genrule(
+    native.sh_binary(
         name = "launch-remote-vm",
-        srcs = [
-            "//rs/ic_os/dev_test_tools/launch-single-vm",
-            ":disk-img.tar.zst.cas-url",
-            ":disk-img.tar.zst.sha256",
+        srcs = ["//ic-os:dev-tools/launch-remote-vm.sh"],
+        data = [
+            "//rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm",
             "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
+            ":disk-img.tar.zst",
             ":version.txt",
+            "//bazel:upload_systest_dep",
         ],
-        outs = ["launch_remote_vm_script"],
-        cmd = """
-        BIN="$(location //rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm)"
-        VERSION="$$(cat $(location :version.txt))"
-        URL="$$(cat $(location :disk-img.tar.zst.cas-url))"
-        SHA="$$(cat $(location :disk-img.tar.zst.sha256))"
-        SCRIPT="$(location //ic-os/components:hostos-scripts/build-bootstrap-config-image.sh)"
-        cat <<EOF > $@
-#!/usr/bin/env bash
-set -euo pipefail
-cd "\\$$BUILD_WORKSPACE_DIRECTORY"
-# Hack to switch nested for SetupOS
-nested=""
-if [[ "$@" =~ "setupos" ]]; then
-    nested="--nested"
-fi
-$$BIN --version "$$VERSION" --url "$$URL" --sha256 "$$SHA" --build-bootstrap-script "$$SCRIPT" \\$${nested}
-EOF
-        """,
-        executable = True,
-        tags = ["manual"],
+        env = {
+            "BIN": "$(location //rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm)",
+            "UPLOAD_SYSTEST_DEP": "$(location //bazel:upload_systest_dep)",
+            "SCRIPT": "$(location //ic-os/components:hostos-scripts/build-bootstrap-config-image.sh)",
+            "VERSION_FILE": "$(location :version.txt)",
+            "DISK_IMG": "$(location :disk-img.tar.zst)",
+        },
         testonly = True,
+        tags = ["manual"],
     )
 
     native.genrule(
@@ -862,20 +808,6 @@ EOF
     zstd_compress(
         name = "disk-img.tar.zst",
         srcs = ["disk-img.tar"],
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
-    sha256sum(
-        name = "disk-img.tar.zst.sha256",
-        srcs = [":disk-img.tar.zst"],
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
-    sha256sum2url(
-        name = "disk-img.tar.zst.cas-url",
-        src = ":disk-img.tar.zst.sha256",
         visibility = visibility,
         tags = ["manual"],
     )

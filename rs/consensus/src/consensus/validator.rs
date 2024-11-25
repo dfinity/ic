@@ -23,7 +23,6 @@ use ic_interfaces::{
     consensus::{InvalidPayloadReason, PayloadBuilder, PayloadValidationFailure},
     consensus_pool::*,
     dkg::DkgPool,
-    ingress_manager::IngressSelector,
     messaging::MessageRouting,
     time_source::TimeSource,
     validation::{ValidationError, ValidationResult},
@@ -687,7 +686,6 @@ pub struct Validator {
     metrics: ValidatorMetrics,
     schedule: RoundRobin,
     time_source: Arc<dyn TimeSource>,
-    ingress_selector: Option<Arc<dyn IngressSelector>>,
 }
 
 impl Validator {
@@ -705,7 +703,6 @@ impl Validator {
         log: ReplicaLogger,
         metrics: ValidatorMetrics,
         time_source: Arc<dyn TimeSource>,
-        ingress_selector: Option<Arc<dyn IngressSelector>>,
     ) -> Validator {
         Validator {
             replica_config,
@@ -720,7 +717,6 @@ impl Validator {
             metrics,
             schedule: RoundRobin::default(),
             time_source,
-            ingress_selector,
         }
     }
 
@@ -1143,8 +1139,7 @@ impl Validator {
         for action in &change_set {
             if let ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal)) = action
             {
-                self.metrics
-                    .observe_data_payload(proposal, self.ingress_selector.as_deref());
+                self.metrics.observe_data_payload(proposal);
                 self.metrics.observe_block(pool_reader, proposal);
             }
         }
@@ -1997,7 +1992,6 @@ pub mod test {
                 no_op_logger(),
                 ValidatorMetrics::new(MetricsRegistry::new()),
                 Arc::clone(&dependencies.time_source) as Arc<_>,
-                /*ingress_selector=*/ None,
             );
             Self {
                 validator,
