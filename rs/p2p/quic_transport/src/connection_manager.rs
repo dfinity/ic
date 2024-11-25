@@ -122,7 +122,10 @@ struct ConnectionManager {
 
 #[derive(Debug, Error)]
 enum ConnectionEstablishError {
-    #[error("Timeout during connection establishment")]
+    #[error(
+        "Timeout during connection establishment. Took longer than {:?} to establish a connection",
+        CONNECT_TIMEOUT
+    )]
     Timeout,
     #[error("Failed to get rustls client config for peer {peer_id:?}. {cause:?}")]
     TlsClientConfigError {
@@ -139,12 +142,13 @@ enum ConnectionEstablishError {
         peer_id: Option<NodeId>,
         cause: ConnectionError,
     },
+    // The following errors should be infallible.
     #[error("No peer identity available.")]
     MissingPeerIdentity,
     #[error("Malformed peer identity. {0}")]
     MalformedPeerIdentity(String),
-    #[error("Received peer ids didn't match {client:?} and {server:?}.")]
-    PeerIdMismatch { client: NodeId, server: NodeId },
+    #[error("Incoming connection from {client:?}, which is > than {server:?}")]
+    InvalidIncomingPeerId { client: NodeId, server: NodeId },
 }
 
 struct ConnectionWithPeerId {
@@ -547,6 +551,7 @@ impl ConnectionManager {
         };
     }
 
+    /// Inserts a task into 'inbound_connecting' that handles an inbound connection attempt.
     fn handle_inbound(&mut self, incoming: Incoming) {
         self.metrics.inbound_connection_total.inc();
         let node_id = self.node_id;
@@ -575,7 +580,7 @@ impl ConnectionManager {
 
             // Lower ID is dialer. So we reject if this nodes id is higher.
             if peer_id > node_id {
-                return Err(ConnectionEstablishError::PeerIdMismatch {
+                return Err(ConnectionEstablishError::InvalidIncomingPeerId {
                     client: peer_id,
                     server: node_id,
                 });
