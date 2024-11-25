@@ -9,6 +9,7 @@ use std::{
 };
 
 use anyhow::Result;
+use itertools::Itertools;
 use maplit::hashmap;
 use reqwest::Url;
 use serde::Serialize;
@@ -173,7 +174,8 @@ impl PrometheusVm {
             .output()?;
 
         let mut file = std::fs::File::create(k8s_repo.join(".git/info/sparse-checkout"))?;
-        write!(file, "{}", "bases/apps/ic-dashboards")?;
+        let paths_to_sparse_checkout = &["bases/apps/ic-dashboards"];
+        write!(file, "{}", paths_to_sparse_checkout.iter().join("\n"))?;
 
         Command::new("git")
             .arg("pull")
