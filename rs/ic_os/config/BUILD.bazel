@@ -4,7 +4,6 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/ic_os/network/mac_address",
     "//rs/ic_os/utils",
     "//rs/types/types",
     "@crate_index//:anyhow",
@@ -22,6 +21,16 @@ DEV_DEPENDENCIES = [
     "@crate_index//:tempfile",
 ]
 
+TOOL_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/ic_os/network",
+    "@crate_index//:anyhow",
+    "@crate_index//:clap",
+    "@crate_index//:regex",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+]
+
 MACRO_DEPENDENCIES = []
 
 ALIASES = {}
@@ -29,8 +38,7 @@ ALIASES = {}
 rust_library(
     name = "config_lib",
     srcs = glob(
-        ["src/**/*.rs"],
-        exclude = ["src/main.rs"],
+        ["src/*.rs"],
     ),
     crate_name = "config",
     edition = "2021",
@@ -39,17 +47,17 @@ rust_library(
 
 rust_binary(
     name = "config",
-    srcs = ["src/main.rs"],
+    srcs = ["tool/src/main.rs"],
     aliases = ALIASES,
-    crate_name = "config",
+    crate_name = "config_tool",
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [":config_lib"] + DEPENDENCIES,
+    deps = [":config_lib"] + TOOL_DEPENDENCIES,
 )
 
 rust_test(
     name = "config_lib_test",
     crate = ":config_lib",
     # You may add other deps that are specific to the test configuration
-    deps = DEV_DEPENDENCIES,
+    deps = [":config_lib"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

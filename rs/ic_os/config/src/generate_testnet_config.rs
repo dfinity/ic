@@ -1,5 +1,4 @@
 use anyhow::Result;
-use mac_address::mac_address::FormattedMacAddress;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 use url::Url;

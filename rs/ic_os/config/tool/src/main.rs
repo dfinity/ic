@@ -3,7 +3,7 @@ use clap::{Args, Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
-use mac_address::mac_address::{get_ipmi_mac, FormattedMacAddress};
+use network::mac_address::derive_mgmt_mac;
 use regex::Regex;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -179,7 +179,9 @@ pub fn main() -> Result<()> {
                 }),
                 (None, None, None) => None,
                 _ => {
-                    println!("Warning: Partial IPv4 configuration provided. All parameters are required for IPv4 configuration.");
+                    // FIXME: bad input data should probably be rendered as hard failure,
+                    // not as a silent partial configuration drop.
+                    eprintln!("Warning: Partial IPv4 configuration provided. All parameters are required for IPv4 configuration.");
                     None
                 }
             };
@@ -198,17 +200,7 @@ pub fn main() -> Result<()> {
                 elasticsearch_tags: None,
             };
 
-            let mgmt_mac = match deployment_json_settings.deployment.mgmt_mac {
-                Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
-                    println!(
-                        "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac
-                    );
-                    mgmt_mac
-                }
-                None => get_ipmi_mac()?,
-            };
+            let mgmt_mac = derive_mgmt_mac(deployment_json_settings.deployment.mgmt_mac)?;
 
             let node_reward_type = node_reward_type.expect("Node reward type is required.");
 
@@ -254,12 +246,12 @@ pub fn main() -> Result<()> {
                 hostos_settings,
                 guestos_settings,
             };
-            println!("SetupOSConfig: {:?}", setupos_config);
+            eprintln!("SetupOSConfig: {:?}", setupos_config);
 
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
             serialize_and_write_config(setupos_config_json_path, &setupos_config)?;
 
-            println!(
+            eprintln!(
                 "SetupOSConfig has been written to {}",
                 setupos_config_json_path.display()
             );
@@ -286,7 +278,7 @@ pub fn main() -> Result<()> {
             let hostos_config_json_path = Path::new(&hostos_config_json_path);
             serialize_and_write_config(hostos_config_json_path, &hostos_config)?;
 
-            println!(
+            eprintln!(
                 "HostOSConfig has been written to {}",
                 hostos_config_json_path.display()
             );

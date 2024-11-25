@@ -46,7 +46,6 @@ pub fn deserialize_config<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(file_pat
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mac_address::mac_address::FormattedMacAddress;
     use types::*;
 
     #[test]
