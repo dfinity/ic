@@ -112,6 +112,7 @@ impl SystemStateFixture {
         let request = RequestBuilder::default()
             .sender(CANISTER_ID)
             .receiver(callee)
+            .sender_reply_callback(callback)
             .deadline(deadline)
             .build()
             .into();
@@ -214,9 +215,8 @@ fn correct_charging_target_canister_for_a_response() {
 fn induct_messages_to_self_in_running_status_works() {
     let mut fixture = SystemStateFixture::running();
 
-    fixture
-        .push_output_request(default_request_to_self())
-        .unwrap();
+    let (request_to_self, _) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
+    fixture.push_output_request(request_to_self).unwrap();
     fixture.induct_messages_to_self();
 
     assert!(fixture.system_state.has_input());
@@ -366,12 +366,14 @@ fn induct_messages_to_self_full_queue() {
     let mut fixture = SystemStateFixture::running();
 
     // Push`DEFAULT_QUEUE_CAPACITY` requests.
-    let request = default_request_to_self();
+    let mut requests = Vec::new();
     for _ in 0..DEFAULT_QUEUE_CAPACITY {
+        let (request, _) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
+        requests.push(request.clone());
         fixture
             .push_input(
-                RequestOrResponse::Request(request.clone()),
-                InputQueueType::RemoteSubnet,
+                RequestOrResponse::Request(request),
+                InputQueueType::LocalSubnet,
             )
             .unwrap();
     }
@@ -379,11 +381,8 @@ fn induct_messages_to_self_full_queue() {
     fixture.induct_messages_to_self();
 
     // Expect all requests to have been inducted.
-    for _ in 0..DEFAULT_QUEUE_CAPACITY {
-        assert_eq!(
-            Some(CanisterMessage::Request(request.clone())),
-            fixture.pop_input()
-        );
+    for request in requests {
+        assert_eq!(Some(CanisterMessage::Request(request)), fixture.pop_input());
     }
 
     assert_eq!(None, fixture.pop_input());
