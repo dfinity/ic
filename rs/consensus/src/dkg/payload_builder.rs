@@ -303,7 +303,7 @@ fn compute_remote_dkg_data(
         for config in low_high_threshold_configs {
             let dkg_id = config.dkg_id();
 
-            // If not, we check if we computed a transcript for this config in the last round. And
+            // We check if we computed a transcript for this config in the last round. And
             // if not, we move the config into the new summary so that we try again in
             // the next round.
             if !new_transcripts
