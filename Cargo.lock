@@ -17060,6 +17060,7 @@ dependencies = [
 name = "pocket-ic"
 version = "6.0.0"
 dependencies = [
+ "backoff",
  "base64 0.13.1",
  "candid",
  "candid_parser",

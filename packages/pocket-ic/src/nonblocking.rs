@@ -17,6 +17,8 @@ use crate::management_canister::{
 };
 pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
+use backoff::backoff::Backoff;
+use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
@@ -608,6 +610,26 @@ impl PocketIc {
             },
             RawCanisterResult::Err(user_error) => Err(user_error),
         })
+    }
+
+    /// Await an update call submitted previously by `submit_call_with_effective_principal`.
+    /// This function does not execute rounds and thus should only be called on a "live" PocketIC instance
+    /// or if rounds are executed due to separate PocketIC library calls.
+    pub async fn await_call_no_ticks(
+        &self,
+        message_id: RawMessageId,
+    ) -> Result<WasmResult, UserError> {
+        let mut retry_policy: ExponentialBackoff = ExponentialBackoffBuilder::new()
+            .with_initial_interval(Duration::from_millis(10))
+            .with_max_interval(Duration::from_secs(1))
+            .with_multiplier(2.0)
+            .build();
+        loop {
+            if let Some(ingress_status) = self.ingress_status(message_id.clone()).await {
+                break ingress_status;
+            }
+            tokio::time::sleep(retry_policy.next_backoff().unwrap()).await;
+        }
     }
 
     /// Execute an update call on a canister.

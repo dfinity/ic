@@ -685,6 +685,14 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.ingress_status(message_id).await })
     }
 
+    /// Await an update call submitted previously by `submit_call_with_effective_principal`.
+    /// This function does not execute rounds and thus should only be called on a "live" PocketIC instance
+    /// or if rounds are executed due to separate PocketIC library calls.
+    pub fn await_call_no_ticks(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.await_call_no_ticks(message_id).await })
+    }
+
     /// Execute an update call on a canister.
     #[instrument(skip(self, payload), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
     pub fn update_call(
