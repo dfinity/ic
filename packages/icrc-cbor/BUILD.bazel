@@ -23,20 +23,18 @@ package(default_visibility = ["//visibility:public"])
     ),
 ]]
 
-rust_test(
-    name = "unit_tests",
+[rust_test(
+    name = "unit_tests" + target_suffix,
     crate = ":icrc-cbor",
+    crate_features = features,
     deps = [
         "@crate_index//:proptest",
-    ],
-)
-
-rust_test(
-    name = "unit_tests_u256",
-    crate = ":icrc-cbor",
-    crate_features = ["u256"],
-    deps = [
-        "@crate_index//:ethnum",
-        "@crate_index//:proptest",
-    ],
-)
+    ] + extra_deps,
+) for (target_suffix, features, extra_deps) in [
+    ("", [], []),
+    (
+        "_u256",
+        ["u256"],
+        ["@crate_index//:ethnum"],
+    ),
+]]
