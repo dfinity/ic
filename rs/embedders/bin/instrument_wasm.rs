@@ -67,8 +67,8 @@ fn get_logger() -> slog::Logger {
 }
 
 fn process_wasm(filename: &Path, mut output_stream: Box<dyn std::io::Write>, artifact: Artifact) {
-    let contents =
-        std::fs::read(filename).expect(&format!("Failed to read input file {:?}", filename));
+    let contents = std::fs::read(filename)
+        .unwrap_or_else(|e| panic!("Failed to read input file {:?}: {e}", filename));
     let config = EmbeddersConfig::default();
     let decoded = decode_wasm(config.wasm_max_size, Arc::new(contents))
         .expect("failed to decode canister module");
@@ -101,7 +101,7 @@ fn main() {
     let output: Box<dyn std::io::Write> = if let Some(output_file) = options.output_file {
         Box::new(
             std::fs::File::create(&output_file)
-                .expect(&format!("Error opening output file {:?}", output_file)),
+                .unwrap_or_else(|e| panic!("Error opening output file {:?}: {e}", output_file)),
         )
     } else {
         Box::new(std::io::stdout())

@@ -114,8 +114,8 @@ rust_ic_test(
     aliases = ALIASES,
     crate = ":execution_environment",
     data = DATA + [
-        "//rs/universal_canister/impl:universal_canister.wasm.gz",
         "//rs/universal_canister/impl:universal_canister.module",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = ENV | {
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
