@@ -1,3 +1,5 @@
+#![cfg(feature = "u256")]
+
 use ethnum::u256;
 use minicbor::data::Tag;
 use minicbor::decode::{Decoder, Error};

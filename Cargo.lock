@@ -6647,7 +6647,6 @@ dependencies = [
  "ic-cdk-timers",
  "ic-cketh-test-utils",
  "ic-config",
- "ic-cross-chain-cbor",
  "ic-crypto-secp256k1",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-ethereum-types",
@@ -6658,6 +6657,7 @@ dependencies = [
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-utils-ensure",
+ "icrc-cbor",
  "icrc-ledger-client-cdk",
  "icrc-ledger-types",
  "maplit",
@@ -6886,19 +6886,6 @@ dependencies = [
  "ic-types",
  "rand 0.8.5",
  "slog",
-]
-
-[[package]]
-name = "ic-cross-chain-cbor"
-version = "0.9.0"
-dependencies = [
- "candid",
- "ethnum",
- "minicbor",
- "num-bigint 0.4.6",
- "num-traits",
- "phantom_newtype",
- "proptest",
 ]
 
 [[package]]
@@ -13979,6 +13966,18 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "icrc-cbor"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ethnum",
+ "minicbor",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "proptest",
 ]
 
 [[package]]

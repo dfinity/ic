@@ -1,3 +1,4 @@
+use crate::cbor::tests::check_roundtrip;
 use crate::eth_logs::{ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc::Hash;
 use crate::memo::BurnMemo;
@@ -10,17 +11,6 @@ use icrc_ledger_types::icrc1::transfer::Memo;
 use minicbor::{Decode, Encode};
 use proptest::prelude::*;
 use std::str::FromStr;
-
-pub fn check_roundtrip<T>(v: &T) -> Result<(), TestCaseError>
-where
-    for<'a> T: PartialEq + std::fmt::Debug + Encode<()> + Decode<'a, ()>,
-{
-    let mut buf = vec![];
-    minicbor::encode(v, &mut buf).expect("encoding should succeed");
-    let decoded = minicbor::decode(&buf).expect("decoding should succeed");
-    prop_assert_eq!(v, &decoded);
-    Ok(())
-}
 
 proptest! {
     #[test]
