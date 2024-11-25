@@ -100,7 +100,6 @@ pub fn split(
         state_layout,
         &cp,
         &mut thread_pool,
-        fd_factory,
         &config,
         &metrics,
         log,
@@ -179,7 +178,6 @@ fn write_checkpoint(
     state_layout: StateLayout,
     old_cp: &CheckpointLayout<ReadOnly>,
     thread_pool: &mut Pool,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     config: &Config,
     metrics: &StateManagerMetrics,
     log: ReplicaLogger,
@@ -214,13 +212,11 @@ fn write_checkpoint(
         &metrics.checkpoint_metrics,
     );
 
-    let (cp_layout, _state, _has_downgrade) = make_checkpoint(
+    let (cp_layout, _has_downgrade) = make_checkpoint(
         state,
         new_height,
         &tip_channel,
         &metrics.checkpoint_metrics,
-        thread_pool,
-        fd_factory,
         config.lsmt_config.lsmt_status,
     )
     .map_err(|e| format!("Failed to write checkpoint: {}", e))?;

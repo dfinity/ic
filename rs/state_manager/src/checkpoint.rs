@@ -20,6 +20,7 @@ use ic_state_layout::{
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::maybe_parallel_map;
+use ic_validate_eq::ValidateEq;
 use std::collections::BTreeMap;
 use std::convert::{identity, TryFrom};
 use std::sync::Arc;
@@ -61,10 +62,8 @@ pub(crate) fn make_checkpoint(
     height: Height,
     tip_channel: &Sender<TipRequest>,
     metrics: &CheckpointMetrics,
-    thread_pool: &mut scoped_threadpool::Pool,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     lsmt_storage: FlagStatus,
-) -> Result<(CheckpointLayout<ReadOnly>, ReplicatedState, HasDowngrade), CheckpointError> {
+) -> Result<(CheckpointLayout<ReadOnly>, HasDowngrade), CheckpointError> {
     {
         let _timer = metrics
             .make_checkpoint_step_duration
@@ -124,21 +123,7 @@ pub(crate) fn make_checkpoint(
         recv.recv().unwrap();
     }
 
-    let state = {
-        let _timer = metrics
-            .make_checkpoint_step_duration
-            .with_label_values(&["load"])
-            .start_timer();
-        load_checkpoint(
-            &cp,
-            state.metadata.own_subnet_type,
-            metrics,
-            Some(thread_pool),
-            Arc::clone(&fd_factory),
-        )?
-    };
-
-    Ok((cp, state, has_downgrade))
+    Ok((cp, has_downgrade))
 }
 
 pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
@@ -346,6 +331,44 @@ pub fn load_checkpoint(
         checkpoint_loader.load_query_stats()?,
         checkpoint_loader.load_canister_snapshots(&mut thread_pool)?,
     ))
+}
+
+pub fn validate_eq_checkpoint(
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+    reference_state: &ReplicatedState,
+    own_subnet_type: SubnetType,
+    metrics: &CheckpointMetrics,
+    mut thread_pool: Option<&mut scoped_threadpool::Pool>,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+) {
+    let checkpoint_loader = CheckpointLoader {
+        checkpoint_layout: checkpoint_layout.clone(),
+        own_subnet_type,
+        metrics: metrics.clone(),
+        fd_factory,
+    };
+
+    assert!(checkpoint_loader
+        .load_canister_states(&mut thread_pool)
+        .unwrap()
+        .validate_eq(&reference_state.canister_states)
+        .is_ok());
+    assert!(checkpoint_loader
+        .load_system_metadata()
+        .unwrap()
+        .validate_eq(&reference_state.metadata)
+        .is_ok());
+    assert!(checkpoint_loader
+        .load_subnet_queues()
+        .unwrap()
+        .validate_eq(reference_state.subnet_queues())
+        .is_ok());
+    assert!(checkpoint_loader.load_query_stats().unwrap() == *reference_state.query_stats());
+    assert!(checkpoint_loader
+        .load_canister_snapshots(&mut thread_pool)
+        .unwrap()
+        .validate_eq(&reference_state.canister_snapshots)
+        .is_ok());
 }
 
 #[derive(Default)]

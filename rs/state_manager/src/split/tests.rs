@@ -204,7 +204,6 @@ fn read_write_roundtrip() {
             layout.clone(),
             &cp,
             &mut thread_pool,
-            fd_factory,
             &Config::new(root),
             &metrics,
             log.clone(),
@@ -454,13 +453,11 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     );
 
     let mut thread_pool = thread_pool();
-    let (cp_layout, _state, _has_downgrade) = make_checkpoint(
+    let (cp_layout, _has_downgrade) = make_checkpoint(
         &state,
         HEIGHT,
         &tip_channel,
         &state_manager_metrics.checkpoint_metrics,
-        &mut thread_pool,
-        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         lsmt_config_default().lsmt_status,
     )
     .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err));
