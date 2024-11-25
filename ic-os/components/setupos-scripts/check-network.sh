@@ -101,6 +101,7 @@ function get_network_settings() {
         "echo ${ipv6_address_system_full} | awk -F '/' '{ print \$1 }'" \
         "Failed to get system's IPv6 address.")
 
+    # 0 corresponds to HostOS, 1 to GuestOS
     HOSTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type 0)
     GUESTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type 1)
 }

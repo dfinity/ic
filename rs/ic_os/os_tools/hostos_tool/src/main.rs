@@ -21,10 +21,12 @@ pub enum Commands {
         output_directory: String,
     },
     GenerateIpv6Address {
+        // 0x0 corresponds to HostOS
         #[arg(short, long, default_value = "0")]
         node_type: u8,
     },
     GenerateMacAddress {
+        // 0x0 corresponds to HostOS
         #[arg(short, long, default_value = "0")]
         node_type: u8,
     },
@@ -76,7 +78,7 @@ pub fn main() -> Result<()> {
                 mgmt_mac,
                 deployment_settings.deployment.name.parse()?,
                 IpVariant::V6,
-                0x0,
+                0x0, /* 0x0 corresponds to HostOS */
             )?;
 
             generate_network_config(&network_info, &generated_mac, Path::new(&output_directory))
