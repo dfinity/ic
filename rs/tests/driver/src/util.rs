@@ -1509,14 +1509,25 @@ impl LogStream {
 pub struct MetricsFetcher {
     nodes: Vec<IcNodeSnapshot>,
     metrics: Vec<String>,
+    port: u16,
 }
 
 impl MetricsFetcher {
     /// Create a new [`MetricsFetcher`]
     pub fn new(nodes: impl Iterator<Item = IcNodeSnapshot>, metrics: Vec<String>) -> Self {
+        Self::new_with_port(nodes, metrics, 9090)
+    }
+
+    /// Create a new [`MetricsFetcher`] for a specific port
+    pub fn new_with_port(
+        nodes: impl Iterator<Item = IcNodeSnapshot>,
+        metrics: Vec<String>,
+        port: u16,
+    ) -> Self {
         Self {
             nodes: nodes.collect(),
             metrics,
+            port,
         }
     }
 
@@ -1559,7 +1570,7 @@ impl MetricsFetcher {
             IpAddr::V6(ipv6_addr) => ipv6_addr,
         };
 
-        let socket_addr: SocketAddr = SocketAddr::V6(SocketAddrV6::new(ip_addr, 9090, 0, 0));
+        let socket_addr: SocketAddr = SocketAddr::V6(SocketAddrV6::new(ip_addr, self.port, 0, 0));
         let url = format!("http://{}", socket_addr);
         let response = reqwest::get(url).await?.text().await?;
 

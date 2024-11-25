@@ -582,10 +582,10 @@ impl NeuronStore {
     /// Adjusts the storage location of neurons, since active neurons might become inactive due to
     /// passage of time.
     pub fn batch_adjust_neurons_storage(&mut self, start_neuron_id: NeuronId) -> Option<NeuronId> {
-        static BATCH_SIZE_FOR_MOVING_NEURONS: usize = 1000;
+        static BATCH_SIZE_FOR_MOVING_NEURONS: usize = 200;
 
         #[cfg(target_arch = "wasm32")]
-        static MAX_NUM_INSTRUCTIONS_PER_BATCH: u64 = 5_000_000_000;
+        static MAX_NUM_INSTRUCTIONS_PER_BATCH: u64 = 1_000_000_000;
 
         #[cfg(target_arch = "wasm32")]
         let max_instructions_reached =
