@@ -367,10 +367,8 @@ impl PocketIc {
         });
         let runtime = rx.recv().unwrap();
 
-        let pocket_ic = runtime.block_on(async {
-            PocketIcAsync::new_from_existing_instance(server_url, instance_id, max_request_time_ms)
-                .await
-        });
+        let pocket_ic =
+            PocketIcAsync::new_from_existing_instance(server_url, instance_id, max_request_time_ms);
 
         Self {
             pocket_ic,

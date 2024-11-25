@@ -97,7 +97,7 @@ impl PocketIc {
     /// Note that this handle does not extend the lifetime of the existing instance,
     /// i.e., the existing instance is deleted and this handle stops working
     /// when the PocketIC handle that created the existing instance is dropped.
-    pub async fn new_from_existing_instance(
+    pub fn new_from_existing_instance(
         server_url: Url,
         instance_id: InstanceId,
         max_request_time_ms: Option<u64>,
