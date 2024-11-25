@@ -1164,17 +1164,25 @@ fn test_canister_http() {
     let canister_http_requests = pic.get_canister_http();
     assert_eq!(canister_http_requests.len(), 0);
 
+    // Check that there is no known call status yet.
+    let ingress_status = pic.ingress_status(call_id.clone());
+    assert!(ingress_status.is_none());
+
     // Now the test canister will receive the http outcall response
     // and reply to the ingress message from the test driver.
-    let reply = pic.await_call(call_id).unwrap();
+    let reply = pic.await_call(call_id.clone()).unwrap();
     match reply {
-        WasmResult::Reply(data) => {
+        WasmResult::Reply(ref data) => {
             let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
-                decode_one(&data).unwrap();
+                decode_one(data).unwrap();
             assert_eq!(http_response.unwrap().body, body);
         }
         WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
     };
+
+    // Check that the call status matches the result of `PocketIc::await_call`.
+    let ingress_status = pic.ingress_status(call_id);
+    assert_eq!(ingress_status.unwrap(), Ok(reply));
 }
 
 #[test]

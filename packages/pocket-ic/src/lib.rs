@@ -674,6 +674,17 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.await_call(message_id).await })
     }
 
+    /// Fetch the status of an update call submitted previously by `submit_call_with_effective_principal`.
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call.
+    pub fn ingress_status(
+        &self,
+        message_id: RawMessageId,
+    ) -> Option<Result<WasmResult, UserError>> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.ingress_status(message_id).await })
+    }
+
     /// Execute an update call on a canister.
     #[instrument(skip(self, payload), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
     pub fn update_call(

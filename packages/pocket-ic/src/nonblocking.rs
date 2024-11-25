@@ -592,6 +592,24 @@ impl PocketIc {
         }
     }
 
+    /// Fetch the status of an update call submitted previously by `submit_call_with_effective_principal`.
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call.
+    pub async fn ingress_status(
+        &self,
+        message_id: RawMessageId,
+    ) -> Option<Result<WasmResult, UserError>> {
+        let endpoint = "read/ingress_status";
+        let result: Option<RawCanisterResult> = self.post(endpoint, message_id).await;
+        result.map(|result| match result {
+            RawCanisterResult::Ok(raw_wasm_result) => match raw_wasm_result {
+                RawWasmResult::Reply(data) => Ok(WasmResult::Reply(data)),
+                RawWasmResult::Reject(text) => Ok(WasmResult::Reject(text)),
+            },
+            RawCanisterResult::Err(user_error) => Err(user_error),
+        })
+    }
+
     /// Execute an update call on a canister.
     #[instrument(skip(self, payload), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
     pub async fn update_call(

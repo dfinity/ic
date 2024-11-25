@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - The function `PocketIcBuilder::with_bitcoind_addrs` to specify multiple addresses and ports at which `bitcoind` processes are listening.
 - The functions `PocketIc::update_call_with_effective_principal` and `PocketIc::query_call_with_effective_principal` for making generic calls (including management canister calls).
+- The function `PocketIc::ingress_status` to fetch the status of an update call submitted through an ingress message (`None` means that the status is unknown yet).
 
 
 
