@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
     name = "icrc-cbor" + target_suffix,
     srcs = glob(["src/*.rs"]),
     crate_features = features,
+    crate_name = "icrc_cbor",
     deps = [
         # Keep sorted.
         "@crate_index//:candid",
