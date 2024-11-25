@@ -33,6 +33,7 @@ use ic_system_test_driver::{
     retry_with_msg_async,
     util::{agent_observes_canister_module, assert_create_agent, block_on},
 };
+use ic_types::PrincipalId;
 use std::{env, iter, net::SocketAddrV6, time::Duration};
 
 use anyhow::{anyhow, bail, Context, Error};
@@ -49,6 +50,9 @@ use reqwest::{redirect::Policy, ClientBuilder, Method};
 use serde::Deserialize;
 use slog::{error, info, Logger};
 use tokio::{runtime::Runtime, time::sleep};
+use v2_call_transport::V2CallAgent;
+
+mod v2_call_transport;
 
 fn runtime() -> Runtime {
     Runtime::new().expect("Could not create tokio runtime")
@@ -206,16 +210,20 @@ pub fn api_call_test(env: TestEnv) {
 
     block_on(async move {
         let cid = install_counter_canister(env, logger.clone()).await?;
+        let canister_principal_id = PrincipalId(cid.clone());
 
+        // update call
+        let v2_test_agent = V2CallAgent::new(client.clone(), host.clone(), logger.clone());
+        v2_test_agent
+            .call(canister_principal_id, "write".to_string())
+            .await
+            .unwrap();
+
+        // check that the update call went through
         let transport = ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
-
         let agent = Agent::builder().with_transport(transport).build()?;
         agent.fetch_root_key().await?;
 
-        // update call
-        agent.update(&cid, "write").call_and_wait().await?;
-
-        // check that the update call went through
         let out = agent.query(&cid, "read").call().await?;
         if !out.eq(&[1, 0, 0, 0]) {
             bail!("{name} failed: got {:?}, expected {:?}", out, &[1, 0, 0, 0],)
