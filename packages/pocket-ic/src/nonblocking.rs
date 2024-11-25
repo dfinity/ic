@@ -78,6 +78,8 @@ pub struct PocketIc {
     http_gateway: Option<HttpGatewayInfo>,
     server_url: Url,
     reqwest_client: reqwest::Client,
+    // do not delete the instance when dropping this handle if this handle was created for an existing instance
+    owns_instance: bool,
     _log_guard: Option<WorkerGuard>,
 }
 
@@ -89,6 +91,32 @@ impl PocketIc {
             .with_application_subnet()
             .build_async()
             .await
+    }
+
+    /// Creates a PocketIC handle to an existing instance on a running server.
+    /// Note that this handle does not extend the lifetime of the existing instance,
+    /// i.e., the existing instance is deleted and this handle stops working
+    /// when the PocketIC handle that created the existing instance is dropped.
+    pub async fn new_from_existing_instance(
+        server_url: Url,
+        instance_id: InstanceId,
+        max_request_time_ms: Option<u64>,
+    ) -> Self {
+        let test_driver_pid = std::process::id();
+        let log_guard = setup_tracing(test_driver_pid);
+
+        let reqwest_client = reqwest::Client::new();
+        debug!("instance_id={} Reusing existing instance.", instance_id);
+
+        Self {
+            instance_id,
+            max_request_time_ms,
+            http_gateway: None,
+            server_url,
+            reqwest_client,
+            owns_instance: true,
+            _log_guard: log_guard,
+        }
     }
 
     pub(crate) async fn from_components(
@@ -139,8 +167,14 @@ impl PocketIc {
             http_gateway: None,
             server_url,
             reqwest_client,
+            owns_instance: false,
             _log_guard: log_guard,
         }
+    }
+
+    /// Returns the URL of the PocketIC server on which this PocketIC instance is running.
+    pub fn get_server_url(&self) -> Url {
+        self.server_url.clone()
     }
 
     /// Returns the topology of the different subnets of this PocketIC instance.
@@ -1266,11 +1300,13 @@ impl PocketIc {
 
     pub(crate) async fn do_drop(&mut self) {
         self.stop_http_gateway().await;
-        self.reqwest_client
-            .delete(self.instance_url())
-            .send()
-            .await
-            .expect("Failed to send delete request");
+        if !self.owns_instance {
+            self.reqwest_client
+                .delete(self.instance_url())
+                .send()
+                .await
+                .expect("Failed to send delete request");
+        }
     }
 
     async fn get<T: DeserializeOwned>(&self, endpoint: &str) -> T {

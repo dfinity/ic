@@ -1,5 +1,5 @@
 {
-  "checksum": "e0804f7216ce2d2306ecd8805a53ba18d14121a9d27e151ac84142e61e098c70",
+  "checksum": "bef27a5bfc14b21bb169b205f08e83399d71e3eacacd01a9417acce17d18131a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -19309,7 +19309,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.16",
+              "id": "rustls 0.23.17",
               "target": "rustls"
             },
             {
@@ -25082,7 +25082,7 @@
               "target": "futures_io"
             },
             {
-              "id": "rustls 0.23.16",
+              "id": "rustls 0.23.17",
               "target": "rustls"
             },
             {
@@ -29149,7 +29149,7 @@
               "target": "log"
             },
             {
-              "id": "rustls 0.23.16",
+              "id": "rustls 0.23.17",
               "target": "rustls"
             },
             {
@@ -30689,7 +30689,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-bn-lib",
           "commitish": {
-            "Rev": "526d34d15cfbf369d8baf2dae9932aa18d570a1d"
+            "Rev": "2496803db52d8182f578f098a3ffe4fcb9573fcd"
           }
         }
       },
@@ -30839,7 +30839,7 @@
               "target": "reqwest"
             },
             {
-              "id": "rustls 0.23.16",
+              "id": "rustls 0.23.17",
               "target": "rustls"
             },
             {
@@ -30883,7 +30883,7 @@
               "target": "systemstat"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.3",
               "target": "thiserror"
             },
             {
@@ -37382,7 +37382,7 @@
               "target": "pem"
             },
             {
-              "id": "rustls 0.23.16",
+              "id": "rustls 0.23.17",
               "target": "rustls"
             },
             {
@@ -53290,7 +53290,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.16",
+              "id": "rustls 0.23.17",
               "target": "rustls"
             },
             {
@@ -53378,7 +53378,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.16",
+              "id": "rustls 0.23.17",
               "target": "rustls"
             },
             {
@@ -57236,7 +57236,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -57286,7 +57286,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -57336,7 +57336,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -57386,7 +57386,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -57436,7 +57436,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -57486,7 +57486,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -57536,7 +57536,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -57586,7 +57586,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -57636,7 +57636,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -57686,7 +57686,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -57736,7 +57736,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -57786,7 +57786,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -57906,7 +57906,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -57956,7 +57956,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58006,7 +58006,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58056,7 +58056,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58106,7 +58106,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58156,7 +58156,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58206,7 +58206,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58256,7 +58256,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58306,7 +58306,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58356,7 +58356,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58406,7 +58406,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58468,7 +58468,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58518,7 +58518,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58568,7 +58568,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58618,7 +58618,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58668,7 +58668,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58718,7 +58718,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58768,7 +58768,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58818,7 +58818,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -58868,7 +58868,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.16",
+                "id": "rustls 0.23.17",
                 "target": "rustls"
               },
               {
@@ -61654,14 +61654,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rustls 0.23.16": {
+    "rustls 0.23.17": {
       "name": "rustls",
-      "version": "0.23.16",
+      "version": "0.23.17",
       "package_url": "https://github.com/rustls/rustls",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls/0.23.16/download",
-          "sha256": "eee87ff5d9b36712a58574e12e9f0ea80f915a5b0ac518d322b24a465617925e"
+          "url": "https://static.crates.io/crates/rustls/0.23.17/download",
+          "sha256": "7f1a745511c54ba6d4465e8d5dfbd81b45791756de28d4981af70d6dca128f1e"
         }
       },
       "targets": [
@@ -61729,7 +61729,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls 0.23.16",
+              "id": "rustls 0.23.17",
               "target": "build_script_build"
             },
             {
@@ -61753,7 +61753,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.23.16"
+        "version": "0.23.17"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -62315,7 +62315,7 @@
               "target": "once_cell"
             },
             {
-              "id": "rustls 0.23.16",
+              "id": "rustls 0.23.17",
               "target": "rustls"
             }
           ],
@@ -73605,7 +73605,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls 0.23.16",
+              "id": "rustls 0.23.17",
               "target": "rustls"
             },
             {
@@ -87194,7 +87194,7 @@
     "rust_decimal_macros 1.36.0",
     "rustc-demangle 0.1.23",
     "rustc-hash 1.1.0",
-    "rustls 0.23.16",
+    "rustls 0.23.17",
     "rustls-pemfile 2.2.0",
     "rustversion 1.0.14",
     "rusty-fork 0.3.0",
