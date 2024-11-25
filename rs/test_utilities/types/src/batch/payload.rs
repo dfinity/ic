@@ -47,7 +47,6 @@ impl PayloadBuilder {
 mod tests {
     use ic_types::{
         batch::{BatchPayload, IngressPayload},
-        consensus::dkg::DataPayload,
         consensus::{BlockPayload, DataPayload},
     };
 
@@ -78,7 +77,7 @@ mod tests {
             ic_types::crypto::crypto_hash,
             BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dealings: DataPayload::new_empty(Height::from(0)),
+                dkg: dkg::DataPayload::new_empty(Height::from(0)),
                 idkg: None,
             }),
         );
@@ -104,7 +103,7 @@ mod tests {
             ic_types::crypto::crypto_hash,
             BlockPayload::Data(DataPayload {
                 batch: batch_payload_0,
-                dealings: dkg::DataPayload::new_empty(Height::new(0)),
+                dkg: dkg::DataPayload::new_empty(Height::new(0)),
                 idkg: None,
             }),
         );
