@@ -234,7 +234,7 @@ fn main() -> io::Result<()> {
     //   3. Jeager exporter if enabled
 
     let (logging, _logging_drop_guard) = logging_layer(&config.logger, node_id, subnet_id);
-    // TARPC is way to verbose. Turn it off for now.
+    // TARPC is way too verbose. Turn it off for now.
     let logging = logging.with_filter(filter_fn(|metadata| metadata.target() != "tarpc::client"));
 
     let mut tracing_layers = vec![logging.boxed()];
