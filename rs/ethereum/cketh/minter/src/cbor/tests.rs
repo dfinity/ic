@@ -15,8 +15,8 @@ where
 }
 
 enum IdTag {}
-type U64Newtype = Id<IdTag, u64>;
 type U256Newtype = CheckedAmountOf<IdTag>;
+type U64Newtype = Id<IdTag, u64>;
 
 #[derive(Eq, PartialEq, Debug, Decode, Encode)]
 struct U256NewtypeContainer {
