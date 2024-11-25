@@ -3,6 +3,9 @@
 //! The state is stored in the global thread-level variable `__STATE`.
 //! This module provides utility functions to manage the state. Most
 //! code should use those functions instead of touching `__STATE` directly.
+#[cfg(test)]
+mod tests;
+
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -26,6 +29,8 @@ use ic_utils_ensure::ensure_eq;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
 use std::collections::btree_map::Entry;
+use std::collections::btree_set;
+use std::iter::Chain;
 
 /// The maximum number of finalized BTC retrieval requests that we keep in the
 /// history.
@@ -933,21 +938,67 @@ impl CkBtcMinterState {
         }
     }
 
-    /// Filters out known UTXOs of the given account from the given UTXO list.
-    pub fn new_utxos_for_account(&self, mut utxos: Vec<Utxo>, account: &Account) -> Vec<Utxo> {
-        let maybe_existing_utxos = self.utxos_state_addresses.get(account);
-        let maybe_finalized_utxos = self.finalized_utxos.get(&account.owner);
-        utxos.retain(|utxo| {
-            !maybe_existing_utxos
+    /// Returns the UTXOs that can be processed for the given account.
+    ///
+    /// The returned UTXOs include:
+    /// * new UTXOs that are not known to the minter,
+    /// * UTXOs that were previously ignored and that can be re-evaluated,
+    /// * UTXOs that were previously quarantined and that can be re-evaluated.
+    pub fn processable_utxos_for_account<I: IntoIterator<Item = Utxo>>(
+        &self,
+        all_utxos_for_account: I,
+        account: &Account,
+    ) -> ProcessableUtxos {
+        let is_known = |utxo: &Utxo| {
+            self.utxos_state_addresses
+                .get(account)
                 .map(|utxos| utxos.contains(utxo))
                 .unwrap_or(false)
-                && !maybe_finalized_utxos
+                || self
+                    .finalized_utxos
+                    .get(&account.owner)
                     .map(|utxos| utxos.contains(utxo))
                     .unwrap_or(false)
-                && !self.ignored_utxos.contains(utxo)
-                && !self.quarantined_utxos.contains(utxo)
-        });
-        utxos
+        };
+        let mut new_utxos = BTreeSet::new();
+        //TODO XC-230: only re-evaluate the ignored and quarantined utxos at most once a day
+        let mut previously_ignored_utxos = BTreeSet::new();
+        let mut previously_quarantined_utxos = BTreeSet::new();
+
+        for utxo in all_utxos_for_account.into_iter() {
+            if self.ignored_utxos.contains(&utxo) {
+                previously_ignored_utxos.insert(utxo);
+            } else if self.quarantined_utxos.contains(&utxo) {
+                previously_quarantined_utxos.insert(utxo);
+            } else if !is_known(&utxo) {
+                new_utxos.insert(utxo);
+            }
+        }
+
+        debug_assert_eq!(
+            new_utxos.intersection(&previously_ignored_utxos).next(),
+            None
+        );
+        debug_assert_eq!(
+            new_utxos.intersection(&previously_quarantined_utxos).next(),
+            None
+        );
+        debug_assert_eq!(
+            previously_ignored_utxos
+                .intersection(&previously_quarantined_utxos)
+                .next(),
+            None
+        );
+
+        ProcessableUtxos {
+            new_utxos,
+            previously_ignored_utxos,
+            previously_quarantined_utxos,
+        }
+    }
+
+    pub fn has_ignored_utxo(&self, utxo: &Utxo) -> bool {
+        self.ignored_utxos.contains(utxo)
     }
 
     /// Adds given UTXO to the set of ignored UTXOs.
@@ -970,6 +1021,8 @@ impl CkBtcMinterState {
     ) {
         match status {
             UtxoCheckStatus::Clean => {
+                self.ignored_utxos.remove(&utxo);
+                self.quarantined_utxos.remove(&utxo);
                 if self
                     .checked_utxos
                     .insert(
@@ -990,9 +1043,21 @@ impl CkBtcMinterState {
                 }
             }
             UtxoCheckStatus::Tainted => {
+                self.ignored_utxos.remove(&utxo);
                 self.quarantined_utxos.insert(utxo);
             }
         }
+    }
+
+    pub fn utxo_checked_status(&self, utxo: &Utxo) -> Option<&UtxoCheckStatus> {
+        self.checked_utxos
+            .get(utxo)
+            .map(|checked_utxo| &checked_utxo.status)
+            .or_else(|| {
+                self.quarantined_utxos
+                    .contains(utxo)
+                    .then_some(&UtxoCheckStatus::Tainted)
+            })
     }
 
     /// Decreases the owed amount for the given provider by the amount.
@@ -1173,6 +1238,37 @@ impl CkBtcMinterState {
         }
         total_btc += self.available_utxos.iter().map(|u| u.value).sum::<u64>();
         total_btc
+    }
+}
+
+#[derive(Eq, PartialEq, Debug, Default)]
+pub struct ProcessableUtxos {
+    new_utxos: BTreeSet<Utxo>,
+    previously_ignored_utxos: BTreeSet<Utxo>,
+    previously_quarantined_utxos: BTreeSet<Utxo>,
+}
+
+impl ProcessableUtxos {
+    pub fn iter(&self) -> impl Iterator<Item = &Utxo> {
+        self.new_utxos
+            .iter()
+            .chain(&self.previously_ignored_utxos)
+            .chain(&self.previously_quarantined_utxos)
+    }
+}
+
+impl IntoIterator for ProcessableUtxos {
+    type Item = Utxo;
+    type IntoIter = Chain<
+        Chain<btree_set::IntoIter<Utxo>, btree_set::IntoIter<Utxo>>,
+        btree_set::IntoIter<Utxo>,
+    >;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.new_utxos
+            .into_iter()
+            .chain(self.previously_ignored_utxos)
+            .chain(self.previously_quarantined_utxos)
     }
 }
 
