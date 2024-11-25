@@ -301,7 +301,7 @@ jobs:
           path: |
             build-ic.tar
 
-  build-determinism:
+  build-determinism-test:
     name: Build Determinism
     runs-on: ubuntu-latest
     timeout-minutes: 30

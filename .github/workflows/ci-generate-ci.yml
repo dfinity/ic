@@ -12,17 +12,15 @@ on:
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   generate-ci:
     name: Generate CI
     runs-on: ubuntu-latest
     steps:
-      - name: Create GitHub App Token
-        uses: actions/create-github-app-token@v1
-        id: app-token
-        with:
-          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
-          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
       - name: Checkout
         uses: actions/checkout@v4
         # If this is a pull request, use the HEAD ref instead of the merge commit
@@ -30,7 +28,6 @@ jobs:
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ steps.app-token.outputs.token }}
       - name: Checkout
         uses: actions/checkout@v4
         if: github.event_name != 'pull_request'
