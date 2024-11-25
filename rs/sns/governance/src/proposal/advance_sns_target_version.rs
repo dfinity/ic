@@ -306,10 +306,7 @@ fn test_invalid_new_targets() {
             Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
                 new_target: Some(SnsVersion::from(next_version.clone())),
             }),
-            Err(format!(
-                "SNS target already set to version {}.",
-                next_version
-            )),
+            Err(format!("SNS target already set to {}.", next_version)),
         ),
         (
             "Scenario D: `new_target` is behind `current_target_version`.",
@@ -317,10 +314,7 @@ fn test_invalid_new_targets() {
             Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
                 new_target: Some(SnsVersion::from(next_version.clone())),
             }),
-            Err(format!(
-                "SNS target already set to version {}.",
-                next_next_version
-            )),
+            Err(format!("SNS target already set to {}.", next_next_version)),
         ),
         (
             "Scenario E: `new_target` is ahead of `current_target_version`.",
