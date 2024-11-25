@@ -1,8 +1,10 @@
 use std::{
     collections::HashMap,
     fs::{self, File},
+    io::Write,
     net::Ipv6Addr,
     path::{Path, PathBuf},
+    process::Command,
     time::Duration,
 };
 
@@ -11,7 +13,7 @@ use maplit::hashmap;
 use reqwest::Url;
 use serde::Serialize;
 use serde_json::json;
-use slog::{debug, info};
+use slog::{debug, info, Logger};
 
 use crate::driver::{
     constants::SSH_USERNAME,
@@ -143,6 +145,87 @@ impl PrometheusVm {
         self
     }
 
+    fn sync_k8s_repo_dashboards(logger: Logger) -> Result<()> {
+        let k8s_repo = get_dependency_path("rs/tests/dashboards/k8s");
+        if k8s_repo.exists() {
+            std::fs::remove_dir_all(&k8s_repo)?;
+        }
+
+        std::fs::create_dir_all(&k8s_repo)?;
+        Command::new("git")
+            .arg("init")
+            .current_dir(&k8s_repo)
+            .output()?;
+
+        Command::new("git")
+            .arg("remote")
+            .arg("add")
+            .arg("origin")
+            .arg("git@github.com:dfinity-ops/k8s.git")
+            .current_dir(&k8s_repo)
+            .output()?;
+
+        Command::new("git")
+            .arg("config")
+            .arg("core.sparseCheckout")
+            .arg("true")
+            .current_dir(&k8s_repo)
+            .output()?;
+
+        let mut file = std::fs::File::create(k8s_repo.join(".git/info/sparse-checkout"))?;
+        write!(file, "{}", "bases/apps/ic-dashboards")?;
+
+        Command::new("git")
+            .arg("pull")
+            .arg("origin")
+            .arg("main")
+            .current_dir(&k8s_repo)
+            .output()?;
+        info!(logger, "Pulled from origin");
+
+        let dashboards_root = k8s_repo.join("bases").join("apps").join("ic-dashboards");
+        let k8s_dashboards = k8s_repo.join("k8s-dashboards");
+        std::fs::create_dir_all(&k8s_dashboards)?;
+        info!(
+            logger,
+            "Created k8s dashboards folder on path: {}",
+            k8s_dashboards.display()
+        );
+
+        for directory in dashboards_root.read_dir()? {
+            let entry = directory?;
+            if !entry.path().is_dir() {
+                continue;
+            }
+
+            for maybe_file in entry.path().read_dir()? {
+                let file = maybe_file?;
+
+                if !entry.path().is_file() && entry.path().extension().is_none() {
+                    continue;
+                }
+
+                // Safe because of previous check
+                let path = entry.path();
+                let extension = path.extension().unwrap();
+
+                // Dashboards are json files
+                if extension != "json" {
+                    continue;
+                }
+
+                let file_name = format!("{}.json", file.file_name().as_os_str().to_str().unwrap());
+
+                let destination_path = k8s_dashboards.join(&file_name);
+
+                std::fs::copy(file.path(), destination_path)?;
+                info!(logger, "Copying `{}` dashboard...", file_name);
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn start(&self, env: &TestEnv) -> Result<()> {
         // Create a config directory containing the prometheus.yml configuration file.
         let vm_name = &self.universal_vm.name;
@@ -161,8 +244,8 @@ if uname -a | grep -q Ubuntu; then
   # k8s
   chmod g+s /etc/prometheus
   cp -f /config/prometheus/prometheus.yml /etc/prometheus/prometheus.yml
-  cp -R /config/grafana/dashboards/IC /var/lib/grafana/dashboards/
-  chown -R grafana:grafana /var/lib/grafana/dashboards/IC/
+  cp -R /config/grafana/dashboards/k8s-dashboards /var/lib/grafana/dashboards/
+  chown -R grafana:grafana /var/lib/grafana/dashboards/k8s-dashboards/
   chown -R {SSH_USERNAME}:prometheus /etc/prometheus
   systemctl reload prometheus
 else
@@ -175,6 +258,9 @@ fi
             .unwrap();
         let grafana_dashboards_src = get_dependency_path("rs/tests/dashboards");
         let grafana_dashboards_dst = config_dir.join("grafana").join("dashboards");
+
+        Self::sync_k8s_repo_dashboards(log.clone()).unwrap();
+
         debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
         TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst).unwrap();
         write_prometheus_config_dir(config_dir.clone(), self.scrape_interval).unwrap();
