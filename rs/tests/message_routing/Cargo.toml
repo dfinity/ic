@@ -10,6 +10,7 @@ documentation.workspace = true
 anyhow = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+ic-cdk = { workspace = true }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 itertools = { workspace = true }

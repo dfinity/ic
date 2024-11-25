@@ -25,6 +25,7 @@ system_test_nns(
         "//rs/rust_canisters/xnet_test",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:ic_cdk",
         "@crate_index//:itertools",
         "@crate_index//:slog",
         "@crate_index//:tokio",

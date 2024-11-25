@@ -1,10 +1,10 @@
 use crate::api::handle::Ic;
 use crate::tests::{cleanup, locate_canisters, parallel_async};
-use candid::{CandidType, Deserialize};
+use candid::{CandidType, Deserialize, Principal};
 use canister_test::*;
 use dfn_candid::candid;
 use ic_base_types::SubnetId;
-use std::{collections::BTreeMap, fmt::Display};
+use std::{collections::BTreeMap, convert::TryFrom, fmt::Display};
 use std::{str::FromStr, time::Duration};
 use xnet_test::{Metrics, NetworkTopology};
 
@@ -230,13 +230,13 @@ pub async fn test_impl(
         topology
             .get_mut(0)
             .unwrap()
-            .push(canisters[0].canister_id_vec8());
+            .push(Principal::try_from(canisters[0].canister_id_vec8()).unwrap());
     } else {
         canisters.iter().enumerate().for_each(|(i, canister)| {
             topology
                 .get_mut(i % subnets)
                 .unwrap()
-                .push(canister.canister_id_vec8())
+                .push(Principal::try_from(canister.canister_id_vec8()).unwrap())
         });
     }
     let _: Vec<String> = parallel_async(

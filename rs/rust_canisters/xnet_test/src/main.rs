@@ -15,7 +15,7 @@ use ic_cdk::{
     },
     setup,
 };
-use ic_cdk_macros::{heartbeat, init, query, update};
+use ic_cdk_macros::{heartbeat, query, update};
 use rand::Rng;
 use rand_pcg::Lcg64Xsh32;
 use std::cell::RefCell;
@@ -268,7 +268,7 @@ fn metrics() -> Metrics {
     METRICS.with(|m| m.borrow().clone())
 }
 
-#[init]
+#[export_name = "canister_init"]
 fn main() {
     setup();
 }
