@@ -21,10 +21,16 @@ pub struct HealthArgs {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+struct Cycles {
+    cycles: u64,
+    freezing_threshold: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct SnsHealthInfo {
     name: String,
     memory_consumption: Vec<(u64, SnsCanisterType)>,
-    cycles: Vec<(u64, SnsCanisterType)>,
+    cycles: Vec<(Cycles, SnsCanisterType)>,
     num_remaining_upgrade_steps: usize,
 }
 
@@ -57,11 +63,16 @@ impl TableRow for SnsHealthInfo {
         let low_cycles = self
             .cycles
             .iter()
-            .filter(|(cycles, _)| (*cycles as f64) < 10.0 * 1000.0 * 1000.0 * 1000.0 * 1000.0)
+            .filter(|(cycles, _)| (cycles.cycles as f64) < 10.0 * 1000.0 * 1000.0 * 1000.0 * 1000.0)
             .map(|(cycles, canister_type)| {
                 format!(
-                    "{canister_type}: ({:.2} TC)",
-                    *cycles as f64 / 1000.0 / 1000.0 / 1000.0 / 1000.0
+                    "{canister_type}: ({:.2} TC{frozen})",
+                    cycles.cycles as f64 / 1000.0 / 1000.0 / 1000.0 / 1000.0,
+                    frozen = if cycles.freezing_threshold > cycles.cycles {
+                        " 🥶".to_string()
+                    } else {
+                        "".to_string()
+                    }
                 )
             })
             .join(", ");
@@ -128,7 +139,16 @@ pub async fn exec(args: HealthArgs, agent: &Agent) -> Result<()> {
                 .map(|(canister_status, ctype)| {
                     (
                         (u64::try_from(canister_status.memory_size.0).unwrap(), ctype),
-                        (u64::try_from(canister_status.cycles.0).unwrap(), ctype),
+                        (
+                            Cycles {
+                                freezing_threshold: u64::try_from(
+                                    canister_status.settings.freezing_threshold.0,
+                                )
+                                .unwrap(),
+                                cycles: 0,
+                            },
+                            ctype,
+                        ),
                     )
                 })
                 .unzip();
