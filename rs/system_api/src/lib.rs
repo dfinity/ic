@@ -3168,7 +3168,7 @@ impl SystemApi for SystemApiImpl {
         trace_syscall!(self, CanisterStatus, result);
         result
     }
-    // TODO: This can be removed (in favour of ic0_mint_cycles128) once the CMC is upgraded, so it
+    // TODO(EXC-1806): This can be removed (in favour of ic0_mint_cycles128) once the CMC is upgraded, so it
     // doesn't make sense to deduplicate the shared code.
     fn ic0_mint_cycles(&mut self, amount: u64) -> HypervisorResult<u64> {
         let result = match self.api_type {

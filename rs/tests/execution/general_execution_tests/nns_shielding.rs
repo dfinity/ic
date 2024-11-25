@@ -201,8 +201,6 @@ pub fn mint_cycles128_not_supported_on_application_subnet(env: TestEnv) {
     let app_node = env.get_first_healthy_application_node_snapshot();
     let agent = app_node.build_default_agent();
     block_on(async move {
-        let wasm = wat::parse_str(MINT_CYCLES).unwrap();
-
         let canister_id = UniversalCanister::new_with_cycles(
             &agent,
             app_node.effective_canister_id(),
