@@ -214,15 +214,6 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
         bin_args_file_path.display()
     );
 
-    let hex_args_file_path = output_dir.join("args.hex");
-    let mut args_file = fs::File::create(&hex_args_file_path)
-        .unwrap_or_else(|_| panic!("failed to create {:?}", hex_args_file_path));
-    proposal.write_hex_args(&mut args_file);
-    println!(
-        "Hexadecimal upgrade args written to '{}'",
-        hex_args_file_path.display()
-    );
-
     let artifact = output_dir.join(proposal.target_canister().artifact_file_name());
     ic_repo.copy_file(&proposal.target_canister().artifact(), &artifact);
     println!("Artifact written to '{}'", artifact.display());

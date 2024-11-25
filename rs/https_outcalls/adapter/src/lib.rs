@@ -13,13 +13,13 @@ mod metrics;
 
 pub use cli::Cli;
 pub use config::{Config, IncomingSource};
-pub use rpc_server::CanisterHttp;
 
 use futures::StreamExt;
 use ic_async_utils::{incoming_from_first_systemd_socket, incoming_from_path};
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
+use rpc_server::CanisterHttp;
 use std::time::Duration;
 use tonic::transport::Server;
 

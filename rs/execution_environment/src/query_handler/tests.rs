@@ -1,17 +1,16 @@
-use crate::InternalHttpQueryHandler;
+use crate::{query_handler::DISTRIKT_SUBNET_PRINCIPAL, InternalHttpQueryHandler};
 use ic_base_types::{CanisterId, NumSeconds};
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
 use ic_error_types::{ErrorCode, UserError};
-use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     ingress::WasmResult,
     messages::{Query, QuerySource},
-    Cycles, NumInstructions,
+    Cycles, NumInstructions, PrincipalId,
 };
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 const CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
@@ -42,7 +41,7 @@ fn query_metrics_are_reported() {
     // Canister A handles the user query by calling canister B.
 
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_type(SubnetType::VerifiedApplication)
+        .with_subnet_id(PrincipalId::from_str(DISTRIKT_SUBNET_PRINCIPAL).unwrap())
         .build();
 
     let canister_a = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
@@ -193,13 +192,14 @@ fn query_metrics_are_reported() {
 }
 
 #[test]
-fn query_call_with_side_effects() {
+fn legacy_query_call_with_side_effects() {
     // In this test we have two canisters A and B.
     // Canister A does a side-effectful operation (stable_grow) and then
     // calls canister B. The side effect must happen once and only once.
 
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_type(SubnetType::System)
+        // Legacy ICQC only enabled on Distrikt's subnet.
+        .with_subnet_id(PrincipalId::from_str(DISTRIKT_SUBNET_PRINCIPAL).unwrap())
         .build();
 
     let canister_a = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
@@ -270,9 +270,10 @@ fn query_calls_disabled_for_application_subnet() {
 }
 
 #[test]
-fn query_callgraph_depth_is_enforced() {
+fn legacy_query_callgraph_depth_is_enforced() {
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_type(SubnetType::System) // For now, query calls are only allowed in system subnets
+        // Legacy ICQC only enabled on Distrikt's subnet.
+        .with_subnet_id(PrincipalId::from_str(DISTRIKT_SUBNET_PRINCIPAL).unwrap())
         .build();
 
     const NUM_CANISTERS: usize = 20;
@@ -354,12 +355,13 @@ fn query_callgraph_depth_is_enforced() {
 }
 
 #[test]
-fn query_callgraph_max_instructions_is_enforced() {
+fn legacy_query_callgraph_max_instructions_is_enforced() {
     const NUM_CANISTERS: u64 = 20;
     const NUM_SUCCESSFUL_QUERIES: u64 = 5; // Number of calls expected to succeed
 
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_type(SubnetType::System) // For now, query calls are only allowed in system subnets
+        // Legacy ICQC only enabled on Distrikt's subnet.
+        .with_subnet_id(PrincipalId::from_str(DISTRIKT_SUBNET_PRINCIPAL).unwrap())
         .with_max_query_call_graph_instructions(NumInstructions::from(
             NUM_SUCCESSFUL_QUERIES * INSTRUCTION_OVERHEAD_PER_QUERY_CALL,
         ))
@@ -747,11 +749,11 @@ fn queries_to_frozen_canisters_are_rejected() {
     // to be installed (the canister is created with the provisional
     // create canister api that doesn't require additional cycles).
     //
-    // 120_000_002_460 cycles are needed as prepayment for max install_code instructions
-    //         590_000 cycles are needed for update call execution
+    // 300_000_002_460 cycles are needed as prepayment for max install_code instructions
+    //       5_000_000 cycles are needed for update call execution
     //          41_070 cycles are needed to cover freeze_threshold_cycles
     //                 of the canister history memory usage (134 bytes)
-    let low_cycles = Cycles::new(120_000_633_530);
+    let low_cycles = Cycles::new(300_005_633_530);
     let canister_a = test.universal_canister_with_cycles(low_cycles).unwrap();
     test.update_freezing_threshold(canister_a, freezing_threshold)
         .unwrap();
@@ -1473,9 +1475,7 @@ fn test_incorrect_query_name() {
 
 #[test]
 fn test_call_context_performance_counter_correctly_reported_on_query() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_type(SubnetType::System)
-        .build();
+    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
     let a_id = test.universal_canister().unwrap();
     let b_id = test.universal_canister().unwrap();
 
@@ -1510,7 +1510,9 @@ fn test_call_context_performance_counter_correctly_reported_on_query() {
         .int64_to_blob()
         .append_to_global_data()
         .build();
-    let result = test.non_replicated_query(a_id, "query", a).unwrap();
+    let result = test
+        .non_replicated_query(a_id, "composite_query", a)
+        .unwrap();
 
     let counters = result
         .bytes()

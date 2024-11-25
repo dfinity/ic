@@ -2,6 +2,7 @@ use crate::endpoints::CandidBlockTag;
 use crate::eth_rpc::BlockTag;
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{BlockNumber, TransactionNonce, Wei};
+use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::transactions::EthTransactions;
 use crate::state::{InvalidStateError, State};
 use candid::types::number::Nat;
@@ -69,19 +70,23 @@ impl TryFrom<InitArg> for State {
                         "ERROR: last_scraped_block_number is at maximum value".to_string(),
                     )
                 })?;
+        let mut log_scrapings = LogScrapings::new(last_scraped_block_number);
+        if let Some(contract_address) = eth_helper_contract_address {
+            log_scrapings
+                .set_contract_address(LogScrapingId::EthDepositWithoutSubaccount, contract_address)
+                .map_err(|e| {
+                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
+                })?;
+        }
         let state = Self {
             ethereum_network,
             ecdsa_key_name,
-            eth_helper_contract_address,
-            erc20_helper_contract_address: None,
             pending_withdrawal_principals: Default::default(),
             eth_transactions: EthTransactions::new(initial_nonce),
             cketh_ledger_id: ledger_id,
             cketh_minimum_withdrawal_amount: minimum_withdrawal_amount,
             ethereum_block_height: BlockTag::from(ethereum_block_height),
             first_scraped_block_number,
-            last_scraped_block_number,
-            last_erc20_scraped_block_number: last_scraped_block_number,
             last_observed_block_number: None,
             events_to_mint: Default::default(),
             minted_events: Default::default(),
@@ -96,6 +101,7 @@ impl TryFrom<InitArg> for State {
             evm_rpc_id: None,
             ckerc20_tokens: Default::default(),
             erc20_balances: Default::default(),
+            log_scrapings,
         };
         state.validate_config()?;
         Ok(state)

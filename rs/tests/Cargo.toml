@@ -138,7 +138,7 @@ registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 rosetta-core = { path = "../rosetta-api/common/rosetta_core" }
 rsa = { workspace = true }
-rust_decimal = "1.25"
+rust_decimal = "1.36.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -186,22 +186,6 @@ path = "financial_integrations/rosetta/rosetta_test.rs"
 [[bin]]
 name = "ic-systest-rosetta-neuron-follow-test"
 path = "financial_integrations/rosetta/rosetta_neuron_follow_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta-neuron-hotkey-test"
-path = "financial_integrations/rosetta/rosetta_neuron_hotkey_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta-neuron-info-test"
-path = "financial_integrations/rosetta/rosetta_neuron_info_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta-neuron-maturity-test"
-path = "financial_integrations/rosetta/rosetta_neuron_maturity_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta-neuron-spawn-test"
-path = "financial_integrations/rosetta/rosetta_neuron_spawn_test.rs"
 
 [[bin]]
 name = "test-driver-e2e-scenarios"

@@ -1179,6 +1179,19 @@ impl CanisterQueues {
         Some(self.store.get(output_queue.peek()?))
     }
 
+    /// Pops the next message from the output queue to `dst_canister`.
+    pub(super) fn pop_canister_output(
+        &mut self,
+        dst_canister: &CanisterId,
+    ) -> Option<RequestOrResponse> {
+        let queue = &mut self.canister_queues.get_mut(dst_canister)?.1;
+        let msg = self.store.queue_pop_and_advance(queue);
+
+        debug_assert_eq!(Ok(()), self.test_invariants());
+        debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
+        msg
+    }
+
     /// Tries to induct a message from the output queue to `own_canister_id`
     /// into the input queue from `own_canister_id`. Returns `Err(())` if there
     /// was no message to induct or the input queue was full.
@@ -1267,12 +1280,13 @@ impl CanisterQueues {
         self.queue_stats.output_queues_reserved_slots
     }
 
-    /// Returns the memory usage of all best-effort messages.
+    /// Returns the memory usage of all best-effort messages (zero iff there are
+    /// zero pooled best-effort messages).
     ///
     /// Does not account for callback references for expired callbacks or dropped
     /// responses, as these are constant size per callback and thus can be included
     /// in the cost of a callback.
-    pub fn best_effort_memory_usage(&self) -> usize {
+    pub fn best_effort_message_memory_usage(&self) -> usize {
         self.message_stats().best_effort_message_bytes
     }
 
@@ -1398,6 +1412,8 @@ impl CanisterQueues {
     /// Updates the stats for the dropped message and (where applicable) the
     /// generated response. `own_canister_id` and `local_canisters` are required
     /// to determine the correct input queue schedule to update (if applicable).
+    ///
+    /// Time complexity: `O(log(n))`.
     pub fn shed_largest_message(
         &mut self,
         own_canister_id: &CanisterId,
@@ -2018,15 +2034,11 @@ pub mod testing {
         /// Returns the number of messages in `ingress_queue`.
         fn ingress_queue_size(&self) -> usize;
 
-        /// Pops the next message from the output queue associated with
-        /// `dst_canister`.
+        /// Pops the next message from the output queue to `dst_canister`.
         fn pop_canister_output(&mut self, dst_canister: &CanisterId) -> Option<RequestOrResponse>;
 
         /// Returns the number of output queues, empty or not.
         fn output_queues_len(&self) -> usize;
-
-        /// Returns the number of messages in `output_queues`.
-        fn output_message_count(&self) -> usize;
 
         /// Publicly exposes `CanisterQueues::push_input()`.
         fn push_input(
@@ -2055,16 +2067,11 @@ pub mod testing {
         }
 
         fn pop_canister_output(&mut self, dst_canister: &CanisterId) -> Option<RequestOrResponse> {
-            let queue = &mut self.canister_queues.get_mut(dst_canister).unwrap().1;
-            self.store.queue_pop_and_advance(queue)
+            self.pop_canister_output(dst_canister)
         }
 
         fn output_queues_len(&self) -> usize {
             self.canister_queues.len()
-        }
-
-        fn output_message_count(&self) -> usize {
-            self.message_stats().outbound_message_count
         }
 
         fn push_input(

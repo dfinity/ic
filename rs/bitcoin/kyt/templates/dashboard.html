@@ -7,11 +7,13 @@
 {%- endmacro %}
 
 {% macro btc_tx_link(txid) -%}
-    {% match config.btc_network %}
+    {% match config.btc_network() %}
         {%- when crate::BtcNetwork::Mainnet -%}
             <a href="https://live.blockcypher.com/btc/tx/{{txid}}"><code>{{txid}}</code></a>
         {%- when crate::BtcNetwork::Testnet -%}
             <a href="https://live.blockcypher.com/btc-testnet/tx/{{txid}}"><code>{{txid}}</code></a>
+        {%- when _ -%}
+            <code>{{txid}}</code>
     {% endmatch %}
 {%- endmacro %}
 
@@ -32,7 +34,7 @@
 <html lang="en">
 
 <head>
-    <title>KYT Canister Dashboard for Bitcoin ({{ config.btc_network }})</title>
+    <title>KYT Canister Dashboard for Bitcoin ({{ config.btc_network() }})</title>
     <style>
         details {
             margin-right: 1rem;
@@ -126,13 +128,13 @@
 <body>
     <div class="background">
         <div class="content">
-            <h2>KYT Canister Dashboard for Bitcoin ({{ config.btc_network }})</h2>
+            <h2>KYT Canister Dashboard for Bitcoin ({{ config.btc_network() }})</h2>
             <h3>Metadata</h3>
             <table>
                 <tbody>
                     <tr id="kyt-mode">
                         <th>KYT Mode</th>
-                        <td><code>{{ config.kyt_mode }}</code></td>
+                        <td><code>{{ config.kyt_mode() }}</code></td>
                     </tr>
                     <tr id="outcall-capacity">
                         <th>Outcall Capacity</th>

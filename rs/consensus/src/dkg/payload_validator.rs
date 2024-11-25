@@ -226,7 +226,7 @@ fn validate_dealings_payload(
     let dealers_from_payload: HashSet<_> = dealings
         .messages
         .iter()
-        .map(|message| (message.content.dkg_id, message.signature.signer))
+        .map(|message| (message.content.dkg_id.clone(), message.signature.signer))
         .collect();
 
     if dealers_from_payload.len() != dealings.messages.len() {

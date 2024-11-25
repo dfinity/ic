@@ -1,6 +1,7 @@
 use std::{convert::TryFrom, rc::Rc};
 
 use ic_base_types::NumBytes;
+use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{wasm_utils::compile, wasmtime_embedder::WasmtimeInstance, WasmtimeEmbedder};
@@ -126,13 +127,18 @@ impl WasmtimeInstanceBuilder {
             SubnetType::System => SchedulerConfig::system_subnet(),
         }
         .dirty_page_overhead;
+        let subnet_available_callbacks =
+            HypervisorConfig::default().subnet_callback_soft_limit as u64;
+        let canister_callback_quota =
+            HypervisorConfig::default().canister_guaranteed_callback_quota as u64;
 
-        let sandbox_safe_system_state = SandboxSafeSystemState::new(
+        let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
             &system_state,
             cycles_account_manager,
             &self.network_topology,
             dirty_page_overhead,
             ComputeAllocation::default(),
+            subnet_available_callbacks,
             RequestMetadata::new(0, UNIX_EPOCH),
             self.api_type.caller(),
             self.api_type.call_context_id(),
@@ -154,6 +160,7 @@ impl WasmtimeInstanceBuilder {
                 canister_memory_limit: self.canister_memory_limit,
                 wasm_memory_limit: None,
                 memory_allocation: MemoryAllocation::default(),
+                canister_guaranteed_callback_quota: canister_callback_quota,
                 compute_allocation: ComputeAllocation::default(),
                 subnet_type: self.subnet_type,
                 execution_mode: ExecutionMode::Replicated,

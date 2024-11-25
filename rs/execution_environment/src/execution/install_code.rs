@@ -33,6 +33,7 @@ use crate::{
     execution_environment::{log_dirty_pages, RoundContext},
     CompilationCostHandling, RoundLimits,
 };
+use ic_cycles_account_manager::WasmExecutionMode;
 
 #[cfg(test)]
 mod tests;
@@ -257,6 +258,12 @@ impl InstallCodeHelper {
             self.canister.system_state.balance()
         );
 
+        let instructions_used = NumInstructions::from(
+            message_instruction_limit
+                .get()
+                .saturating_sub(instructions_left.get()),
+        );
+
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             instructions_left,
@@ -264,6 +271,7 @@ impl InstallCodeHelper {
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
+            original.wasm_execution_mode,
             round.log,
         );
 
@@ -452,12 +460,6 @@ impl InstallCodeHelper {
         if original.config.rate_limiting_of_instructions == FlagStatus::Enabled {
             self.canister.scheduler_state.install_code_debit += self.instructions_consumed();
         }
-
-        let instructions_used = NumInstructions::from(
-            message_instruction_limit
-                .get()
-                .saturating_sub(instructions_left.get()),
-        );
 
         let old_wasm_hash = get_wasm_hash(&clean_canister);
         let new_wasm_hash = get_wasm_hash(&self.canister);
@@ -874,6 +876,7 @@ pub(crate) struct OriginalContext {
     pub sender: PrincipalId,
     pub canister_id: CanisterId,
     pub log_dirty_pages: FlagStatus,
+    pub wasm_execution_mode: WasmExecutionMode,
 }
 
 pub(crate) fn validate_controller(
@@ -934,6 +937,7 @@ pub(crate) fn finish_err(
         );
 
     let message_instruction_limit = original.execution_parameters.instruction_limits.message();
+
     round.cycles_account_manager.refund_unused_execution_cycles(
         &mut new_canister.system_state,
         instructions_left,
@@ -941,6 +945,7 @@ pub(crate) fn finish_err(
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
+        original.wasm_execution_mode,
         round.log,
     );
 

@@ -31,6 +31,7 @@ use ic_sns_wasm::pb::v1::SnsCanisterType;
 /// Note: FI canisters are considered fully tested elsewhere, and have stable APIs.
 
 /// Deployment tests
+
 #[tokio::test]
 async fn test_deployment_all_upgrades() {
     test_sns_deployment(
@@ -81,6 +82,15 @@ async fn test_deployment_swap_upgrade() {
 }
 
 /// Upgrade Tests
+
+// TODO[NNS1-3433]: Enable this test after the SNS Governance canister published to SNS-W on mainnet
+// TODO[NNS1-3433]: starts upgrading its Swap.
+#[ignore]
+#[tokio::test]
+async fn test_upgrade_swap() {
+    test_sns_upgrade(vec![SnsCanisterType::Swap]).await;
+}
+
 #[tokio::test]
 async fn test_upgrade_sns_gov_root() {
     test_sns_upgrade(vec![SnsCanisterType::Root, SnsCanisterType::Governance]).await;
@@ -263,19 +273,9 @@ async fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
 
     // Every canister we are testing has two upgrades.  We are just making sure the counts match
     for canister_type in &sns_canisters_to_upgrade {
-        sns::upgrade_sns_to_next_version_and_assert_change(
-            &pocket_ic,
-            sns.root.canister_id,
-            *canister_type,
-        )
-        .await;
+        sns::upgrade_sns_to_next_version_and_assert_change(&pocket_ic, &sns, *canister_type).await;
     }
     for canister_type in sns_canisters_to_upgrade {
-        sns::upgrade_sns_to_next_version_and_assert_change(
-            &pocket_ic,
-            sns.root.canister_id,
-            canister_type,
-        )
-        .await;
+        sns::upgrade_sns_to_next_version_and_assert_change(&pocket_ic, &sns, canister_type).await;
     }
 }

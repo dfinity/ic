@@ -64,7 +64,8 @@ type KytArg = variant {
 
 type BtcNetwork = variant {
     mainnet;
-    testnet
+    testnet;
+    regtest: record { json_rpc_url: text };
 };
 
 type KytMode = variant {

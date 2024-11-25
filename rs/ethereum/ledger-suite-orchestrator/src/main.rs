@@ -196,13 +196,13 @@ fn http_request(
                 const WASM_PAGE_SIZE_IN_BYTES: f64 = 65536.0;
 
                 w.encode_gauge(
-                    "ledger_suite_orchestrator_stable_memory_bytes",
+                    "stable_memory_bytes",
                     ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
                     "Size of the stable memory allocated by this canister.",
                 )?;
 
                 w.encode_gauge(
-                    "ledger_suite_orchestrator_heap_memory_bytes",
+                    "heap_memory_bytes",
                     heap_memory_size_bytes() as f64,
                     "Size of the heap memory allocated by this canister.",
                 )?;

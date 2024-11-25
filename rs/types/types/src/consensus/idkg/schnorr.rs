@@ -1,7 +1,8 @@
 //! Threshold Schnorr transcripts and references related definitions.
 use crate::crypto::canister_threshold_sig::{
-    ExtendedDerivationPath, SchnorrPreSignatureTranscript, ThresholdSchnorrSigInputs,
+    SchnorrPreSignatureTranscript, ThresholdSchnorrSigInputs,
 };
+use crate::crypto::ExtendedDerivationPath;
 use crate::{Height, Randomness};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -258,6 +259,7 @@ impl ThresholdSchnorrSigInputsRef {
         ThresholdSchnorrSigInputs::new(
             &self.derivation_path,
             &self.message,
+            None, // TODO(CRP-2630)
             self.nonce,
             presig_transcript,
             key_transcript,

@@ -50,7 +50,7 @@ use std::mem::size_of;
 use std::time::Duration;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
-const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
+const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
 
 #[test]
 fn ic0_canister_status_works() {
@@ -2110,7 +2110,7 @@ fn ic0_call_cycles_add_deducts_cycles() {
             (data (i32.const 0) "some_remote_method XYZ")
             (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
-    let initial_cycles = Cycles::new(121_000_000_000);
+    let initial_cycles = Cycles::new(301_000_000_000);
     let canister_id = test
         .canister_from_cycles_and_wat(initial_cycles, wat)
         .unwrap();
@@ -2131,7 +2131,11 @@ fn ic0_call_cycles_add_deducts_cycles() {
             MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             test.subnet_size(),
         )
-        + mgr.execution_cost(MAX_NUM_INSTRUCTIONS, test.subnet_size());
+        + mgr.execution_cost(
+            MAX_NUM_INSTRUCTIONS,
+            test.subnet_size(),
+            test.canister_wasm_execution_mode(canister_id),
+        );
     let transferred_cycles = Cycles::new(10_000_000_000);
     assert_eq!(
         initial_cycles - messaging_fee - transferred_cycles - test.execution_cost(),
@@ -2169,7 +2173,7 @@ fn ic0_call_cycles_add_has_no_effect_without_ic0_call_perform() {
             (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
 
-    let initial_cycles = Cycles::new(121_000_000_000);
+    let initial_cycles = Cycles::new(301_000_000_000);
     let canister_id = test
         .canister_from_cycles_and_wat(initial_cycles, wat)
         .unwrap();
@@ -5032,7 +5036,7 @@ fn can_use_more_instructions_during_install_code() {
         .with_instruction_limit(1_000_000)
         .with_cost_to_compile_wasm_instruction(0)
         .with_install_code_instruction_limit(
-            1_000_000 + wasm_compilation_cost(UNIVERSAL_CANISTER_WASM).get(),
+            1_000_000 + wasm_compilation_cost(&UNIVERSAL_CANISTER_WASM).get(),
         )
         .build();
     let canister_id = test.universal_canister().unwrap();
@@ -5121,9 +5125,11 @@ fn dts_abort_works_in_update_call() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         original_system_state.balance()
-            - test
-                .cycles_account_manager()
-                .execution_cost(NumInstructions::from(100_000_000), test.subnet_size()),
+            - test.cycles_account_manager().execution_cost(
+                NumInstructions::from(100_000_000),
+                test.subnet_size(),
+                test.canister_wasm_execution_mode(canister_id)
+            ),
     );
     assert_eq!(
         test.canister_state(canister_id)
@@ -5152,9 +5158,11 @@ fn dts_abort_works_in_update_call() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         original_system_state.balance()
-            - test
-                .cycles_account_manager()
-                .execution_cost(NumInstructions::from(100_000_000), test.subnet_size()),
+            - test.cycles_account_manager().execution_cost(
+                NumInstructions::from(100_000_000),
+                test.subnet_size(),
+                test.canister_wasm_execution_mode(canister_id)
+            ),
     );
     assert_eq!(
         test.canister_state(canister_id)
@@ -5274,6 +5282,121 @@ fn system_state_apply_change_fails() {
             );
         }
     };
+}
+
+/// Tests that given specific canister callback quota and subnet available
+/// callback numbers, exactly the expected number of calls succeed.
+fn test_callback_limits_impl(
+    canister_callback_quota: usize,
+    subnet_available_callbacks: i64,
+    expected_successful_calls: usize,
+) {
+    let mut test = ExecutionTestBuilder::new()
+        .with_canister_callback_quota(canister_callback_quota)
+        // Enough cycles for more than a handful of concurrent calls.
+        .with_initial_canister_cycles(1_000_000_000_000_000)
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+
+    // A no-op update call.
+    let a0 = wasm().message_payload().reply().build();
+
+    // An update call that makes one self-call.
+    let a1 = wasm()
+        .inter_update(
+            a_id,
+            call_args()
+                .other_side(a0.clone())
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+
+    // Set the size of the subnet-wide shared callback pool.
+    test.set_subnet_available_callbacks(subnet_available_callbacks);
+
+    // Make `expected_successful_calls + 1` calls to `a1`.
+    let mut ingress_ids = Vec::new();
+    for _ in 0..expected_successful_calls + 1 {
+        let (ingress_id, _) = test.ingress_raw(a_id, "update", a1.clone());
+        ingress_ids.push(ingress_id);
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::StartNew,
+        );
+        test.execute_message(a_id);
+    }
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    // Only `expected_successful_calls` calls have resulted in a downstream call.
+    test.induct_messages();
+    for _ in 0..expected_successful_calls {
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::StartNew,
+        );
+        test.execute_message(a_id);
+    }
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    // Process `expected_successful_calls` responses.
+    test.induct_messages();
+    for _ in 0..expected_successful_calls {
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::StartNew,
+        );
+        test.execute_message(a_id);
+    }
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    // The first `expected_successful_calls` calls have succeeded.
+    for ingress_id in ingress_ids.iter().take(expected_successful_calls) {
+        let ingress_status = test.ingress_status(ingress_id);
+        let result = check_ingress_status(ingress_status).unwrap();
+        assert_matches!(result, WasmResult::Reply(_));
+    }
+
+    // The last call has failed synchronously when invoking `call_perform`.
+    let ingress_status = test.ingress_status(&ingress_ids[expected_successful_calls]);
+    assert_matches!(ingress_status, IngressStatus::Known {
+            state: IngressState::Failed(err),
+            ..
+        } if err.description().contains("call_perform failed"));
+
+    // Sanity check that the round limits were accurately updated.
+    assert_eq!(
+        test.subnet_available_callbacks(),
+        subnet_available_callbacks - expected_successful_calls as i64
+    );
+}
+
+#[test]
+fn call_perform_fails_when_out_of_callback_quota() {
+    // With a canister callback quota of 3; and 1 available callback in the shared
+    // subnet pool; we expect only 3 downstream calls to be allowed.
+    let canister_callback_quota = 3;
+    let subnet_available_callbacks = 1;
+    test_callback_limits_impl(canister_callback_quota, subnet_available_callbacks, 3);
+}
+
+#[test]
+fn call_perform_fails_when_out_of_subnet_callbacks() {
+    // With a canister callback quota of 3; and 4 available callbacks in the shared
+    // subnet pool; we expect only 4 downstream calls to be allowed.
+    let canister_callback_quota = 3;
+    let subnet_available_callbacks = 4;
+    test_callback_limits_impl(canister_callback_quota, subnet_available_callbacks, 4);
 }
 
 #[test]
@@ -6618,7 +6741,7 @@ fn stable_memory_grow_reserves_cycles() {
             .build();
 
         let canister_id = test
-            .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+            .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
             .unwrap();
 
         test.update_freezing_threshold(canister_id, NumSeconds::new(0))
@@ -7042,7 +7165,7 @@ fn stable_memory_grow_respects_reserved_cycles_limit() {
         .build();
 
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
     test.update_freezing_threshold(canister_id, NumSeconds::new(0))
@@ -7087,7 +7210,7 @@ fn stable_memory_grow_does_not_reserve_cycles_on_out_of_memory() {
         .build();
 
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     test.update_freezing_threshold(canister_id, NumSeconds::new(0))
         .unwrap();
@@ -7834,12 +7957,10 @@ fn ic0_mint_cycles_u64() {
     }
     let result = test.ingress(canister_id, "test", vec![]);
     assert_empty_reply(result);
-    assert!(
-        test.canister_state(canister_id)
-            .system_state
-            .balance()
-            .get()
-            >= 2 * (1 << 64) - 10_000_000
+    assert_balance_equals(
+        test.canister_state(canister_id).system_state.balance(),
+        Cycles::new(2 * (1 << 64)),
+        BALANCE_EPSILON,
     );
 }
 

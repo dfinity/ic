@@ -1,10 +1,10 @@
 [package]
-name = "ic-execution-environment"
-version.workspace = true
 authors.workspace = true
-edition.workspace = true
 description.workspace = true
 documentation.workspace = true
+edition.workspace = true
+name = "ic-execution-environment"
+version.workspace = true
 
 [dependencies]
 candid = { workspace = true }
@@ -13,7 +13,6 @@ ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-config = { path = "../config" }
-ic-limits = { path = "../limits" }
 ic-crypto-prng = { path = "../crypto/prng" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
@@ -23,6 +22,7 @@ ic-embedders = { path = "../embedders" }
 ic-error-types = { path = "../types/error_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
@@ -39,9 +39,11 @@ ic-system-api = { path = "../system_api" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-utils-lru-cache = { path = "../utils/lru_cache" }
+ic-wasm-transform = { path = "../wasm_transform" }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = { workspace = true }
 memory_tracker = { path = "../memory_tracker" }
+more-asserts = "0.3.1"
 num-rational = "0.2.2"
 num-traits = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
@@ -79,7 +81,6 @@ ic-wasm-types = { path = "../types/wasm_types" }
 itertools = { workspace = true }
 libflate = { workspace = true }
 maplit = "1.0.2"
-more-asserts = "0.3.1"
 proptest = { workspace = true }
 tempfile = { workspace = true }
 test-strategy = "0.3.1"
@@ -119,6 +120,10 @@ path = "benches/wasm_instructions/main.rs"
 [[bench]]
 harness = false
 name = "scheduler"
+
+[[bench]]
+harness = false
+name = "load_simulator_canisters"
 
 [[bench]]
 harness = false

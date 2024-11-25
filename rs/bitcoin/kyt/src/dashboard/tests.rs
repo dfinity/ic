@@ -1,10 +1,11 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::{filters, DashboardTemplate, Fetched, Status, DEFAULT_TX_TABLE_PAGE_SIZE};
 use crate::state::{Config, Timestamp, TransactionKytData};
-use crate::{blocklist::BTC_ADDRESS_BLOCKLIST, dashboard, state, BtcNetwork, KytMode};
+use crate::{dashboard, state};
 use bitcoin::Address;
 use bitcoin::{absolute::LockTime, transaction::Version, Transaction};
 use ic_btc_interface::Txid;
+use ic_btc_kyt::{blocklist::BTC_ADDRESS_BLOCKLIST, BtcNetwork, KytMode};
 use std::str::FromStr;
 
 fn mock_txid(v: usize) -> Txid {
@@ -16,10 +17,7 @@ fn mock_txid(v: usize) -> Txid {
 
 #[test]
 fn should_display_metadata() {
-    let config = Config {
-        btc_network: BtcNetwork::Mainnet,
-        kyt_mode: KytMode::Normal,
-    };
+    let config = Config::new_and_validate(BtcNetwork::Mainnet, KytMode::Normal).unwrap();
     let outcall_capacity = 50;
     let cached_entries = 0;
     let oldest_entry_time = 0;
@@ -36,8 +34,8 @@ fn should_display_metadata() {
     };
 
     DashboardAssert::assert_that(dashboard)
-        .has_btc_network_in_title(config.btc_network)
-        .has_kyt_mode(config.kyt_mode)
+        .has_btc_network_in_title(config.btc_network())
+        .has_kyt_mode(config.kyt_mode())
         .has_outcall_capacity(outcall_capacity)
         .has_cached_entries(cached_entries)
         .has_oldest_entry_time(oldest_entry_time)
@@ -77,10 +75,7 @@ fn should_display_statuses() {
     });
 
     let dashboard = DashboardTemplate {
-        config: Config {
-            btc_network: BtcNetwork::Mainnet,
-            kyt_mode: KytMode::Normal,
-        },
+        config: Config::new_and_validate(BtcNetwork::Mainnet, KytMode::Normal).unwrap(),
         outcall_capacity: 50,
         cached_entries: 6,
         tx_table_page_size: 10,
@@ -120,10 +115,9 @@ fn test_pagination() {
     use askama::Template;
     use scraper::{Html, Selector};
 
-    state::set_config(state::Config {
-        btc_network: BtcNetwork::Mainnet,
-        kyt_mode: KytMode::Normal,
-    });
+    state::set_config(
+        state::Config::new_and_validate(BtcNetwork::Mainnet, KytMode::Normal).unwrap(),
+    );
     let mock_transaction = TransactionKytData::from_transaction(
         &BtcNetwork::Mainnet,
         Transaction {

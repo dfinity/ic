@@ -9,6 +9,7 @@ type Action = variant {
   ManageDappCanisterSettings : ManageDappCanisterSettings;
   RemoveGenericNervousSystemFunction : nat64;
   UpgradeSnsToNextVersion : record {};
+  AdvanceSnsTargetVersion : AdvanceSnsTargetVersion;
   RegisterDappCanisters : RegisterDappCanisters;
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
@@ -24,6 +25,7 @@ type Action = variant {
 type ActionAuxiliary = variant {
   TransferSnsTreasuryFunds : MintSnsTokensActionAuxiliary;
   MintSnsTokens : MintSnsTokensActionAuxiliary;
+  AdvanceSnsTargetVersion : AdvanceSnsTargetVersionActionAuxiliary;
 };
 
 type AddNeuronPermissions = record {
@@ -257,7 +259,12 @@ type GetProposalResponse = record {
 
 type GetRunningSnsVersionResponse = record {
   deployed_version : opt Version;
-  pending_version : opt UpgradeInProgress;
+  pending_version : opt record {
+    mark_failed_at_seconds : nat64;
+    checking_upgrade_lock : nat64;
+    proposal_id : nat64;
+    target_version : opt Version;
+  };
 };
 
 type GetSnsInitializationParametersResponse = record {
@@ -282,7 +289,7 @@ type Governance = record {
   cached_upgrade_steps : opt CachedUpgradeSteps;
   sns_initialization_parameters : text;
   latest_reward_event : opt RewardEvent;
-  pending_version : opt UpgradeInProgress;
+  pending_version : opt PendingVersion;
   swap_canister_id : opt principal;
   ledger_canister_id : opt principal;
   proposals : vec record { nat64; ProposalData };
@@ -370,6 +377,19 @@ type ManageDappCanisterSettings = record {
   compute_allocation : opt nat64;
 };
 
+type SnsVersion = record {
+  governance_wasm_hash : opt blob;
+  swap_wasm_hash : opt blob;
+  root_wasm_hash : opt blob;
+  index_wasm_hash : opt blob;
+  ledger_wasm_hash : opt blob;
+  archive_wasm_hash : opt blob;
+};
+
+type AdvanceSnsTargetVersion = record {
+  new_target : opt SnsVersion;
+};
+
 type ManageLedgerParameters = record {
   token_symbol : opt text;
   transfer_fee : opt nat64;
@@ -421,6 +441,10 @@ type MintSnsTokens = record {
 
 type MintSnsTokensActionAuxiliary = record {
   valuation : opt Valuation;
+};
+
+type AdvanceSnsTargetVersionActionAuxiliary = record {
+  target_version : opt SnsVersion;
 };
 
 type Motion = record {
@@ -674,7 +698,14 @@ type TransferSnsTreasuryFunds = record {
 type UpgradeInProgress = record {
   mark_failed_at_seconds : nat64;
   checking_upgrade_lock : nat64;
-  proposal_id : nat64;
+  proposal_id : opt nat64;
+  target_version : opt Version;
+};
+
+type PendingVersion = record {
+  mark_failed_at_seconds : nat64;
+  checking_upgrade_lock : nat64;
+  proposal_id : opt nat64;
   target_version : opt Version;
 };
 
@@ -723,8 +754,9 @@ type WaitForQuietState = record {
 type UpgradeJournalEntry = record {
   event : opt variant {
     UpgradeStepsRefreshed : UpgradeStepsRefreshed;
+    UpgradeStepsReset : UpgradeStepsReset;
     TargetVersionSet : TargetVersionSet;
-    TargetVersionReset : TargetVersionSet;
+    TargetVersionReset : TargetVersionReset;
     UpgradeStarted : UpgradeStarted;
     UpgradeOutcome : UpgradeOutcome;
   };
@@ -735,9 +767,20 @@ type UpgradeStepsRefreshed = record {
   upgrade_steps : opt Versions;
 };
 
+type UpgradeStepsReset = record {
+  human_readable : opt text;
+  upgrade_steps : opt Versions;
+};
+
 type TargetVersionSet = record {
   new_target_version : opt Version;
   old_target_version : opt Version;
+};
+
+type TargetVersionReset = record {
+  new_target_version : opt Version;
+  old_target_version : opt Version;
+  human_readable : opt text;
 };
 
 type UpgradeStarted = record {
@@ -769,6 +812,7 @@ type GetUpgradeJournalResponse = record {
   upgrade_steps : opt Versions;
   response_timestamp_seconds : opt nat64;
   target_version : opt Version;
+  deployed_version : opt Version;
   upgrade_journal : opt UpgradeJournal;
 };
 

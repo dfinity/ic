@@ -1,3 +1,6 @@
+use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
+use crate::cached_upgrade_steps::CachedUpgradeSteps;
+use crate::pb::v1::AdvanceSnsTargetVersion;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     governance::{
@@ -12,16 +15,16 @@ use crate::{
         proposal,
         proposal::Action,
         proposal_data::{
-            self, ActionAuxiliary as ActionAuxiliaryPb, MintSnsTokensActionAuxiliary,
-            TransferSnsTreasuryFundsActionAuxiliary,
+            self, ActionAuxiliary as ActionAuxiliaryPb, AdvanceSnsTargetVersionActionAuxiliary,
+            MintSnsTokensActionAuxiliary, TransferSnsTreasuryFundsActionAuxiliary,
         },
         transfer_sns_treasury_funds::TransferFrom,
         DeregisterDappCanisters, ExecuteGenericNervousSystemFunction, Governance, GovernanceError,
         LogVisibility, ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata,
         MintSnsTokens, Motion, NervousSystemFunction, NervousSystemParameters, Proposal,
         ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-        RegisterDappCanisters, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-        UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
+        RegisterDappCanisters, SnsVersion, Tally, TransferSnsTreasuryFunds,
+        UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
     },
     sns_upgrade::{get_proposal_id_that_added_wasm, get_upgrade_params, UpgradeSnsParams},
     types::Environment,
@@ -169,10 +172,11 @@ pub(crate) fn get_action_auxiliary(
         })
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum ActionAuxiliary {
     TransferSnsTreasuryFunds(Valuation),
     MintSnsTokens(Valuation),
+    AdvanceSnsTargetVersion(Version),
     None,
 }
 
@@ -186,6 +190,21 @@ impl ActionAuxiliary {
                 format!(
                     "Missing supporting information. Specifically, \
                      no treasury valuation factors: {:#?}",
+                    wrong,
+                ),
+            )),
+        }
+    }
+
+    pub fn unwrap_advance_sns_target_version_or_err(self) -> Result<Version, GovernanceError> {
+        match self {
+            Self::AdvanceSnsTargetVersion(new_target) => Ok(new_target),
+
+            wrong => Err(GovernanceError::new_with_message(
+                ErrorType::InconsistentInternalData,
+                format!(
+                    "Missing supporting information. Specifically, \
+                     no new target version: {:#?}",
                     wrong,
                 ),
             )),
@@ -215,6 +234,14 @@ impl TryFrom<ActionAuxiliary> for Option<ActionAuxiliaryPb> {
                     valuation: Some(ValuationPb::try_from(valuation)?),
                 },
             )),
+
+            ActionAuxiliary::AdvanceSnsTargetVersion(target_version) => {
+                Some(ActionAuxiliaryPb::AdvanceSnsTargetVersion(
+                    AdvanceSnsTargetVersionActionAuxiliary {
+                        target_version: Some(SnsVersion::from(target_version)),
+                    },
+                ))
+            }
         };
 
         Ok(result)
@@ -244,6 +271,21 @@ impl TryFrom<&Option<ActionAuxiliaryPb>> for ActionAuxiliary {
                     .map_err(|err| format!("Invalid ActionAuxiliaryPb {:?}: {}", src, err))?;
 
                 ActionAuxiliary::MintSnsTokens(valuation)
+            }
+            Some(ActionAuxiliaryPb::AdvanceSnsTargetVersion(action_auxiliary)) => {
+                let AdvanceSnsTargetVersionActionAuxiliary {
+                    target_version: Some(target_version),
+                } = action_auxiliary
+                else {
+                    return Err(
+                        "Invalid ActionAuxiliaryPb: target_version must be specified.".to_string(),
+                    );
+                };
+
+                let target_version = Version::try_from(target_version.clone())
+                    .map_err(|err| format!("Invalid ActionAuxiliaryPb {:?}: {}", src, err))?;
+
+                ActionAuxiliary::AdvanceSnsTargetVersion(target_version)
             }
         };
 
@@ -441,6 +483,18 @@ pub(crate) async fn validate_and_render_action(
         }
         proposal::Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
             validate_and_render_manage_dapp_canister_settings(manage_dapp_canister_settings)
+        }
+        proposal::Action::AdvanceSnsTargetVersion(advance_sns_target_version) => {
+            let deployed_version = governance_proto.deployed_version_or_err()?;
+            let cached_upgrade_steps = governance_proto.cached_upgrade_steps_or_err()?;
+            let upgrade_steps = cached_upgrade_steps.take_from(&deployed_version)?;
+
+            return validate_and_render_advance_sns_target_version_proposal(
+                env.canister_id(),
+                upgrade_steps,
+                governance_proto.target_version.clone(),
+                advance_sns_target_version,
+            );
         }
     }
     .map(|rendering| (rendering, ActionAuxiliary::None))
@@ -1668,6 +1722,83 @@ fn validate_and_render_manage_dapp_canister_settings(
     }
 }
 
+/// Attempts to validate an `AdvanceSnsTargetVersion` action and render its human-readable text.
+/// Invalidates the action in the following cases:
+/// - There are no pending upgrades.
+/// - `new_target` is equal to `current_version`.
+/// - `new_target` comes before `current_target_version` along the `upgrade_steps`.
+///
+/// Details:
+/// 1. Validates the action's `new_target` field, if it is `Some(new_target)`.
+/// 2. Identifies the `new_target`, either based on the above, or using `upgrade_steps`.
+/// 3. Renders the Markdown proposal description.
+/// 4. Returns the rendering and the identified `new_target` (guaranteed to be `Some`)
+///    as `ActionAuxiliary`. This returned `new_target` should be used for executing this action,
+///    assuming the proposal will be adopted.
+fn validate_and_render_advance_sns_target_version_proposal(
+    sns_governance_canister_id: CanisterId,
+    upgrade_steps: CachedUpgradeSteps,
+    current_target_version: Option<Version>,
+    advance_sns_target_version: &AdvanceSnsTargetVersion,
+) -> Result<(String, ActionAuxiliary), String> {
+    if upgrade_steps.is_empty() {
+        return Err(
+            "Cannot advance SNS target version: there are no pending upgrades.".to_string(),
+        );
+    }
+
+    let new_target = if let Some(new_target) = &advance_sns_target_version.new_target {
+        let new_target = Version::try_from(new_target.clone()).map_err(|err| {
+            format!(
+                "Cannot validate and render AdvanceSnsTargetVersion proposal: {}",
+                err
+            )
+        })?;
+
+        upgrade_steps.validate_new_target_version(&new_target)?;
+
+        new_target
+    } else {
+        upgrade_steps.last().clone()
+    };
+
+    if let Some(current_target_version) = current_target_version {
+        let new_target_is_not_ahead_of_current_target =
+            upgrade_steps.contains_in_order(&new_target, &current_target_version)?;
+        if new_target_is_not_ahead_of_current_target {
+            return Err(format!(
+                "SNS target already set to version {}.",
+                current_target_version
+            ));
+        }
+    }
+
+    let valid_timestamp_seconds = upgrade_steps.approximate_time_of_validity_timestamp_seconds();
+
+    let current_target_versions_render =
+        render_two_versions_as_markdown_table(upgrade_steps.current(), &new_target);
+
+    let upgrade_journal_url_render = format!(
+        "https://{}.raw.icp0.io/journal/json",
+        sns_governance_canister_id,
+    );
+
+    let render = format!(
+        "# Proposal to advance SNS target version\n\n\
+         {current_target_versions_render}\n\n\
+         ### Upgrade steps\n\n\
+         {upgrade_steps}\n\n\
+         ### Monitoring the upgrade process\n\n\
+         Please note: the upgrade steps above (valid around timestamp {valid_timestamp_seconds} \
+         seconds) might change during this proposal's voting period. Such changes are unlikely and \
+         are subject to NNS community's approval.\n\n\
+         The **upgrade journal** provides up-to-date information on this SNS's upgrade process:\n\n\
+         {upgrade_journal_url_render}"
+    );
+
+    Ok((render, ActionAuxiliary::AdvanceSnsTargetVersion(new_target)))
+}
+
 impl ProposalData {
     /// Returns the proposal's decision status. See [ProposalDecisionStatus] in the SNS's
     /// proto for more information.
@@ -2197,6 +2328,30 @@ impl ProposalData {
             ballots: limited_ballots,
         }
     }
+
+    /// "Upgrade proposals" are those that upgrade the SNS or a canister it controls.
+    pub(crate) fn is_upgrade_proposal(&self) -> bool {
+        let action_is_upgrade = matches!(
+            self.proposal,
+            Some(Proposal {
+                action: Some(
+                    Action::UpgradeSnsControlledCanister(_)
+                        | Action::UpgradeSnsToNextVersion(_)
+                        | Action::ManageLedgerParameters(_)
+                ),
+                ..
+            })
+        );
+        // In production, the above condition is exactly what we want. However, in some tests, we only set the action_id
+        // and not the action.
+        let upgrade_action_ids: [u64; 3] = [
+            (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into(),
+            (&Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default())).into(),
+            (&Action::ManageLedgerParameters(ManageLedgerParameters::default())).into(),
+        ];
+        let action_id_is_upgrade = upgrade_action_ids.contains(&self.action);
+        action_is_upgrade || action_id_is_upgrade
+    }
 }
 
 impl ProposalDecisionStatus {
@@ -2419,6 +2574,9 @@ mod treasury_tests;
 
 #[cfg(test)]
 mod minting_tests;
+
+#[cfg(test)]
+mod advance_sns_target_version;
 
 #[cfg(test)]
 mod tests {

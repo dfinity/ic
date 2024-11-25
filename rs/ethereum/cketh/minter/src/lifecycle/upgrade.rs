@@ -26,6 +26,10 @@ pub struct UpgradeArg {
     pub last_erc20_scraped_block_number: Option<Nat>,
     #[cbor(n(7), with = "crate::cbor::principal::option")]
     pub evm_rpc_id: Option<Principal>,
+    #[n(8)]
+    pub deposit_with_subaccount_helper_contract_address: Option<String>,
+    #[cbor(n(9), with = "crate::cbor::nat::option")]
+    pub last_deposit_with_subaccount_scraped_block_number: Option<Nat>,
 }
 
 pub fn post_upgrade(upgrade_args: Option<UpgradeArg>) {

@@ -1,16 +1,15 @@
 //! Defines canister threshold signature types.
-use crate::crypto::canister_threshold_sig::error::impl_display_using_debug;
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptType,
     IDkgUnmaskedTranscriptOrigin,
 };
+use crate::crypto::impl_display_using_debug;
 use crate::crypto::AlgorithmId;
+use crate::crypto::ExtendedDerivationPath;
 use crate::{NumberOfNodes, Randomness};
 use core::fmt;
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::NodeId;
 use ic_crypto_internal_types::NodeIndex;
-#[cfg(test)]
-use ic_exhaustive_derive::ExhaustiveSet;
 use serde::{Deserialize, Serialize};
 use std::fmt::Formatter;
 
@@ -274,34 +273,6 @@ impl EcdsaPreSignatureQuadruple {
     }
 }
 
-/// Metadata used to derive a specific ECDSA keypair.
-#[serde_with::serde_as]
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct ExtendedDerivationPath {
-    pub caller: PrincipalId,
-    #[serde_as(as = "Vec<serde_with::Bytes>")]
-    pub derivation_path: Vec<Vec<u8>>,
-}
-
-impl fmt::Debug for ExtendedDerivationPath {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "ExtendedDerivationPath {{ caller: {:?}", self.caller)?;
-        write!(f, ", derivation_path: {{ ")?;
-        let mut first_path = true;
-        for path in &self.derivation_path {
-            if !first_path {
-                write!(f, ", ")?;
-                first_path = false;
-            }
-            write!(f, "{}", hex::encode(path))?;
-        }
-        write!(f, " }}")?;
-        write!(f, " }}")?;
-        Ok(())
-    }
-}
-
 /// All inputs required to generate a canister threshold signature.
 #[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct ThresholdEcdsaSigInputs {
@@ -525,6 +496,8 @@ pub struct ThresholdSchnorrSigInputs {
     derivation_path: ExtendedDerivationPath,
     #[serde(with = "serde_bytes")]
     message: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    taproot_tree_root: Option<Vec<u8>>,
     nonce: Randomness,
     presig_transcript: SchnorrPreSignatureTranscript,
     key_transcript: IDkgTranscript,
@@ -537,6 +510,9 @@ impl fmt::Debug for ThresholdSchnorrSigInputs {
         write!(f, "ThresholdSchnorrSigInputs {{ ")?;
         write!(f, "derivation_path: {:?}", self.derivation_path)?;
         write!(f, ", message: 0x{}", hex::encode(&self.message))?;
+        if let Some(ttr) = &self.taproot_tree_root {
+            write!(f, ", taproot_tree_root: 0x{}", hex::encode(ttr))?;
+        }
         write!(f, ", nonce: 0x{}", hex::encode(self.nonce.as_ref()))?;
         write!(f, ", presig_transcript: {}", self.presig_transcript)?;
         write!(f, ", key_transcript: {}", self.key_transcript.transcript_id)?;
@@ -565,6 +541,7 @@ impl ThresholdSchnorrSigInputs {
     pub fn new(
         derivation_path: &ExtendedDerivationPath,
         message: &[u8],
+        taproot_tree_root: Option<&[u8]>,
         nonce: Randomness,
         presig_transcript: SchnorrPreSignatureTranscript,
         key_transcript: IDkgTranscript,
@@ -573,10 +550,12 @@ impl ThresholdSchnorrSigInputs {
         Self::check_algorithm_id_validity(key_transcript.algorithm_id)?;
         Self::check_receivers_consistency(&presig_transcript, &key_transcript)?;
         Self::check_presig_transcript_origin(&presig_transcript)?;
+        Self::check_taproot_tree_root_argument(key_transcript.algorithm_id, taproot_tree_root)?;
 
         Ok(Self {
             derivation_path: derivation_path.clone(),
             message: message.to_vec(),
+            taproot_tree_root: taproot_tree_root.map(Vec::from),
             nonce,
             presig_transcript,
             key_transcript,
@@ -589,6 +568,10 @@ impl ThresholdSchnorrSigInputs {
 
     pub fn message(&self) -> &[u8] {
         &self.message
+    }
+
+    pub fn taproot_tree_root(&self) -> Option<&[u8]> {
+        self.taproot_tree_root.as_deref()
     }
 
     pub fn nonce(&self) -> &Randomness {
@@ -672,6 +655,24 @@ impl ThresholdSchnorrSigInputs {
                     "Presignature transcript: {origin:?}",
                 )),
             ),
+        }
+    }
+
+    fn check_taproot_tree_root_argument(
+        algorithm: AlgorithmId,
+        taproot_tree_root: Option<&[u8]>,
+    ) -> Result<(), error::ThresholdSchnorrSigInputsCreationError> {
+        match taproot_tree_root {
+            None => Ok(()),
+            Some(ttr) => {
+                if algorithm == AlgorithmId::ThresholdSchnorrBip340
+                    && (ttr.is_empty() || ttr.len() == 32)
+                {
+                    Ok(())
+                } else {
+                    Err(error::ThresholdSchnorrSigInputsCreationError::InvalidUseOfTaprootHash)
+                }
+            }
         }
     }
 }
