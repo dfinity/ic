@@ -31,7 +31,7 @@ mod display_and_debug {
             derivation_path: ExtendedDerivationPath { caller: 7xzs3-rqraa-aaaaa-aaaap-2ai, \
             derivation_path: { 6470 } }, \
             derivation_id: 0x646964, \
-            encryption_key: 0x656b \
+            encryption_public_key: 0x656b \
         }"
         .to_string();
 
