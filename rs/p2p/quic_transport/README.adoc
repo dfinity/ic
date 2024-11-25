@@ -8,9 +8,6 @@ The IC Transport layer enables message delivery between nodes within a subnet.
 
 == High Level Application Requirements ==
 
-[cols="1,1"]
-|===
-
 1. RPC-like library that abstracts away communication between nodes.
 2. Supports multitenancy of application protocols.
 3. Works in P2P network with Byzantine peers.
