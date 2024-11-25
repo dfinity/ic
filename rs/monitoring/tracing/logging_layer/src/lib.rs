@@ -75,7 +75,7 @@ pub fn logging_layer(
             LogDestination::Stderr => Box::new(std::io::stderr()),
             LogDestination::Stdout => Box::new(std::io::stdout()),
             LogDestination::File(path) => {
-                Box::new(std::fs::File::create(path).expect("Creating a file should succeed."))
+                Box::new(std::fs::File::create(path).expect("Creating a file must succeed."))
             }
         }
     };
