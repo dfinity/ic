@@ -186,9 +186,9 @@ async fn fanout() {
         let mut futures = vec![];
         for _ in 0..PER_SUBNET_RATE.with(|r| *r.borrow()) {
             let idx = RNG.with(|rng| rng.borrow_mut().gen_range(0..canisters.len()));
-            let canister = canisters[idx].clone();
+            let canister = canisters[idx];
 
-            let seq_no = STATE.with(|s| s.borrow_mut().next_out_seq_no(canister.clone()));
+            let seq_no = STATE.with(|s| s.borrow_mut().next_out_seq_no(canister));
 
             let payload_size = PAYLOAD_SIZE.with(|p| *p.borrow()) as usize;
             let payload = Request {
@@ -198,7 +198,7 @@ async fn fanout() {
             };
 
             let res = call::<(Request,), (Reply,)>(
-                Principal::try_from(canister.clone()).unwrap(),
+                Principal::try_from(canister).unwrap(),
                 "handle_request",
                 (payload,),
             );
