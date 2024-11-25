@@ -33,7 +33,11 @@ impl V2CallAgent {
         }
     }
 
-    pub async fn call(&self, canister_id: PrincipalId, method_name: String) -> anyhow::Result<()> {
+    pub(crate) async fn call(
+        &self,
+        canister_id: PrincipalId,
+        method_name: String,
+    ) -> anyhow::Result<()> {
         let ingress_expiry = (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
 
         let update = HttpCanisterUpdate {
