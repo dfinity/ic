@@ -19,7 +19,7 @@ use ic_types::{
     batch::BatchPayload,
     consensus::{
         certification::{Certification, CertificationMessage, CertificationShare},
-        dkg::Dealings,
+        dkg::DataPayload,
         BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ConsensusMessageHash,
         ConsensusMessageHashable, EquivocationProof, Finalization, FinalizationShare, HasHeight,
         Notarization, NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape,
@@ -431,7 +431,7 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
                                 Box::new(move || {
                                     BlockPayload::Data(DataPayload {
                                         batch: BatchPayload::default(),
-                                        dealings: Dealings::new_empty(start_height),
+                                        dkg: Dealings::new_empty(start_height),
                                         idkg: None,
                                     })
                                 }),
