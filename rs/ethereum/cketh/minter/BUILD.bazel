@@ -42,9 +42,9 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-ethereum-types",
+        "//packages/icrc-cbor",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/cross-chain/cbor",
         "//rs/crypto/secp256k1",
         "//rs/ethereum/evm-rpc-client",
         "//rs/phantom_newtype",

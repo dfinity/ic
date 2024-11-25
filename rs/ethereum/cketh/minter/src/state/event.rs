@@ -42,7 +42,7 @@ pub enum EventType {
         #[n(0)]
         event_source: EventSource,
         /// The transaction index on the ckETH ledger.
-        #[cbor(n(1), with = "ic_cross_chain_cbor::id")]
+        #[cbor(n(1), with = "icrc_cbor::id")]
         mint_block_index: LedgerMintIndex,
     },
     /// The minter processed the helper smart contract logs up to the specified height.
@@ -58,7 +58,7 @@ pub enum EventType {
     /// The minter created a new transaction to handle a withdrawal request.
     #[n(8)]
     CreatedTransaction {
-        #[cbor(n(0), with = "ic_cross_chain_cbor::id")]
+        #[cbor(n(0), with = "icrc_cbor::id")]
         withdrawal_id: LedgerBurnIndex,
         #[n(1)]
         transaction: Eip1559TransactionRequest,
@@ -67,7 +67,7 @@ pub enum EventType {
     #[n(9)]
     SignedTransaction {
         /// The withdrawal identifier.
-        #[cbor(n(0), with = "ic_cross_chain_cbor::id")]
+        #[cbor(n(0), with = "icrc_cbor::id")]
         withdrawal_id: LedgerBurnIndex,
         /// The signed transaction.
         #[n(1)]
@@ -77,7 +77,7 @@ pub enum EventType {
     #[n(10)]
     ReplacedTransaction {
         /// The withdrawal identifier.
-        #[cbor(n(0), with = "ic_cross_chain_cbor::id")]
+        #[cbor(n(0), with = "icrc_cbor::id")]
         withdrawal_id: LedgerBurnIndex,
         /// The replacement transaction.
         #[n(1)]
@@ -87,7 +87,7 @@ pub enum EventType {
     #[n(11)]
     FinalizedTransaction {
         /// The withdrawal identifier.
-        #[cbor(n(0), with = "ic_cross_chain_cbor::id")]
+        #[cbor(n(0), with = "icrc_cbor::id")]
         withdrawal_id: LedgerBurnIndex,
         /// The receipt for the finalized transaction.
         #[n(1)]
@@ -112,7 +112,7 @@ pub enum EventType {
         #[n(0)]
         event_source: EventSource,
         /// The transaction index on the ckETH ledger.
-        #[cbor(n(1), with = "ic_cross_chain_cbor::id")]
+        #[cbor(n(1), with = "icrc_cbor::id")]
         mint_block_index: LedgerMintIndex,
         #[n(2)]
         ckerc20_token_symbol: String,
@@ -128,9 +128,9 @@ pub enum EventType {
     },
     #[n(19)]
     ReimbursedErc20Withdrawal {
-        #[cbor(n(0), with = "ic_cross_chain_cbor::id")]
+        #[cbor(n(0), with = "icrc_cbor::id")]
         cketh_ledger_burn_index: LedgerBurnIndex,
-        #[cbor(n(1), with = "ic_cross_chain_cbor::principal")]
+        #[cbor(n(1), with = "icrc_cbor::principal")]
         ckerc20_ledger_id: Principal,
         #[n(2)]
         reimbursed: Reimbursed,

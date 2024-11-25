@@ -128,10 +128,10 @@ pub struct EthWithdrawalRequest {
     #[n(1)]
     pub destination: Address,
     /// The transaction ID of the ckETH burn operation.
-    #[cbor(n(2), with = "ic_cross_chain_cbor::id")]
+    #[cbor(n(2), with = "icrc_cbor::id")]
     pub ledger_burn_index: LedgerBurnIndex,
     /// The owner of the account from which the minter burned ckETH.
-    #[cbor(n(3), with = "ic_cross_chain_cbor::principal")]
+    #[cbor(n(3), with = "icrc_cbor::principal")]
     pub from: Principal,
     /// The subaccount from which the minter burned ckETH.
     #[n(4)]
@@ -154,19 +154,19 @@ pub struct Erc20WithdrawalRequest {
     #[n(2)]
     pub destination: Address,
     /// The transaction ID of the ckETH burn operation on the ckETH ledger.
-    #[cbor(n(3), with = "ic_cross_chain_cbor::id")]
+    #[cbor(n(3), with = "icrc_cbor::id")]
     pub cketh_ledger_burn_index: LedgerBurnIndex,
     /// Address of the ERC-20 smart contract that is the message call's recipient.
     #[n(4)]
     pub erc20_contract_address: Address,
     /// The ckERC20 ledger on which the minter burned the ckERC20 tokens.
-    #[cbor(n(5), with = "ic_cross_chain_cbor::principal")]
+    #[cbor(n(5), with = "icrc_cbor::principal")]
     pub ckerc20_ledger_id: Principal,
     /// The transaction ID of the ckERC20 burn operation on the ckERC20 ledger.
-    #[cbor(n(6), with = "ic_cross_chain_cbor::id")]
+    #[cbor(n(6), with = "icrc_cbor::id")]
     pub ckerc20_ledger_burn_index: LedgerBurnIndex,
     /// The owner of the account from which the minter burned ckETH.
-    #[cbor(n(7), with = "ic_cross_chain_cbor::principal")]
+    #[cbor(n(7), with = "icrc_cbor::principal")]
     pub from: Principal,
     /// The subaccount from which the minter burned ckETH.
     #[n(8)]
@@ -181,18 +181,18 @@ pub enum ReimbursementIndex {
     #[n(0)]
     CkEth {
         /// Burn index on the ckETH ledger
-        #[cbor(n(0), with = "ic_cross_chain_cbor::id")]
+        #[cbor(n(0), with = "icrc_cbor::id")]
         ledger_burn_index: LedgerBurnIndex,
     },
     #[n(1)]
     CkErc20 {
-        #[cbor(n(0), with = "ic_cross_chain_cbor::id")]
+        #[cbor(n(0), with = "icrc_cbor::id")]
         cketh_ledger_burn_index: LedgerBurnIndex,
         /// The ckERC20 ledger canister ID identifying the ledger on which the burn to be reimbursed was made.
-        #[cbor(n(1), with = "ic_cross_chain_cbor::principal")]
+        #[cbor(n(1), with = "icrc_cbor::principal")]
         ledger_id: Principal,
         /// Burn index on the ckERC20 ledger
-        #[cbor(n(2), with = "ic_cross_chain_cbor::id")]
+        #[cbor(n(2), with = "icrc_cbor::id")]
         ckerc20_ledger_burn_index: LedgerBurnIndex,
     },
 }
@@ -236,12 +236,12 @@ impl ReimbursementIndex {
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct ReimbursementRequest {
     /// Burn index on the ledger that should be reimbursed.
-    #[cbor(n(0), with = "ic_cross_chain_cbor::id")]
+    #[cbor(n(0), with = "icrc_cbor::id")]
     pub ledger_burn_index: LedgerBurnIndex,
     /// The amount that should be reimbursed in the smallest denomination.
     #[n(1)]
     pub reimbursed_amount: CkTokenAmount,
-    #[cbor(n(2), with = "ic_cross_chain_cbor::principal")]
+    #[cbor(n(2), with = "icrc_cbor::principal")]
     pub to: Principal,
     #[n(3)]
     pub to_subaccount: Option<LedgerSubaccount>,
@@ -254,9 +254,9 @@ pub struct ReimbursementRequest {
 
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct Reimbursed {
-    #[cbor(n(0), with = "ic_cross_chain_cbor::id")]
+    #[cbor(n(0), with = "icrc_cbor::id")]
     pub reimbursed_in_block: LedgerMintIndex,
-    #[cbor(n(1), with = "ic_cross_chain_cbor::id")]
+    #[cbor(n(1), with = "icrc_cbor::id")]
     pub burn_in_block: LedgerBurnIndex,
     /// The amount reimbursed in the smallest denomination.
     #[n(2)]

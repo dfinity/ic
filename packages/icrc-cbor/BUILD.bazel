@@ -3,10 +3,8 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 rust_library(
-    name = "cbor",
+    name = "icrc-cbor",
     srcs = glob(["src/*.rs"]),
-    crate_name = "ic_cross_chain_cbor",
-    version = "0.1.0",
     deps = [
         # Keep sorted.
         "//rs/phantom_newtype",
@@ -20,7 +18,7 @@ rust_library(
 
 rust_test(
     name = "unit_tests",
-    crate = ":cbor",
+    crate = ":icrc-cbor",
     deps = [
         "@crate_index//:proptest",
     ],
