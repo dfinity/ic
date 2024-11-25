@@ -97,7 +97,7 @@ rust_binary(
     srcs = ["bin/instrument_wasm.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":embedders"],
+    deps = DEPENDENCIES + ["@crate_index//:bincode", "@crate_index//:clap", ":embedders"],
 )
 
 rust_test(

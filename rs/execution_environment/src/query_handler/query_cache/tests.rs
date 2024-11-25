@@ -91,6 +91,7 @@ fn builder_with_query_caching() -> ExecutionTestBuilder {
     ExecutionTestBuilder::new()
         .with_composite_queries()
         .with_query_stats()
+        .with_precompiled_universal_canister(true)
 }
 
 /// Return `ExecutionTestBuilder` with specified query cache `capacity`.

@@ -33,30 +33,44 @@ rust_library(
     deps = LIB_DEPENDENCIES,
 )
 
-# rust_canister(
-#     name = "universal_canister",
-#     srcs = glob(["src/*.rs"]),
-#     aliases = ALIASES,
-#     crate_features = ["heartbeat"],
-#     proc_macro_deps = MACRO_DEPENDENCIES,
-#     service_file = ":interface.did",
-#     deps = LIB_DEPENDENCIES + DEPENDENCIES,
-# )
-
+rust_canister(
+    name = "universal_canister",
+    srcs = glob(["src/*.rs"]),
+    aliases = ALIASES,
+    crate_features = ["heartbeat"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":interface.did",
+    deps = LIB_DEPENDENCIES + DEPENDENCIES,
+)
 
 genrule(
-    name = "universal_canister",
-    srcs = ["empty.wasm.gz"],
-    outs = ["universal_canister.wasm.gz"],
+    name = "universal_canister_serialized_module",
+    srcs = [":universal_canister"],
+    outs = ["universal_canister.module"],
     visibility = ["//visibility:public"],
     testonly = False,
-    message = "Copying universal canister",
-    tools = [],
+    message = "Compiling universal canister with Wasmtime",
+    tools = ["@pigz", "//rs/embedders:instrument-wasm"],
     cmd_bash = " && ".join([
-        "cp {empty_wasm} $@",
+        "{pigz} --decompress --no-name {input_wasm} --stdout > $@.unzip",
+        "{instrument_wasm} $@.unzip -a serialized-module > $@", 
     ])
-        .format(empty_wasm = "$(location empty.wasm.gz)"),
+        .format(input_wasm = "$(location :universal_canister)", pigz = "$(location @pigz)", instrument_wasm = "$(location //rs/embedders:instrument-wasm)"),
 )
+
+# genrule(
+#     name = "universal_canister",
+#     srcs = ["empty.wasm.gz"],
+#     outs = ["universal_canister.wasm.gz"],
+#     visibility = ["//visibility:public"],
+#     testonly = False,
+#     message = "Copying universal canister",
+#     tools = [],
+#     cmd_bash = " && ".join([
+#         "cp {empty_wasm} $@",
+#     ])
+#         .format(empty_wasm = "$(location empty.wasm.gz)"),
+# )
 
 rust_canister(
     name = "universal_canister_no_heartbeat",
