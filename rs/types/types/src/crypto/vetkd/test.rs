@@ -24,7 +24,7 @@ mod display_and_debug {
                 derivation_path: vec![b"dp".to_vec()],
             },
             derivation_id: b"did".to_vec(),
-            encryption_key: b"ek".to_vec(),
+            encryption_public_key: b"ek".to_vec(),
         };
         let output = "VetKdArgs { \
             ni_dkg_id: NiDkgId { start_block_height: 7, dealer_subnet: ot5wk-sbkaa-aaaaa-aaaap-yai, dkg_tag: HighThreshold, target_subnet: Remote(0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a) }, \
