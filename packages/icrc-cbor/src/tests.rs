@@ -1,7 +1,6 @@
 use candid::{Nat, Principal};
 use ethnum::{u256, U256};
 use minicbor::{Decode, Encode};
-use phantom_newtype::Id;
 use proptest::collection::vec as pvec;
 use proptest::prelude::*;
 
@@ -15,9 +14,6 @@ where
     prop_assert_eq!(v, &decoded);
     Ok(())
 }
-
-enum IdTag {}
-type U64Newtype = Id<IdTag, u64>;
 
 #[derive(Eq, PartialEq, Debug, Decode, Encode)]
 struct U256Container {
@@ -49,12 +45,6 @@ struct OptPrincipalContainer {
     pub value: Option<Principal>,
 }
 
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
-struct U64NewtypeContainer {
-    #[cbor(n(0), with = "crate::id")]
-    pub value: U64Newtype,
-}
-
 proptest! {
     #[test]
     fn u256_encoding_roundtrip((hi, lo) in (any::<u128>(), any::<u128>())) {
@@ -67,13 +57,6 @@ proptest! {
     fn u256_small_value_encoding_roundtrip(n in any::<u64>()) {
         check_roundtrip(&U256Container {
             value: u256::from(n),
-        })?;
-    }
-
-    #[test]
-    fn u64_id_encoding_roundtrip(n in any::<u64>()) {
-        check_roundtrip(&U64NewtypeContainer {
-            value: U64Newtype::new(n),
         })?;
     }
 
