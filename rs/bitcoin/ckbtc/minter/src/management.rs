@@ -1,17 +1,18 @@
 //! This module contains async functions for interacting with the management canister.
 
 use crate::logs::P0;
-use crate::tx;
 use crate::ECDSAPublicKey;
+use crate::{tx, CanisterRuntime};
 use candid::{CandidType, Principal};
 use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
     MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
 };
-use ic_btc_kyt::{CheckAddressArgs, CheckAddressResponse};
+use ic_btc_kyt::{
+    CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
+};
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
-use ic_ckbtc_kyt::{DepositRequest, Error as KytError, FetchAlertsResponse, WithdrawalAttempt};
 use ic_management_canister_types::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
 };
@@ -87,7 +88,7 @@ impl Reason {
     }
 }
 
-async fn call<I, O>(method: &str, payment: u64, input: &I) -> Result<O, CallError>
+pub(crate) async fn call<I, O>(method: &str, payment: u64, input: &I) -> Result<O, CallError>
 where
     I: CandidType,
     O: CandidType + DeserializeOwned,
@@ -134,11 +135,12 @@ pub enum CallSource {
 }
 
 /// Fetches the full list of UTXOs for the specified address.
-pub async fn get_utxos(
+pub async fn get_utxos<R: CanisterRuntime>(
     network: Network,
     address: &Address,
     min_confirmations: u32,
     source: CallSource,
+    runtime: &R,
 ) -> Result<GetUtxosResponse, CallError> {
     // NB. The minimum number of cycles that need to be sent with the call is 10B (4B) for
     // Bitcoin mainnet (Bitcoin testnet):
@@ -150,17 +152,18 @@ pub async fn get_utxos(
 
     // Calls "bitcoin_get_utxos" method with the specified argument on the
     // management canister.
-    async fn bitcoin_get_utxos(
+    async fn bitcoin_get_utxos<R: CanisterRuntime>(
         req: &GetUtxosRequest,
         cycles: u64,
         source: CallSource,
+        runtime: &R,
     ) -> Result<GetUtxosResponse, CallError> {
         match source {
             CallSource::Client => &crate::metrics::GET_UTXOS_CLIENT_CALLS,
             CallSource::Minter => &crate::metrics::GET_UTXOS_MINTER_CALLS,
         }
         .with(|cell| cell.set(cell.get() + 1));
-        call("bitcoin_get_utxos", cycles, req).await
+        runtime.bitcoin_get_utxos(req, cycles).await
     }
 
     let mut response = bitcoin_get_utxos(
@@ -171,6 +174,7 @@ pub async fn get_utxos(
         },
         get_utxos_cost_cycles,
         source,
+        runtime,
     )
     .await?;
 
@@ -186,6 +190,7 @@ pub async fn get_utxos(
             },
             get_utxos_cost_cycles,
             source,
+            runtime,
         )
         .await?;
 
@@ -298,57 +303,6 @@ pub async fn sign_with_ecdsa(
     }
 }
 
-/// Requests alerts for the given UTXO.
-pub async fn fetch_utxo_alerts(
-    kyt_principal: Principal,
-    caller: Principal,
-    utxo: &Utxo,
-) -> Result<Result<FetchAlertsResponse, KytError>, CallError> {
-    let (res,): (Result<FetchAlertsResponse, KytError>,) = ic_cdk::api::call::call(
-        kyt_principal,
-        "fetch_utxo_alerts",
-        (DepositRequest {
-            caller,
-            txid: utxo.outpoint.txid.into(),
-            vout: utxo.outpoint.vout,
-        },),
-    )
-    .await
-    .map_err(|(code, message)| CallError {
-        method: "fetch_utxo_alerts".to_string(),
-        reason: Reason::from_reject(code, message),
-    })?;
-    Ok(res)
-}
-
-/// Requests alerts for the given Bitcoin address.
-pub async fn fetch_withdrawal_alerts(
-    kyt_principal: Principal,
-    caller: Principal,
-    address: String,
-    amount: u64,
-) -> Result<Result<FetchAlertsResponse, KytError>, CallError> {
-    let now = ic_cdk::api::time();
-    let id = format!("{caller}:{address}:{amount}:{now}");
-    let (res,): (Result<FetchAlertsResponse, KytError>,) = ic_cdk::api::call::call(
-        kyt_principal,
-        "fetch_withdrawal_alerts",
-        (WithdrawalAttempt {
-            caller,
-            id,
-            amount,
-            address,
-            timestamp_nanos: now,
-        },),
-    )
-    .await
-    .map_err(|(code, message)| CallError {
-        method: "fetch_withdrawal_alerts".to_string(),
-        reason: Reason::from_reject(code, message),
-    })?;
-    Ok(res)
-}
-
 /// Check if the given Bitcoin address is blocked.
 pub async fn check_withdrawal_destination_address(
     kyt_principal: Principal,
@@ -362,6 +316,28 @@ pub async fn check_withdrawal_destination_address(
     .await
     .map_err(|(code, message)| CallError {
         method: "check_address".to_string(),
+        reason: Reason::from_reject(code, message),
+    })?;
+    Ok(res)
+}
+
+/// Check if the given UTXO passes KYT.
+pub async fn check_transaction(
+    kyt_principal: Principal,
+    utxo: &Utxo,
+    cycle_payment: u128,
+) -> Result<CheckTransactionResponse, CallError> {
+    let (res,): (CheckTransactionResponse,) = ic_cdk::api::call::call_with_payment128(
+        kyt_principal,
+        "check_transaction",
+        (CheckTransactionArgs {
+            txid: utxo.outpoint.txid.as_ref().to_vec(),
+        },),
+        cycle_payment,
+    )
+    .await
+    .map_err(|(code, message)| CallError {
+        method: "check_transaction".to_string(),
         reason: Reason::from_reject(code, message),
     })?;
     Ok(res)

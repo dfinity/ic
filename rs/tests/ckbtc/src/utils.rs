@@ -410,12 +410,13 @@ pub fn get_btc_client(env: &TestEnv) -> Client {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     Client::new(
         &format!(
-            "http://[{}]:8332",
-            deployed_universal_vm.get_vm().unwrap().ipv6
+            "http://[{}]:{}",
+            deployed_universal_vm.get_vm().unwrap().ipv6,
+            crate::BITCOIND_RPC_PORT
         ),
         Auth::UserPass(
-            "btc-dev-preview".to_string(),
-            "Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=".to_string(),
+            crate::BITCOIND_RPC_USER.to_string(),
+            crate::BITCOIND_RPC_PASSWORD.to_string(),
         ),
     )
     .unwrap()
