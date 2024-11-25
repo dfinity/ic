@@ -227,7 +227,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["typed-header"],
             ),
             "axum-server": crate.spec(
-                version = "^0.7.1",
+                version = "^0.6.0",
                 features = [
                     "tls-rustls",
                 ],
