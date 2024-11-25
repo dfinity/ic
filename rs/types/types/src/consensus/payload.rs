@@ -244,9 +244,9 @@ impl From<dkg::Payload> for BlockPayload {
                 dkg: summary,
                 idkg: None,
             }),
-            dkg::Payload::Data(dealings) => BlockPayload::Data(DataPayload {
+            dkg::Payload::Data(dkg) => BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dkg: dealings,
+                dkg,
                 idkg: idkg::Payload::default(),
             }),
         }

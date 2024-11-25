@@ -1388,18 +1388,14 @@ impl TryFrom<pb::Block> for Block {
 
                 BlockPayload::Summary(SummaryPayload { dkg: summary, idkg })
             }
-            dkg::Payload::Data(dealings) => {
+            dkg::Payload::Data(dkg) => {
                 let idkg = block
                     .idkg_payload
                     .as_ref()
                     .map(|idkg| idkg.try_into())
                     .transpose()?;
 
-                BlockPayload::Data(DataPayload {
-                    batch,
-                    dkg: dealings,
-                    idkg,
-                })
+                BlockPayload::Data(DataPayload { batch, dkg, idkg })
             }
         };
         Ok(Block {

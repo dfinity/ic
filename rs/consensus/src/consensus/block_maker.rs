@@ -334,7 +334,7 @@ impl BlockMaker {
                         idkg: idkg_summary,
                     })
                 }
-                dkg::Payload::Data(dealings) => {
+                dkg::Payload::Data(dkg) => {
                     let (batch_payload, dealings, idkg_data) = match status::get_status(
                         height,
                         self.registry_client.as_ref(),
@@ -349,7 +349,7 @@ impl BlockMaker {
                         // Use empty payload and empty DKG dealings if the replica is halting.
                         Status::Halting => (
                             BatchPayload::default(),
-                            dkg::DataPayload::new_empty(dealings.start_height),
+                            dkg::DataPayload::new_empty(dkg.start_height),
                             /*idkg_data=*/ None,
                         ),
                         Status::Running => {
@@ -380,7 +380,7 @@ impl BlockMaker {
                             .ok()
                             .flatten();
 
-                            (batch_payload, dealings, idkg_data)
+                            (batch_payload, dkg, idkg_data)
                         }
                     };
 
