@@ -282,8 +282,7 @@ fn test_perform_advance_target_version() {
 
     let make_governance = |versions: Vec<Version>, current_target| {
         let mut governance_proto = basic_governance_proto();
-        let deployed_version: Version = versions.get(0).unwrap().clone();
-        governance_proto.deployed_version = Some(deployed_version);
+        governance_proto.deployed_version = versions.first().cloned();
         governance_proto.target_version = current_target;
         governance_proto.cached_upgrade_steps = Some(CachedUpgradeStepsPb {
             upgrade_steps: Some(Versions { versions }),
