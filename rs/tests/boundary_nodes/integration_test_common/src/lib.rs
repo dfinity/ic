@@ -210,7 +210,7 @@ pub fn api_call_test(env: TestEnv) {
 
     block_on(async move {
         let cid = install_counter_canister(env, logger.clone()).await?;
-        let canister_principal_id = PrincipalId(cid.clone());
+        let canister_principal_id = PrincipalId(cid);
 
         // update call
         let v2_test_agent = V2CallAgent::new(client.clone(), host.clone(), logger.clone());
