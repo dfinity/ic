@@ -46,7 +46,7 @@ pub(crate) struct StableNeuronStoreBuilder<Memory> {
 
 /// A section of a neuron represents a part of neuron that can potentially be large, and when a
 /// neuron is read, the caller can specify which sections of the neuron they want to read.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(crate) struct NeuronSections {
     pub hot_keys: bool,
     pub recent_ballots: bool,
@@ -63,6 +63,16 @@ impl NeuronSections {
             followees: true,
             known_neuron_data: true,
             transfer: true,
+        }
+    }
+
+    pub fn none() -> Self {
+        Self {
+            hot_keys: false,
+            recent_ballots: false,
+            followees: false,
+            known_neuron_data: false,
+            transfer: false,
         }
     }
 }

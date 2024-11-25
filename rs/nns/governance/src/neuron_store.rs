@@ -963,7 +963,7 @@ impl NeuronStore {
                     process_neuron(neuron.as_ref());
                 }
             },
-            NeuronSections::default(),
+            NeuronSections::none(),
         );
 
         (ballots, deciding_voting_power, potential_voting_power)
@@ -1006,7 +1006,7 @@ impl NeuronStore {
             &neuron_id,
             NeuronSections {
                 hot_keys: true,
-                ..Default::default()
+                ..NeuronSections::none()
             },
             |neuron| neuron.is_authorized_to_vote(&principal_id),
         )
