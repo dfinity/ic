@@ -32,7 +32,6 @@ rust_library(
             "src/dashboard/tests.rs",
         ],
     ),
-    crate_features = ["u256"],
     crate_name = "ic_cketh_minter",
     proc_macro_deps = [
         # Keep sorted.
@@ -43,7 +42,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-ethereum-types",
-        "//packages/icrc-cbor",
+        "//packages/icrc-cbor:icrc-cbor_u256",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/secp256k1",

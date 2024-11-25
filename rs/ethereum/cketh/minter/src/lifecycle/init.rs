@@ -19,15 +19,15 @@ pub struct InitArg {
     pub ecdsa_key_name: String,
     #[n(2)]
     pub ethereum_contract_address: Option<String>,
-    #[cbor(n(3), with = "icrc_cbor::principal")]
+    #[cbor(n(3), with = "icrc_cbor_u256::principal")]
     pub ledger_id: Principal,
     #[n(4)]
     pub ethereum_block_height: CandidBlockTag,
-    #[cbor(n(6), with = "icrc_cbor::nat")]
+    #[cbor(n(6), with = "icrc_cbor_u256::nat")]
     pub minimum_withdrawal_amount: Nat,
-    #[cbor(n(7), with = "icrc_cbor::nat")]
+    #[cbor(n(7), with = "icrc_cbor_u256::nat")]
     pub next_transaction_nonce: Nat,
-    #[cbor(n(8), with = "icrc_cbor::nat")]
+    #[cbor(n(8), with = "icrc_cbor_u256::nat")]
     pub last_scraped_block_number: Nat,
 }
 

@@ -2,18 +2,25 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-rust_library(
-    name = "icrc-cbor",
+[rust_library(
+    name = "icrc-cbor" + target_suffix,
     srcs = glob(["src/*.rs"]),
+    crate_features = features,
     deps = [
         # Keep sorted.
         "@crate_index//:candid",
-        "@crate_index//:ethnum",
         "@crate_index//:minicbor",
         "@crate_index//:num-bigint",
         "@crate_index//:num-traits",
-    ],
-)
+    ] + extra_deps,
+) for (target_suffix, features, extra_deps) in [
+    ("", [], []),
+    (
+        "_u256",
+        ["u256"],
+        ["@crate_index//:ethnum"],
+    ),
+]]
 
 rust_test(
     name = "unit_tests",
