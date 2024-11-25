@@ -1,4 +1,5 @@
 use candid::{Nat, Principal};
+#[cfg(feature = "u256")]
 use ethnum::{u256, U256};
 use minicbor::{Decode, Encode};
 use proptest::collection::vec as pvec;
@@ -15,6 +16,7 @@ where
     Ok(())
 }
 
+#[cfg(feature = "u256")]
 #[derive(Eq, PartialEq, Debug, Decode, Encode)]
 struct U256Container {
     #[cbor(n(0), with = "crate::u256")]
@@ -46,6 +48,7 @@ struct OptPrincipalContainer {
 }
 
 proptest! {
+    #[cfg(feature = "u256")]
     #[test]
     fn u256_encoding_roundtrip((hi, lo) in (any::<u128>(), any::<u128>())) {
         check_roundtrip(&U256Container {
@@ -53,6 +56,7 @@ proptest! {
         })?;
     }
 
+    #[cfg(feature = "u256")]
     #[test]
     fn u256_small_value_encoding_roundtrip(n in any::<u64>()) {
         check_roundtrip(&U256Container {

@@ -30,3 +30,13 @@ rust_test(
         "@crate_index//:proptest",
     ],
 )
+
+rust_test(
+    name = "unit_tests_u256",
+    crate = ":icrc-cbor",
+    crate_features = ["u256"],
+    deps = [
+        "@crate_index//:ethnum",
+        "@crate_index//:proptest",
+    ],
+)
