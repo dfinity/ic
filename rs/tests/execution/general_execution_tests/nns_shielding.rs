@@ -14,6 +14,7 @@ use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, H
 use ic_system_test_driver::{util::CYCLES_LIMIT_PER_CANISTER, util::*};
 use ic_types::Cycles;
 use ic_types_test_utils::ids::node_test_id;
+use ic_universal_canister::wasm;
 use lazy_static::lazy_static;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
@@ -111,6 +112,105 @@ pub fn mint_cycles_not_supported_on_application_subnet(env: TestEnv) {
             initial_cycles * 3u64,
         )
         .await;
+
+        let before_balance = get_balance(&canister_id, &agent).await;
+        assert!(
+            Cycles::from(before_balance) > initial_cycles * 2u64,
+            "expected {} > {}",
+            before_balance,
+            initial_cycles * 2u64
+        );
+        assert!(
+            Cycles::from(before_balance) <= initial_cycles * 3u64,
+            "expected {} <= {}",
+            before_balance,
+            initial_cycles * 3u64
+        );
+
+        // The test function on the wasm module will call the mint_cycles system
+        // call.
+        let res = agent.update(&canister_id, "test").call_and_wait().await;
+
+        assert_reject(res, RejectCode::CanisterError);
+        let after_balance = get_balance(&canister_id, &agent).await;
+        assert!(
+            after_balance < before_balance,
+            "expected {} < expected {}",
+            after_balance,
+            before_balance
+        );
+    });
+}
+
+pub fn mint_cycles128_supported_only_on_cycles_minting_canister(env: TestEnv) {
+    let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let specified_id = nns_node.get_last_canister_id_in_allocation_ranges();
+    // Check that 'specified_id' is not 'CYCLES_MINTING_CANISTER_ID'.
+    assert_ne!(specified_id, CYCLES_MINTING_CANISTER_ID.into());
+    let nns_agent = nns_node.build_default_agent();
+    block_on(async move {
+        let not_cmc = UniversalCanister::new_with_cycles(&nns_agent, specified_id, *INITIAL_CYCLES)
+            .await
+            .unwrap()
+            .canister_id();
+
+        let before_balance = get_balance(&not_cmc, &nns_agent).await;
+        assert_balance_equals(
+            *INITIAL_CYCLES,
+            Cycles::from(before_balance),
+            BALANCE_EPSILON,
+        );
+
+        let res = nns_agent
+            .update(&not_cmc, "update")
+            .with_arg(
+                wasm()
+                    .mint_cycles128(Cycles::from((1u128 << 64) + 2u128))
+                    .reply_data_append()
+                    .reply()
+                    .build(),
+            )
+            .call_and_wait()
+            .await
+            .expect_err("should not succeed");
+
+        assert_eq!(
+            res,
+            AgentError::CertifiedReject(
+                RejectResponse {
+                    reject_code: RejectCode::CanisterError,
+                    reject_message: format!(
+                        "Error from Canister {}: Canister violated contract: ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}.\nThis is likely an error with the compiler/CDK toolchain being used to build the canister. Please report the error to IC devs on the forum: https://forum.dfinity.org and include which language/CDK was used to create the canister.",
+                        not_cmc, not_cmc,
+                        CYCLES_MINTING_CANISTER_ID),
+                    error_code: None})
+        );
+
+        let after_balance = get_balance(&not_cmc, &nns_agent).await;
+        assert!(
+            after_balance == before_balance,
+            "expected {} == {}",
+            after_balance,
+            before_balance
+        );
+    });
+}
+
+pub fn mint_cycles128_not_supported_on_application_subnet(env: TestEnv) {
+    let initial_cycles = CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = app_node.build_default_agent();
+    block_on(async move {
+        let wasm = wat::parse_str(MINT_CYCLES).unwrap();
+
+        let canister_id = UniversalCanister::new_with_cycles(
+            &agent,
+            app_node.effective_canister_id(),
+            initial_cycles * 3u64,
+        )
+        .await
+        .unwrap()
+        .canister_id();
 
         let before_balance = get_balance(&canister_id, &agent).await;
         assert!(
