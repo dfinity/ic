@@ -5,7 +5,7 @@ use ic_interfaces_registry::{
 };
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_common_proto::pb::proto_registry::v1::ProtoRegistryRecord;
-use ic_registry_transport::pb::v1::RegistryDelta;
+use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_transport_records;
 use ic_registry_transport::{
     deserialize_get_changes_since_response, serialize_get_changes_since_request,
 };
@@ -21,9 +21,12 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::marker::PhantomData;
 
-pub struct StableRegistryRecord(ProtoRegistryRecord);
+const BYTE: u32 = 1;
+const KB: u32 = 1024 * BYTE;
 
-impl Storable for StableRegistryRecord {
+pub struct StorableRegistryRecord(ProtoRegistryRecord);
+
+impl Storable for StorableRegistryRecord {
     fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::from(self.0.encode_to_vec())
     }
@@ -32,44 +35,57 @@ impl Storable for StableRegistryRecord {
         Self(ProtoRegistryRecord::decode(&bytes[..]).unwrap())
     }
 
-    const BOUND: Bound = Bound::Unbounded;
+    const BOUND: Bound = Bound::Bounded {
+        max_size: KB,
+        is_fixed_size: false,
+    };
 }
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 pub trait StableVecBorrower: Send + Sync {
-    fn with_borrow<R>(f: impl FnOnce(&StableVec<StableRegistryRecord, Memory>) -> R) -> R;
-    fn with_borrow_mut<R>(f: impl FnOnce(&mut StableVec<StableRegistryRecord, Memory>) -> R) -> R;
+    fn with_borrow<R>(f: impl FnOnce(&StableVec<StorableRegistryRecord, Memory>) -> R) -> R;
+    fn with_borrow_mut<R>(f: impl FnOnce(&mut StableVec<StorableRegistryRecord, Memory>) -> R)
+        -> R;
 }
 pub struct StableRegistryDataProvider<S: StableVecBorrower> {
-    registry_caller: RegistryCaller,
     keys_to_retain: Option<HashSet<String>>,
-    _stable_memory_store: PhantomData<S>,
+    _store: PhantomData<S>,
 }
 
 impl<S: StableVecBorrower> StableRegistryDataProvider<S> {
     pub fn new(keys_to_retain: Option<HashSet<String>>) -> Self {
         Self {
             keys_to_retain,
-            registry_caller: RegistryCaller,
-            _stable_memory_store: PhantomData,
+            _store: PhantomData,
         }
     }
 
-    fn get_latest_version(&self) -> Option<u64> {
-        S::with_borrow(|local_registry| {
-            local_registry
-                .iter()
-                .last()
-                .map(|last_record| last_record.0.version)
-        })
+    async fn get_changes_since(
+        &self,
+        version: u64,
+    ) -> anyhow::Result<Vec<RegistryTransportRecord>> {
+        let buff = serialize_get_changes_since_request(version)?;
+        let response = ic_cdk::api::call::call_raw(
+            Principal::from(REGISTRY_CANISTER_ID),
+            "get_changes_since",
+            buff,
+            0,
+        )
+        .await
+        .unwrap();
+        let (registry_delta, _) = deserialize_get_changes_since_response(response).unwrap();
+        let registry_transport_record =
+            registry_deltas_to_registry_transport_records(registry_delta)?;
+        Ok(registry_transport_record)
     }
 
     pub async fn sync_registry_stored(&self) -> anyhow::Result<()> {
         let mut update_registry_version = self
-            .get_latest_version()
+            .get_local_version()
             .unwrap_or(ZERO_REGISTRY_VERSION.get());
+
         loop {
-            let remote_latest_version = self.registry_caller.get_latest_version().await;
+            let remote_latest_version = ic_nns_common::registry::get_latest_version().await;
 
             println!(
                 "local version: {} remote version: {}",
@@ -100,10 +116,7 @@ impl<S: StableVecBorrower> StableRegistryDataProvider<S> {
                 }
             }
 
-            if let Ok(mut registry_records) = self
-                .registry_caller
-                .get_changes_since(update_registry_version)
-                .await
+            if let Ok(mut registry_records) = self.get_changes_since(update_registry_version).await
             {
                 registry_records.sort_by_key(|tr| tr.version);
 
@@ -118,7 +131,7 @@ impl<S: StableVecBorrower> StableRegistryDataProvider<S> {
                             .iter()
                             .any(|prefix| record.key.starts_with(prefix.as_str()))
                         {
-                            self.insert_registry_record(ProtoRegistryRecord {
+                            self.insert_record(ProtoRegistryRecord {
                                 key: record.key,
                                 version: record.version.get(),
                                 value: record.value,
@@ -131,9 +144,20 @@ impl<S: StableVecBorrower> StableRegistryDataProvider<S> {
         Ok(())
     }
 
-    fn insert_registry_record(&self, record: ProtoRegistryRecord) {
+    fn insert_record(&self, record: ProtoRegistryRecord) {
         S::with_borrow_mut(|local_registry| {
-            local_registry.push(&StableRegistryRecord(record)).unwrap();
+            local_registry
+                .push(&StorableRegistryRecord(record))
+                .unwrap();
+        })
+    }
+
+    fn get_local_version(&self) -> Option<u64> {
+        S::with_borrow(|local_registry| {
+            local_registry
+                .iter()
+                .last()
+                .map(|last_record| last_record.0.version)
         })
     }
 }
@@ -158,65 +182,4 @@ impl<S: StableVecBorrower> RegistryDataProvider for StableRegistryDataProvider<S
             Ok(updates)
         })
     }
-}
-
-#[derive(Default)]
-pub struct RegistryCaller;
-impl RegistryCaller {
-    async fn get_latest_version(&self) -> u64 {
-        ic_nns_common::registry::get_latest_version().await
-    }
-
-    async fn get_changes_since(
-        &self,
-        version: u64,
-    ) -> anyhow::Result<Vec<RegistryTransportRecord>> {
-        let buff = serialize_get_changes_since_request(version)?;
-        let response = ic_cdk::api::call::call_raw(
-            Principal::from(REGISTRY_CANISTER_ID),
-            "get_changes_since",
-            buff,
-            0,
-        )
-        .await
-        .unwrap();
-        let (registry_delta, _) = deserialize_get_changes_since_response(response).unwrap();
-        let registry_transport_record =
-            registry_deltas_to_registry_transport_records(registry_delta)?;
-        Ok(registry_transport_record)
-    }
-}
-
-fn registry_deltas_to_registry_transport_records(
-    deltas: Vec<RegistryDelta>,
-) -> anyhow::Result<Vec<RegistryTransportRecord>> {
-    let mut records = Vec::new();
-    for delta in deltas.into_iter() {
-        let string_key = std::str::from_utf8(&delta.key[..])
-            .map_err(|_| {
-                ic_registry_transport::Error::UnknownError(format!(
-                    "Failed to convert key {:?} to string",
-                    delta.key
-                ))
-            })?
-            .to_string();
-
-        for value in delta.values.into_iter() {
-            records.push(RegistryTransportRecord {
-                key: string_key.clone(),
-                value: if value.deletion_marker {
-                    None
-                } else {
-                    Some(value.value)
-                },
-                version: RegistryVersion::new(value.version),
-            });
-        }
-    }
-    records.sort_by(|lhs, rhs| {
-        lhs.version
-            .cmp(&rhs.version)
-            .then_with(|| lhs.key.cmp(&rhs.key))
-    });
-    Ok(records)
 }

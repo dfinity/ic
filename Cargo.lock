@@ -19973,6 +19973,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-registry-common-proto",
+ "ic-registry-nns-data-provider",
  "ic-registry-transport",
  "ic-stable-structures",
  "ic-types",
