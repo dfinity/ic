@@ -169,9 +169,9 @@ fn bitcoin_library_accepts_our_bip341_signatures() {
 
         let pk = XOnlyPublicKey::from_slice(&sk.public_key().serialize_sec1(true)[1..]).unwrap();
 
-        let tnh = TapBranchHash::from_hex(&hex::encode(ttr)).unwrap();
+        let tbh = TapBranchHash::from_hex(&hex::encode(ttr)).unwrap();
 
-        let dk = pk.tap_tweak(&secp256k1, Some(tnh)).0.to_inner();
+        let dk = pk.tap_tweak(&secp256k1, Some(tbh)).0.to_inner();
 
         let msg = Message::from_slice(&msg).unwrap();
         let sig = Signature::from_slice(&sig).unwrap();
@@ -195,6 +195,22 @@ fn should_accept_bip340_signatures_that_we_generate() {
 
         let sig = sk.sign_message_with_bip340(&msg, &mut rng);
         assert!(pk.verify_bip340_signature(&msg, &sig));
+    }
+}
+
+#[test]
+fn should_accept_bip341_signatures_that_we_generate() {
+    use rand::RngCore;
+
+    let mut rng = test_rng();
+
+    for len in 0..100 {
+        let sk = PrivateKey::generate_using_rng(&mut rng);
+
+        let pk = sk.public_key();
+
+        let mut msg = vec![0u8; len];
+        rng.fill_bytes(&mut msg);
 
         for ttr_len in [0, 32] {
             let mut ttr = vec![0u8; ttr_len];

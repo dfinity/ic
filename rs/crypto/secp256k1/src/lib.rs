@@ -340,7 +340,24 @@ fn pem_encode(raw: &[u8], label: &'static str) -> String {
     })
 }
 
+/// BIP341 / Taproot derivation step
+///
+/// BIP341 defines a key tweaking operation that occurs with Taproot
+/// <https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki#constructing-and-spending-taproot-outputs>
+///
+/// This function implements what is referred to in BIP341 as "tagged_hash"
+///
+/// * pk_x is the x coordinate of the public key (even y coordinate is assumed)
+/// * ttr is the Taproot Tree Root, referred to as `h` in BIP341
 fn bip341_hash(pk_x: &[u8], ttr: &[u8]) -> Result<Scalar, InvalidTaprootHash> {
+    // The caller should have already validated these but let's double check...
+    if pk_x.len() != 32 {
+        return Err(InvalidTaprootHash::InvalidLength);
+    }
+    if !(ttr.is_empty() || ttr.len() == 32) {
+        return Err(InvalidTaprootHash::InvalidLength);
+    }
+
     use k256::elliptic_curve::PrimeField;
     use sha2::Digest;
 
@@ -915,16 +932,15 @@ impl PublicKey {
 
         let t = k256::ProjectivePoint::mul_by_generator(&bip341_hash(&pk[1..], ttr)?);
         let pk_y_is_even = pk[0] == 0x02;
-        println!("y_is_even {}", pk_y_is_even);
 
-        let dk = if pk_y_is_even {
+        let tweaked_key = if pk_y_is_even {
             self.key.to_projective() + t
         } else {
             use std::ops::Neg;
             self.key.to_projective().neg() + t
         };
 
-        let key = k256::PublicKey::from_affine(dk.to_affine())
+        let key = k256::PublicKey::from_affine(tweaked_key.to_affine())
             .map_err(|_| InvalidTaprootHash::InvalidScalar)?;
 
         Ok(Self { key })
@@ -937,12 +953,12 @@ impl PublicKey {
         signature: &[u8],
         taproot_tree_root: &[u8],
     ) -> bool {
-        let dk = match self.derive_bip341(taproot_tree_root) {
+        let tweaked_key = match self.derive_bip341(taproot_tree_root) {
             Ok(k) => k,
             Err(_) => return false,
         };
 
-        dk.verify_bip340_signature(message, signature)
+        tweaked_key.verify_bip340_signature(message, signature)
     }
 
     /// Determines the [`RecoveryId`] for a given public key, digest and signature.
