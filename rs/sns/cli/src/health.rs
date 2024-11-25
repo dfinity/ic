@@ -73,7 +73,7 @@ impl TableRow for SnsHealthInfo {
                 format!(
                     "{canister_type}: ({:.2} TC{frozen})",
                     cycles.cycles as f64 / TC,
-                    frozen = if (cycles.freezing_threshold as u128) > cycles.cycles {
+                    frozen = if cycles.cycles < cycles.freezing_threshold as u128 {
                         " 🥶".to_string()
                     } else {
                         "".to_string()
