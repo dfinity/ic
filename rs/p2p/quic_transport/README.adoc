@@ -24,11 +24,11 @@ The IC Transport layer enables message delivery between nodes within a subnet.
 
 | Works in P2P network with Byzantine peers
 | This is the real world production environment. 
-| Backpressure ?!
+| Flow control on the number of connections and number of inflight messages per connection.
 
 | Scalable and reliable
-| ?! CPU, file descriptors are shared resource.
-| Single connection between peers?!
+| ?! CPU, file descriptors are shared resource, latency
+| Single connection between peers.
 
 |===
 
