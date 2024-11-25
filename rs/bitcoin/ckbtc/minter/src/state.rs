@@ -242,7 +242,7 @@ impl Default for Mode {
 }
 
 /// The outcome of a UTXO KYT check.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, serde::Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum UtxoCheckStatus {
     /// The KYT check did not reveal any problems.
     Clean,
@@ -267,7 +267,7 @@ impl UtxoCheckStatus {
 /// Relevant data for a checked UTXO. The UUID and `kyt_provider` are kept for
 /// backward-compatibility reasons. They should be set to `None` since
 /// we dont use KYT providers anymore.
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, serde::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CheckedUtxo {
     pub(crate) status: UtxoCheckStatus,
     uuid: Option<String>,
@@ -281,7 +281,7 @@ pub struct Overdraft(pub u64);
 /// The state of the ckBTC Minter.
 ///
 /// Every piece of state of the Minter should be stored as field of this struct.
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, serde::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CkBtcMinterState {
     /// The bitcoin network that the minter will connect to
     pub btc_network: Network,
@@ -376,10 +376,8 @@ pub struct CkBtcMinterState {
     pub finalized_utxos: BTreeMap<Principal, BTreeSet<Utxo>>,
 
     /// Process one timer event at a time.
-    #[serde(skip)]
     pub is_timer_running: bool,
 
-    #[serde(skip)]
     pub is_distributing_fee: bool,
 
     /// The mode in which the minter runs.
