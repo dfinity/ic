@@ -1381,8 +1381,9 @@ impl CanisterQueues {
         self.store.pool.has_expired_deadlines(current_time)
     }
 
-    /// Drops expired messages given a current time, enqueueing a reject response
-    /// for own requests into the matching reverse queue (input or output).
+    /// Drops expired messages given a current time, releasing any slot reservations
+    /// and enqueueing inbound reject responses for own outbound requests.
+    ///
     /// This covers all best-effort messages except responses in input queues (which
     /// we don't want to expire); plus guaranteed response requests in output queues
     /// (which don't have an explicit deadline, but expire after an implicit
