@@ -15,8 +15,11 @@ message DkgMessage {
 message DkgPayload {
   oneof val {
     Summary summary = 1;
-    DataPayload data_payload = 2;
+    DataPayload data_payload = 3;
   }
+
+  reserved 2;
+  reserved "dealings";
 }
 
 message DataPayload {

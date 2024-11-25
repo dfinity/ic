@@ -347,7 +347,7 @@ pub struct DkgMessage {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DkgPayload {
-    #[prost(oneof = "dkg_payload::Val", tags = "1, 2")]
+    #[prost(oneof = "dkg_payload::Val", tags = "1, 3")]
     pub val: ::core::option::Option<dkg_payload::Val>,
 }
 /// Nested message and enum types in `DkgPayload`.
@@ -356,7 +356,7 @@ pub mod dkg_payload {
     pub enum Val {
         #[prost(message, tag = "1")]
         Summary(super::Summary),
-        #[prost(message, tag = "2")]
+        #[prost(message, tag = "3")]
         DataPayload(super::DataPayload),
     }
 }
