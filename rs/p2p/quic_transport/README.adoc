@@ -6,13 +6,22 @@
 
 The IC Transport layer enables message delivery between nodes within a subnet.
 
-== Requirements ==
+== High Level Application Requirements ==
+
+[cols="1,1"]
+|===
+
+1. RPC-like library that abstracts away communication between nodes.
+2. Supports multitenancy of application protocols.
+3. Works in P2P network with Byzantine peers.
+4. Scalable and reliable.
+
+== Technical Requirements ==
 
 [cols="1,1"]
 |===
 | **What ?**
 | **Why ?**
-
 
 | https://en.wikipedia.org/wiki/Reliability_(computer_networking)[Reliable data delivery] - the sender knows if a message was delivered succesfully to the recepient.
 | Applications on top of the transport layer are simpler to implement when this abstraction exists. E.g. they don't need to re-implement TCP or QUIC.
@@ -23,7 +32,7 @@ The IC Transport layer enables message delivery between nodes within a subnet.
 | https://en.wikipedia.org/wiki/Network_congestion#Congestion_control[Fair congestion control] - if a server is at capacity regardless of the reason then messages should be processed fairly across different connections.
 | In cases where a replica receives more requests than it can handle (e.g. malicious peer, bug, or it just cannot keep up with processing), messages from particular peer should not be favoured over other messages because it is unknown which peers are malicious.
 
-| Application specific handshake - TLS.
+| TLS
 | Security.
 
 | Persistent connections.
@@ -31,6 +40,7 @@ The IC Transport layer enables message delivery between nodes within a subnet.
 
 | Bounded memory.
 | There should be no operational burden. Having unbounded data structures implies there is high risk of nodes OOMing. If an OOM event happens most likely an operation mitigation is required in order to decrease the memory usage.
+
 
 |===
 
