@@ -2,9 +2,9 @@ use ic_crypto_internal_bls12_381_vetkd::{DerivationPath, DerivedPublicKey, G2Aff
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::DeriveThresholdPublicKeyError;
 use ic_types::crypto::canister_threshold_sig::error::CanisterThresholdGetPublicKeyError;
 use ic_types::crypto::canister_threshold_sig::{MasterPublicKey, PublicKey};
-use ic_types::crypto::vetkd::VetKdPublicKeyDeriveError;
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::ExtendedDerivationPath;
+use std::fmt;
 
 /// Derives the threshold public key from the specified `master_public_key` for
 /// the given `extended_derivation_path`.
@@ -47,4 +47,17 @@ pub fn derive_vetkd_public_key(
 
     let derived_key = DerivedPublicKey::compute_derived_key(&key, &derivation_path);
     Ok(derived_key.serialize().to_vec())
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum VetKdPublicKeyDeriveError {
+    InvalidArgument(String),
+    InvalidAlgorithmId,
+    InvalidPublicKey,
+}
+
+impl fmt::Display for VetKdPublicKeyDeriveError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
 }
