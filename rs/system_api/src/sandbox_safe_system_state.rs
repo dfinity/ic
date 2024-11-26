@@ -625,6 +625,8 @@ impl SandboxSafeSystemState {
         caller: Option<PrincipalId>,
         next_canister_log_record_idx: u64,
         is_wasm64_execution: bool,
+        wasm_chunk_store_memory_usage: NumBytes,
+        snapshots_memory_usage: NumBytes,
     ) -> Self {
         Self {
             canister_id,
@@ -660,6 +662,8 @@ impl SandboxSafeSystemState {
             request_metadata,
             caller,
             is_wasm64_execution,
+            wasm_chunk_store_memory_usage,
+            snapshots_memory_usage,
         }
     }
 
@@ -744,6 +748,10 @@ impl SandboxSafeSystemState {
             .get_subnet_size(&cycles_account_manager.get_subnet_id())
             .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
 
+        let wasm_chunk_store_memory_usage = system_state.wasm_chunk_store.memory_usage();
+
+        let snapshots_memory_usage = system_state.snapshots_memory_usage;
+
         Self::new_internal(
             system_state.canister_id,
             CanisterStatusView::from_canister_status_type(system_state.status()),
@@ -774,6 +782,8 @@ impl SandboxSafeSystemState {
             caller,
             system_state.canister_log.next_idx(),
             is_wasm64_execution,
+            wasm_chunk_store_memory_usage,
+            snapshots_memory_usage,
         )
     }
 
@@ -1283,8 +1293,8 @@ impl SandboxSafeSystemState {
         let wasm_memory_limit =
             wasm_memory_limit.unwrap_or_else(|| NumBytes::new(4 * 1024 * 1024 * 1024));
 
-        // If the canister has memory allocation, then it maximum allowed Wasm memory
-        // can be calculated as min(memory_allocation - used_stable_memory, wasm_memory_limit).
+        // If the canister has memory allocation, then it maximum allowed Wasm memory can be calculated
+        // as min(memory_allocation - used_stable_memory - snapshots_memory_usage, wasm_memory_limit).
         let wasm_capacity = memory_allocation.map_or_else(
             || wasm_memory_limit,
             |memory_allocation| {
@@ -1294,18 +1304,21 @@ impl SandboxSafeSystemState {
                     used_stable_memory,
                     memory_allocation
                 );
-                std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
+                std::cmp::min(
+                    memory_allocation - used_stable_memory - self.snapshots_memory_usage,
+                    wasm_memory_limit,
+                )
             },
         );
 
-        // Conceptually we can think that the remaining Wasm memory is
-        // equal to `wasm_capacity - used_wasm_memory` and that should
-        // be compared with `wasm_memory_threshold` when checking for
-        // the condition for the hook. However, since `wasm_memory_limit`
-        // is ignored in some executions as stated above it is possible
-        // that `used_wasm_memory` is greater than `wasm_capacity` to
-        // avoid overflowing subtraction we adopted inequality.
-        let is_condition_satisfied = wasm_capacity < used_wasm_memory + self.wasm_memory_threshold;
+        // Conceptually we can think that the remaining Wasm memory is equal to:
+        // `wasm_capacity - used_wasm_memory - wasm_chunk_store_memory_usage`
+        // and that should be compared with `wasm_memory_threshold` when checking for the
+        // condition for the hook. However, since `wasm_memory_limit` is ignored in some
+        // executions as stated above it is possible that `used_wasm_memory` is greater
+        // than `wasm_capacity` to avoid overflowing subtraction we adopted inequality.
+        let is_condition_satisfied = wasm_capacity
+            < used_wasm_memory + self.wasm_memory_threshold + self.wasm_chunk_store_memory_usage;
         self.system_state_changes
             .on_low_wasm_memory_hook_condition_check_result = Some(is_condition_satisfied);
     }
@@ -1494,6 +1507,8 @@ mod tests {
             0,
             // Wasm32 execution environment. Sufficient in testing.
             false,
+            NumBytes::new(0),
+            NumBytes::new(0),
         );
         sandbox_state.msg_deadline()
     }
@@ -1509,7 +1524,11 @@ mod tests {
         assert_eq!(helper_msg_deadline(Some(deadline)), deadline);
     }
 
-    fn helper_create_state_for_hook_status(wasm_memory_threshold: u64) -> SandboxSafeSystemState {
+    fn helper_create_state_for_hook_status(
+        wasm_memory_threshold: u64,
+        wasm_chunk_store_memory_usage: u64,
+        snapshots_memory_usage: u64,
+    ) -> SandboxSafeSystemState {
         SandboxSafeSystemState::new_internal(
             canister_test_id(0),
             CanisterStatusView::Running,
@@ -1544,6 +1563,8 @@ mod tests {
             0,
             // Wasm32 execution environment. Sufficient in testing.
             false,
+            NumBytes::new(wasm_chunk_store_memory_usage),
+            NumBytes::new(snapshots_memory_usage),
         )
     }
 
@@ -1555,14 +1576,19 @@ mod tests {
         wasm_memory_limit: Option<u64>,
         used_stable_memory: u64,
         used_wasm_memory: u64,
+        wasm_chunk_store_memory_usage: u64,
+        snapshot_memory_usage: u64,
     ) -> bool {
         let wasm_memory_limit = wasm_memory_limit.unwrap_or(4 * GIB);
 
         let wasm_capacity = memory_allocation.map_or(wasm_memory_limit, |memory_allocation| {
-            std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
+            std::cmp::min(
+                memory_allocation - used_stable_memory - snapshot_memory_usage,
+                wasm_memory_limit,
+            )
         });
 
-        wasm_capacity < used_wasm_memory + wasm_memory_threshold
+        wasm_capacity < used_wasm_memory + wasm_memory_threshold + wasm_chunk_store_memory_usage
     }
     #[test]
     fn test_on_low_wasm_memory_hook_condition_update() {
@@ -1574,36 +1600,45 @@ mod tests {
                 {
                     for used_stable_memory in [0, GIB] {
                         for used_wasm_memory in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
-                            let mut state =
-                                helper_create_state_for_hook_status(wasm_memory_threshold);
+                            for wasm_chunk_store_memory_usage in [0, GIB] {
+                                for snapshot_memory_usage in [0, GIB] {
+                                    let mut state = helper_create_state_for_hook_status(
+                                        wasm_memory_threshold,
+                                        wasm_chunk_store_memory_usage,
+                                        snapshot_memory_usage,
+                                    );
 
-                            assert_eq!(
-                                state
-                                    .system_state_changes
-                                    .on_low_wasm_memory_hook_condition_check_result,
-                                None
-                            );
+                                    assert_eq!(
+                                        state
+                                            .system_state_changes
+                                            .on_low_wasm_memory_hook_condition_check_result,
+                                        None
+                                    );
 
-                            state.check_on_low_wasm_memory_hook_condition(
-                                memory_allocation.map(|m| m.into()),
-                                wasm_memory_limit.map(|m| m.into()),
-                                used_stable_memory.into(),
-                                used_wasm_memory.into(),
-                            );
+                                    state.check_on_low_wasm_memory_hook_condition(
+                                        memory_allocation.map(|m| m.into()),
+                                        wasm_memory_limit.map(|m| m.into()),
+                                        used_stable_memory.into(),
+                                        used_wasm_memory.into(),
+                                    );
 
-                            assert_eq!(
-                                state
-                                    .system_state_changes
-                                    .on_low_wasm_memory_hook_condition_check_result
-                                    .unwrap(),
-                                helper_is_condition_satisfied_for_on_low_wasm_memory_hook(
-                                    wasm_memory_threshold,
-                                    memory_allocation,
-                                    wasm_memory_limit,
-                                    used_stable_memory,
-                                    used_wasm_memory
-                                )
-                            );
+                                    assert_eq!(
+                                        state
+                                            .system_state_changes
+                                            .on_low_wasm_memory_hook_condition_check_result
+                                            .unwrap(),
+                                        helper_is_condition_satisfied_for_on_low_wasm_memory_hook(
+                                            wasm_memory_threshold,
+                                            memory_allocation,
+                                            wasm_memory_limit,
+                                            used_stable_memory,
+                                            used_wasm_memory,
+                                            wasm_chunk_store_memory_usage,
+                                            snapshot_memory_usage,
+                                        )
+                                    );
+                                }
+                            }
                         }
                     }
                 }

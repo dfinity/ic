@@ -232,6 +232,8 @@ mod tests {
             caller,
             0,
             IS_WASM64_EXECUTION,
+            NumBytes::new(0),
+            NumBytes::new(0),
         )
     }
 
