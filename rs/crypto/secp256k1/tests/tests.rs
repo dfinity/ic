@@ -171,11 +171,11 @@ fn bitcoin_library_accepts_our_bip341_signatures() {
 
         let tbh = TapBranchHash::from_hex(&hex::encode(ttr)).unwrap();
 
-        let dk = pk.tap_tweak(&secp256k1, Some(tbh)).0.to_inner();
+        let tweaked_key = pk.tap_tweak(&secp256k1, Some(tbh)).0.to_inner();
 
         let msg = Message::from_slice(&msg).unwrap();
         let sig = Signature::from_slice(&sig).unwrap();
-        assert!(sig.verify(&msg, &dk).is_ok());
+        assert!(sig.verify(&msg, &tweaked_key).is_ok());
     }
 }
 

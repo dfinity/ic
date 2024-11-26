@@ -345,11 +345,11 @@ fn pem_encode(raw: &[u8], label: &'static str) -> String {
 /// BIP341 defines a key tweaking operation that occurs with Taproot
 /// <https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki#constructing-and-spending-taproot-outputs>
 ///
-/// This function implements what is referred to in BIP341 as "tagged_hash"
+/// This function implements what is referred to in BIP341 as int_from_bytes(tagged_hash("TapTweak", ...))
 ///
 /// * pk_x is the x coordinate of the public key (even y coordinate is assumed)
 /// * ttr is the Taproot Tree Root, referred to as `h` in BIP341
-fn bip341_hash(pk_x: &[u8], ttr: &[u8]) -> Result<Scalar, InvalidTaprootHash> {
+fn bip341_generate_tweak(pk_x: &[u8], ttr: &[u8]) -> Result<Scalar, InvalidTaprootHash> {
     // The caller should have already validated these but let's double check...
     if pk_x.len() != 32 {
         return Err(InvalidTaprootHash::InvalidLength);
@@ -589,7 +589,7 @@ impl PrivateKey {
     fn derive_bip341(&self, ttr: &[u8]) -> Result<Self, InvalidTaprootHash> {
         let pk = self.public_key().serialize_sec1(true);
 
-        let t = bip341_hash(&pk[1..], ttr)?;
+        let t = bip341_generate_tweak(&pk[1..], ttr)?;
         let pk_y_is_even = pk[0] == 0x02;
 
         let z = if pk_y_is_even {
@@ -616,8 +616,8 @@ impl PrivateKey {
             return Err(InvalidTaprootHash::InvalidLength);
         }
 
-        let dk = self.derive_bip341(taproot_tree_hash)?;
-        Ok(dk.sign_message_with_bip340(message, rng))
+        let tweaked_key = self.derive_bip341(taproot_tree_hash)?;
+        Ok(tweaked_key.sign_message_with_bip340(message, rng))
     }
 
     /// Return the public key corresponding to this private key
@@ -930,7 +930,7 @@ impl PublicKey {
 
         let pk = self.serialize_sec1(true);
 
-        let t = k256::ProjectivePoint::mul_by_generator(&bip341_hash(&pk[1..], ttr)?);
+        let t = k256::ProjectivePoint::mul_by_generator(&bip341_generate_tweak(&pk[1..], ttr)?);
         let pk_y_is_even = pk[0] == 0x02;
 
         let tweaked_key = if pk_y_is_even {
