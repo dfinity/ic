@@ -846,36 +846,6 @@ pub async fn agent_with_client_identity(
     Ok(a)
 }
 
-/// Creates an agent that routes ingress messages to the asynchronous V2 call endpoint.
-pub async fn agent_using_call_v2_endpoint(
-    url: &str,
-    addr_mapping: IpAddr,
-) -> Result<Agent, AgentError> {
-    let identity = get_identity();
-    let parsed_url = reqwest::Url::parse(url).expect("is valid url");
-
-    let reqwest = reqwest::Client::builder()
-        .timeout(AGENT_REQUEST_TIMEOUT)
-        .danger_accept_invalid_certs(true)
-        .resolve(
-            parsed_url.domain().expect("url has domain"),
-            (addr_mapping, 0).into(),
-        )
-        .build()
-        .expect("Is valid reqwest client");
-
-    let transport = ReqwestTransport::create_with_client(url, reqwest)?;
-
-    let agent = Agent::builder()
-        .with_transport(transport)
-        .with_identity(identity)
-        .build()
-        .unwrap();
-    agent.fetch_root_key().await?;
-
-    Ok(agent)
-}
-
 // Creates an identity to be used with `Agent`.
 pub fn random_ed25519_identity() -> BasicIdentity {
     let rng = ring::rand::SystemRandom::new();
