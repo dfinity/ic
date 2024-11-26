@@ -91,7 +91,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         .with(
             always(),
             eq(provided_batch.randomness),
-            eq(provided_batch.idkg_subnet_public_keys.clone()),
+            eq(provided_batch.chain_key_subnet_public_keys.clone()),
             eq(provided_batch.idkg_pre_signature_ids.clone()),
             eq(provided_batch.replica_version.clone()),
             eq(round),

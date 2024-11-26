@@ -2331,7 +2331,7 @@ impl StateMachine {
                 query_stats: payload.query_stats,
             },
             randomness: Randomness::from(seed),
-            idkg_subnet_public_keys: self.idkg_subnet_public_keys.clone(),
+            chain_key_subnet_public_keys: self.idkg_subnet_public_keys.clone(),
             idkg_pre_signature_ids: BTreeMap::new(),
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
