@@ -97,7 +97,7 @@ impl PocketIc {
     /// Note that this handle does not extend the lifetime of the existing instance,
     /// i.e., the existing instance is deleted and this handle stops working
     /// when the PocketIC handle that created the existing instance is dropped.
-    pub async fn new_from_existing_instance(
+    pub fn new_from_existing_instance(
         server_url: Url,
         instance_id: InstanceId,
         max_request_time_ms: Option<u64>,
@@ -630,7 +630,11 @@ impl PocketIc {
         .await
     }
 
-    pub(crate) async fn query_call_with_effective_principal(
+    /// Execute a query call on a canister explicitly specifying an effective principal to route the request:
+    /// this API is useful for making generic calls (including management canister calls) without using dedicated functions from this library
+    /// (e.g., making generic calls in dfx to a PocketIC instance).
+    #[instrument(skip(self, payload), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), effective_principal = %effective_principal.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
+    pub async fn query_call_with_effective_principal(
         &self,
         canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,
@@ -1425,7 +1429,11 @@ impl PocketIc {
         }
     }
 
-    pub(crate) async fn update_call_with_effective_principal(
+    /// Execute an update call on a canister explicitly specifying an effective principal to route the request:
+    /// this API is useful for making generic calls (including management canister calls) without using dedicated functions from this library
+    /// (e.g., making generic calls in dfx to a PocketIC instance).
+    #[instrument(skip(self, payload), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), effective_principal = %effective_principal.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
+    pub async fn update_call_with_effective_principal(
         &self,
         canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,

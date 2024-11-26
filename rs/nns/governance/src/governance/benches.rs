@@ -384,6 +384,7 @@ fn make_neuron(
             vote: Vote::Yes as i32,
         })
         .collect();
+    neuron.recent_ballots_next_entry_index = Some(0);
 
     neuron
 }

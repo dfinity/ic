@@ -25,7 +25,7 @@ use ic_nervous_system_governance::index::{
     neuron_following::{HeapNeuronFollowingIndex, NeuronFollowingIndex},
     neuron_principal::NeuronPrincipalIndex,
 };
-use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::{AccountIdentifier, Subaccount};
 use std::{
     borrow::Cow,
@@ -1112,6 +1112,31 @@ impl NeuronStore {
         self.with_neuron_sections(&neuron_id, needed_sections, |neuron| {
             neuron.would_follow_ballots(topic, ballots)
         })
+    }
+
+    pub fn register_recent_neuron_ballot(
+        &mut self,
+        neuron_id: NeuronId,
+        topic: Topic,
+        proposal_id: ProposalId,
+        vote: Vote,
+    ) -> Result<(), NeuronStoreError> {
+        if self.heap_neurons.contains_key(&neuron_id.id) {
+            self.with_neuron_mut(&neuron_id, |neuron| {
+                neuron.register_recent_ballot(topic, &proposal_id, vote)
+            })?;
+        } else {
+            with_stable_neuron_store_mut(|stable_neuron_store| {
+                stable_neuron_store.register_recent_neuron_ballot(
+                    neuron_id,
+                    topic,
+                    proposal_id,
+                    vote,
+                )
+            })?;
+        }
+
+        Ok(())
     }
 
     // Below are indexes related methods. They don't have a unified interface yet, but NNS1-2507 will change that.
