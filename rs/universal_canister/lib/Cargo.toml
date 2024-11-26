@@ -7,7 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-bincode = { workspace = true }
 candid = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-embedders = { path = "../../embedders" }

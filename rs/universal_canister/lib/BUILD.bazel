@@ -8,7 +8,6 @@ DEPENDENCIES = [
     "//rs/embedders",
     "//rs/types/types",
     "//rs/universal_canister/impl:lib",
-    "@crate_index//:bincode",
     "@crate_index//:candid",
     "@crate_index//:lazy_static",
     "@crate_index//:serde",

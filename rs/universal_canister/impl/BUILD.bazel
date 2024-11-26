@@ -65,20 +65,6 @@ genrule(
     visibility = ["//visibility:public"],
 )
 
-# genrule(
-#     name = "universal_canister",
-#     srcs = ["empty.wasm.gz"],
-#     outs = ["universal_canister.wasm.gz"],
-#     visibility = ["//visibility:public"],
-#     testonly = False,
-#     message = "Copying universal canister",
-#     tools = [],
-#     cmd_bash = " && ".join([
-#         "cp {empty_wasm} $@",
-#     ])
-#         .format(empty_wasm = "$(location empty.wasm.gz)"),
-# )
-
 rust_canister(
     name = "universal_canister_no_heartbeat",
     srcs = glob(["src/*.rs"]),
