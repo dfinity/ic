@@ -64,7 +64,7 @@ A nice writeup about async and blocking operations can be found in https://ryhl.
 
 == Implementation Details ==
 
-Use the https://github.com/quinn-rs/quinn[QUINN] library for QUIC, as it meets the requirements for reliable data delivery, multiplexing, connection-oriented communication, and flow control.  
+This RPC library uses the https://github.com/quinn-rs/quinn[QUINN] library for QUIC, as it meets the requirements for reliable data delivery, multiplexing, connection-oriented communication, and flow control.  
 
 === QUIC stream per message ===
 
