@@ -911,7 +911,7 @@ impl WasmExecutor for SandboxedExecutionController {
                                 .create_execution_state_serialized(
                                     protocol::sbxsvc::CreateExecutionStateSerializedRequest {
                                         wasm_id,
-                                        serialized_module: Arc::clone(&serialized_module),
+                                        serialized_module: Arc::clone(serialized_module),
                                         wasm_page_map: wasm_page_map.serialize(),
                                         next_wasm_memory_id,
                                         canister_id,
@@ -960,7 +960,7 @@ impl WasmExecutor for SandboxedExecutionController {
                                 .create_execution_state_serialized(
                                     protocol::sbxsvc::CreateExecutionStateSerializedRequest {
                                         wasm_id,
-                                        serialized_module: Arc::clone(&serialized_module),
+                                        serialized_module: Arc::clone(serialized_module),
                                         wasm_page_map: wasm_page_map.serialize(),
                                         next_wasm_memory_id,
                                         canister_id,
