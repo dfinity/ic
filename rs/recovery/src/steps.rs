@@ -2,7 +2,7 @@ use crate::{
     admin_helper::IcAdmin,
     command_helper::exec_cmd,
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{create_dir, read_dir, rsync, rsync_with_retries, clear_dir},
+    file_sync_helper::{clear_dir, create_dir, read_dir, rsync, rsync_with_retries},
     get_member_ips, get_node_heights_from_metrics,
     registry_helper::RegistryHelper,
     replay_helper,
