@@ -720,7 +720,7 @@ fn test_register_recent_neuron_ballot_migration_full() {
 
     store.create(neuron.clone()).unwrap();
 
-    let retrieved_neuron = store.read(neuron.id(), NeuronSections::all()).unwrap();
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::ALL).unwrap();
     assert_eq!(retrieved_neuron, neuron);
 
     store
@@ -742,7 +742,7 @@ fn test_register_recent_neuron_ballot_migration_full() {
         recent_ballots
     };
 
-    let retrieved_neuron = store.read(neuron.id(), NeuronSections::all()).unwrap();
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::ALL).unwrap();
     assert_eq!(retrieved_neuron.recent_ballots, expected_updated_ballots);
     assert_eq!(retrieved_neuron.recent_ballots_next_entry_index, Some(1));
 
@@ -760,7 +760,7 @@ fn test_register_recent_neuron_ballot_migration_full() {
         proposal_id: Some(ProposalId { id: 101 }),
         vote: Vote::Yes as i32,
     };
-    let retrieved_neuron = store.read(neuron.id(), NeuronSections::all()).unwrap();
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::ALL).unwrap();
     assert_eq!(retrieved_neuron.recent_ballots, expected_updated_ballots);
     assert_eq!(retrieved_neuron.recent_ballots_next_entry_index, Some(2));
 }
@@ -783,7 +783,7 @@ fn test_register_recent_neuron_ballot_migration_notfull() {
 
     store.create(neuron.clone()).unwrap();
 
-    let retrieved_neuron = store.read(neuron.id(), NeuronSections::all()).unwrap();
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::ALL).unwrap();
     assert_eq!(retrieved_neuron, neuron);
 
     store
@@ -805,7 +805,7 @@ fn test_register_recent_neuron_ballot_migration_notfull() {
         recent_ballots
     };
 
-    let retrieved_neuron = store.read(neuron.id(), NeuronSections::all()).unwrap();
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::ALL).unwrap();
     assert_eq!(retrieved_neuron.recent_ballots, expected_updated_ballots);
     assert_eq!(retrieved_neuron.recent_ballots_next_entry_index, Some(21));
 
@@ -823,7 +823,7 @@ fn test_register_recent_neuron_ballot_migration_notfull() {
         proposal_id: Some(ProposalId { id: 101 }),
         vote: Vote::Yes as i32,
     });
-    let retrieved_neuron = store.read(neuron.id(), NeuronSections::all()).unwrap();
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::ALL).unwrap();
     assert_eq!(retrieved_neuron.recent_ballots, expected_updated_ballots);
     assert_eq!(retrieved_neuron.recent_ballots_next_entry_index, Some(22));
 }
