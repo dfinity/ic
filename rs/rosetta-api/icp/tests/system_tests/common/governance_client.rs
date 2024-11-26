@@ -2,6 +2,8 @@ use candid::{Decode, Encode, Principal};
 use ic_agent::Agent;
 use ic_base_types::PrincipalId;
 use ic_nns_common::{pb::v1::ProposalId, types::NeuronId};
+use ic_nns_governance_api::pb::v1::Motion;
+use ic_nns_governance_api::pb::v1::ProposalActionRequest;
 use ic_nns_governance_api::{
     pb::v1::{
         manage_neuron_response, manage_neuron_response::MakeProposalResponse, MakeProposalRequest,
@@ -9,8 +11,6 @@ use ic_nns_governance_api::{
     },
     proposal_submission_helpers::create_make_proposal_payload,
 };
-use ic_nns_governance_api::pb::v1::ProposalActionRequest;
-use ic_nns_governance_api::pb::v1::Motion;
 
 pub struct GovernanceClient {
     agent: Agent,
@@ -20,7 +20,7 @@ pub struct GovernanceClient {
 impl GovernanceClient {
     pub fn new(agent: Agent, governance_principal: Principal) -> GovernanceClient {
         GovernanceClient {
-            agent: agent,
+            agent,
             governance_principal,
         }
     }
@@ -57,8 +57,7 @@ impl GovernanceClient {
         {
             assert!(proposal_id.is_some());
             let arg = Encode!(&proposal_id.unwrap().id).expect("Error while encoding arg.");
-            self
-                .agent
+            self.agent
                 .query(&self.governance_principal, "get_proposal_info")
                 .with_arg(arg)
                 .call()
@@ -73,7 +72,14 @@ impl GovernanceClient {
         }
     }
 
-    pub async fn submit_proposal(self: &Self, principal: Principal, neuron_id: NeuronId, title: &str, summary: &str, motion_text: &str) -> ProposalId {
+    pub async fn submit_proposal(
+        &self,
+        principal: Principal,
+        neuron_id: NeuronId,
+        title: &str,
+        summary: &str,
+        motion_text: &str,
+    ) -> ProposalId {
         let proposal = MakeProposalRequest {
             title: Some(title.to_string()),
             summary: summary.to_string(),
@@ -82,15 +88,12 @@ impl GovernanceClient {
             })),
             ..Default::default()
         };
-    
-        let proposal_id = self
-            .make_proposal(neuron_id.into(), PrincipalId::from(principal), &proposal)
-            .await;
-    
-        proposal_id
+
+        self.make_proposal(neuron_id, PrincipalId::from(principal), &proposal)
+            .await
     }
 
-    pub async fn get_pending_proposals(self: &Self) -> Vec<ProposalInfo> {
+    pub async fn get_pending_proposals(&self) -> Vec<ProposalInfo> {
         let arg = Encode!(&"").expect("Error while encoding arg.");
         let res = self
             .agent
@@ -99,8 +102,6 @@ impl GovernanceClient {
             .call()
             .await
             .expect("Error while calling endpoint.");
-        let pending_proposals = Decode!(res.as_slice(), Vec<ProposalInfo>)
-            .expect("Error while decoding response.");
-        pending_proposals
+        Decode!(res.as_slice(), Vec<ProposalInfo>).expect("Error while decoding response.")
     }
 }

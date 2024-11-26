@@ -58,12 +58,7 @@ fn test_neuron_voting() {
         let neuron_ids = create_neurons(&env, INITIAL_BALANCE / 10, DISSOLVE_DELAY_6_MONTHS).await;
 
         // Ensure no proposals exist initially
-        assert!(
-            get_pending_proposals(&env.rosetta_client, env.network_identifier.clone())
-                .await
-                .unwrap()
-                .is_empty()
-        );
+        assert!(get_pending_proposals(&env).await.unwrap().is_empty());
 
         // Submit multiple proposals
         for i in 0..3 {
@@ -79,10 +74,7 @@ fn test_neuron_voting() {
         }
 
         // Ensure all proposals are pending and have the expected details
-        let all_proposals =
-            get_pending_proposals(&env.rosetta_client, env.network_identifier.clone())
-                .await
-                .unwrap();
+        let all_proposals = get_pending_proposals(&env).await.unwrap();
         let all_proposals_from_governance = governance_client.get_pending_proposals().await;
 
         assert_eq!(all_proposals.len(), 3);
@@ -95,7 +87,6 @@ fn test_neuron_voting() {
                     motion_text: "dummy text 0".to_string(),
                 })),
                 url: "".to_string(),
-                ..Default::default()
             },
             Proposal {
                 title: Some("dummy title 1".to_string()),
@@ -104,7 +95,6 @@ fn test_neuron_voting() {
                     motion_text: "dummy text 1".to_string(),
                 })),
                 url: "".to_string(),
-                ..Default::default()
             },
             Proposal {
                 title: Some("dummy title 2".to_string()),
@@ -113,7 +103,6 @@ fn test_neuron_voting() {
                     motion_text: "dummy text 2".to_string(),
                 })),
                 url: "".to_string(),
-                ..Default::default()
             },
         ];
 
@@ -151,10 +140,7 @@ fn test_neuron_voting() {
             .unwrap();
 
         // Verify the first proposal is no longer pending
-        let pending_proposals =
-            get_pending_proposals(&env.rosetta_client, env.network_identifier.clone())
-                .await
-                .unwrap();
+        let pending_proposals = get_pending_proposals(&env).await.unwrap();
         let pending_proposals_from_governance = governance_client.get_pending_proposals().await;
         assert_eq!(
             pending_proposals_from_governance,
@@ -172,10 +158,7 @@ fn test_neuron_voting() {
         register_vote(&env, proposal_ids[1], NEURON_INDEX[2], Vote::No)
             .await
             .unwrap();
-        let pending_proposals =
-            get_pending_proposals(&env.rosetta_client, env.network_identifier.clone())
-                .await
-                .unwrap();
+        let pending_proposals = get_pending_proposals(&env).await.unwrap();
         let pending_proposals_from_governance = governance_client.get_pending_proposals().await;
         assert_eq!(pending_proposals.len(), 2);
         assert_eq!(pending_proposals_from_governance.len(), 2);
@@ -193,10 +176,7 @@ fn test_neuron_voting() {
             .unwrap();
 
         // Verify the second proposal is no longer pending
-        let pending_proposals =
-            get_pending_proposals(&env.rosetta_client, env.network_identifier.clone())
-                .await
-                .unwrap();
+        let pending_proposals = get_pending_proposals(&env).await.unwrap();
         let pending_proposals_from_governance = governance_client.get_pending_proposals().await;
         assert_eq!(
             pending_proposals_from_governance,
@@ -306,12 +286,12 @@ async fn create_neuron_with_dissolve(
             &(*TEST_IDENTITY).clone(),
             RosettaCreateNeuronArgs::builder(staked_amount.into())
                 .with_from_subaccount([0; 32])
-                .with_neuron_index(neuron_index.try_into().unwrap())
+                .with_neuron_index(neuron_index)
                 .build(),
         )
         .await
         .unwrap();
-    set_dissolve_delay_from_now(env, neuron_index.try_into().unwrap(), dissolve_period_secs).await;
+    set_dissolve_delay_from_now(env, neuron_index, dissolve_period_secs).await;
     if let serde_json::Value::Number(n) =
         &neuron_response.metadata.unwrap()["operations"][0]["metadata"]["neuron_id"]
     {

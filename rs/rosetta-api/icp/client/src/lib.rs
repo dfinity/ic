@@ -14,9 +14,9 @@ use ic_rosetta_api::request_types::ChangeAutoStakeMaturityMetadata;
 use ic_rosetta_api::request_types::DisburseMetadata;
 use ic_rosetta_api::request_types::KeyMetadata;
 use ic_rosetta_api::request_types::NeuronIdentifierMetadata;
-use ic_rosetta_api::request_types::RegisterVoteMetadata;
 use ic_rosetta_api::request_types::NeuronInfoMetadata;
 use ic_rosetta_api::request_types::PublicKeyOrPrincipal;
+use ic_rosetta_api::request_types::RegisterVoteMetadata;
 use ic_rosetta_api::request_types::RequestType;
 use ic_rosetta_api::request_types::SetDissolveTimestampMetadata;
 use ic_rosetta_api::request_types::SpawnMetadata;
@@ -325,18 +325,16 @@ impl RosettaClient {
             amount: None,
             coin_change: None,
             metadata: Some(
-                RegisterVoteMetadata { 
+                RegisterVoteMetadata {
                     neuron_index,
-                    vote: vote,
-                    proposal: Some(proposal)
+                    vote,
+                    proposal: Some(proposal),
                 }
-                    .try_into()
-                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
             ),
         }])
     }
-
-
 
     pub async fn build_change_auto_stake_maturity_operations(
         signer_principal: Principal,
