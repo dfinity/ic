@@ -3485,14 +3485,7 @@ impl StateManager for StateManagerImpl {
                     }
                 }
 
-                {
-                    let _timer = self
-                        .metrics
-                        .checkpoint_op_duration
-                        .with_label_values(&["copy_state"])
-                        .start_timer();
-                    Arc::new(state)
-                }
+                Arc::new(state)
             }
         };
 
@@ -3580,7 +3573,14 @@ impl StateManager for StateManagerImpl {
 
         // The next call to take_tip() will take care of updating the
         // tip if needed.
-        states.tip = Some((height, state.deref().clone()));
+        {
+            let _timer = self
+                .metrics
+                .checkpoint_op_duration
+                .with_label_values(&["copy_state"])
+                .start_timer();
+            states.tip = Some((height, state.deref().clone()));
+        }
 
         if scope == CertificationScope::Full {
             self.release_lock_and_persist_metadata(states);
