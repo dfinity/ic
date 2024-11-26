@@ -34,11 +34,11 @@ impl Storable for StorableRegistryValue {
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct StorableRegistryKey {
-    pub version: u64,
-    pub key: String,
+    version: u64,
+    key: String,
 }
 
-// This value is computed as 2 times the max key size present in the registry
+// This value is set as 2 times the max key size present in the registry
 const MAX_REGISTRY_KEY_SIZE: u32 = 200;
 
 impl Storable for StorableRegistryKey {
@@ -62,7 +62,7 @@ impl Storable for StorableRegistryKey {
         Self { version, key }
     }
     const BOUND: Bound = Bound::Bounded {
-        max_size: MAX_REGISTRY_KEY_SIZE + std::mem::size_of::<u64>() as u32,
+        max_size: MAX_REGISTRY_KEY_SIZE + size_of::<u64>() as u32,
         is_fixed_size: false,
     };
 }
@@ -77,15 +77,22 @@ pub trait StableMemoryBorrower: Send + Sync {
         f: impl FnOnce(&mut StableBTreeMap<StorableRegistryKey, StorableRegistryValue, Memory>) -> R,
     ) -> R;
 }
+
+/// This registry data provider is designed to work with the `ic-registry-canister-client`
+/// in canisters, enabling the retrieval and storage of a registry copy in stable memory.
+///
+/// - If `keys_to_keep` is `Some(keys)`, only the specified `keys` will be stored in stable memory,
+///   while all other keys from the registry will be discarded.
+/// - If `keys_to_keep` is `None`, all keys from the registry will be retained in stable memory.
 pub struct CanisterDataProvider<S: StableMemoryBorrower> {
-    keys_filter: Option<HashSet<String>>,
+    keys_to_keep: Option<HashSet<String>>,
     _store: PhantomData<S>,
 }
 
 impl<S: StableMemoryBorrower> CanisterDataProvider<S> {
     pub fn new(keys_to_retain: Option<HashSet<String>>) -> Self {
         Self {
-            keys_filter: keys_to_retain,
+            keys_to_keep: keys_to_retain,
             _store: PhantomData,
         }
     }
@@ -114,7 +121,7 @@ impl<S: StableMemoryBorrower> CanisterDataProvider<S> {
             let string_key = std::str::from_utf8(&delta.key[..])
                 .map_err(|_| anyhow::anyhow!("Failed to convert key {:?} to string", delta.key))?;
 
-            if let Some(keys) = &self.keys_filter {
+            if let Some(keys) = &self.keys_to_keep {
                 if keys.iter().all(|prefix| !string_key.starts_with(prefix)) {
                     continue;
                 }
@@ -139,6 +146,7 @@ impl<S: StableMemoryBorrower> CanisterDataProvider<S> {
         Ok(())
     }
 
+    // This function can be called in a timer to periodically update the registry stored
     pub async fn sync_registry_stored(&self) -> anyhow::Result<()> {
         let mut update_registry_version = self
             .get_latest_version()
