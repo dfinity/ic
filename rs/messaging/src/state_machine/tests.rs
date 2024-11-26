@@ -34,7 +34,7 @@ mock! {
             &self,
             state: ic_replicated_state::ReplicatedState,
             randomness: ic_types::Randomness,
-            idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+            chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
             idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
             replica_version: &ReplicaVersion,
             current_round: ExecutionRound,

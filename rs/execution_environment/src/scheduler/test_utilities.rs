@@ -114,7 +114,7 @@ pub(crate) struct SchedulerTest {
     // Metrics Registry.
     metrics_registry: MetricsRegistry,
     // iDKG subnet public keys.
-    idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     // Pre-signature IDs.
     idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
     // Version of the running replica, not the registry's Entry
@@ -518,7 +518,7 @@ impl SchedulerTest {
         let state = self.scheduler.execute_round(
             state,
             Randomness::from([0; 32]),
-            self.idkg_subnet_public_keys.clone(),
+            self.chain_key_subnet_public_keys.clone(),
             self.idkg_pre_signature_ids.clone(),
             &self.replica_version,
             self.round,
@@ -839,7 +839,7 @@ impl SchedulerTestBuilder {
                 },
             );
         }
-        let idkg_subnet_public_keys: BTreeMap<_, _> = self
+        let chain_key_subnet_public_keys: BTreeMap<_, _> = self
             .idkg_keys
             .into_iter()
             .map(|key_id| {
@@ -956,7 +956,7 @@ impl SchedulerTestBuilder {
             wasm_executor,
             registry_settings,
             metrics_registry: self.metrics_registry,
-            idkg_subnet_public_keys,
+            chain_key_subnet_public_keys,
             idkg_pre_signature_ids: BTreeMap::new(),
             replica_version: self.replica_version,
         }

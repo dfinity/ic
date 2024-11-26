@@ -841,7 +841,7 @@ pub struct StateMachine {
     // the time of the last round
     // (equal to `time` when this `StateMachine` is initialized)
     time_of_last_round: RwLock<Time>,
-    idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     idkg_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
     pub replica_logger: ReplicaLogger,
     pub log_level: Option<Level>,
@@ -1618,7 +1618,7 @@ impl StateMachine {
             name: "master_ecdsa_public_key".to_string(),
         };
 
-        let mut idkg_subnet_public_keys = BTreeMap::new();
+        let mut chain_key_subnet_public_keys = BTreeMap::new();
         let mut idkg_subnet_secret_keys = BTreeMap::new();
 
         for key_id in idkg_keys_signing_enabled_status.keys() {
@@ -1721,7 +1721,7 @@ impl StateMachine {
 
             idkg_subnet_secret_keys.insert(key_id.clone(), private_key);
 
-            idkg_subnet_public_keys.insert(key_id.clone(), public_key);
+            chain_key_subnet_public_keys.insert(key_id.clone(), public_key);
         }
 
         let time_source = FastForwardTimeSource::new();
@@ -1790,7 +1790,7 @@ impl StateMachine {
             nonce: AtomicU64::new(nonce),
             time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
             time_of_last_round: RwLock::new(time),
-            idkg_subnet_public_keys,
+            chain_key_subnet_public_keys,
             idkg_subnet_secret_keys,
             replica_logger: replica_logger.clone(),
             log_level,
@@ -2331,7 +2331,7 @@ impl StateMachine {
                 query_stats: payload.query_stats,
             },
             randomness: Randomness::from(seed),
-            chain_key_subnet_public_keys: self.idkg_subnet_public_keys.clone(),
+            chain_key_subnet_public_keys: self.chain_key_subnet_public_keys.clone(),
             idkg_pre_signature_ids: BTreeMap::new(),
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
