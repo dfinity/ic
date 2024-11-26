@@ -41,7 +41,6 @@ LEDGER_CANISTER_DEPS = [
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:ic-cdk",
-    "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:num-traits",

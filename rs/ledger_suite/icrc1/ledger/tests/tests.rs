@@ -384,6 +384,15 @@ fn test_balances_overflow() {
 }
 
 #[test]
+fn test_approval_trimming() {
+    ic_ledger_suite_state_machine_tests::test_approval_trimming(
+        ledger_wasm(),
+        encode_init_args,
+        false,
+    );
+}
+
+#[test]
 fn test_archive_controllers() {
     ic_ledger_suite_state_machine_tests::test_archive_controllers(ledger_wasm());
 }

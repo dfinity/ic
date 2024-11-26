@@ -6,16 +6,13 @@ use ic_ledger_canister_core::ledger::{
     self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
 };
 use ic_ledger_core::{
-    approvals::{Allowance, AllowanceTable, AllowancesData},
-    balances::Balances,
-    block::EncodedBlock,
-    timestamp::TimeStamp,
+    approvals::AllowanceTable, approvals::HeapAllowancesData, balances::Balances,
+    block::EncodedBlock, timestamp::TimeStamp,
 };
 use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
 use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{storable::Bound, Storable};
-use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
+use ic_stable_structures::DefaultMemoryImpl;
 use icp_ledger::{
     AccountIdentifier, Block, FeatureFlags, LedgerAllowances, LedgerBalances, Memo, Operation,
     PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE,
@@ -23,7 +20,6 @@ use icp_ledger::{
 use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
 use lazy_static::lazy_static;
-use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -73,54 +69,6 @@ fn default_ledger_version() -> u64 {
 }
 
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
-const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
-const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
-
-#[derive(Clone, Debug, Encode, Decode)]
-struct StorableAllowance {
-    #[n(0)]
-    amount: Tokens,
-    #[n(1)]
-    expires_at: Option<TimeStamp>,
-}
-
-impl Storable for StorableAllowance {
-    fn to_bytes(&self) -> Cow<[u8]> {
-        let mut buf = vec![];
-        minicbor::encode(self, &mut buf).expect("StorableAllowance encoding should always succeed");
-        Cow::Owned(buf)
-    }
-
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        minicbor::decode(bytes.as_ref()).unwrap_or_else(|e| {
-            panic!(
-                "failed to decode StorableAllowance bytes {}: {e}",
-                hex::encode(bytes)
-            )
-        })
-    }
-
-    const BOUND: Bound = Bound::Unbounded;
-}
-
-impl From<Allowance<Tokens>> for StorableAllowance {
-    fn from(val: Allowance<Tokens>) -> Self {
-        Self {
-            amount: val.amount,
-            expires_at: val.expires_at,
-        }
-    }
-}
-
-impl From<StorableAllowance> for Allowance<Tokens> {
-    fn from(val: StorableAllowance) -> Self {
-        Self {
-            amount: val.amount,
-            expires_at: val.expires_at,
-            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
-        }
-    }
-}
 
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
@@ -130,34 +78,6 @@ thread_local! {
     // The memory where the ledger must write and read its state during an upgrade.
     pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
         RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
-
-    // (from, spender) -> allowance - map storing ledger allowances.
-    #[allow(clippy::type_complexity)]
-    pub static ALLOWANCES_MEMORY: RefCell<StableBTreeMap<(AccountIdentifier, AccountIdentifier), StorableAllowance, VirtualMemory<DefaultMemoryImpl>>> =
-        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_MEMORY_ID))));
-
-    // (timestamp, (from, spender)) - expiration set used for removing expired allowances.
-    #[allow(clippy::type_complexity)]
-    pub static ALLOWANCES_EXPIRATIONS_MEMORY: RefCell<StableBTreeMap<(TimeStamp, (AccountIdentifier, AccountIdentifier)), (), VirtualMemory<DefaultMemoryImpl>>> =
-        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_EXPIRATIONS_MEMORY_ID))));
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub enum LedgerField {
-    Allowances,
-    AllowancesExpirations,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub enum LedgerState {
-    Migrating(LedgerField),
-    Ready,
-}
-
-impl Default for LedgerState {
-    fn default() -> Self {
-        Self::Ready
-    }
 }
 
 /// The ledger versions represent backwards incompatible versions of the ledger.
@@ -176,8 +96,6 @@ pub struct Ledger {
     pub balances: LedgerBalances,
     #[serde(default)]
     pub approvals: LedgerAllowances,
-    #[serde(default)]
-    pub stable_approvals: AllowanceTable<StableAllowancesData>,
     pub blockchain: Blockchain<dfn_runtime::DfnRuntime, IcpLedgerArchiveWasm>,
     // A cap on the maximum number of accounts.
     pub maximum_number_of_accounts: usize,
@@ -219,16 +137,13 @@ pub struct Ledger {
     #[serde(default)]
     pub feature_flags: FeatureFlags,
 
-    #[serde(default)]
-    pub state: LedgerState,
-
     #[serde(default = "default_ledger_version")]
     pub ledger_version: u64,
 }
 
 impl LedgerContext for Ledger {
     type AccountId = AccountIdentifier;
-    type AllowancesData = StableAllowancesData;
+    type AllowancesData = HeapAllowancesData<AccountIdentifier, Tokens>;
     type BalancesStore = BTreeMap<AccountIdentifier, Tokens>;
     type Tokens = Tokens;
 
@@ -241,11 +156,11 @@ impl LedgerContext for Ledger {
     }
 
     fn approvals(&self) -> &AllowanceTable<Self::AllowancesData> {
-        &self.stable_approvals
+        &self.approvals
     }
 
     fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData> {
-        &mut self.stable_approvals
+        &mut self.approvals
     }
 
     fn fee_collector(&self) -> Option<&ic_ledger_core::block::FeeCollector<Self::AccountId>> {
@@ -326,7 +241,6 @@ impl Default for Ledger {
     fn default() -> Self {
         Self {
             approvals: Default::default(),
-            stable_approvals: Default::default(),
             balances: LedgerBalances::default(),
             blockchain: Blockchain::default(),
             maximum_number_of_accounts: 28_000_000,
@@ -343,7 +257,6 @@ impl Default for Ledger {
             token_symbol: unknown_token(),
             token_name: unknown_token(),
             feature_flags: FeatureFlags::default(),
-            state: LedgerState::Ready,
             ledger_version: LEDGER_VERSION,
         }
     }
@@ -565,10 +478,6 @@ impl Ledger {
             self.feature_flags = feature_flags;
         }
     }
-
-    pub fn is_ready(&self) -> bool {
-        matches!(self.state, LedgerState::Ready)
-    }
 }
 
 pub fn add_payment(
@@ -594,106 +503,4 @@ pub fn change_notification_state(
         new_state,
         TimeStamp::from(now()),
     )
-}
-
-#[derive(Serialize, Deserialize, Debug, Default)]
-pub struct StableAllowancesData {}
-
-impl AllowancesData for StableAllowancesData {
-    type AccountId = AccountIdentifier;
-    type Tokens = Tokens;
-
-    fn get_allowance(
-        &self,
-        account_spender: &(Self::AccountId, Self::AccountId),
-    ) -> Option<Allowance<Self::Tokens>> {
-        ALLOWANCES_MEMORY
-            .with_borrow(|allowances| allowances.get(account_spender))
-            .map(|a| a.into())
-    }
-
-    fn set_allowance(
-        &mut self,
-        account_spender: (Self::AccountId, Self::AccountId),
-        allowance: Allowance<Self::Tokens>,
-    ) {
-        ALLOWANCES_MEMORY
-            .with_borrow_mut(|allowances| allowances.insert(account_spender, allowance.into()));
-    }
-
-    fn remove_allowance(&mut self, account_spender: &(Self::AccountId, Self::AccountId)) {
-        ALLOWANCES_MEMORY.with_borrow_mut(|allowances| allowances.remove(account_spender));
-    }
-
-    fn insert_expiry(
-        &mut self,
-        timestamp: TimeStamp,
-        account_spender: (Self::AccountId, Self::AccountId),
-    ) {
-        ALLOWANCES_EXPIRATIONS_MEMORY.with_borrow_mut(|expirations| {
-            expirations.insert((timestamp, account_spender), ());
-        });
-    }
-
-    fn remove_expiry(
-        &mut self,
-        timestamp: TimeStamp,
-        account_spender: (Self::AccountId, Self::AccountId),
-    ) {
-        ALLOWANCES_EXPIRATIONS_MEMORY.with_borrow_mut(|expirations| {
-            expirations.remove(&(timestamp, account_spender));
-        });
-    }
-
-    fn insert_arrival(
-        &mut self,
-        _timestamp: TimeStamp,
-        _account_spender: (Self::AccountId, Self::AccountId),
-    ) {
-    }
-
-    fn remove_arrival(
-        &mut self,
-        _timestamp: TimeStamp,
-        _account_spender: (Self::AccountId, Self::AccountId),
-    ) {
-    }
-
-    fn first_expiry(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
-        ALLOWANCES_EXPIRATIONS_MEMORY
-            .with_borrow(|expirations| expirations.first_key_value().map(|kv| kv.0))
-    }
-
-    fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
-        ALLOWANCES_EXPIRATIONS_MEMORY
-            .with_borrow_mut(|expirations| expirations.pop_first().map(|kv| kv.0))
-    }
-
-    fn pop_first_allowance(
-        &mut self,
-    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)> {
-        panic!("The method should not be called for StableAllowancesData")
-    }
-
-    fn len_allowances(&self) -> usize {
-        ALLOWANCES_MEMORY
-            .with_borrow(|allowances| allowances.len())
-            .try_into()
-            .unwrap()
-    }
-
-    fn len_expirations(&self) -> usize {
-        ALLOWANCES_EXPIRATIONS_MEMORY
-            .with_borrow(|expirations| expirations.len())
-            .try_into()
-            .unwrap()
-    }
-
-    fn len_arrivals(&self) -> usize {
-        0
-    }
-
-    fn clear_arrivals(&mut self) {
-        panic!("The method should not be called for StableAllowancesData")
-    }
 }

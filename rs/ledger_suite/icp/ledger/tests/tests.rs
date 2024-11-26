@@ -1508,6 +1508,15 @@ fn test_balances_overflow() {
 }
 
 #[test]
+fn test_approval_trimming() {
+    ic_ledger_suite_state_machine_tests::test_approval_trimming(
+        ledger_wasm(),
+        encode_init_args,
+        true,
+    );
+}
+
+#[test]
 fn account_identifier_test() {
     let env = StateMachine::new();
     let payload = LedgerCanisterInitPayload::builder()

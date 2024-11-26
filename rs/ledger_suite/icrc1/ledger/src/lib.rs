@@ -1233,6 +1233,11 @@ impl AllowancesData for StableAllowancesData {
         result.map(|e| (e.timestamp, e.account_spender.into()))
     }
 
+    fn oldest_arrivals(&self, _n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
+        // We do not store arrivals in stable structures.
+        vec![]
+    }
+
     fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
         let result = ALLOWANCES_EXPIRATIONS_MEMORY
             .with_borrow_mut(|expirations| expirations.pop_first().map(|kv| kv.0));
