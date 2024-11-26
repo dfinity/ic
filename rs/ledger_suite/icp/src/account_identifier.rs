@@ -6,7 +6,6 @@ use ic_stable_structures::{storable::Bound, Storable};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{de, de::Error, Deserialize, Serialize};
 use std::borrow::Cow;
-use std::io::{Cursor, Read};
 use std::{
     convert::{TryFrom, TryInto},
     fmt::{Display, Formatter},
@@ -62,13 +61,9 @@ impl Storable for AccountIdentifier {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        let mut cursor = Cursor::new(bytes);
-
-        let mut ai = AccountIdentifier { hash: [7; 28] };
-        cursor
-            .read_exact(&mut ai.hash)
-            .expect("Unable to read the account identifier");
-        ai
+        AccountIdentifier {
+            hash: bytes[0..28].try_into().unwrap(),
+        }
     }
 
     const BOUND: Bound = Bound::Bounded {
