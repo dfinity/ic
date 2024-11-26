@@ -18,10 +18,7 @@ use futures::{
     FutureExt,
 };
 use ic_agent::{
-    agent::{
-        http_transport::reqwest_transport::{reqwest, ReqwestTransport},
-        CallResponse, EnvelopeContent, RejectCode, RejectResponse,
-    },
+    agent::{CallResponse, EnvelopeContent, RejectCode, RejectResponse},
     export::Principal,
     identity::BasicIdentity,
     Agent, AgentError, Identity, Signature,
@@ -811,20 +808,11 @@ pub async fn agent_with_identity_mapping(
         (Some(addr_mapping), Ok(Some(domain))) => builder.resolve(domain, (addr_mapping, 0).into()),
         _ => builder,
     };
-    let client = builder
-        .build()
-        .map_err(|err| AgentError::TransportError(Box::new(err)))?;
-    agent_with_client_identity(url, client, identity).await
-}
+    let reqwest_client = builder.build().map_err(AgentError::TransportError)?;
 
-pub async fn agent_with_client_identity(
-    url: &str,
-    client: reqwest::Client,
-    identity: impl Identity + 'static,
-) -> Result<Agent, AgentError> {
-    let transport = ReqwestTransport::create_with_client(url, client)?.with_use_call_v3_endpoint();
     let a = Agent::builder()
-        .with_transport(transport)
+        .with_url(url)
+        .with_http_client(reqwest_client)
         .with_identity(identity)
         .with_max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
         // Ingresses are created with the system time but are checked against the consensus time.
@@ -839,7 +827,7 @@ pub async fn agent_with_client_identity(
         // too further in the future, i.e. greater than x+MAX_INGRESS_TTL in this case. To tolerate
         // the delays in the progress of consensus, we reduce 30sn from MAX_INGRESS_TTL and set the
         // expiry_time of ingresses accordingly.
-        .with_ingress_expiry(Some(MAX_INGRESS_TTL - std::time::Duration::from_secs(30)))
+        .with_ingress_expiry(MAX_INGRESS_TTL - std::time::Duration::from_secs(30))
         .build()
         .unwrap();
     a.fetch_root_key().await?;
