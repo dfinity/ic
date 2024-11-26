@@ -1469,11 +1469,7 @@ impl PocketIc {
         }
     }
 
-    /// Execute an update call on a canister explicitly specifying an effective principal to route the request:
-    /// this API is useful for making generic calls (including management canister calls) without using dedicated functions from this library
-    /// (e.g., making generic calls in dfx to a PocketIC instance).
-    #[instrument(skip(self, payload), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), effective_principal = %effective_principal.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
-    pub async fn update_call_with_effective_principal(
+    pub(crate) async fn update_call_with_effective_principal(
         &self,
         canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,

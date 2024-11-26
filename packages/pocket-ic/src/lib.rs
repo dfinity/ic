@@ -1090,11 +1090,7 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.get_subnet_metrics(subnet_id).await })
     }
 
-    /// Execute an update call on a canister explicitly specifying an effective principal to route the request:
-    /// this API is useful for making generic calls (including management canister calls) without using dedicated functions from this library
-    /// (e.g., making generic calls in dfx to a PocketIC instance).
-    #[instrument(skip(self, payload), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), effective_principal = %effective_principal.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
-    pub fn update_call_with_effective_principal(
+    pub(crate) fn update_call_with_effective_principal(
         &self,
         canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,
@@ -1117,8 +1113,8 @@ impl PocketIc {
     }
 
     /// Execute a query call on a canister explicitly specifying an effective principal to route the request:
-    /// this API is useful for making generic calls (including management canister calls) without using dedicated functions from this library
-    /// (e.g., making generic calls in dfx to a PocketIC instance).
+    /// this API is useful for making generic query calls (including management canister query calls) without using dedicated functions from this library
+    /// (e.g., making generic query calls in dfx to a PocketIC instance).
     #[instrument(skip(self, payload), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), effective_principal = %effective_principal.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
     pub fn query_call_with_effective_principal(
         &self,
