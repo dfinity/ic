@@ -18,7 +18,7 @@ pub const DEFAULT_SUBACCOUNT: &Subaccount = &[0; 32];
 // Account representation of ledgers supporting the ICRC1 standard
 #[derive(Serialize, CandidType, Deserialize, Clone, Debug, Copy, Encode, Decode)]
 pub struct Account {
-    #[cbor(n(0), with = "crate::cbor::principal")]
+    #[cbor(n(0), with = "icrc_cbor::principal")]
     pub owner: Principal,
     #[cbor(n(1), with = "minicbor::bytes")]
     pub subaccount: Option<Subaccount>,

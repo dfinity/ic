@@ -16,11 +16,11 @@ rust_library(
     name = "tokens_u256",
     srcs = [
         "src/lib.rs",
-        "src/minicbor_u256.rs",
     ],
     crate_name = "ic_icrc1_tokens_u256",
     version = "0.1.0",
     deps = COMMON_DEPS + [
+        "//packages/icrc-cbor:icrc-cbor_u256",
         "//rs/ledger_suite/common/ledger_core",
         "@crate_index//:ethnum",
         "@crate_index//:num-bigint",
