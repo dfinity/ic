@@ -1330,7 +1330,7 @@ impl NeuronStore {
         with_stable_neuron_store(|stable_neuron_store| {
             // Select stable memory neurons.
             let stable_neuron = stable_neuron_store
-                .range_neurons(neuron_ids, neuron_sections)
+                .range_neurons_sections(neuron_ids, neuron_sections)
                 .map(|neuron| {
                     let original = neuron.clone();
                     NeuronHandle::Owned {
