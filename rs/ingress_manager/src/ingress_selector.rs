@@ -53,21 +53,20 @@ impl IngressSelector for IngressManager {
     ) -> IngressPayload {
         let _timer = self.metrics.ingress_selector_get_payload_time.start_timer();
         let certified_height = context.certified_height;
-        let past_ingress_set = match IngressSetChain::new(context.time, past_ingress, || {
-            IngressHistorySet::new(self.ingress_hist_reader.as_ref(), certified_height)
-        }) {
-            Ok(past_ingress_set) => past_ingress_set,
-            Err(err) => {
-                warn!(
-                    every_n_seconds => 5,
-                    self.log,
-                    "IngressHistoryReader doesn't have state for height {}: {:?}",
-                    certified_height,
-                    err
-                );
-                return IngressPayload::default();
-            }
-        };
+        let past_ingress_set =
+            match IngressSetChain::new(context, past_ingress, self.ingress_hist_reader.as_ref()) {
+                Ok(past_ingress_set) => past_ingress_set,
+                Err(err) => {
+                    warn!(
+                        every_n_seconds => 5,
+                        self.log,
+                        "IngressHistoryReader doesn't have state for height {}: {:?}",
+                        certified_height,
+                        err
+                    );
+                    return IngressPayload::default();
+                }
+            };
 
         let state = match self.state_reader.get_state_at(certified_height) {
             Ok(state) => state,
@@ -94,7 +93,6 @@ impl IngressSelector for IngressManager {
         // becomes greater than byte_limit.
         let mut accumulated_size = 0;
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
-        let mut num_messages = 0;
 
         let ingress_pool = self.ingress_pool.read().unwrap();
 
@@ -148,7 +146,7 @@ impl IngressSelector for IngressManager {
 
         let mut messages_in_payload = vec![];
 
-        let mut canisters: Vec<_> = canister_queues.keys().cloned().collect();
+        let mut canisters: Vec<_> = canister_queues.keys().copied().collect();
 
         // Do round-robin iterations until the payload is full or no messages are left
         let mut round_robin_iter: u32 = 0;
@@ -159,7 +157,7 @@ impl IngressSelector for IngressManager {
             let mut i = 0;
             while i < canisters.len() {
                 let canister_id = canisters[i];
-                // For a given canister, add valid ingress messsages until quota is met
+                // For a given canister, add valid ingress messages until quota is met
                 let queue = &mut canister_queues.get_mut(&canister_id).unwrap();
                 while let Some(msg) = queue.msgs.last() {
                     let ingress = &msg.msg.signed_ingress;
@@ -170,7 +168,7 @@ impl IngressSelector for IngressManager {
                         context,
                         &settings,
                         &past_ingress_set,
-                        num_messages,
+                        messages_in_payload.len(),
                         &mut cycles_needed,
                     );
                     // Any message that generates validation errors gets removed from
@@ -207,7 +205,6 @@ impl IngressSelector for IngressManager {
                         break;
                     }
 
-                    num_messages += 1;
                     accumulated_size += ingress_size;
                     queue.msgs_included += 1;
                     queue.bytes_included += ingress_size;
@@ -287,24 +284,23 @@ impl IngressSelector for IngressManager {
             .get_ingress_message_settings(context.registry_version)
             .expect("Couldn't get IngressMessageSettings from the registry.");
 
-        let past_ingress = match IngressSetChain::new(context.time, past_ingress, || {
-            IngressHistorySet::new(self.ingress_hist_reader.as_ref(), certified_height)
-        }) {
-            Ok(ingress_set) => ingress_set,
-            Err(err) => {
-                warn!(
-                    every_n_seconds => 30,
-                    self.log,
-                    "IngressHistoryReader doesn't have state for height {} yet: {:?}",
-                    certified_height,
-                    err
-                );
+        let past_ingress =
+            match IngressSetChain::new(context, past_ingress, self.ingress_hist_reader.as_ref()) {
+                Ok(ingress_set) => ingress_set,
+                Err(err) => {
+                    warn!(
+                        every_n_seconds => 30,
+                        self.log,
+                        "IngressHistoryReader doesn't have state for height {} yet: {:?}",
+                        certified_height,
+                        err
+                    );
 
-                return Err(ValidationError::ValidationFailed(
-                    IngressPayloadValidationFailure::IngressHistoryError(certified_height, err),
-                ));
-            }
-        };
+                    return Err(ValidationError::ValidationFailed(
+                        IngressPayloadValidationFailure::IngressHistoryError(certified_height, err),
+                    ));
+                }
+            };
 
         let state = match self.state_reader.get_state_at(certified_height) {
             Ok(state) => state.take(),
@@ -432,7 +428,7 @@ impl IngressManager {
         state: &ReplicatedState,
         context: &ValidationContext,
         settings: &IngressMessageSettings,
-        past_ingress_set: &IngressSetChain<IngressHistorySet>,
+        past_ingress_set: &IngressSetChain,
         num_messages: usize,
         cycles_needed: &mut BTreeMap<CanisterId, Cycles>,
     ) -> ValidationResult<IngressPayloadValidationError> {
@@ -561,31 +557,7 @@ impl IngressManager {
     }
 }
 
-/// An IngressSetQuery implementation based on IngressHistoryReader.
-struct IngressHistorySet {
-    get_status: Box<dyn Fn(&MessageId) -> IngressStatus>,
-}
-
-impl IngressHistorySet {
-    fn new(
-        ingress_hist_reader: &dyn IngressHistoryReader,
-        certified_height: Height,
-    ) -> Result<Self, IngressHistoryError> {
-        ingress_hist_reader
-            .get_status_at_height(certified_height)
-            .map(|get_status| IngressHistorySet { get_status })
-    }
-}
-
-impl IngressSetQuery for IngressHistorySet {
-    fn contains(&self, msg_id: &IngressMessageId) -> bool {
-        (self.get_status)(&msg_id.into()) != IngressStatus::Unknown
-    }
-
-    fn get_expiry_lower_bound(&self) -> Time {
-        ic_types::time::UNIX_EPOCH
-    }
-}
+type IngressStatusGetter = Box<dyn Fn(&MessageId) -> IngressStatus>;
 
 /// Chaining of two IngressSetQuery objects. We only look up the second
 /// one if the first one is false.
@@ -593,50 +565,44 @@ impl IngressSetQuery for IngressHistorySet {
 /// Because an `IngressSetQuery` covers a range starting from its expiry lower
 /// bound, if the first one already covers the range of interest, we do not need
 /// to consult the second one.
-struct IngressSetChain<'a, T> {
-    first: &'a dyn IngressSetQuery,
-    next: Option<T>,
+struct IngressSetChain<'a> {
+    ingress_set_query: &'a dyn IngressSetQuery,
+    ingress_status_getter: Option<IngressStatusGetter>,
 }
 
-impl<'a, T: IngressSetQuery> IngressSetChain<'a, T> {
-    /// Return the Chaining of two IngerssSetQuery object that can be
-    /// used to check if an ingress message with an expiry time in the range
-    /// of `time .. time + MAX_INGRESS_TTL` already exists in the set.
+impl<'a> IngressSetChain<'a> {
+    /// Return the chaining of [`IngerssSetQuery`] and [`IngressHistoryReader`] that can be used to
+    /// check if an ingress message with an expiry time in the range of `time .. time +
+    /// MAX_INGRESS_TTL` already exists in the set.
     ///
-    /// If the first IngressSetQuery is enough to cover the full range (i.e.
-    /// its expiry lower bound <= time - MAX_INGRESS_TTL), the second
-    /// IngressSetQuery object will not be used.
-    fn new<Err>(
-        time: Time,
-        first: &'a dyn IngressSetQuery,
-        second: impl Fn() -> Result<T, Err>,
-    ) -> Result<IngressSetChain<'a, T>, Err> {
-        let next = if first.get_expiry_lower_bound() + MAX_INGRESS_TTL <= time {
-            None
-        } else {
-            Some(second()?)
-        };
-        Ok(IngressSetChain { first, next })
-    }
-}
+    /// If the [`IngressSetQuery`] is enough to cover the full range (i.e. its expiry lower bound
+    /// <= time - MAX_INGRESS_TTL), the [`IngressHistoryReader`] will not be used.
+    fn new(
+        context: &ValidationContext,
+        ingress_set_query: &'a dyn IngressSetQuery,
+        ingress_history_reader: &dyn IngressHistoryReader,
+    ) -> Result<IngressSetChain<'a>, IngressHistoryError> {
+        let ingress_status_getter =
+            if ingress_set_query.get_expiry_lower_bound() + MAX_INGRESS_TTL <= context.time {
+                None
+            } else {
+                Some(ingress_history_reader.get_status_at_height(context.certified_height)?)
+            };
 
-impl<'a, T: IngressSetQuery> IngressSetQuery for IngressSetChain<'a, T> {
+        Ok(IngressSetChain {
+            ingress_set_query,
+            ingress_status_getter,
+        })
+    }
+
     fn contains(&self, msg_id: &IngressMessageId) -> bool {
-        if self.first.contains(msg_id) {
-            true
-        } else {
-            self.next
+        self.ingress_set_query.contains(msg_id)
+            || self
+                .ingress_status_getter
                 .as_ref()
-                .map(|set| set.contains(msg_id))
-                .unwrap_or(false)
-        }
-    }
-
-    fn get_expiry_lower_bound(&self) -> Time {
-        self.next
-            .as_ref()
-            .map(|set| set.get_expiry_lower_bound())
-            .unwrap_or_else(|| self.first.get_expiry_lower_bound())
+                .is_some_and(|ingress_status_getter| {
+                    ingress_status_getter(&msg_id.message_id) != IngressStatus::Unknown
+                })
     }
 }
 
@@ -2230,6 +2196,7 @@ mod tests {
             },
         )
     }
+
     #[tokio::test]
     async fn test_not_stuck() {
         const MSG_SIZE: usize = 154;
