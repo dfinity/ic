@@ -506,12 +506,13 @@ fn test_abridged_neuron_size() {
         dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(u64::MAX)),
         visibility: None,
         voting_power_refreshed_timestamp_seconds: Some(u64::MAX),
+        recent_ballots_next_entry_index: Some(100),
     };
 
     assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());
     // This size can be updated. This assertion is here to make sure we are very aware of growth.
     // Reminder: the amount we allocated for AbridgedNeuron is 380 bytes.
-    assert_eq!(abridged_neuron.encoded_len(), 196);
+    assert_eq!(abridged_neuron.encoded_len(), 199);
 }
 
 #[test]
@@ -563,4 +564,130 @@ fn test_range_neurons_ranges_work_correctly() {
         ))
         .collect::<Vec<_>>();
     assert_eq!(result, neurons[2..3]);
+}
+
+#[test]
+fn test_register_recent_neuron_ballot_migration_full() {
+    // Set up with 100 ballots, and ensure that the pointer is in the right place and the ballots are reversed
+    let mut store = new_heap_based();
+    let mut neuron = create_model_neuron(1);
+    neuron.recent_ballots_next_entry_index = None;
+
+    let recent_ballots = (0..100)
+        .map(|i| BallotInfo {
+            proposal_id: Some(ProposalId { id: i as u64 }),
+            vote: Vote::Yes as i32,
+        })
+        .collect::<Vec<_>>();
+
+    neuron.recent_ballots = recent_ballots.clone();
+
+    store.create(neuron.clone()).unwrap();
+
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::all()).unwrap();
+    assert_eq!(retrieved_neuron, neuron);
+
+    store
+        .register_recent_neuron_ballot(
+            neuron.id(),
+            Topic::NetworkEconomics,
+            ProposalId { id: 100 },
+            Vote::No,
+        )
+        .unwrap();
+
+    let mut expected_updated_ballots = {
+        let mut recent_ballots = recent_ballots.clone();
+        recent_ballots.reverse();
+        recent_ballots[0] = BallotInfo {
+            proposal_id: Some(ProposalId { id: 100 }),
+            vote: Vote::No as i32,
+        };
+        recent_ballots
+    };
+
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::all()).unwrap();
+    assert_eq!(retrieved_neuron.recent_ballots, expected_updated_ballots);
+    assert_eq!(retrieved_neuron.recent_ballots_next_entry_index, Some(1));
+
+    // Now, let's add another ballot and ensure that the pointer is updated correctly and ballots
+    // are not reversed again
+    store
+        .register_recent_neuron_ballot(
+            neuron.id(),
+            Topic::NetworkEconomics,
+            ProposalId { id: 101 },
+            Vote::Yes,
+        )
+        .unwrap();
+    expected_updated_ballots[1] = BallotInfo {
+        proposal_id: Some(ProposalId { id: 101 }),
+        vote: Vote::Yes as i32,
+    };
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::all()).unwrap();
+    assert_eq!(retrieved_neuron.recent_ballots, expected_updated_ballots);
+    assert_eq!(retrieved_neuron.recent_ballots_next_entry_index, Some(2));
+}
+
+#[test]
+fn test_register_recent_neuron_ballot_migration_notfull() {
+    // Set up with 100 ballots, and ensure that the pointer is in the right place and the ballots are reversed
+    let mut store = new_heap_based();
+    let mut neuron = create_model_neuron(1);
+    neuron.recent_ballots_next_entry_index = None;
+
+    let recent_ballots = (0..20)
+        .map(|i| BallotInfo {
+            proposal_id: Some(ProposalId { id: i as u64 }),
+            vote: Vote::Yes as i32,
+        })
+        .collect::<Vec<_>>();
+
+    neuron.recent_ballots = recent_ballots.clone();
+
+    store.create(neuron.clone()).unwrap();
+
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::all()).unwrap();
+    assert_eq!(retrieved_neuron, neuron);
+
+    store
+        .register_recent_neuron_ballot(
+            neuron.id(),
+            Topic::NetworkEconomics,
+            ProposalId { id: 100 },
+            Vote::No,
+        )
+        .unwrap();
+
+    let mut expected_updated_ballots = {
+        let mut recent_ballots = recent_ballots.clone();
+        recent_ballots.reverse();
+        recent_ballots.push(BallotInfo {
+            proposal_id: Some(ProposalId { id: 100 }),
+            vote: Vote::No as i32,
+        });
+        recent_ballots
+    };
+
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::all()).unwrap();
+    assert_eq!(retrieved_neuron.recent_ballots, expected_updated_ballots);
+    assert_eq!(retrieved_neuron.recent_ballots_next_entry_index, Some(21));
+
+    // Now, let's add another ballot and ensure that the pointer is updated correctly and ballots
+    // are not reversed again
+    store
+        .register_recent_neuron_ballot(
+            neuron.id(),
+            Topic::NetworkEconomics,
+            ProposalId { id: 101 },
+            Vote::Yes,
+        )
+        .unwrap();
+    expected_updated_ballots.push(BallotInfo {
+        proposal_id: Some(ProposalId { id: 101 }),
+        vote: Vote::Yes as i32,
+    });
+    let retrieved_neuron = store.read(neuron.id(), NeuronSections::all()).unwrap();
+    assert_eq!(retrieved_neuron.recent_ballots, expected_updated_ballots);
+    assert_eq!(retrieved_neuron.recent_ballots_next_entry_index, Some(22));
 }

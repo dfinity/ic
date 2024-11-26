@@ -1,6 +1,6 @@
-use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use crate::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet};
 use crate::crypto::vetkd::{VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare};
+use crate::crypto::ExtendedDerivationPath;
 use crate::Height;
 use ic_base_types::PrincipalId;
 use ic_base_types::SubnetId;
@@ -24,14 +24,14 @@ mod display_and_debug {
                 derivation_path: vec![b"dp".to_vec()],
             },
             derivation_id: b"did".to_vec(),
-            encryption_key: b"ek".to_vec(),
+            encryption_public_key: b"ek".to_vec(),
         };
         let output = "VetKdArgs { \
             ni_dkg_id: NiDkgId { start_block_height: 7, dealer_subnet: ot5wk-sbkaa-aaaaa-aaaap-yai, dkg_tag: HighThreshold, target_subnet: Remote(0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a) }, \
             derivation_path: ExtendedDerivationPath { caller: 7xzs3-rqraa-aaaaa-aaaap-2ai, \
             derivation_path: { 6470 } }, \
             derivation_id: 0x646964, \
-            encryption_key: 0x656b \
+            encryption_public_key: 0x656b \
         }"
         .to_string();
 

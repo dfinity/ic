@@ -12,8 +12,6 @@ path = "src/main.rs"
 
 [dependencies]
 candid = { workspace = true }
-ciborium = { workspace = true }
-futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
@@ -22,10 +20,7 @@ ic-cdk-timers = { workspace = true }
 ic-metrics-encoder = "1"
 ic-nns-governance = { path = "../../nns/governance" }
 ic-stable-structures = { workspace = true }
-ic0 = "0.18.9"
-num-traits = { workspace = true }
 serde = { workspace = true }
-serde_bytes = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

@@ -60,8 +60,9 @@ use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
     crypto::{
-        canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey, PublicKey},
+        canister_threshold_sig::{MasterPublicKey, PublicKey},
         threshold_sig::ni_dkg::NiDkgTargetId,
+        ExtendedDerivationPath,
     },
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
@@ -2637,6 +2638,7 @@ impl ExecutionEnvironment {
         match args {
             ThresholdArguments::Ecdsa(_) => cam.ecdsa_signature_fee(subnet_size),
             ThresholdArguments::Schnorr(_) => cam.schnorr_signature_fee(subnet_size),
+            ThresholdArguments::VetKd(_) => cam.vetkd_fee(subnet_size),
         }
     }
 
@@ -2674,6 +2676,7 @@ impl ExecutionEnvironment {
                         CyclesUseCase::ECDSAOutcalls
                     }
                     ThresholdArguments::Schnorr(_) => CyclesUseCase::SchnorrOutcalls,
+                    ThresholdArguments::VetKd(_) => CyclesUseCase::VetKd,
                 };
                 state
                     .metadata

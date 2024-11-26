@@ -22,7 +22,7 @@ pub mod option {
 
     #[derive(Decode, Encode)]
     #[cbor(transparent)]
-    struct CborPrincipal(#[cbor(n(0), with = "crate::cbor::principal")] pub Principal);
+    struct CborPrincipal(#[cbor(n(0), with = "crate::principal")] pub Principal);
 
     pub fn decode<Ctx>(d: &mut Decoder<'_>, ctx: &mut Ctx) -> Result<Option<Principal>, Error> {
         Ok(Option::<CborPrincipal>::decode(d, ctx)?.map(|n| n.0))

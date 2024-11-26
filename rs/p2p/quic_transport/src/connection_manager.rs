@@ -77,8 +77,8 @@ const STREAM_RECEIVE_WINDOW: VarInt = VarInt::from_u32(4_000_000);
 const MAX_CONCURRENT_BIDI_STREAMS: VarInt = VarInt::from_u32(1_000);
 const MAX_CONCURRENT_UNI_STREAMS: VarInt = VarInt::from_u32(1_000);
 
-/// Interval of quic heartbeats. They are only sent if the connection is idle for more than 200ms.
-const KEEP_ALIVE_INTERVAL: Duration = Duration::from_millis(200);
+/// Interval of quic heartbeats. They are only sent if the connection is idle for more than 1sec.
+const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(1);
 /// Timeout after which quic marks connections as broken. This timeout is used to detect connections
 /// that were not explicitly closed. I.e replica crash
 const IDLE_TIMEOUT: Duration = Duration::from_secs(5);

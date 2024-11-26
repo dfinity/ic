@@ -75,7 +75,7 @@ impl GetBlocksRequest {
 }
 
 /// Deprecated, use `ICRC3DataCertificate` instead"
-#[derive(Debug, CandidType, Serialize, Deserialize)]
+#[derive(Debug, CandidType, Serialize, Deserialize, Eq, PartialEq)]
 pub struct DataCertificate {
     pub certificate: Option<serde_bytes::ByteBuf>,
     pub hash_tree: serde_bytes::ByteBuf,

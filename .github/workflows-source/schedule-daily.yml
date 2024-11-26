@@ -18,7 +18,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:a9a164fcf92c866941898ec3ac8d01a5955e689ab7a9a9258856cbecbaabd0d8
+    image: ghcr.io/dfinity/ic-build@sha256:1d775e6d161dee883d10f082ab7fdde3e3d26061e1209255fb6514f8b62b206b
   dind-large-setup: &dind-large-setup
     runs-on:
       group: zh1
@@ -83,6 +83,7 @@ jobs:
               --file_share_ssh_key "$(realpath file2)" \
               --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
               --file_share_username ci_interim \
+              --hsm \
               --ci_mode
 
           # Run bare metal node performance benchmarks

@@ -2313,7 +2313,13 @@ impl Governance {
                             && neuron.visibility() == Some(Visibility::Public)
                         );
                 if let_caller_read_full_neuron {
-                    full_neurons.push(NeuronProto::from(neuron.clone()));
+                    let mut proto = NeuronProto::from(neuron.clone());
+                    // We get the recent_ballots from the neuron itself, because
+                    // we are using a circular buffer to store them.  This solution is not ideal, but
+                    // we need to do a larger refactoring to use the correct API types instead of the internal
+                    // governance proto at this level.
+                    proto.recent_ballots = neuron.sorted_recent_ballots();
+                    full_neurons.push(proto);
                 }
             });
         }
@@ -5387,7 +5393,7 @@ impl Governance {
             .collect()
     }
 
-    pub fn make_proposal(
+    pub async fn make_proposal(
         &mut self,
         proposer_id: &NeuronId,
         caller: &PrincipalId,
@@ -5592,7 +5598,8 @@ impl Governance {
         );
         self.heap_data.proposals.insert(proposal_num, proposal_data);
 
-        self.cast_vote_and_cascade_follow(proposal_id, *proposer_id, Vote::Yes, topic);
+        self.cast_vote_and_cascade_follow(proposal_id, *proposer_id, Vote::Yes, topic)
+            .await;
 
         self.process_proposal(proposal_num);
 
@@ -5744,7 +5751,7 @@ impl Governance {
         }
     }
 
-    fn register_vote(
+    async fn register_vote(
         &mut self,
         neuron_id: &NeuronId,
         caller: &PrincipalId,
@@ -5816,7 +5823,8 @@ impl Governance {
             *neuron_id,
             vote,
             topic,
-        );
+        )
+        .await;
 
         self.process_proposal(proposal_id.id);
 
@@ -6328,7 +6336,7 @@ impl Governance {
                 .follow(&id, caller, f)
                 .map(|_| ManageNeuronResponse::follow_response()),
             Some(Command::MakeProposal(p)) => {
-                self.make_proposal(&id, caller, p).map(|proposal_id| {
+                self.make_proposal(&id, caller, p).await.map(|proposal_id| {
                     ManageNeuronResponse::make_proposal_response(
                         proposal_id,
                         "The proposal has been created successfully.".to_string(),
@@ -6337,6 +6345,7 @@ impl Governance {
             }
             Some(Command::RegisterVote(v)) => self
                 .register_vote(&id, caller, v)
+                .await
                 .map(|_| ManageNeuronResponse::register_vote_response()),
             Some(Command::ClaimOrRefresh(_)) => {
                 panic!("This should have already returned")
@@ -6962,6 +6971,11 @@ impl Governance {
                 latest_round_available_e8s_equivalent_float as u64,
             ),
         })
+    }
+
+    pub fn batch_adjust_neurons_storage(&mut self, start_neuron_id: NeuronId) -> Option<NeuronId> {
+        self.neuron_store
+            .batch_adjust_neurons_storage(start_neuron_id)
     }
 
     /// Recompute cached metrics once per day
