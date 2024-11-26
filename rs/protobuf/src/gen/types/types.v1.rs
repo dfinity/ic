@@ -366,6 +366,8 @@ pub struct DkgDataPayload {
     pub dealings: ::prost::alloc::vec::Vec<DkgMessage>,
     #[prost(uint64, tag = "2")]
     pub summary_height: u64,
+    #[prost(message, repeated, tag = "3")]
+    pub transcripts_for_remote_subnets: ::prost::alloc::vec::Vec<CallbackIdedNiDkgTranscript>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Summary {
