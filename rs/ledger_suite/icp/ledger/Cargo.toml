@@ -19,6 +19,7 @@ dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
 dfn_http_metrics = { path = "../../../rust_canisters/dfn_http_metrics" }
 dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
+hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-cdk = { workspace = true }
@@ -43,7 +44,6 @@ serde_cbor = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-error-types = { path = "../../../types/error_types" }
 ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
