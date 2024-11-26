@@ -45,7 +45,7 @@ fn generate_deltas(num: usize) -> Vec<RegistryDelta> {
 #[test]
 fn test_add_deltas_correctly() {
     let provider = CanisterDataProvider::<DummyStore>::new(None);
-    let deltas = generate_deltas(10);
+    let deltas = self::generate_deltas(10);
 
     provider.add_deltas(deltas).unwrap();
     let len = DUMMY_REGISTRY.with_borrow(|registry_stored| registry_stored.len());
@@ -75,7 +75,7 @@ fn test_add_deltas_correctly() {
 fn test_add_deltas_with_keys_to_retain() {
     let keys_to_retain = HashSet::from(["test_key1".to_string(), "test_key3".to_string()]);
     let provider = CanisterDataProvider::<DummyStore>::new(Some(keys_to_retain));
-    let deltas = generate_deltas(5);
+    let deltas = self::generate_deltas(5);
 
     provider.add_deltas(deltas).unwrap();
 
