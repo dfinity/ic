@@ -54,9 +54,6 @@ message StreamEntry {
 }
 
 message RequestMetadata {
-  // TODO(MR-641): Remove deprecated fields.
-  // optional uint64 deprecated_opt_call_tree_depth = 1;
-  // optional uint64 deprecated_opt_call_tree_start_time_nanos = 2;
   uint64 call_tree_depth = 1;
   uint64 call_tree_start_time_nanos = 2;
   // A point in the future vs. `call_tree_start_time` at which a request would ideally have concluded

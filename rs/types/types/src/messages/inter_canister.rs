@@ -615,9 +615,6 @@ impl From<Response> for RequestOrResponse {
 impl From<&RequestMetadata> for pb_queues::RequestMetadata {
     fn from(metadata: &RequestMetadata) -> Self {
         Self {
-            // TODO(MR-641): Remove deprecated fields.
-            //deprecated_opt_call_tree_depth: None,
-            //deprecated_opt_call_tree_start_time_nanos: None,
             call_tree_depth: metadata.call_tree_depth,
             call_tree_start_time_nanos: metadata.call_tree_start_time.as_nanos_since_unix_epoch(),
             call_subtree_deadline_nanos: None,
@@ -643,22 +640,11 @@ impl From<&Request> for pb_queues::Request {
 
 impl From<pb_queues::RequestMetadata> for RequestMetadata {
     fn from(metadata: pb_queues::RequestMetadata) -> Self {
-        // TODO(MR-641): Remove the logic for deprecated fields.
         Self {
             call_tree_depth: metadata.call_tree_depth,
             call_tree_start_time: Time::from_nanos_since_unix_epoch(
                 metadata.call_tree_start_time_nanos,
             ),
-            /*
-            call_tree_depth: metadata
-                .deprecated_opt_call_tree_depth
-                .unwrap_or(metadata.call_tree_depth),
-            call_tree_start_time: Time::from_nanos_since_unix_epoch(
-                metadata
-                    .deprecated_opt_call_tree_start_time_nanos
-                    .unwrap_or(metadata.call_tree_start_time_nanos),
-            ),
-            */
         }
     }
 }

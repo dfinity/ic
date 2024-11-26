@@ -45,9 +45,6 @@ pub struct StreamEntry {
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct RequestMetadata {
-    /// TODO(MR-641): Remove deprecated fields.
-    /// optional uint64 deprecated_opt_call_tree_depth = 1;
-    /// optional uint64 deprecated_opt_call_tree_start_time_nanos = 2;
     #[prost(uint64, tag = "1")]
     pub call_tree_depth: u64,
     #[prost(uint64, tag = "2")]
