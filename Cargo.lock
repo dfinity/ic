@@ -5813,7 +5813,9 @@ dependencies = [
  "futures",
  "ic-agent",
  "ic-boundary-nodes-system-test-utils",
+ "ic-crypto-tree-hash",
  "ic-system-test-driver",
+ "ic-types",
  "reqwest 0.12.9",
  "serde",
  "serde_cbor",
@@ -6657,6 +6659,7 @@ dependencies = [
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-utils-ensure",
+ "icrc-cbor",
  "icrc-ledger-client-cdk",
  "icrc-ledger-types",
  "maplit",
@@ -13981,6 +13984,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "icrc-cbor"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ethnum",
+ "minicbor",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "proptest",
+]
+
+[[package]]
 name = "icrc-ledger-agent"
 version = "0.1.0"
 dependencies = [
@@ -17047,6 +17062,7 @@ dependencies = [
 name = "pocket-ic"
 version = "6.0.0"
 dependencies = [
+ "backoff",
  "base64 0.13.1",
  "candid",
  "candid_parser",

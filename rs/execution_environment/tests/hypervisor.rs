@@ -1,4 +1,3 @@
-use crate::hypervisor::tests::WasmResult::Reply;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
@@ -1800,15 +1799,13 @@ fn ic0_msg_reject_fails_if_called_twice() {
         .contains("ic0.msg_reject: the call is already replied"));
 }
 
-#[test]
-fn some_ic0_calls_fail_if_called_with_huge_size() {
-    fn test(syscall: &str) {
-        let mut test = ExecutionTestBuilder::new()
-            // 3T Cycles should be more than enough for a single ingress call.
-            .with_initial_canister_cycles(3_000_000_000_000)
-            .build();
-        let wat = format!(
-            r#"
+fn test_large_syscall(syscall: &str) {
+    let mut test = ExecutionTestBuilder::new()
+        // 3T Cycles should be more than enough for a single ingress call.
+        .with_initial_canister_cycles(3_000_000_000_000)
+        .build();
+    let wat = format!(
+        r#"
         (module
             (import "ic0" "{syscall}"
                 (func $ic0_{syscall} (param i32) (param i32))
@@ -1818,17 +1815,28 @@ fn some_ic0_calls_fail_if_called_with_huge_size() {
             )
             (memory 1 1)
         )"#,
-            SIZE = u32::MAX
-        );
-        let canister_id = test.canister_from_wat(wat).unwrap();
+        SIZE = u32::MAX
+    );
+    let canister_id = test.canister_from_wat(wat).unwrap();
 
-        let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
-        // It must be neither a contract violation nor timeout.
-        assert_eq!(ErrorCode::CanisterInstructionLimitExceeded, err.code());
-    }
-    for syscall in ["msg_reject", "call_data_append", "msg_reply_data_append"] {
-        test(syscall);
-    }
+    let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
+    // It must be neither a contract violation nor timeout.
+    assert_eq!(ErrorCode::CanisterInstructionLimitExceeded, err.code());
+}
+
+#[test]
+fn msg_reject_calls_fail_if_called_with_huge_size() {
+    test_large_syscall("msg_reject")
+}
+
+#[test]
+fn call_data_append_calls_fail_if_called_with_huge_size() {
+    test_large_syscall("call_data_append")
+}
+
+#[test]
+fn msg_reply_data_append_calls_fail_if_called_with_huge_size() {
+    test_large_syscall("msg_reply_data_append")
 }
 
 #[test]
@@ -4105,7 +4113,7 @@ fn can_extract_exported_custom_sections() {
     // Custom start=0x00028de2 end=0x00028dfc (size=0x0000001a) "icp:private candid:args"
     // Custom start=0x00028e02 end=0x00028e30 (size=0x0000002e) "icp:private motoko:stable-types"
 
-    let binary = include_bytes!("../../tests/test-data/custom_sections.wasm").to_vec();
+    let binary = include_bytes!("test-data/custom_sections.wasm").to_vec();
     let canister_id = test.canister_from_binary(binary).unwrap();
 
     let execution_state = test.execution_state(canister_id);
@@ -5461,7 +5469,7 @@ fn call_with_best_effort_response_succeeds() {
         )
         .unwrap();
 
-    assert_eq!(result, Reply(vec![]));
+    assert_eq!(result, WasmResult::Reply(vec![]));
 }
 
 #[test]

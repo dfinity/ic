@@ -306,6 +306,11 @@ pub struct Neuron {
     /// after the UNIX epoch).
     #[prost(uint64, optional, tag = "24")]
     pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
+    /// The index of the next entry in the recent_ballots list that will be
+    /// used for the circular buffer. This is used to determine which entry
+    /// to overwrite next.
+    #[prost(uint32, optional, tag = "25")]
+    pub recent_ballots_next_entry_index: ::core::option::Option<u32>,
     /// At any time, at most one of `when_dissolved` and
     /// `dissolve_delay` are specified.
     ///
@@ -433,6 +438,8 @@ pub struct AbridgedNeuron {
     pub visibility: ::core::option::Option<i32>,
     #[prost(uint64, optional, tag = "24")]
     pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
+    #[prost(uint32, optional, tag = "25")]
+    pub recent_ballots_next_entry_index: ::core::option::Option<u32>,
     #[prost(oneof = "abridged_neuron::DissolveState", tags = "9, 10")]
     pub dissolve_state: ::core::option::Option<abridged_neuron::DissolveState>,
 }

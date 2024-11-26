@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+    "packages/icrc-cbor",
     "packages/icrc-ledger-agent",
     "packages/icrc-ledger-client",
     "packages/icrc-ledger-client-cdk",

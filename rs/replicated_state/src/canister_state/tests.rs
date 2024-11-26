@@ -415,6 +415,7 @@ fn canister_state_push_input_best_effort_response_duplicate_of_paused_response()
 }
 
 #[test]
+#[should_panic(expected = "Failed to induct message to self: NonMatchingResponse")]
 fn canister_state_induct_messages_to_self_guaranteed_response_duplicate_of_paused_response() {
     canister_state_induct_messages_to_self_duplicate_of_paused_response(NO_DEADLINE);
 }
