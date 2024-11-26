@@ -42,12 +42,9 @@ use std::mem::size_of;
 mod canister_task;
 
 #[cfg(test)]
-mod compilation;
-#[cfg(test)]
-mod orthogonal_persistence;
-
-#[cfg(test)]
 mod canister_snapshots;
+#[cfg(test)]
+mod compilation;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
 const ONE_GIB: i64 = 1 << 30;
