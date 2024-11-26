@@ -44,7 +44,7 @@ pub mod option {
 
     #[derive(Decode, Encode)]
     #[cbor(transparent)]
-    struct CborNat(#[cbor(n(0), with = "crate::cbor::nat")] pub Nat);
+    struct CborNat(#[cbor(n(0), with = "crate::nat")] pub Nat);
 
     pub fn decode<Ctx>(d: &mut Decoder<'_>, ctx: &mut Ctx) -> Result<Option<Nat>, Error> {
         Ok(Option::<CborNat>::decode(d, ctx)?.map(|n| n.0))

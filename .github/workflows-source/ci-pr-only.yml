@@ -2,6 +2,7 @@ name: CI PR Only
 # Jobs that run on PRs, but no other pipelines
 
 on:
+  merge_group:
   pull_request:
     types: [opened, synchronize, reopened]
 
@@ -37,11 +38,14 @@ anchors:
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
+  skip-merge-group: &skip-merge-group
+    if: ${{ github.event_name != 'merge_group' }}
 
 jobs:
   bazel-build-fuzzers-archives:
     name: Bazel Build Fuzzers Archives
     <<: *dind-large-setup
+    <<: *skip-merge-group
     steps:
       - <<: *checkout
       - name: Filter Relevant Files
@@ -76,6 +80,7 @@ jobs:
   lock-generate:
     name: Lock Generate
     <<: *dind-small-setup
+    <<: *skip-merge-group
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
@@ -110,6 +115,7 @@ jobs:
   dependencies-check:
     name: Dependency Scan for PR
     <<: *dind-small-setup
+    <<: *skip-merge-group
     timeout-minutes: 60
     permissions:
       contents: read
@@ -150,6 +156,7 @@ jobs:
   bazel-test-coverage:
     name: Bazel Test Coverage
     <<: *dind-large-setup
+    <<: *skip-merge-group
     if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
     steps:
       - <<: *checkout

@@ -17,8 +17,8 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_ledger,
-    install_minter, install_new_kyt, setup, subnet_sys, ADDRESS_LENGTH, TEST_KEY_LOCAL,
+    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
+    install_ledger, install_minter, setup, subnet_sys, ADDRESS_LENGTH, TEST_KEY_LOCAL,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use slog::info;
@@ -33,14 +33,13 @@ pub fn test_ckbtc_addresses(env: TestEnv) {
         install_bitcoin_canister(&runtime, &logger).await;
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
-        let mut new_kyt_canister = create_canister(&runtime).await;
+        let mut kyt_canister = create_canister(&runtime).await;
 
         let minting_user = minter_canister.canister_id().get();
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let new_kyt_id = install_new_kyt(&mut new_kyt_canister, &env).await;
+        let kyt_id = install_kyt(&mut kyt_canister, &env).await;
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
-        let minter_id =
-            install_minter(&mut minter_canister, ledger_id, &logger, 0, new_kyt_id).await;
+        let minter_id = install_minter(&mut minter_canister, ledger_id, &logger, 0, kyt_id).await;
         let minter = Principal::try_from_slice(minter_id.as_ref()).unwrap();
         activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
 
@@ -123,14 +122,13 @@ pub fn test_ckbtc_minter_agent(env: TestEnv) {
         let runtime = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
-        let mut new_kyt_canister = create_canister(&runtime).await;
+        let mut kyt_canister = create_canister(&runtime).await;
 
         let minting_user = minter_canister.canister_id().get();
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let new_kyt_id = install_new_kyt(&mut new_kyt_canister, &env).await;
+        let kyt_id = install_kyt(&mut kyt_canister, &env).await;
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
-        let minter_id =
-            install_minter(&mut minter_canister, ledger_id, &logger, 0, new_kyt_id).await;
+        let minter_id = install_minter(&mut minter_canister, ledger_id, &logger, 0, kyt_id).await;
         let minter = Principal::try_from_slice(minter_id.as_ref()).unwrap();
         activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
 
