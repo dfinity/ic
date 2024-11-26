@@ -239,7 +239,7 @@ impl Hypervisor {
         if let Err(err) = wasm_size_result {
             round_limits.instructions -= as_round_instructions(compilation_cost);
             self.compilation_cache
-                .insert(&canister_module, Err(err.clone().into()));
+                .insert_err(&canister_module, err.clone().into());
             return (compilation_cost, Err(err.into()));
         }
 

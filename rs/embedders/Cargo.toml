@@ -36,6 +36,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
 slog-term = { workspace = true }
+tempfile = { workspace = true }
 wasm-encoder = { workspace = true }
 wasmparser = { workspace = true }
 wasmtime = { version = "26.0.0", default-features = false, features = [
