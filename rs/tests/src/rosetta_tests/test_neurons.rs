@@ -33,18 +33,6 @@ impl TestNeurons<'_> {
         self.seed += 1;
         details
     }
-    pub(crate) fn create_custom(
-        &mut self,
-        neuron_setup: impl FnOnce(&mut Neuron),
-        id: u64,
-        kp: &EdKeypair,
-    ) -> NeuronDetails {
-        let details = create_custom_neuron(id, neuron_setup, self.ledger_balances, kp);
-        self.neurons
-            .insert(details.neuron.id.unwrap().id, details.neuron.clone());
-        self.seed += 1;
-        details
-    }
 
     /// Return the map of neurons indexed by their id.
     pub(crate) fn get_neurons(&self) -> BTreeMap<u64, Neuron> {
