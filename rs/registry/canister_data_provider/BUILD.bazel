@@ -10,8 +10,8 @@ DEPENDENCIES = [
     "//rs/registry/transport",
     "//rs/types/types",
     "@crate_index//:anyhow",
-    "@crate_index//:ic-cdk",
     "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:itertools",
 ]
