@@ -1265,7 +1265,7 @@ impl NeuronStore {
     // with_stable_neuron_store.
     pub(crate) fn map_range(
         &mut self,
-        neuron_ids: impl RangeBounds<NeuronId> + Copy,
+        neuron_ids_range: impl RangeBounds<NeuronId> + Copy,
         neuron_sections: NeuronSections,
 
         // This can make changes to Neurons as each one is scanned (via the
@@ -1330,7 +1330,7 @@ impl NeuronStore {
         with_stable_neuron_store(|stable_neuron_store| {
             // Select stable memory neurons.
             let stable_neuron = stable_neuron_store
-                .range_neurons_sections(neuron_ids, neuron_sections)
+                .range_neurons_sections(neuron_ids_range, neuron_sections)
                 .map(|neuron| {
                     // With the help of Cow, it might be possible to avoid this clone...
                     let original = neuron.clone();
@@ -1341,7 +1341,7 @@ impl NeuronStore {
                 });
 
             // Select heap neurons.
-            let neuron_ids = {
+            let neuron_ids_range = {
                 fn to_u64(bound: Bound<&NeuronId>) -> Bound<u64> {
                     match bound {
                         Bound::Unbounded => Bound::Unbounded,
@@ -1350,14 +1350,14 @@ impl NeuronStore {
                     }
                 }
 
-                let start = to_u64(neuron_ids.start_bound());
-                let end = to_u64(neuron_ids.end_bound());
+                let start = to_u64(neuron_ids_range.start_bound());
+                let end = to_u64(neuron_ids_range.end_bound());
 
                 (start, end)
             };
             let heap_neuron = self
                 .heap_neurons
-                .range_mut(neuron_ids)
+                .range_mut(neuron_ids_range)
                 .map(|(_, neuron)| NeuronHandle::Borrowed(neuron));
 
             // Merge neurons in heap + stable memory.
