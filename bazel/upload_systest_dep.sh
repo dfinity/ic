@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-#
+
+set -euo pipefail
+
 # Uploads a dependency to shared storage and returns the download URL.
 #
 # The path to the dependency should be specified as the first (and only) argument.
@@ -43,6 +45,7 @@ lookup_dep_url() {
 }
 
 dep_filename="${1:?Dependency not specified}"
+dep_sha256=$(sha256sum "$dep_filename" | cut -d' ' -f1)
 
 echo "Found dep to upload $dep_filename ($dep_sha256)" >&2
 result_url=$(lookup_dep_url "$dep_sha256")
@@ -52,16 +55,17 @@ result_url=$(lookup_dep_url "$dep_sha256")
 if [ -n "$result_url" ]; then
     echo "dep '$dep_filename': already uploaded" >&2
 else
-    echo "dep '$dep_filename': not uploaded yet, uploading to $dep_upload_url" >&2
+    echo "dep '$dep_filename': not uploaded yet" >&2
 
     # We use bazel-remote as a CAS storage
     UPLOAD_URL="http://server.bazel-remote.svc.cluster.local:8080/cas"
     echo "Using upload URL: '$UPLOAD_URL'" >&2
 
     # Upload the dep
-    dep_sha256=$(sha256sum "$dep_filename" | cut -d' ' -f1)
     dep_upload_url="$UPLOAD_URL/$dep_sha256"
-    curl --silent --fail "$dep_upload_url" --upload-file "$dep_filename" -w 'Uploaded %{size_upload}B in: %{time_total}s (%{speed_upload}B/s)\n' >&2
+    # read & pretty print 3 metrics: upload size, upload time & upload speed
+    read -ra metrics < <(curl --silent --fail "$dep_upload_url" --upload-file "$dep_filename" -w '%{size_upload} %{time_total} %{speed_upload}')
+    echo "Uploaded $(numfmt --to=iec-i --suffix=B "${metrics[0]}") in ${metrics[1]}s ($(numfmt --to=iec-i --suffix=B "${metrics[2]}")/s)" >&2
 
     # Check that it was actually uploaded and can be served (this sometimes takes a minute)
     attempt=1
