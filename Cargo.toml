@@ -247,6 +247,7 @@ members = [
     "rs/registry/canister",
     "rs/registry/canister/api",
     "rs/registry/canister/protobuf_generator",
+    "rs/registry/canister_data_provider",
     "rs/registry/client",
     "rs/registry/canister-client",
     "rs/registry/fake",
@@ -435,7 +436,6 @@ members = [
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
-    "rs/registry/canister_data_provider",
 ]
 
 resolver = "2"
