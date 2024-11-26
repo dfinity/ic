@@ -539,6 +539,6 @@ impl Hypervisor {
     ) {
         let canister_module = CanisterModule::new(bytes);
         self.compilation_cache
-            .insert(&canister_module, Ok(Arc::new(compiled_module)))
+            .insert_ok(&canister_module, compiled_module);
     }
 }

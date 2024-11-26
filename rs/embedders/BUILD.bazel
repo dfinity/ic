@@ -101,7 +101,6 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
         ":embedders",
-        "@crate_index//:bincode",
         "@crate_index//:clap",
     ],
 )
