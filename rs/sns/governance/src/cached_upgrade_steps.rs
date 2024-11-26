@@ -336,7 +336,22 @@ impl Governance {
         .await;
 
         let upgrade_steps = match upgrade_steps {
-            Ok(upgrade_steps) => upgrade_steps,
+            Ok(upgrade_steps) => {
+                // Check for duplicate versions in the response
+                let mut seen = std::collections::HashSet::new();
+                for version in &upgrade_steps {
+                    if !seen.insert(version) {
+                        log!(
+                            ERROR,
+                            "Cannot refresh cached_upgrade_steps: SNS-W response contains duplicate versions"
+                        );
+                        return;
+                    }
+                }
+                Versions {
+                    versions: upgrade_steps,
+                }
+            }
             Err(err) => {
                 log!(
                     ERROR,
@@ -345,9 +360,6 @@ impl Governance {
                 );
                 return;
             }
-        };
-        let upgrade_steps = Versions {
-            versions: upgrade_steps,
         };
 
         // Ensure `cached_upgrade_steps` is initialized
