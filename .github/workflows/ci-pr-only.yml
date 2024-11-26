@@ -2,6 +2,7 @@ name: CI PR Only
 # Jobs that run on PRs, but no other pipelines
 
 on:
+  merge_group:
   pull_request:
     types: [opened, synchronize, reopened]
 concurrency:
@@ -23,6 +24,7 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:1d775e6d161dee883d10f082ab7fdde3e3d26061e1209255fb6514f8b62b206b
       options: >-
         -e NODE_NAME
+    if: ${{ github.event_name != 'merge_group' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -63,6 +65,7 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:1d775e6d161dee883d10f082ab7fdde3e3d26061e1209255fb6514f8b62b206b
       options: >-
         -e NODE_NAME
+    if: ${{ github.event_name != 'merge_group' }}
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
@@ -101,6 +104,7 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:1d775e6d161dee883d10f082ab7fdde3e3d26061e1209255fb6514f8b62b206b
       options: >-
         -e NODE_NAME
+    if: ${{ github.event_name != 'merge_group' }}
     timeout-minutes: 60
     permissions:
       contents: read

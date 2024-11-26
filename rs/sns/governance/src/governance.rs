@@ -462,6 +462,55 @@ impl GovernanceProto {
             .expect("GovernanceProto.deployed_version must be set.")
     }
 
+    pub(crate) fn validate_new_target_version<V>(
+        &self,
+        new_target: Option<V>,
+    ) -> Result<
+        (
+            /* pending_upgrade_steps */ CachedUpgradeSteps,
+            /* valid_target_version */ Version,
+        ),
+        String,
+    >
+    where
+        Version: TryFrom<V>,
+        <Version as TryFrom<V>>::Error: ToString,
+    {
+        let deployed_version = self.deployed_version_or_err()?;
+
+        let upgrade_steps = {
+            let cached_upgrade_steps = self.cached_upgrade_steps_or_err()?;
+            cached_upgrade_steps.take_from(&deployed_version)?
+        };
+
+        if upgrade_steps.is_empty() {
+            return Err(
+                "Cannot advance SNS target version: there are no pending upgrades.".to_string(),
+            );
+        }
+
+        let new_target = if let Some(new_target) = new_target {
+            let new_target = Version::try_from(new_target).map_err(|err| err.to_string())?;
+            upgrade_steps.validate_new_target_version(&new_target)?;
+            new_target
+        } else {
+            upgrade_steps.last().clone()
+        };
+
+        if let Some(current_target_version) = &self.target_version {
+            let new_target_is_not_ahead_of_current_target =
+                upgrade_steps.contains_in_order(&new_target, current_target_version)?;
+            if new_target_is_not_ahead_of_current_target {
+                return Err(format!(
+                    "SNS target already set to {}.",
+                    current_target_version
+                ));
+            }
+        }
+
+        Ok((upgrade_steps, new_target))
+    }
+
     /// Returns 0 if maturity modulation is disabled (per
     /// nervous_system_parameters.maturity_modulation_disabled). Otherwise,
     /// returns the value in self.maturity_modulation.current_basis_points. If
@@ -3054,21 +3103,17 @@ impl Governance {
         // TODO[NNS1-3365]: Enable the AdvanceSnsTargetVersionFeature.
         self.check_test_features_enabled();
 
-        let cached_upgrade_steps = self
+        let (_, target_version) = self
             .proto
-            .cached_upgrade_steps_or_err()
-            .map_err(|err| GovernanceError::new_with_message(ErrorType::NotFound, err))?;
-
-        cached_upgrade_steps
-            .validate_new_target_version(&new_target)
+            .validate_new_target_version(Some(new_target))
             .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
 
         self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionSet::new(
             self.proto.target_version.clone(),
-            Some(new_target.clone()),
+            Some(target_version.clone()),
         ));
 
-        self.proto.target_version = Some(new_target);
+        self.proto.target_version = Some(target_version);
 
         Ok(())
     }
@@ -6087,3 +6132,6 @@ mod fail_stuck_upgrade_in_progress_tests;
 
 #[cfg(test)]
 mod advance_target_sns_version_tests;
+
+#[cfg(test)]
+mod test_helpers;

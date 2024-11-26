@@ -2,10 +2,10 @@ use candid::Principal;
 use mockall::automock;
 
 use crate::{
-    add_config::{AddConfigError, AddsConfig},
+    add_config::AddsConfig,
     disclose::DisclosesRules,
     state::CanisterApi,
-    types::{DiscloseRulesError, Timestamp},
+    types::{AddConfigError, DiscloseRulesError, Timestamp},
 };
 
 #[automock]
@@ -13,7 +13,7 @@ pub trait ResolveAccessLevel {
     fn get_access_level(&self) -> AccessLevel;
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum AccessLevel {
     FullAccess,
     FullRead,

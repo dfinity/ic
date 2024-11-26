@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [1.1.2] - 2024-11-21
+### Fixed
+- Support for icrc3 certificates
+
 ## [1.1.1] - 2024-07-09
 ### Added
 - Added /ready endpoint which indicates whether Rosetta is finished with its initial block synch

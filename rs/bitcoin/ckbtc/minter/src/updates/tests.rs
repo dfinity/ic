@@ -220,7 +220,7 @@ mod update_balance {
         use crate::lifecycle::init::InitArgs;
         use ic_base_types::CanisterId;
         init_state(InitArgs {
-            new_kyt_principal: Some(CanisterId::unchecked_from_principal(KYT_CANISTER_ID.into())),
+            kyt_principal: Some(CanisterId::unchecked_from_principal(KYT_CANISTER_ID.into())),
             ..init_args()
         });
         mutate_state(|s| s.ecdsa_public_key = Some(ecdsa_public_key()))

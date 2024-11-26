@@ -810,11 +810,13 @@ impl CanisterQueues {
         Ok(())
     }
 
-    /// Enqueues a "deadline expired" compact response for the given callback, iff a
-    /// response for the callback is not already enqueued.
+    /// Enqueues a "deadline expired" compact response for the given best-effort
+    /// callback, iff a response for the callback is not already enqueued.
     ///
-    /// Must only be called for not-yet-executing callbacks (i.e. not for a paused
-    /// or aborted callback).
+    /// Must only be called for existent, not-yet-executing callbacks (i.e. not for
+    /// a paused or aborted callback). This is ensured by `SystemState`, by checking
+    /// against the `CallContextManager`'s set of callbacks.
+    ///
     ///
     /// Returns:
     ///  * `Ok(true)` if a "deadline expired" compact response was enqueued;
@@ -1379,8 +1381,13 @@ impl CanisterQueues {
         self.store.pool.has_expired_deadlines(current_time)
     }
 
-    /// Drops expired messages given a current time, enqueueing a reject response
-    /// for own requests into the matching reverse queue (input or output).
+    /// Drops expired messages given a current time, releasing any slot reservations
+    /// and enqueueing inbound reject responses for own outbound requests.
+    ///
+    /// This covers all best-effort messages except responses in input queues (which
+    /// we don't want to expire); plus guaranteed response requests in output queues
+    /// (which don't have an explicit deadline, but expire after an implicit
+    /// `REQUEST_LIFETIME`).
     ///
     /// Updating the correct input queues schedule after enqueueing a reject response
     /// into a previously empty input queue also requires the set of local canisters
@@ -1531,6 +1538,10 @@ impl CanisterQueues {
                 self.queue_stats
                     .on_push_response(&response, Context::Inbound);
 
+                // We protect against duplicate responses here, but we cannot check that this is
+                // an active (i.e. existent and not paused/aborted) callback. This is OK, as we
+                // could not have started executing a response (whether reject or reply) for a
+                // request that was still in an output queue.
                 assert!(self
                     .callbacks_with_enqueued_response
                     .insert(response.originator_reply_callback));
@@ -2040,9 +2051,6 @@ pub mod testing {
         /// Returns the number of output queues, empty or not.
         fn output_queues_len(&self) -> usize;
 
-        /// Returns the number of messages in `output_queues`.
-        fn output_message_count(&self) -> usize;
-
         /// Publicly exposes `CanisterQueues::push_input()`.
         fn push_input(
             &mut self,
@@ -2075,10 +2083,6 @@ pub mod testing {
 
         fn output_queues_len(&self) -> usize {
             self.canister_queues.len()
-        }
-
-        fn output_message_count(&self) -> usize {
-            self.message_stats().outbound_message_count
         }
 
         fn push_input(

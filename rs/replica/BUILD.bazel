@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "//rs/monitoring/pprof",
     "//rs/monitoring/tracing",
     "//rs/monitoring/tracing/jaeger_exporter",
+    "//rs/monitoring/tracing/logging_layer",
     "//rs/protobuf",
     "//rs/registry/client",
     "//rs/registry/helpers",
