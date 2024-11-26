@@ -8,7 +8,7 @@ use crate::{
     health_manager_actor::HealthManagerActor, node::Node, types::GlobalShared,
 };
 use arc_swap::ArcSwap;
-use ic_agent::{agent::http_transport::route_provider::RouteProvider, AgentError};
+use ic_agent::{agent::route_provider::RouteProvider, AgentError};
 use tokio::sync::watch;
 use tokio::time::sleep;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
@@ -42,6 +42,11 @@ where
             AgentError::RouteProviderError("No healthy API domains found for routing.".to_string())
         })?;
         Ok(node.to_routing_url())
+    }
+
+    // TODO: Implement this new method in the `RouteProvider` trait.
+    fn n_ordered_routes(&self, n: usize) -> Result<Vec<Url>, AgentError> {
+        self.route().map(|url| vec![url])
     }
 }
 

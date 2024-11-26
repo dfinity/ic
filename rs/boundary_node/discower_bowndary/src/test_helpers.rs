@@ -1,4 +1,4 @@
-use ic_agent::agent::http_transport::route_provider::RouteProvider;
+use ic_agent::agent::route_provider::RouteProvider;
 use std::collections::HashMap;
 use std::{fmt::Debug, hash::Hash, sync::Arc};
 
