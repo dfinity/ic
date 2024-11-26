@@ -5813,7 +5813,9 @@ dependencies = [
  "futures",
  "ic-agent",
  "ic-boundary-nodes-system-test-utils",
+ "ic-crypto-tree-hash",
  "ic-system-test-driver",
+ "ic-types",
  "reqwest 0.12.9",
  "serde",
  "serde_cbor",
@@ -6657,6 +6659,7 @@ dependencies = [
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-utils-ensure",
+ "icrc-cbor",
  "icrc-ledger-client-cdk",
  "icrc-ledger-types",
  "maplit",
@@ -11358,6 +11361,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-tracing",
  "ic-tracing-jaeger-exporter",
+ "ic-tracing-logging-layer",
  "ic-types",
  "ic-xnet-payload-builder",
  "libc",
@@ -13150,6 +13154,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-tracing-logging-layer"
+version = "0.9.0"
+dependencies = [
+ "ic-base-types",
+ "ic-config",
+ "time",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "ic-transport-types"
 version = "0.37.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13965,6 +13981,18 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "icrc-cbor"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ethnum",
+ "minicbor",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "proptest",
 ]
 
 [[package]]
@@ -17034,6 +17062,7 @@ dependencies = [
 name = "pocket-ic"
 version = "6.0.0"
 dependencies = [
+ "backoff",
  "base64 0.13.1",
  "candid",
  "candid_parser",
@@ -21426,6 +21455,7 @@ dependencies = [
  "sharded-slab",
  "smallvec",
  "thread_local",
+ "time",
  "tracing",
  "tracing-core",
  "tracing-log",

@@ -9,8 +9,8 @@ use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
     DashboardRequest, ExecuteIngressMessage, GetCanisterHttp, GetControllers, GetCyclesBalance,
-    GetStableMemory, GetSubnet, GetTime, GetTopology, MockCanisterHttp, PubKey, Query,
-    QueryRequest, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
+    GetStableMemory, GetSubnet, GetTime, GetTopology, IngressMessageStatus, MockCanisterHttp,
+    PubKey, Query, QueryRequest, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
     SubnetReadStateRequest, Tick,
 };
 use crate::{async_trait, pocket_ic::PocketIc, BlobStore, InstanceId, OpId, Operation};
@@ -81,6 +81,7 @@ where
         .directory_route("/get_stable_memory", post(handler_get_stable_memory))
         .directory_route("/get_subnet", post(handler_get_subnet))
         .directory_route("/pub_key", post(handler_pub_key))
+        .directory_route("/ingress_status", post(handler_ingress_status))
 }
 
 pub fn instance_update_routes<S>() -> ApiRouter<S>
@@ -416,6 +417,28 @@ impl TryFrom<OpOut> for RawCanisterResult {
                 };
                 Ok(inner)
             }
+            _ => Err(OpConversionError),
+        }
+    }
+}
+
+impl TryFrom<OpOut> for Option<RawCanisterResult> {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
+        match value {
+            OpOut::CanisterResult(wasm_result) => {
+                let inner = match wasm_result {
+                    Ok(WasmResult::Reply(wasm_result)) => {
+                        Some(RawCanisterResult::Ok(RawWasmResult::Reply(wasm_result)))
+                    }
+                    Ok(WasmResult::Reject(error_message)) => {
+                        Some(RawCanisterResult::Ok(RawWasmResult::Reject(error_message)))
+                    }
+                    Err(user_error) => Some(RawCanisterResult::Err(user_error)),
+                };
+                Ok(inner)
+            }
+            OpOut::NoOutput => Ok(None),
             _ => Err(OpConversionError),
         }
     }
@@ -993,6 +1016,28 @@ pub async fn handler_execute_ingress_message(
     match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
         Ok(canister_call) => {
             let ingress_op = ExecuteIngressMessage(canister_call);
+            let (code, response) = run_operation(api_state, instance_id, timeout, ingress_op).await;
+            (code, Json(response))
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error {
+                message: format!("{:?}", e),
+            }),
+        ),
+    }
+}
+
+pub async fn handler_ingress_status(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
+    extract::Json(raw_message_id): extract::Json<RawMessageId>,
+) -> (StatusCode, Json<ApiResponse<Option<RawCanisterResult>>>) {
+    let timeout = timeout_or_default(headers);
+    match crate::pocket_ic::MessageId::try_from(raw_message_id) {
+        Ok(message_id) => {
+            let ingress_op = IngressMessageStatus(message_id);
             let (code, response) = run_operation(api_state, instance_id, timeout, ingress_op).await;
             (code, Json(response))
         }

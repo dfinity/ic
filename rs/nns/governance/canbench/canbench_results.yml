@@ -1,115 +1,115 @@
 benches:
   add_neuron_active_maximum:
     total:
-      instructions: 35992698
+      instructions: 36185720
       heap_increase: 1
       stable_memory_increase: 0
     scopes: {}
   add_neuron_active_typical:
     total:
-      instructions: 1838632
+      instructions: 1835678
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   add_neuron_inactive_maximum:
     total:
-      instructions: 98666560
+      instructions: 96172531
       heap_increase: 1
       stable_memory_increase: 0
     scopes: {}
   add_neuron_inactive_typical:
     total:
-      instructions: 7577551
+      instructions: 7370935
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   cascading_vote_all_heap:
     total:
-      instructions: 32302982
+      instructions: 31928362
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   cascading_vote_heap_neurons_stable_index:
     total:
-      instructions: 54494918
+      instructions: 54231599
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   cascading_vote_stable_everything:
     total:
-      instructions: 1969690886
+      instructions: 160353265
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   cascading_vote_stable_neurons_with_heap_index:
     total:
-      instructions: 1947188278
+      instructions: 138159263
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   centralized_following_all_stable:
     total:
-      instructions: 2047356165
+      instructions: 66001085
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   compute_ballots_for_new_proposal_with_stable_neurons:
     total:
-      instructions: 1743731
+      instructions: 1782808
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   list_neurons_ready_to_unstake_maturity_heap:
     total:
-      instructions: 3441869
+      instructions: 470604
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   list_neurons_ready_to_unstake_maturity_stable:
     total:
-      instructions: 710546759
+      instructions: 712702017
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   list_ready_to_spawn_neuron_ids_heap:
     total:
-      instructions: 3438794
+      instructions: 462676
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   list_ready_to_spawn_neuron_ids_stable:
     total:
-      instructions: 710543948
+      instructions: 712693035
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   neuron_metrics_calculation_heap:
     total:
-      instructions: 845137
+      instructions: 528806
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   neuron_metrics_calculation_stable:
     total:
-      instructions: 1835769
+      instructions: 1817353
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   range_neurons_performance:
     total:
-      instructions: 47339494
+      instructions: 47337873
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   single_vote_all_stable:
     total:
-      instructions: 13161102
+      instructions: 363904
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
-  update_recent_ballots:
+  update_recent_ballots_stable_memory:
     total:
-      instructions: 16208293
+      instructions: 13388351
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
