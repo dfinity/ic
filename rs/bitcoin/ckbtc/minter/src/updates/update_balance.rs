@@ -248,7 +248,7 @@ pub async fn update_balance<R: CanisterRuntime>(
         let status = kyt_check_utxo(&utxo, &args, runtime).await?;
         mutate_state(|s| match status {
             UtxoCheckStatus::Clean => {
-                state::audit::mark_utxo_checked(s, &utxo, None, None);
+                state::audit::mark_utxo_checked(s, utxo, caller_account);
             }
             UtxoCheckStatus::Tainted => {
                 state::audit::quarantine_utxo(s, utxo.clone(), caller_account);

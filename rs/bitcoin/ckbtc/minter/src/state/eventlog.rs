@@ -125,12 +125,16 @@ mod event {
 
         /// Indicates that the given UTXO went through a KYT check.
         #[serde(rename = "checked_utxo")]
+        #[deprecated(note = "Use CheckedUtxoV2")]
         CheckedUtxo {
             utxo: Utxo,
             uuid: String,
             clean: bool,
             kyt_provider: Option<Principal>,
         },
+
+        #[serde(rename = "checked_utxo_v2")]
+        CheckedUtxoV2 { utxo: Utxo, account: Account },
 
         /// Indicates that the given UTXO's value is too small to pay for a KYT check.
         #[serde(rename = "ignored_utxo")]
@@ -333,6 +337,7 @@ pub fn replay<I: CheckInvariants>(
             Event::ConfirmedBtcTransaction { txid } => {
                 state.finalize_transaction(&txid);
             }
+            #[allow(deprecated)] //need to replay past events
             Event::CheckedUtxo {
                 utxo,
                 uuid,
@@ -346,11 +351,13 @@ pub fn replay<I: CheckInvariants>(
                         kyt_provider,
                     );
                 }
-                #[allow(deprecated)] //need to replay past events
                 UtxoCheckStatus::Tainted => {
                     state.discard_utxo_without_account(utxo, DiscardedReason::Quarantined);
                 }
             },
+            Event::CheckedUtxoV2 { utxo, account } => {
+                state.mark_utxo_checked_v2(utxo, &account);
+            }
             #[allow(deprecated)] //need to replay past events
             Event::IgnoredUtxo { utxo } => {
                 state.discard_utxo_without_account(utxo, DiscardedReason::ValueTooSmall);

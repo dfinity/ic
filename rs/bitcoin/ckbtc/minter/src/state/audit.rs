@@ -71,19 +71,12 @@ pub fn confirm_transaction(state: &mut CkBtcMinterState, txid: &Txid) {
     state.finalize_transaction(txid);
 }
 
-pub fn mark_utxo_checked(
-    state: &mut CkBtcMinterState,
-    utxo: &Utxo,
-    uuid: Option<String>,
-    kyt_provider: Option<Principal>,
-) {
-    record_event(&Event::CheckedUtxo {
+pub fn mark_utxo_checked(state: &mut CkBtcMinterState, utxo: Utxo, account: Account) {
+    record_event(&Event::CheckedUtxoV2 {
         utxo: utxo.clone(),
-        uuid: uuid.clone().unwrap_or_default(),
-        clean: UtxoCheckStatus::Clean.is_clean(),
-        kyt_provider,
+        account: account,
     });
-    state.mark_utxo_checked(utxo.clone(), uuid, kyt_provider);
+    state.mark_utxo_checked_v2(utxo, &account);
 }
 
 pub fn quarantine_utxo(state: &mut CkBtcMinterState, utxo: Utxo, account: Account) {

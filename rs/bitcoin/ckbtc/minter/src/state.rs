@@ -1022,18 +1022,17 @@ impl CkBtcMinterState {
         self.discarded_utxos.insert_without_account(utxo, reason)
     }
 
-    /// Marks the given UTXO as checked.
-    /// If the UTXO is clean, we increase the owed KYT amount if there is a KYT provider, and
+    /// Marks the given UTXO as successfully checked.
+    /// We increase the owed KYT amount if there is a KYT provider, and
     /// remember that UTXO until we see it again in an [add_utxos] call.
-    /// If the UTXO is tainted, we put it in the quarantine area without increasing the owed KYT
-    /// amount.
+    #[deprecated(note = "Use mark_utxo_checked_v2() instead")]
     fn mark_utxo_checked(
         &mut self,
         utxo: Utxo,
         uuid: Option<String>,
         kyt_provider: Option<Principal>,
     ) {
-        self.discarded_utxos.remove(&utxo);
+        self.discarded_utxos.remove_without_account(&utxo);
         if self
             .checked_utxos
             .insert(
@@ -1052,6 +1051,19 @@ impl CkBtcMinterState {
                 *self.owed_kyt_amount.entry(provider).or_insert(0) += self.kyt_fee;
             }
         }
+    }
+
+    /// Marks the given UTXO as successfully checked.
+    fn mark_utxo_checked_v2(&mut self, utxo: Utxo, account: &Account) {
+        self.discarded_utxos.remove(account, &utxo);
+        self.checked_utxos.insert(
+            utxo,
+            CheckedUtxo {
+                uuid: None,
+                status: UtxoCheckStatus::Clean,
+                kyt_provider: None,
+            },
+        );
     }
 
     /// Decreases the owed amount for the given provider by the amount.
