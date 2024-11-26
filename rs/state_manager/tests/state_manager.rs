@@ -1631,6 +1631,14 @@ fn remove_inmemory_states_below_can_keep_extra_states() {
 
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
 
+        // Tests the behavior of `remove_inmemory_states_below` for various scenarios involving extra heights to keep.
+        // This call covers another two cases:
+        // Case 1:
+        //   Extra heights to keep exist in memory and are below the requested height to remove.
+        //   Expected: These heights are retained.
+        // Case 2:
+        //   Extra heights to keep exist in memory and are at or above the requested height to remove.
+        //   Expected: No effect.
         state_manager
             .remove_inmemory_states_below(height(5), &btreeset![height(1), height(4), height(7)]);
 
@@ -1653,8 +1661,17 @@ fn remove_inmemory_states_below_can_keep_extra_states() {
             ],
         );
 
-        state_manager
-            .remove_inmemory_states_below(height(9), &btreeset![height(2), height(7), height(8)]);
+        // This call covers another two cases:
+        // Case 3:
+        //   Extra heights to keep do not exist in memory, and are below the requested height to remove.
+        //   Expected: No effect.
+        // Case 4:
+        //   Extra heights to keep do not exist in memory, and are at or above the requested height to remove.
+        //   Expected: No effect.
+        state_manager.remove_inmemory_states_below(
+            height(9),
+            &btreeset![height(2), height(7), height(8), height(10)],
+        );
 
         // Asking to keep state at 2 has no effect since it is already removed.
         // State at height 7 and 8 are kept because they are included in `extra_heights_to_keep`.
