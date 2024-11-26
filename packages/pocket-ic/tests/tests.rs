@@ -1998,3 +1998,63 @@ fn create_instance_from_existing() {
     let reply = call_counter_can(&pic, can_id, "read");
     assert_eq!(reply, WasmResult::Reply(vec![3, 0, 0, 0]));
 }
+
+#[test]
+fn ingress_status() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+
+    let msg_id = pic
+        .submit_call(
+            canister_id,
+            Principal::anonymous(),
+            "whoami",
+            encode_one(()).unwrap(),
+        )
+        .unwrap();
+
+    assert!(pic.ingress_status(msg_id.clone()).is_none());
+
+    pic.tick();
+
+    let ingress_status = pic.ingress_status(msg_id).unwrap().unwrap();
+    let principal = match ingress_status {
+        WasmResult::Reply(data) => Decode!(&data, String).unwrap(),
+        WasmResult::Reject(err) => panic!("Unexpected reject: {}", err),
+    };
+    assert_eq!(principal, canister_id.to_string());
+}
+
+#[test]
+fn await_call_no_ticks() {
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+
+    pic.make_live(None);
+
+    let msg_id = pic
+        .submit_call(
+            canister_id,
+            Principal::anonymous(),
+            "whoami",
+            encode_one(()).unwrap(),
+        )
+        .unwrap();
+
+    let result = pic.await_call_no_ticks(msg_id).unwrap();
+    let principal = match result {
+        WasmResult::Reply(data) => Decode!(&data, String).unwrap(),
+        WasmResult::Reject(err) => panic!("Unexpected reject: {}", err),
+    };
+    assert_eq!(principal, canister_id.to_string());
+}
