@@ -2,7 +2,7 @@ use crate::{
     admin_helper::IcAdmin,
     command_helper::exec_cmd,
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{create_dir, read_dir, remove_dir, rsync, rsync_with_retries},
+    file_sync_helper::{create_dir, read_dir, rsync, rsync_with_retries, clear_dir},
     get_member_ips, get_node_heights_from_metrics,
     registry_helper::RegistryHelper,
     replay_helper,
@@ -662,11 +662,11 @@ pub struct CleanupStep {
 
 impl Step for CleanupStep {
     fn descr(&self) -> String {
-        format!("Deleting directory {}.", self.recovery_dir.display())
+        format!("Clearing directory {}.", self.recovery_dir.display())
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        remove_dir(&self.recovery_dir)
+        clear_dir(&self.recovery_dir)
     }
 }
 
