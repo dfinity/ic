@@ -43,7 +43,8 @@ use ic_crypto_internal_types::NodeIndex;
 use ic_error_types::RejectCode;
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
 };
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, Id};
@@ -375,15 +376,44 @@ impl ExhaustiveSet for SchnorrKeyId {
     }
 }
 
+impl ExhaustiveSet for VetKdCurve {
+    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+        VetKdCurve::iter().collect()
+    }
+}
+
+impl ExhaustiveSet for VetKdKeyId {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <(VetKdCurve, String)>::exhaustive_set(rng)
+            .into_iter()
+            .map(|elem| Self {
+                curve: elem.0,
+                name: elem.1,
+            })
+            .collect()
+    }
+}
+
 impl ExhaustiveSet for MasterPublicKeyId {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         let ecdsa_key_ids = EcdsaKeyId::exhaustive_set(rng);
         let schnorr_key_ids = SchnorrKeyId::exhaustive_set(rng);
+        let vetkd_key_ids = VetKdKeyId::exhaustive_set(rng);
 
         ecdsa_key_ids
             .into_iter()
             .map(MasterPublicKeyId::Ecdsa)
             .chain(schnorr_key_ids.into_iter().map(MasterPublicKeyId::Schnorr))
+            .chain(vetkd_key_ids.into_iter().map(MasterPublicKeyId::VetKd))
+            .collect()
+    }
+}
+
+impl ExhaustiveSet for IDkgMasterPublicKeyId {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        MasterPublicKeyId::exhaustive_set(rng)
+            .into_iter()
+            .flat_map(IDkgMasterPublicKeyId::try_from)
             .collect()
     }
 }
@@ -629,13 +659,6 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, MultiSignature<T>> {
                 },
             })
             .collect()
-    }
-}
-
-// TODO(CON-1433): Remove once NiDkgTag::HighThresholdForKey variant is supported by the mainnet version
-impl ExhaustiveSet for NiDkgTag {
-    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
-        vec![NiDkgTag::LowThreshold, NiDkgTag::HighThreshold]
     }
 }
 
