@@ -554,6 +554,11 @@ impl Neuron {
         self.voting_power_refreshed_timestamp_seconds = now_seconds;
     }
 
+    pub(crate) fn ready_to_spawn(&self, now_seconds: u64) -> bool {
+        self.spawn_at_timestamp_seconds
+            .is_some_and(|spawn_at_timestamp_seconds| now_seconds >= spawn_at_timestamp_seconds)
+    }
+
     pub(crate) fn ready_to_unstake_maturity(&self, now_seconds: u64) -> bool {
         self.state(now_seconds) == NeuronState::Dissolved
             && self.staked_maturity_e8s_equivalent.unwrap_or(0) > 0
