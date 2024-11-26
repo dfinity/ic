@@ -454,8 +454,8 @@ fn icrc1_test_upgrade_serialization() {
 }
 
 #[test]
-fn icrc1_test_upgrade_serialization_fixed_tx() {
-    ic_ledger_suite_state_machine_tests::icrc1_test_upgrade_serialization_fixed_tx(
+fn icrc1_test_multi_step_migration() {
+    ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
         ledger_mainnet_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,

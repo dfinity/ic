@@ -2470,7 +2470,7 @@ pub fn test_upgrade_serialization<Tokens>(
         .unwrap();
 }
 
-pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
+pub fn icrc1_test_multi_step_migration<T>(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current_lowinstructionlimits: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
