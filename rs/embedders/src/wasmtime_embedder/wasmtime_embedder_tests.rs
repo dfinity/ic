@@ -171,16 +171,10 @@ fn test_wasmtime_system_api() {
 
 #[test]
 fn test_initial_wasmtime_config() {
-    // The following proposals should be disabled: tail_call, simd, relaxed_simd,
+    // The following proposals should be disabled: simd, relaxed_simd,
     // threads, multi_memory, exceptions, extended_const, component_model,
     // function_references, memory_control, gc
     for (proposal, _url, wat, expected_err_msg) in [
-        (
-            "tail_call",
-            "https://github.com/WebAssembly/tail-call/",
-            "(module (func $f1 return_call $f2) (func $f2))",
-            "tail calls support is not enabled",
-        ),
         (
             "relaxed_simd",
             "https://github.com/WebAssembly/relaxed-simd/",
