@@ -18,7 +18,6 @@ itertools = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 xnet-test = { path = "../../rust_canisters/xnet_test" }
-candid = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-types = { path = "../../types/types" }
