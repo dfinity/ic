@@ -131,6 +131,8 @@ thread_local! {
     pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
         RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
 
+    pub static LEDGER_STATE: RefCell<LedgerState> = const { RefCell::new(LedgerState::Ready) };
+
     // (from, spender) -> allowance - map storing ledger allowances.
     #[allow(clippy::type_complexity)]
     pub static ALLOWANCES_MEMORY: RefCell<StableBTreeMap<(AccountIdentifier, AccountIdentifier), StorableAllowance, VirtualMemory<DefaultMemoryImpl>>> =
@@ -142,13 +144,13 @@ thread_local! {
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_EXPIRATIONS_MEMORY_ID))));
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
 pub enum LedgerField {
     Allowances,
     AllowancesExpirations,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
 pub enum LedgerState {
     Migrating(LedgerField),
     Ready,
@@ -219,9 +221,6 @@ pub struct Ledger {
     #[serde(default)]
     pub feature_flags: FeatureFlags,
 
-    #[serde(default)]
-    pub state: LedgerState,
-
     #[serde(default = "default_ledger_version")]
     pub ledger_version: u64,
 }
@@ -233,18 +232,22 @@ impl LedgerContext for Ledger {
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
+        panic_if_not_ready();
         &self.balances
     }
 
     fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
+        panic_if_not_ready();
         &mut self.balances
     }
 
     fn approvals(&self) -> &AllowanceTable<Self::AllowancesData> {
+        panic_if_not_ready();
         &self.stable_approvals
     }
 
     fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData> {
+        panic_if_not_ready();
         &mut self.stable_approvals
     }
 
@@ -343,7 +346,6 @@ impl Default for Ledger {
             token_symbol: unknown_token(),
             token_name: unknown_token(),
             feature_flags: FeatureFlags::default(),
-            state: LedgerState::Ready,
             ledger_version: LEDGER_VERSION,
         }
     }
@@ -565,10 +567,6 @@ impl Ledger {
             self.feature_flags = feature_flags;
         }
     }
-
-    pub fn is_ready(&self) -> bool {
-        matches!(self.state, LedgerState::Ready)
-    }
 }
 
 pub fn add_payment(
@@ -594,6 +592,24 @@ pub fn change_notification_state(
         new_state,
         TimeStamp::from(now()),
     )
+}
+
+pub fn is_ready() -> bool {
+    LEDGER_STATE.with(|s| matches!(*s.borrow(), LedgerState::Ready))
+}
+
+pub fn panic_if_not_ready() {
+    if !is_ready() {
+        ic_cdk::trap("The Ledger is not ready");
+    }
+}
+
+pub fn ledger_state() -> LedgerState {
+    LEDGER_STATE.with(|s| *s.borrow())
+}
+
+pub fn set_ledger_state(ledger_state: LedgerState) {
+    LEDGER_STATE.with(|s| *s.borrow_mut() = ledger_state);
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]

@@ -58,8 +58,8 @@ use icrc_ledger_types::{
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
 use ledger_canister::{
-    Ledger, LedgerField, LedgerState, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES,
-    UPGRADES_MEMORY,
+    is_ready, ledger_state, set_ledger_state, Ledger, LedgerField, LedgerState, LEDGER,
+    LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY,
 };
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
@@ -847,7 +847,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
     );
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
-    ledger.state = LedgerState::Migrating(LedgerField::Allowances);
+    set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
     ledger.approvals.allowances_data.clear_arrivals();
 
     migrate_next_part(
@@ -869,7 +869,7 @@ fn migrate_next_part(instruction_limit: u64) {
 
     Access::with_ledger_mut(|ledger| {
         while instruction_counter() < instruction_limit {
-            let field = match ledger.state.clone() {
+            let field = match ledger_state() {
                 LedgerState::Migrating(ledger_field) => ledger_field,
                 LedgerState::Ready => break,
             };
@@ -884,8 +884,9 @@ fn migrate_next_part(instruction_limit: u64) {
                             migrated_allowances += 1;
                         }
                         None => {
-                            ledger.state =
-                                LedgerState::Migrating(LedgerField::AllowancesExpirations);
+                            set_ledger_state(LedgerState::Migrating(
+                                LedgerField::AllowancesExpirations,
+                            ));
                         }
                     };
                 }
@@ -899,7 +900,7 @@ fn migrate_next_part(instruction_limit: u64) {
                             migrated_expirations += 1;
                         }
                         None => {
-                            ledger.state = LedgerState::Ready;
+                            set_ledger_state(LedgerState::Ready);
                         }
                     };
                 }
@@ -907,7 +908,7 @@ fn migrate_next_part(instruction_limit: u64) {
         }
         let msg = format!("Number of elements migrated: allowances:{migrated_allowances} expirations:{migrated_expirations}. Instructions used {}.",
             instruction_counter());
-        if !ledger.is_ready() {
+        if !is_ready() {
             print!("Migration partially done. Scheduling the next part. {msg}");
             ic_cdk_timers::set_timer(Duration::from_secs(0), || {
                 migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
@@ -934,7 +935,7 @@ fn pre_upgrade() {
         .read()
         // This should never happen, but it's better to be safe than sorry
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if !ledger.is_ready() {
+    if !is_ready() {
         // This means that migration did not complete and the correct state
         // of the ledger is still in UPGRADES_MEMORY.
         print!("Ledger not ready, skipping write to UPGRADES_MEMORY.");
@@ -1773,6 +1774,16 @@ candid::export_service!();
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
 fn get_canidid_interface() {
     over(candid_one, |()| -> String { __export_service() })
+}
+
+#[candid_method(query, rename = "is_ledger_ready")]
+fn is_ledger_ready() -> bool {
+    is_ready()
+}
+
+#[export_name = "canister_query is_ledger_ready"]
+fn is_ledger_ready_candid() {
+    over(candid_one, |()| is_ledger_ready())
 }
 
 #[cfg(test)]
