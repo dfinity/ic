@@ -8213,6 +8213,7 @@ dependencies = [
  "bincode",
  "candid",
  "canister-test",
+ "clap 4.5.20",
  "criterion",
  "embedders_bench",
  "ic-base-types",
@@ -12933,6 +12934,7 @@ dependencies = [
 name = "ic-test-utilities-execution-environment"
 version = "0.9.0"
 dependencies = [
+ "bincode",
  "ic-base-types",
  "ic-config",
  "ic-cycles-account-manager",
@@ -13272,6 +13274,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-crypto-sha2",
+ "ic-embedders",
  "ic-types",
  "lazy_static",
  "serde",
