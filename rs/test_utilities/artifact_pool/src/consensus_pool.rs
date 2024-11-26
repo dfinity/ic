@@ -260,9 +260,9 @@ impl TestConsensusPool {
         let dkg_payload = (self.dkg_payload_builder)(self, parent.clone(), &block.context);
         let payload = match dkg_payload {
             dkg::Payload::Summary(dkg) => BlockPayload::Summary(SummaryPayload { dkg, idkg }),
-            dkg::Payload::Dealings(dealings) => BlockPayload::Data(DataPayload {
+            dkg::Payload::Data(dkg) => BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dealings,
+                dkg,
                 idkg,
             }),
         };
