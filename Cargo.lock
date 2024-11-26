@@ -8225,7 +8225,7 @@ dependencies = [
  "bincode",
  "candid",
  "canister-test",
- "clap 4.5.20",
+ "clap 4.5.21",
  "criterion",
  "embedders_bench",
  "ic-base-types",
