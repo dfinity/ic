@@ -8034,6 +8034,7 @@ dependencies = [
 name = "ic-crypto-utils-canister-threshold-sig"
 version = "0.9.0"
 dependencies = [
+ "ic-crypto-internal-bls12-381-vetkd",
  "ic-crypto-internal-threshold-sig-canister-threshold-sig",
  "ic-types",
 ]
@@ -8209,6 +8210,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
+ "bincode",
  "candid",
  "canister-test",
  "criterion",
@@ -8255,6 +8257,7 @@ dependencies = [
  "serde_bytes",
  "slog",
  "slog-term",
+ "tempfile",
  "wasm-encoder 0.217.0",
  "wasmparser 0.217.0",
  "wasmprinter 0.217.0",
