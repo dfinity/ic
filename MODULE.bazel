@@ -845,6 +845,6 @@ http_file(
 http_file(
     name = "management_canister_did",
     downloaded_file_path = "ic.did",
-    sha256 = "d5fbda52b8b30e2a4ac2d9bf03afa409097e510a50e4243143d05320bc277d61",
-    url = "https://raw.githubusercontent.com/dfinity/portal/244f3ecc411e16ba85b52d7266de3010af3cd9af/docs/references/_attachments/ic.did",
+    sha256 = "30298e7d04dc8a314f53303088c0b624e103ee3c5c8a13127a06d5e525aff822",
+    url = "https://raw.githubusercontent.com/dfinity/portal/72369b95e824f57d537da52839c18ea842843a94/docs/references/_attachments/ic.did",
 )
