@@ -591,6 +591,8 @@ pub struct SandboxSafeSystemState {
     pub(super) request_metadata: RequestMetadata,
     caller: Option<PrincipalId>,
     pub is_wasm64_execution: bool,
+    wasm_chunk_store_memory_usage: NumBytes,
+    snapshots_memory_usage: NumBytes,
 }
 
 impl SandboxSafeSystemState {
