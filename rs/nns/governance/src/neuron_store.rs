@@ -722,7 +722,7 @@ impl NeuronStore {
         &self,
         neuron_id: NeuronId,
     ) -> Result<(Cow<Neuron>, StorageLocation), NeuronStoreError> {
-        self.load_neuron_with_sections(neuron_id, NeuronSections::all())
+        self.load_neuron_with_sections(neuron_id, NeuronSections::ALL)
     }
 
     fn update_neuron(
@@ -809,7 +809,7 @@ impl NeuronStore {
         &self,
         callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Cow<Neuron>> + 'b>) -> R,
     ) -> R {
-        self.with_active_neurons_iter_sections(callback, NeuronSections::all())
+        self.with_active_neurons_iter_sections(callback, NeuronSections::ALL)
     }
 
     fn with_active_neurons_iter_sections<R>(
@@ -963,7 +963,7 @@ impl NeuronStore {
                     process_neuron(neuron.as_ref());
                 }
             },
-            NeuronSections::default(),
+            NeuronSections::ALL,
         );
 
         (ballots, deciding_voting_power, potential_voting_power)
@@ -1006,7 +1006,7 @@ impl NeuronStore {
             &neuron_id,
             NeuronSections {
                 hot_keys: true,
-                ..Default::default()
+                ..NeuronSections::NONE
             },
             |neuron| neuron.is_authorized_to_vote(&principal_id),
         )
