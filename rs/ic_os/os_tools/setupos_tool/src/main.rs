@@ -6,10 +6,12 @@ use clap::{Parser, Subcommand};
 use config::config_ini::config_map_from_path;
 use config::deployment_json::get_deployment_settings;
 use config::{DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH};
-use deterministic_ips::{calculate_deterministic_mac, IpVariant};
+use mac_address::mac_address::{generate_mac_address, get_ipmi_mac, FormattedMacAddress};
+use mac_address::node_type::NodeType;
+use network::generate_network_config;
 use network::info::NetworkInfo;
+use network::ipv6::generate_ipv6_address;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
-use network::{generate_network_config, resolve_mgmt_mac};
 use utils::to_cidr;
 
 #[derive(Subcommand)]
@@ -21,8 +23,8 @@ pub enum Commands {
         output_directory: String,
     },
     GenerateIpv6Address {
-        #[arg(short, long, default_value = "0xf")]
-        node_type: u8,
+        #[arg(short, long, default_value = "SetupOS")]
+        node_type: String,
     },
 }
 
@@ -65,16 +67,25 @@ pub fn main() -> Result<()> {
                 ))?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
-            let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
-            let generated_mac = calculate_deterministic_mac(
-                mgmt_mac,
-                deployment_settings.deployment.name.parse()?,
-                IpVariant::V6,
-                0xf,
+            let mgmt_mac = match deployment_settings.deployment.mgmt_mac {
+                Some(config_mac) => {
+                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
+                    eprintln!(
+                        "Using mgmt_mac address found in deployment.json: {}",
+                        mgmt_mac
+                    );
+                    mgmt_mac
+                }
+                None => get_ipmi_mac()?,
+            };
+            let generated_mac = generate_mac_address(
+                &mgmt_mac,
+                deployment_settings.deployment.name.as_str(),
+                &NodeType::SetupOS,
             )?;
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
 
-            generate_network_config(&network_info, &generated_mac, Path::new(&output_directory))
+            generate_network_config(&network_info, generated_mac, Path::new(&output_directory))
         }
         Some(Commands::GenerateIpv6Address { node_type }) => {
             let config_map = config_map_from_path(Path::new(&opts.config)).context(format!(
@@ -93,14 +104,24 @@ pub fn main() -> Result<()> {
                 ))?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
-            let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
-            let generated_mac = calculate_deterministic_mac(
-                mgmt_mac,
-                deployment_settings.deployment.name.parse()?,
-                IpVariant::V6,
-                node_type,
+            let node_type = node_type.parse::<NodeType>()?;
+            let mgmt_mac = match deployment_settings.deployment.mgmt_mac {
+                Some(config_mac) => {
+                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
+                    eprintln!(
+                        "Using mgmt_mac address found in deployment.json: {}",
+                        mgmt_mac
+                    );
+                    mgmt_mac
+                }
+                None => get_ipmi_mac()?,
+            };
+            let generated_mac = generate_mac_address(
+                &mgmt_mac,
+                deployment_settings.deployment.name.as_str(),
+                &node_type,
             )?;
-            let ipv6_address = generated_mac.calculate_slaac(&network_info.ipv6_prefix)?;
+            let ipv6_address = generate_ipv6_address(&network_info.ipv6_prefix, &generated_mac)?;
             println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
             Ok(())
         }
