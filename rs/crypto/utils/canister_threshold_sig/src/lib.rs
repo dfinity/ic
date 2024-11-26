@@ -51,7 +51,6 @@ pub fn derive_vetkd_public_key(
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum VetKdPublicKeyDeriveError {
-    InvalidArgument(String),
     InvalidAlgorithmId,
     InvalidPublicKey,
 }

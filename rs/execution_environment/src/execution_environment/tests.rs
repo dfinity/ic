@@ -3182,13 +3182,13 @@ fn test_vetkd_public_key_api_is_enabled() {
         .with_chain_key(key_id.clone())
         .build();
 
-    let some_key = into_inner_vetkd(make_vetkd_key("some_key"));
+    let nonexistent_key_id = into_inner_vetkd(make_vetkd_key("nonexistent_key_id"));
     test.inject_call_to_ic00(
         Method::VetKdPublicKey,
         ic00::VetKdPublicKeyArgs {
             canister_id: None,
             derivation_path: DerivationPath::new(vec![]),
-            key_id: some_key.clone(),
+            key_id: nonexistent_key_id.clone(),
         }
         .encode(),
         Cycles::new(0),
@@ -3198,7 +3198,7 @@ fn test_vetkd_public_key_api_is_enabled() {
         ic00::VetKdPublicKeyArgs {
             canister_id: None,
             derivation_path: DerivationPath::new(vec![]),
-            key_id: into_inner_vetkd(make_vetkd_key("correct_key")),
+            key_id: into_inner_vetkd(key_id),
         }
         .encode(),
         Cycles::new(0),
@@ -3211,7 +3211,7 @@ fn test_vetkd_public_key_api_is_enabled() {
         get_reject_message(response),
         format!(
             "Subnet {} does not hold threshold key vetkd:{}.",
-            own_subnet, some_key
+            own_subnet, nonexistent_key_id
         ),
     );
 
