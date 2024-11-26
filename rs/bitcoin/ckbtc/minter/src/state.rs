@@ -1356,6 +1356,10 @@ impl DiscardedUtxos {
     pub fn num_utxos(&self) -> usize {
         self.utxos_without_account.len() + self.utxos.values().map(|u| u.len()).sum::<usize>()
     }
+
+    pub fn utxos_without_account(&self) -> &BTreeMap<Utxo, DiscardedReason> {
+        &self.utxos_without_account
+    }
 }
 
 fn as_sorted_vec<T, K: Ord>(values: impl Iterator<Item = T>, key: impl Fn(&T) -> K) -> Vec<T> {

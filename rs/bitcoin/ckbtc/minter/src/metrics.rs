@@ -203,6 +203,24 @@ pub fn encode_metrics(
         "The total amount of ckBTC that minter owes to the KYT canister.",
     )?;
 
+    metrics.encode_gauge(
+        "ckbtc_minter_discarded_utxos_without_account_count",
+        state::read_state(|s| s.discarded_utxos.utxos_without_account().len()) as f64,
+        "Total number of discarded UTXOs without account.",
+    )?;
+
+    metrics.encode_gauge(
+        "ckbtc_minter_ignored_utxos_count",
+        state::read_state(|s| s.ignored_utxos().count()) as f64,
+        "Total number of discarded UTXOs due to a too small value.",
+    )?;
+
+    metrics.encode_gauge(
+        "ckbtc_minter_quarantined_utxos_count",
+        state::read_state(|s| s.quarantined_utxos().count()) as f64,
+        "Total number of discarded UTXOs due to being marked as tainted.",
+    )?;
+
     Ok(())
 }
 
