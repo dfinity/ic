@@ -14842,6 +14842,7 @@ dependencies = [
  "icrc-ledger-types",
  "intmap",
  "lazy_static",
+ "minicbor",
  "num-traits",
  "on_wire",
  "serde",
