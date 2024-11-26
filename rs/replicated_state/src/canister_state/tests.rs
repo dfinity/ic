@@ -416,21 +416,30 @@ fn canister_state_push_input_best_effort_response_duplicate_of_paused_response()
 
 #[test]
 fn canister_state_induct_messages_to_self_guaranteed_response_duplicate_of_paused_response() {
+    canister_state_induct_messages_to_self_duplicate_of_paused_response(NO_DEADLINE);
+}
+
+#[test]
+fn canister_state_induct_messages_to_self_best_effort_duplicate_of_paused_response() {
+    canister_state_induct_messages_to_self_duplicate_of_paused_response(SOME_DEADLINE);
+}
+
+fn canister_state_induct_messages_to_self_duplicate_of_paused_response(deadline: CoarseTime) {
     let mut fixture = CanisterStateFixture::new();
 
     // Pair of request and response to self.
-    let callback_id = fixture.make_callback_to(CANISTER_ID, SOME_DEADLINE);
+    let callback_id = fixture.make_callback_to(CANISTER_ID, deadline);
     let request = RequestBuilder::default()
         .sender(CANISTER_ID)
         .receiver(CANISTER_ID)
         .sender_reply_callback(callback_id)
-        .deadline(SOME_DEADLINE)
+        .deadline(deadline)
         .build();
     let response = ResponseBuilder::default()
         .originator(CANISTER_ID)
         .respondent(CANISTER_ID)
         .originator_reply_callback(callback_id)
-        .deadline(SOME_DEADLINE)
+        .deadline(deadline)
         .build();
 
     // Make an input queue slot reservation.
@@ -483,10 +492,12 @@ fn canister_state_induct_messages_to_self_guaranteed_response_duplicate_of_pause
         &mut SUBNET_AVAILABLE_MEMORY.clone(),
         SubnetType::Application,
     );
+
     // Nothing was enqueued.
     assert!(!fixture.canister_state.has_input());
-    // And the response is still in the output queue.
-    assert!(fixture.canister_state.has_output());
+    // And the response should be silently consumed if best-effort; retained if
+    // guaranteed response.
+    assert_eq!(deadline == NO_DEADLINE, fixture.canister_state.has_output());
 }
 
 #[test]

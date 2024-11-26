@@ -66,4 +66,3 @@ policycoreutils
 # this package can be removed
 selinux-policy-dev
 checkpolicy
-

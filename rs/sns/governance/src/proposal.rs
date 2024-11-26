@@ -1,3 +1,5 @@
+use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
+use crate::pb::v1::AdvanceSnsTargetVersion;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     governance::{
@@ -169,7 +171,7 @@ pub(crate) fn get_action_auxiliary(
         })
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum ActionAuxiliary {
     TransferSnsTreasuryFunds(Valuation),
     MintSnsTokens(Valuation),
@@ -187,6 +189,21 @@ impl ActionAuxiliary {
                 format!(
                     "Missing supporting information. Specifically, \
                      no treasury valuation factors: {:#?}",
+                    wrong,
+                ),
+            )),
+        }
+    }
+
+    pub fn unwrap_advance_sns_target_version_or_err(self) -> Result<Version, GovernanceError> {
+        match self {
+            Self::AdvanceSnsTargetVersion(new_target) => Ok(new_target),
+
+            wrong => Err(GovernanceError::new_with_message(
+                ErrorType::InconsistentInternalData,
+                format!(
+                    "Missing supporting information. Specifically, \
+                     no new target version: {:#?}",
                     wrong,
                 ),
             )),
@@ -466,9 +483,12 @@ pub(crate) async fn validate_and_render_action(
         proposal::Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
             validate_and_render_manage_dapp_canister_settings(manage_dapp_canister_settings)
         }
-        proposal::Action::AdvanceSnsTargetVersion(_) => {
-            // TODO[NNS1-3434]: Implement Action::AdvanceSnsTargetVersion
-            return Err("Action::AdvanceSnsTargetVersion is not implemented yet.".to_string());
+        proposal::Action::AdvanceSnsTargetVersion(advance_sns_target_version) => {
+            return validate_and_render_advance_sns_target_version_proposal(
+                env.canister_id(),
+                governance_proto,
+                advance_sns_target_version,
+            );
         }
     }
     .map(|rendering| (rendering, ActionAuxiliary::None))
@@ -1696,6 +1716,56 @@ fn validate_and_render_manage_dapp_canister_settings(
     }
 }
 
+/// Attempts to validate an `AdvanceSnsTargetVersion` action and render its human-readable text.
+/// Invalidates the action in the following cases:
+/// - There are no pending upgrades.
+/// - `new_target` is equal to `current_version`.
+/// - `new_target` comes before `current_target_version` along the `upgrade_steps`.
+///
+/// Details:
+/// 1. Validates the action's `new_target` field, if it is set.
+/// 2. Identifies the `new_target`, either based on the above, or using `upgrade_steps`.
+/// 3. Renders the Markdown proposal description.
+/// 4. Returns the rendering and the identified `target_version`.
+///    as `ActionAuxiliary`. This returned `target_version` should be used for executing
+///    this action, assuming the proposal gets adopted.
+fn validate_and_render_advance_sns_target_version_proposal(
+    sns_governance_canister_id: CanisterId,
+    governance_proto: &Governance,
+    advance_sns_target_version: &AdvanceSnsTargetVersion,
+) -> Result<(String, ActionAuxiliary), String> {
+    let (upgrade_steps, target_version) = governance_proto
+        .validate_new_target_version(advance_sns_target_version.new_target.clone())?;
+
+    let valid_timestamp_seconds = upgrade_steps.approximate_time_of_validity_timestamp_seconds();
+
+    let current_target_versions_render =
+        render_two_versions_as_markdown_table(upgrade_steps.current(), &target_version);
+
+    let upgrade_journal_url_render = format!(
+        "https://{}.raw.icp0.io/journal/json",
+        sns_governance_canister_id,
+    );
+
+    let render = format!(
+        "# Proposal to advance SNS target version\n\n\
+         {current_target_versions_render}\n\n\
+         ### Upgrade steps\n\n\
+         {upgrade_steps}\n\n\
+         ### Monitoring the upgrade process\n\n\
+         Please note: the upgrade steps above (valid around timestamp {valid_timestamp_seconds} \
+         seconds) might change during this proposal's voting period. Such changes are unlikely and \
+         are subject to NNS community's approval.\n\n\
+         The **upgrade journal** provides up-to-date information on this SNS's upgrade process:\n\n\
+         {upgrade_journal_url_render}"
+    );
+
+    Ok((
+        render,
+        ActionAuxiliary::AdvanceSnsTargetVersion(target_version),
+    ))
+}
+
 impl ProposalData {
     /// Returns the proposal's decision status. See [ProposalDecisionStatus] in the SNS's
     /// proto for more information.
@@ -2471,6 +2541,9 @@ mod treasury_tests;
 
 #[cfg(test)]
 mod minting_tests;
+
+#[cfg(test)]
+mod advance_sns_target_version;
 
 #[cfg(test)]
 mod tests {

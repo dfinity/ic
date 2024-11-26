@@ -11,7 +11,9 @@ use assert_matches::assert_matches;
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use common::increase_dissolve_delay_raw;
-use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
+use comparable::{
+    Changed, I32Change, MapChange, OptionChange, StringChange, U32Change, U64Change, VecChange,
+};
 use fixtures::{
     account, environment_fixture::CanisterCallReply, new_motion_proposal, principal, NNSBuilder,
     NNSStateChange, NeuronBuilder, ProposalNeuronBehavior, NNS,
@@ -126,7 +128,7 @@ use std::{
     collections::{BTreeMap, HashSet, VecDeque},
     convert::{TryFrom, TryInto},
     iter::{self, once},
-    ops::Div,
+    ops::{Deref, Div},
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -290,6 +292,7 @@ fn test_single_neuron_proposal_new() {
                                 ),
                             ),
                         ),
+                        NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(U32Change(0, 1,),),),
                     ],
                 )]),
                 GovernanceChange::Proposals(vec![MapChange::Added(
@@ -961,6 +964,9 @@ async fn test_cascade_following_new() {
                             DEFAULT_TEST_START_TIMESTAMP_SECONDS,
                         ),
                     ),),
+                    NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(U32Change(
+                        0, 1,
+                    ),),),
                 ],
             )]),
             GovernanceChange::Proposals(vec![MapChange::Added(
@@ -1115,6 +1121,9 @@ async fn test_cascade_following_new() {
                             DEFAULT_TEST_START_TIMESTAMP_SECONDS,
                         ),
                     ),),
+                    NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(U32Change(
+                        0, 1,
+                    ),),),
                 ],
             )]),
             GovernanceChange::Proposals(vec![MapChange::Changed(
@@ -1183,29 +1192,39 @@ async fn test_cascade_following_new() {
                 ),
                 MapChange::Changed(
                     2,
-                    vec![NeuronChange::RecentBallots(vec![VecChange::Added(
-                        0,
-                        vec![
-                            BallotInfoChange::ProposalId(OptionChange::Different(
-                                None,
-                                Some(ProposalId { id: 1 }),
-                            )),
-                            BallotInfoChange::Vote(I32Change(0, 1)),
-                        ],
-                    )])],
+                    vec![
+                        NeuronChange::RecentBallots(vec![VecChange::Added(
+                            0,
+                            vec![
+                                BallotInfoChange::ProposalId(OptionChange::Different(
+                                    None,
+                                    Some(ProposalId { id: 1 }),
+                                )),
+                                BallotInfoChange::Vote(I32Change(0, 1)),
+                            ],
+                        )]),
+                        NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(
+                            U32Change(0, 1,),
+                        ),),
+                    ],
                 ),
                 MapChange::Changed(
                     3,
-                    vec![NeuronChange::RecentBallots(vec![VecChange::Added(
-                        0,
-                        vec![
-                            BallotInfoChange::ProposalId(OptionChange::Different(
-                                None,
-                                Some(ProposalId { id: 1 }),
-                            )),
-                            BallotInfoChange::Vote(I32Change(0, 1)),
-                        ],
-                    )])],
+                    vec![
+                        NeuronChange::RecentBallots(vec![VecChange::Added(
+                            0,
+                            vec![
+                                BallotInfoChange::ProposalId(OptionChange::Different(
+                                    None,
+                                    Some(ProposalId { id: 1 }),
+                                )),
+                                BallotInfoChange::Vote(I32Change(0, 1)),
+                            ],
+                        )]),
+                        NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(
+                            U32Change(0, 1,),
+                        ),),
+                    ],
                 ),
                 MapChange::Changed(
                     6,
@@ -1227,6 +1246,9 @@ async fn test_cascade_following_new() {
                                 DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
                                 DEFAULT_TEST_START_TIMESTAMP_SECONDS,
                             ),
+                        ),),
+                        NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(
+                            U32Change(0, 1,),
                         ),),
                     ],
                 ),
@@ -1783,8 +1805,7 @@ async fn test_all_follow_proposer() {
             })),
         },
     )
-    .now_or_never()
-    .unwrap()
+    .await
     .panic_if_error("Manage neuron failed");
 
     // Assert that neuron 5's voting power was refreshed. More concretely,
@@ -1815,8 +1836,7 @@ async fn test_all_follow_proposer() {
             })),
         },
     )
-    .now_or_never()
-    .unwrap()
+    .await
     .panic_if_error("Manage neuron failed");
 
     gov.make_proposal(
@@ -7200,9 +7220,11 @@ fn test_manage_and_reward_node_providers() {
         ProposalStatus::Executed
     );
     // Find the neuron...
-    let neuron = gov
-        .neuron_store
-        .with_active_neurons_iter(|mut iter| iter.find(|x| x.controller() == np_pid).unwrap());
+    let neuron = gov.neuron_store.with_active_neurons_iter(|mut iter| {
+        iter.find(|x| x.controller() == np_pid)
+            .map(|n| n.deref().clone())
+            .unwrap()
+    });
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
     driver.assert_account_contains(
@@ -7508,9 +7530,11 @@ fn test_manage_and_reward_multiple_node_providers() {
 
     // Check third reward
     // Find the neuron...
-    let neuron = gov
-        .neuron_store
-        .with_active_neurons_iter(|mut iter| iter.find(|x| x.controller() == np_pid_2).unwrap());
+    let neuron = gov.neuron_store.with_active_neurons_iter(|mut iter| {
+        iter.find(|x| x.controller() == np_pid_2)
+            .map(|n| n.deref().clone())
+            .unwrap()
+    });
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
     driver.assert_account_contains(
