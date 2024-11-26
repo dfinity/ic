@@ -26,11 +26,6 @@ pub(crate) fn evict(
 ) -> Vec<EvictionCandidate> {
     let evict_at_least: usize = candidates.len().saturating_sub(max_count_threshold);
 
-    if evict_at_least == 0 && total_rss <= max_sandboxes_rss {
-        // No need to evict any candidate.
-        return vec![];
-    }
-
     let min_scheduler_priority = AccumulatedPriority::new(i64::MIN);
 
     candidates.sort_by_key(|x| {
@@ -49,16 +44,17 @@ pub(crate) fn evict(
 
     // Evict as many idle candidates as required.
     for candidate in candidates.into_iter() {
-        evicted_rss = evicted_rss.saturating_add(&candidate.rss);
-        evicted.push(candidate);
-
-        if evicted.len() >= evict_at_least
+        if candidate.last_used >= last_used_threshold
+            && evicted.len() >= evict_at_least
             && total_rss <= max_sandboxes_rss.saturating_add(&evicted_rss)
         {
-            // We have already evicted the minimum required number of candidates.
-            // No need to evict more.
+            // We have already evicted the minimum required number of candidates,
+            // and all other candidates are non-idle.
             break;
         }
+
+        evicted_rss = evicted_rss.saturating_add(&candidate.rss);
+        evicted.push(candidate);
     }
 
     evicted
@@ -231,25 +227,37 @@ mod tests {
     }
 
     #[test]
-    fn dont_not_evict_any() {
+    fn evict_all_idle_regardless_of_priority() {
         let mut candidates = vec![];
         let now = Instant::now();
-        for i in 0..100 {
+        for i in 0..51 {
+            let priority = rand::thread_rng().gen_range(0..100);
             candidates.push(EvictionCandidate {
                 id: canister_test_id(i),
                 last_used: now - Duration::from_secs(i + 1),
                 rss: 0.into(),
-                scheduler_priority: AccumulatedPriority::new(0),
+                scheduler_priority: AccumulatedPriority::new(priority),
             });
         }
-        assert_eq!(
-            evict(candidates.clone(), 0.into(), 100, now, 0.into()).len(),
-            0
-        );
+        for i in 0..49 {
+            let priority = rand::thread_rng().gen_range(0..100);
+            candidates.push(EvictionCandidate {
+                id: canister_test_id(i),
+                last_used: now + Duration::from_secs(i + 1),
+                rss: 0.into(),
+                scheduler_priority: AccumulatedPriority::new(priority),
+            });
+        }
+        assert_eq!(evict(candidates.clone(), 0.into(), 100, now, 0.into()), {
+            // Since scheduler priority is not important when candidate is idle,
+            // we sort only by last_used.
+            candidates.sort_by_key(|x| x.last_used);
+            candidates.into_iter().take(51).collect::<Vec<_>>()
+        });
     }
 
     #[test]
-    fn evict_half_idle_due_to_process_count() {
+    fn evict_all_idle() {
         let mut candidates = vec![];
         let now = Instant::now();
         for i in 0..100 {
@@ -268,7 +276,7 @@ mod tests {
             // Since scheduler priority is not important when candidate is idle,
             // we sort only by last_used.
             candidates.sort_by_key(|x| x.last_used);
-            candidates.into_iter().take(50).collect::<Vec<_>>()
+            candidates
         });
     }
 

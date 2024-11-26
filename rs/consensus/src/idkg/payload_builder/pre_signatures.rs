@@ -4,7 +4,7 @@ use crate::idkg::{pre_signer::IDkgTranscriptBuilder, utils::algorithm_for_key_id
 use ic_logger::{debug, error, ReplicaLogger};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_features::ChainKeyConfig;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext;
 use ic_types::{
     consensus::idkg::{
         self,
@@ -285,7 +285,7 @@ fn update_schnorr_transcript_in_creation(
 /// than the one currently used.
 pub(super) fn purge_old_key_pre_signatures(
     idkg_payload: &mut idkg::IDkgPayload,
-    all_signing_requests: &BTreeMap<CallbackId, SignWithThresholdContext>,
+    all_signing_requests: &BTreeMap<CallbackId, IDkgSignWithThresholdContext<'_>>,
 ) {
     let matched_pre_signatures = all_signing_requests
         .values()
@@ -541,8 +541,8 @@ pub(super) mod tests {
         create_available_pre_signature, create_available_pre_signature_with_key_transcript,
         fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
         fake_schnorr_idkg_master_public_key_id, fake_schnorr_key_id,
-        fake_signature_request_context_with_pre_sig, request_id, set_up_idkg_payload,
-        IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
+        fake_signature_request_context_with_pre_sig, into_idkg_contexts, request_id,
+        set_up_idkg_payload, IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
@@ -1119,6 +1119,7 @@ pub(super) mod tests {
                 Some(id),
             )
         }));
+        let contexts = into_idkg_contexts(&contexts);
 
         // None of them should be purged
         assert_eq!(payload.available_pre_signatures.len(), 3);
@@ -1156,6 +1157,7 @@ pub(super) mod tests {
             key_id.clone(),
             None,
         )]);
+        let contexts = into_idkg_contexts(&contexts);
 
         // None of them should be purged
         assert_eq!(payload.available_pre_signatures.len(), 3);
@@ -1212,6 +1214,7 @@ pub(super) mod tests {
             key_id.clone(),
             Some(pre_sig_ids[0]),
         )]);
+        let contexts = into_idkg_contexts(&contexts);
 
         // The second one should be purged
         assert_eq!(payload.available_pre_signatures.len(), 2);

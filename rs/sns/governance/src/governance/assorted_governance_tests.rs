@@ -3,10 +3,16 @@
 //! The name of this file is indeed too generic; feel free to factor specific tests out into
 //! more appropriate locations, or create new file modules for them, whatever makes more sense.
 
+use super::test_helpers::{
+    basic_governance_proto, canister_status_for_test,
+    canister_status_from_management_canister_for_test, DoNothingLedger, A_MOTION_PROPOSAL,
+    A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, TEST_ARCHIVES_CANISTER_IDS,
+    TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID, TEST_INDEX_CANISTER_ID,
+    TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID, TEST_SWAP_CANISTER_ID,
+};
 use super::*;
 use crate::{
     pb::v1::{
-        governance::SnsMetadata,
         manage_neuron_response,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
         neuron, Account as AccountProto, Motion, NeuronPermissionType, ProposalData, ProposalId,
@@ -17,7 +23,8 @@ use crate::{
     sns_upgrade::{
         CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
         GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
-        GetWasmResponse, SnsCanisterType, SnsVersion, SnsWasm,
+        GetWasmResponse, ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
+        SnsCanisterType, SnsVersion, SnsWasm,
     },
     types::test_helpers::NativeEnvironment,
 };
@@ -27,10 +34,7 @@ use candid::Principal;
 use futures::{join, FutureExt};
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_clients::{
-    canister_id_record::CanisterIdRecord,
-    canister_status::{
-        CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
-    },
+    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusType,
 };
 use ic_nervous_system_common::{
     assert_is_err, assert_is_ok, cmc::FakeCmc, ledger::compute_neuron_staking_subaccount_bytes, E8,
@@ -50,34 +54,6 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, SystemTime},
 };
-
-pub(crate) struct DoNothingLedger {}
-
-#[async_trait]
-impl ICRC1Ledger for DoNothingLedger {
-    async fn transfer_funds(
-        &self,
-        _amount_e8s: u64,
-        _fee_e8s: u64,
-        _from_subaccount: Option<Subaccount>,
-        _to: Account,
-        _memo: u64,
-    ) -> Result<u64, NervousSystemError> {
-        unimplemented!();
-    }
-
-    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
-        unimplemented!()
-    }
-
-    async fn account_balance(&self, _account: Account) -> Result<Tokens, NervousSystemError> {
-        unimplemented!()
-    }
-
-    fn canister_id(&self) -> CanisterId {
-        unimplemented!()
-    }
-}
 
 struct AlwaysSucceedingLedger {}
 
@@ -107,24 +83,6 @@ impl ICRC1Ledger for AlwaysSucceedingLedger {
     }
 }
 
-pub(crate) fn basic_governance_proto() -> GovernanceProto {
-    GovernanceProto {
-        root_canister_id: Some(PrincipalId::new_user_test_id(53)),
-        ledger_canister_id: Some(PrincipalId::new_user_test_id(228)),
-        swap_canister_id: Some(PrincipalId::new_user_test_id(15)),
-
-        parameters: Some(NervousSystemParameters::with_default_values()),
-        mode: governance::Mode::Normal as i32,
-        sns_metadata: Some(SnsMetadata {
-            logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
-            name: Some("ServiceNervousSystem-Test".to_string()),
-            description: Some("A project to spin up a ServiceNervousSystem".to_string()),
-            url: Some("https://internetcomputer.org".to_string()),
-        }),
-        ..Default::default()
-    }
-}
-
 const TRANSITION_ROUND_COUNT: u64 = 42;
 const BASE_VOTING_REWARDS_PARAMETERS: VotingRewardsParameters = VotingRewardsParameters {
     round_duration_seconds: Some(7 * 24 * 60 * 60), // 1 week
@@ -132,45 +90,6 @@ const BASE_VOTING_REWARDS_PARAMETERS: VotingRewardsParameters = VotingRewardsPar
     initial_reward_rate_basis_points: Some(200),                                              // 2%
     final_reward_rate_basis_points: Some(100),                                                // 1%
 };
-
-lazy_static! {
-    static ref A_NEURON_PRINCIPAL_ID: PrincipalId = PrincipalId::new_user_test_id(956560);
-
-    static ref A_NEURON_ID: NeuronId = NeuronId::from(
-        compute_neuron_staking_subaccount_bytes(*A_NEURON_PRINCIPAL_ID, /* nonce = */ 0),
-    );
-
-    static ref A_NEURON: Neuron = Neuron {
-        id: Some(A_NEURON_ID.clone()),
-        permissions: vec![NeuronPermission {
-            principal: Some(*A_NEURON_PRINCIPAL_ID),
-            permission_type: NeuronPermissionType::all(),
-        }],
-        cached_neuron_stake_e8s: 100 * E8,
-        aging_since_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
-        dissolve_state: Some(DissolveState::DissolveDelaySeconds(365 * ONE_DAY_SECONDS)),
-        voting_power_percentage_multiplier: 100,
-        ..Default::default()
-    };
-
-    static ref A_MOTION_PROPOSAL: Proposal = Proposal {
-        title: "This Proposal is Wunderbar!".to_string(),
-        summary: "This will solve all of your problems.".to_string(),
-        url: "https://www.example.com/some/path".to_string(),
-        action: Some(Action::Motion(Motion {
-            motion_text: "See the summary.".to_string(),
-        }))
-    };
-
-    pub(crate) static ref TEST_ROOT_CANISTER_ID: CanisterId = CanisterId::from(500);
-    pub(crate) static ref TEST_GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from(501);
-    static ref TEST_LEDGER_CANISTER_ID: CanisterId = CanisterId::from(502);
-    static ref TEST_SWAP_CANISTER_ID: CanisterId = CanisterId::from(503);
-    static ref TEST_ARCHIVES_CANISTER_IDS: Vec<CanisterId> =
-        vec![CanisterId::from(504), CanisterId::from(505)];
-    static ref TEST_INDEX_CANISTER_ID: CanisterId = CanisterId::from(506);
-    static ref TEST_DAPP_CANISTER_IDS: Vec<CanisterId> = vec![CanisterId::from(600)];
-}
 
 #[test]
 fn fixtures_are_valid() {
@@ -799,29 +718,6 @@ fn execute_proposal(governance: &mut Governance, proposal_id: u64) -> ProposalDa
         }
 
         std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-}
-
-fn canister_status_for_test(
-    module_hash: Vec<u8>,
-    status: CanisterStatusType,
-) -> CanisterStatusResultV2 {
-    CanisterStatusResultV2::from(canister_status_from_management_canister_for_test(
-        module_hash,
-        status,
-    ))
-}
-
-fn canister_status_from_management_canister_for_test(
-    module_hash: Vec<u8>,
-    status: CanisterStatusType,
-) -> CanisterStatusResultFromManagementCanister {
-    let module_hash = Some(module_hash);
-
-    CanisterStatusResultFromManagementCanister {
-        status,
-        module_hash,
-        ..Default::default()
     }
 }
 
@@ -1833,7 +1729,7 @@ fn test_distribute_rewards_does_not_block_upgrades() {
             timestamp_seconds: _,
             event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
                 upgrade_journal_entry::UpgradeOutcome {
-                    human_readable: None,
+                    human_readable: Some(_),
                     status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
                         Empty {}
                     )),
@@ -2044,7 +1940,7 @@ fn test_check_upgrade_status_succeeds() {
     assert!(governance.proto.pending_version.is_none());
     assert_eq!(
         governance.proto.deployed_version.clone().unwrap(),
-        next_version.into()
+        next_version.clone().into()
     );
     // Assert proposal executed
     let proposal = governance.get_proposal(&GetProposal {
@@ -2067,7 +1963,11 @@ fn test_check_upgrade_status_succeeds() {
             timestamp_seconds: Some(now),
             event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
                 upgrade_journal_entry::UpgradeOutcome {
-                    human_readable: None,
+                    human_readable: Some(format!(
+                        "Upgrade marked successful at timestamp {} seconds, new {:?}",
+                        governance.env.now(),
+                        Version::from(next_version),
+                    )),
                     status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
                         Empty {}
                     )),
@@ -2474,9 +2374,9 @@ fn test_no_target_version_fails_check_upgrade_status() {
     assert_eq!(
         proposal_data.failure_reason.unwrap(),
         GovernanceError::new_with_message(
-            ErrorType::PreconditionFailed,
-                "No target_version set for upgrade_in_progress. This should be impossible. \
-                    Clearing upgrade_in_progress state and marking proposal failed to unblock further upgrades."
+            ErrorType::InconsistentInternalData,
+            "No target_version set for upgrade_in_progress. This should be impossible. Clearing \
+             upgrade_in_progress state and marking proposal failed to unblock further upgrades."
         )
     );
 
@@ -2512,18 +2412,6 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
         index_wasm_hash: vec![9, 9, 9],
     };
 
-    let mut env = NativeEnvironment::new(Some(governance_canister_id));
-    // We set a status that matches our pending version
-    env.set_call_canister_response(
-        root_canister_id,
-        "get_sns_canisters_summary",
-        Encode!(&GetSnsCanistersSummaryRequest {
-            update_canister_list: Some(true)
-        })
-        .unwrap(),
-        Ok(Encode!(&std_sns_canisters_summary_response()).unwrap()),
-    );
-
     // This is set to the version returned by std_sns_canisters_summary_response()
     // But is different from next_version so we can assert the right result below
     let running_version = {
@@ -2531,6 +2419,57 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
         version.index_wasm_hash = vec![6, 7, 8];
         version
     };
+
+    let mut env = NativeEnvironment::new(Some(governance_canister_id));
+
+    let first_get_sns_canisters_summary_response = std_sns_canisters_summary_response();
+
+    let second_get_sns_canisters_summary_response = {
+        let mut response = first_get_sns_canisters_summary_response.clone();
+        let index = {
+            let mut index = response.index.clone().unwrap();
+            let status = {
+                let mut status = index.status.clone().unwrap();
+                status.module_hash = Some(vec![9, 9, 9]);
+                status
+            };
+            index.status = Some(status);
+            index
+        };
+        response.index = Some(index);
+        response
+    };
+
+    env.set_call_canister_response(
+        root_canister_id,
+        "get_sns_canisters_summary",
+        Encode!(&GetSnsCanistersSummaryRequest {
+            update_canister_list: Some(true)
+        })
+        .unwrap(),
+        Ok(Encode!(&first_get_sns_canisters_summary_response).unwrap()),
+    );
+    env.set_call_canister_response(
+        SNS_WASM_CANISTER_ID,
+        "list_upgrade_steps",
+        Encode!(&ListUpgradeStepsRequest {
+            starting_at: Some(running_version.clone()),
+            sns_governance_canister_id: Some(governance_canister_id.into()),
+            limit: 0,
+        })
+        .unwrap(),
+        Ok(Encode!(&ListUpgradeStepsResponse {
+            steps: vec![
+                ListUpgradeStep {
+                    version: Some(running_version.clone())
+                },
+                ListUpgradeStep {
+                    version: Some(next_version.clone())
+                },
+            ]
+        })
+        .unwrap()),
+    );
 
     let now = env.now();
     let proposal_id = 12;
@@ -2583,28 +2522,59 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
         Box::new(FakeCmc::new()),
     );
 
-    assert_eq!(
-        governance.proto.pending_version.clone().unwrap(),
-        PendingVersion {
-            target_version: Some(next_version.into()),
-            mark_failed_at_seconds: now + 5 * 60,
-            checking_upgrade_lock: 0,
-            proposal_id: Some(proposal_id),
-        }
-    );
+    let expected_running_version_before_upgrade = Some(running_version.clone().into());
+    let expected_running_version_after_upgrade = Some(next_version.clone().into());
+    let expected_pending_version = Some(PendingVersion {
+        target_version: expected_running_version_after_upgrade.clone(),
+        mark_failed_at_seconds: now + 5 * 60,
+        checking_upgrade_lock: 0,
+        proposal_id: Some(proposal_id),
+    });
 
+    // Preconditions
     assert_eq!(governance.proto.deployed_version, None);
-    // After we run our periodic tasks, the version should be marked as successful
-    governance.run_periodic_tasks().now_or_never();
+    assert_eq!(governance.proto.pending_version, expected_pending_version);
 
-    assert!(governance.proto.pending_version.is_none());
-    // This is set to the running version to avoid non-recoverable state
-    assert_eq!(
-        governance.proto.deployed_version.clone().unwrap(),
-        running_version.into()
-    );
+    // After the 1st run of periodic tasks, deployed_version should be recovered, but the upgrade
+    // does not succeed yet (as the target version wasn't reached).
+    {
+        governance.run_periodic_tasks().now_or_never();
+        assert_eq!(
+            governance.proto.deployed_version,
+            expected_running_version_before_upgrade
+        );
+        assert_eq!(governance.proto.pending_version, expected_pending_version);
+    }
 
-    // Assert proposal failed
+    // Modify the environment to enable calling `get_sns_canisters_summary` again.
+    // Due to the limitations of this testing framework, we can't add this call spec upfront,
+    // as it needs to be hashed by the same key as the first call.
+    {
+        let mut env = NativeEnvironment::new(Some(governance_canister_id));
+        env.set_call_canister_response(
+            root_canister_id,
+            "get_sns_canisters_summary",
+            Encode!(&GetSnsCanistersSummaryRequest {
+                update_canister_list: Some(true)
+            })
+            .unwrap(),
+            Ok(Encode!(&second_get_sns_canisters_summary_response).unwrap()),
+        );
+        governance.env = Box::new(env);
+    }
+
+    // After the 2nd run of periodic tasks, the upgrade is expected to succeed,
+    // consuming `pending_version`.
+    {
+        governance.run_periodic_tasks().now_or_never();
+        assert_eq!(governance.proto.pending_version, None);
+        assert_eq!(
+            governance.proto.deployed_version,
+            expected_running_version_after_upgrade
+        );
+    }
+
+    // Assert proposal succeeded.
     let proposal = governance.get_proposal(&GetProposal {
         proposal_id: Some(ProposalId { id: proposal_id }),
     });
@@ -2614,38 +2584,58 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
         }
         get_proposal_response::Result::Proposal(proposal) => proposal,
     };
-    assert_ne!(proposal_data.failed_timestamp_seconds, 0);
 
-    assert_eq!(
-        proposal_data.failure_reason.unwrap(),
-        GovernanceError::new_with_message(
-            ErrorType::PreconditionFailed,
-            format!(
-                "Upgrade marked as failed at {} seconds from genesis. \
-            Governance had no recorded deployed_version.  \
-            Setting it to currently running version and failing upgrade.",
-                now
-            )
-        )
+    assert_eq!(proposal_data.failed_timestamp_seconds, 0);
+    assert_eq!(proposal_data.failure_reason, None);
+
+    // Check that the upgrade journal reflects the succeeded upgrade.
+    let upgrade_journal = governance.proto.upgrade_journal.clone().unwrap();
+    let (reset_upgrade_steps, refreshed_versions) = assert_matches!(
+        &upgrade_journal.entries[..],
+        [
+            UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                    upgrade_journal_entry::UpgradeStepsReset {
+                        human_readable: Some(_),
+                        upgrade_steps: Some(reset_upgrade_steps),
+                    },
+                )),
+            },
+            UpgradeJournalEntry {
+                timestamp_seconds: Some(_),
+                event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
+                    upgrade_journal_entry::UpgradeStepsRefreshed {
+                        upgrade_steps: Some(
+                            Versions {
+                                versions: refreshed_versions,
+                            },
+                        ),
+                    },
+                )),
+            },
+            UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                    upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: Some(_),
+                        status: Some(
+                            upgrade_journal_entry::upgrade_outcome::Status::Success(Empty {})
+                        ),
+                    }
+                )),
+            }
+        ] => (reset_upgrade_steps, refreshed_versions)
     );
 
-    // Check that the upgrade journal reflects the failed upgrade attempt
-    assert_matches!(
-        &governance.proto.upgrade_journal.clone().unwrap().entries[..],
-        [UpgradeJournalEntry {
-            timestamp_seconds: _,
-            event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
-                upgrade_journal_entry::UpgradeOutcome {
-                    human_readable: Some(_),
-                    status: Some(
-                        upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
-                            upgrade_journal_entry::upgrade_outcome::InvalidState { version: None }
-                        )
-                    ),
-                }
-            )),
-        }]
-    )
+    assert_eq!(
+        reset_upgrade_steps.versions,
+        vec![Version::from(running_version.clone())]
+    );
+    assert_eq!(
+        &refreshed_versions[..],
+        [Version::from(running_version), Version::from(next_version)]
+    );
 }
 
 #[test]

@@ -655,6 +655,8 @@ impl ProposalNeuronBehavior {
                     ..Default::default()
                 },
             )
+            .now_or_never()
+            .unwrap()
             .unwrap();
         // Vote
         for (voter, vote) in &self.votes {
