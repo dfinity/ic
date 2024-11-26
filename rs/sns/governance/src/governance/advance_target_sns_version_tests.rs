@@ -720,7 +720,10 @@ fn add_environment_mock_calls_for_initiate_upgrade(
     assert!(!canisters_to_be_upgraded.is_empty());
 
     if expected_canister_to_be_upgraded != SnsCanisterType::Root {
-        add_environment_mock_get_sns_canisters_summary_call(&mut *env, starting_version);
+        add_environment_mock_get_sns_canisters_summary_call(
+            &mut *env,
+            SnsCanistersSummaryResponse::Uniform(starting_version),
+        );
         for canister_id in canisters_to_be_upgraded {
             env.require_call_canister_invocation(
                 root_canister_id,
@@ -781,10 +784,32 @@ fn add_environment_mock_calls_for_initiate_upgrade(
     }
 }
 
+#[derive(Clone)]
+enum SnsCanistersSummaryResponse {
+    // All archives use the version from SnsVersion
+    Uniform(SnsVersion),
+    // Some archives use random versions, others use the version from SnsVersion
+    MixedArchives {
+        version: SnsVersion,
+        num_random_versions: usize,
+    },
+}
+
+impl From<SnsVersion> for SnsCanistersSummaryResponse {
+    fn from(version: SnsVersion) -> Self {
+        SnsCanistersSummaryResponse::Uniform(version)
+    }
+}
+
 fn add_environment_mock_get_sns_canisters_summary_call(
     env: &mut NativeEnvironment,
-    version: SnsVersion,
+    archive_versions: impl Into<SnsCanistersSummaryResponse>,
 ) {
+    let archive_versions = archive_versions.into();
+    let version = match &archive_versions {
+        SnsCanistersSummaryResponse::Uniform(v) => v.clone(),
+        SnsCanistersSummaryResponse::MixedArchives { version, .. } => version.clone(),
+    };
     let root_canister_id = *TEST_ROOT_CANISTER_ID;
     let governance_canister_id = *TEST_GOVERNANCE_CANISTER_ID;
     let ledger_canister_id = *TEST_LEDGER_CANISTER_ID;
@@ -835,16 +860,40 @@ fn add_environment_mock_get_sns_canisters_summary_call(
                     CanisterStatusType::Running,
                 )),
             }),
-            archives: ledger_archive_ids
-                .iter()
-                .map(|id| CanisterSummary {
-                    canister_id: Some(PrincipalId::from(*id)),
-                    status: Some(canister_status_for_test(
-                        version.archive_wasm_hash.clone(),
-                        CanisterStatusType::Running,
-                    )),
-                })
-                .collect(),
+            archives: match archive_versions {
+                SnsCanistersSummaryResponse::Uniform(v) => ledger_archive_ids
+                    .iter()
+                    .map(|id| CanisterSummary {
+                        canister_id: Some(PrincipalId::from(*id)),
+                        status: Some(canister_status_for_test(
+                            v.archive_wasm_hash.clone(),
+                            CanisterStatusType::Running,
+                        )),
+                    })
+                    .collect(),
+                SnsCanistersSummaryResponse::MixedArchives {
+                    version,
+                    num_random_versions,
+                } => {
+                    let mut archives = Vec::new();
+                    for (i, id) in ledger_archive_ids.iter().enumerate() {
+                        let hash = if i < num_random_versions {
+                            // Generate a random version for this archive
+                            vec![i as u8 + 1, 2, 3]
+                        } else {
+                            version.archive_wasm_hash.clone()
+                        };
+                        archives.push(CanisterSummary {
+                            canister_id: Some(PrincipalId::from(*id)),
+                            status: Some(canister_status_for_test(
+                                hash,
+                                CanisterStatusType::Running,
+                            )),
+                        });
+                    }
+                    archives
+                }
+            },
             dapps: vec![],
         })
         .unwrap()),
