@@ -4909,7 +4909,10 @@ impl Governance {
         match self.upgrade_periodic_task_lock {
             Some(time_acquired)
                 if now
-                    > time_acquired.saturating_add(UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS) =>
+                    >= time_acquired
+                        .checked_add(UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS)
+                        // In case of overflow, we'll unwrap to 0, which should always cause this to evaluate to true
+                        .unwrap_or(0) =>
             {
                 self.upgrade_periodic_task_lock = Some(now);
                 true
