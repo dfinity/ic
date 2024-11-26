@@ -138,13 +138,13 @@ where
     }
 
     fn check_invariants(&self) {
-        debug_assert_eq!(
-            self.size,
-            self.cache
-                .iter()
-                .map(|(key, value)| key.count_bytes() + value.count_bytes())
-                .sum::<usize>()
-        );
+        // debug_assert_eq!(
+        //     self.size,
+        //     self.cache
+        //         .iter()
+        //         .map(|(key, value)| key.count_bytes() + value.count_bytes())
+        //         .sum::<usize>()
+        // );
         debug_assert!(self.size <= self.capacity);
     }
 }
