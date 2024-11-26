@@ -1,5 +1,5 @@
 {
-  "checksum": "bef27a5bfc14b21bb169b205f08e83399d71e3eacacd01a9417acce17d18131a",
+  "checksum": "4bd74c2ecc5939648f9c864dcd11c37c0375659ed3c59474a56fee853f99565b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18795,7 +18795,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "ic-agent 0.37.1",
+              "id": "ic-agent 0.39.1",
               "target": "ic_agent"
             },
             {
@@ -20415,6 +20415,7 @@
           "common": [
             "alloc",
             "arithmetic",
+            "default",
             "der",
             "digest",
             "hazmat",
@@ -20901,6 +20902,7 @@
           "common": [
             "alloc",
             "arithmetic",
+            "default",
             "digest",
             "ff",
             "group",
@@ -28184,62 +28186,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "http-body-to-bytes 0.2.0": {
-      "name": "http-body-to-bytes",
-      "version": "0.2.0",
-      "package_url": "https://github.com/bk-rs/http-body-ext",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/http-body-to-bytes/0.2.0/download",
-          "sha256": "17a08236c6f51c2ee95d840f45acf8fa9e339390e00b4ef640857b2f2a534d70"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "http_body_to_bytes",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "http_body_to_bytes",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bytes 1.8.0",
-              "target": "bytes"
-            },
-            {
-              "id": "http-body 1.0.1",
-              "target": "http_body"
-            },
-            {
-              "id": "http-body-util 0.1.2",
-              "target": "http_body_util"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.2.0"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "http-body-util 0.1.2": {
       "name": "http-body-util",
       "version": "0.1.2",
@@ -29812,8 +29758,6 @@
         "crate_features": {
           "common": [
             "default",
-            "experimental_sync_call",
-            "hyper",
             "pem",
             "reqwest"
           ],
@@ -29856,10 +29800,6 @@
             {
               "id": "http-body 1.0.1",
               "target": "http_body"
-            },
-            {
-              "id": "hyper 1.5.0",
-              "target": "hyper"
             },
             {
               "id": "ic-certification 2.6.0",
@@ -29947,270 +29887,6 @@
             }
           ],
           "selects": {
-            "aarch64-apple-darwin": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "aarch64-apple-ios": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "aarch64-apple-ios-sim": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "aarch64-fuchsia": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "aarch64-linux-android": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "aarch64-pc-windows-msvc": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "aarch64-unknown-linux-gnu": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "aarch64-unknown-nixos-gnu": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "aarch64-unknown-nto-qnx710": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "arm-unknown-linux-gnueabi": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "armv7-linux-androideabi": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
             "cfg(not(target_family = \"wasm\"))": [
               {
                 "id": "rustls-webpki 0.102.8",
@@ -30219,446 +29895,6 @@
               {
                 "id": "tokio 1.41.1",
                 "target": "tokio"
-              }
-            ],
-            "i686-apple-darwin": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "i686-linux-android": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "i686-pc-windows-msvc": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "i686-unknown-freebsd": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "i686-unknown-linux-gnu": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "powerpc-unknown-linux-gnu": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "riscv32imc-unknown-none-elf": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "riscv64gc-unknown-none-elf": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "s390x-unknown-linux-gnu": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "thumbv7em-none-eabi": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "thumbv8m.main-none-eabi": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "x86_64-apple-darwin": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "x86_64-apple-ios": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "x86_64-fuchsia": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "x86_64-linux-android": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "x86_64-pc-windows-msvc": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "x86_64-unknown-freebsd": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "x86_64-unknown-linux-gnu": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "x86_64-unknown-nixos-gnu": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
-              }
-            ],
-            "x86_64-unknown-none": [
-              {
-                "id": "http-body-to-bytes 0.2.0",
-                "target": "http_body_to_bytes"
-              },
-              {
-                "id": "http-body-util 0.1.2",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper-rustls 0.27.3",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "hyper-util 0.1.10",
-                "target": "hyper_util"
-              },
-              {
-                "id": "tower 0.4.13",
-                "target": "tower"
               }
             ]
           }
@@ -30674,6 +29910,208 @@
           "selects": {}
         },
         "version": "0.37.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
+    "ic-agent 0.39.1": {
+      "name": "ic-agent",
+      "version": "0.39.1",
+      "package_url": "https://github.com/dfinity/agent-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-agent/0.39.1/download",
+          "sha256": "158138fcb769fe6288e63d5db221c904e472cfb7d376aba13a38c060f2984e63"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_agent",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_agent",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "pem"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "async-lock 3.3.0",
+              "target": "async_lock"
+            },
+            {
+              "id": "backoff 0.4.0",
+              "target": "backoff"
+            },
+            {
+              "id": "cached 0.52.0",
+              "target": "cached"
+            },
+            {
+              "id": "candid 0.10.10",
+              "target": "candid"
+            },
+            {
+              "id": "der 0.7.8",
+              "target": "der"
+            },
+            {
+              "id": "ecdsa 0.16.9",
+              "target": "ecdsa"
+            },
+            {
+              "id": "ed25519-consensus 2.1.0",
+              "target": "ed25519_consensus"
+            },
+            {
+              "id": "elliptic-curve 0.13.8",
+              "target": "elliptic_curve"
+            },
+            {
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "http 1.1.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.1",
+              "target": "http_body"
+            },
+            {
+              "id": "ic-certification 2.6.0",
+              "target": "ic_certification"
+            },
+            {
+              "id": "ic-transport-types 0.39.1",
+              "target": "ic_transport_types"
+            },
+            {
+              "id": "ic-verify-bls-signature 0.5.0",
+              "target": "ic_verify_bls_signature"
+            },
+            {
+              "id": "k256 0.13.4",
+              "target": "k256"
+            },
+            {
+              "id": "leb128 0.2.5",
+              "target": "leb128"
+            },
+            {
+              "id": "p256 0.13.2",
+              "target": "p256"
+            },
+            {
+              "id": "pem 3.0.4",
+              "target": "pem"
+            },
+            {
+              "id": "pkcs8 0.10.2",
+              "target": "pkcs8"
+            },
+            {
+              "id": "rand 0.8.5",
+              "target": "rand"
+            },
+            {
+              "id": "rangemap 1.4.0",
+              "target": "rangemap"
+            },
+            {
+              "id": "reqwest 0.12.9",
+              "target": "reqwest"
+            },
+            {
+              "id": "sec1 0.7.3",
+              "target": "sec1"
+            },
+            {
+              "id": "serde 1.0.214",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            },
+            {
+              "id": "serde_cbor 0.11.2",
+              "target": "serde_cbor"
+            },
+            {
+              "id": "sha2 0.10.8",
+              "target": "sha2"
+            },
+            {
+              "id": "simple_asn1 0.6.2",
+              "target": "simple_asn1"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            },
+            {
+              "id": "time 0.3.36",
+              "target": "time"
+            },
+            {
+              "id": "tower-service 0.3.3",
+              "target": "tower_service"
+            },
+            {
+              "id": "url 2.5.3",
+              "target": "url"
+            }
+          ],
+          "selects": {
+            "cfg(not(target_family = \"wasm\"))": [
+              {
+                "id": "tokio 1.41.1",
+                "target": "tokio"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.83",
+              "target": "async_trait"
+            },
+            {
+              "id": "serde_repr 0.1.16",
+              "target": "serde_repr"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.39.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -32894,6 +32332,94 @@
           "selects": {}
         },
         "version": "0.37.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
+    "ic-transport-types 0.39.1": {
+      "name": "ic-transport-types",
+      "version": "0.39.1",
+      "package_url": "https://github.com/dfinity/agent-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-transport-types/0.39.1/download",
+          "sha256": "2d8789a5c176bb1b925fa58ca97c651a3995d504e76101e93d2a17f558bdcf66"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_transport_types",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_transport_types",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.10",
+              "target": "candid"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "ic-certification 2.6.0",
+              "target": "ic_certification"
+            },
+            {
+              "id": "leb128 0.2.5",
+              "target": "leb128"
+            },
+            {
+              "id": "serde 1.0.214",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            },
+            {
+              "id": "serde_cbor 0.11.2",
+              "target": "serde_cbor"
+            },
+            {
+              "id": "sha2 0.10.8",
+              "target": "sha2"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "serde_repr 0.1.16",
+              "target": "serde_repr"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.39.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -53821,6 +53347,12 @@
                 "target": "libc"
               }
             ],
+            "aarch64-pc-windows-msvc": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
             "aarch64-unknown-linux-gnu": [
               {
                 "id": "libc 0.2.158",
@@ -53869,6 +53401,12 @@
                 "target": "libc"
               }
             ],
+            "i686-pc-windows-msvc": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
             "i686-unknown-freebsd": [
               {
                 "id": "libc 0.2.158",
@@ -53912,6 +53450,12 @@
               }
             ],
             "x86_64-linux-android": [
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "x86_64-pc-windows-msvc": [
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
@@ -60838,6 +60382,11 @@
               "time",
               "use-libc-auxv"
             ],
+            "aarch64-pc-windows-msvc": [
+              "default",
+              "termios",
+              "use-libc-auxv"
+            ],
             "aarch64-unknown-linux-gnu": [
               "default",
               "event",
@@ -60928,6 +60477,11 @@
               "process",
               "termios",
               "time",
+              "use-libc-auxv"
+            ],
+            "i686-pc-windows-msvc": [
+              "default",
+              "termios",
               "use-libc-auxv"
             ],
             "i686-unknown-freebsd": [
@@ -61042,6 +60596,11 @@
               "process",
               "termios",
               "time",
+              "use-libc-auxv"
+            ],
+            "x86_64-pc-windows-msvc": [
+              "default",
+              "termios",
               "use-libc-auxv"
             ],
             "x86_64-unknown-freebsd": [
@@ -61159,9 +60718,46 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "aarch64-unknown-nixos-gnu": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "aarch64-unknown-nto-qnx710": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "arm-unknown-linux-gnueabi": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -61244,9 +60840,24 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "i686-unknown-freebsd": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "i686-unknown-linux-gnu": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -61394,9 +61005,35 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
               }
             ],
             "x86_64-unknown-freebsd": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "errno 0.3.8",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
+                "id": "libc 0.2.158",
+                "target": "libc"
+              }
+            ],
+            "x86_64-unknown-nixos-gnu": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -87060,7 +86697,7 @@
     "hyper-rustls 0.27.3",
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.10",
-    "ic-agent 0.37.1",
+    "ic-agent 0.39.1",
     "ic-bn-lib 0.1.0",
     "ic-btc-interface 0.2.2",
     "ic-btc-test-utils 0.1.0",
