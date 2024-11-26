@@ -64,7 +64,7 @@ A nice writeup about async and blocking operations can be found in https://ryhl.
 
 == Implementation design decisions ==
 
-1. Use QUIC to satisfy the first two requirements ("Reliable data delivery" and "Multiplexing").
+1. Use the https://github.com/quinn-rs/quinn[QUINN] library for QUIC, as it meets the requirements for reliable data delivery, multiplexing, connection-oriented communication, and flow control.  
 2. Open a new QUIC stream for each message, instead of one stream per handler/URI. TODO: explain.
 3. Handlers are always ready to process messages, hence the router is always ready to accept streams. TODO: explain.
 
@@ -86,23 +86,21 @@ As a result, when there are handlers that take the weak reference the transport 
 
 3. Another alternative is to allow the `+QuicTransport+` to update the routes dynamically. In this case, once a connection is established it is unnatural to change the available routes from a client PoV.
 
-=== Unused QUIC/QUINN abstraction ===
+== Implementation Details ==
 
-* `+QuicTransport+` doesn't send nor receive datagrams because they are not reliably delivered.
-* `+QuicTransport+` doesn't use uni-directional streams. One possible situation where uni-directional
-stream may make sense if a handler is infallible. Since each route and the corresponding handler is given by a client,
-if a route is missing it should not be considered a failure in transport.
-For comparison, https://grpc.io/docs/what-is-grpc/core-concepts/#rpc-life-cycle[all `+gRPC+` methods contain a response from the application receive side].
-In addition, no +gRPC+ implementation will return https://grpc.github.io/grpc/core/md_doc_statuscodes.html[`+NOT_FOUND+`],
-which is the most appropriate return code if a route is missing.
+This section highlights key implementation decisions and details.
 
-=== Using HTTP request/response as API types ===
+=== Unused QUIC/QUINN Abstraction ===
 
-gRPC implementations use Interface Definition Language (IDL) for describing both the service interface and the structure of the payload messages.
-Since the QUIC transport is a lightweight library, no IDL is used. 
+* `+QuicTransport+` neither sends nor receives datagrams, as they are not reliably delivered.
+* +QuicTransport+ does not use uni-directional streams. Although uni-directional streams are suitable for infallible handlers, the client cannot determine whether a request was processed by such a handler or dropped due to a missing route. Since routes and handlers are client-provided, a missing route is not considered a transport failure.
+For comparison, https://grpc.io/docs/what-is-grpc/core-concepts/#rpc-life-cycle[all `+gRPC+` methods expect a response from the application receive side]. Moreover, no `+gRPC+` implementation returns https://grpc.github.io/grpc/core/md_doc_statuscodes.html[`+NOT_FOUND+`], the most suitable return code for a missing route.
 
-The QUIC transport library directly exposes the HTTP request and response to the client instead of introducing a custom type that wraps the payload.
-There are two main reasons for this design decision:
+=== Using HTTP Request/Response as API Types ===
 
-* Reuse the HTTP request and response types to keep the code compact. This also eliminates the need to implement https://docs.rs/axum/latest/axum/index.html#extractors[extractors].
-* Existing HTTP client-server can be transitioned more easily to the QUIC transport. For example, the server router can be completely reused; request building and response handling on the client stay unchanged.
+gRPC implementations rely on Interface Definition Language (IDL) to define both the service interface and payload structure. However, the QUIC transport library avoids IDL to keep things lightweight.
+
+Instead, the QUIC transport directly uses HTTP request and response types, for two main reasons:
+
+* Reuse existing HTTP request/response types to simplify the code, eliminating the need for custom extractors.
+* Ease transition from existing HTTP client-server setups to the QUIC transport, allowing full reuse of the server router and leaving request building and response handling unchanged on the client side.
