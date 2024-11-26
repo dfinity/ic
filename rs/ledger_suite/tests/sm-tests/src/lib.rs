@@ -12,6 +12,7 @@ use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
+use ic_ledger_core::Tokens;
 use ic_ledger_hash_of::HashOf;
 use ic_management_canister_types::{
     self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
@@ -20,7 +21,7 @@ use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::{ErrorCode, StateMachine, WasmResult};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use icp_ledger::{AccountIdentifier, IcpAllowanceArgs};
+use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, IcpAllowanceArgs};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -682,6 +683,47 @@ impl AllowanceProvider for AccountIdentifier {
             Allowance
         )
         .expect("failed to decode allowance response")
+    }
+}
+
+pub trait BalanceProvider: Sized {
+    fn get_balance(env: &StateMachine, ledger: CanisterId, account: impl Into<Self>) -> Nat;
+}
+
+impl BalanceProvider for Account {
+    fn get_balance(env: &StateMachine, ledger: CanisterId, account: impl Into<Account>) -> Nat {
+        Decode!(
+            &env.query(
+                ledger,
+                "icrc1_balance_of",
+                Encode!(&account.into()).unwrap()
+            )
+            .expect("failed to query balance")
+            .bytes(),
+            Nat
+        )
+        .expect("failed to decode icrc1_balance_of response")
+    }
+}
+
+impl BalanceProvider for AccountIdentifier {
+    fn get_balance(
+        env: &StateMachine,
+        ledger: CanisterId,
+        account: impl Into<AccountIdentifier>,
+    ) -> Nat {
+        let arg = BinaryAccountBalanceArgs {
+            account: account.into().to_address(),
+        };
+        Decode!(
+            &env.query(ledger, "account_balance", Encode!(&arg).unwrap())
+                .expect("failed to guery balance")
+                .bytes(),
+            Tokens
+        )
+        .expect("failed to decode account_balance response")
+        .get_e8s()
+        .into()
     }
 }
 

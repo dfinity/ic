@@ -378,7 +378,7 @@ impl Default for Config {
                 mainnet_canister_id: Some(bitcoin_mainnet_canister_id),
             },
             composite_queries: FlagStatus::Enabled,
-            query_caching: FlagStatus::Enabled,
+            query_caching: FlagStatus::Disabled,
             query_cache_capacity: QUERY_CACHE_CAPACITY,
             query_cache_max_expiry_time: QUERY_CACHE_MAX_EXPIRY_TIME,
             query_cache_data_certificate_expiry_time: QUERY_CACHE_DATA_CERTIFICATE_EXPIRY_TIME,

@@ -30,6 +30,7 @@ pub fn new_state_machine_with_golden_fiduciary_state_or_panic() -> StateMachine 
         routing_table,
         hypervisor_config: Some(Config {
             rate_limiting_of_instructions: FlagStatus::Disabled,
+            query_caching: FlagStatus::Disabled,
             ..Config::default()
         }),
         scp_location: FIDUCIARY_STATE_SOURCE,

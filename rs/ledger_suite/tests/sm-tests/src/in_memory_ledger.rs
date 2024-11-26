@@ -1,6 +1,6 @@
-use super::{get_all_ledger_and_archive_blocks, AllowanceProvider};
+use super::{get_all_ledger_and_archive_blocks, AllowanceProvider, BalanceProvider};
 use crate::metrics::parse_metric;
-use candid::{CandidType, Decode, Encode, Nat, Principal};
+use candid::{CandidType, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::CanisterId;
 use ic_icrc1::Operation;
@@ -13,6 +13,7 @@ use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::time::Instant;
 
 #[cfg(test)]
 mod tests;
@@ -316,7 +317,7 @@ where
 
 impl<AccountId, Tokens> InMemoryLedger<AccountId, Tokens>
 where
-    AccountId: PartialEq + Ord + Clone + Hash,
+    AccountId: PartialEq + Ord + Clone + Hash + std::fmt::Debug,
     Tokens: TokensType,
 {
     fn decrease_allowance(
@@ -571,7 +572,8 @@ where
         + Hash
         + Eq
         + std::fmt::Debug
-        + AllowanceProvider,
+        + AllowanceProvider
+        + BalanceProvider,
     Tokens: Default + TokensType + PartialEq + std::fmt::Debug + std::fmt::Display,
 {
     pub fn new(burns_without_spender: Option<BurnsWithoutSpender<AccountId>>) -> Self {
@@ -681,24 +683,8 @@ where
             "Checking {} balances and {} allowances",
             actual_num_balances, actual_num_approvals
         );
-        for (account, balance) in self.balances.iter() {
-            let actual_balance = Decode!(
-                &env.query(ledger_id, "icrc1_balance_of", Encode!(account).unwrap())
-                    .expect("failed to query balance")
-                    .bytes(),
-                Nat
-            )
-            .expect("failed to decode balance_of response");
-
-            assert_eq!(
-                &Tokens::try_from(actual_balance.clone()).unwrap(),
-                balance,
-                "Mismatch in balance for account {:?} ({} vs {})",
-                account,
-                balance,
-                actual_balance
-            );
-        }
+        let now = Instant::now();
+        let mut allowances_checked = 0;
         for (approval, allowance) in self.allowances.iter() {
             let (from, spender): (AccountId, AccountId) = approval.clone().into();
             assert!(
@@ -711,14 +697,55 @@ where
             assert_eq!(
                 allowance.amount,
                 Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
-                "Mismatch in allowance for approval from {:?} spender {:?}: {:?} ({:?} vs {:?})",
+                "Mismatch in allowance for approval from {:?} spender {:?}: {:?} ({:?} vs {:?}) at {:?}",
                 &from,
                 &spender,
                 approval,
                 allowance,
-                actual_allowance
+                actual_allowance,
+                env.time()
             );
+            if allowances_checked % 10000 == 0 && allowances_checked > 0 {
+                println!(
+                    "Checked {} allowances in {:?}",
+                    allowances_checked,
+                    now.elapsed()
+                );
+            }
+            allowances_checked += 1;
         }
+        println!(
+            "{} allowances checked in {:?}",
+            allowances_checked,
+            now.elapsed()
+        );
+        let mut balances_checked = 0;
+        let now = Instant::now();
+        for (account, balance) in self.balances.iter() {
+            let actual_balance = AccountId::get_balance(env, ledger_id, account.clone());
+
+            assert_eq!(
+                &Tokens::try_from(actual_balance.clone()).unwrap(),
+                balance,
+                "Mismatch in balance for account {:?} ({} vs {})",
+                account,
+                balance,
+                actual_balance
+            );
+            if balances_checked % 100000 == 0 && balances_checked > 0 {
+                println!(
+                    "Checked {} balances in {:?}",
+                    balances_checked,
+                    now.elapsed()
+                );
+            }
+            balances_checked += 1;
+        }
+        println!(
+            "{} balances checked in {:?}",
+            balances_checked,
+            now.elapsed()
+        );
     }
 }
 
