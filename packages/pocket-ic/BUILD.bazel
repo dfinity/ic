@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "@crate_index//:backoff",
     "@crate_index//:base64",
     "@crate_index//:candid",
     "@crate_index//:hex",

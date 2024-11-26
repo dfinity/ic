@@ -25,7 +25,7 @@ use ic_nervous_system_governance::index::{
     neuron_following::{HeapNeuronFollowingIndex, NeuronFollowingIndex},
     neuron_principal::NeuronPrincipalIndex,
 };
-use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::{AccountIdentifier, Subaccount};
 use std::{
     borrow::Cow,
@@ -582,10 +582,10 @@ impl NeuronStore {
     /// Adjusts the storage location of neurons, since active neurons might become inactive due to
     /// passage of time.
     pub fn batch_adjust_neurons_storage(&mut self, start_neuron_id: NeuronId) -> Option<NeuronId> {
-        static BATCH_SIZE_FOR_MOVING_NEURONS: usize = 1000;
+        static BATCH_SIZE_FOR_MOVING_NEURONS: usize = 200;
 
         #[cfg(target_arch = "wasm32")]
-        static MAX_NUM_INSTRUCTIONS_PER_BATCH: u64 = 5_000_000_000;
+        static MAX_NUM_INSTRUCTIONS_PER_BATCH: u64 = 1_000_000_000;
 
         #[cfg(target_arch = "wasm32")]
         let max_instructions_reached =
@@ -1112,6 +1112,31 @@ impl NeuronStore {
         self.with_neuron_sections(&neuron_id, needed_sections, |neuron| {
             neuron.would_follow_ballots(topic, ballots)
         })
+    }
+
+    pub fn register_recent_neuron_ballot(
+        &mut self,
+        neuron_id: NeuronId,
+        topic: Topic,
+        proposal_id: ProposalId,
+        vote: Vote,
+    ) -> Result<(), NeuronStoreError> {
+        if self.heap_neurons.contains_key(&neuron_id.id) {
+            self.with_neuron_mut(&neuron_id, |neuron| {
+                neuron.register_recent_ballot(topic, &proposal_id, vote)
+            })?;
+        } else {
+            with_stable_neuron_store_mut(|stable_neuron_store| {
+                stable_neuron_store.register_recent_neuron_ballot(
+                    neuron_id,
+                    topic,
+                    proposal_id,
+                    vote,
+                )
+            })?;
+        }
+
+        Ok(())
     }
 
     // Below are indexes related methods. They don't have a unified interface yet, but NNS1-2507 will change that.

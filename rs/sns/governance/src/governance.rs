@@ -1,3 +1,4 @@
+use crate::cached_upgrade_steps::CachedUpgradeSteps;
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -20,8 +21,8 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, Command as InFlightCommand},
-                CachedUpgradeSteps, MaturityModulation, NeuronInFlightCommand, PendingVersion,
-                SnsMetadata, Version, Versions,
+                CachedUpgradeSteps as CachedUpgradeStepsPb, MaturityModulation,
+                NeuronInFlightCommand, PendingVersion, SnsMetadata, Version, Versions,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -433,12 +434,81 @@ impl GovernanceProto {
         result
     }
 
+    pub(crate) fn cached_upgrade_steps_or_err(&self) -> Result<CachedUpgradeSteps, String> {
+        let Some(cached_upgrade_steps) = &self.cached_upgrade_steps else {
+            return Err(
+                "Internal error: GovernanceProto.cached_upgrade_steps must be specified."
+                    .to_string(),
+            );
+        };
+
+        let cached_upgrade_steps = CachedUpgradeSteps::try_from(cached_upgrade_steps)
+            .map_err(|err| format!("Internal error: {}", err))?;
+
+        Ok(cached_upgrade_steps)
+    }
+
+    pub fn deployed_version_or_err(&self) -> Result<Version, String> {
+        if let Some(deployed_version) = &self.deployed_version {
+            Ok(deployed_version.clone())
+        } else {
+            Err("GovernanceProto.deployed_version is not set.".to_string())
+        }
+    }
+
     /// Gets the current deployed version of the SNS or panics.
     pub fn deployed_version_or_panic(&self) -> Version {
-        self.deployed_version
-            .as_ref()
-            .cloned()
-            .expect("No version set in Governance.")
+        self.deployed_version_or_err()
+            .expect("GovernanceProto.deployed_version must be set.")
+    }
+
+    pub(crate) fn validate_new_target_version<V>(
+        &self,
+        new_target: Option<V>,
+    ) -> Result<
+        (
+            /* pending_upgrade_steps */ CachedUpgradeSteps,
+            /* valid_target_version */ Version,
+        ),
+        String,
+    >
+    where
+        Version: TryFrom<V>,
+        <Version as TryFrom<V>>::Error: ToString,
+    {
+        let deployed_version = self.deployed_version_or_err()?;
+
+        let upgrade_steps = {
+            let cached_upgrade_steps = self.cached_upgrade_steps_or_err()?;
+            cached_upgrade_steps.take_from(&deployed_version)?
+        };
+
+        if upgrade_steps.is_empty() {
+            return Err(
+                "Cannot advance SNS target version: there are no pending upgrades.".to_string(),
+            );
+        }
+
+        let new_target = if let Some(new_target) = new_target {
+            let new_target = Version::try_from(new_target).map_err(|err| err.to_string())?;
+            upgrade_steps.validate_new_target_version(&new_target)?;
+            new_target
+        } else {
+            upgrade_steps.last().clone()
+        };
+
+        if let Some(current_target_version) = &self.target_version {
+            let new_target_is_not_ahead_of_current_target =
+                upgrade_steps.contains_in_order(&new_target, current_target_version)?;
+            if new_target_is_not_ahead_of_current_target {
+                return Err(format!(
+                    "SNS target already set to {}.",
+                    current_target_version
+                ));
+            }
+        }
+
+        Ok((upgrade_steps, new_target))
     }
 
     /// Returns 0 if maturity modulation is disabled (per
@@ -2128,11 +2198,13 @@ impl Governance {
                 self.perform_manage_dapp_canister_settings(manage_dapp_canister_settings)
                     .await
             }
-            // TODO[NNS1-3434]: Implement `AdvanceSnsTargetVersion` proposals.
-            Action::AdvanceSnsTargetVersion(_) => Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "AdvanceSnsTargetVersion proposals are not implemented yet.".to_string(),
-            )),
+            Action::AdvanceSnsTargetVersion(_) => {
+                get_action_auxiliary(&self.proto.proposals, ProposalId { id: proposal_id })
+                    .and_then(|action_auxiliary| {
+                        action_auxiliary.unwrap_advance_sns_target_version_or_err()
+                    })
+                    .and_then(|new_target| self.perform_advance_target_version(new_target))
+            }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
             Action::Unspecified(_) => Err(GovernanceError::new_with_message(
@@ -3022,6 +3094,28 @@ impl Governance {
                     )),
                 },
             )
+    }
+
+    fn perform_advance_target_version(
+        &mut self,
+        new_target: Version,
+    ) -> Result<(), GovernanceError> {
+        // TODO[NNS1-3365]: Enable the AdvanceSnsTargetVersionFeature.
+        self.check_test_features_enabled();
+
+        let (_, target_version) = self
+            .proto
+            .validate_new_target_version(Some(new_target))
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
+
+        self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionSet::new(
+            self.proto.target_version.clone(),
+            Some(target_version.clone()),
+        ));
+
+        self.proto.target_version = Some(target_version);
+
+        Ok(())
     }
 
     // Returns an option with the NervousSystemParameters
@@ -4847,7 +4941,7 @@ impl Governance {
             return;
         };
 
-        let Some(CachedUpgradeSteps {
+        let Some(CachedUpgradeStepsPb {
             upgrade_steps: Some(Versions {
                 versions: upgrade_steps,
             }),
@@ -4963,7 +5057,7 @@ impl Governance {
         let upgrade_steps =
             self.proto
                 .cached_upgrade_steps
-                .get_or_insert_with(|| CachedUpgradeSteps {
+                .get_or_insert_with(|| CachedUpgradeStepsPb {
                     requested_timestamp_seconds: Some(self.env.now()),
                     ..Default::default()
                 });
@@ -5058,16 +5152,20 @@ impl Governance {
         }
     }
 
+    // This is a test-only function, so panicking should be okay.
     pub fn advance_target_version(
         &mut self,
         request: AdvanceTargetVersionRequest,
     ) -> AdvanceTargetVersionResponse {
-        self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionSet::new(
-            self.proto.target_version.clone(),
-            request.target_version.clone(),
-        ));
+        let AdvanceTargetVersionRequest {
+            target_version: Some(target_version),
+        } = request
+        else {
+            panic!("AdvanceTargetVersionRequest.target_version must be specified.");
+        };
 
-        self.proto.target_version = request.target_version;
+        self.perform_advance_target_version(target_version)
+            .expect("Cannot perform perform_advance_target_version");
 
         AdvanceTargetVersionResponse {}
     }
@@ -6034,3 +6132,6 @@ mod fail_stuck_upgrade_in_progress_tests;
 
 #[cfg(test)]
 mod advance_target_sns_version_tests;
+
+#[cfg(test)]
+mod test_helpers;
