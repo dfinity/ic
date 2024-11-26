@@ -1164,25 +1164,17 @@ fn test_canister_http() {
     let canister_http_requests = pic.get_canister_http();
     assert_eq!(canister_http_requests.len(), 0);
 
-    // Check that there is no known call status yet.
-    let ingress_status = pic.ingress_status(call_id.clone());
-    assert!(ingress_status.is_none());
-
     // Now the test canister will receive the http outcall response
     // and reply to the ingress message from the test driver.
-    let reply = pic.await_call(call_id.clone()).unwrap();
+    let reply = pic.await_call(call_id).unwrap();
     match reply {
-        WasmResult::Reply(ref data) => {
+        WasmResult::Reply(data) => {
             let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
-                decode_one(data).unwrap();
+                decode_one(&data).unwrap();
             assert_eq!(http_response.unwrap().body, body);
         }
         WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
     };
-
-    // Check that the call status matches the result of `PocketIc::await_call`.
-    let ingress_status = pic.ingress_status(call_id);
-    assert_eq!(ingress_status.unwrap(), Ok(reply));
 }
 
 #[test]
@@ -2005,6 +1997,37 @@ fn create_instance_from_existing() {
     assert_eq!(reply, WasmResult::Reply(vec![3, 0, 0, 0]));
     let reply = call_counter_can(&pic, can_id, "read");
     assert_eq!(reply, WasmResult::Reply(vec![3, 0, 0, 0]));
+}
+
+#[test]
+fn ingress_status() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+
+    let msg_id = pic
+        .submit_call(
+            canister_id,
+            Principal::anonymous(),
+            "whoami",
+            encode_one(()).unwrap(),
+        )
+        .unwrap();
+
+    assert!(pic.ingress_status(msg_id.clone()).is_none());
+
+    pic.tick();
+
+    let ingress_status = pic.ingress_status(msg_id).unwrap().unwrap();
+    let principal = match ingress_status {
+        WasmResult::Reply(data) => Decode!(&data, String).unwrap(),
+        WasmResult::Reject(err) => panic!("Unexpected reject: {}", err),
+    };
+    assert_eq!(principal, canister_id.to_string());
 }
 
 #[test]
