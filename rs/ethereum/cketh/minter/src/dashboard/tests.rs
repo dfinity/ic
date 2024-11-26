@@ -15,7 +15,7 @@ use ic_cketh_minter::state::audit::{apply_state_transition, EventType};
 use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
 use ic_cketh_minter::state::transactions::{
     create_transaction, Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex,
-    Subaccount, WithdrawalRequest,
+    WithdrawalRequest,
 };
 use ic_cketh_minter::state::State;
 use ic_cketh_minter::tx::{
@@ -1102,7 +1102,7 @@ fn cketh_withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> Et
         destination: Address::from_str(DEFAULT_RECIPIENT_ADDRESS).unwrap(),
         withdrawal_amount: Wei::new(DEFAULT_WITHDRAWAL_AMOUNT),
         from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
-        from_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
+        from_subaccount: LedgerSubaccount::from_bytes(DEFAULT_SUBACCOUNT),
         created_at: None,
     }
 }
@@ -1124,7 +1124,7 @@ fn ckerc20_withdrawal_request_with_index(
         ckerc20_ledger_id: ckerc20_token.ckerc20_ledger_id,
         ckerc20_ledger_burn_index: (cketh_ledger_burn_index.get() + 1_u64).into(),
         from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
-        from_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
+        from_subaccount: LedgerSubaccount::from_bytes(DEFAULT_SUBACCOUNT),
         created_at: 1712305423000000000,
     }
 }
@@ -1293,7 +1293,7 @@ mod assertions {
         pub fn has_last_synced_block_href(&self, id: LogScrapingId, expected_href: &str) -> &Self {
             self.has_href_value(
                 &format!(
-                    "#helper-smart-contract-{} > td:nth-child(3) > code > a",
+                    "#helper-smart-contract-{} > td:nth-child(4) > code > a",
                     lower_alphanumeric(id).unwrap()
                 ),
                 expected_href,

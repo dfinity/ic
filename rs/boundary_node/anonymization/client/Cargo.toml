@@ -12,7 +12,7 @@ ic-types = { path = "../../../types/types" }
 rand = { workspace = true }
 rsa = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true }
 
 [dependencies.anonymization-interface]
 path = "../interface"

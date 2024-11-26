@@ -689,6 +689,28 @@ fn send_signal_to_pic(pic: PocketIc, mut child: Child, shutdown_signal: Option<S
     }
 }
 
+fn kill_gateway_with_signal(shutdown_signal: Signal) {
+    let (server_url, child) = start_server_helper(None, None, false, false);
+    let mut pic = PocketIcBuilder::new()
+        .with_server_url(server_url)
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let _ = pic.make_live(None);
+
+    send_signal_to_pic(pic, child, Some(shutdown_signal));
+}
+
+#[test]
+fn kill_gateway_with_sigint() {
+    kill_gateway_with_signal(Signal::SIGINT);
+}
+
+#[test]
+fn kill_gateway_with_sigterm() {
+    kill_gateway_with_signal(Signal::SIGTERM);
+}
+
 fn canister_state_dir(shutdown_signal: Option<Signal>) {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
 
@@ -1411,4 +1433,62 @@ fn auto_progress() {
             break;
         }
     }
+}
+
+fn create_gateway(
+    server_url: Url,
+    port: Option<u16>,
+    forward_to: HttpGatewayBackend,
+) -> Result<u16, String> {
+    let endpoint = server_url.join("http_gateway").unwrap();
+    let http_gateway_config = HttpGatewayConfig {
+        ip_addr: None,
+        port,
+        forward_to,
+        domains: None,
+        https_config: None,
+    };
+    let res = reqwest::blocking::Client::new()
+        .post(endpoint)
+        .json(&http_gateway_config)
+        .send()
+        .expect("HTTP failure")
+        .json::<CreateHttpGatewayResponse>()
+        .expect("Could not parse response for create HTTP gateway request");
+    match res {
+        CreateHttpGatewayResponse::Created(info) => Ok(info.port),
+        CreateHttpGatewayResponse::Error { message } => Err(message),
+    }
+}
+
+#[test]
+fn test_gateway_address_in_use() {
+    let (server_url, _) = start_server_helper(None, None, false, false);
+
+    // create PocketIC instance
+    let pic = PocketIcBuilder::new()
+        .with_server_url(server_url.clone())
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // create an HTTP gateway at an arbitrary port
+    let port = create_gateway(
+        server_url.clone(),
+        None,
+        HttpGatewayBackend::PocketIcInstance(pic.instance_id()),
+    )
+    .unwrap();
+
+    // try to create another HTTP gateway at the same port
+    let err = create_gateway(
+        server_url,
+        Some(port),
+        HttpGatewayBackend::PocketIcInstance(pic.instance_id()),
+    )
+    .unwrap_err();
+    assert!(err.contains(&format!(
+        "Failed to bind to address 127.0.0.1:{}: Address already in use",
+        port
+    )));
 }

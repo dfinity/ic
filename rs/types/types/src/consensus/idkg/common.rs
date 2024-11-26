@@ -1,21 +1,23 @@
 //! Canister threshold transcripts and references related defininitions.
-use crate::crypto::{
-    canister_threshold_sig::{
-        error::IDkgParamsValidationError,
-        idkg::{
-            IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
-            IDkgTranscriptType,
+use crate::{
+    crypto::{
+        canister_threshold_sig::{
+            error::IDkgParamsValidationError,
+            idkg::{
+                IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
+                IDkgTranscriptType,
+            },
+            ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
+            ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
         },
-        ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
-        ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
+        AlgorithmId,
     },
-    AlgorithmId,
+    messages::CallbackId,
 };
 use crate::{Height, RegistryVersion};
 use ic_base_types::{NodeId, PrincipalId};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
@@ -36,6 +38,7 @@ use super::{
         PreSignatureTranscriptRef, ThresholdSchnorrSigInputsError, ThresholdSchnorrSigInputsRef,
         TranscriptInCreation,
     },
+    IDkgMasterPublicKeyId,
 };
 
 /// PseudoRandomId is defined in execution context as plain 32-byte vector, we give it a synonym here.
@@ -50,19 +53,17 @@ pub type PseudoRandomId = [u8; 32];
 ///
 /// The height field represents at which block the RequestId is created.
 /// It is used for purging purpose.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RequestId {
-    pub pre_signature_id: PreSigId,
-    pub pseudo_random_id: PseudoRandomId,
+    pub callback_id: CallbackId,
     pub height: Height,
 }
 
 impl From<RequestId> for pb::RequestId {
     fn from(request_id: RequestId) -> Self {
         Self {
-            pre_signature_id: request_id.pre_signature_id.id(),
-            pseudo_random_id: request_id.pseudo_random_id.to_vec(),
+            callback_id: request_id.callback_id.get(),
             height: request_id.height.get(),
         }
     }
@@ -72,20 +73,10 @@ impl TryFrom<&pb::RequestId> for RequestId {
     type Error = ProxyDecodeError;
 
     fn try_from(request_id: &pb::RequestId) -> Result<Self, Self::Error> {
-        if request_id.pseudo_random_id.len() != 32 {
-            Err(ProxyDecodeError::Other(String::from(
-                "request_id.pseudo_random_id must be 32 bytes long",
-            )))
-        } else {
-            let mut pseudo_random_id = [0; 32];
-            pseudo_random_id.copy_from_slice(&request_id.pseudo_random_id);
-
-            Ok(Self {
-                pre_signature_id: PreSigId(request_id.pre_signature_id),
-                pseudo_random_id,
-                height: Height::from(request_id.height),
-            })
-        }
+        Ok(Self {
+            callback_id: CallbackId::from(request_id.callback_id),
+            height: Height::from(request_id.height),
+        })
     }
 }
 
@@ -654,7 +645,7 @@ pub trait IDkgBlockReader: Send + Sync {
     /// Returns the IDs of pre-signatures in creation by the tip.
     fn pre_signatures_in_creation(
         &self,
-    ) -> Box<dyn Iterator<Item = (PreSigId, MasterPublicKeyId)> + '_>;
+    ) -> Box<dyn Iterator<Item = (PreSigId, IDkgMasterPublicKeyId)> + '_>;
 
     /// For the given pre-signature ID, returns the pre-signature ref if available.
     fn available_pre_signature(&self, id: &PreSigId) -> Option<&PreSignatureRef>;

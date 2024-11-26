@@ -4,7 +4,6 @@ use crate::common::raw_canister_id_range_into;
 use candid::Principal;
 use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange};
 use ic_registry_subnet_type::SubnetType;
-use pocket_ic::common::rest::DtsFlag;
 use pocket_ic::PocketIcBuilder;
 use rcgen::{CertificateParams, KeyPair};
 use spec_compliance::run_ic_ref_test;
@@ -112,7 +111,6 @@ fn setup_and_run_ic_ref_test(
     let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
-        .with_dts_flag(DtsFlag::Disabled)
         .build();
     let endpoint = pic.make_live(None);
     let topo = pic.topology();

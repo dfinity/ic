@@ -1,14 +1,3 @@
-// Note on `candid_method`: each canister method should have a function
-// annotated with `#[candid_method]` that has the arguments and return type
-// expected by the canister method, to be able to generate `governance.did`
-// automatically.
-//
-// This often means we need a function with `#[export_name = "canister_query
-// my_method"]` that doesn't take arguments and doesn't return anything (per IC
-// spec), then another function with the actual method arguments and return
-// type, annotated with `#[candid_method(query/update)]` to be able to generate
-// the did definition of the method.
-
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
@@ -22,7 +11,7 @@ use ic_nervous_system_clients::{
 };
 use ic_nervous_system_common::{
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
-    serve_logs, serve_logs_v2, serve_metrics,
+    serve_journal, serve_logs, serve_logs_v2, serve_metrics,
 };
 use ic_nervous_system_proto::pb::v1::{
     GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
@@ -40,7 +29,8 @@ use ic_sns_governance::{
     },
     logs::{ERROR, INFO},
     pb::v1::{
-        ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
+        get_running_sns_version_response::UpgradeInProgress, ClaimSwapNeuronsRequest,
+        ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
         FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
         GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
         GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
@@ -467,9 +457,16 @@ async fn get_root_canister_status(_: ()) -> CanisterStatusResultV2 {
 #[query]
 fn get_running_sns_version(_: GetRunningSnsVersionRequest) -> GetRunningSnsVersionResponse {
     log!(INFO, "get_running_sns_version");
+    let pending_version = governance().proto.pending_version.clone();
+    let upgrade_in_progress = pending_version.map(|upgrade_in_progress| UpgradeInProgress {
+        target_version: upgrade_in_progress.target_version.clone(),
+        mark_failed_at_seconds: upgrade_in_progress.mark_failed_at_seconds,
+        checking_upgrade_lock: upgrade_in_progress.checking_upgrade_lock,
+        proposal_id: upgrade_in_progress.proposal_id.unwrap_or(0),
+    });
     GetRunningSnsVersionResponse {
         deployed_version: governance().proto.deployed_version.clone(),
-        pending_version: governance().proto.pending_version.clone(),
+        pending_version: upgrade_in_progress,
     }
 }
 
@@ -605,6 +602,15 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 #[query(hidden = true, decoding_quota = 10000)]
 pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
+        "/journal/json" => {
+            let journal_entries = &governance()
+                .proto
+                .upgrade_journal
+                .as_ref()
+                .expect("The upgrade journal is not initialized for this SNS.")
+                .entries;
+            serve_journal(journal_entries)
+        }
         "/metrics" => serve_metrics(encode_metrics),
         "/logs" => serve_logs_v2(request, &INFO, &ERROR),
 

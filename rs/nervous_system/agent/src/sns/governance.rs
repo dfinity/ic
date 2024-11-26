@@ -1,7 +1,7 @@
 use crate::CallCanisters;
 use ic_base_types::PrincipalId;
 use ic_sns_governance::pb::v1::{
-    GetMetadataRequest, GetMetadataResponse, GetRunningSnsVersionRequest,
+    GetMetadataRequest, GetMetadataResponse, GetMode, GetModeResponse, GetRunningSnsVersionRequest,
     GetRunningSnsVersionResponse,
 };
 use serde::{Deserialize, Serialize};
@@ -26,6 +26,10 @@ impl GovernanceCanister {
         agent
             .call(self.canister_id, GetRunningSnsVersionRequest {})
             .await
+    }
+
+    pub async fn get_mode<C: CallCanisters>(&self, agent: &C) -> Result<GetModeResponse, C::Error> {
+        agent.call(self.canister_id, GetMode {}).await
     }
 }
 

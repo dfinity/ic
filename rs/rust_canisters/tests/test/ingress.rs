@@ -8,7 +8,7 @@ use on_wire::bytes;
 #[test]
 fn test_update_from_sender() {
     local_test_e(|runtime| async move {
-        let universal_canister = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM)
+        let universal_canister = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec())
             .install(&runtime)
             .bytes(Vec::new())
             .await

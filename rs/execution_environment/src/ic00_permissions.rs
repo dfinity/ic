@@ -103,12 +103,27 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: true,
             },
+            Ic00Method::ReshareChainKey => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: true,
+            },
             Ic00Method::SchnorrPublicKey => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
             Ic00Method::SignWithSchnorr => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
+            Ic00Method::VetKdPublicKey => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
+            Ic00Method::VetKdDeriveEncryptedKey => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
@@ -149,6 +164,11 @@ impl Ic00MethodPermissions {
                 allow_only_nns_subnet_sender: false,
             },
             Ic00Method::NodeMetricsHistory => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
+            Ic00Method::SubnetInfo => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,

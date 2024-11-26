@@ -137,7 +137,7 @@ pub(crate) async fn get_proposal_id_that_added_wasm(
     Ok(proposal_id)
 }
 
-async fn get_canisters_to_upgrade(
+pub(crate) async fn get_canisters_to_upgrade(
     env: &dyn Environment,
     root_canister_id: CanisterId,
     canister_type: SnsCanisterType,
@@ -174,7 +174,7 @@ async fn get_canisters_to_upgrade(
         .collect()
 }
 
-fn canister_type_and_wasm_hash_for_upgrade(
+pub(crate) fn canister_type_and_wasm_hash_for_upgrade(
     current_version: &Version,
     next_version: &Version,
 ) -> Result<(SnsCanisterType, Vec<u8>), String> {
@@ -416,6 +416,7 @@ impl Version {
 
         differences
     }
+
     pub(crate) fn version_has_expected_hashes(
         &self,
         expected_hashes: &[(SnsCanisterType, Vec<u8> /* wasm hash*/)],
@@ -545,7 +546,7 @@ pub(crate) struct GetSnsCanistersSummaryRequest {
     pub update_canister_list: Option<bool>,
 }
 
-#[derive(Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetSnsCanistersSummaryResponse {
     pub root: Option<CanisterSummary>,
     pub governance: Option<CanisterSummary>,
@@ -557,7 +558,7 @@ pub(crate) struct GetSnsCanistersSummaryResponse {
 }
 
 /// Copied from ic-sns-root
-#[derive(Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
 pub(crate) struct CanisterSummary {
     pub canister_id: Option<PrincipalId>,
     pub status: Option<CanisterStatusResultV2>,

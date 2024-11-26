@@ -73,11 +73,11 @@ impl Block {
     }
 
     /// Define variables and functions used in the `code` snippet.
-    pub fn define_variables_and_functions(mut self, code: &str, wasm64_enabled: Wasm64) -> Self {
+    pub fn define_variables_and_functions(mut self, code: &str) -> Self {
         for name in ["x", "y", "z", "zero", "address", "one"] {
             for ty in ["i32", "i64", "f32", "f64", "v128"] {
                 if code.contains(&format!("${name}_{ty}")) {
-                    self.declare_variable(name, ty, wasm64_enabled);
+                    self.declare_variable(name, ty);
                 }
             }
         }
@@ -99,8 +99,8 @@ impl Block {
     }
 
     /// Declare a `black_box` variable with specified `name` and `type`.
-    pub fn declare_variable(&mut self, name: &str, ty: &str, wasm64_enabled: Wasm64) -> &mut Self {
-        let memory_var_address = if wasm64_enabled == Wasm64::Enabled {
+    pub fn declare_variable(&mut self, name: &str, ty: &str) -> &mut Self {
+        let memory_var_address = if ty == "i64" {
             // The address should be somewhere beyond 4 GiB.
             // This is 5 GB.
             "5368709120"

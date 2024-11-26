@@ -138,7 +138,7 @@ registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 rosetta-core = { path = "../rosetta-api/common/rosetta_core" }
 rsa = { workspace = true }
-rust_decimal = "1.25"
+rust_decimal = "1.36.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }

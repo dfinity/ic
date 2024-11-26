@@ -5,6 +5,7 @@ use crate::crypto::canister_threshold_sig::error::{
 use crate::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
 use crate::{Height, NodeId, RegistryVersion, SubnetId};
 use assert_matches::assert_matches;
+use ic_base_types::PrincipalId;
 use ic_crypto_test_utils_canister_threshold_sigs::{ordered_node_id, set_of_nodes};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::{CryptoRng, Rng};

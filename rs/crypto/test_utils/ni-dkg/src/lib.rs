@@ -461,9 +461,10 @@ impl RandomNiDkgConfig {
     /// is possible to perform tests where a single subnet has both
     /// high and low threshold transcripts
     pub fn new_with_inverted_threshold<R: Rng + CryptoRng>(&self, rng: &mut R) -> Self {
-        let dkg_tag = match self.0.dkg_id().dkg_tag {
+        let dkg_tag = match &self.0.dkg_id().dkg_tag {
             NiDkgTag::LowThreshold => NiDkgTag::HighThreshold,
             NiDkgTag::HighThreshold => NiDkgTag::LowThreshold,
+            NiDkgTag::HighThresholdForKey(_) => unimplemented!("not supported/needed currently"),
         };
 
         let subnet_size = self.0.receivers().get().len();

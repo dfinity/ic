@@ -411,7 +411,7 @@ pub fn set_up_universal_canister(machine: &StateMachine, cycles: Option<Cycles>)
         .install_wasm_in_mode(
             canister_id,
             CanisterInstallMode::Install,
-            Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes(),
+            Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()).bytes(),
             vec![],
         )
         .unwrap();
@@ -989,7 +989,7 @@ pub fn nns_disburse_neuron(
     state_machine: &StateMachine,
     sender: PrincipalId,
     neuron_id: NeuronId,
-    amount_e8s: u64,
+    amount_e8s: Option<u64>,
     to_account: Option<AccountIdentifier>,
 ) -> ManageNeuronResponse {
     manage_neuron(
@@ -997,7 +997,8 @@ pub fn nns_disburse_neuron(
         sender,
         neuron_id,
         ManageNeuronCommandRequest::Disburse(Disburse {
-            amount: Some(manage_neuron::disburse::Amount { e8s: amount_e8s }),
+            amount: amount_e8s
+                .map(|amount_e8s| manage_neuron::disburse::Amount { e8s: amount_e8s }),
             to_account: to_account.map(|account| account.into()),
         }),
     )

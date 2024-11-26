@@ -60,22 +60,3 @@ system_test_nns(
         ],
     deps = DEPENDENCIES + ["//rs/tests"],
 )
-
-system_test_nns(
-    name = "rosetta_list_neurons_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api/icp:ic-rosetta-api",
-            "//rs/rosetta-api/icp:rosetta_image.tar",
-            "//rs/tests:rosetta_workspace",
-            "@rosetta-cli//:rosetta-cli",
-        ],
-    deps = DEPENDENCIES + ["//rs/tests"],
-)

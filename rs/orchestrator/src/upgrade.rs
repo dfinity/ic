@@ -31,6 +31,7 @@ use std::{
     collections::BTreeMap,
     path::PathBuf,
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
@@ -194,7 +195,7 @@ impl Upgrade {
                                     // Otherwise we would have left the subnet before upgrading. This means
                                     // we will trust the registry and go ahead with removing the node's state
                                     // including the broken local CUP.
-                                    self.remove_state()?;
+                                    self.remove_state().await?;
                                     return Ok(None);
                                 }
                                 Err(other) => return Err(other),
@@ -269,8 +270,17 @@ impl Upgrade {
             &latest_cup,
         ) {
             self.stop_replica()?;
-            self.remove_state()?;
-            return Ok(None);
+            return match self.remove_state().await {
+                Ok(()) => Ok(None),
+                Err(err) => {
+                    warn!(
+                        self.logger,
+                        "Removal of the node state failed with error {}", err
+                    );
+                    self.metrics.critical_error_state_removal_failed.inc();
+                    Err(err)
+                }
+            };
         }
 
         // If we arrived here, we have the newest CUP and we're still assigned.
@@ -359,7 +369,7 @@ impl Upgrade {
         Ok(())
     }
 
-    fn remove_state(&self) -> OrchestratorResult<()> {
+    async fn remove_state(&self) -> OrchestratorResult<()> {
         // Reset the key changed errors counter to not raise alerts in other subnets
         self.metrics.master_public_key_changed_errors.reset();
         remove_node_state(
@@ -369,6 +379,18 @@ impl Upgrade {
         )
         .map_err(OrchestratorError::UpgradeError)?;
         info!(self.logger, "Subnet state removed");
+
+        let instant = Instant::now();
+        sync_and_trim_fs(&self.logger)
+            .await
+            .map_err(OrchestratorError::UpgradeError)?;
+        let elapsed = instant.elapsed().as_millis();
+        self.metrics.fstrim_duration.set(elapsed as i64);
+        info!(
+            self.logger,
+            "Filesystem synced and trimmed in {}ms", elapsed
+        );
+
         Ok(())
     }
 
@@ -622,6 +644,28 @@ fn should_node_become_unassigned(
     true
 }
 
+// Call `sync` and `fstrim` on the data partition
+async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
+    let mut fstrim_script = tokio::process::Command::new("/opt/ic/bin/sync_fstrim.sh");
+    info!(logger, "Running command '{:?}'...", fstrim_script);
+    match fstrim_script.status().await {
+        Ok(status) => {
+            if status.success() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "Failed to run command '{:?}', return value: {}",
+                    fstrim_script, status
+                ))
+            }
+        }
+        Err(err) => Err(format!(
+            "Failed to run command '{:?}', error: {}",
+            fstrim_script, err
+        )),
+    }
+}
+
 // Deletes the subnet state consisting of the consensus pool, execution state,
 // the local CUP and the persisted error metric of threshold key changes.
 fn remove_node_state(
@@ -771,7 +815,7 @@ fn get_master_public_keys(
 
         match get_master_public_key_from_transcript(transcript) {
             Ok(public_key) => {
-                public_keys.insert(key_id.clone(), public_key);
+                public_keys.insert(key_id.clone().into(), public_key);
             }
             Err(err) => {
                 warn!(
@@ -931,7 +975,7 @@ mod tests {
             vec![MasterKeyTranscript {
                 current: unmasked,
                 next_in_creation: idkg::KeyTranscriptCreation::Begin,
-                master_key_id: key_id.clone(),
+                master_key_id: key_id.clone().try_into().unwrap(),
             }],
         );
         idkg.idkg_transcripts = idkg_transcripts;

@@ -535,9 +535,12 @@ impl Drop for DkgKeyManager {
 
 /// Print the information about a [`NiDkgId`] in a concise way for logging
 fn dkg_id_log_msg(id: &NiDkgId) -> String {
-    let tag = match id.dkg_tag {
-        NiDkgTag::LowThreshold => "low",
-        NiDkgTag::HighThreshold => "high",
+    let tag = match &id.dkg_tag {
+        NiDkgTag::LowThreshold => "low".to_string(),
+        NiDkgTag::HighThreshold => "high".to_string(),
+        NiDkgTag::HighThresholdForKey(master_public_key_id) => {
+            format!("highForKey({master_public_key_id})")
+        }
     };
 
     // If the target is local (which it is usually), we don't log the target

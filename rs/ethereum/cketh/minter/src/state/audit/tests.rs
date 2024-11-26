@@ -7,7 +7,7 @@ use crate::lifecycle::EthereumNetwork;
 use crate::numeric::Wei;
 use crate::state::audit::{replay_events_internal, Event};
 use crate::state::transactions::{
-    Erc20WithdrawalRequest, Reimbursed, ReimbursementIndex, ReimbursementRequest, Subaccount,
+    Erc20WithdrawalRequest, Reimbursed, ReimbursementIndex, ReimbursementRequest,
 };
 use crate::tx::{
     AccessList, AccessListItem, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
@@ -31,7 +31,7 @@ async fn should_replay_events_for_mainnet() {
     assert_eq!(state.ethereum_network, EthereumNetwork::Mainnet);
     assert_eq!(
         state.eth_balance.eth_balance(),
-        Wei::from(963_862_214_315_907_950_601_u128)
+        Wei::from(973_769_498_742_712_741_454_u128)
     );
 }
 
@@ -46,7 +46,7 @@ async fn should_replay_events_for_sepolia() {
     assert_eq!(state.ethereum_network, EthereumNetwork::Sepolia);
     assert_eq!(
         state.eth_balance.eth_balance(),
-        Wei::from(23_921_100_389_314_727_754_717_u128)
+        Wei::from(23_921_238_021_909_121_554_717_u128)
     );
 }
 
@@ -310,7 +310,7 @@ impl GetEventsFile {
                     destination: destination.parse().unwrap(),
                     ledger_burn_index: map_nat(ledger_burn_index),
                     from,
-                    from_subaccount: from_subaccount.map(Subaccount),
+                    from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
                     created_at,
                 }),
                 EventPayload::CreatedTransaction {
@@ -421,7 +421,7 @@ impl GetEventsFile {
                     ckerc20_ledger_id,
                     ckerc20_ledger_burn_index: map_nat(ckerc20_ledger_burn_index),
                     from,
-                    from_subaccount: from_subaccount.map(Subaccount),
+                    from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
                     created_at,
                 }),
                 EventPayload::FailedErc20WithdrawalRequest {
@@ -433,7 +433,7 @@ impl GetEventsFile {
                     ledger_burn_index: map_nat(withdrawal_id),
                     reimbursed_amount: reimbursed_amount.try_into().unwrap(),
                     to,
-                    to_subaccount: to_subaccount.map(Subaccount),
+                    to_subaccount: to_subaccount.and_then(LedgerSubaccount::from_bytes),
                     transaction_hash: None,
                 }),
                 EventPayload::MintedCkErc20 {
