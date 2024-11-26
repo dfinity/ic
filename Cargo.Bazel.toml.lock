@@ -3089,8 +3089,8 @@ dependencies = [
  "ic-sha3",
  "ic-stable-structures",
  "ic-test-state-machine-client",
- "ic-transport-types 0.37.1",
- "ic-utils",
+ "ic-transport-types 0.39.1",
+ "ic-utils 0.39.0",
  "ic-verify-bls-signature 0.6.0",
  "ic-wasm",
  "ic-xrc-types",
@@ -4952,6 +4952,7 @@ dependencies = [
  "rand 0.8.5",
  "rangemap",
  "reqwest 0.12.9",
+ "ring 0.17.7",
  "sec1",
  "serde",
  "serde_bytes",
@@ -5328,7 +5329,7 @@ dependencies = [
  "ic-agent 0.37.1",
  "ic-http-certification",
  "ic-response-verification",
- "ic-utils",
+ "ic-utils 0.37.0",
  "thiserror 1.0.68",
 ]
 
@@ -5447,6 +5448,28 @@ dependencies = [
  "candid",
  "futures-util",
  "ic-agent 0.37.1",
+ "once_cell",
+ "semver",
+ "serde",
+ "serde_bytes",
+ "sha2 0.10.8",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
+ "thiserror 1.0.68",
+ "time",
+ "tokio",
+]
+
+[[package]]
+name = "ic-utils"
+version = "0.39.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb1da4a68c45146018b8496c157ad94126b9c202ab4400c6c0a9030c1ef0f0ba"
+dependencies = [
+ "async-trait",
+ "candid",
+ "futures-util",
+ "ic-agent 0.39.1",
  "once_cell",
  "semver",
  "serde",

@@ -1,5 +1,5 @@
 {
-  "checksum": "bcf8141a2dd5fdac247edec5e2ed6e45f320012f07e86173971b2d847b1996e3",
+  "checksum": "dba87f825e0e63fb8d82f832c2f7291cb7e8d7d1335ae3caa200e081c68fe14c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18699,11 +18699,11 @@
               "target": "ic_test_state_machine_client"
             },
             {
-              "id": "ic-transport-types 0.37.1",
+              "id": "ic-transport-types 0.39.1",
               "target": "ic_transport_types"
             },
             {
-              "id": "ic-utils 0.37.0",
+              "id": "ic-utils 0.39.0",
               "target": "ic_utils"
             },
             {
@@ -29804,7 +29804,8 @@
         "crate_features": {
           "common": [
             "default",
-            "pem"
+            "pem",
+            "ring"
           ],
           "selects": {}
         },
@@ -29901,6 +29902,10 @@
             {
               "id": "reqwest 0.12.9",
               "target": "reqwest"
+            },
+            {
+              "id": "ring 0.17.7",
+              "target": "ring"
             },
             {
               "id": "sec1 0.7.3",
@@ -32290,12 +32295,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "raw"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -32364,6 +32363,116 @@
           "selects": {}
         },
         "version": "0.37.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
+    "ic-utils 0.39.0": {
+      "name": "ic-utils",
+      "version": "0.39.0",
+      "package_url": "https://github.com/dfinity/agent-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-utils/0.39.0/download",
+          "sha256": "bb1da4a68c45146018b8496c157ad94126b9c202ab4400c6c0a9030c1ef0f0ba"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_utils",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_utils",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "raw"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.10",
+              "target": "candid"
+            },
+            {
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
+            },
+            {
+              "id": "ic-agent 0.39.1",
+              "target": "ic_agent"
+            },
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "semver 1.0.22",
+              "target": "semver"
+            },
+            {
+              "id": "serde 1.0.214",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            },
+            {
+              "id": "sha2 0.10.8",
+              "target": "sha2"
+            },
+            {
+              "id": "strum 0.26.3",
+              "target": "strum"
+            },
+            {
+              "id": "thiserror 1.0.68",
+              "target": "thiserror"
+            },
+            {
+              "id": "time 0.3.36",
+              "target": "time"
+            },
+            {
+              "id": "tokio 1.41.1",
+              "target": "tokio"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.83",
+              "target": "async_trait"
+            },
+            {
+              "id": "strum_macros 0.26.4",
+              "target": "strum_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.39.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -86597,8 +86706,8 @@
     "ic-sha3 1.0.0",
     "ic-stable-structures 0.6.5",
     "ic-test-state-machine-client 3.0.1",
-    "ic-transport-types 0.37.1",
-    "ic-utils 0.37.0",
+    "ic-transport-types 0.39.1",
+    "ic-utils 0.39.0",
     "ic-verify-bls-signature 0.6.0",
     "ic-wasm 0.8.4",
     "ic-xrc-types 1.2.0",

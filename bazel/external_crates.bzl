@@ -559,7 +559,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-agent": crate.spec(
                 version = "^0.39.1",
-                features = ["pem"],
+                features = ["pem", "ring"],
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
@@ -633,10 +633,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^3.0.0",
             ),
             "ic-transport-types": crate.spec(
-                version = "^0.37.1",
+                version = "^0.39.1",
             ),
             "ic-utils": crate.spec(
-                version = "^0.37.0",
+                version = "^0.39.0",
                 features = ["raw"],
             ),
             "ic-verify-bls-signature": crate.spec(

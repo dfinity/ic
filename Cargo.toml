@@ -559,7 +559,7 @@ hyper-rustls = { version = "0.27.3", default-features = false, features = [
 ] }
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.10", features = ["full"] }
-ic-agent = { version = "0.39.1", features = ["pem"] }
+ic-agent = { version = "0.39.1", features = ["pem", "ring"] }
 ic-btc-interface = "0.2.2"
 ic-btc-test-utils = "0.1.0"
 ic-cbor = "2.6.0"
@@ -572,8 +572,8 @@ ic-http-certification = "2.6.0"
 ic-response-verification = "2.6.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.5"
-ic-transport-types = { version = "0.37.1" }
-ic-utils = { version = "0.37.0", features = ["raw"] }
+ic-transport-types = { version = "0.39.1" }
+ic-utils = { version = "0.39.0", features = ["raw"] }
 ic_bls12_381 = { version = "0.10.0", default-features = false, features = [
     "groups",
     "pairings",
