@@ -2,7 +2,7 @@
 
 use super::{
     eventlog::Event, CkBtcMinterState, DiscardedReason, FinalizedBtcRetrieval, FinalizedStatus,
-    RetrieveBtcRequest, SubmittedBtcTransaction, UtxoCheckStatus,
+    RetrieveBtcRequest, SubmittedBtcTransaction,
 };
 use crate::state::invariants::CheckInvariantsImpl;
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit};
@@ -74,7 +74,7 @@ pub fn confirm_transaction(state: &mut CkBtcMinterState, txid: &Txid) {
 pub fn mark_utxo_checked(state: &mut CkBtcMinterState, utxo: Utxo, account: Account) {
     record_event(&Event::CheckedUtxoV2 {
         utxo: utxo.clone(),
-        account: account,
+        account,
     });
     state.mark_utxo_checked_v2(utxo, &account);
 }

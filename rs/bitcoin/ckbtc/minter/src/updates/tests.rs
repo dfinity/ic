@@ -1,7 +1,5 @@
 mod update_balance {
-    use crate::state::{
-        audit, eventlog::Event, mutate_state, read_state, DiscardedReason, UtxoCheckStatus,
-    };
+    use crate::state::{audit, eventlog::Event, mutate_state, read_state, DiscardedReason};
     use crate::storage;
     use crate::test_fixtures::{
         ecdsa_public_key, get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
@@ -74,7 +72,10 @@ mod update_balance {
                 reason: DiscardedReason::Quarantined,
             }],
         );
-        assert_has_ignored_utxo(&ignored_utxo);
+        assert_eq!(
+            discarded_utxo(&ignored_utxo),
+            Some(DiscardedReason::Quarantined)
+        );
     }
 
     #[tokio::test]
@@ -109,7 +110,7 @@ mod update_balance {
         )
         .await;
 
-        assert_has_ignored_utxo(&ignored_utxo);
+        assert_eq!(discarded_utxo(&ignored_utxo), None);
         assert_eq!(
             result,
             Ok(vec![UtxoStatus::Minted {
@@ -121,7 +122,7 @@ mod update_balance {
         assert_has_new_events(
             &events_before,
             &[
-                checked_utxo_event(ignored_utxo.clone(), true),
+                checked_utxo_event(ignored_utxo.clone(), account),
                 Event::ReceivedUtxos {
                     mint_txid: Some(1),
                     to_account: account,
@@ -193,10 +194,7 @@ mod update_balance {
         )
         .await;
 
-        assert_eq!(
-            read_state(|s| s.discarded_utxos.get(&quarantined_utxo).cloned()),
-            None
-        );
+        assert_eq!(discarded_utxo(&quarantined_utxo), None);
         assert_eq!(
             result,
             Ok(vec![UtxoStatus::Minted {
@@ -208,7 +206,7 @@ mod update_balance {
         assert_has_new_events(
             &events_before,
             &[
-                checked_utxo_event(quarantined_utxo.clone(), true),
+                checked_utxo_event(quarantined_utxo.clone(), account),
                 Event::ReceivedUtxos {
                     mint_txid: Some(1),
                     to_account: account,
@@ -288,22 +286,21 @@ mod update_balance {
         assert_has_new_events(events_before, &[]);
     }
 
-    fn checked_utxo_event(utxo: Utxo, clean: bool) -> Event {
-        Event::CheckedUtxo {
-            utxo,
-            uuid: String::default(),
-            clean,
-            kyt_provider: None,
-        }
+    fn checked_utxo_event(utxo: Utxo, account: Account) -> Event {
+        Event::CheckedUtxoV2 { utxo, account }
     }
 
-    fn assert_has_ignored_utxo(utxo: &Utxo) {
-        let reason = read_state(|s| s.discarded_utxos.get(utxo).cloned());
-        assert_eq!(
-            reason,
-            Some(DiscardedReason::ValueTooSmall),
-            "BUG: unexpected discarded reason. Discarded UTXOs {:?}",
-            read_state(|s| s.discarded_utxos.clone())
-        );
+    fn discarded_utxo(utxo: &Utxo) -> Option<DiscardedReason> {
+        read_state(|s| {
+            s.discarded_utxos
+                .iter()
+                .find_map(|(discarded_utxo, reason)| {
+                    if discarded_utxo == utxo {
+                        Some(*reason)
+                    } else {
+                        None
+                    }
+                })
+        })
     }
 }

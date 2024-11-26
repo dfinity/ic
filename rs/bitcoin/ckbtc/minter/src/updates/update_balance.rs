@@ -1,6 +1,6 @@
 use crate::logs::{P0, P1};
 use crate::memo::MintMemo;
-use crate::state::{mutate_state, read_state, DiscardedReason, UtxoCheckStatus};
+use crate::state::{mutate_state, read_state, UtxoCheckStatus};
 use crate::tasks::{schedule_now, TaskType};
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_btc_interface::{GetUtxosError, GetUtxosResponse, OutPoint, Utxo};
@@ -248,7 +248,7 @@ pub async fn update_balance<R: CanisterRuntime>(
         let status = kyt_check_utxo(&utxo, &args, runtime).await?;
         mutate_state(|s| match status {
             UtxoCheckStatus::Clean => {
-                state::audit::mark_utxo_checked(s, utxo, caller_account);
+                state::audit::mark_utxo_checked(s, utxo.clone(), caller_account);
             }
             UtxoCheckStatus::Tainted => {
                 state::audit::quarantine_utxo(s, utxo.clone(), caller_account);

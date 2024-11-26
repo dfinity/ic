@@ -1002,24 +1002,24 @@ impl CkBtcMinterState {
 
     /// Adds given UTXO to the set of discarded UTXOs.
     pub fn discard_utxo(&mut self, utxo: Utxo, account: Account, reason: DiscardedReason) -> bool {
-        match reason {
-            DiscardedReason::ValueTooSmall => {
-                assert!(utxo.value <= self.kyt_fee);
-            }
-            DiscardedReason::Quarantined => {}
-        }
+        self.ensure_reason_consistent_with_state(&utxo, reason);
         self.discarded_utxos.insert(account, utxo, reason)
     }
 
     #[deprecated(note = "Use discard_utxo() instead")]
     pub fn discard_utxo_without_account(&mut self, utxo: Utxo, reason: DiscardedReason) -> bool {
+        self.ensure_reason_consistent_with_state(&utxo, reason);
+        #[allow(deprecated)]
+        self.discarded_utxos.insert_without_account(utxo, reason)
+    }
+
+    fn ensure_reason_consistent_with_state(&self, utxo: &Utxo, reason: DiscardedReason) {
         match reason {
             DiscardedReason::ValueTooSmall => {
                 assert!(utxo.value <= self.kyt_fee);
             }
             DiscardedReason::Quarantined => {}
         }
-        self.discarded_utxos.insert_without_account(utxo, reason)
     }
 
     /// Marks the given UTXO as successfully checked.
@@ -1032,6 +1032,7 @@ impl CkBtcMinterState {
         uuid: Option<String>,
         kyt_provider: Option<Principal>,
     ) {
+        #[allow(deprecated)]
         self.discarded_utxos.remove_without_account(&utxo);
         if self
             .checked_utxos
@@ -1310,14 +1311,14 @@ impl DiscardedUtxos {
             return false;
         }
         self.utxos_without_account.remove(&utxo);
-        let utxos = self.utxos.entry(account).or_insert_with(BTreeMap::new);
+        let utxos = self.utxos.entry(account).or_default();
         utxos.insert(utxo, reason);
         true
     }
 
     #[deprecated(note = "Use insert() instead")]
     pub fn insert_without_account(&mut self, utxo: Utxo, reason: DiscardedReason) -> bool {
-        //TODO XC-230: ensure no duplicate UTXO
+        debug_assert!(self.utxos.values().all(|utxos| !utxos.contains_key(&utxo)));
         self.utxos_without_account.insert(utxo, reason).is_some()
     }
 
@@ -1334,17 +1335,26 @@ impl DiscardedUtxos {
             .or_else(|| self.utxos_without_account.get(utxo))
     }
 
-    pub fn remove(&mut self, utxo: &Utxo) -> bool {
-        todo!()
+    pub fn remove(&mut self, account: &Account, utxo: &Utxo) {
+        self.utxos_without_account.remove(utxo);
+        if let Some(utxos) = self.utxos.get_mut(account) {
+            utxos.remove(utxo);
+        }
     }
 
-    pub fn get(&self, account: &Utxo) -> Option<&DiscardedReason> {
-        todo!()
+    #[deprecated(note = "Use remove() instead")]
+    pub fn remove_without_account(&mut self, utxo: &Utxo) {
+        self.utxos_without_account.remove(utxo);
+        for utxos in self.utxos.values_mut() {
+            if utxos.remove(utxo).is_some() {
+                return; //UTXO can belong to at most one account
+            }
+        }
     }
 
     /// Number of discarded UTXOs
     pub fn num_utxos(&self) -> usize {
-        todo!()
+        self.utxos_without_account.len() + self.utxos.values().map(|u| u.len()).sum::<usize>()
     }
 }
 
