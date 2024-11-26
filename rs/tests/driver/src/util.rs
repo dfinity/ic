@@ -822,7 +822,7 @@ pub async fn agent_with_client_identity(
     client: reqwest::Client,
     identity: impl Identity + 'static,
 ) -> Result<Agent, AgentError> {
-    let transport = ReqwestTransport::create_with_client(url, client);
+    let transport = ReqwestTransport::create_with_client(url, client)?.with_use_call_v3_endpoint();
     let a = Agent::builder()
         .with_transport(transport)
         .with_identity(identity)

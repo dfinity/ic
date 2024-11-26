@@ -559,7 +559,12 @@ hyper-rustls = { version = "0.27.3", default-features = false, features = [
 ] }
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.10", features = ["full"] }
-ic-agent = { version = "0.39.1", features = ["pem"] }
+ic-agent = { version = "0.37.1", features = [
+    "experimental_sync_call",
+    "hyper",
+    "reqwest",
+    "pem",
+] }
 ic-btc-interface = "0.2.2"
 ic-btc-test-utils = "0.1.0"
 ic-cbor = "2.6.0"
