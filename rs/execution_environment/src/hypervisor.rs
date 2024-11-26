@@ -33,9 +33,6 @@ use crate::execution_environment::{as_round_instructions, CompilationCostHandlin
 use crate::metrics::CallTreeMetrics;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 
-#[cfg(test)]
-mod tests;
-
 #[doc(hidden)] // pub for usage in tests
 pub struct HypervisorMetrics {
     accessed_pages: HistogramVec,
