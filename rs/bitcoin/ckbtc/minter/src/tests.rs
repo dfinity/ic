@@ -41,7 +41,6 @@ fn default_init_args() -> InitArgs {
         mode: Mode::GeneralAvailability,
         kyt_fee: None,
         kyt_principal: None,
-        new_kyt_principal: None,
     }
 }
 

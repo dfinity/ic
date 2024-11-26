@@ -2353,10 +2353,8 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap 4.5.20",
- "config_types",
- "deterministic_ips",
  "ic-types",
- "network",
+ "mac_address",
  "once_cell",
  "regex",
  "serde",
@@ -2365,21 +2363,6 @@ dependencies = [
  "tempfile",
  "url",
  "utils",
-]
-
-[[package]]
-name = "config_types"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "deterministic_ips",
- "ic-types",
- "once_cell",
- "serde",
- "serde_json",
- "serde_with 1.14.0",
- "tempfile",
- "url",
 ]
 
 [[package]]
@@ -4962,7 +4945,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.20",
  "config",
- "deterministic_ips",
+ "mac_address",
  "network",
  "utils",
 ]
@@ -5830,7 +5813,9 @@ dependencies = [
  "futures",
  "ic-agent",
  "ic-boundary-nodes-system-test-utils",
+ "ic-crypto-tree-hash",
  "ic-system-test-driver",
+ "ic-types",
  "reqwest 0.12.9",
  "serde",
  "serde_cbor",
@@ -6674,6 +6659,7 @@ dependencies = [
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-utils-ensure",
+ "icrc-cbor",
  "icrc-ledger-client-cdk",
  "icrc-ledger-types",
  "maplit",
@@ -11375,6 +11361,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-tracing",
  "ic-tracing-jaeger-exporter",
+ "ic-tracing-logging-layer",
  "ic-types",
  "ic-xnet-payload-builder",
  "libc",
@@ -13167,6 +13154,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-tracing-logging-layer"
+version = "0.9.0"
+dependencies = [
+ "ic-base-types",
+ "ic-config",
+ "time",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "ic-transport-types"
 version = "0.37.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13982,6 +13981,18 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "icrc-cbor"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ethnum",
+ "minicbor",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "proptest",
 ]
 
 [[package]]
@@ -15291,6 +15302,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 
 [[package]]
+name = "mac_address"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "hex",
+ "regex",
+ "serde",
+ "sha2 0.10.8",
+ "utils",
+]
+
+[[package]]
 name = "mach2"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15735,11 +15758,10 @@ name = "network"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "config_types",
- "deterministic_ips",
+ "config",
+ "mac_address",
  "ping",
  "rayon",
- "regex",
  "serde",
  "serde_json",
  "serde_with 1.14.0",
@@ -19532,7 +19554,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.20",
  "config",
- "deterministic_ips",
+ "mac_address",
  "network",
  "utils",
 ]
@@ -21448,6 +21470,7 @@ dependencies = [
  "sharded-slab",
  "smallvec",
  "thread_local",
+ "time",
  "tracing",
  "tracing-core",
  "tracing-log",

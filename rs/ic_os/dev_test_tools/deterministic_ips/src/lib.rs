@@ -103,7 +103,7 @@ impl FromStr for HwAddr {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone)]
 #[non_exhaustive]
 pub enum Deployment {
     Mainnet,
@@ -115,23 +115,6 @@ impl fmt::Display for Deployment {
         match self {
             Deployment::Mainnet => write!(f, "mainnet"),
             Deployment::Testnet => write!(f, "testnet"),
-        }
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum DeploymentParseError {
-    #[error("invalid deployment variant")]
-    InvalidVariant,
-}
-
-impl FromStr for Deployment {
-    type Err = DeploymentParseError;
-    fn from_str(s: &str) -> Result<Deployment, DeploymentParseError> {
-        match s.to_lowercase().as_str() {
-            "mainnet" => Ok(Deployment::Mainnet),
-            "testnet" => Ok(Deployment::Testnet),
-            _ => Err(DeploymentParseError::InvalidVariant),
         }
     }
 }
