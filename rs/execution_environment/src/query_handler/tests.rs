@@ -667,7 +667,9 @@ fn composite_query_callgraph_max_instructions_is_enforced() {
 
 #[test]
 fn query_compiled_once() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_precompiled_universal_canister(false)
+        .build();
     let initial_cycles = Cycles::new(1_000_000_000_000);
 
     let canister_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
