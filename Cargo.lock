@@ -19972,13 +19972,10 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-registry-common-proto",
- "ic-registry-nns-data-provider",
  "ic-registry-transport",
  "ic-stable-structures",
  "ic-types",
  "itertools 0.12.1",
- "prost 0.13.3",
 ]
 
 [[package]]
