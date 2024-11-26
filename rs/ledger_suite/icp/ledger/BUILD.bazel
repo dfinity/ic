@@ -90,6 +90,11 @@ rust_ledger_canister(
     extra_deps = [":ledger_next_version"],
 )
 
+rust_ledger_canister(
+    name = "ledger-canister-wasm-low-limits",
+    crate_features = ["low-upgrade-instruction-limits"],
+)
+
 rust_test(
     name = "ledger_canister_unit_test",
     compile_data = LEDGER_CANISTER_DATA,
@@ -108,6 +113,7 @@ rust_ic_test(
     data = [
         ":ledger-canister-wasm",
         ":ledger-canister-wasm-allowance-getter",
+        ":ledger-canister-wasm-low-limits",
         ":ledger-canister-wasm-next-version",
         "@mainnet_icp_ledger_canister//file",
     ],
@@ -118,6 +124,7 @@ rust_ic_test(
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath :ledger-canister-wasm)",
         "LEDGER_CANISTER_ALLOWANCE_GETTER_WASM_PATH": "$(rootpath :ledger-canister-wasm-allowance-getter)",
         "LEDGER_CANISTER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger-canister-wasm-next-version)",
+        "LEDGER_CANISTER_LOW_LIMITS_WASM_PATH": "$(rootpath :ledger-canister-wasm-low-limits)",
     },
     flaky = True,
     deps = [

@@ -66,6 +66,14 @@ fn ledger_wasm_allowance_getter() -> Vec<u8> {
     )
 }
 
+fn ledger_wasm_low_instruction_limits() -> Vec<u8> {
+    ic_test_utilities_load_wasm::load_wasm(
+        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        "ledger-canister-low-limits",
+        &[],
+    )
+}
+
 fn encode_init_args(
     args: ic_ledger_suite_state_machine_tests::InitArgs,
 ) -> LedgerCanisterInitPayload {
@@ -1336,6 +1344,15 @@ fn test_downgrade_from_incompatible_version() {
         ledger_wasm(),
         encode_init_args,
         true,
+    );
+}
+
+#[test]
+fn test_incomplete_migration() {
+    ic_ledger_suite_state_machine_tests::test_incomplete_migration(
+        ledger_wasm_mainnet(),
+        ledger_wasm_low_instruction_limits(),
+        encode_init_args,
     );
 }
 

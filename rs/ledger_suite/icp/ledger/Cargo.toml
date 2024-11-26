@@ -55,3 +55,4 @@ ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 notify-method = []
 icp-allowance-getter = []
 next-ledger-version = []
+low-upgrade-instruction-limits = []
