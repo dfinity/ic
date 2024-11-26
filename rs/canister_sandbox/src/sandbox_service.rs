@@ -52,6 +52,8 @@ pub trait SandboxService: Send + Sync {
         &self,
         req: CreateExecutionStateSerializedRequest,
     ) -> Call<CreateExecutionStateSerializedReply>;
+
+    fn memory_usage(&self, req: MemoryUsageRequest) -> Call<MemoryUsageReply>;
 }
 
 impl<Svc: SandboxService + Send + Sync> DemuxServer<Request, Reply> for Svc {
@@ -84,6 +86,7 @@ impl<Svc: SandboxService + Send + Sync> DemuxServer<Request, Reply> for Svc {
                 self.create_execution_state_serialized(req),
                 Reply::CreateExecutionStateSerialized,
             ),
+            Request::MemoryUsage(req) => Call::new_wrap(self.memory_usage(req), Reply::MemoryUsage),
         }
     }
 }

@@ -109,6 +109,8 @@ struct SandboxedExecutionMetrics {
     #[cfg(target_os = "linux")]
     sandboxed_execution_subprocess_memfd_rss_total: IntGauge,
     #[cfg(target_os = "linux")]
+    sandboxed_execution_subprocess_rust_mem_total: IntGauge,
+    #[cfg(target_os = "linux")]
     sandboxed_execution_subprocess_anon_rss: Histogram,
     #[cfg(target_os = "linux")]
     sandboxed_execution_subprocess_memfd_rss: Histogram,
@@ -192,6 +194,11 @@ impl SandboxedExecutionMetrics {
             sandboxed_execution_subprocess_memfd_rss_total: metrics_registry.int_gauge(
                 "sandboxed_execution_subprocess_memfd_rss_total_kib",
                 "The resident shared memory for all canister sandbox processes in KiB"
+            ),
+            #[cfg(target_os = "linux")]
+            sandboxed_execution_subprocess_rust_mem_total: metrics_registry.int_gauge(
+                "sandboxed_execution_subprocess_rust_mem_total_kib",
+                "The Rust allocated memory for all canister sandbox processes in KiB"
             ),
             #[cfg(target_os = "linux")]
             sandboxed_execution_subprocess_anon_rss: metrics_registry.histogram(
@@ -376,15 +383,6 @@ impl Drop for SandboxProcess {
 pub struct OpenedWasm {
     sandbox_process: Weak<SandboxProcess>,
     wasm_id: WasmId,
-}
-
-impl OpenedWasm {
-    fn new(sandbox_process: Weak<SandboxProcess>, wasm_id: WasmId) -> Self {
-        Self {
-            sandbox_process,
-            wasm_id,
-        }
-    }
 }
 
 impl Drop for OpenedWasm {
@@ -995,12 +993,6 @@ impl WasmExecutor for SandboxedExecutionController {
             .start_timer();
         observe_metrics(&self.metrics, &serialized_module.imports_details);
 
-        cache_opened_wasm(
-            &mut wasm_binary.embedder_cache.lock().unwrap(),
-            &sandbox_process,
-            wasm_id,
-        );
-
         // Step 5. Create the execution state.
         let mut wasm_memory = Memory::new(wasm_page_map, memory_modifications.size);
         wasm_memory
@@ -1175,6 +1167,7 @@ impl SandboxedExecutionController {
             {
                 let mut total_anon_rss: u64 = 0;
                 let mut total_memfd_rss: u64 = 0;
+                let mut total_rust_mem: u64 = 0;
                 let now = std::time::Instant::now();
 
                 // For all processes requested, get their memory usage and report
@@ -1202,6 +1195,17 @@ impl SandboxedExecutionController {
                     } else {
                         warn!(logger, "Unable to get memfd RSS for pid {}", pid);
                     }
+
+                    if let SandboxProcessStatus::Active = status {
+                        if let Ok(protocol::sbxsvc::MemoryUsageReply { bytes }) = sandbox_process
+                            .sandbox_service
+                            .memory_usage(protocol::sbxsvc::MemoryUsageRequest {})
+                            .sync()
+                        {
+                            total_rust_mem += bytes as u64;
+                        }
+                    }
+
                     metrics
                         .sandboxed_execution_subprocess_rss
                         .observe(process_rss as f64);
@@ -1229,6 +1233,10 @@ impl SandboxedExecutionController {
                 metrics
                     .sandboxed_execution_subprocess_memfd_rss_total
                     .set(total_memfd_rss.try_into().unwrap());
+
+                metrics
+                    .sandboxed_execution_subprocess_rust_mem_total
+                    .set(total_rust_mem.try_into().unwrap());
             }
 
             // We don't need to record memory metrics on non-linux systems.  And
@@ -1571,18 +1579,6 @@ impl SandboxedExecutionController {
     }
 }
 
-/// Cache the sandbox process and wasm id of the opened wasm in the embedder
-/// cache.
-fn cache_opened_wasm(
-    embedder_cache: &mut Option<EmbedderCache>,
-    sandbox_process: &Arc<SandboxProcess>,
-    wasm_id: WasmId,
-) {
-    let opened_wasm: HypervisorResult<OpenedWasm> =
-        Ok(OpenedWasm::new(Arc::downgrade(sandbox_process), wasm_id));
-    *embedder_cache = Some(EmbedderCache::new(opened_wasm));
-}
-
 /// Cache an error from compilation so that we don't try to recompile just to
 /// get the same error.
 fn cache_errored_wasm(embedder_cache: &mut Option<EmbedderCache>, err: HypervisorError) {
@@ -1654,7 +1650,6 @@ fn open_wasm(
                             serialized_module: Arc::clone(&serialized_module.bytes),
                         })
                         .on_completion(|_| ());
-                    cache_opened_wasm(&mut embedder_cache, sandbox_process, wasm_id);
                     observe_metrics(metrics, &serialized_module.imports_details);
                     compilation_cache.insert(&wasm_binary.binary, Ok(Arc::new(serialized_module)));
                     Ok((wasm_id, Some(compilation_result)))
@@ -1684,7 +1679,6 @@ fn open_wasm(
                     serialized_module: Arc::clone(&serialized_module.bytes),
                 })
                 .on_completion(|_| ());
-            cache_opened_wasm(&mut embedder_cache, sandbox_process, wasm_id);
             Ok((wasm_id, None))
         }
     }
