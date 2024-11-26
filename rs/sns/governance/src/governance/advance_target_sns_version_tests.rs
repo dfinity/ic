@@ -46,28 +46,10 @@ async fn test_initiate_upgrade_blocked_by_upgrade_proposal() {
         version
     };
 
-    // Set up environment to return upgrade steps that would allow an upgrade
-    env.set_call_canister_response(
-        SNS_WASM_CANISTER_ID,
-        "list_upgrade_steps",
-        Encode!(&ListUpgradeStepsRequest {
-            starting_at: Some(current_version.clone()),
-            sns_governance_canister_id: Some(governance_canister_id.into()),
-            limit: 0,
-        })
-        .unwrap(),
-        Ok(Encode!(&ListUpgradeStepsResponse {
-            steps: vec![
-                ListUpgradeStep {
-                    version: Some(current_version.clone())
-                },
-                ListUpgradeStep {
-                    version: Some(target_version.clone())
-                },
-            ]
-        })
-        .unwrap()),
-    );
+    add_environment_mock_list_upgrade_steps_call(&mut env, current_version.clone(), vec![
+        current_version.clone(),
+        target_version.clone(),
+    ]);
 
     let proposal_id = 12;
     let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {});
@@ -140,6 +122,32 @@ async fn test_initiate_upgrade_blocked_by_upgrade_proposal() {
     );
 }
 
+fn add_environment_mock_list_upgrade_steps_call(
+    env: &mut NativeEnvironment,
+    starting_version: SnsVersion,
+    versions: Vec<SnsVersion>,
+) {
+    env.set_call_canister_response(
+        SNS_WASM_CANISTER_ID,
+        "list_upgrade_steps",
+        Encode!(&ListUpgradeStepsRequest {
+            starting_at: Some(starting_version),
+            sns_governance_canister_id: Some(TEST_GOVERNANCE_CANISTER_ID.get()),
+            limit: 0,
+        })
+        .unwrap(),
+        Ok(Encode!(&ListUpgradeStepsResponse {
+            steps: versions
+                .into_iter()
+                .map(|version| ListUpgradeStep {
+                    version: Some(version),
+                })
+                .collect(),
+        })
+        .unwrap()),
+    );
+}
+
 #[tokio::test]
 async fn test_automatic_upgrade_when_behind_target_version_for_root() {
     // Step 1: Prepare the world.
@@ -169,31 +177,11 @@ async fn test_automatic_upgrade_when_behind_target_version_for_root() {
         version
     };
 
-    // Set up environment to return upgrade steps that would allow an upgrade
-    env.set_call_canister_response(
-        SNS_WASM_CANISTER_ID,
-        "list_upgrade_steps",
-        Encode!(&ListUpgradeStepsRequest {
-            starting_at: Some(current_version.clone()),
-            sns_governance_canister_id: Some(governance_canister_id.into()),
-            limit: 0,
-        })
-        .unwrap(),
-        Ok(Encode!(&ListUpgradeStepsResponse {
-            steps: vec![
-                ListUpgradeStep {
-                    version: Some(current_version.clone())
-                },
-                ListUpgradeStep {
-                    version: Some(intermediate_version.clone())
-                },
-                ListUpgradeStep {
-                    version: Some(target_version.clone())
-                },
-            ]
-        })
-        .unwrap()),
-    );
+    add_environment_mock_list_upgrade_steps_call(&mut env, current_version.clone(), vec![
+        current_version.clone(),
+        intermediate_version.clone(),
+        target_version.clone(),
+    ]);
 
     let mut governance = Governance::new(
         GovernanceProto {
