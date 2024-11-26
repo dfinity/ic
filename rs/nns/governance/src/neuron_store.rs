@@ -1251,7 +1251,7 @@ impl NeuronStore {
     /// I think this is good for use cases where you want to scan ALL neurons in
     /// the background (i.e. not as part of servicing a request), but you do not
     /// need to scan them all in one go. By "ALL" neurons, we mean regardless of
-    /// where they are stored (heap or stable memory).
+    /// whether they live in heap or stable memory.
     ///
     /// One strange limitation of this is that changes to neurons in stable
     /// memory are not applied immediately. Instead, such changes are only made
@@ -1332,6 +1332,7 @@ impl NeuronStore {
             let stable_neuron = stable_neuron_store
                 .range_neurons_sections(neuron_ids, neuron_sections)
                 .map(|neuron| {
+                    // With the help of Cow, it might be possible to avoid this clone...
                     let original = neuron.clone();
                     NeuronHandle::Owned {
                         original,
