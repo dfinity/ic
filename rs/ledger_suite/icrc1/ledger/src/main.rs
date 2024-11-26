@@ -260,7 +260,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 }
 
 fn migrate_next_part(instruction_limit: u64) {
-    let instructions_mingration_start = instruction_counter();
+    let instructions_migration_start = instruction_counter();
     STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow_mut() += 1);
     let mut migrated_allowances = 0;
     let mut migrated_expirations = 0;
