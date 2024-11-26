@@ -101,3 +101,88 @@ mod processable_utxos_for_account {
         );
     }
 }
+
+mod discarded_utxos {
+    use crate::state::{DiscardedReason, DiscardedUtxos};
+    use crate::test_fixtures::{ledger_account, utxo};
+
+    #[test]
+    fn should_be_nop_when_already_discarded_for_same_reason() {
+        for reason in all_discarded_reasons() {
+            let mut discarded_utxos = DiscardedUtxos::default();
+
+            assert!(discarded_utxos.insert(ledger_account(), utxo(), reason));
+            assert_eq!(discarded_utxos.num_utxos(), 1);
+
+            assert!(!discarded_utxos.insert(ledger_account(), utxo(), reason));
+            assert_eq!(discarded_utxos.num_utxos(), 1);
+        }
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn should_add_account_information_to_utxo() {
+        for first_reason in all_discarded_reasons() {
+            for second_reason in all_discarded_reasons() {
+                let mut discarded_utxos = DiscardedUtxos::default();
+                let utxo = utxo();
+
+                discarded_utxos.insert_without_account(utxo.clone(), first_reason);
+                assert_eq!(discarded_utxos.num_utxos(), 1);
+
+                assert!(discarded_utxos.insert(ledger_account(), utxo, second_reason));
+                assert_eq!(discarded_utxos.num_utxos(), 1);
+            }
+        }
+    }
+
+    #[test]
+    fn should_register_change_of_discarded_reason() {
+        for reason in all_discarded_reasons() {
+            let mut discarded_utxos = DiscardedUtxos::default();
+            let utxo = utxo();
+            assert!(discarded_utxos.insert(ledger_account(), utxo.clone(), reason));
+            assert_eq!(discarded_utxos.num_utxos(), 1);
+
+            let other_reason = match reason {
+                DiscardedReason::ValueTooSmall => DiscardedReason::Quarantined,
+                DiscardedReason::Quarantined => DiscardedReason::ValueTooSmall,
+            };
+            assert!(discarded_utxos.insert(ledger_account(), utxo.clone(), other_reason));
+            assert_eq!(discarded_utxos.num_utxos(), 1);
+        }
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn should_remove_utxo() {
+        for reason in all_discarded_reasons() {
+            let mut discarded_utxos = DiscardedUtxos::default();
+            let utxo = utxo();
+
+            discarded_utxos.insert_without_account(utxo.clone(), reason);
+            assert_eq!(discarded_utxos.num_utxos(), 1);
+            discarded_utxos.remove_without_account(&utxo);
+            assert_eq!(discarded_utxos.num_utxos(), 0);
+
+            discarded_utxos.insert_without_account(utxo.clone(), reason);
+            assert_eq!(discarded_utxos.num_utxos(), 1);
+            discarded_utxos.remove(&ledger_account(), &utxo);
+            assert_eq!(discarded_utxos.num_utxos(), 0);
+
+            discarded_utxos.insert(ledger_account(), utxo.clone(), reason);
+            assert_eq!(discarded_utxos.num_utxos(), 1);
+            discarded_utxos.remove_without_account(&utxo);
+            assert_eq!(discarded_utxos.num_utxos(), 0);
+
+            discarded_utxos.insert(ledger_account(), utxo.clone(), reason);
+            assert_eq!(discarded_utxos.num_utxos(), 1);
+            discarded_utxos.remove(&ledger_account(), &utxo);
+            assert_eq!(discarded_utxos.num_utxos(), 0);
+        }
+    }
+
+    fn all_discarded_reasons() -> Vec<DiscardedReason> {
+        vec![DiscardedReason::Quarantined, DiscardedReason::ValueTooSmall]
+    }
+}

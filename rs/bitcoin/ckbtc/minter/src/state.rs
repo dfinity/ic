@@ -1007,7 +1007,7 @@ impl CkBtcMinterState {
     }
 
     #[deprecated(note = "Use discard_utxo() instead")]
-    pub fn discard_utxo_without_account(&mut self, utxo: Utxo, reason: DiscardedReason) -> bool {
+    pub fn discard_utxo_without_account(&mut self, utxo: Utxo, reason: DiscardedReason) {
         self.ensure_reason_consistent_with_state(&utxo, reason);
         #[allow(deprecated)]
         self.discarded_utxos.insert_without_account(utxo, reason)
@@ -1317,9 +1317,9 @@ impl DiscardedUtxos {
     }
 
     #[deprecated(note = "Use insert() instead")]
-    pub fn insert_without_account(&mut self, utxo: Utxo, reason: DiscardedReason) -> bool {
+    pub fn insert_without_account(&mut self, utxo: Utxo, reason: DiscardedReason) {
         debug_assert!(self.utxos.values().all(|utxos| !utxos.contains_key(&utxo)));
-        self.utxos_without_account.insert(utxo, reason).is_some()
+        self.utxos_without_account.insert(utxo, reason);
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&Utxo, &DiscardedReason)> {
