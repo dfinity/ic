@@ -234,11 +234,13 @@ pub fn is_prune_following_enabled() -> bool {
 }
 
 /// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_enable_prune_following() -> Temporary {
     Temporary::new(&IS_PRUNE_FOLLOWING_ENABLED, true)
 }
 
 /// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_prune_following() -> Temporary {
     Temporary::new(&IS_PRUNE_FOLLOWING_ENABLED, false)
 }
