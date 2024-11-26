@@ -239,7 +239,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     if upgrade_from_version < LEDGER_VERSION {
         if upgrade_from_version == 0 {
-            log_message("Upgrading from version 0 which does not use stable memory, clearing stable allowance data.");
+            log_message("Upgrading from version 0 which does not use stable structures, clearing stable allowance data.");
             clear_stable_allowance_data();
         }
         set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
