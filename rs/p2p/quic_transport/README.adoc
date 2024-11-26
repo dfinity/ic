@@ -62,13 +62,34 @@ In order to make request processing https://docs.rs/tokio/latest/tokio/task/inde
 Job execution starts in the threadpool iff the parent task was not cancelled.
 A nice writeup about async and blocking operations can be found in https://ryhl.io/blog/async-what-is-blocking/[Alice Ryhl's blog post].
 
-== Implementation design decisions ==
+== Implementation Details ==
 
-1. Use the https://github.com/quinn-rs/quinn[QUINN] library for QUIC, as it meets the requirements for reliable data delivery, multiplexing, connection-oriented communication, and flow control.  
-2. Open a new QUIC stream for each message, instead of one stream per handler/URI. TODO: explain.
-3. Handlers are always ready to process messages, hence the router is always ready to accept streams. TODO: explain.
+Use the https://github.com/quinn-rs/quinn[QUINN] library for QUIC, as it meets the requirements for reliable data delivery, multiplexing, connection-oriented communication, and flow control.  
 
-=== Breaking dependency cycles in P2P protocols ===
+=== QUIC stream per message ===
+
+Instead of one stream per handler/URI. TODO: explain.
+
+=== Handlers are always ready to process messages ===
+
+The router is always ready to accept streams. TODO: explain.
+
+=== Unused QUIC/QUINN Abstraction ===
+
+* `+QuicTransport+` neither sends nor receives datagrams, as they are not reliably delivered.
+* `+QuicTransport+` does not use uni-directional streams. Although uni-directional streams are suitable for infallible handlers, the client cannot determine whether a request was processed by such a handler or dropped due to a missing route. Since routes and handlers are client-provided, a missing route is not considered a transport failure.
+For comparison, https://grpc.io/docs/what-is-grpc/core-concepts/#rpc-life-cycle[all `+gRPC+` methods expect a response from the application receive side]. Moreover, no `+gRPC+` implementation returns https://grpc.github.io/grpc/core/md_doc_statuscodes.html[`+NOT_FOUND+`], the most suitable return code for a missing route.
+
+=== Using HTTP Request/Response as API Types ===
+
+gRPC implementations rely on Interface Definition Language (IDL) to define both the service interface and payload structure. However, the QUIC transport library avoids IDL to keep things lightweight.
+
+Instead, the QUIC transport directly uses HTTP request and response types, for two main reasons:
+
+* Reuse existing HTTP request/response types to simplify the code, eliminating the need for custom extractors.
+* Ease transition from existing HTTP client-server setups to the QUIC transport, allowing full reuse of the server router and leaving request building and response handling unchanged on the client side.
+
+== Breaking dependency cycles in P2P protocols ==
 
 Many P2P protocol designs use a single TCP/UDP connection between any two peers. The main benefit is less consumption of limited resources (e.g. CPU for TLS handshake, file descriptors for sockets).
 Such protocols that use a single connection for inbound and outbound traffic, with a designated listener and dialer, have circular dependency between the read and write paths.
@@ -86,21 +107,3 @@ As a result, when there are handlers that take the weak reference the transport 
 
 3. Another alternative is to allow the `+QuicTransport+` to update the routes dynamically. In this case, once a connection is established it is unnatural to change the available routes from a client PoV.
 
-== Implementation Details ==
-
-This section highlights key implementation decisions and details.
-
-=== Unused QUIC/QUINN Abstraction ===
-
-* `+QuicTransport+` neither sends nor receives datagrams, as they are not reliably delivered.
-* +QuicTransport+ does not use uni-directional streams. Although uni-directional streams are suitable for infallible handlers, the client cannot determine whether a request was processed by such a handler or dropped due to a missing route. Since routes and handlers are client-provided, a missing route is not considered a transport failure.
-For comparison, https://grpc.io/docs/what-is-grpc/core-concepts/#rpc-life-cycle[all `+gRPC+` methods expect a response from the application receive side]. Moreover, no `+gRPC+` implementation returns https://grpc.github.io/grpc/core/md_doc_statuscodes.html[`+NOT_FOUND+`], the most suitable return code for a missing route.
-
-=== Using HTTP Request/Response as API Types ===
-
-gRPC implementations rely on Interface Definition Language (IDL) to define both the service interface and payload structure. However, the QUIC transport library avoids IDL to keep things lightweight.
-
-Instead, the QUIC transport directly uses HTTP request and response types, for two main reasons:
-
-* Reuse existing HTTP request/response types to simplify the code, eliminating the need for custom extractors.
-* Ease transition from existing HTTP client-server setups to the QUIC transport, allowing full reuse of the server router and leaving request building and response handling unchanged on the client side.
