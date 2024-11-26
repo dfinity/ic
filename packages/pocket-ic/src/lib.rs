@@ -668,13 +668,13 @@ impl PocketIc {
         })
     }
 
-    /// Await an update call submitted previously by `submit_call_with_effective_principal`.
+    /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     pub fn await_call(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.await_call(message_id).await })
     }
 
-    /// Fetch the status of an update call submitted previously by `submit_call_with_effective_principal`.
+    /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     /// Note that the status of the update call can only change if the PocketIC instance is in live mode
     /// or a round has been executed due to a separate PocketIC library call.
     pub fn ingress_status(
@@ -685,7 +685,7 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.ingress_status(message_id).await })
     }
 
-    /// Await an update call submitted previously by `submit_call_with_effective_principal`.
+    /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     /// This function does not execute rounds and thus should only be called on a "live" PocketIC instance
     /// or if rounds are executed due to separate PocketIC library calls.
     pub fn await_call_no_ticks(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
