@@ -211,7 +211,7 @@ fn schedule_prune_following(delay: Duration) {
     ic_cdk_timers::set_timer(delay, || {
         let start_checkpoint = PRUNE_FOLLOWING_CHECKPOINT.with(|p| *p.borrow());
 
-        let carry_on = || call_context_instruction_counter() < 10_000_000;
+        let carry_on = || call_context_instruction_counter() < 500_000_000;
         let new_checkpoint = governance_mut().prune_some_following(&start_checkpoint, carry_on);
 
         PRUNE_FOLLOWING_CHECKPOINT.with(|p| {
