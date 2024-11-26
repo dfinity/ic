@@ -2667,12 +2667,15 @@ impl StateManagerImpl {
                 .make_checkpoint_step_duration
                 .with_label_values(&["switch_to_checkpoint"])
                 .start_timer();
-            switch_to_checkpoint(state, &cp_layout, &self.get_fd_factory());
             self.tip_channel
                 .send(TipRequest::ValidateReplicatedState {
                     checkpoint_layout: cp_layout.clone(),
+                    replicated_state: state.clone(),
+                    own_subnet_type: self.own_subnet_type,
+                    fd_factory: self.fd_factory.clone(),
                 })
                 .expect("Failed to send Validate request");
+            switch_to_checkpoint(state, &cp_layout, &self.get_fd_factory());
         }
 
         // On the NNS subnet we never allow incremental manifest computation

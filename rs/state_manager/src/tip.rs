@@ -1,5 +1,5 @@
 use crate::{
-    checkpoint::validate_checkpoint_and_remove_unverified_marker,
+    checkpoint::{validate_checkpoint_and_remove_unverified_marker, validate_eq_checkpoint},
     compute_bundled_manifest, release_lock_and_persist_metadata,
     state_sync::types::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
@@ -16,6 +16,8 @@ use ic_protobuf::state::{
     stats::v1::Stats,
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
+use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     canister_snapshots::{CanisterSnapshot, SnapshotOperation},
     page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
@@ -125,6 +127,9 @@ pub(crate) enum TipRequest {
     /// Crash if diverges.
     ValidateReplicatedState {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
+        replicated_state: Arc<ReplicatedState>,
+        own_subnet_type: SubnetType,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     },
     /// Wait for the message to be executed and notify back via sender.
     /// State: *
@@ -448,7 +453,12 @@ pub(crate) fn spawn_tip_thread(
                             have_latest_manifest = true;
                         }
 
-                        TipRequest::ValidateReplicatedState { checkpoint_layout } => {
+                        TipRequest::ValidateReplicatedState {
+                            checkpoint_layout,
+                            replicated_state,
+                            own_subnet_type,
+                            fd_factory,
+                        } => {
                             if let Err(err) = validate_checkpoint_and_remove_unverified_marker(
                                 &checkpoint_layout,
                                 Some(&mut thread_pool),
@@ -460,6 +470,14 @@ pub(crate) fn spawn_tip_thread(
                                     err
                                 )
                             }
+                            validate_eq_checkpoint(
+                                checkpoint_layout,
+                                &replicated_state,
+                                own_subnet_type,
+                                Some(&mut thread_pool),
+                                fd_factory,
+                            )
+                            .unwrap();
                         }
 
                         TipRequest::Noop => {}
