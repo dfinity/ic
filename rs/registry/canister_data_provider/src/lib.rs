@@ -1,5 +1,3 @@
-mod test;
-
 use candid::Principal;
 use ic_interfaces_registry::{
     RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
@@ -220,3 +218,6 @@ impl<S: StableMemoryBorrower> RegistryDataProvider for CanisterDataProvider<S> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests;
