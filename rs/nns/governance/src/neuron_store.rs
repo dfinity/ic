@@ -1430,6 +1430,9 @@ fn groom_neurons(
 ) -> NeuronId {
     let mut last_neuron_id = exclusive_lower_bound;
 
+    // Normally, this loop only goes through one iteration. A second iteration
+    // is performed if we wrap back to the beginning of neuron IDs, because in
+    // that case, no work was performed during the first iteration.
     for _ in 0..2 {
         neuron_store.map_range(
             (Bound::Excluded(exclusive_lower_bound), Bound::Unbounded),
