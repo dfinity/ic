@@ -46,27 +46,9 @@ async fn test_initiate_upgrade_blocked_by_upgrade_proposal() {
         version
     };
 
-    // Set up environment to return upgrade steps that would allow an upgrade
-    env.set_call_canister_response(
-        SNS_WASM_CANISTER_ID,
-        "list_upgrade_steps",
-        Encode!(&ListUpgradeStepsRequest {
-            starting_at: Some(current_version.clone()),
-            sns_governance_canister_id: Some(governance_canister_id.into()),
-            limit: 0,
-        })
-        .unwrap(),
-        Ok(Encode!(&ListUpgradeStepsResponse {
-            steps: vec![
-                ListUpgradeStep {
-                    version: Some(current_version.clone())
-                },
-                ListUpgradeStep {
-                    version: Some(target_version.clone())
-                },
-            ]
-        })
-        .unwrap()),
+    add_environment_mock_list_upgrade_steps_call(
+        &mut env,
+        vec![current_version.clone(), target_version.clone()],
     );
 
     let proposal_id = 12;
@@ -169,30 +151,13 @@ async fn test_automatic_upgrade_when_behind_target_version_for_root() {
         version
     };
 
-    // Set up environment to return upgrade steps that would allow an upgrade
-    env.set_call_canister_response(
-        SNS_WASM_CANISTER_ID,
-        "list_upgrade_steps",
-        Encode!(&ListUpgradeStepsRequest {
-            starting_at: Some(current_version.clone()),
-            sns_governance_canister_id: Some(governance_canister_id.into()),
-            limit: 0,
-        })
-        .unwrap(),
-        Ok(Encode!(&ListUpgradeStepsResponse {
-            steps: vec![
-                ListUpgradeStep {
-                    version: Some(current_version.clone())
-                },
-                ListUpgradeStep {
-                    version: Some(intermediate_version.clone())
-                },
-                ListUpgradeStep {
-                    version: Some(target_version.clone())
-                },
-            ]
-        })
-        .unwrap()),
+    add_environment_mock_list_upgrade_steps_call(
+        &mut env,
+        vec![
+            current_version.clone(),
+            intermediate_version.clone(),
+            target_version.clone(),
+        ],
     );
 
     let mut governance = Governance::new(
@@ -414,6 +379,145 @@ async fn test_automatic_upgrade_when_behind_target_version_for_governance() {
 }
 
 #[tokio::test]
+async fn test_automatic_upgrade_when_behind_target_version_for_archive_then_ledger() {
+    // Step 1: Prepare the world.
+    let root_canister_id = *TEST_ROOT_CANISTER_ID;
+    let governance_canister_id = *TEST_GOVERNANCE_CANISTER_ID;
+
+    let mut env = NativeEnvironment::new(Some(governance_canister_id));
+
+    let current_version = SnsVersion {
+        root_wasm_hash: vec![1, 2, 3],
+        governance_wasm_hash: vec![2, 3, 4],
+        ledger_wasm_hash: vec![3, 4, 5],
+        swap_wasm_hash: vec![4, 5, 6],
+        archive_wasm_hash: vec![5, 6, 7],
+        index_wasm_hash: vec![6, 7, 8],
+    };
+
+    let intermediate_version = {
+        let mut version = current_version.clone();
+        version.archive_wasm_hash = vec![4, 4, 4];
+        version
+    };
+
+    let target_version = {
+        let mut version = intermediate_version.clone();
+        version.ledger_wasm_hash = vec![9, 9, 9];
+        version
+    };
+
+    // Set up environment to return upgrade steps that would allow an upgrade
+    add_environment_mock_list_upgrade_steps_call(
+        &mut env,
+        vec![
+            current_version.clone(),
+            intermediate_version.clone(),
+            target_version.clone(),
+        ],
+    );
+
+    let mut governance = Governance::new(
+        GovernanceProto {
+            root_canister_id: Some(root_canister_id.get()),
+            deployed_version: Some(current_version.clone().into()),
+            ..basic_governance_proto()
+        }
+        .try_into()
+        .unwrap(),
+        Box::new(env),
+        Box::new(DoNothingLedger {}),
+        Box::new(DoNothingLedger {}),
+        Box::new(FakeCmc::new()),
+    );
+
+    // Step 2: Update the cached upgrade steps
+    assert_eq!(governance.proto.cached_upgrade_steps, None);
+    governance.run_periodic_tasks().await;
+    assert_eq!(
+        governance
+            .proto
+            .cached_upgrade_steps
+            .clone()
+            .unwrap()
+            .upgrade_steps
+            .unwrap()
+            .versions
+            .len(),
+        3
+    );
+
+    // Step 3: Set target version to latest version
+    governance.proto.target_version = Some(Version::from(target_version.clone()));
+
+    // Step 4: Run periodic tasks and observe upgrades
+    {
+        // The first periodic task initiates the upgrade
+        let mut env = NativeEnvironment::new(Some(governance_canister_id));
+        add_environment_mock_calls_for_initiate_upgrade(
+            &mut env,
+            vec![4, 4, 4],
+            SnsCanisterType::Archive,
+            current_version.clone(),
+        );
+        governance.env = Box::new(env);
+        governance.run_periodic_tasks().await;
+    }
+    {
+        // The second periodic task tries to mark the upgrade as completed, but doesn't because the archives are not all upgraded yet
+        let mut env = NativeEnvironment::new(Some(governance_canister_id));
+        add_environment_mock_get_sns_canisters_summary_call(
+            &mut env,
+            SnsCanistersSummaryResponse::MixedArchives {
+                version: intermediate_version.clone(),
+                num_random_versions: 3,
+            },
+        );
+        governance.env = Box::new(env);
+        governance.run_periodic_tasks().await;
+    }
+    {
+        // The third periodic task marks the upgrade as completed and initiates the next one
+        let mut env = NativeEnvironment::new(Some(governance_canister_id));
+        add_environment_mock_get_sns_canisters_summary_call(&mut env, target_version.clone());
+        add_environment_mock_calls_for_initiate_upgrade(
+            &mut env,
+            vec![9, 9, 9],
+            SnsCanisterType::Ledger,
+            intermediate_version.clone(),
+        );
+        governance.env = Box::new(env);
+        governance.run_periodic_tasks().await;
+    }
+
+    // Should now be at intermediate version
+    assert_eq!(
+        governance.proto.deployed_version,
+        Some(Version::from(intermediate_version))
+    );
+
+    {
+        // The third periodic task marks the upgrade as completed, even though not all the archives are in sync
+        let mut env = NativeEnvironment::new(Some(governance_canister_id));
+        add_environment_mock_get_sns_canisters_summary_call(
+            &mut env,
+            SnsCanistersSummaryResponse::MixedArchives {
+                version: target_version.clone(),
+                num_random_versions: 3,
+            },
+        );
+        governance.env = Box::new(env);
+        governance.run_periodic_tasks().await;
+    }
+
+    // Should now be at target version
+    assert_eq!(
+        governance.proto.deployed_version,
+        Some(Version::from(target_version))
+    );
+}
+
+#[tokio::test]
 async fn test_initiate_upgrade_blocked_by_pending_upgrade() {
     // Step 1: Prepare the world.
     let root_canister_id = *TEST_ROOT_CANISTER_ID;
@@ -437,26 +541,9 @@ async fn test_initiate_upgrade_blocked_by_pending_upgrade() {
     };
 
     // Set up environment to return upgrade steps that would allow an upgrade
-    env.set_call_canister_response(
-        SNS_WASM_CANISTER_ID,
-        "list_upgrade_steps",
-        Encode!(&ListUpgradeStepsRequest {
-            starting_at: Some(current_version.clone()),
-            sns_governance_canister_id: Some(governance_canister_id.into()),
-            limit: 0,
-        })
-        .unwrap(),
-        Ok(Encode!(&ListUpgradeStepsResponse {
-            steps: vec![
-                ListUpgradeStep {
-                    version: Some(current_version.clone())
-                },
-                ListUpgradeStep {
-                    version: Some(target_version.clone())
-                },
-            ]
-        })
-        .unwrap()),
+    add_environment_mock_list_upgrade_steps_call(
+        &mut env,
+        vec![current_version.clone(), target_version.clone()],
     );
 
     let pending_version = Version {
@@ -720,7 +807,10 @@ fn add_environment_mock_calls_for_initiate_upgrade(
     assert!(!canisters_to_be_upgraded.is_empty());
 
     if expected_canister_to_be_upgraded != SnsCanisterType::Root {
-        add_environment_mock_get_sns_canisters_summary_call(&mut *env, starting_version);
+        add_environment_mock_get_sns_canisters_summary_call(
+            &mut *env,
+            SnsCanistersSummaryResponse::Uniform(starting_version),
+        );
         for canister_id in canisters_to_be_upgraded {
             env.require_call_canister_invocation(
                 root_canister_id,
@@ -781,10 +871,32 @@ fn add_environment_mock_calls_for_initiate_upgrade(
     }
 }
 
+#[derive(Clone)]
+enum SnsCanistersSummaryResponse {
+    // All archives use the version from SnsVersion
+    Uniform(SnsVersion),
+    // Some archives use random versions, others use the version from SnsVersion
+    MixedArchives {
+        version: SnsVersion,
+        num_random_versions: usize,
+    },
+}
+
+impl From<SnsVersion> for SnsCanistersSummaryResponse {
+    fn from(version: SnsVersion) -> Self {
+        SnsCanistersSummaryResponse::Uniform(version)
+    }
+}
+
 fn add_environment_mock_get_sns_canisters_summary_call(
     env: &mut NativeEnvironment,
-    version: SnsVersion,
+    archive_versions: impl Into<SnsCanistersSummaryResponse>,
 ) {
+    let archive_versions = archive_versions.into();
+    let version = match &archive_versions {
+        SnsCanistersSummaryResponse::Uniform(v) => v.clone(),
+        SnsCanistersSummaryResponse::MixedArchives { version, .. } => version.clone(),
+    };
     let root_canister_id = *TEST_ROOT_CANISTER_ID;
     let governance_canister_id = *TEST_GOVERNANCE_CANISTER_ID;
     let ledger_canister_id = *TEST_LEDGER_CANISTER_ID;
@@ -835,17 +947,66 @@ fn add_environment_mock_get_sns_canisters_summary_call(
                     CanisterStatusType::Running,
                 )),
             }),
-            archives: ledger_archive_ids
-                .iter()
-                .map(|id| CanisterSummary {
-                    canister_id: Some(PrincipalId::from(*id)),
-                    status: Some(canister_status_for_test(
-                        version.archive_wasm_hash.clone(),
-                        CanisterStatusType::Running,
-                    )),
+            archives: match archive_versions {
+                SnsCanistersSummaryResponse::Uniform(v) => ledger_archive_ids
+                    .iter()
+                    .map(|id| CanisterSummary {
+                        canister_id: Some(PrincipalId::from(*id)),
+                        status: Some(canister_status_for_test(
+                            v.archive_wasm_hash.clone(),
+                            CanisterStatusType::Running,
+                        )),
+                    })
+                    .collect(),
+                SnsCanistersSummaryResponse::MixedArchives {
+                    version,
+                    num_random_versions,
+                } => {
+                    let mut archives = Vec::new();
+                    for (i, id) in ledger_archive_ids.iter().enumerate() {
+                        let hash = if i < num_random_versions {
+                            // Generate a random version for this archive
+                            vec![i as u8 + 1, 2, 3]
+                        } else {
+                            version.archive_wasm_hash.clone()
+                        };
+                        archives.push(CanisterSummary {
+                            canister_id: Some(PrincipalId::from(*id)),
+                            status: Some(canister_status_for_test(
+                                hash,
+                                CanisterStatusType::Running,
+                            )),
+                        });
+                    }
+                    archives
+                }
+            },
+            dapps: vec![],
+        })
+        .unwrap()),
+    );
+}
+
+fn add_environment_mock_list_upgrade_steps_call(
+    env: &mut NativeEnvironment,
+    versions: Vec<SnsVersion>,
+) {
+    env.set_call_canister_response(
+        SNS_WASM_CANISTER_ID,
+        "list_upgrade_steps",
+        Encode!(&ListUpgradeStepsRequest {
+            starting_at: Some(versions.first().unwrap().clone()),
+            sns_governance_canister_id: Some(TEST_GOVERNANCE_CANISTER_ID.get()),
+            limit: 0,
+        })
+        .unwrap(),
+        Ok(Encode!(&ListUpgradeStepsResponse {
+            steps: versions
+                .into_iter()
+                .map(|version| ListUpgradeStep {
+                    version: Some(version),
                 })
                 .collect(),
-            dapps: vec![],
         })
         .unwrap()),
     );
