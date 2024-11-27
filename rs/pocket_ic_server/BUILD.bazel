@@ -210,7 +210,6 @@ rust_test(
     },
     tags = [
         "cpu:8",
-        "test_macos",
     ],
     deps = SPEC_TEST_DEPENDENCIES,
 )
