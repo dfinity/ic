@@ -38,12 +38,7 @@ use std::{env, iter, net::SocketAddrV6, time::Duration};
 
 use anyhow::{anyhow, bail, Context, Error};
 use futures::stream::FuturesUnordered;
-use ic_agent::{
-    export::reqwest,
-    // agent::http_transport::reqwest_transport::{reqwest, ReqwestTransport},
-    export::Principal,
-    Agent,
-};
+use ic_agent::{export::reqwest, export::Principal, Agent};
 use reqwest::{redirect::Policy, ClientBuilder, Method, StatusCode};
 use serde::Deserialize;
 use slog::{error, info, Logger};

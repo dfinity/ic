@@ -13768,7 +13768,6 @@ dependencies = [
  "candid",
  "certificate_orchestrator_interface",
  "ic-agent 0.39.1",
- "ic-agent",
  "ic-base-types",
  "ic-boundary-nodes-integration-test-common",
  "ic-boundary-nodes-performance-test-common",
