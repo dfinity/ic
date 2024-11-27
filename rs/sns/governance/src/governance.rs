@@ -47,16 +47,15 @@ use crate::{
             GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
             GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
             GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
-            GetSnsInitializationParametersResponse, GetUpgradeJournalResponse,
-            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
-            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
-            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
-            ManageSnsMetadata, MintSnsTokens, MintTokensRequest, MintTokensResponse,
-            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-            RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote,
-            WaitForQuietState,
+            GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
+            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
+            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
+            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
+            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
+            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
+            RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds,
+            UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
     proposal::{
@@ -5054,28 +5053,6 @@ impl Governance {
 
     fn release_upgrade_periodic_task_lock(&mut self) {
         self.upgrade_periodic_task_lock = None;
-    }
-
-    pub fn get_upgrade_journal(&self) -> GetUpgradeJournalResponse {
-        let cached_upgrade_steps = self.proto.cached_upgrade_steps.clone();
-        match cached_upgrade_steps {
-            Some(cached_upgrade_steps) => GetUpgradeJournalResponse {
-                upgrade_steps: cached_upgrade_steps.upgrade_steps,
-                response_timestamp_seconds: cached_upgrade_steps.response_timestamp_seconds,
-                target_version: self.proto.target_version.clone(),
-                deployed_version: self.proto.deployed_version.clone(),
-                // TODO(NNS1-3416): Bound the size of the response.
-                upgrade_journal: self.proto.upgrade_journal.clone(),
-            },
-            None => GetUpgradeJournalResponse {
-                upgrade_steps: None,
-                response_timestamp_seconds: None,
-                target_version: None,
-                deployed_version: self.proto.deployed_version.clone(),
-                // TODO(NNS1-3416): Bound the size of the response.
-                upgrade_journal: self.proto.upgrade_journal.clone(),
-            },
-        }
     }
 
     // This is a test-only function, so panicking should be okay.
