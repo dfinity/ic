@@ -146,6 +146,7 @@ type UpgradeArgs = record {
     feature_flags : opt FeatureFlags;
     accounts_overflow_trim_quantity: opt nat64;
     change_archive_options : opt ChangeArchiveOptions;
+    index_principal : opt text;
 };
 
 type LedgerArg = variant {
@@ -481,6 +482,16 @@ type icrc21_consent_message_response = variant {
     Err: icrc21_error;
 };
 
+type GetIndexResult = variant {
+    Ok : principal;
+    Err : GetIndexError;
+};
+
+type GetIndexError = variant {
+    IndexNotSet;
+    GenericError : record { error_code : nat; message : text };
+};
+
 service : (ledger_arg : LedgerArg) -> {
     archives : () -> (vec ArchiveInfo) query;
     get_transactions : (GetTransactionsRequest) -> (GetTransactionsResponse) query;
@@ -509,4 +520,6 @@ service : (ledger_arg : LedgerArg) -> {
 
     icrc21_canister_call_consent_message: (icrc21_consent_message_request) -> (icrc21_consent_message_response);
     icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
+
+    icrc106_get_index_principal: () -> (GetIndexResult) query;
 }

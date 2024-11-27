@@ -335,6 +335,8 @@ pub struct UpgradeArgs {
     pub accounts_overflow_trim_quantity: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub change_archive_options: Option<ChangeArchiveOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index_principal: Option<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -390,6 +392,8 @@ pub struct Ledger<Tokens: TokensType> {
 
     #[serde(default = "default_ledger_version")]
     pub ledger_version: u64,
+
+    index_principal: Option<Principal>,
 }
 
 fn default_maximum_number_of_accounts() -> usize {
@@ -487,6 +491,7 @@ impl<Tokens: TokensType> Ledger<Tokens> {
                 .try_into()
                 .unwrap(),
             ledger_version: LEDGER_VERSION,
+            index_principal: None,
         };
 
         for (account, balance) in initial_balances.into_iter() {
@@ -618,6 +623,10 @@ impl<Tokens: TokensType> Ledger<Tokens> {
         self.decimals
     }
 
+    pub fn index_principal(&self) -> Option<Principal> {
+        self.index_principal.clone()
+    }
+
     pub fn metadata(&self) -> Vec<(String, Value)> {
         let mut records: Vec<(String, Value)> = self
             .metadata
@@ -701,6 +710,9 @@ impl<Tokens: TokensType> Ledger<Tokens> {
             if let Some(archive) = maybe_archive.deref_mut() {
                 change_archive_options.apply(archive);
             }
+        }
+        if let Some(index_principal) = args.index_principal {
+            self.index_principal = Some(index_principal);
         }
     }
 

@@ -25,6 +25,7 @@ use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
+use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
@@ -283,6 +284,19 @@ fn icrc21_consent_message(
             Result<ConsentInfo, Icrc21Error>
     )
     .expect("failed to decode icrc21_canister_call_consent_message response")
+}
+
+fn icrc106_get_index_principal(
+    env: &StateMachine,
+    ledger: CanisterId,
+) -> Result<Principal, Icrc106Error> {
+    Decode!(
+        &env.query(ledger, "icrc106_get_index_principal", Encode!().unwrap())
+            .expect("failed to query icrc106_get_index_principal")
+            .bytes(),
+        Result<Principal, Icrc106Error>
+    )
+    .expect("failed to decode icrc106_get_index_principal response")
 }
 
 pub fn get_all_ledger_and_archive_blocks<Tokens: TokensType>(
@@ -4079,6 +4093,45 @@ where
         from_account,
         spender_account,
         receiver_account,
+    );
+}
+
+pub fn test_icrc106_standard<T, U>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+    encode_upgrade_args: fn(Option<Principal>) -> U,
+) where
+    T: CandidType,
+    U: CandidType,
+{
+    fn assert_icrc106_supported(env: &StateMachine, canister_id: CanisterId) {
+        let mut found = false;
+        for standard in supported_standards(&env, canister_id) {
+            if standard.name == "ICRC-106" {
+                found = true;
+                break;
+            }
+        }
+        assert!(found, "ICRC-106 should be supported");
+    }
+
+    let (env, canister_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
+    assert_icrc106_supported(&env, canister_id);
+    assert_eq!(
+        Err(Icrc106Error::IndexNotSet),
+        icrc106_get_index_principal(&env, canister_id)
+    );
+
+    let index_principal = PrincipalId::new_user_test_id(1).0;
+    let args = encode_upgrade_args(Some(index_principal));
+    let encoded_upgrade_args = Encode!(&args).unwrap();
+    env.upgrade_canister(canister_id, ledger_wasm, encoded_upgrade_args.clone())
+        .expect("should successfully upgrade ledger canister");
+
+    assert_icrc106_supported(&env, canister_id);
+    assert_eq!(
+        Ok(index_principal),
+        icrc106_get_index_principal(&env, canister_id)
     );
 }
 
