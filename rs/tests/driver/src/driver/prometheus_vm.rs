@@ -147,17 +147,17 @@ impl PrometheusVm {
     }
 
     fn sync_k8s_repo_dashboards(logger: Logger) -> Result<()> {
-        let k8s_repo = get_dependency_path("rs/tests/dashboards/k8s");
+        let destination = get_dependency_path("rs/tests/dashboards");
+        let k8s_repo = get_dependency_path("rs/tests/k8s-dashboards");
         if k8s_repo.exists() {
             std::fs::remove_dir_all(&k8s_repo)?;
         }
 
-        let k8s_dashboards = k8s_repo.join("k8s-dashboards");
-        std::fs::create_dir_all(&k8s_dashboards)?;
+        std::fs::create_dir_all(&k8s_repo)?;
         info!(
             logger,
-            "Created k8s dashboards folder on path: {}",
-            k8s_dashboards.display()
+            "Created k8s repo folder on path: {}",
+            k8s_repo.display()
         );
         Command::new("git")
             .arg("init")
@@ -187,6 +187,7 @@ impl PrometheusVm {
             .arg("pull")
             .arg("origin")
             .arg("main")
+            .arg("--depth=1")
             .current_dir(&k8s_repo)
             .output()?;
         info!(logger, "Pulled dashboards from dfinity-ops/k8s repo");
@@ -199,15 +200,50 @@ impl PrometheusVm {
                 continue;
             }
 
+            let maybe_kustomization = entry
+                .path()
+                .read_dir()?
+                .filter_map(|f| f.ok())
+                .find(|f| f.file_name().eq("kustomization.yaml"));
+
+            let dashboard_dir = match maybe_kustomization {
+                Some(file) => {
+                    let parsed: serde_yaml::Value =
+                        serde_yaml::from_str(&std::fs::read_to_string(file.path()).unwrap())?;
+
+                    parsed
+                        .get("commonAnnotations")
+                        .ok_or(anyhow::anyhow!(
+                            "Unexpected yaml schema for kustomization.yaml"
+                        ))?
+                        .get("k8s-sidecar-target-directory")
+                        .ok_or(anyhow::anyhow!(
+                            "Unexpected yaml schema for kustomization.yaml"
+                        ))?
+                        .as_str()
+                        .ok_or(anyhow::anyhow!("Expected string for the name of directory"))?
+                        .to_string()
+                }
+                None => entry.file_name().to_string_lossy().to_string(),
+            };
+            let dashboard_dir = destination.join(dashboard_dir);
+
+            std::fs::create_dir_all(&dashboard_dir)?;
+            info!(
+                logger,
+                "Created dir for dashboards: {}",
+                dashboard_dir.display()
+            );
+
             for maybe_file in entry.path().read_dir()? {
                 let file = maybe_file?;
 
-                if !entry.path().is_file() && entry.path().extension().is_none() {
+                if !file.path().is_file() && file.path().extension().is_none() {
                     continue;
                 }
 
                 // Safe because of previous check
-                let path = entry.path();
+                let path = file.path();
                 let extension = path.extension().unwrap();
 
                 // Dashboards are json files
@@ -217,7 +253,7 @@ impl PrometheusVm {
 
                 let file_name = format!("{}.json", file.file_name().as_os_str().to_str().unwrap());
 
-                let destination_path = k8s_dashboards.join(&file_name);
+                let destination_path = dashboard_dir.join(&file_name);
 
                 std::fs::copy(file.path(), destination_path)?;
                 info!(logger, "Copying `{}` dashboard...", file_name);
@@ -245,8 +281,8 @@ if uname -a | grep -q Ubuntu; then
   # k8s
   chmod g+s /etc/prometheus
   cp -f /config/prometheus/prometheus.yml /etc/prometheus/prometheus.yml
-  cp -R /config/grafana/dashboards/k8s-dashboards /var/lib/grafana/dashboards/
-  chown -R grafana:grafana /var/lib/grafana/dashboards/k8s-dashboards/
+  cp -R /config/grafana/dashboards /var/lib/grafana/
+  chown -R grafana:grafana /var/lib/grafana/dashboards
   chown -R {SSH_USERNAME}:prometheus /etc/prometheus
   systemctl reload prometheus
 else
