@@ -10,7 +10,3 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 thiserror = { workspace = true }
-
-[[bin]]
-name = "deterministic-ips"
-path = "src/main.rs"
