@@ -9,12 +9,6 @@ use std::str::FromStr;
 pub mod node_type;
 use node_type::NodeType;
 
-#[derive(Debug, thiserror::Error)]
-pub enum AddressError {
-    #[error("the resulting address is invalid")]
-    InvalidAddress,
-}
-
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct HwAddr(MacAddr6);
 
