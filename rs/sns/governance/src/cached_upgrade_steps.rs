@@ -1,7 +1,12 @@
+use crate::governance::Governance;
+use crate::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
+use crate::logs::ERROR;
 use crate::pb::v1::governance::CachedUpgradeSteps as CachedUpgradeStepsPb;
 use crate::pb::v1::governance::Version;
 use crate::pb::v1::governance::Versions;
+use crate::pb::v1::upgrade_journal_entry;
 use crate::sns_upgrade::SnsCanisterType;
+use ic_canister_log::log;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct CachedUpgradeSteps {
@@ -282,5 +287,96 @@ impl CachedUpgradeSteps {
             return Err("new_target_version must differ from the current version.".to_string());
         }
         Ok(())
+    }
+}
+
+impl Governance {
+    pub fn temporarily_lock_refresh_cached_upgrade_steps(&mut self) {
+        let upgrade_steps =
+            self.proto
+                .cached_upgrade_steps
+                .get_or_insert_with(|| CachedUpgradeStepsPb {
+                    requested_timestamp_seconds: Some(self.env.now()),
+                    ..Default::default()
+                });
+        upgrade_steps.requested_timestamp_seconds = Some(self.env.now());
+    }
+
+    pub fn should_refresh_cached_upgrade_steps(&mut self) -> bool {
+        let now = self.env.now();
+
+        if let Some(ref cached_upgrade_steps) = self.proto.cached_upgrade_steps {
+            let requested_timestamp_seconds = cached_upgrade_steps
+                .requested_timestamp_seconds
+                .unwrap_or(0);
+            if now - requested_timestamp_seconds < UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Refreshes the cached_upgrade_steps field
+    pub async fn refresh_cached_upgrade_steps(&mut self) {
+        let Some(deployed_version) = self.proto.deployed_version.as_ref() else {
+            log!(
+                ERROR,
+                "Cannot refresh cached_upgrade_steps: deployed_version not set."
+            );
+            return;
+        };
+        let sns_governance_canister_id = self.env.canister_id().get();
+
+        let upgrade_steps = crate::sns_upgrade::get_upgrade_steps(
+            &*self.env,
+            deployed_version.clone(),
+            sns_governance_canister_id,
+        )
+        .await;
+
+        let upgrade_steps = match upgrade_steps {
+            Ok(upgrade_steps) => {
+                // Check for duplicate versions in the response
+                let mut seen = std::collections::HashSet::new();
+                for version in &upgrade_steps {
+                    if !seen.insert(version) {
+                        log!(
+                            ERROR,
+                            "Cannot refresh cached_upgrade_steps: SNS-W response contains duplicate versions"
+                        );
+                        return;
+                    }
+                }
+                Versions {
+                    versions: upgrade_steps,
+                }
+            }
+            Err(err) => {
+                log!(
+                    ERROR,
+                    "Cannot refresh cached_upgrade_steps: call to SNS-W failed: {}",
+                    err
+                );
+                return;
+            }
+        };
+
+        // Ensure `cached_upgrade_steps` is initialized
+        let cached_upgrade_steps = self
+            .proto
+            .cached_upgrade_steps
+            .get_or_insert_with(Default::default);
+
+        // Update `response_timestamp_seconds`
+        cached_upgrade_steps.response_timestamp_seconds = Some(self.env.now());
+
+        // Refresh the upgrade steps if they have changed
+        if cached_upgrade_steps.upgrade_steps != Some(upgrade_steps.clone()) {
+            cached_upgrade_steps.upgrade_steps = Some(upgrade_steps.clone());
+            self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsRefreshed::new(
+                upgrade_steps.versions,
+            ));
+        }
     }
 }
