@@ -2164,6 +2164,7 @@ message UpdateCanisterSettings {
     optional uint64 freezing_threshold = 4;
     optional LogVisibility log_visibility = 5;
     optional uint64 wasm_memory_limit = 6;
+    optional uint64 wasm_memory_threshold = 7;
   }
 
   // The settings to update. Required.
