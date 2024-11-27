@@ -2,7 +2,8 @@ use crate::governance::Governance;
 use crate::pb::v1::{
     governance::{Version, Versions},
     upgrade_journal_entry::{self, upgrade_outcome, upgrade_started},
-    Empty, GetUpgradeJournalResponse, ProposalId, UpgradeJournal, UpgradeJournalEntry,
+    Empty, GetUpgradeJournalRequest, GetUpgradeJournalResponse, ProposalId, UpgradeJournal,
+    UpgradeJournalEntry,
 };
 
 impl upgrade_journal_entry::UpgradeStepsRefreshed {
@@ -129,7 +130,11 @@ impl Governance {
         }
     }
 
-    pub fn get_upgrade_journal(&self) -> GetUpgradeJournalResponse {
+    pub fn get_upgrade_journal(
+        &self,
+        request: GetUpgradeJournalRequest,
+    ) -> GetUpgradeJournalResponse {
+        let GetUpgradeJournalRequest {} = request;
         let cached_upgrade_steps = self.proto.cached_upgrade_steps.clone();
         match cached_upgrade_steps {
             Some(cached_upgrade_steps) => GetUpgradeJournalResponse {
