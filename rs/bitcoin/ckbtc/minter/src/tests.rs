@@ -17,6 +17,7 @@ use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_btc_interface::{Network, OutPoint, Satoshi, Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
+use maplit::btreeset;
 use proptest::proptest;
 use proptest::{
     array::uniform20,
@@ -274,24 +275,22 @@ fn should_have_same_input_and_output_count() {
 
 #[test]
 fn test_min_change_amount() {
-    let mut available_utxos = BTreeSet::new();
-    available_utxos.insert(Utxo {
+    let utxo_1 = Utxo {
         outpoint: OutPoint {
             txid: [0; 32].into(),
             vout: 0,
         },
         value: 100_000,
         height: 10,
-    });
-
-    available_utxos.insert(Utxo {
+    };
+    let utxo_2 = Utxo {
         outpoint: OutPoint {
             txid: [1; 32].into(),
             vout: 1,
         },
-        value: 100_000,
-        height: 10,
-    });
+        ..utxo_1.clone()
+    };
+    let mut available_utxos = btreeset! {utxo_1.clone(), utxo_2.clone()};
 
     let minter_addr = BitcoinAddress::P2wpkhV0([0; 20]);
     let out1_addr = BitcoinAddress::P2wpkhV0([1; 20]);
@@ -300,11 +299,15 @@ fn test_min_change_amount() {
 
     let (tx, change_output, _) = build_unsigned_transaction(
         &mut available_utxos,
-        vec![(out1_addr.clone(), 100_000), (out2_addr.clone(), 99_999)],
+        vec![
+            (out1_addr.clone(), utxo_1.value),
+            (out2_addr.clone(), utxo_2.value - 1),
+        ],
         minter_addr.clone(),
         fee_per_vbyte,
     )
     .expect("failed to build a transaction");
+    let change_value = 1;
 
     let fee = fake_sign(&tx).vsize() as u64 * fee_per_vbyte / 1000;
     let minter_fee = crate::MINTER_FEE_PER_INPUT * tx.inputs.len() as u64
@@ -312,22 +315,29 @@ fn test_min_change_amount() {
         + crate::MINTER_FEE_CONSTANT;
 
     assert_eq!(tx.outputs.len(), 3);
-    let fee_share = (fee + minter_fee - 1) / 2;
+    let fee_shares = {
+        let total_fee = fee + minter_fee;
+        let avg_fee_per_share = total_fee / 2;
+        let share_1 = avg_fee_per_share + (total_fee % 2);
+        let share_2 = avg_fee_per_share;
+        assert_eq!(share_1 + share_2, total_fee);
+        [share_1, share_2]
+    };
 
     assert_eq!(
         &tx.outputs,
         &[
             tx::TxOut {
                 address: out1_addr,
-                value: 100_000 - fee_share - 1, // Subtract the remainder
+                value: 100_000 - fee_shares[0],
             },
             tx::TxOut {
                 address: out2_addr,
-                value: 99_999 - fee_share,
+                value: 99_999 - fee_shares[1],
             },
             tx::TxOut {
                 address: minter_addr,
-                value: minter_fee + 1, // Add the remainder
+                value: minter_fee + change_value,
             }
         ]
     );
@@ -335,7 +345,7 @@ fn test_min_change_amount() {
         change_output,
         ChangeOutput {
             vout: 2,
-            value: 1 + minter_fee
+            value: change_value + minter_fee
         }
     );
 }
