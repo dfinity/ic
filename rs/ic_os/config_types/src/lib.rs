@@ -75,7 +75,7 @@ pub struct ICOSSettings {
     /// else found dynamically in call to config tool CreateSetuposConfig
     pub mgmt_mac: HwAddr,
     #[serde_as(as = "DisplayFromStr")]
-    pub deployment_environment: Deployment,
+    pub deployment_environment: DeploymentEnvironment,
     pub logging: Logging,
     pub use_nns_public_key: bool,
     /// The URL (HTTP) of the NNS node(s).
@@ -151,16 +151,16 @@ pub struct BackupSpoolSettings {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[non_exhaustive]
-pub enum Deployment {
+pub enum DeploymentEnvironment {
     Mainnet,
     Testnet,
 }
 
-impl fmt::Display for Deployment {
+impl fmt::Display for DeploymentEnvironment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Deployment::Mainnet => write!(f, "mainnet"),
-            Deployment::Testnet => write!(f, "testnet"),
+            DeploymentEnvironment::Mainnet => write!(f, "mainnet"),
+            DeploymentEnvironment::Testnet => write!(f, "testnet"),
         }
     }
 }
@@ -171,12 +171,12 @@ pub enum DeploymentParseError {
     InvalidVariant,
 }
 
-impl FromStr for Deployment {
+impl FromStr for DeploymentEnvironment {
     type Err = DeploymentParseError;
-    fn from_str(s: &str) -> Result<Deployment, DeploymentParseError> {
+    fn from_str(s: &str) -> Result<DeploymentEnvironment, DeploymentParseError> {
         match s.to_lowercase().as_str() {
-            "mainnet" => Ok(Deployment::Mainnet),
-            "testnet" => Ok(Deployment::Testnet),
+            "mainnet" => Ok(DeploymentEnvironment::Mainnet),
+            "testnet" => Ok(DeploymentEnvironment::Testnet),
             _ => Err(DeploymentParseError::InvalidVariant),
         }
     }
@@ -245,7 +245,7 @@ mod tests {
             icos_settings: ICOSSettings {
                 node_reward_type: Some(String::new()),
                 mgmt_mac: "00:00:00:00:00:00".parse()?,
-                deployment_environment: Deployment::Testnet,
+                deployment_environment: DeploymentEnvironment::Testnet,
                 logging: Logging {
                     elasticsearch_hosts: String::new(),
                     elasticsearch_tags: None,

@@ -93,7 +93,7 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub mgmt_mac: Option<HwAddr>,
     #[arg(long)]
-    pub deployment_environment: Option<Deployment>,
+    pub deployment_environment: Option<DeploymentEnvironment>,
     #[arg(long)]
     pub elasticsearch_hosts: Option<String>,
     #[arg(long)]

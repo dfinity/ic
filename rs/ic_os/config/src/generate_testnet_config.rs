@@ -24,7 +24,7 @@ pub struct GenerateTestnetConfigArgs {
     // ICOSSettings arguments
     pub node_reward_type: Option<String>,
     pub mgmt_mac: Option<HwAddr>,
-    pub deployment_environment: Option<Deployment>,
+    pub deployment_environment: Option<DeploymentEnvironment>,
     pub elasticsearch_hosts: Option<String>,
     pub elasticsearch_tags: Option<String>,
     pub use_nns_public_key: Option<bool>,
@@ -169,7 +169,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         None => "00:00:00:00:00:00".parse()?,
     };
 
-    let deployment_environment = deployment_environment.unwrap_or(Deployment::Testnet);
+    let deployment_environment = deployment_environment.unwrap_or(DeploymentEnvironment::Testnet);
 
     let logging = Logging {
         elasticsearch_hosts: elasticsearch_hosts.unwrap_or_else(|| "".to_string()),
