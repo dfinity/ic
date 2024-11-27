@@ -17,7 +17,6 @@ DEPENDENCIES = [
     "@crate_index//:chrono",
     "@crate_index//:ciborium",
     "@crate_index//:ic-agent",
-    "@crate_index//:leb128",
     "@crate_index//:rusqlite",
     "@crate_index//:serde",
     "@crate_index//:tokio",

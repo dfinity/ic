@@ -1,11 +1,10 @@
 use anyhow::Result;
-use std::time::Duration;
-
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::systest;
-use ic_tests::nns_tests::sns_aggregator::{benchmark_config_with_auth, workload_direct_auth};
-use ic_tests::nns_tests::sns_deployment::initiate_token_swap_with_oc_parameters;
+use sns_system_test_lib::sns_aggregator::{benchmark_config_with_auth, workload_direct_auth};
+use sns_system_test_lib::sns_deployment::initiate_token_swap_with_oc_parameters;
+use std::time::Duration;
 
 const WORKLOAD_DURATION: Duration = Duration::from_secs(2 * 60);
 
@@ -46,7 +45,7 @@ fn workload_direct_auth_rps9600(env: TestEnv) {
 /// See https://github.com/dfinity/nns-dapp/blob/6b85f56b6f5261bf0d1e4a1848752828ff0f4238/frontend/src/lib/services/%24public/sns.services.ts#L82
 ///
 /// 1. Install NNS and SNS
-/// 2. Initiate the token sale
+/// 2. Initiate the token swap
 /// 3. Generate workload (mimicking nns-dapp frontend) at various RPSs
 fn main() -> Result<()> {
     SystemTestGroup::new()

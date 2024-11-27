@@ -848,7 +848,7 @@ pub mod sns_neuron_recipe {
         /// in the SNS Ledger.
         /// See `nervous_system_common::compute_neuron_staking_subaccount`.
         /// The memo is used along with the a principal_id of the "controller" of
-        /// the neuron. In the case of the decentralization sale, that will either be
+        /// the neuron. In the case of the decentralization swap, that will either be
         /// the PrincipalId of NNS Governance canister for Neurons' Fund investors,
         /// or the PrincipalId of the direct investor.
         #[prost(uint64, tag = "1")]

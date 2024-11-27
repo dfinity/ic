@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 use assert_matches::assert_matches;
 use ic_certification_test_utils::serialize_to_cbor;
 use ic_crypto_internal_basic_sig_iccsa::types::*;

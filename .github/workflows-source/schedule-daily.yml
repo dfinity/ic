@@ -18,7 +18,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:ced9611af39119f62feedc8a5ad75a8fac478cb43d2d56b623023766f6ce8ca7
+    image: ghcr.io/dfinity/ic-build@sha256:6a6b2a4583db6a23f2a3a84b1051322a0f975a40aa6519442f3def9810643189
   dind-large-setup: &dind-large-setup
     runs-on:
       group: zh1
@@ -33,12 +33,6 @@ anchors:
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
-  before-script: &before-script
-    name: Before script
-    id: before-script
-    shell: bash
-    run: |
-      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
   docker-login: &docker-login
     name: Login to Dockerhub
     shell: bash
@@ -72,13 +66,13 @@ jobs:
       labels: dind-large
     steps:
       - <<: *checkout
-      - <<: *before-script
       - <<: *docker-login
       - name: Run Bazel Launch Bare Metal
         shell: bash
         run: |
           echo "$ZH2_DLL01_CSV_SECRETS" > file1
           echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
 
           # Run bare metal installation test
           # shellcheck disable=SC2046,SC2086
@@ -89,6 +83,7 @@ jobs:
               --file_share_ssh_key "$(realpath file2)" \
               --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
               --file_share_username ci_interim \
+              --hsm \
               --ci_mode
 
           # Run bare metal node performance benchmarks
@@ -115,7 +110,6 @@ jobs:
     timeout-minutes: 720 # 12 hours
     steps:
       - <<: *checkout
-      - <<: *before-script
       - <<: *docker-login
       - name: Run FI Tests Nightly
         id: bazel-test-all
@@ -135,7 +129,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - <<: *checkout
-      - <<: *before-script
       - <<: *docker-login
       - name: Run NNS Tests Nightly
         id: bazel-test-all
@@ -155,7 +148,6 @@ jobs:
     timeout-minutes: 480
     steps:
       - <<: *checkout
-      - <<: *before-script
       - <<: *docker-login
       - name: Set Benchmark Targets
         shell: bash
@@ -193,7 +185,6 @@ jobs:
       REPO_NAME: ${{ github.repository }}
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -202,7 +193,8 @@ jobs:
         id: setup-environment-deps
         shell: bash
         run: |
-          pip3 install --ignore-installed -r requirements.txt
+          # Ignore externally-managed-environment pip error, install packages system-wide.
+          PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
           cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
           source "${NVM_DIR}/nvm.sh"
           nvm use ${DEFAULT_NODE_VERSION}
@@ -218,3 +210,18 @@ jobs:
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_periodic_job.py
           $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
           $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
+
+  # CI job is also executed in PR on use of 'CI_COVERAGE' label
+  bazel-test-coverage:
+    name: Bazel Test Coverage
+    <<: *dind-large-setup
+    steps:
+      - <<: *checkout
+      - name: Run Bazel Test Coverage
+        shell: bash
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+          ./ci/scripts/bazel-coverage.sh
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

@@ -886,7 +886,7 @@ prop_compose! {
     )(
         msg_start in 0..10000u64,
         msgs in prop::collection::vec(
-            arbitrary::request_or_response_with_config(true, true),
+            arbitrary::request_or_response_with_config(true),
             min_size..=max_size
         ),
         (signals_end, reject_signals) in arb_reject_signals(
@@ -950,12 +950,11 @@ prop_compose! {
         min_signal_count: usize,
         max_signal_count: usize,
         with_reject_reasons: Vec<RejectReason>,
-        with_responses_only_flag: Vec<bool>,
     )(
         msg_start in 0..10000u64,
         msg_len in 0..10000u64,
         (signals_end, reject_signals) in arb_reject_signals(min_signal_count, max_signal_count, with_reject_reasons),
-        responses_only in proptest::sample::select(with_responses_only_flag),
+        responses_only in any::<bool>(),
     ) -> StreamHeader {
         let begin = StreamIndex::from(msg_start);
         let end = StreamIndex::from(msg_start + msg_len);

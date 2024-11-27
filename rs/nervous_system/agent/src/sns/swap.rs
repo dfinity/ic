@@ -8,7 +8,7 @@ use thiserror::Error;
 
 use crate::CallCanisters;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct SwapCanister {
     pub canister_id: PrincipalId,
 }

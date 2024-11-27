@@ -48,6 +48,7 @@ pub struct InternetComputer {
     /// Indicates whether this `InternetComputer` instance should be installed with
     /// GuestOS disk images of the latest-deployed mainnet version.
     pub with_mainnet_config: bool,
+    pub api_boundary_nodes: Vec<Node>,
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
@@ -146,6 +147,28 @@ impl InternetComputer {
         self
     }
 
+    /// Add the given number of API boundary nodes and simply set their domain
+    /// name to apibn-X.ic.net, where X ranges from 0 to the given number of nodes
+    pub fn with_api_boundary_nodes(mut self, no_of_nodes: usize) -> Self {
+        for idx in 0..no_of_nodes {
+            self.api_boundary_nodes.push(
+                Node::new_with_settings(
+                    self.default_vm_resources,
+                    self.vm_allocation.clone(),
+                    self.required_host_features.clone(),
+                )
+                .with_domain(format!("apibn-{idx}.ic.net")),
+            );
+        }
+        self
+    }
+
+    /// Add an API boundary node with custom settings (domain name)
+    pub fn with_api_boundary_node(mut self, node: Node) -> Self {
+        self.api_boundary_nodes.push(node);
+        self
+    }
+
     /// Add a single unassigned node with the given IPv4 configuration
     pub fn with_ipv4_enabled_unassigned_node(mut self, ipv4_config: IPv4Config) -> Self {
         self.unassigned_nodes.push(
@@ -202,18 +225,13 @@ impl InternetComputer {
     pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
         // propagate required host features and resource settings to all vms
         let farm = Farm::from_test_env(env, "Internet Computer");
-        for subnet in self.subnets.iter_mut() {
-            for node in subnet.nodes.iter_mut() {
-                node.required_host_features = node
-                    .required_host_features
-                    .iter()
-                    .chain(self.required_host_features.iter())
-                    .cloned()
-                    .collect();
-                node.vm_resources = node.vm_resources.or(&self.default_vm_resources);
-            }
-        }
-        for node in self.unassigned_nodes.iter_mut() {
+        for node in self
+            .subnets
+            .iter_mut()
+            .flat_map(|subnet| subnet.nodes.iter_mut())
+            .chain(self.unassigned_nodes.iter_mut())
+            .chain(self.api_boundary_nodes.iter_mut())
+        {
             node.required_host_features = node
                 .required_host_features
                 .iter()
@@ -231,7 +249,10 @@ impl InternetComputer {
 
         if InfraProvider::read_attribute(env) == InfraProvider::K8s {
             let image_url = res_request.primary_image.url.clone();
-            let tnet = TNet::read_attribute(env).image_url(image_url.as_ref());
+            let image_sha = res_request.primary_image.sha256.clone();
+            let tnet = TNet::read_attribute(env)
+                .image_url(image_url.as_ref())
+                .image_sha(image_sha.as_ref());
             block_on(tnet.deploy_guestos_image()).expect("failed to deploy guestos image");
             tnet.write_attribute(env);
         }
@@ -268,39 +289,34 @@ impl InternetComputer {
     }
 
     fn create_secret_key_stores(&mut self, tempdir: &Path) -> Result<()> {
-        for n in self.unassigned_nodes.iter_mut() {
-            let sks = NodeSecretKeyStore::new(tempdir.join(format!("node-{:p}", n)))?;
-            n.secret_key_store = Some(sks);
-        }
-        for s in self.subnets.iter_mut() {
-            for n in s.nodes.iter_mut() {
-                let sks = NodeSecretKeyStore::new(tempdir.join(format!("node-{:p}", n)))?;
-                n.secret_key_store = Some(sks);
-            }
+        for node in self
+            .subnets
+            .iter_mut()
+            .flat_map(|subnet| subnet.nodes.iter_mut())
+            .chain(self.unassigned_nodes.iter_mut())
+            .chain(self.api_boundary_nodes.iter_mut())
+        {
+            let sks = NodeSecretKeyStore::new(tempdir.join(format!("node-{:p}", node)))?;
+            node.secret_key_store = Some(sks);
         }
         Ok(())
     }
 
     fn propagate_ip_addrs(&mut self, res_group: &ResourceGroup) {
-        for n in self.unassigned_nodes.iter_mut() {
-            n.ipv6 = Some(
+        for node in self
+            .subnets
+            .iter_mut()
+            .flat_map(|subnet| subnet.nodes.iter_mut())
+            .chain(self.unassigned_nodes.iter_mut())
+            .chain(self.api_boundary_nodes.iter_mut())
+        {
+            node.ipv6 = Some(
                 res_group
                     .vms
-                    .get(&n.id().to_string())
-                    .unwrap_or_else(|| panic!("no VM found for [node_id = {:?}]", n.id()))
+                    .get(&node.id().to_string())
+                    .unwrap_or_else(|| panic!("no VM found for [node_id = {:?}]", node.id()))
                     .ipv6,
             );
-        }
-        for s in self.subnets.iter_mut() {
-            for n in s.nodes.iter_mut() {
-                n.ipv6 = Some(
-                    res_group
-                        .vms
-                        .get(n.id().to_string().as_str())
-                        .unwrap_or_else(|| panic!("no VM found for [node_id = {:?}]", n.id()))
-                        .ipv6,
-                );
-            }
         }
     }
 
@@ -313,7 +329,11 @@ impl InternetComputer {
             .unassigned_nodes
             .iter()
             .any(|n| n.malicious_behaviour.is_some());
-        has_malicious_nodes || has_malicious_unassigned_nodes
+        let has_malicious_api_boundary_nodes = self
+            .api_boundary_nodes
+            .iter()
+            .any(|n| n.malicious_behaviour.is_some());
+        has_malicious_nodes || has_malicious_unassigned_nodes || has_malicious_api_boundary_nodes
     }
 
     pub fn get_malicious_behavior_of_node(&self, node_id: NodeId) -> Option<MaliciousBehaviour> {
@@ -332,6 +352,9 @@ impl InternetComputer {
             .collect();
         // extract malicious nodes from all unassigned nodes
         malicious_nodes.extend(self.unassigned_nodes.iter().filter_map(node_filter_map));
+        // extract malicious nodes from all API boundary nodes
+        malicious_nodes.extend(self.api_boundary_nodes.iter().filter_map(node_filter_map));
+
         match malicious_nodes.len() {
             0 => None,
             1 => malicious_nodes.first().unwrap().clone(),
@@ -365,8 +388,12 @@ impl InternetComputer {
             .iter()
             .flat_map(|s| s.nodes.iter().filter_map(node_filter_map))
             .collect();
-        // extract malicious nodes from all unassigned nodes
+        // extract ipv4-enabled nodes from all unassigned nodes
         ipv4_enabled_nodes.extend(self.unassigned_nodes.iter().filter_map(node_filter_map));
+
+        // extract ipv4-enabled nodes from all API boundary nodes
+        ipv4_enabled_nodes.extend(self.api_boundary_nodes.iter().filter_map(node_filter_map));
+
         match ipv4_enabled_nodes.len() {
             0 => None,
             1 => ipv4_enabled_nodes.first().unwrap().clone(),
@@ -388,8 +415,11 @@ impl InternetComputer {
             .iter()
             .flat_map(|s| s.nodes.iter().filter_map(node_filter_map))
             .collect();
-        // extract malicious nodes from all unassigned nodes
+        // extract node with given domain name from all unassigned nodes
         nodes.extend(self.unassigned_nodes.iter().filter_map(node_filter_map));
+        // extract node with given domain name  from all unassigned nodes
+        nodes.extend(self.api_boundary_nodes.iter().filter_map(node_filter_map));
+
         match nodes.len() {
             0 => None,
             1 => nodes.first().unwrap().clone(),

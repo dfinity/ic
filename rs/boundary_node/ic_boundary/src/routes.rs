@@ -22,11 +22,11 @@ use http::header::{HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OP
 use ic_bn_lib::http::{
     body::buffer_body, headers::*, proxy, Client as HttpClient, Error as IcBnError,
 };
+pub use ic_bn_lib::types::RequestType;
 use ic_types::{
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     CanisterId, PrincipalId, SubnetId,
 };
-
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -63,27 +63,6 @@ pub const PATH_HEALTH: &str = "/health";
 lazy_static! {
     pub static ref UUID_REGEX: Regex =
         Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
-}
-
-// Type of IC request
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Display, Default, Deserialize, IntoStaticStr)]
-#[strum(serialize_all = "snake_case")]
-#[serde(rename_all = "snake_case")]
-pub enum RequestType {
-    #[default]
-    Unknown,
-    Status,
-    Query,
-    Call,
-    SyncCall,
-    ReadState,
-    ReadStateSubnet,
-}
-
-impl RequestType {
-    pub fn is_call(&self) -> bool {
-        matches!(self, Self::Call | Self::SyncCall)
-    }
 }
 
 #[derive(Clone, Debug, Display)]
@@ -176,7 +155,9 @@ impl ErrorCause {
 impl IntoResponse for ErrorCause {
     fn into_response(self) -> Response {
         let client_facing_error = self.to_client_facing_error();
-        client_facing_error.into_response()
+        let mut resp = client_facing_error.into_response();
+        resp.extensions_mut().insert(self);
+        resp
     }
 }
 
@@ -222,7 +203,7 @@ impl ErrorClientFacing {
         match self {
             Self::BodyTimedOut => "Reading the request body timed out due to data arriving too slowly.".to_string(),
             Self::CanisterNotFound => "The specified canister does not exist.".to_string(),
-            Self::LoadShed => "Reading the request body timed out due to data arriving too slowly.".to_string(),
+            Self::LoadShed => "Temporarily unable to handle the request due to high load. Please try again later.".to_string(),
             Self::MalformedRequest(x) => x.clone(),
             Self::NoHealthyNodes => "There are currently no healthy replica nodes available to handle the request. This may be due to an ongoing upgrade of the replica software in the subnet. Please try again later.".to_string(),
             Self::Other => "Internal Server Error".to_string(),
@@ -245,9 +226,7 @@ impl IntoResponse for ErrorClientFacing {
         let headers = [(X_IC_ERROR_CAUSE, error_cause.clone())];
         let body = format!("error: {}\ndetails: {}", error_cause, self.details());
 
-        let mut resp = (self.status_code(), headers, body).into_response();
-        resp.extensions_mut().insert(self);
-        resp
+        (self.status_code(), headers, body).into_response()
     }
 }
 

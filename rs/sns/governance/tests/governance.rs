@@ -10,6 +10,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nervous_system_proto::pb::v1::{Percentage, Principals};
+use ic_sns_governance::pb::v1::governance::CachedUpgradeSteps;
 use ic_sns_governance::{
     governance::{
         MATURITY_DISBURSEMENT_DELAY_SECONDS, UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
@@ -26,7 +27,7 @@ use ic_sns_governance::{
                 NeuronRecipe, NeuronRecipes,
             },
             claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
-            governance::Version,
+            governance::{Version, Versions},
             governance_error::ErrorType,
             manage_neuron::{
                 self, claim_or_refresh, configure::Operation, AddNeuronPermissions, ClaimOrRefresh,
@@ -39,12 +40,13 @@ use ic_sns_governance::{
             },
             neuron::{self, DissolveState, Followees},
             proposal::Action,
-            Account as AccountProto, AddMaturityRequest, Ballot, ClaimSwapNeuronsError,
-            ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
-            DeregisterDappCanisters, Empty, GovernanceError, ManageNeuronResponse,
-            MintTokensRequest, MintTokensResponse, Motion, NervousSystemParameters, Neuron,
-            NeuronId, NeuronIds, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
-            Proposal, ProposalData, ProposalId, RegisterDappCanisters, Vote, WaitForQuietState,
+            upgrade_journal_entry, Account as AccountProto, AddMaturityRequest, Ballot,
+            ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
+            ClaimedSwapNeuronStatus, DeregisterDappCanisters, Empty, GovernanceError,
+            ManageNeuronResponse, MintTokensRequest, MintTokensResponse, Motion,
+            NervousSystemParameters, Neuron, NeuronId, NeuronIds, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalId,
+            RegisterDappCanisters, UpgradeJournalEntry, Vote, WaitForQuietState,
         },
     },
     sns_upgrade::{ListUpgradeStep, ListUpgradeStepsResponse, SnsVersion},
@@ -1714,7 +1716,7 @@ fn test_validate_and_execute_register_dapp_proposal_fails_when_no_canisters_pass
 
 #[test]
 fn test_claim_swap_neurons_rejects_unauthorized_access() {
-    // Set up the test environment with the default sale canister id
+    // Set up the test environment with the default swap canister id
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Build the request, but leave it empty as it is not relevant to the test
@@ -1741,13 +1743,13 @@ fn test_claim_swap_neurons_rejects_unauthorized_access() {
         }
     );
 
-    // Get the configured sale canister id created by the test environment
-    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    // Get the configured swap canister id created by the test environment
+    let authorized_swap_principal = canister_fixture.get_swap_canister_id();
 
     // Call the method with the authorized principal and assert the response is correct
     let response = canister_fixture
         .governance
-        .claim_swap_neurons(request, authorized_sale_principal);
+        .claim_swap_neurons(request, authorized_swap_principal);
 
     assert_eq!(
         response,
@@ -1761,7 +1763,7 @@ fn test_claim_swap_neurons_rejects_unauthorized_access() {
 
 #[test]
 fn test_claim_swap_neurons_reports_invalid_neuron_recipes() {
-    // Set up the test environment with default sale canister id
+    // Set up the test environment with default swap canister id
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Create a neuron id so the test can identify the correct item in the response
@@ -1776,10 +1778,10 @@ fn test_claim_swap_neurons_reports_invalid_neuron_recipes() {
     };
 
     // Call the method
-    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    let authorized_swap_principal = canister_fixture.get_swap_canister_id();
     let response = canister_fixture
         .governance
-        .claim_swap_neurons(request, authorized_sale_principal);
+        .claim_swap_neurons(request, authorized_swap_principal);
 
     // Assert that the invalid neuron parameter results in a SwapNeuron with an invalid status
     assert_eq!(
@@ -1823,10 +1825,10 @@ fn test_claim_swap_neurons_reports_already_existing_neurons() {
         }])),
     };
 
-    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    let authorized_swap_principal = canister_fixture.get_swap_canister_id();
     let response = canister_fixture
         .governance
-        .claim_swap_neurons(request, authorized_sale_principal);
+        .claim_swap_neurons(request, authorized_swap_principal);
 
     assert_eq!(
         response,
@@ -1843,7 +1845,7 @@ fn test_claim_swap_neurons_reports_already_existing_neurons() {
 
 #[test]
 fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
-    // Set up the test environment with default sale canister id.
+    // Set up the test environment with default swap canister id.
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // To cause a failure, set the nervous_system_parameters::max_number_of_neurons to 0
@@ -1882,10 +1884,10 @@ fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
     };
 
     // Call the method
-    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    let authorized_swap_principal = canister_fixture.get_swap_canister_id();
     let response = canister_fixture
         .governance
-        .claim_swap_neurons(request, authorized_sale_principal);
+        .claim_swap_neurons(request, authorized_swap_principal);
 
     // Assert that the invalid neuron parameter results in a SwapNeuron with an invalid status
     assert_eq!(
@@ -1909,7 +1911,7 @@ fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
 
 #[test]
 fn test_claim_swap_neurons_succeeds() {
-    // Set up the test environment with default sale canister id.
+    // Set up the test environment with default swap canister id.
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     let direct_participant_neuron_recipe = NeuronRecipe {
@@ -1944,10 +1946,10 @@ fn test_claim_swap_neurons_succeeds() {
     };
 
     // Call the method
-    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    let authorized_swap_principal = canister_fixture.get_swap_canister_id();
     let response = canister_fixture
         .governance
-        .claim_swap_neurons(request, authorized_sale_principal);
+        .claim_swap_neurons(request, authorized_swap_principal);
 
     // Parse the result from the response
     let swap_neurons = match response.claim_swap_neurons_result.unwrap() {
@@ -2911,12 +2913,17 @@ async fn test_refresh_cached_upgrade_steps() {
 
     // Set up the fixture state
     {
-        let steps = expected_upgrade_steps
+        let steps: Vec<_> = expected_upgrade_steps
             .iter()
             .map(|v| ListUpgradeStep {
                 version: Some(SnsVersion::from(v.clone())),
             })
             .collect();
+        canister_fixture
+            .environment_fixture
+            .push_mocked_canister_reply(ListUpgradeStepsResponse {
+                steps: steps.clone(),
+            });
         canister_fixture
             .environment_fixture
             .push_mocked_canister_reply(ListUpgradeStepsResponse { steps });
@@ -3005,7 +3012,7 @@ async fn test_refresh_cached_upgrade_steps() {
         assert!(!should_refresh);
     }
 
-    // Check that the canister wants to refresh the cached_upgrade_steps after a while
+    // Check that the canister wants to refresh the cached_upgrade_steps after another second
     {
         canister_fixture.advance_time_by(1);
         let should_refresh = canister_fixture
@@ -3013,6 +3020,111 @@ async fn test_refresh_cached_upgrade_steps() {
             .should_refresh_cached_upgrade_steps();
         assert!(should_refresh);
     }
+
+    // Refresh the cached upgrade steps again
+    {
+        canister_fixture
+            .governance
+            .refresh_cached_upgrade_steps()
+            .await;
+    }
+
+    // Check that only one refresh has been recorded in the upgrade journal
+    {
+        let upgrade_journal = canister_fixture
+            .governance
+            .proto
+            .upgrade_journal
+            .clone()
+            .unwrap();
+        assert_eq!(
+            upgrade_journal.entries,
+            vec![UpgradeJournalEntry {
+                // we advanced time by one second after the first refresh
+                timestamp_seconds: Some(DEFAULT_TEST_START_TIMESTAMP_SECONDS + 1),
+                // the event contains the upgrade steps
+                event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
+                    upgrade_journal_entry::UpgradeStepsRefreshed {
+                        upgrade_steps: Some(Versions {
+                            versions: expected_upgrade_steps
+                        }),
+                    }
+                )),
+            }]
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_refresh_cached_upgrade_steps_doesnt_panic_on_invalid_response() {
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+
+    // Set up the fixture state with a deployed version
+    canister_fixture.governance.proto.deployed_version = Some(Version::default());
+
+    // Mock SNS-W to return an invalid response (empty steps)
+    canister_fixture
+        .environment_fixture
+        .push_mocked_canister_reply(ListUpgradeStepsResponse { steps: vec![] });
+
+    // Initial state should be None
+    assert_eq!(canister_fixture.governance.proto.cached_upgrade_steps, None);
+
+    // Refresh should not panic on empty response
+    let now = canister_fixture.governance.env.now();
+    canister_fixture
+        .governance
+        .temporarily_lock_refresh_cached_upgrade_steps();
+    canister_fixture
+        .governance
+        .refresh_cached_upgrade_steps()
+        .await;
+    let expected_upgrade_steps = Some(CachedUpgradeSteps {
+        upgrade_steps: Some(Versions {
+            versions: Vec::new(),
+        }),
+        requested_timestamp_seconds: Some(now),
+        response_timestamp_seconds: Some(now),
+    });
+    assert_eq!(
+        canister_fixture.governance.proto.cached_upgrade_steps,
+        expected_upgrade_steps
+    );
+}
+
+#[tokio::test]
+async fn test_refresh_cached_upgrade_steps_handles_sns_w_error() {
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+
+    // Set up the fixture state with a deployed version
+    canister_fixture.governance.proto.deployed_version = Some(Version::default());
+
+    // Mock SNS-W to return an error
+    canister_fixture
+        .environment_fixture
+        .push_mocked_canister_panic("SNS-W error response");
+
+    let now = canister_fixture.governance.env.now();
+    let expected_upgrade_steps = Some(CachedUpgradeSteps {
+        upgrade_steps: Some(Versions {
+            versions: Vec::new(),
+        }),
+        requested_timestamp_seconds: Some(now),
+        response_timestamp_seconds: Some(now),
+    });
+    canister_fixture.governance.proto.cached_upgrade_steps = expected_upgrade_steps.clone();
+
+    // Refresh should not panic on error response
+    canister_fixture
+        .governance
+        .refresh_cached_upgrade_steps()
+        .await;
+
+    // State should remain None after error
+    assert_eq!(
+        canister_fixture.governance.proto.cached_upgrade_steps,
+        expected_upgrade_steps
+    );
 }
 
 #[tokio::test]

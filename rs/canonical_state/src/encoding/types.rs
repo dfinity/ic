@@ -195,7 +195,7 @@ pub struct RejectContext {
 pub struct SystemMetadata {
     /// The counter used to allocate canister ids.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub id_counter: Option<u64>,
+    pub deprecated_id_counter: Option<u64>,
     /// Hash bytes of the previous (partial) canonical state.
     pub prev_state_hash: Option<Vec<u8>>,
 }
@@ -233,19 +233,6 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
     fn from(
         (header, certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
     ) -> Self {
-        // Replicas with certification version < 9 do not produce reject signals. This
-        // includes replicas with certification version 8, but they may "inherit" reject
-        // signals from a replica with certification version 9 after a downgrade.
-        assert!(
-            header.reject_signals().is_empty() || certification_version >= CertificationVersion::V8,
-            "Replicas with certification version < 9 should not be producing reject signals"
-        );
-        // Replicas with certification version < 17 should not have flags set.
-        assert!(
-            *header.flags() == STREAM_DEFAULT_FLAGS
-                || certification_version >= CertificationVersion::V17
-        );
-
         let mut flags = 0;
         let ic_types::xnet::StreamFlags {
             deprecated_responses_only,
@@ -535,9 +522,7 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
             method_name: request.method_name.clone(),
             method_payload: request.method_payload.clone(),
             cycles_payment: None,
-            metadata: request.metadata.as_ref().and_then(|metadata| {
-                (certification_version >= CertificationVersion::V14).then_some(metadata.into())
-            }),
+            metadata: request.metadata.as_ref().map(From::from),
             deadline: request.deadline.as_secs_since_unix_epoch(),
         }
     }
@@ -743,17 +728,13 @@ impl
     )> for SystemMetadata
 {
     fn from(
-        (metadata, certification_version): (
+        (metadata, _certification_version): (
             &ic_replicated_state::metadata_state::SystemMetadata,
             CertificationVersion,
         ),
     ) -> Self {
         Self {
-            id_counter: if certification_version <= CertificationVersion::V9 {
-                Some(0)
-            } else {
-                None
-            },
+            deprecated_id_counter: None,
             prev_state_hash: metadata
                 .prev_state_hash
                 .as_ref()

@@ -228,10 +228,10 @@ impl Limiter {
 
             if let Some(r) = &b.limiter {
                 return r.try_wait().is_ok();
-            } else {
-                // Always block
-                return false;
             }
+
+            // Always block
+            return false;
         }
 
         // No rules / no match -> pass
@@ -256,7 +256,7 @@ pub async fn middleware(
 ) -> Result<impl IntoResponse, ErrorCause> {
     if !state.acquire_token(
         subnet.id,
-        canister_id.map(|x| (x.0).get().into()),
+        canister_id.map(|x| x.0.get().into()),
         ctx.method_name.as_deref(),
         ctx.request_type,
     ) {

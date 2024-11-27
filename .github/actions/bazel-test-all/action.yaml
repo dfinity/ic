@@ -58,6 +58,9 @@ runs:
               rm "$exportout"
           fi
 
+          # output node name to gihub step summary
+          [ -n "${NODE_NAME:-}" ] && echo "Run on node: $NODE_NAME" >>$GITHUB_STEP_SUMMARY
+
           exit "$BAZEL_EXIT_CODE"
         env:
           BAZEL_COMMAND: ${{ inputs.BAZEL_COMMAND }}

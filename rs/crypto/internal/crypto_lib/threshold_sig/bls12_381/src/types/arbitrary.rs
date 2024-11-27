@@ -1,7 +1,5 @@
 //! Generate data for proptests
 
-#![allow(clippy::unwrap_used)]
-
 use super::*;
 use crate::crypto;
 use ic_crypto_internal_bls12_381_type::Scalar;

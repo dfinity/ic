@@ -101,10 +101,16 @@ function process_bootstrap() {
             cp -rL -T "${TMPDIR}/${ITEM}" "${STATE_ROOT}/data/${ITEM}"
         fi
     done
+    if [ -e "${TMPDIR}/ic-boundary-tls.key" ]; then
+        echo "Setting up self-signed certificate of ic-boundary"
+        cp -L "${TMPDIR}/ic-boundary-tls.key" "${STATE_ROOT}/data/ic-boundary-tls.key"
+        cp -L "${TMPDIR}/ic-boundary-tls.crt" "${STATE_ROOT}/data/ic-boundary-tls.crt"
+        sudo chmod +r ${STATE_ROOT}/data/ic-boundary-tls.key
+    fi
 
     # stash the following configuration files to config store
     # note: keep this list in sync with configurations supported in build-bootstrap-config-image.sh
-    for FILE in filebeat.conf network.conf nns.conf backup.conf malicious_behavior.conf query_stats.conf bitcoind_addr.conf jaeger_addr.conf socks_proxy.conf; do
+    for FILE in filebeat.conf network.conf reward.conf nns.conf backup.conf malicious_behavior.conf query_stats.conf bitcoind_addr.conf jaeger_addr.conf socks_proxy.conf; do
         if [ -e "${TMPDIR}/${FILE}" ]; then
             echo "Setting up ${FILE}"
             cp "${TMPDIR}/${FILE}" "${CONFIG_ROOT}/${FILE}"
@@ -190,12 +196,3 @@ write_metric "guestos_node_operator_private_key_exists" \
     "${node_operator_private_key_exists}" \
     "Existence of a Node Operator private key indicates the node deployment method" \
     "gauge"
-
-# temporary fix to remove existing certificates of the API BNs
-if [ -f /var/lib/ic/data/ic-boundary-tls.key ]; then
-    rm /var/lib/ic/data/ic-boundary-tls.key
-fi
-
-if [ -f /var/lib/ic/data/ic-boundary-tls.crt ]; then
-    rm /var/lib/ic/data/ic-boundary-tls.crt
-fi

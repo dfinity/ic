@@ -172,6 +172,7 @@ mod tests {
     use std::sync::{Arc, Condvar, Mutex};
 
     const INSTRUCTION_LIMIT: u64 = 100_000;
+    const IS_WASM64_EXECUTION: bool = false;
 
     fn execution_parameters() -> ExecutionParameters {
         ExecutionParameters {
@@ -183,6 +184,7 @@ mod tests {
             canister_memory_limit: NumBytes::new(4 << 30),
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
+            canister_guaranteed_callback_quota: 50,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
@@ -217,6 +219,7 @@ mod tests {
                 CyclesAccountManagerConfig::application_subnet(),
             ),
             Some(0),
+            0,
             BTreeMap::new(),
             0,
             ic00_aliases,
@@ -228,6 +231,7 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             caller,
             0,
+            IS_WASM64_EXECUTION,
         )
     }
 

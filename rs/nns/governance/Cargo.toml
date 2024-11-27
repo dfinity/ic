@@ -50,6 +50,7 @@ ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }
+ic-nervous-system-linear-map = { path = "../../nervous_system/linear_map" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
@@ -79,8 +80,8 @@ on_wire = { path = "../../rust_canisters/on_wire" }
 pretty_assertions = { workspace = true }
 prometheus-parse = { workspace = true }
 prost = { workspace = true }
-rust_decimal = { version = "1.25" }
-rust_decimal_macros = "1.25"
+rust_decimal = "1.36.0"
+rust_decimal_macros = "1.36.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
@@ -112,6 +113,7 @@ criterion = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
 ic-config = { path = "../../config" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
+ic-nns-governance = { path = ".", features = ["test"] }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 local_key = { path = "../../tla_instrumentation/local_key" }

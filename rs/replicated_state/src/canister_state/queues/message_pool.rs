@@ -876,7 +876,8 @@ pub(super) struct MessageStats {
     /// Total byte size of all messages in the pool.
     pub(super) size_bytes: usize,
 
-    /// Total byte size of all best-effort messages in the pool.
+    /// Total byte size of all best-effort messages in the pool. Zero iff the pool
+    /// contains zero best-effort messages.
     pub(super) best_effort_message_bytes: usize,
 
     /// Total byte size of all guaranteed responses in the pool.

@@ -1323,12 +1323,13 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_mode = api_type.execution_mode();
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters(execution_mode.clone()).compute_allocation,
+        execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
         api_type.call_context_id(),
@@ -1400,12 +1401,13 @@ fn helper_test_on_low_wasm_memory(
     execution_parameters.memory_allocation = system_state.memory_allocation;
     execution_parameters.wasm_memory_limit = system_state.wasm_memory_limit;
 
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters.compute_allocation,
+        execution_parameters.canister_guaranteed_callback_quota,
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
         api_type.call_context_id(),
@@ -1620,12 +1622,13 @@ fn push_output_request_respects_memory_limits() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_mode = api_type.execution_mode();
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters(execution_mode.clone()).compute_allocation,
+        execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
         api_type.call_context_id(),
@@ -1733,12 +1736,13 @@ fn push_output_request_oversized_request_memory_limits() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_mode = api_type.execution_mode();
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters(execution_mode.clone()).compute_allocation,
+        execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
         api_type.call_context_id(),

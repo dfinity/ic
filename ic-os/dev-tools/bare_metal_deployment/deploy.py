@@ -71,6 +71,9 @@ class Args:
     """
 
     # If present - decompress `upload_img` and inject this into config.ini
+    inject_image_node_reward_type: Optional[str] = None
+
+    # If present - decompress `upload_img` and inject this into config.ini
     inject_image_ipv6_prefix: Optional[str] = None
 
     # If present - decompress `upload_img` and inject this into config.ini
@@ -111,6 +114,9 @@ class Args:
 
     # Run benchmarks if True
     benchmark: bool = flag(default=False)
+
+    # Check HSM capability if True
+    hsm: bool = flag(default=False)
 
     # Path to the benchmark_driver script.
     benchmark_driver_script: Optional[str] = "./benchmark_driver.sh"
@@ -263,6 +269,21 @@ def check_guestos_metrics_version(ip_address: IPv6Address, timeout_secs: int) ->
     return True
 
 
+def check_guestos_hsm_capability(ip_address: IPv6Address, ssh_key_file: Optional[str] = None) -> bool:
+    # Check that the HSM is working correctly, over an SSH session with the node.
+    ssh_key_arg = f"-i {ssh_key_file}" if ssh_key_file else ""
+    ssh_opts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    result = invoke.run(
+        f"ssh {ssh_opts} {ssh_key_arg} admin@{ip_address} '/opt/ic/bin/vsock_guest --attach-hsm && sleep 5 && pkcs11-tool --list-slots | grep \"Nitrokey HSM\"'",
+        warn=True,
+    )
+    if not result or not result.ok:
+        return False
+
+    log.info("HSM check success.")
+    return True
+
+
 def wait(wait_secs: int) -> bool:
     time.sleep(wait_secs)
     return False
@@ -320,7 +341,13 @@ def configure_process_local_log(server_id: str):
     log.add(sys.stderr, format=logger_format)
 
 
-def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path):
+def deploy_server(
+    bmc_info: BMCInfo,
+    wait_time_mins: int,
+    idrac_script_dir: Path,
+    file_share_ssh_key: Optional[str] = None,
+    check_hsm: bool = False,
+):
     # Partially applied function for brevity
     run_func = functools.partial(run_script, idrac_script_dir, bmc_info)
 
@@ -379,9 +406,14 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
 
         def check_connectivity_func() -> bool:
             assert bmc_info.guestos_ipv6_address is not None, "Logic error"
-            return check_guestos_ping_connectivity(
-                bmc_info.guestos_ipv6_address, timeout_secs
-            ) and check_guestos_metrics_version(bmc_info.guestos_ipv6_address, timeout_secs)
+
+            result = check_guestos_ping_connectivity(bmc_info.guestos_ipv6_address, timeout_secs)
+            result = result and check_guestos_metrics_version(bmc_info.guestos_ipv6_address, timeout_secs)
+
+            if check_hsm:
+                result = result and check_guestos_hsm_capability(bmc_info.guestos_ipv6_address, file_share_ssh_key)
+
+            return result
 
         iterate_func = check_connectivity_func if bmc_info.guestos_ipv6_address else wait_func
 
@@ -417,10 +449,17 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
                 return e.args[0]
 
 
-def boot_images(bmc_infos: List[BMCInfo], parallelism: int, wait_time_mins: int, idrac_script_dir: Path):
+def boot_images(
+    bmc_infos: List[BMCInfo],
+    parallelism: int,
+    wait_time_mins: int,
+    idrac_script_dir: Path,
+    file_share_ssh_key: Optional[str] = None,
+    check_hsm: bool = False,
+):
     results: List[OperationResult] = []
 
-    arg_tuples = ((bmc_info, wait_time_mins, idrac_script_dir) for bmc_info in bmc_infos)
+    arg_tuples = ((bmc_info, wait_time_mins, idrac_script_dir, file_share_ssh_key, check_hsm) for bmc_info in bmc_infos)
 
     with Pool(parallelism) as p:
         results = p.starmap(deploy_server, arg_tuples)
@@ -539,6 +578,7 @@ def inject_config_into_image(
     setupos_inject_configuration_path: Path,
     working_dir: Path,
     compressed_image_path: Path,
+    node_reward_type: str,
     ipv6_prefix: str,
     ipv6_gateway: str,
     ipv4_args: Optional[Ipv4Args],
@@ -567,6 +607,7 @@ def inject_config_into_image(
     assert img_path.exists()
 
     image_part = f"--image-path {img_path}"
+    reward_part = f"--node-reward-type {node_reward_type}"
     prefix_part = f"--ipv6-prefix {ipv6_prefix}"
     gateway_part = f"--ipv6-gateway {ipv6_gateway}"
     ipv4_part = ""
@@ -585,7 +626,7 @@ def inject_config_into_image(
         admin_key_part = f'--public-keys "{pub_key}"'
 
     invoke.run(
-        f"{setupos_inject_configuration_path} {image_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part} {admin_key_part}",
+        f"{setupos_inject_configuration_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part} {admin_key_part}",
         echo=True,
     )
 
@@ -649,6 +690,7 @@ def main():
                 Path(args.inject_configuration_tool),
                 Path(tmpdir),
                 Path(args.upload_img),
+                args.inject_image_node_reward_type,
                 args.inject_image_ipv6_prefix,
                 args.inject_image_ipv6_gateway,
                 ipv4_args,
@@ -676,7 +718,12 @@ def main():
     wait_time_mins = args.wait_time
     parallelism = args.parallel
     success = boot_images(
-        bmc_infos=bmc_infos, parallelism=parallelism, wait_time_mins=wait_time_mins, idrac_script_dir=idrac_script_dir
+        bmc_infos=bmc_infos,
+        parallelism=parallelism,
+        wait_time_mins=wait_time_mins,
+        idrac_script_dir=idrac_script_dir,
+        file_share_ssh_key=args.file_share_ssh_key,
+        check_hsm=args.hsm,
     )
 
     if not success:

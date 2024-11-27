@@ -64,7 +64,7 @@ use ic_types::{
 };
 use ic_utils_thread::JoinOnDrop;
 use ic_validate_eq::ValidateEq;
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use prost::Message;
 use std::convert::{From, TryFrom};
 use std::fs::File;
@@ -195,6 +195,7 @@ pub struct CheckpointMetrics {
     tip_handler_request_duration: HistogramVec,
     page_map_flushes: IntCounter,
     page_map_flush_skips: IntCounter,
+    num_page_maps_by_load_status: IntGaugeVec,
     log: ReplicaLogger,
 }
 
@@ -246,6 +247,11 @@ impl CheckpointMetrics {
             "Amount of FlushPageMap requests that were skipped.",
         );
 
+        let num_page_maps_by_load_status = metrics_registry.int_gauge_vec(
+            "state_manager_num_page_maps_by_load_status",
+            "How many PageMaps are loaded or not at the end of checkpoint interval.",
+            &["status"],
+        );
         Self {
             make_checkpoint_step_duration,
             load_checkpoint_step_duration,
@@ -255,6 +261,7 @@ impl CheckpointMetrics {
             tip_handler_request_duration,
             page_map_flushes,
             page_map_flush_skips,
+            num_page_maps_by_load_status,
             log: replica_logger,
         }
     }
@@ -1610,7 +1617,7 @@ impl StateManagerImpl {
                             err
                         )
                     });
-                let state = checkpoint::load_checkpoint_parallel(
+                let state = checkpoint::load_checkpoint_and_validate_parallel(
                     &cp_layout,
                     own_subnet_type,
                     &metrics.checkpoint_metrics,
@@ -1763,6 +1770,32 @@ impl StateManagerImpl {
     /// StateManager.
     pub fn state_layout(&self) -> &StateLayout {
         &self.state_layout
+    }
+
+    /// Populate `num_page_maps_by_load_status` in the metrics with their actual
+    /// values in provided state.
+    fn observe_num_loaded_pagemaps(&self, state: &ReplicatedState) {
+        let mut loaded = 0;
+        let mut not_loaded = 0;
+        for entry in PageMapType::list_all_including_snapshots(state) {
+            if let Some(page_map) = entry.get(state) {
+                if page_map.is_loaded() {
+                    loaded += 1;
+                } else {
+                    not_loaded += 1;
+                }
+            }
+        }
+        self.metrics
+            .checkpoint_metrics
+            .num_page_maps_by_load_status
+            .with_label_values(&["loaded"])
+            .set(loaded);
+        self.metrics
+            .checkpoint_metrics
+            .num_page_maps_by_load_status
+            .with_label_values(&["not_loaded"])
+            .set(not_loaded);
     }
 
     /// Reads states metadata file, returning an empty one if any errors occurs.
@@ -2181,7 +2214,8 @@ impl StateManagerImpl {
             .expect("Failed to receive deallocation notification");
     }
 
-    /// Remove any inmemory state at height h with h < last_height_to_keep, and
+    /// Remove any inmemory state at height h with h < last_height_to_keep
+    /// except for any heights provided in `extra_inmemory_heights_to_keep`, and
     /// any checkpoint at height h < last_checkpoint_to_keep
     ///
     /// Shared inner function of the public functions remove_states_below
@@ -2190,6 +2224,7 @@ impl StateManagerImpl {
         &self,
         last_height_to_keep: Height,
         last_checkpoint_to_keep: Height,
+        extra_inmemory_heights_to_keep: &BTreeSet<Height>,
     ) {
         debug_assert!(
             last_height_to_keep >= last_checkpoint_to_keep,
@@ -2223,6 +2258,19 @@ impl StateManagerImpl {
                     state_metadata.bundled_manifest.as_ref().map(|_| *height)
                 });
 
+        // The `extra_inmemory_heights_to_keep` is used for preserving in-memory states,
+        // but it can safely be included in the `heights_to_keep` set, which retains both
+        // in-memory states and checkpoints. This is safe because:
+        //
+        // 1. When called by `remove_inmemory_states_below`, checkpoints are never removed,
+        //    regardless of the inclusion of `extra_inmemory_heights_to_keep`, so no harm
+        //    or unnecessary preservation occurs.
+        //
+        // 2. When called by `remove_states_below`, `extra_inmemory_heights_to_keep` is always
+        //    an empty set, having no effect on the outcome.
+        //
+        // In the future, separating these sets could clarify their distinct purposes and
+        // simplify reasoning about correctness without relying heavily on input behavior.
         let heights_to_keep: BTreeSet<Height> = states
             .states_metadata
             .keys()
@@ -2232,6 +2280,7 @@ impl StateManagerImpl {
             })
             .chain(std::iter::once(latest_certified_height))
             .chain(latest_manifest_height)
+            .chain(extra_inmemory_heights_to_keep.iter().copied())
             .collect();
 
         // Send object to deallocation thread if it has capacity.
@@ -2368,9 +2417,11 @@ impl StateManagerImpl {
 
             let state_heights = self.list_state_heights(CERT_ANY);
 
-            debug_assert!(heights_to_keep.iter().all(|h| unfiltered_checkpoint_heights
-                .contains(h)
-                || *h == latest_certified_height));
+            debug_assert!(heights_to_keep
+                .iter()
+                .all(|h| unfiltered_checkpoint_heights.contains(h)
+                    || extra_inmemory_heights_to_keep.contains(h)
+                    || *h == latest_certified_height));
 
             debug_assert!(state_heights.contains(&latest_state_height));
             debug_assert!(state_heights.contains(&latest_certified_height));
@@ -2454,6 +2505,7 @@ impl StateManagerImpl {
         state: &mut ReplicatedState,
         height: Height,
     ) -> CreateCheckpointResult {
+        self.observe_num_loaded_pagemaps(state);
         struct PreviousCheckpointInfo {
             dirty_pages: DirtyPages,
             base_manifest: Manifest,
@@ -2556,7 +2608,7 @@ impl StateManagerImpl {
                             .checkpoint_op_duration
                             .with_label_values(&["recover"])
                             .start_timer();
-                        let state = checkpoint::load_checkpoint_parallel_and_mark_verified(
+                        let state = checkpoint::load_checkpoint_and_validate_parallel(
                             &layout,
                             self.own_subnet_type,
                             &self.metrics.checkpoint_metrics,
@@ -2626,16 +2678,11 @@ impl StateManagerImpl {
                 .with_label_values(&["switch_to_checkpoint"])
                 .start_timer();
             switch_to_checkpoint(state, &checkpointed_state);
-            #[cfg(debug_assertions)]
-            {
-                self.tip_channel
-                    .send(TipRequest::ValidateReplicatedState {
-                        checkpointed_state: Box::new(checkpointed_state.clone()),
-                        execution_state: Box::new(state.clone()),
-                    })
-                    .expect("Failed to send Validate request");
-                self.flush_tip_channel();
-            }
+            self.tip_channel
+                .send(TipRequest::ValidateReplicatedState {
+                    checkpoint_layout: cp_layout.clone(),
+                })
+                .expect("Failed to send Validate request");
         }
 
         // On the NNS subnet we never allow incremental manifest computation
@@ -3298,7 +3345,12 @@ impl StateManager for StateManagerImpl {
                 .min(oldest_checkpoint_to_keep)
         };
 
-        self.remove_states_below_impl(oldest_height_to_keep, oldest_checkpoint_to_keep);
+        // The public interface does not protect extra states, so we pass an empty set here.
+        self.remove_states_below_impl(
+            oldest_height_to_keep,
+            oldest_checkpoint_to_keep,
+            &BTreeSet::new(),
+        );
     }
 
     /// Variant of `remove_states_below()` that only removes states committed with
@@ -3310,7 +3362,12 @@ impl StateManager for StateManagerImpl {
     /// * The latest state
     /// * The latest certified state
     /// * State 0
-    fn remove_inmemory_states_below(&self, requested_height: Height) {
+    /// * Specified extra heights to keep
+    fn remove_inmemory_states_below(
+        &self,
+        requested_height: Height,
+        extra_heights_to_keep: &BTreeSet<Height>,
+    ) {
         let _timer = self
             .metrics
             .api_call_duration
@@ -3323,7 +3380,42 @@ impl StateManager for StateManagerImpl {
             .min(requested_height)
             .max(Height::new(1));
 
-        self.remove_states_below_impl(oldest_height_to_keep, Self::INITIAL_STATE_HEIGHT);
+        // Log how Consensus calls this API when it has some extra states to keep.
+        if !extra_heights_to_keep.is_empty() {
+            info!(
+                self.log,
+                "Removing in-memory states below {} except for {:?}",
+                requested_height,
+                extra_heights_to_keep,
+            );
+
+            let states = self.states.read();
+            let checkpoint_heights_below_oldest_height_to_keep: BTreeSet<Height> = states
+                .snapshots
+                .iter()
+                .map(|snapshot| snapshot.height)
+                .filter(|height| {
+                    states.states_metadata.contains_key(height) && *height < oldest_height_to_keep
+                })
+                .collect();
+            drop(states);
+
+            // Memory usage can be saved by removing them if they are not protected by `extra_heights_to_keep`.
+            // Log these potential removal candidates and evaluate them against `extra_heights_to_keep` before actual removal in future versions.
+            if !checkpoint_heights_below_oldest_height_to_keep.is_empty() {
+                info!(
+                    self.log,
+                    "In-memory states at checkpoint heights {:?} are candidates for removal in future.",
+                    checkpoint_heights_below_oldest_height_to_keep,
+                );
+            }
+        }
+
+        self.remove_states_below_impl(
+            oldest_height_to_keep,
+            Self::INITIAL_STATE_HEIGHT,
+            extra_heights_to_keep,
+        );
     }
 
     fn commit_and_certify(
@@ -3635,6 +3727,7 @@ impl StateReader for StateManagerImpl {
             (snapshot.height == height).then(|| Labeled::new(height, snapshot.state.clone()))
         }) {
             Some(state) => Ok(state),
+            // In normal operation, getting in-memory states should not fall back to loading checkpoints.
             None => match load_checkpoint(
                 &self.state_layout,
                 height,
@@ -3642,9 +3735,30 @@ impl StateReader for StateManagerImpl {
                 self.own_subnet_type,
                 Arc::clone(&self.get_fd_factory()),
             ) {
-                Ok((state, _)) => Ok(Labeled::new(height, Arc::new(state))),
+                Ok((state, _)) => {
+                    self.metrics
+                        .state_manager_error_count
+                        .with_label_values(&["state_fallback_to_checkpoint"])
+                        .inc();
+                    warn!(
+                        self.log,
+                        "State @{} unavailable in memory; fallback to checkpoint succeeded.",
+                        height
+                    );
+
+                    Ok(Labeled::new(height, Arc::new(state)))
+                }
                 Err(CheckpointError::NotFound(_)) => Err(StateManagerError::StateRemoved(height)),
                 Err(err) => {
+                    self.metrics
+                        .state_manager_error_count
+                        .with_label_values(&["state_fallback_to_checkpoint"])
+                        .inc();
+                    warn!(
+                        self.log,
+                        "State @{} unavailable in memory; fallback to checkpoint failed.", height
+                    );
+
                     self.metrics
                         .state_manager_error_count
                         .with_label_values(&["recover_checkpoint"])

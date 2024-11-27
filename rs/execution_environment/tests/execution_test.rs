@@ -3,7 +3,6 @@ use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::{
     execution_environment::{Config as HypervisorConfig, DEFAULT_WASM_MEMORY_LIMIT},
-    flag_status::FlagStatus,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_management_canister_types::{
@@ -14,11 +13,12 @@ use ic_management_canister_types::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
 use ic_state_machine_tests::{
-    ErrorCode, IngressState, IngressStatus, MessageId, StateMachine, StateMachineBuilder,
-    StateMachineConfig, UserError,
+    ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
 use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities_metrics::{fetch_gauge, fetch_int_counter};
+use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::messages::MessageId;
 use ic_types::{ingress::WasmResult, messages::NO_DEADLINE, CanisterId, Cycles, NumBytes, Time};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use more_asserts::{assert_gt, assert_le, assert_lt};
@@ -175,7 +175,7 @@ fn create_universal_canister_with_cycles(
     settings: Option<CanisterSettingsArgs>,
     cycles: Cycles,
 ) -> CanisterId {
-    create_canister_with_cycles(env, UNIVERSAL_CANISTER_WASM.into(), settings, cycles)
+    create_canister_with_cycles(env, UNIVERSAL_CANISTER_WASM.to_vec(), settings, cycles)
 }
 
 /// The test checks that the canister heap is discarded on code
@@ -728,7 +728,6 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
         HypervisorConfig {
             subnet_memory_capacity: NumBytes::from(100 * MIB),
             subnet_memory_reservation: NumBytes::from(0),
-            canister_snapshots: FlagStatus::Enabled,
             ..Default::default()
         },
     ));
@@ -795,7 +794,6 @@ fn canister_snapshot_metrics_are_observed() {
         HypervisorConfig {
             subnet_memory_capacity: NumBytes::from(100 * MIB),
             subnet_memory_reservation: NumBytes::from(0),
-            canister_snapshots: FlagStatus::Enabled,
             ..Default::default()
         },
     ));
@@ -849,6 +847,45 @@ fn canister_snapshot_metrics_are_observed() {
 
     let gauge = fetch_gauge(env.metrics_registry(), "scheduler_num_canister_snapshots").unwrap();
     assert_eq!(gauge, 1.0);
+}
+
+#[test]
+fn canister_snapshot_metrics_are_consistent_after_canister_deletion() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let canister_id = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .unwrap();
+
+    let count = fetch_gauge(env.metrics_registry(), "scheduler_num_canister_snapshots").unwrap();
+    assert_eq!(count, 1.0);
+    let memory_usage = fetch_gauge(
+        env.metrics_registry(),
+        "scheduler_canister_snapshots_memory_usage_bytes",
+    )
+    .unwrap();
+    assert_gt!(memory_usage, 0.0);
+
+    env.stop_canister(canister_id)
+        .expect("Error stopping canister.");
+    env.delete_canister(canister_id)
+        .expect("Error deleting canister.");
+
+    let count = fetch_gauge(env.metrics_registry(), "scheduler_num_canister_snapshots").unwrap();
+    assert_eq!(count, 0.0);
+    let memory_usage = fetch_gauge(
+        env.metrics_registry(),
+        "scheduler_canister_snapshots_memory_usage_bytes",
+    )
+    .unwrap();
+    assert_eq!(memory_usage, 0.0);
 }
 
 fn assert_replied(result: Result<WasmResult, UserError>) {
@@ -1344,7 +1381,7 @@ fn canister_with_reserved_balance_is_not_uninstalled_too_early() {
         HypervisorConfig::default(),
     ));
 
-    let initial_cycles = Cycles::new(121 * B);
+    let initial_cycles = Cycles::new(301 * B);
     let canister_a = create_universal_canister_with_cycles(
         &env,
         Some(
@@ -1402,7 +1439,7 @@ fn canister_with_reserved_balance_is_not_frozen_too_early() {
         HypervisorConfig::default(),
     ));
 
-    let initial_cycles = Cycles::new(240 * B);
+    let initial_cycles = Cycles::new(420 * B);
 
     let canister_id = create_universal_canister_with_cycles(
         &env,
@@ -1436,7 +1473,7 @@ fn canister_with_reserved_balance_is_not_frozen_too_early() {
     // The amount of remaining cycles in the main balance should be large enough
     // to start message execution but should be lower than the freezing
     // threshold.
-    let reserved_cycles = Cycles::new(180 * B);
+    let reserved_cycles = Cycles::new(360 * B);
     {
         let mut state = env.get_latest_state().as_ref().clone();
         let canister = state.canister_state_mut(&canister_id).unwrap();
@@ -1591,7 +1628,7 @@ fn execution_observes_oversize_messages() {
 
     let a_id = sm
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             INITIAL_CYCLES_BALANCE,
@@ -1630,7 +1667,7 @@ fn execution_observes_oversize_messages() {
     // Canister A calls B with a large message
     let b_id = sm
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             INITIAL_CYCLES_BALANCE,
@@ -1754,7 +1791,7 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
 
     fn install_canister(env: &StateMachine) -> Result<CanisterId, UserError> {
         let wasm = wat::parse_str(TEST_CANISTER).expect("invalid WAT");
-        env.install_canister_with_cycles(wasm, vec![], None, Cycles::new(121 * B))
+        env.install_canister_with_cycles(wasm, vec![], None, Cycles::new(301 * B))
     }
 
     fn send_ingress(env: &StateMachine, canister_id: &CanisterId) -> MessageId {
@@ -1917,7 +1954,7 @@ fn current_interval_length_works_on_app_subnets() {
 
     let wasm = wat::parse_str(DIRTY_PAGE_CANISTER).unwrap();
     let _canister_id = env
-        .install_canister_with_cycles(wasm, vec![], None, Cycles::new(121 * B))
+        .install_canister_with_cycles(wasm, vec![], None, Cycles::new(301 * B))
         .unwrap();
 
     // Canister install takes 2 rounds.
@@ -1983,7 +2020,7 @@ fn system_subnets_are_not_rate_limited() {
 
     let canister_id = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             Cycles::new(100_000_000_000),
@@ -2193,24 +2230,24 @@ fn test_malicious_input() {
                     (param $reject_fun i32)         (param $reject_env i32)
                   ))
                   (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
-    
+
                   (func $proxy_msg_reply_data_append
                     (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (call $msg_arg_data_size))
                     (call $msg_reply_data_append (i32.load (i32.const 0)) (i32.load (i32.const 4)))
                     (call $msg_reply))
-    
+
                   (func $proxy_msg_arg_data_copy_from_buffer_without_input
                     (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 10)))
-    
+
                   (func $proxy_msg_arg_data_copy_to_oob_buffer
                     (call $msg_arg_data_copy (i32.const 65536) (i32.const 0) (i32.const 10))
                     (call $msg_reply))
-    
+
                   (func $proxy_msg_arg_data_copy_return_last_4_bytes
                     (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 65536))
                     (call $msg_reply_data_append (i32.const 65532) (i32.const 4))
                     (call $msg_reply))
-    
+
                   ;; All the function below are not used
                   (func $proxy_data_certificate_present
                     (i32.const 0)
@@ -2218,23 +2255,23 @@ fn test_malicious_input() {
                     (i32.store)
                     (call $msg_reply_data_append (i32.const 0) (i32.const 1))
                     (call $msg_reply))
-    
+
                   (func $proxy_certified_data_set
                     (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (call $msg_arg_data_size))
                     (call $certified_data_set (i32.const 0) (call $msg_arg_data_size))
                     (call $msg_reply_data_append (i32.const 0) (call $msg_arg_data_size))
                     (call $msg_reply))
-    
+
                   (func $proxy_data_certificate_copy
                     (call $data_certificate_copy (i32.const 0) (i32.const 0) (i32.const 32))
                     (call $msg_reply_data_append (i32.const 0) (i32.const 32))
                     (call $msg_reply))
-    
+
                   (func $f_100 (result i32)
                     i32.const 100)
                   (func $f_200 (result i32)
                     i32.const 200)
-    
+
                   (type $return_i32 (func (result i32))) ;; if this was f32, type checking would fail
                   (func $callByIndex
                     (i32.const 0)
@@ -2242,7 +2279,7 @@ fn test_malicious_input() {
                     (i32.store)
                     (call $msg_reply_data_append (i32.const 0) (i32.const 4))
                     (call $msg_reply))
-    
+
                   (table funcref (elem $f_100 $f_200))
                   (memory $memory 1)
                   (export "memory" (memory $memory))
@@ -2614,7 +2651,7 @@ fn canister_create_with_default_wasm_memory_limit() {
         .with_subnet_type(SubnetType::Application)
         .build();
 
-    let initial_cycles = Cycles::new(200 * B);
+    let initial_cycles = Cycles::new(301 * B);
     let canister_id = create_universal_canister_with_cycles(&env, None, initial_cycles);
 
     let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
@@ -2627,7 +2664,7 @@ fn initialize_default_wasm_memory_limit_with_low_memory_usage() {
         .with_subnet_type(SubnetType::Application)
         .build();
 
-    let initial_cycles = Cycles::new(200 * B);
+    let initial_cycles = Cycles::new(301 * B);
     let canister_id = create_universal_canister_with_cycles(&env, None, initial_cycles);
 
     let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
