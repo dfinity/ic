@@ -1344,6 +1344,7 @@ pub mod sns {
     pub mod governance {
         use super::*;
         use ic_crypto_sha2::Sha256;
+        use ic_nervous_system_agent::sns::governance::GovernanceCanister;
         use ic_sns_governance::pb::v1::get_neuron_response;
         use pocket_ic::ErrorCode;
 
@@ -1553,29 +1554,15 @@ pub mod sns {
                 })
         }
 
+        /// This function is a wrapper around `GovernanceCanister::get_nervous_system_parameters`, kept here for convenience.
         pub async fn get_nervous_system_parameters(
             pocket_ic: &PocketIc,
             canister_id: PrincipalId,
         ) -> sns_pb::NervousSystemParameters {
-            let result = pocket_ic
-                .query_call(
-                    canister_id.into(),
-                    Principal::from(PrincipalId::new_anonymous()),
-                    "get_nervous_system_parameters",
-                    Encode!().unwrap(),
-                )
+            GovernanceCanister { canister_id }
+                .get_nervous_system_parameters(pocket_ic)
                 .await
-                .unwrap();
-            let result = match result {
-                WasmResult::Reply(reply) => reply,
-                WasmResult::Reject(reject) => {
-                    panic!(
-                        "get_nervous_system_parameters rejected by SNS governance: {:#?}",
-                        reject
-                    )
-                }
-            };
-            Decode!(&result, sns_pb::NervousSystemParameters).unwrap()
+                .unwrap()
         }
 
         pub async fn propose_to_advance_sns_target_version(
