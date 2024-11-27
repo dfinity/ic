@@ -375,25 +375,37 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     runners.append(&mut registry_runners);
 
     // HTTP Logs Anonymization
-    let tracker = (cli.misc.crypto_config)
-        .zip(cli.obs.obs_log_anonymization_canister_id)
-        .map(|(crypto_config, log_anonymization_cid)| {
-            #[allow(clippy::disallowed_methods)]
-            let c = tokio::task::block_in_place(|| {
-                Arc::new(CryptoComponent::new(
-                    &crypto_config,                          // config
-                    Some(tokio::runtime::Handle::current()), // tokio_runtime_handle
-                    registry_client.clone(),                 // registry_client
-                    no_op_logger(),                          // logger
-                    None,                                    // metrics
-                ))
-            });
+    let tracker = match (
+        cli.misc.crypto_config,
+        cli.obs.obs_log_anonymization_canister_id,
+    ) {
+        (Some(crypto_config), Some(log_anonymization_cid)) => {
+            let c = tokio::task::spawn_blocking({
+                let registry_client = registry_client.clone();
 
-            let pk = c
-                .current_node_public_keys()
-                .map_err(|err| anyhow!("failed to retrieve public key: {err:?}"))?
-                .node_signing_public_key
-                .context("missing node public key")?;
+                move || {
+                    Arc::new(CryptoComponent::new(
+                        &crypto_config,                          // config
+                        Some(tokio::runtime::Handle::current()), // tokio_runtime_handle
+                        registry_client,                         // registry_client
+                        no_op_logger(),                          // logger
+                        None,                                    // metrics
+                    ))
+                }
+            })
+            .await?;
+
+            let pk = tokio::task::spawn_blocking({
+                let c = c.clone();
+
+                move || {
+                    c.current_node_public_keys()
+                        .map_err(|err| anyhow!("failed to retrieve public key: {err:?}"))?
+                        .node_signing_public_key
+                        .context("missing node public key")
+                }
+            })
+            .await??;
 
             let nid = derive_node_id(&pk).expect("failed to derive node id");
 
@@ -448,9 +460,10 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             // Tracker
             let tracker = AnonymizationTracker::new(rng, c.into())?;
 
-            Ok::<_, Error>(tracker)
-        })
-        .transpose()?;
+            Some(tracker)
+        }
+        _ => None,
+    };
 
     TokioScope::scope_and_block(move |s| {
         if let Some(v) = registry_replicator {
