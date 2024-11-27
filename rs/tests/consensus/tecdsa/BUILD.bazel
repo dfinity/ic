@@ -346,7 +346,6 @@ tecdsa_performance_test_template = system_test_nns(
 
 system_test_nns(
     name = "tecdsa_performance_test",
-    tags = ["manual"],
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
@@ -354,13 +353,13 @@ system_test_nns(
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "ecdsa_secp256k1",
         "BENCHMARK_NAME": "tecdsa_performance_test",
     },
+    tags = ["manual"],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
 )
 
 system_test_nns(
     name = "tschnorr_ed25519_performance_test",
-    tags = ["manual"],
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
@@ -368,13 +367,13 @@ system_test_nns(
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "schnorr_ed25519",
         "BENCHMARK_NAME": "tschnorr_ed25519_performance_test",
     },
+    tags = ["manual"],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
 )
 
 system_test_nns(
     name = "tschnorr_bip340_performance_test",
-    tags = ["manual"],
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
@@ -382,6 +381,7 @@ system_test_nns(
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "schnorr_bip340",
         "BENCHMARK_NAME": "tschnorr_ed25519_performance_test",
     },
+    tags = ["manual"],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
 )
