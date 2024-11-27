@@ -158,7 +158,7 @@ impl BoundaryNodeManager {
             .as_ref()
             .ok_or_else(|| OrchestratorError::DomainNameMissingError(self.node_id))?;
 
-        const LOG_ANONYMIZATION_CID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+        const LOG_ANONYMIZATION_CID: &str = "uz2z3-qyaaa-aaaaq-qaacq-cai";
 
         // TODO: Should these values be settable via config?
         let args = vec![
