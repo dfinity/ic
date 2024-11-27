@@ -624,7 +624,7 @@ impl<Tokens: TokensType> Ledger<Tokens> {
     }
 
     pub fn index_principal(&self) -> Option<Principal> {
-        self.index_principal.clone()
+        self.index_principal
     }
 
     pub fn metadata(&self) -> Vec<(String, Value)> {
