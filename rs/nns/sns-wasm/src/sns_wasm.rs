@@ -497,11 +497,9 @@ where
                     },
                 );
 
-                if let Err(err) = self.upgrade_path.add_wasm(new_latest_version) {
-                    add_wasm_response::Result::Error(SnsWasmError { message: err })
-                } else {
-                    add_wasm_response::Result::Hash(hash.to_vec())
-                }
+                self.upgrade_path.add_wasm(new_latest_version);
+
+                add_wasm_response::Result::Hash(hash.to_vec())
             }
             Err(e) => {
                 println!("{}add_wasm unable to persist WASM: {}", LOG_PREFIX, e);
@@ -1869,12 +1867,10 @@ impl UpgradePath {
         Ok(new_latest_version)
     }
 
-    pub fn add_wasm(&mut self, new_latest_version: SnsVersion) -> Result<(), String> {
+    pub fn add_wasm(&mut self, new_latest_version: SnsVersion) {
         self.upgrade_path
             .insert(self.latest_version.clone(), new_latest_version.clone());
         self.latest_version = new_latest_version;
-
-        Ok(())
     }
 
     pub fn get_next_version(
