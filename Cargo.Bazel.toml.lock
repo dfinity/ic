@@ -3069,28 +3069,28 @@ dependencies = [
  "hyper-rustls 0.27.3",
  "hyper-socks2",
  "hyper-util",
- "ic-agent 0.39.1",
+ "ic-agent",
  "ic-bn-lib",
  "ic-btc-interface",
  "ic-btc-test-utils",
  "ic-canister-log",
  "ic-canister-sig-creation",
- "ic-cbor",
+ "ic-cbor 2.6.0",
  "ic-cdk 0.16.0",
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
- "ic-certificate-verification",
- "ic-certification",
+ "ic-certificate-verification 2.6.0",
+ "ic-certification 2.6.0",
  "ic-certified-map",
- "ic-http-certification",
+ "ic-http-certification 2.6.0",
  "ic-http-gateway",
  "ic-metrics-encoder",
- "ic-response-verification",
+ "ic-response-verification 2.6.0",
  "ic-sha3",
  "ic-stable-structures",
  "ic-test-state-machine-client",
- "ic-transport-types 0.39.1",
- "ic-utils 0.39.0",
+ "ic-transport-types",
+ "ic-utils",
  "ic-verify-bls-signature 0.6.0",
  "ic-wasm",
  "ic-xrc-types",
@@ -4883,47 +4883,6 @@ dependencies = [
 
 [[package]]
 name = "ic-agent"
-version = "0.37.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fd3fdf5e5c4f4a9fe5ca612f0febd22dcb161d2f2b75b0142326732be5e4978"
-dependencies = [
- "async-lock",
- "backoff",
- "cached 0.52.0",
- "candid",
- "ed25519-consensus",
- "futures-util",
- "hex",
- "http 1.1.0",
- "http-body 1.0.1",
- "ic-certification",
- "ic-transport-types 0.37.1",
- "ic-verify-bls-signature 0.5.0",
- "k256",
- "leb128",
- "p256",
- "pem 3.0.3",
- "pkcs8",
- "rand 0.8.5",
- "rangemap",
- "reqwest 0.12.9",
- "ring 0.17.7",
- "rustls-webpki 0.102.8",
- "sec1",
- "serde",
- "serde_bytes",
- "serde_cbor",
- "serde_repr",
- "sha2 0.10.8",
- "simple_asn1",
- "thiserror 1.0.68",
- "time",
- "tokio",
- "url",
-]
-
-[[package]]
-name = "ic-agent"
 version = "0.39.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "158138fcb769fe6288e63d5db221c904e472cfb7d376aba13a38c060f2984e63"
@@ -4941,8 +4900,8 @@ dependencies = [
  "hex",
  "http 1.1.0",
  "http-body 1.0.1",
- "ic-certification",
- "ic-transport-types 0.39.1",
+ "ic-certification 2.6.0",
+ "ic-transport-types",
  "ic-verify-bls-signature 0.5.0",
  "k256",
  "leb128",
@@ -5072,8 +5031,8 @@ dependencies = [
  "candid",
  "hex",
  "ic-cdk 0.14.1",
- "ic-certification",
- "ic-representation-independent-hash",
+ "ic-certification 2.6.0",
+ "ic-representation-independent-hash 2.6.0",
  "lazy_static",
  "serde",
  "serde_bytes",
@@ -5089,7 +5048,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02b0e48b4166c891e79d624f3a184b4a7c145d307576872d9a46dedb8c73ea8f"
 dependencies = [
  "candid",
- "ic-certification",
+ "ic-certification 2.6.0",
+ "leb128",
+ "nom",
+ "thiserror 1.0.68",
+]
+
+[[package]]
+name = "ic-cbor"
+version = "2.6.0"
+source = "git+https://github.com/dfinity/response-verification?rev=dcbd7d471e1a5f95d8b1e8a66c4a35fd2a68268f#dcbd7d471e1a5f95d8b1e8a66c4a35fd2a68268f"
+dependencies = [
+ "candid",
+ "ic-certification 2.6.0",
  "leb128",
  "nom",
  "thiserror 1.0.68",
@@ -5266,8 +5237,26 @@ checksum = "586e09b06a93d930f6a33f5f909bb11d2e4a06be3635dd5da1eb0e6554b7dae4"
 dependencies = [
  "cached 0.47.0",
  "candid",
- "ic-cbor",
- "ic-certification",
+ "ic-cbor 2.6.0",
+ "ic-certification 2.6.0",
+ "lazy_static",
+ "leb128",
+ "miracl_core_bls12381",
+ "nom",
+ "parking_lot 0.12.1",
+ "sha2 0.10.8",
+ "thiserror 1.0.68",
+]
+
+[[package]]
+name = "ic-certificate-verification"
+version = "2.6.0"
+source = "git+https://github.com/dfinity/response-verification?rev=dcbd7d471e1a5f95d8b1e8a66c4a35fd2a68268f#dcbd7d471e1a5f95d8b1e8a66c4a35fd2a68268f"
+dependencies = [
+ "cached 0.47.0",
+ "candid",
+ "ic-cbor 2.6.0",
+ "ic-certification 2.6.0",
  "lazy_static",
  "leb128",
  "miracl_core_bls12381",
@@ -5282,6 +5271,17 @@ name = "ic-certification"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e64ee3d8b6e81b51f245716d3e0badb63c283c00f3c9fb5d5219afc30b5bf821"
+dependencies = [
+ "hex",
+ "serde",
+ "serde_bytes",
+ "sha2 0.10.8",
+]
+
+[[package]]
+name = "ic-certification"
+version = "2.6.0"
+source = "git+https://github.com/dfinity/response-verification?rev=dcbd7d471e1a5f95d8b1e8a66c4a35fd2a68268f#dcbd7d471e1a5f95d8b1e8a66c4a35fd2a68268f"
 dependencies = [
  "hex",
  "serde",
@@ -5308,9 +5308,25 @@ checksum = "ff0b97e949845039149dc5e7ea6a7c12ee4333bb402e37bc507904643c7b3e41"
 dependencies = [
  "candid",
  "http 0.2.12",
- "ic-certification",
- "ic-representation-independent-hash",
+ "ic-certification 2.6.0",
+ "ic-representation-independent-hash 2.6.0",
  "serde",
+ "thiserror 1.0.68",
+ "urlencoding",
+]
+
+[[package]]
+name = "ic-http-certification"
+version = "2.6.0"
+source = "git+https://github.com/dfinity/response-verification?rev=dcbd7d471e1a5f95d8b1e8a66c4a35fd2a68268f#dcbd7d471e1a5f95d8b1e8a66c4a35fd2a68268f"
+dependencies = [
+ "base64 0.21.6",
+ "candid",
+ "http 0.2.12",
+ "ic-certification 2.6.0",
+ "ic-representation-independent-hash 2.6.0",
+ "serde",
+ "serde_cbor",
  "thiserror 1.0.68",
  "urlencoding",
 ]
@@ -5318,7 +5334,7 @@ dependencies = [
 [[package]]
 name = "ic-http-gateway"
 version = "0.0.0"
-source = "git+https://github.com/dfinity/http-gateway?tag=0.1.0-b0#3be26b5a2c71bf56e05b910951c1935a1ac550c4"
+source = "git+https://github.com/dfinity/http-gateway?tag=0.1.0-b3#192559e062cfa90d5dbb4df03198f66a80f31046"
 dependencies = [
  "bytes",
  "candid",
@@ -5326,10 +5342,10 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.1",
  "http-body-util",
- "ic-agent 0.37.1",
- "ic-http-certification",
- "ic-response-verification",
- "ic-utils 0.37.0",
+ "ic-agent",
+ "ic-http-certification 2.6.0",
+ "ic-response-verification 2.6.0",
+ "ic-utils",
  "thiserror 1.0.68",
 ]
 
@@ -5350,6 +5366,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-representation-independent-hash"
+version = "2.6.0"
+source = "git+https://github.com/dfinity/response-verification?rev=dcbd7d471e1a5f95d8b1e8a66c4a35fd2a68268f#dcbd7d471e1a5f95d8b1e8a66c4a35fd2a68268f"
+dependencies = [
+ "leb128",
+ "sha2 0.10.8",
+]
+
+[[package]]
 name = "ic-response-verification"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5360,11 +5385,34 @@ dependencies = [
  "flate2",
  "hex",
  "http 0.2.12",
- "ic-cbor",
- "ic-certificate-verification",
- "ic-certification",
- "ic-http-certification",
- "ic-representation-independent-hash",
+ "ic-cbor 2.6.0",
+ "ic-certificate-verification 2.6.0",
+ "ic-certification 2.6.0",
+ "ic-http-certification 2.6.0",
+ "ic-representation-independent-hash 2.6.0",
+ "leb128",
+ "log",
+ "nom",
+ "sha2 0.10.8",
+ "thiserror 1.0.68",
+ "urlencoding",
+]
+
+[[package]]
+name = "ic-response-verification"
+version = "2.6.0"
+source = "git+https://github.com/dfinity/response-verification?rev=dcbd7d471e1a5f95d8b1e8a66c4a35fd2a68268f#dcbd7d471e1a5f95d8b1e8a66c4a35fd2a68268f"
+dependencies = [
+ "base64 0.21.6",
+ "candid",
+ "flate2",
+ "hex",
+ "http 0.2.12",
+ "ic-cbor 2.6.0",
+ "ic-certificate-verification 2.6.0",
+ "ic-certification 2.6.0",
+ "ic-http-certification 2.6.0",
+ "ic-representation-independent-hash 2.6.0",
  "leb128",
  "log",
  "nom",
@@ -5405,30 +5453,13 @@ dependencies = [
 
 [[package]]
 name = "ic-transport-types"
-version = "0.37.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "875dc4704780383112e8e8b5063a1b98de114321d0c7d3e7f635dcf360a57fba"
-dependencies = [
- "candid",
- "hex",
- "ic-certification",
- "leb128",
- "serde",
- "serde_bytes",
- "serde_repr",
- "sha2 0.10.8",
- "thiserror 1.0.68",
-]
-
-[[package]]
-name = "ic-transport-types"
 version = "0.39.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d8789a5c176bb1b925fa58ca97c651a3995d504e76101e93d2a17f558bdcf66"
 dependencies = [
  "candid",
  "hex",
- "ic-certification",
+ "ic-certification 2.6.0",
  "leb128",
  "serde",
  "serde_bytes",
@@ -5440,28 +5471,6 @@ dependencies = [
 
 [[package]]
 name = "ic-utils"
-version = "0.37.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fa832296800758c9c921dd1704985ded6b3e6fbc3aee409727eb1f00d69a595"
-dependencies = [
- "async-trait",
- "candid",
- "futures-util",
- "ic-agent 0.37.1",
- "once_cell",
- "semver",
- "serde",
- "serde_bytes",
- "sha2 0.10.8",
- "strum 0.26.3",
- "strum_macros 0.26.4",
- "thiserror 1.0.68",
- "time",
- "tokio",
-]
-
-[[package]]
-name = "ic-utils"
 version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb1da4a68c45146018b8496c157ad94126b9c202ab4400c6c0a9030c1ef0f0ba"
@@ -5469,7 +5478,7 @@ dependencies = [
  "async-trait",
  "candid",
  "futures-util",
- "ic-agent 0.39.1",
+ "ic-agent",
  "once_cell",
  "semver",
  "serde",
