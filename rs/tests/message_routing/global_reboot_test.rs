@@ -215,12 +215,9 @@ pub fn assert_metrics_progress_without_errors(
 
         assert_eq!(pre_reboot.seq_errors, 0);
         assert_eq!(post_reboot.seq_errors, 0);
-        assert!(pre_reboot.calls_attempted - pre_reboot.call_errors > 0);
+        assert!(pre_reboot.requests_sent() > 0);
         // Assert positive dynamics after reboot.
-        assert!(
-            post_reboot.calls_attempted - post_reboot.call_errors
-                > pre_reboot.calls_attempted - pre_reboot.call_errors
-        );
+        assert!(post_reboot.requests_sent() > pre_reboot.requests_sent());
 
         let responses_pre_reboot = pre_reboot.latency_distribution.buckets().last().unwrap().1
             + pre_reboot.reject_responses;

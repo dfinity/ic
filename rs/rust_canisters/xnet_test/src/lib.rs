@@ -54,6 +54,11 @@ impl Metrics {
         self.log.push_str("-----\n");
         self.log.push_str(&other.log);
     }
+
+    /// Returns the number of requests sent successfully.
+    pub fn requests_sent(&self) -> usize {
+        self.calls_attempted - self.call_errors
+    }
 }
 
 /// Latency distribution implements a cumulative histogram used to record

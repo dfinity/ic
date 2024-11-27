@@ -363,23 +363,19 @@ pub async fn test_impl(
             m.latency_distribution.buckets().last().unwrap().1 + m.reject_responses;
         // All messages sent more than `targeted_latency_seconds` before the end of the
         // test should have gotten a response.
-        let responses_expected = ((m.calls_attempted - m.call_errors) as f64
+        let responses_expected = (m.requests_sent() as f64
             * (runtime - targeted_latency_seconds) as f64
             / runtime as f64) as usize;
         // Account for requests enqueued this round (in case canister messages were
         // executed before ingress messages, i.e. the heartbeat was executed before
         // metrics collection) or uncounted responses (if ingress executed first).
         let responses_expected = responses_expected - subnet_to_subnet_rate;
-        let actual = format!(
-            "{}/{}",
-            responses_received,
-            m.calls_attempted - m.call_errors
-        );
+        let actual = format!("{}/{}", responses_received, m.requests_sent());
         let msg = format!(
             "Expected requests sent more than {}s ago ({}/{}) to receive responses",
             targeted_latency_seconds,
             responses_expected,
-            m.calls_attempted - m.call_errors
+            m.requests_sent()
         );
         expect(
             responses_received >= responses_expected,
