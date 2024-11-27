@@ -30,8 +30,11 @@ options may be specified:
   --ipv4_gateway a.b.c.d
     (optional) Default IPv4 gateway (e.g. 18.208.190.33).
 
-    --domain domain
+  --domain domain
     (optional) The domain name to assign to the guest.
+
+  --node_reward_type node_reward_type
+    (optional) The node reward type determines node rewards
 
   --hostname name
     Name to assign to the host. Will be used in logging.
@@ -106,6 +109,10 @@ options may be specified:
   --socks_proxy url
     The URL of the socks proxy to use. To be used in
     systems tests only.
+
+  --generate_ic_boundary_tls_cert domain_name
+    Generate and inject a self-signed TLS certificate and key for ic-boundary
+    for the given domain name. To be used in system tests only.
 EOF
 }
 
@@ -147,6 +154,9 @@ function build_ic_bootstrap_tar() {
                 ;;
             --domain)
                 DOMAIN="$2"
+                ;;
+            --node_reward_type)
+                NODE_REWARD_TYPE="$2"
                 ;;
             --hostname)
                 HOSTNAME="$2"
@@ -199,6 +209,9 @@ function build_ic_bootstrap_tar() {
             --socks_proxy)
                 SOCKS_PROXY="$2"
                 ;;
+            --generate_ic_boundary_tls_cert)
+                IC_BOUNDARY_TLS_CERT_DOMAIN_NAME="$2"
+                ;;
             *)
                 echo "Unrecognized option: $1"
                 usage
@@ -224,6 +237,9 @@ ${IPV4_ADDRESS:+ipv4_address=$IPV4_ADDRESS}
 ${IPV4_GATEWAY:+ipv4_gateway=$IPV4_GATEWAY}
 ${DOMAIN:+domain=$DOMAIN}
 EOF
+    if [ "${NODE_REWARD_TYPE}" != "" ]; then
+        echo "node_reward_type=$NODE_REWARD_TYPE" >"${BOOTSTRAP_TMPDIR}/reward.conf"
+    fi
     if [ "${ELASTICSEARCH_HOSTS}" != "" ]; then
         echo "elasticsearch_hosts=$ELASTICSEARCH_HOSTS" >"${BOOTSTRAP_TMPDIR}/filebeat.conf"
     fi
@@ -269,6 +285,12 @@ EOF
     fi
     if [ "${NODE_OPERATOR_PRIVATE_KEY}" != "" ]; then
         cp "${NODE_OPERATOR_PRIVATE_KEY}" "${BOOTSTRAP_TMPDIR}/node_operator_private_key.pem"
+    fi
+    if [[ -n "$IC_BOUNDARY_TLS_CERT_DOMAIN_NAME" ]]; then
+        openssl req -x509 -newkey rsa:2048 \
+            -keyout ${BOOTSTRAP_TMPDIR}/ic-boundary-tls.key \
+            -out ${BOOTSTRAP_TMPDIR}/ic-boundary-tls.crt -sha256 -days 3650 -nodes \
+            -subj /C=CH/ST=Zurich/L=Zurich/O=InternetComputer/OU=ApiBoundaryNodes/CN=${IC_BOUNDARY_TLS_CERT_DOMAIN_NAME}
     fi
 
     tar cf "${OUT_FILE}" \

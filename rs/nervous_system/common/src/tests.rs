@@ -1,6 +1,6 @@
 use super::*;
 
-use crate::ledger::compute_neuron_staking_subaccount_bytes;
+use crate::{hash_to_hex_string, ledger::compute_neuron_staking_subaccount_bytes};
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 
@@ -45,4 +45,22 @@ fn test_compute_neuron_staking_subaccount_bytes() {
         compute_neuron_staking_subaccount_bytes(principal_id, nonce),
         hash
     );
+}
+
+#[test]
+fn test_hash_to_hex_string_empty() {
+    let empty: [u8; 0] = [];
+    assert_eq!(hash_to_hex_string(&empty), "");
+}
+
+#[test]
+fn test_hash_to_hex_string_single_byte() {
+    let single = [0xAB];
+    assert_eq!(hash_to_hex_string(&single), "ab");
+}
+
+#[test]
+fn test_hash_to_hex_string_multiple_bytes() {
+    let bytes = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0];
+    assert_eq!(hash_to_hex_string(&bytes), "123456789abcdef0");
 }

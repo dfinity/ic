@@ -15,11 +15,14 @@ message DkgMessage {
 message DkgPayload {
   oneof val {
     Summary summary = 1;
-    Dealings dealings = 2;
+    DkgDataPayload data_payload = 3;
   }
+
+  reserved 2;
+  reserved "dealings";
 }
 
-message Dealings {
+message DkgDataPayload {
   repeated DkgMessage dealings = 1;
   uint64 summary_height = 2;
 }
@@ -41,6 +44,7 @@ message Summary {
 message TaggedNiDkgTranscript {
   NiDkgTranscript transcript = 1;
   NiDkgTag tag = 2;
+  optional MasterPublicKeyId key_id = 3;
 }
 
 message CallbackIdedNiDkgTranscript {

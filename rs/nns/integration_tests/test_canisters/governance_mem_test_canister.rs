@@ -313,6 +313,7 @@ fn allocate_neuron(id: u64) -> Neuron {
         spawn_at_timestamp_seconds: None,
         neuron_type: None,
         visibility: None,
+        voting_power_refreshed_timestamp_seconds: None,
     }
 }
 

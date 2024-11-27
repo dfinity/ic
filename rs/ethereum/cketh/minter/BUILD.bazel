@@ -42,6 +42,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-ethereum-types",
+        "//packages/icrc-cbor:icrc-cbor_u256",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/secp256k1",
@@ -207,6 +208,7 @@ rust_binary(
             "//rs/ethereum/ledger-suite-orchestrator/test_utils",
             "//rs/state_machine_tests",
             "//rs/types/base_types",
+            "//rs/types/management_canister_types",
             "@crate_index//:assert_matches",
             "@crate_index//:candid",
             "@crate_index//:ethers-core",

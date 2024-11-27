@@ -89,7 +89,7 @@ rust_test(
     data = [
         "testdata/nftables_assigned_replica.conf.golden",
         "testdata/nftables_boundary_node.conf.golden",
-        "//ic-os/components:ic/ic.json5.template",
+        "//ic-os/components:ic/generate-ic-config/ic.json5.template",
     ],
     deps = [
         # Keep sorted.
@@ -99,6 +99,7 @@ rust_test(
         "//rs/crypto/test_utils/tls",
         "//rs/registry/fake",
         "//rs/registry/proto_data_provider",
+        "//rs/registry/subnet_type",
         "//rs/test_utilities",
         "//rs/test_utilities/consensus",
         "//rs/test_utilities/in_memory_logger",

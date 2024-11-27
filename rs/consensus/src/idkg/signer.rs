@@ -14,7 +14,9 @@ use ic_interfaces::idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+    SignWithThresholdContext, ThresholdArguments,
+};
 use ic_replicated_state::ReplicatedState;
 use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::idkg::common::{
@@ -570,11 +572,17 @@ impl ThresholdSigner for ThresholdSignerImpl {
             .get_state()
             .signature_request_contexts()
             .iter()
-            .flat_map(|(callback_id, context)| {
-                context.matched_pre_signature.map(|(_, height)| RequestId {
+            .flat_map(|(callback_id, context)| match &context.args {
+                ThresholdArguments::Ecdsa(_) | ThresholdArguments::Schnorr(_) => {
+                    context.matched_pre_signature.map(|(_, height)| RequestId {
+                        callback_id: *callback_id,
+                        height,
+                    })
+                }
+                ThresholdArguments::VetKd(args) => Some(RequestId {
                     callback_id: *callback_id,
-                    height,
-                })
+                    height: args.height,
+                }),
             })
             .collect();
         idkg_pool
@@ -849,7 +857,7 @@ mod tests {
     };
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::consensus::idkg::*;
-    use ic_types::crypto::{canister_threshold_sig::ExtendedDerivationPath, AlgorithmId};
+    use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{Height, Randomness};
     use std::ops::Deref;
@@ -857,7 +865,7 @@ mod tests {
 
     #[test]
     fn test_ecdsa_signer_action() {
-        let key_id = fake_ecdsa_master_public_key_id();
+        let key_id = fake_ecdsa_idkg_master_public_key_id();
         let height = Height::from(100);
         let (id_1, id_2, id_3, id_4, id_5) = (
             request_id(1, height),
@@ -925,7 +933,7 @@ mod tests {
         }
     }
 
-    fn test_signature_shares_purging(key_id: MasterPublicKeyId) {
+    fn test_signature_shares_purging(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, signer, state_manager) =
@@ -995,7 +1003,7 @@ mod tests {
         }
     }
 
-    fn test_send_signature_shares(key_id: MasterPublicKeyId) {
+    fn test_send_signature_shares(key_id: IDkgMasterPublicKeyId) {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let ids: Vec<_> = (0..5).map(|i| request_id(i, height)).collect();
@@ -1107,17 +1115,17 @@ mod tests {
         }
     }
 
-    fn test_send_signature_shares_incomplete_contexts(key_id: MasterPublicKeyId) {
+    fn test_send_signature_shares_incomplete_contexts(key_id: IDkgMasterPublicKeyId) {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let ids: Vec<_> = (0..5).map(|i| request_id(i, height)).collect();
         let pids: Vec<_> = (0..5).map(|_| generator.next_pre_signature_id()).collect();
 
-        let wrong_key_id = match key_id {
+        let wrong_key_id = match key_id.inner() {
             MasterPublicKeyId::Ecdsa(_) => {
-                fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
+                fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519)
             }
-            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id(),
+            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_idkg_master_public_key_id(),
             MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
 
@@ -1181,7 +1189,7 @@ mod tests {
         }
     }
 
-    fn test_send_signature_shares_when_failure(key_id: MasterPublicKeyId) {
+    fn test_send_signature_shares_when_failure(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
@@ -1244,7 +1252,7 @@ mod tests {
         }
     }
 
-    fn test_send_signature_shares_with_complaints(key_id: MasterPublicKeyId) {
+    fn test_send_signature_shares_with_complaints(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
@@ -1280,7 +1288,7 @@ mod tests {
                     &state,
                 );
                 let requested_signatures_count = ids.len();
-                let expected_complaints_count = match key_id {
+                let expected_complaints_count = match key_id.inner() {
                     MasterPublicKeyId::Ecdsa(_) => requested_signatures_count * 5,
                     MasterPublicKeyId::Schnorr(_) => requested_signatures_count * 2,
                     MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
@@ -1308,7 +1316,7 @@ mod tests {
         }
     }
 
-    fn test_crypto_verify_sig_share(key_id: MasterPublicKeyId) {
+    fn test_crypto_verify_sig_share(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
@@ -1328,7 +1336,7 @@ mod tests {
                     caller: user_test_id(1).get(),
                     derivation_path: vec![],
                 };
-                let (receivers, inputs) = match key_id {
+                let (receivers, inputs) = match key_id.inner() {
                     MasterPublicKeyId::Ecdsa(_) => {
                         let inputs = generate_tecdsa_protocol_inputs(
                             &env,
@@ -1355,6 +1363,7 @@ mod tests {
                             &key_transcript,
                             &[0; 32],
                             Randomness::from([0; 32]),
+                            None,
                             &derivation_path,
                             algorithm_for_key_id(&key_id),
                             &mut rng,
@@ -1398,7 +1407,7 @@ mod tests {
         }
     }
 
-    fn test_validate_signature_shares(key_id: MasterPublicKeyId) {
+    fn test_validate_signature_shares(key_id: IDkgMasterPublicKeyId) {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let (id_1, id_2, id_3, id_4) = (
@@ -1508,7 +1517,7 @@ mod tests {
         }
     }
 
-    fn test_validate_signature_shares_mismatching_schemes(key_id: MasterPublicKeyId) {
+    fn test_validate_signature_shares_mismatching_schemes(key_id: IDkgMasterPublicKeyId) {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let (id_1, id_2) = (request_id(1, height), request_id(2, height));
@@ -1546,11 +1555,11 @@ mod tests {
         });
 
         // A share for the second context with mismatching schemes
-        let key_id_wrong_scheme = match key_id {
+        let key_id_wrong_scheme = match key_id.inner() {
             MasterPublicKeyId::Ecdsa(_) => {
-                fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
+                fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519)
             }
-            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id(),
+            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_idkg_master_public_key_id(),
             MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
         let message = create_signature_share(&key_id_wrong_scheme, NODE_2, id_2);
@@ -1584,7 +1593,7 @@ mod tests {
         }
     }
 
-    fn test_validate_signature_shares_incomplete_contexts(key_id: MasterPublicKeyId) {
+    fn test_validate_signature_shares_incomplete_contexts(key_id: IDkgMasterPublicKeyId) {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let ids: Vec<_> = (0..3).map(|i| request_id(i, height)).collect();
@@ -1674,7 +1683,7 @@ mod tests {
         }
     }
 
-    fn test_duplicate_signature_shares(key_id: MasterPublicKeyId) {
+    fn test_duplicate_signature_shares(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
@@ -1730,7 +1739,7 @@ mod tests {
         }
     }
 
-    fn test_duplicate_signature_shares_in_batch(key_id: MasterPublicKeyId) {
+    fn test_duplicate_signature_shares_in_batch(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
@@ -1805,7 +1814,7 @@ mod tests {
         }
     }
 
-    fn test_purge_unvalidated_signature_shares(key_id: MasterPublicKeyId) {
+    fn test_purge_unvalidated_signature_shares(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
@@ -1872,7 +1881,7 @@ mod tests {
         }
     }
 
-    fn test_purge_validated_signature_shares(key_id: MasterPublicKeyId) {
+    fn test_purge_validated_signature_shares(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
@@ -2104,6 +2113,7 @@ mod tests {
                     &key_transcript,
                     &message,
                     Randomness::from(context.nonce.unwrap()),
+                    None,
                     &derivation_path,
                     algorithm,
                     &mut rng,

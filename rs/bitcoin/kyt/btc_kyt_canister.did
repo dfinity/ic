@@ -49,10 +49,13 @@ type CheckTransactionIrrecoverableError = variant {
 };
 
 type InitArg = record {
-    btc_network : BtcNetwork
+    btc_network : BtcNetwork;
+    kyt_mode: KytMode;
 };
 
-type UpgradeArg = record {};
+type UpgradeArg = record {
+    kyt_mode: opt KytMode;
+};
 
 type KytArg = variant {
     InitArg : InitArg;
@@ -61,7 +64,14 @@ type KytArg = variant {
 
 type BtcNetwork = variant {
     mainnet;
-    testnet
+    testnet;
+    regtest: record { json_rpc_url: text };
+};
+
+type KytMode = variant {
+    AcceptAll;
+    RejectAll;
+    Normal;
 };
 
 service : (KytArg) -> {

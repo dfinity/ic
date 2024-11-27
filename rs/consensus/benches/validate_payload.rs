@@ -11,6 +11,7 @@
 //!   the message validates successfully
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use dkg::DkgDataPayload;
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, ingress_pool::IngressPoolImpl};
 use ic_config::state_manager::Config as StateManagerConfig;
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
@@ -276,9 +277,7 @@ fn add_past_blocks(
                     ingress,
                     ..BatchPayload::default()
                 },
-                dealings: dkg::Dealings::new_empty(
-                    block.payload.as_ref().dkg_interval_start_height(),
-                ),
+                dkg: DkgDataPayload::new_empty(block.payload.as_ref().dkg_interval_start_height()),
                 idkg: None,
             }),
         );
@@ -353,7 +352,7 @@ fn validate_payload_benchmark(criterion: &mut Criterion) {
                             ingress,
                             ..BatchPayload::default()
                         },
-                        dealings: dkg::Dealings::new_empty(
+                        dkg: DkgDataPayload::new_empty(
                             tip.payload.as_ref().dkg_interval_start_height(),
                         ),
                         idkg: None,

@@ -26,8 +26,7 @@ pub struct SubnetTopology {
     pub subnet_features:
         ::core::option::Option<super::super::super::registry::subnet::v1::SubnetFeatures>,
     #[prost(message, repeated, tag = "6")]
-    pub idkg_keys_held:
-        ::prost::alloc::vec::Vec<super::super::super::registry::crypto::v1::MasterPublicKeyId>,
+    pub idkg_keys_held: ::prost::alloc::vec::Vec<super::super::super::types::v1::MasterPublicKeyId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetsEntry {
@@ -39,8 +38,7 @@ pub struct SubnetsEntry {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgKeyEntry {
     #[prost(message, optional, tag = "1")]
-    pub key_id:
-        ::core::option::Option<super::super::super::registry::crypto::v1::MasterPublicKeyId>,
+    pub key_id: ::core::option::Option<super::super::super::types::v1::MasterPublicKeyId>,
     #[prost(message, repeated, tag = "2")]
     pub subnet_ids: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
 }
@@ -89,25 +87,28 @@ pub struct SetupInitialDkgContextTree {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaArguments {
     #[prost(message, optional, tag = "1")]
-    pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::EcdsaKeyId>,
+    pub key_id: ::core::option::Option<super::super::super::types::v1::EcdsaKeyId>,
     #[prost(bytes = "vec", tag = "2")]
     pub message_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SchnorrArguments {
     #[prost(message, optional, tag = "1")]
-    pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::SchnorrKeyId>,
+    pub key_id: ::core::option::Option<super::super::super::types::v1::SchnorrKeyId>,
     #[prost(bytes = "vec", tag = "2")]
     pub message: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VetKdArguments {
     #[prost(message, optional, tag = "1")]
-    pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::VetKdKeyId>,
-    /// TODO: Use correct arguments
+    pub key_id: ::core::option::Option<super::super::super::types::v1::VetKdKeyId>,
     #[prost(bytes = "vec", tag = "2")]
-    pub data: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint64, tag = "3")]
+    pub derivation_id: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub encryption_public_key: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "4")]
+    pub ni_dkg_id: ::core::option::Option<super::super::super::types::v1::NiDkgId>,
+    #[prost(uint64, tag = "5")]
     pub height: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -124,7 +125,7 @@ pub mod threshold_arguments {
         #[prost(message, tag = "2")]
         Schnorr(super::SchnorrArguments),
         #[prost(message, tag = "3")]
-        VetKd(super::VetKdArguments),
+        Vetkd(super::VetKdArguments),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -193,8 +194,7 @@ pub struct IDkgDealingsContext {
     #[prost(message, optional, tag = "1")]
     pub request: ::core::option::Option<super::super::queues::v1::Request>,
     #[prost(message, optional, tag = "2")]
-    pub key_id:
-        ::core::option::Option<super::super::super::registry::crypto::v1::MasterPublicKeyId>,
+    pub key_id: ::core::option::Option<super::super::super::types::v1::MasterPublicKeyId>,
     #[prost(message, repeated, tag = "3")]
     pub nodes: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
     #[prost(uint64, tag = "4")]
@@ -405,8 +405,7 @@ pub struct ApiBoundaryNodeEntry {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ThresholdSignatureAgreementsEntry {
     #[prost(message, optional, tag = "1")]
-    pub key_id:
-        ::core::option::Option<super::super::super::registry::crypto::v1::MasterPublicKeyId>,
+    pub key_id: ::core::option::Option<super::super::super::types::v1::MasterPublicKeyId>,
     #[prost(uint64, tag = "2")]
     pub count: u64,
 }

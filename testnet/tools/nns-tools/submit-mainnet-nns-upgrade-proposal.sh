@@ -104,7 +104,6 @@ submit_nns_upgrade_proposal_mainnet() {
         --wasm-module-path="$WASM_GZ"
 
         # Misc
-        --use-explicit-action-type true
         --wasm-module-sha256="$WASM_SHA"
         --proposer="$NEURON_ID"
     )

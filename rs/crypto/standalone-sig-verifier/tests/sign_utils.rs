@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 use ic_crypto_internal_basic_sig_der_utils::subject_public_key_info_der;
 use ic_crypto_internal_test_vectors::test_data;
 use ic_crypto_standalone_sig_verifier::{

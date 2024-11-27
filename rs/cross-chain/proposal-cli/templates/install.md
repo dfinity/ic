@@ -6,6 +6,8 @@ Git hash: `{{at}}`
 
 New compressed Wasm hash: `{{compressed_wasm_hash}}`
 
+Install args hash: `{{install_args.args_sha256_hex()}}`
+
 Target canister: `{{canister_id}}`
 
 ---

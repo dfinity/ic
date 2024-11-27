@@ -100,6 +100,7 @@ fn main() -> Result<()> {
                 public_api,
                 node_operator_principal_id: None,
                 secret_key_store: None,
+                domain: None,
             },
         );
 

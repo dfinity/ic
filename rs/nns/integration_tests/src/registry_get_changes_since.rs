@@ -5,13 +5,11 @@ use ic_nns_test_utils::{
         registry_get_changes_since, setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
-use ic_registry_transport::pb::v1::{
-    registry_error, RegistryError, RegistryGetChangesSinceResponse,
-};
+use ic_registry_transport::pb::v1::RegistryGetChangesSinceResponse;
 use std::str::FromStr;
 
 #[test]
-fn test_disallow_opaque_caller() {
+fn test_allow_opaque_caller() {
     // Step 1: Prepare the world.
     let state_machine = state_machine_builder_for_nns_tests().build();
 
@@ -36,27 +34,11 @@ fn test_disallow_opaque_caller() {
         deltas,
     } = response;
 
-    assert_eq!(version, 0);
-    assert_eq!(deltas, vec![]);
-
-    let error = error.unwrap();
-    let RegistryError { code, reason, key } = error;
-
-    assert_eq!(key, Vec::<u8>::new());
-
-    assert_eq!(
-        registry_error::Code::try_from(code),
-        Ok(registry_error::Code::Authorization)
-    );
-    let reason = reason.to_lowercase();
-    for key_word in ["caller", "self-authenticating", "anonymous", "opaque"] {
-        assert!(
-            reason.contains(key_word),
-            "{} not in {:?}",
-            key_word,
-            reason
-        );
-    }
+    assert_eq!(error, None);
+    // The important thing is that deltas is not empty. The exact number of
+    // elements is not so important.
+    assert_eq!(deltas.len(), 13);
+    assert_eq!(version, 1);
 }
 
 #[test]

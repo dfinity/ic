@@ -24,6 +24,7 @@ rust_library(
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
         "//rs/types/management_canister_types",
+        "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",

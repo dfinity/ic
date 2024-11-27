@@ -271,13 +271,13 @@ pub fn setup_test_router(
 ) -> (Router, Vec<Subnet>) {
     let mut args = vec![
         "",
-        "--local-store-path",
+        "--registry-local-store-path",
         "/tmp",
-        "--log-null",
+        "--obs-log-null",
         "--retry-update-call",
     ];
     if !enable_logging {
-        args.push("--disable-request-logging");
+        args.push("--obs-disable-request-logging");
     }
 
     // Hacky, but required due to &str
@@ -291,7 +291,7 @@ pub fn setup_test_router(
     let cli = Cli::parse_from(args);
     #[cfg(feature = "tls")]
     let cli = Cli::parse_from({
-        args.extend_from_slice(&["--hostname", "foobar"]);
+        args.extend_from_slice(&["--tls-hostname", "foobar"]);
         args
     });
 

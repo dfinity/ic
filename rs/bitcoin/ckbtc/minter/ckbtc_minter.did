@@ -307,6 +307,8 @@ type BitcoinAddress = variant {
 
 type MinterInfo = record {
     min_confirmations : nat32;
+    // This fee is based on the `retrieve_btc_min_amount` setting during canister
+    // initialization or upgrades, but may vary according to current network fees.
     retrieve_btc_min_amount : nat64;
     kyt_fee : nat64;
 };

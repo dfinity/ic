@@ -12,22 +12,69 @@ use ic_interfaces::execution_environment::ExecutionMode;
 use ic_types::methods::WasmMethod;
 use ic_types::PrincipalId;
 
+use crate::common::Wasm64;
+
 pub fn execute_query_bench(c: &mut Criterion) {
     // List of benchmarks: benchmark id (name), WAT, expected instructions.
     let benchmarks: Vec<common::Benchmark> = vec![
         common::Benchmark(
-            "ic0_data_certificate_size()".into(),
-            Module::QueryTest.from_ic0("data_certificate_size", NoParams, Result::I32),
+            "wasm32/ic0_data_certificate_size()".into(),
+            Module::QueryTest.from_ic0(
+                "data_certificate_size",
+                NoParams,
+                Result::I32,
+                Wasm64::Disabled,
+            ),
             517000006,
         ),
         common::Benchmark(
-            "ic0_data_certificate_copy()/1B".into(),
-            Module::QueryTest.from_ic0("data_certificate_copy", Params3(0, 0, 1), Result::No),
+            "wasm64/ic0_data_certificate_size()".into(),
+            Module::QueryTest.from_ic0(
+                "data_certificate_size",
+                NoParams,
+                Result::I64,
+                Wasm64::Enabled,
+            ),
+            517000006,
+        ),
+        common::Benchmark(
+            "wasm32/ic0_data_certificate_copy()/1B".into(),
+            Module::QueryTest.from_ic0(
+                "data_certificate_copy",
+                Params3(0, 0, 1),
+                Result::No,
+                Wasm64::Disabled,
+            ),
             520000006,
         ),
         common::Benchmark(
-            "ic0_data_certificate_copy()/64B".into(),
-            Module::QueryTest.from_ic0("data_certificate_copy", Params3(0, 0, 64), Result::No),
+            "wasm64/ic0_data_certificate_copy()/1B".into(),
+            Module::QueryTest.from_ic0(
+                "data_certificate_copy",
+                Params3(0_i64, 0_i64, 1_i64),
+                Result::No,
+                Wasm64::Enabled,
+            ),
+            520000006,
+        ),
+        common::Benchmark(
+            "wasm32/ic0_data_certificate_copy()/64B".into(),
+            Module::QueryTest.from_ic0(
+                "data_certificate_copy",
+                Params3(0, 0, 64),
+                Result::No,
+                Wasm64::Disabled,
+            ),
+            583000006,
+        ),
+        common::Benchmark(
+            "wasm64/ic0_data_certificate_copy()/64B".into(),
+            Module::QueryTest.from_ic0(
+                "data_certificate_copy",
+                Params3(0_i64, 0_i64, 64_i64),
+                Result::No,
+                Wasm64::Enabled,
+            ),
             583000006,
         ),
     ];
@@ -43,6 +90,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
              time,
              mut execution_parameters,
              subnet_available_memory,
+             subnet_available_callbacks,
              network_topology,
              ..
          }| {
@@ -52,6 +100,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                     execution_parameters.instruction_limits.message(),
                 ),
                 subnet_available_memory,
+                subnet_available_callbacks,
                 compute_allocation_used: 0,
             };
             let instructions_before = round_limits.instructions;
