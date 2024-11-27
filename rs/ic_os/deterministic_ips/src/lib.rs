@@ -103,48 +103,15 @@ impl FromStr for HwAddr {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-#[non_exhaustive]
-pub enum Deployment {
-    Mainnet,
-    Testnet,
-}
-
-impl fmt::Display for Deployment {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Deployment::Mainnet => write!(f, "mainnet"),
-            Deployment::Testnet => write!(f, "testnet"),
-        }
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum DeploymentParseError {
-    #[error("invalid deployment variant")]
-    InvalidVariant,
-}
-
-impl FromStr for Deployment {
-    type Err = DeploymentParseError;
-    fn from_str(s: &str) -> Result<Deployment, DeploymentParseError> {
-        match s.to_lowercase().as_str() {
-            "mainnet" => Ok(Deployment::Mainnet),
-            "testnet" => Ok(Deployment::Testnet),
-            _ => Err(DeploymentParseError::InvalidVariant),
-        }
-    }
-}
-
 #[derive(Copy, Clone)]
 pub enum IpVariant {
     V4,
     V6,
 }
 
-pub fn calculate_deterministic_mac<T: AsRef<HwAddr>>(
+pub fn calculate_deterministic_mac<T: AsRef<HwAddr>, D: fmt::Display>(
     mgmt_mac: T,
-    deployment: Deployment,
+    deployment: D,
     ip_version: IpVariant,
     index: u8,
 ) -> Result<HwAddr, AddressError> {
@@ -206,8 +173,7 @@ mod test {
 
         let expected_mac: HwAddr = "4a:00:f8:87:a4:8a".parse().unwrap();
 
-        let mac =
-            calculate_deterministic_mac(mgmt_mac, Deployment::Testnet, IpVariant::V4, 0).unwrap();
+        let mac = calculate_deterministic_mac(mgmt_mac, "testnet", IpVariant::V4, 0).unwrap();
 
         assert_eq!(mac, expected_mac);
     }
@@ -255,8 +221,7 @@ mod test {
             .parse::<Ipv6Addr>()
             .unwrap();
 
-        let mac =
-            calculate_deterministic_mac(mgmt_mac, Deployment::Mainnet, IpVariant::V6, 1).unwrap();
+        let mac = calculate_deterministic_mac(mgmt_mac, "mainnet", IpVariant::V6, 1).unwrap();
         let slaac = mac.calculate_slaac(prefix).unwrap();
 
         assert_eq!(slaac, expected_ip);

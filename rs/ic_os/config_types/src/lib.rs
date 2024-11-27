@@ -14,12 +14,14 @@
 //! - **Removing Fields**: To prevent backwards-compatibility deserialization errors, required fields must not be removed directly: In a first step, they have to be made optional and code that reads the value must be removed/handle missing values. In a second step, after the first step has rolled out to all OSes and there is no risk of a rollback, the field can be removed. Additionally, to avoid reintroducing a previously removed field, add your removed field to the RESERVED_FIELD_NAMES list.
 //!
 //! - **Renaming Fields**: Avoid renaming fields unless absolutely necessary. If you must rename a field, use `#[serde(rename = "old_name")]`.
-use deterministic_ips::{Deployment, HwAddr};
+use deterministic_ips::HwAddr;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use std::collections::HashMap;
+use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::str::FromStr;
 use url::Url;
 
 pub const CONFIG_VERSION: &str = "1.0.0";
@@ -73,7 +75,6 @@ pub struct ICOSSettings {
     /// else found dynamically in call to config tool CreateSetuposConfig
     pub mgmt_mac: HwAddr,
     #[serde_as(as = "DisplayFromStr")]
-    /// "mainnet" or "testnet"
     pub deployment_environment: Deployment,
     pub logging: Logging,
     pub use_nns_public_key: bool,
@@ -146,6 +147,39 @@ pub struct BackupSpoolSettings {
     pub backup_retention_time_seconds: Option<u64>,
     /// The interval at which the backup spool directory will be scanned for files to delete.
     pub backup_purging_interval_seconds: Option<u64>,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[non_exhaustive]
+pub enum Deployment {
+    Mainnet,
+    Testnet,
+}
+
+impl fmt::Display for Deployment {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Deployment::Mainnet => write!(f, "mainnet"),
+            Deployment::Testnet => write!(f, "testnet"),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum DeploymentParseError {
+    #[error("invalid deployment variant")]
+    InvalidVariant,
+}
+
+impl FromStr for Deployment {
+    type Err = DeploymentParseError;
+    fn from_str(s: &str) -> Result<Deployment, DeploymentParseError> {
+        match s.to_lowercase().as_str() {
+            "mainnet" => Ok(Deployment::Mainnet),
+            "testnet" => Ok(Deployment::Testnet),
+            _ => Err(DeploymentParseError::InvalidVariant),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]

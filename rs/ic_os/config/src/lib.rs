@@ -45,7 +45,6 @@ pub fn deserialize_config<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(file_pat
 #[cfg(test)]
 mod tests {
     use config_types::*;
-    use deterministic_ips::Deployment;
 
     #[test]
     fn test_serialize_and_deserialize() {

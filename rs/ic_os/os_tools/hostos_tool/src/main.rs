@@ -76,7 +76,7 @@ pub fn main() -> Result<()> {
             let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
             let generated_mac = calculate_deterministic_mac(
                 mgmt_mac,
-                deployment_settings.deployment.name.parse()?,
+                deployment_settings.deployment.name,
                 IpVariant::V6,
                 0x0, /* 0x0 corresponds to HostOS */
             )?;
@@ -103,7 +103,7 @@ pub fn main() -> Result<()> {
             let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
             let generated_mac = calculate_deterministic_mac(
                 mgmt_mac,
-                deployment_settings.deployment.name.parse()?,
+                deployment_settings.deployment.name,
                 IpVariant::V6,
                 node_type,
             )?;
@@ -131,7 +131,7 @@ pub fn main() -> Result<()> {
             let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
             let generated_mac = calculate_deterministic_mac(
                 mgmt_mac,
-                deployment_settings.deployment.name.parse()?,
+                deployment_settings.deployment.name,
                 IpVariant::V6,
                 node_type,
             )?;

@@ -14,7 +14,8 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use deterministic_ips::{calculate_deterministic_mac, Deployment, HwAddr, IpVariant};
+use config_types::Deployment;
+use deterministic_ips::{calculate_deterministic_mac, HwAddr, IpVariant};
 use serde::{Deserialize, Serialize};
 use slog::info;
 use ssh2::Session;

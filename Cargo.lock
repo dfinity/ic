@@ -2379,6 +2379,7 @@ dependencies = [
  "serde_json",
  "serde_with 1.14.0",
  "tempfile",
+ "thiserror 2.0.3",
  "url",
 ]
 
@@ -12677,6 +12678,7 @@ dependencies = [
  "canister-test",
  "chrono",
  "clap 4.5.20",
+ "config_types",
  "crossbeam-channel",
  "cycles-minting-canister",
  "deterministic_ips",

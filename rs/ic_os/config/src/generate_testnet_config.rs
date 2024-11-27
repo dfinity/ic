@@ -1,5 +1,5 @@
 use anyhow::Result;
-use deterministic_ips::{Deployment, HwAddr};
+use deterministic_ips::HwAddr;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 use url::Url;
