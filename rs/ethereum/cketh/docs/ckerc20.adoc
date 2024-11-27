@@ -172,7 +172,7 @@ The ERC-20 -> ckERC-20 flow involves the following steps:
 ... The second `address` argument is the source Ethereum address.
 ... The `uint` argument is the deposit value.
 ... The first `bytes32` argument encodes the IC principal.
-... The second `bytes32` argument encodes the ledger subaccount. Both principal and subaccount identity the receiver of ckERC20 on the IC.
+... The second `bytes32` argument encodes the ledger subaccount. Both principal and subaccount identify the receiver of ckERC20 on the IC.
 . The scrapping of the logs will be done as in ckETH, meaning that ckETH minter executes the following steps on a timer:
 .. Query the latest finalized block number using the `eth_getBlockByNumber` RPC endpoint. If the finalized block number hasn't changed since the last timer execution, skip the rest of the timer logic.
 .. Use the `eth_getLogs` RPC endpoint to fetch the helper smart contract logs from the previous finalized block number to the block number obtained at the previous step. The response is an array of events, where each event includes in particular the transaction hash `transactionHash` and the log entry index `logIndex`. Parse `ReceivedEthOrErc20` events contained in the logs.
