@@ -95,9 +95,11 @@ pub fn create_payload(
             pool_reader,
             parent,
             dkg_pool,
+            crypto,
             last_dkg_summary,
             max_dealings_per_block,
             &last_summary_block,
+            logger,
         )
         .map(dkg::Payload::Data)
     }
@@ -107,9 +109,11 @@ fn create_data_payload(
     pool_reader: &PoolReader<'_>,
     parent: &Block,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
+    crypto: &dyn ConsensusCrypto,
     last_dkg_summary: &Summary,
     max_dealings_per_block: usize,
     last_summary_block: &Block,
+    logger: ReplicaLogger,
 ) -> Result<DkgDataPayload, PayloadCreationError> {
     // Get all dealer ids from the chain.
     let dealers_from_chain = utils::get_dealers_from_chain(pool_reader, parent);
@@ -137,40 +141,49 @@ fn create_data_payload(
         ));
     }
 
-    // TODO: Try to include remote transcripts
-    Ok(DkgDataPayload::new_empty(last_summary_block.height))
+    // Try to include remote transcripts
+    Ok(DkgDataPayload::new_with_remote_dkg_transcripts(
+        last_summary_block.height,
+        create_early_remote_transcripts(pool_reader, crypto, parent, 1, last_dkg_summary, logger),
+    ))
 }
 
 fn create_early_remote_transcripts(
     pool_reader: &PoolReader<'_>,
+    crypto: &dyn ConsensusCrypto,
     parent: &Block,
     num_transcripts: usize,
+    last_dkg_summary: &Summary,
+    logger: ReplicaLogger,
 ) -> Vec<(CallbackId, NiDkgId, NiDkgTranscript)> {
     // Get all dealings that have not been used in a transcript already
     let all_dealings = utils::get_dkg_dealings2(pool_reader, parent, true);
 
     // Collect map of remote target_ids to ni_dkg_ids
     let mut remote_contexts: BTreeMap<NiDkgTargetId, Vec<NiDkgId>> = BTreeMap::new();
-    for (target_id, ni_dkg_id) in
-        all_dealings
-            .into_iter()
-            .filter_map(|(id, _)| match id.target_subnet {
-                NiDkgTargetSubnet::Local => None,
-                NiDkgTargetSubnet::Remote(target_id) => Some((target_id, id)),
-            })
+    for (target_id, ni_dkg_id) in all_dealings
+        .iter()
+        .filter_map(|(id, _)| match id.target_subnet {
+            NiDkgTargetSubnet::Local => None,
+            NiDkgTargetSubnet::Remote(target_id) => Some((target_id, id)),
+        })
     {
         let entry = remote_contexts.entry(target_id).or_default();
-        entry.push(ni_dkg_id);
+        entry.push(ni_dkg_id.clone());
     }
 
     let x = remote_contexts
         .iter()
+        // For inital DKG transcripts, we need a pair of
         .filter(|(_, ni_dkg_ids)| match ni_dkg_ids.len() {
             1 => {
                 // TODO: With vetkd, we need to check that these have a HighTresholdForMasterPublicKeyId tag
                 // Sould we also check that the key exists?
                 false
             }
+            // If we have two transcripts for the same ID, we check that it is one low and one high threshold transcript
+            // Note: We do not really need to check whether there is an actual context, since this will happen later when we map
+            // the transcripts to callback ids
             2 => {
                 let tags = ni_dkg_ids
                     .iter()
@@ -179,8 +192,30 @@ fn create_early_remote_transcripts(
                 let expected_tags = TAGS.iter().cloned().collect::<BTreeSet<_>>();
                 tags == expected_tags
             }
+            // Other combinations should never happen and we discard them here
             _ => false,
         })
+        // Lookup the config from the summary
+        .filter_map(|(_, ni_dkg_id)| {
+            // TODO: Find ALL configs here
+            last_dkg_summary
+                .configs
+                .iter()
+                .find(ni_dkg_id)
+                .map(|config| (ni_dkg_id, config))
+        })
+        // Generate the actual transcripts
+        .map(|(ni_dkg_id, config)| {
+            (
+                ni_dkg_id,
+                create_transcript(crypto, config, &all_dealings, &logger),
+            )
+        })
+        .filter_map(|(ni_dkg_id, maybe_transcript)| match maybe_transcript {
+            Ok(_) => todo!(),
+            Err(_) => None,
+        })
+        // Take only the number of transcripts
         .take(num_transcripts);
 
     todo!()

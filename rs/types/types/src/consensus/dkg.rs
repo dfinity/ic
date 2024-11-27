@@ -581,14 +581,14 @@ impl DkgDataPayload {
     }
 
     /// Return an new DealingsPayload.
-    pub fn new_with_remote_dkg_transcript(
+    pub fn new_with_remote_dkg_transcripts(
         start_height: Height,
-        remote_dkg_transcript: (NiDkgId, CallbackId, Result<NiDkgTranscript, String>),
+        remote_dkg_transcripts: Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
     ) -> Self {
         Self {
             start_height,
             messages: vec![],
-            transcripts_for_remote_subnets: vec![remote_dkg_transcript],
+            transcripts_for_remote_subnets: remote_dkg_transcripts,
         }
     }
 }
