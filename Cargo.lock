@@ -3545,26 +3545,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "discower_bowndary"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arc-swap",
- "async-trait",
- "http 1.1.0",
- "ic-agent 0.37.1",
- "rand 0.8.5",
- "ring 0.17.8",
- "simple_moving_average",
- "thiserror 2.0.3",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "url",
-]
-
-[[package]]
 name = "displaydoc"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12740,7 +12720,7 @@ dependencies = [
  "humantime",
  "humantime-serde",
  "hyper 1.5.1",
- "ic-agent",
+ "ic-agent 0.37.1",
  "ic-artifact-pool",
  "ic-base-types",
  "ic-btc-interface",
@@ -13788,8 +13768,7 @@ dependencies = [
  "anyhow",
  "candid",
  "certificate_orchestrator_interface",
- "discower_bowndary",
- "ic-agent",
+ "ic-agent 0.37.1",
  "ic-base-types",
  "ic-boundary-nodes-integration-test-common",
  "ic-boundary-nodes-performance-test-common",
