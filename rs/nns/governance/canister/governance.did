@@ -960,7 +960,9 @@ type ProposalData = record {
   //
   // Note that this is NOT used to determine whether the proposal is adopted or
   // rejected. Instead, the total subfield in the latest_tally field is used as
-  // the baseline when deciding proposals.
+  // the baseline when deciding proposals. This is true both when proposals are
+  // decided early, as well as when they are decided after reaching the voting
+  // deadline.
   total_potential_voting_power : opt nat64;
 };
 
