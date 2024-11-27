@@ -138,7 +138,7 @@ pub(crate) fn update_signature_agreements(
                 signature: signature.signature.clone(),
             }
             .encode(),
-            Some(CombinedSignature::VetKd) => {
+            Some(CombinedSignature::VetKd(_)) => {
                 if let Some(metrics) = idkg_payload_metrics {
                     metrics.payload_errors_inc("vet_kd_in_idkg_payload");
                 }

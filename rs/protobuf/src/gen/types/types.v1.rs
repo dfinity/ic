@@ -970,7 +970,9 @@ pub struct VetKdShare {
     #[prost(message, optional, tag = "2")]
     pub request_id: ::core::option::Option<RequestId>,
     #[prost(bytes = "vec", tag = "3")]
-    pub sig_share_raw: ::prost::alloc::vec::Vec<u8>,
+    pub encrypted_key_share: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "4")]
+    pub node_signature: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignedIDkgComplaint {

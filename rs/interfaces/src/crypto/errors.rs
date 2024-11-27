@@ -9,6 +9,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::Dk
 use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
+use ic_types::crypto::vetkd::VetKdKeyShareVerificationError;
 use ic_types::crypto::CryptoError;
 use ic_types::registry::RegistryClientError;
 
@@ -421,6 +422,20 @@ impl ErrorReproducibility for RegistryClientError {
             RegistryClientError::PollingLatestVersionFailed { .. } => false,
             // true, as the registry is guaranteed to be consistent across replicas
             RegistryClientError::DecodeError { .. } => true,
+        }
+    }
+}
+
+impl ErrorReproducibility for VetKdKeyShareVerificationError  {
+    fn is_reproducible(&self) -> bool {
+        // The match below is intentionally explicit on all possible values,
+        // to avoid defaults, which might be error-prone.
+        // Upon addition of any new error this match has to be updated.
+
+        // VetKd key share verification does not depend on any local or private
+        // state and so is inherently replicated.
+        match self {
+            Self::InvalidSignature => true,
         }
     }
 }

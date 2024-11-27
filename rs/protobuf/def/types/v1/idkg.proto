@@ -237,7 +237,8 @@ message SchnorrSigShare {
 message VetKdShare {
   NodeId signer_id = 1;
   RequestId request_id = 2;
-  bytes sig_share_raw = 3;
+  bytes encrypted_key_share = 3;
+  bytes node_signature = 4;
 }
 
 message SignedIDkgComplaint {

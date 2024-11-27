@@ -10,7 +10,7 @@ use crate::{
             ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
             ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
         },
-        vetkd::VetKdArgs,
+        vetkd::{VetKdArgs, VetKdEncryptedKey},
         AlgorithmId,
     },
     messages::CallbackId,
@@ -1167,7 +1167,7 @@ pub enum ThresholdSigInputs {
 pub enum CombinedSignature {
     Ecdsa(ThresholdEcdsaCombinedSignature),
     Schnorr(ThresholdSchnorrCombinedSignature),
-    VetKd, // TODO: Fill with vet KD combined signature, once it exists
+    VetKd(VetKdEncryptedKey),
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]

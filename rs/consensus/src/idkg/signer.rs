@@ -33,6 +33,9 @@ use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
     ThresholdSchnorrVerifySigShareError,
 };
+use ic_types::crypto::vetkd::{
+    VedKdKeyShareCreationError, VetKdKeyShareCombinationError, VetKdKeyShareVerificationError,
+};
 use ic_types::messages::CallbackId;
 use ic_types::{Height, NodeId};
 use std::cell::RefCell;
@@ -47,14 +50,14 @@ use super::utils::{build_signature_inputs, update_purge_height};
 enum CreateSigShareError {
     Ecdsa(ThresholdEcdsaCreateSigShareError),
     Schnorr(ThresholdSchnorrCreateSigShareError),
-    VetKd, // TODO: Fill with crypto error once it exists
+    VetKd(VedKdKeyShareCreationError),
 }
 
 #[derive(Clone, Debug)]
 enum VerifySigShareError {
     Ecdsa(ThresholdEcdsaVerifySigShareError),
     Schnorr(ThresholdSchnorrVerifySigShareError),
-    VetKd, // TODO: Fill with crypto error once it exists
+    VetKd(VetKdKeyShareVerificationError),
     ThresholdSchemeMismatch,
 }
 
@@ -63,7 +66,7 @@ impl VerifySigShareError {
         match self {
             VerifySigShareError::Ecdsa(err) => err.is_reproducible(),
             VerifySigShareError::Schnorr(err) => err.is_reproducible(),
-            VerifySigShareError::VetKd => true, // TODO: Check if crypto error is reproducible, once it exists
+            VerifySigShareError::VetKd(err) => err.is_reproducible(),
             VerifySigShareError::ThresholdSchemeMismatch => true,
         }
     }
@@ -73,7 +76,7 @@ impl VerifySigShareError {
 enum CombineSigSharesError {
     Ecdsa(ThresholdEcdsaCombineSigSharesError),
     Schnorr(ThresholdSchnorrCombineSigSharesError),
-    VetKd, // TODO: Fill with crypto error once it exists
+    VetKd(VetKdKeyShareCombinationError),
 }
 
 impl CombineSigSharesError {
@@ -84,7 +87,9 @@ impl CombineSigSharesError {
                 ThresholdEcdsaCombineSigSharesError::UnsatisfiedReconstructionThreshold { .. }
             ) | CombineSigSharesError::Schnorr(
                 ThresholdSchnorrCombineSigSharesError::UnsatisfiedReconstructionThreshold { .. }
-            ) // TODO: Check if Vet KD crypto error is `UnsatisfiedReconstructionThreshold`, once it exists
+            ) | CombineSigSharesError::VetKd(
+                VetKdKeyShareCombinationError::UnsatisfiedReconstructionThreshold { .. }
+            )
         )
     }
 }

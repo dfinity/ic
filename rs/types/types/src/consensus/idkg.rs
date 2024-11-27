@@ -51,6 +51,8 @@ use strum_macros::EnumIter;
 
 use self::common::{PreSignatureInCreation, PreSignatureRef};
 
+use super::vetkd::VetKdEncryptedKeyShare;
+
 pub mod common;
 pub mod ecdsa;
 pub mod schnorr;
@@ -1487,8 +1489,7 @@ pub struct VetKdShare {
     pub request_id: RequestId,
 
     /// The signature share
-    /// TODO: use correct Vet KD share, once it exists
-    pub share: ThresholdSchnorrSigShare,
+    pub share: VetKdEncryptedKeyShare,
 }
 
 impl From<&VetKdShare> for pb::VetKdShare {
@@ -1496,7 +1497,8 @@ impl From<&VetKdShare> for pb::VetKdShare {
         Self {
             signer_id: Some(node_id_into_protobuf(value.signer_id)),
             request_id: Some(pb::RequestId::from(value.request_id)),
-            sig_share_raw: value.share.sig_share_raw.clone(),
+            encrypted_key_share: value.share.encrypted_key_share.clone(),
+            node_signature: value.share.node_signature.clone(),
         }
     }
 }
@@ -1507,8 +1509,9 @@ impl TryFrom<&pb::VetKdShare> for VetKdShare {
         Ok(Self {
             signer_id: node_id_try_from_option(value.signer_id.clone())?,
             request_id: try_from_option_field(value.request_id.as_ref(), "VetKdShare::request_id")?,
-            share: ThresholdSchnorrSigShare {
-                sig_share_raw: value.sig_share_raw.clone(),
+            share: VetKdEncryptedKeyShare {
+                encrypted_key_share: value.encrypted_key_share.clone(),
+                node_signature: value.node_signature.clone(),
             },
         })
     }
