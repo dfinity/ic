@@ -1141,6 +1141,12 @@ message ManageNeuron {
     }
   }
 
+  // This is one way for a neuron to make sure that its deciding_voting_power is
+  // not less than its potential_voting_power. See the description of those
+  // fields in Neuron.
+  message RefreshVotingPower {
+  }
+
   oneof command {
     Configure configure = 2;
     Disburse disburse = 3;
@@ -1154,6 +1160,7 @@ message ManageNeuron {
     MergeMaturity merge_maturity = 13;
     Merge merge = 14;
     StakeMaturity stake_maturity = 15;
+    RefreshVotingPower refresh_voting_power = 16;
   }
 }
 
@@ -1219,6 +1226,9 @@ message ManageNeuronResponse {
     ic_nns_common.pb.v1.NeuronId refreshed_neuron_id = 1;
   }
 
+  message RefreshVotingPowerResponse {
+  }
+
   oneof command {
     GovernanceError error = 1;
     ConfigureResponse configure = 2;
@@ -1233,6 +1243,7 @@ message ManageNeuronResponse {
     MergeMaturityResponse merge_maturity = 11;
     MergeResponse merge = 12;
     StakeMaturityResponse stake_maturity = 13;
+    RefreshVotingPowerResponse refresh_voting_power = 14;
   }
 }
 
