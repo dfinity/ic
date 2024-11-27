@@ -22,6 +22,7 @@ pub enum Commands {
         output_directory: String,
     },
     GenerateIpv6Address {
+        // 0xf corresponds to SetupOS
         #[arg(short, long, default_value = "0xf")]
         node_type: u8,
     },
@@ -62,7 +63,7 @@ pub fn main() -> Result<()> {
                 setupos_config.icos_settings.mgmt_mac,
                 setupos_config.icos_settings.deployment_environment,
                 IpVariant::V6,
-                0xf,
+                0xf, /* 0xf corresponds to SetupOS */
             )?;
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
 

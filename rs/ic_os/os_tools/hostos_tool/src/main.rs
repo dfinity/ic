@@ -19,10 +19,12 @@ pub enum Commands {
         output_directory: String,
     },
     GenerateIpv6Address {
+        // 0x0 corresponds to HostOS
         #[arg(short, long, default_value = "0")]
         node_type: u8,
     },
     GenerateMacAddress {
+        // 0x0 corresponds to HostOS
         #[arg(short, long, default_value = "0")]
         node_type: u8,
     },
@@ -58,7 +60,7 @@ pub fn main() -> Result<()> {
                 hostos_config.icos_settings.mgmt_mac,
                 hostos_config.icos_settings.deployment_environment,
                 IpVariant::V6,
-                0x1,
+                0x0, /* 0x0 corresponds to HostOS */
             )?;
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
 

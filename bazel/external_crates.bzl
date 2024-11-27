@@ -1368,6 +1368,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "env-filter",
                     "fmt",
                     "json",
+                    "time",
                 ],
             ),
             "trust-dns-resolver": crate.spec(
