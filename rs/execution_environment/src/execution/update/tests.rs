@@ -13,10 +13,11 @@ use ic_replicated_state::{
     canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES},
     CallOrigin,
 };
-use ic_state_machine_tests::{Cycles, IngressStatus, WasmResult};
+use ic_state_machine_tests::WasmResult;
 use ic_sys::PAGE_SIZE;
+use ic_types::ingress::IngressStatus;
 use ic_types::messages::{CallbackId, RequestMetadata};
-use ic_types::{NumInstructions, NumOsPages};
+use ic_types::{Cycles, NumInstructions, NumOsPages};
 use ic_universal_canister::{call_args, wasm};
 
 use ic_config::embedders::StableMemoryPageLimit;

@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use crate::idkg::{pre_signer::IDkgTranscriptBuilder, utils::algorithm_for_key_id};
 use ic_logger::{info, ReplicaLogger};
-use ic_types::consensus::idkg::HasMasterPublicKeyId;
+use ic_types::consensus::idkg::HasIDkgMasterPublicKeyId;
 use ic_types::{
     consensus::idkg::{
         self, IDkgBlockReader, IDkgUIDGenerator, MasterKeyTranscript, TranscriptAttributes,
@@ -212,8 +212,6 @@ pub(super) fn update_next_key_transcript(
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use ic_crypto_test_utils_canister_threshold_sigs::{
         dummy_values::dummy_initial_idkg_dealing_for_tests, generate_key_transcript, node::Nodes,
         CanisterThresholdSigTestEnvironment, IDkgParticipants,
@@ -222,11 +220,13 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::consensus::idkg::HasMasterPublicKeyId;
+    use ic_types::consensus::idkg::HasIDkgMasterPublicKeyId;
+    use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
     use ic_types::{
         crypto::{canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId},
         Height,
     };
+    use std::str::FromStr;
 
     use crate::idkg::{
         test_utils::{
@@ -248,11 +248,10 @@ mod tests {
             idkg::UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        let current_key_transcript = idkg::MasterKeyTranscript {
-            current: None,
-            next_in_creation: idkg::KeyTranscriptCreation::Created(key_transcript_ref),
-            master_key_id: MasterPublicKeyId::Ecdsa(key_id),
-        };
+        let current_key_transcript = idkg::MasterKeyTranscript::new(
+            MasterPublicKeyId::Ecdsa(key_id).try_into().unwrap(),
+            idkg::KeyTranscriptCreation::Created(key_transcript_ref),
+        );
 
         let created_key_transcript =
             get_created_key_transcript(&current_key_transcript, &block_reader)
@@ -271,11 +270,10 @@ mod tests {
     fn get_created_key_transcript_returns_none_test() {
         let block_reader = TestIDkgBlockReader::new();
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        let key_transcript = idkg::MasterKeyTranscript {
-            current: None,
-            next_in_creation: idkg::KeyTranscriptCreation::Begin,
-            master_key_id: MasterPublicKeyId::Ecdsa(key_id),
-        };
+        let key_transcript = idkg::MasterKeyTranscript::new(
+            MasterPublicKeyId::Ecdsa(key_id).try_into().unwrap(),
+            idkg::KeyTranscriptCreation::Begin,
+        );
 
         let created_key_transcript =
             get_created_key_transcript(&key_transcript, &block_reader).expect("Should not fail");
@@ -304,7 +302,7 @@ mod tests {
         }
     }
 
-    fn test_update_next_key_transcript_single(key_id: MasterPublicKeyId) {
+    fn test_update_next_key_transcript_single(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let (mut payload, env, mut block_reader) = set_up_idkg_payload(
             &mut rng,
@@ -492,7 +490,7 @@ mod tests {
         }
     }
 
-    fn test_update_next_key_transcript_xnet_target_subnet_single(key_id: MasterPublicKeyId) {
+    fn test_update_next_key_transcript_xnet_target_subnet_single(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let (mut payload, env, mut block_reader) = set_up_idkg_payload(
             &mut rng,

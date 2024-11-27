@@ -458,6 +458,11 @@ message Neuron {
   // refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
   // after the UNIX epoch).
   optional uint64 voting_power_refreshed_timestamp_seconds = 24;
+
+  // The index of the next entry in the recent_ballots list that will be
+  // used for the circular buffer. This is used to determine which entry
+  // to overwrite next.
+  optional uint32 recent_ballots_next_entry_index = 25;
 }
 
 // Subset of Neuron that has no collections or big fields that might not exist in most neurons, and
@@ -484,6 +489,7 @@ message AbridgedNeuron {
   optional NeuronType neuron_type = 22;
   optional Visibility visibility = 23;
   optional uint64 voting_power_refreshed_timestamp_seconds = 24;
+  optional uint32 recent_ballots_next_entry_index = 25;
 
   reserved 1;
   reserved "id";
@@ -1447,6 +1453,13 @@ message ProposalData {
   // TODO[NNS1-2566]: deprecate `original_total_community_fund_maturity_e8s_equivalent` and
   // `cf_participants` and use only this field for managing the Neurons' Fund swap participation.
   optional NeuronsFundData neurons_fund_data = 21;
+
+  // This is the amount of voting power that would be available if all neurons
+  // kept themselves "refreshed". This is used as the baseline for voting
+  // rewards. That is, the amount of maturity that a neuron receives is the
+  // amount of voting power that it exercised (so called "deciding" voting
+  // power) in proportion to this.
+  optional uint64 total_potential_voting_power = 22;
 }
 
 // This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
@@ -1750,6 +1763,9 @@ message ProposalInfo {
   optional uint64 deadline_timestamp_seconds = 19;
 
   DerivedProposalInformation derived_proposal_information = 20;
+
+  // See [ProposalData::total_potential_voting_power].
+  optional uint64 total_potential_voting_power = 21;
 }
 
 // Network economics contains the parameters for several operations related

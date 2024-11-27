@@ -1,12 +1,15 @@
 use crate::ledger_client::LedgerBurnError;
 use crate::state::transactions::Erc20WithdrawalRequest;
 use candid::{CandidType, Deserialize, Nat, Principal};
+use icrc_ledger_types::icrc1::account::Subaccount;
 
 #[derive(CandidType, Deserialize)]
 pub struct WithdrawErc20Arg {
     pub amount: Nat,
     pub ckerc20_ledger_id: Principal,
     pub recipient: String,
+    pub from_cketh_subaccount: Option<Subaccount>,
+    pub from_ckerc20_subaccount: Option<Subaccount>,
 }
 
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]

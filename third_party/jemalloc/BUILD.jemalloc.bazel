@@ -1,0 +1,58 @@
+"""
+Jemalloc library, built for tikv-jemalloc-sys. Compiled outside of rust for determinism and to avoid
+rebuilds when rules_rust, rustc or tikv-jemalloc-sys change.
+"""
+
+load("@rules_foreign_cc//foreign_cc:configure.bzl", "configure_make")
+
+# Used in make build
+filegroup(
+    name = "all",
+    srcs = glob(["**"]),
+)
+
+# A copy of just the static archive, which can be used with `$(location ...)` in build (tikv-jemalloc-sys) that
+# need it.
+genrule(
+    name = "libjemalloc",
+    srcs = [":jemalloc_private"],
+    outs = ["libjemalloc.a"],
+
+    # Just iterate over the outputs of `configure_make` until we find the static archive
+    cmd = """
+    for src in $(SRCS); do
+        if [[ $$src =~ libjemalloc.a$$ ]]; then
+            cp "$$src" "$@"
+            break
+        fi
+    done
+    """,
+    visibility = ["//visibility:public"],
+)
+
+# The actual jemalloc build, not exported because not used.
+configure_make(
+    name = "jemalloc_private",
+    autoconf = True,
+    configure_in_place = True,
+
+    # Some options for ./configure
+    configure_options = [
+        # Expected by tikv-jemalloc-sys unless specified otherwise:
+        # https://github.com/tikv/jemallocator/blob/fa31efd3b70899a4a8667269b9e5eac09f9c675b/jemalloc-sys/build.rs#L263-L264
+        "--with-jemalloc-prefix=_rjem_",
+        # recommended for static libs:
+        # https://github.com/jemalloc/jemalloc/blob/2a693b83d2d1631b6a856d178125e1c47c12add9/INSTALL.md?plain=1#L102-L107
+        "--with-private-namespace=_rjem_",
+    ],
+    lib_source = ":all",
+
+    # Specify the name for the static archive instead of defaulting to <rulename>.a
+    out_static_libs = ["libjemalloc.a"],
+
+    # Ensures only the static archive is built. Otherwise (make) targets (including jemalloc.sh) cause
+    # non-determinism in the build and aren't necessary for us.
+    targets = [
+        "install_lib_static",
+    ],
+)

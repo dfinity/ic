@@ -21,6 +21,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{Infallible, TryFrom},
     fmt, ops,
+    sync::Arc,
 };
 use strum_macros::EnumIter;
 use thiserror::Error;
@@ -511,13 +512,18 @@ pub trait IngressHistoryWriter: Send + Sync {
     // Note [Associated Types in Interfaces]
     type State;
 
-    /// Allows to set status on a message.
+    /// Sets the status of a message. Returns the message's previous status.
     ///
     /// The allowed status transitions are:
     /// * "None" -> {"Received", "Processing", "Completed", "Failed"}
     /// * "Received" -> {"Processing", "Completed", "Failed"}
     /// * "Processing" -> {"Processing", "Completed", "Failed"}
-    fn set_status(&self, state: &mut Self::State, message_id: MessageId, status: IngressStatus);
+    fn set_status(
+        &self,
+        state: &mut Self::State,
+        message_id: MessageId,
+        status: IngressStatus,
+    ) -> Arc<IngressStatus>;
 }
 
 /// A trait for handling `out_of_instructions()` calls from the Wasm module.

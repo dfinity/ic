@@ -9,9 +9,8 @@ use crate::{
     idkg::{self, metrics::IDkgPayloadMetrics},
 };
 use ic_consensus_utils::{
-    find_lowest_ranked_non_disqualified_proposals, get_block_hash_string,
-    get_notarization_delay_settings, get_subnet_record, membership::Membership,
-    pool_reader::PoolReader,
+    find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
+    get_subnet_record, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
@@ -24,8 +23,10 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{
-        block_maker::SubnetRecords, dkg, hashed, Block, BlockMetadata, BlockPayload, BlockProposal,
-        DataPayload, HasHeight, HasRank, HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
+        block_maker::SubnetRecords,
+        dkg::{self, DkgDataPayload},
+        hashed, Block, BlockMetadata, BlockPayload, BlockProposal, DataPayload, HasHeight, HasRank,
+        HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
     },
     replica_config::ReplicaConfig,
     time::current_time,
@@ -139,16 +140,8 @@ impl BlockMaker {
                         Some(&self.metrics),
                     )
                 {
-                    self.propose_block(pool, rank, parent).inspect(|proposal| {
-                        debug!(
-                            self.log,
-                            "Make proposal {:?} {:?} {:?}",
-                            proposal.content.get_hash(),
-                            proposal.as_ref().payload.get_hash(),
-                            proposal.as_ref().payload.as_ref()
-                        );
-                        self.log_block(proposal.as_ref());
-                    })
+                    self.propose_block(pool, rank, parent)
+                        .inspect(|block| self.log_block(block))
                 } else {
                     None
                 }
@@ -343,8 +336,8 @@ impl BlockMaker {
                         idkg: idkg_summary,
                     })
                 }
-                dkg::Payload::Dealings(dealings) => {
-                    let (batch_payload, dealings, idkg_data) = match status::get_status(
+                dkg::Payload::Data(dkg) => {
+                    let (batch_payload, dkg, idkg_data) = match status::get_status(
                         height,
                         self.registry_client.as_ref(),
                         self.replica_config.subnet_id,
@@ -358,7 +351,7 @@ impl BlockMaker {
                         // Use empty payload and empty DKG dealings if the replica is halting.
                         Status::Halting => (
                             BatchPayload::default(),
-                            dkg::Dealings::new_empty(dealings.start_height),
+                            DkgDataPayload::new_empty(dkg.start_height),
                             /*idkg_data=*/ None,
                         ),
                         Status::Running => {
@@ -389,7 +382,7 @@ impl BlockMaker {
                             .ok()
                             .flatten();
 
-                            (batch_payload, dealings, idkg_data)
+                            (batch_payload, dkg, idkg_data)
                         }
                     };
 
@@ -400,7 +393,7 @@ impl BlockMaker {
 
                     BlockPayload::Data(DataPayload {
                         batch: batch_payload,
-                        dealings,
+                        dkg,
                         idkg: idkg_data,
                     })
                 }
@@ -449,27 +442,26 @@ impl BlockMaker {
     }
 
     /// Log an entry for the proposed block and each of its ingress messages
-    fn log_block(&self, block: &Block) {
-        let hash = get_block_hash_string(block);
-        let block_log_entry = block.log_entry(hash.clone());
+    fn log_block(&self, block: &BlockProposal) {
+        let block_log_entry = block.content.log_entry();
         debug!(
             self.log,
             "block_proposal";
             block => block_log_entry
         );
         let empty_batch = BatchPayload::default();
-        let batch = if block.payload.is_summary() {
+        let batch = if block.as_ref().payload.is_summary() {
             &empty_batch
         } else {
-            &block.payload.as_ref().as_data().batch
+            &block.as_ref().payload.as_ref().as_data().batch
         };
 
         for message_id in batch.ingress.message_ids() {
             debug!(
                 self.log,
                 "ingress_message_insert_into_block";
-                ingress_message.message_id => format!("{}", message_id),
-                block.hash => hash,
+                ingress_message.message_id => message_id.to_string(),
+                block.hash => format!("{:?}", block.content.get_hash()),
             );
         }
     }
@@ -710,7 +702,7 @@ mod tests {
             let expected_payloads = PoolReader::new(&pool)
                 .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
             let returned_payload =
-                dkg::Payload::Dealings(dkg::Dealings::new_empty(Height::from(0)));
+                dkg::Payload::Data(dkg::DkgDataPayload::new_empty(Height::from(0)));
             let pool_reader = PoolReader::new(&pool);
             let expected_time = expected_payloads[0].1
                 + get_block_maker_delay(

@@ -10,9 +10,10 @@ use ic_icrc1_ledger::ChangeArchiveOptions;
 use ic_ledger_suite_orchestrator::candid::{AddErc20Arg, ManagedCanisterIds};
 use ic_ledger_suite_orchestrator::state::{IndexWasm, LedgerWasm};
 use ic_management_canister_types::{
-    CanisterInfoResponse, CanisterInstallMode, InstallCodeArgs, Method, Payload,
+    CanisterInfoResponse, CanisterInstallMode, CanisterStatusResultV2, InstallCodeArgs, Method,
+    Payload,
 };
-use ic_state_machine_tests::{CanisterStatusResultV2, StateMachine};
+use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
@@ -428,7 +429,7 @@ impl ManagedCanistersAssert {
 macro_rules! assert_ledger {
     ($name:expr, $ty:ty) => {
         paste::paste! {
-            pub fn [<call_ledger_$name:snake >](env: &ic_state_machine_tests::StateMachine, ledger_canister_id: ic_state_machine_tests::CanisterId) -> $ty {
+            pub fn [<call_ledger_$name:snake >](env: &ic_state_machine_tests::StateMachine, ledger_canister_id: ic_base_types::CanisterId) -> $ty {
                 candid::Decode!(
                     &assert_reply(
                             env

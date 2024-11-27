@@ -11,16 +11,11 @@ import {SafeERC20, IERC20} from "https://github.com/OpenZeppelin/openzeppelin-co
 contract CkDeposit {
     using SafeERC20 for IERC20;
 
+    address constant private ZERO_ADDRESS = address(0);
+
     address payable private immutable minterAddress;
 
-    event ReceivedEth(
-        address indexed from,
-        uint256 value,
-        bytes32 indexed principal,
-        bytes32 subaccount
-    );
-
-    event ReceivedErc20(
+    event ReceivedEthOrErc20(
         address indexed erc20ContractAddress,
         address indexed owner,
         uint256 amount,
@@ -44,10 +39,10 @@ contract CkDeposit {
     }
 
     /**
-     * @dev Emits the `ReceivedEth` event if the transfer succeeds.
+     * @dev Emits the `ReceivedEthOrErc20` event if the transfer succeeds.
      */
     function depositEth(bytes32 principal, bytes32 subaccount) public payable {
-        emit ReceivedEth(msg.sender, msg.value, principal, subaccount);
+        emit ReceivedEthOrErc20(ZERO_ADDRESS, msg.sender, msg.value, principal, subaccount);
         minterAddress.transfer(msg.value);
     }
 
@@ -60,6 +55,7 @@ contract CkDeposit {
         bytes32 principal,
         bytes32 subaccount
     ) public {
+        require(erc20Address != ZERO_ADDRESS, "ERC20: depositErc20 from the zero address");
         IERC20 erc20Token = IERC20(erc20Address);
         erc20Token.safeTransferFrom(
             msg.sender,
@@ -67,7 +63,7 @@ contract CkDeposit {
             amount
         );
 
-        emit ReceivedErc20(
+        emit ReceivedEthOrErc20(
             erc20Address,
             msg.sender,
             amount,

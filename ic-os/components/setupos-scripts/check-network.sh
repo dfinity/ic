@@ -101,15 +101,16 @@ function get_network_settings() {
         "echo ${ipv6_address_system_full} | awk -F '/' '{ print \$1 }'" \
         "Failed to get system's IPv6 address.")
 
-    HOSTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type HostOS)
-    GUESTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type GuestOS)
+    # 0 corresponds to HostOS, 1 to GuestOS
+    HOSTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type 0)
+    GUESTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type 1)
 }
 
 function print_network_settings() {
     echo "* Printing user defined network settings..."
     echo "  IPv6 Prefix : ${ipv6_prefix}"
     echo "  IPv6 Gateway: ${ipv6_gateway}"
-    if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} && -n ${domain} ]]; then
+    if [[ -v ipv4_address && -n ${ipv4_address} && -v ipv4_prefix_length && -n ${ipv4_prefix_length} && -v ipv4_gateway && -n ${ipv4_gateway} && -v domain && -n ${domain} ]]; then
         echo "  IPv4 Address: ${ipv4_address}"
         echo "  IPv4 Prefix Length: ${ipv4_prefix_length}"
         echo "  IPv4 Gateway: ${ipv4_gateway}"
@@ -217,19 +218,23 @@ function query_nns_nodes() {
 # Establish run order
 main() {
     log_start "$(basename $0)"
-    read_variables
-    get_network_settings
-    print_network_settings
+    if kernel_cmdline_bool_default_true ic.setupos.check_network; then
+        read_variables
+        get_network_settings
+        print_network_settings
 
-    if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
-        validate_domain_name
-        setup_ipv4_network
-        ping_ipv4_gateway
+        if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
+            validate_domain_name
+            setup_ipv4_network
+            ping_ipv4_gateway
+        fi
+
+        ping_ipv6_gateway
+        assemble_nns_nodes_list
+        query_nns_nodes
+    else
+        echo "* Network checks skipped by request via kernel command line"
     fi
-
-    ping_ipv6_gateway
-    assemble_nns_nodes_list
-    query_nns_nodes
     log_end "$(basename $0)"
 }
 

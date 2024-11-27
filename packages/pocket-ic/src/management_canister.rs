@@ -15,6 +15,8 @@ pub enum LogVisibility {
     Controllers,
     #[serde(rename = "public")]
     Public,
+    #[serde(rename = "allowed_viewers")]
+    AllowedViewers(Vec<Principal>),
 }
 
 #[derive(CandidType, Deserialize, Debug, Clone)]
@@ -76,22 +78,6 @@ pub struct CanisterStatusResult {
     pub idle_cycles_burned_per_day: candid::Nat,
     pub module_hash: Option<Vec<u8>>,
     pub reserved_cycles: candid::Nat,
-}
-
-// canister creation
-
-#[derive(CandidType, Deserialize, Debug, Clone)]
-pub struct CreateCanisterArgs {
-    pub settings: Option<CanisterSettings>,
-    pub sender_canister_version: Option<u64>,
-}
-
-#[derive(CandidType, Deserialize, Debug, Clone)]
-pub struct ProvisionalCreateCanisterWithCyclesArgs {
-    pub settings: Option<CanisterSettings>,
-    pub specified_id: Option<CanisterId>,
-    pub amount: Option<candid::Nat>,
-    pub sender_canister_version: Option<u64>,
 }
 
 // canister code installation
@@ -212,6 +198,126 @@ pub struct CanisterLogRecord {
 pub struct FetchCanisterLogsResult {
     pub canister_log_records: Vec<CanisterLogRecord>,
 }
+
+// provisional API
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct ProvisionalCreateCanisterWithCyclesArgs {
+    pub settings: Option<CanisterSettings>,
+    pub specified_id: Option<CanisterId>,
+    pub amount: Option<candid::Nat>,
+    pub sender_canister_version: Option<u64>,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct ProvisionalTopUpCanisterArgs {
+    pub canister_id: Principal,
+    pub amount: candid::Nat,
+}
+
+// The following types can only be used in inter-canister calls, i.e.,
+// these types CANNOT be used in ingress messages to the management canister.
+
+// canister creation
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct CreateCanisterArgs {
+    pub settings: Option<CanisterSettings>,
+    pub sender_canister_version: Option<u64>,
+}
+
+// canister info
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct CanisterInfoArgs {
+    pub canister_id: CanisterId,
+    pub num_requested_changes: Option<u64>,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub enum ChangeOrigin {
+    #[serde(rename = "from_user")]
+    FromUser { user_id: Principal },
+    #[serde(rename = "from_canister")]
+    FromCanister {
+        canister_version: Option<u64>,
+        canister_id: Principal,
+    },
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub enum ChangeDetailsCodeDeploymentMode {
+    #[serde(rename = "reinstall")]
+    Reinstall,
+    #[serde(rename = "upgrade")]
+    Upgrade,
+    #[serde(rename = "install")]
+    Install,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub enum ChangeDetails {
+    #[serde(rename = "creation")]
+    Creation { controllers: Vec<Principal> },
+    #[serde(rename = "code_deployment")]
+    CodeDeployment {
+        mode: ChangeDetailsCodeDeploymentMode,
+        module_hash: Vec<u8>,
+    },
+    #[serde(rename = "load_snapshot")]
+    LoadSnapshot {
+        canister_version: u64,
+        taken_at_timestamp: u64,
+        snapshot_id: SnapshotId,
+    },
+    #[serde(rename = "controllers_change")]
+    ControllersChange { controllers: Vec<Principal> },
+    #[serde(rename = "code_uninstall")]
+    CodeUninstall,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct Change {
+    pub timestamp_nanos: u64,
+    pub canister_version: u64,
+    pub origin: ChangeOrigin,
+    pub details: ChangeDetails,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct CanisterInfoResult {
+    pub controllers: Vec<Principal>,
+    pub module_hash: Option<Vec<u8>>,
+    pub recent_changes: Vec<Change>,
+    pub total_num_changes: u64,
+}
+
+// raw randomness
+
+pub type RawRandResult = Vec<u8>;
+
+// node metrics
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct NodeMetricsHistoryArgs {
+    pub start_at_timestamp_nanos: u64,
+    pub subnet_id: Principal,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct NodeMetrics {
+    pub num_block_failures_total: u64,
+    pub node_id: Principal,
+    pub num_blocks_proposed_total: u64,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct NodeMetricsHistoryResultItem {
+    pub timestamp_nanos: u64,
+    pub node_metrics: Vec<NodeMetrics>,
+}
+
+pub type NodeMetricsHistoryResult = Vec<NodeMetricsHistoryResultItem>;
 
 // canister http
 
@@ -354,4 +460,97 @@ pub struct SignWithSchnorrArgs {
 #[derive(CandidType, Deserialize, Debug, Clone)]
 pub struct SignWithSchnorrResult {
     pub signature: Vec<u8>,
+}
+
+// bitcoin
+
+#[derive(CandidType, Deserialize)]
+pub enum BitcoinNetwork {
+    #[serde(rename = "mainnet")]
+    Mainnet,
+    #[serde(rename = "testnet")]
+    Testnet,
+}
+
+pub type BitcoinAddress = String;
+
+#[derive(CandidType, Deserialize)]
+pub struct BitcoinGetBalanceArgs {
+    pub network: BitcoinNetwork,
+    pub address: BitcoinAddress,
+    pub min_confirmations: Option<u32>,
+}
+
+pub type Satoshi = u64;
+
+pub type BitcoinGetBalanceResult = Satoshi;
+
+#[derive(CandidType, Deserialize)]
+pub enum BitcoinGetUtxosArgsFilterInner {
+    #[serde(rename = "page")]
+    Page(Vec<u8>),
+    #[serde(rename = "min_confirmations")]
+    MinConfirmations(u32),
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct BitcoinGetUtxosArgs {
+    pub network: BitcoinNetwork,
+    pub filter: Option<BitcoinGetUtxosArgsFilterInner>,
+    pub address: BitcoinAddress,
+}
+
+pub type BitcoinBlockHeight = u32;
+
+pub type BitcoinBlockHash = Vec<u8>;
+
+#[derive(CandidType, Deserialize)]
+pub struct Outpoint {
+    pub txid: Vec<u8>,
+    pub vout: u32,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct Utxo {
+    pub height: u32,
+    pub value: Satoshi,
+    pub outpoint: Outpoint,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct BitcoinGetUtxosResult {
+    pub next_page: Option<Vec<u8>>,
+    pub tip_height: BitcoinBlockHeight,
+    pub tip_block_hash: BitcoinBlockHash,
+    pub utxos: Vec<Utxo>,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct BitcoinSendTransactionArgs {
+    pub transaction: Vec<u8>,
+    pub network: BitcoinNetwork,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct BitcoinGetCurrentFeePercentilesArgs {
+    pub network: BitcoinNetwork,
+}
+
+pub type MillisatoshiPerByte = u64;
+
+pub type BitcoinGetCurrentFeePercentilesResult = Vec<MillisatoshiPerByte>;
+
+#[derive(CandidType, Deserialize)]
+pub struct BitcoinGetBlockHeadersArgs {
+    pub start_height: BitcoinBlockHeight,
+    pub end_height: Option<BitcoinBlockHeight>,
+    pub network: BitcoinNetwork,
+}
+
+pub type BitcoinBlockHeader = Vec<u8>;
+
+#[derive(CandidType, Deserialize)]
+pub struct BitcoinGetBlockHeadersResult {
+    pub tip_height: BitcoinBlockHeight,
+    pub block_headers: Vec<BitcoinBlockHeader>,
 }

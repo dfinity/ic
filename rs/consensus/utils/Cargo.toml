@@ -7,7 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-hex = { workspace = true }
 ic-crypto-prng = { path = "../../crypto/prng" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }

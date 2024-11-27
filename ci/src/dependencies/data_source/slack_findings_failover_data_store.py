@@ -133,7 +133,7 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
                     add_proj = True
                     if proj in ignore_list_by_project:
                         for expr in ignore_list_by_project[proj]:
-                            if expr in vi.vulnerability.description:
+                            if expr.lower() in vi.vulnerability.description.lower():
                                 add_proj = False
                                 break
                     if add_proj:

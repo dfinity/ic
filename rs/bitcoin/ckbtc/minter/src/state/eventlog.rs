@@ -1,5 +1,6 @@
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
+use crate::state::invariants::CheckInvariants;
 use crate::state::{
     ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, Overdraft,
     RetrieveBtcRequest, SubmittedBtcTransaction, UtxoCheckStatus,
@@ -188,7 +189,9 @@ pub enum ReplayLogError {
 }
 
 /// Reconstructs the minter state from an event log.
-pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterState, ReplayLogError> {
+pub fn replay<I: CheckInvariants>(
+    mut events: impl Iterator<Item = Event>,
+) -> Result<CkBtcMinterState, ReplayLogError> {
     let mut state = match events.next() {
         Some(Event::Init(args)) => CkBtcMinterState::from(args),
         Some(evt) => {
@@ -200,15 +203,28 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
         None => return Err(ReplayLogError::EmptyLog),
     };
 
+    // Because `kyt_principal` was previously used as a default
+    // substitute for `kyt_provider` during kyt_fee accounting,
+    // we need to keep track of this value so that `distribute_kyt_fee`
+    // knows when to skip giving fees to `kyt_principal`.
+    let mut previous_kyt_principal = None;
     for event in events {
         match event {
             Event::Init(args) => {
+                if args.kyt_principal.is_some() {
+                    previous_kyt_principal = args.kyt_principal.map(Principal::from);
+                }
                 state.reinit(args);
             }
-            Event::Upgrade(args) => state.upgrade(args),
+            Event::Upgrade(args) => {
+                if args.kyt_principal.is_some() {
+                    previous_kyt_principal = args.kyt_principal.map(Principal::from);
+                }
+                state.upgrade(args);
+            }
             Event::ReceivedUtxos {
                 to_account, utxos, ..
-            } => state.add_utxos(to_account, utxos),
+            } => state.add_utxos::<I>(to_account, utxos),
             Event::AcceptedRetrieveBtcRequest(req) => {
                 if let Some(account) = req.reimbursement_account {
                     state
@@ -304,19 +320,9 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
                 clean,
                 kyt_provider,
             } => {
-                let kyt_provider =
-                    match kyt_provider.or_else(|| state.kyt_principal.map(Principal::from)) {
-                        Some(p) => p,
-                        None => {
-                            return Err(ReplayLogError::InconsistentLog(format!(
-                                "Found CheckUTXO {} event with no provider and KYT principal",
-                                uuid,
-                            )))
-                        }
-                    };
                 state.mark_utxo_checked(
                     utxo,
-                    uuid,
+                    if uuid.is_empty() { None } else { Some(uuid) },
                     UtxoCheckStatus::from_clean_flag(clean),
                     kyt_provider,
                 );
@@ -329,8 +335,12 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
                 amount,
                 ..
             } => {
-                if let Err(Overdraft(overdraft)) = state.distribute_kyt_fee(kyt_provider, amount) {
-                    return Err(ReplayLogError::InconsistentLog(format!("Attempted to distribute {amount} to {kyt_provider}, causing an overdraft of {overdraft}")));
+                if Some(kyt_provider) != previous_kyt_principal {
+                    if let Err(Overdraft(overdraft)) =
+                        state.distribute_kyt_fee(kyt_provider, amount)
+                    {
+                        return Err(ReplayLogError::InconsistentLog(format!("Attempted to distribute {amount} to {kyt_provider}, causing an overdraft of {overdraft}")));
+                    }
                 }
             }
             Event::RetrieveBtcKytFailed { kyt_provider, .. } => {

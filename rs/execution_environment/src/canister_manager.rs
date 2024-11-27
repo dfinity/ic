@@ -465,8 +465,11 @@ impl CanisterManager {
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::SignWithECDSA)
             | Ok(Ic00Method::ComputeInitialIDkgDealings)
+            | Ok(Ic00Method::ReshareChainKey)
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
+            | Ok(Ic00Method::VetKdPublicKey)
+            | Ok(Ic00Method::VetKdDeriveEncryptedKey)
             // "DepositCycles" can be called by anyone however as ingress message
             // cannot carry cycles, it does not make sense to allow them from users.
             | Ok(Ic00Method::DepositCycles)
@@ -480,7 +483,8 @@ impl CanisterManager {
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinSendTransactionInternal)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
-            | Ok(Ic00Method::NodeMetricsHistory) => Err(UserError::new(
+            | Ok(Ic00Method::NodeMetricsHistory)
+            | Ok(Ic00Method::SubnetInfo) => Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!("Only canisters can call ic00 method {}", method_name),
             )),
@@ -1091,7 +1095,7 @@ impl CanisterManager {
         mut stop_context: StopCanisterContext,
         state: &mut ReplicatedState,
     ) -> StopCanisterResult {
-        let mut canister = match state.take_canister_state(&canister_id) {
+        let canister = match state.canister_state_mut(&canister_id) {
             None => {
                 return StopCanisterResult::Failure {
                     error: CanisterManagerError::CanisterNotFound(canister_id),
@@ -1101,7 +1105,7 @@ impl CanisterManager {
             Some(canister) => canister,
         };
 
-        let result = match validate_controller(&canister, stop_context.sender()) {
+        let result = match validate_controller(canister, stop_context.sender()) {
             Err(err) => StopCanisterResult::Failure {
                 error: err,
                 cycles_to_return: stop_context.take_cycles(),
@@ -1115,7 +1119,6 @@ impl CanisterManager {
             },
         };
         canister.system_state.canister_version += 1;
-        state.put_canister_state(canister);
         result
     }
 
@@ -1171,6 +1174,7 @@ impl CanisterManager {
         let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
         let log_visibility = canister.system_state.log_visibility.clone();
         let wasm_memory_limit = canister.system_state.wasm_memory_limit;
+        let wasm_memory_threshold = canister.system_state.wasm_memory_threshold;
 
         Ok(CanisterStatusResultV2::new(
             canister.status(),
@@ -1208,6 +1212,7 @@ impl CanisterManager {
                 .total_query_stats
                 .egress_payload_size,
             wasm_memory_limit.map(|x| x.get()),
+            wasm_memory_threshold.get(),
         ))
     }
 

@@ -26,6 +26,7 @@
         },
         "enable": false,
         "expr": "process_start_time_seconds{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"} * 1000",
+        "hide": false,
         "iconColor": "red",
         "name": "Replica started",
         "step": "10",
@@ -38,6 +39,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 2,
+  "id": 167,
   "links": [
     {
       "asDropdown": true,
@@ -51,7 +53,6 @@
       "type": "dashboards"
     }
   ],
-  "liveNow": false,
   "panels": [
     {
       "collapsed": false,
@@ -102,6 +103,7 @@
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -109,9 +111,11 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "pluginVersion": "9.2.5",
+      "pluginVersion": "11.3.0",
       "targets": [
         {
           "datasource": {
@@ -119,7 +123,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "max(main_chain_height{job=\"bitcoin-$network-canister\"})",
+          "expr": "max(main_chain_height{ic=\"$ic\", job=\"bitcoin-$network-canister\"})",
           "range": true,
           "refId": "A"
         }
@@ -138,6 +142,7 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "blocks",
@@ -145,6 +150,7 @@
             "axisSoftMax": 120,
             "axisSoftMin": 80,
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -153,6 +159,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -166,7 +173,7 @@
               "mode": "none"
             },
             "thresholdsStyle": {
-              "mode": "line"
+              "mode": "dashed"
             }
           },
           "mappings": [],
@@ -206,6 +213,7 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.3.0",
       "targets": [
         {
           "datasource": {
@@ -213,7 +221,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "max(main_chain_height{ic=\"mercury\", job=\"bitcoin-$network-canister\"}) - max(stable_height{ic=\"mercury\", job=\"bitcoin-$network-canister\"})",
+          "expr": "max(main_chain_height{ic=\"$ic\", job=\"bitcoin-$network-canister\"}) - max(stable_height{ic=\"$ic\", job=\"bitcoin-$network-canister\"})",
           "legendFormat": "main_chain_height - stable_height",
           "range": true,
           "refId": "A"
@@ -233,11 +241,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -246,6 +256,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -299,6 +310,7 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.3.0",
       "targets": [
         {
           "datasource": {
@@ -306,7 +318,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "utxos_length{job=\"bitcoin-$network-canister\"}",
+          "expr": "utxos_length{ic=\"$ic\", job=\"bitcoin-$network-canister\"}",
           "legendFormat": "{{job}}",
           "range": true,
           "refId": "A"
@@ -327,11 +339,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -340,6 +354,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -393,6 +408,7 @@
           "sort": "none"
         }
       },
+      "pluginVersion": "11.3.0",
       "targets": [
         {
           "datasource": {
@@ -400,7 +416,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "address_utxos_length{job=\"bitcoin-$network-canister\"}",
+          "expr": "address_utxos_length{ic=\"$ic\", job=\"bitcoin-$network-canister\"}",
           "legendFormat": "{{job}}",
           "range": true,
           "refId": "A"
@@ -434,11 +450,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -447,6 +465,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -479,7 +498,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "max(unstable_blocks_total{job=\"bitcoin-$network-canister\"})"
+              "options": "max(unstable_blocks_total{ic=\"$ic\", job=\"bitcoin-$network-canister\"})"
             },
             "properties": [
               {
@@ -491,7 +510,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "max(unstable_blocks_depth{job=\"bitcoin-$network-canister\"})"
+              "options": "max(unstable_blocks_depth{ic=\"$ic\", job=\"bitcoin-$network-canister\"})"
             },
             "properties": [
               {
@@ -521,7 +540,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "9.2.5",
+      "pluginVersion": "11.3.0",
       "targets": [
         {
           "datasource": {
@@ -529,7 +548,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "max(unstable_blocks_total{job=\"bitcoin-$network-canister\"})",
+          "expr": "max(unstable_blocks_total{ic=\"$ic\", job=\"bitcoin-$network-canister\"})",
           "hide": false,
           "range": true,
           "refId": "A"
@@ -540,7 +559,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "max(unstable_blocks_depth{job=\"bitcoin-$network-canister\"})",
+          "expr": "max(unstable_blocks_depth{ic=\"$ic\", job=\"bitcoin-$network-canister\"})",
           "hide": false,
           "legendFormat": "__auto",
           "range": true,
@@ -562,11 +581,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -575,6 +596,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -624,7 +646,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "9.2.5",
+      "pluginVersion": "11.3.0",
       "targets": [
         {
           "datasource": {
@@ -632,7 +654,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "max(unstable_blocks_difficulty_based_depth{job=\"bitcoin-$network-canister\"}) - max(normalized_stability_threshold{job=\"bitcoin-$network-canister\"})",
+          "expr": "max(unstable_blocks_difficulty_based_depth{ic=\"$ic\", job=\"bitcoin-$network-canister\"}) - max(normalized_stability_threshold{ic=\"$ic\", job=\"bitcoin-$network-canister\"})",
           "range": true,
           "refId": "A"
         },
@@ -688,6 +710,7 @@
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -695,9 +718,11 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "pluginVersion": "9.2.5",
+      "pluginVersion": "11.3.0",
       "targets": [
         {
           "datasource": {
@@ -705,7 +730,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "max(anchor_difficulty{job=\"bitcoin-$network-canister\"})",
+          "expr": "max(anchor_difficulty{ic=\"$ic\", job=\"bitcoin-$network-canister\"})",
           "range": true,
           "refId": "A"
         }
@@ -749,6 +774,7 @@
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -756,9 +782,11 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "pluginVersion": "9.2.5",
+      "pluginVersion": "11.3.0",
       "targets": [
         {
           "datasource": {
@@ -766,7 +794,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "max(unstable_blocks_num_tips{job=\"bitcoin-$network-canister\"})",
+          "expr": "max(unstable_blocks_num_tips{ic=\"$ic\", job=\"bitcoin-$network-canister\"})",
           "range": true,
           "refId": "A"
         }
@@ -870,8 +898,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "#EAB839",
@@ -909,7 +936,7 @@
               },
               "editorMode": "code",
               "exemplar": false,
-              "expr": "sum (\n    0.99 * api_access_target{job=\"bitcoin-watchdog-$network-canister\", flag=\"enabled\"},\n    0.5 * api_access_target{job=\"bitcoin-watchdog-$network-canister\", flag=\"disabled\"},\n    0.01 * api_access_target{job=\"bitcoin-watchdog-$network-canister\", flag=\"undefined\"},\n)",
+              "expr": "sum (\n    0.99 * api_access_target{ic=\"$ic\", job=\"bitcoin-watchdog-$network-canister\", flag=\"enabled\"},\n    0.5 * api_access_target{ic=\"$ic\", job=\"bitcoin-watchdog-$network-canister\", flag=\"disabled\"},\n    0.01 * api_access_target{ic=\"$ic\", job=\"bitcoin-watchdog-$network-canister\", flag=\"undefined\"},\n)",
               "instant": false,
               "legendFormat": "target {{flag}}",
               "range": true,
@@ -921,7 +948,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "sum (\n    0.99 * api_access{job=\"bitcoin-$network-canister\", flag=\"enabled\"},\n    0.5 * api_access{job=\"bitcoin-$network-canister\", flag=\"disabled\"},\n    0.01 * api_access{job=\"bitcoin-$network-canister\", flag=\"undefined\"},\n)",
+              "expr": "sum (\n    0.99 * api_access{ic=\"$ic\", job=\"bitcoin-$network-canister\", flag=\"enabled\"},\n    0.5 * api_access{ic=\"$ic\", job=\"bitcoin-$network-canister\", flag=\"disabled\"},\n    0.01 * api_access{ic=\"$ic\", job=\"bitcoin-$network-canister\", flag=\"undefined\"},\n)",
               "hide": false,
               "legendFormat": "actual {{flag}}",
               "range": true,
@@ -1014,7 +1041,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "height_target{job=\"bitcoin-watchdog-$network-canister\"} > 0",
+              "expr": "height_target{ic=\"$ic\", job=\"bitcoin-watchdog-$network-canister\"} > 0",
               "legendFormat": "height_target",
               "range": true,
               "refId": "height_target"
@@ -1025,7 +1052,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "bitcoin_canister_height{job=\"bitcoin-watchdog-$network-canister\"} > 0",
+              "expr": "bitcoin_canister_height{ic=\"$ic\", job=\"bitcoin-watchdog-$network-canister\"} > 0",
               "hide": false,
               "legendFormat": "bitcoin_canister_height",
               "range": true,
@@ -1096,7 +1123,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 42
+            "y": 104
           },
           "id": 50,
           "options": {
@@ -1118,7 +1145,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "((height_diff{job=\"bitcoin-watchdog-$network-canister\"} +8181818181)>0) -8181818181",
+              "expr": "((height_diff{ic=\"$ic\", job=\"bitcoin-watchdog-$network-canister\"} +8181818181)>0) -8181818181",
               "legendFormat": "height_diff",
               "range": true,
               "refId": "height_diff"
@@ -1129,7 +1156,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "blocks_behind_threshold{job=\"bitcoin-watchdog-$network-canister\"}",
+              "expr": "blocks_behind_threshold{ic=\"$ic\", job=\"bitcoin-watchdog-$network-canister\"}",
               "hide": false,
               "legendFormat": "{{__name__}}",
               "range": true,
@@ -1141,7 +1168,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "blocks_ahead_threshold{job=\"bitcoin-watchdog-$network-canister\"}",
+              "expr": "blocks_ahead_threshold{ic=\"$ic\", job=\"bitcoin-watchdog-$network-canister\"}",
               "hide": false,
               "legendFormat": "{{__name__}}",
               "range": true,
@@ -1237,7 +1264,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 42
+            "y": 104
           },
           "id": 52,
           "options": {
@@ -1259,7 +1286,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "height_status{job=\"bitcoin-watchdog-$network-canister\"}",
+              "expr": "height_status{ic=\"$ic\", job=\"bitcoin-watchdog-$network-canister\"}",
               "legendFormat": "{{code}}",
               "range": true,
               "refId": "height_status"
@@ -1329,7 +1356,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 50
+            "y": 112
           },
           "id": 54,
           "options": {
@@ -1351,7 +1378,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "explorer_height{job=\"bitcoin-watchdog-$network-canister\"} > 0",
+              "expr": "explorer_height{ic=\"$ic\", job=\"bitcoin-watchdog-$network-canister\"} > 0",
               "legendFormat": "{{explorer}}",
               "range": true,
               "refId": "explorer_height"
@@ -1421,7 +1448,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 50
+            "y": 112
           },
           "id": 56,
           "options": {
@@ -1443,7 +1470,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "available_explorers{job=\"bitcoin-watchdog-$network-canister\"}",
+              "expr": "available_explorers{ic=\"$ic\", job=\"bitcoin-watchdog-$network-canister\"}",
               "legendFormat": "{{__name__}}",
               "range": true,
               "refId": "available_explorers"
@@ -1454,7 +1481,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "min_explorers{job=\"bitcoin-watchdog-$network-canister\"}",
+              "expr": "min_explorers{ic=\"$ic\", job=\"bitcoin-watchdog-$network-canister\"}",
               "hide": false,
               "legendFormat": "{{__name__}}",
               "range": true,
@@ -1479,20 +1506,11 @@
       "id": 28,
       "panels": [
         {
-          "cards": {},
-          "color": {
-            "cardColor": "#b4ff00",
-            "colorScale": "sqrt",
-            "colorScheme": "interpolateGreens",
-            "exponent": 0.5,
-            "mode": "spectrum"
-          },
-          "dataFormat": "tsbuckets",
           "datasource": {
             "type": "prometheus",
             "uid": "000000001"
           },
-          "description": "",
+          "description": "Aggregated over **$heatmap_period**",
           "fieldConfig": {
             "defaults": {
               "custom": {
@@ -1512,15 +1530,9 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 98
+            "y": 160
           },
-          "heatmap": {},
-          "hideZeroBuckets": true,
-          "highlightCards": true,
           "id": 30,
-          "legend": {
-            "show": false
-          },
           "options": {
             "calculate": false,
             "calculation": {},
@@ -1559,7 +1571,6 @@
             }
           },
           "pluginVersion": "9.2.5",
-          "reverseYBuckets": false,
           "targets": [
             {
               "datasource": {
@@ -1567,7 +1578,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "round(\n  sum by (le) (\n    avg by(le) (\n      increase(ins_get_utxos_total_bucket{job=\"bitcoin-$network-canister\"}[$heatmap_period])\n    )\n  )\n)",
+              "expr": "round(\n  sum by (le) (\n    avg by(le) (\n      increase(ins_get_utxos_total_bucket{ic=\"$ic\", job=\"bitcoin-$network-canister\"}[$heatmap_period])\n    )\n  )\n)",
               "format": "heatmap",
               "interval": "$heatmap_period",
               "legendFormat": "{{le}}",
@@ -1576,36 +1587,14 @@
             }
           ],
           "title": "get_utxos Instruction Distribution",
-          "tooltip": {
-            "show": true,
-            "showHistogram": false
-          },
-          "type": "heatmap",
-          "xAxis": {
-            "show": true
-          },
-          "yAxis": {
-            "format": "Million",
-            "logBase": 1,
-            "show": true
-          },
-          "yBucketBound": "auto"
+          "type": "heatmap"
         },
         {
-          "cards": {},
-          "color": {
-            "cardColor": "#b4ff00",
-            "colorScale": "sqrt",
-            "colorScheme": "interpolateGreens",
-            "exponent": 0.5,
-            "mode": "spectrum"
-          },
-          "dataFormat": "tsbuckets",
           "datasource": {
             "type": "prometheus",
             "uid": "000000001"
           },
-          "description": "",
+          "description": "Aggregated over **$heatmap_period**",
           "fieldConfig": {
             "defaults": {
               "custom": {
@@ -1625,15 +1614,9 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 98
+            "y": 160
           },
-          "heatmap": {},
-          "hideZeroBuckets": true,
-          "highlightCards": true,
           "id": 32,
-          "legend": {
-            "show": false
-          },
           "options": {
             "calculate": false,
             "calculation": {},
@@ -1673,7 +1656,6 @@
             }
           },
           "pluginVersion": "9.2.5",
-          "reverseYBuckets": false,
           "targets": [
             {
               "datasource": {
@@ -1681,7 +1663,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "round(\n  sum by (le) (\n    avg by(le) (\n      increase(ins_get_balance_total_bucket{job=\"bitcoin-$network-canister\"}[$heatmap_period])\n    )\n  )\n)",
+              "expr": "round(\n  sum by (le) (\n    avg by(le) (\n      increase(ins_get_balance_total_bucket{ic=\"$ic\", job=\"bitcoin-$network-canister\"}[$heatmap_period])\n    )\n  )\n)",
               "format": "heatmap",
               "interval": "$heatmap_period",
               "legendFormat": "{{le}}",
@@ -1690,37 +1672,14 @@
             }
           ],
           "title": "get_balance Instruction Distribution",
-          "tooltip": {
-            "show": true,
-            "showHistogram": false
-          },
-          "type": "heatmap",
-          "xAxis": {
-            "show": true
-          },
-          "yAxis": {
-            "decimals": 1,
-            "format": "Million",
-            "logBase": 1,
-            "show": true
-          },
-          "yBucketBound": "auto"
+          "type": "heatmap"
         },
         {
-          "cards": {},
-          "color": {
-            "cardColor": "#b4ff00",
-            "colorScale": "sqrt",
-            "colorScheme": "interpolateGreens",
-            "exponent": 0.5,
-            "mode": "spectrum"
-          },
-          "dataFormat": "tsbuckets",
           "datasource": {
             "type": "prometheus",
             "uid": "000000001"
           },
-          "description": "",
+          "description": "Aggregated over **$heatmap_period**",
           "fieldConfig": {
             "defaults": {
               "custom": {
@@ -1740,15 +1699,9 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 106
+            "y": 168
           },
-          "heatmap": {},
-          "hideZeroBuckets": true,
-          "highlightCards": true,
           "id": 34,
-          "legend": {
-            "show": false
-          },
           "options": {
             "calculate": false,
             "calculation": {},
@@ -1788,7 +1741,6 @@
             }
           },
           "pluginVersion": "9.2.5",
-          "reverseYBuckets": false,
           "targets": [
             {
               "datasource": {
@@ -1796,7 +1748,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "round(\n  sum by (le) (\n    avg by(le) (\n      increase(ins_get_current_fee_percentiles_total_bucket{job=\"bitcoin-$network-canister\"}[$heatmap_period])\n    )\n  )\n)",
+              "expr": "round(\n  sum by (le) (\n    avg by(le) (\n      increase(ins_get_current_fee_percentiles_total_bucket{ic=\"$ic\", job=\"bitcoin-$network-canister\"}[$heatmap_period])\n    )\n  )\n)",
               "format": "heatmap",
               "interval": "$heatmap_period",
               "legendFormat": "{{le}}",
@@ -1805,21 +1757,7 @@
             }
           ],
           "title": "get_current_fee_percentiles Instruction Distribution",
-          "tooltip": {
-            "show": true,
-            "showHistogram": false
-          },
-          "type": "heatmap",
-          "xAxis": {
-            "show": true
-          },
-          "yAxis": {
-            "decimals": 1,
-            "format": "Million",
-            "logBase": 1,
-            "show": true
-          },
-          "yBucketBound": "auto"
+          "type": "heatmap"
         },
         {
           "datasource": {
@@ -1882,7 +1820,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 106
+            "y": 168
           },
           "id": 21,
           "options": {
@@ -1904,7 +1842,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "rate(send_transaction_count{ic=\"mercury\", job=\"bitcoin-$network-canister\"}[$__rate_interval])",
+              "expr": "rate(send_transaction_count{ic=\"$ic\", job=\"bitcoin-$network-canister\"}[$__rate_interval])",
               "legendFormat": "send_transaction",
               "range": true,
               "refId": "A"
@@ -1988,7 +1926,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 107
+            "y": 169
           },
           "id": 15,
           "options": {
@@ -2010,7 +1948,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "heap_size_in_bytes{ic=\"mercury\", job=\"bitcoin-$network-canister\"}",
+              "expr": "heap_size_in_bytes{ic=\"$ic\", job=\"bitcoin-$network-canister\"}",
               "range": true,
               "refId": "A"
             }
@@ -2079,7 +2017,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 107
+            "y": 169
           },
           "id": 16,
           "options": {
@@ -2101,7 +2039,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "stable_memory_size_in_bytes{ic=\"mercury\", job=\"bitcoin-$network-canister\"}",
+              "expr": "stable_memory_size_in_bytes{ic=\"$ic\", job=\"bitcoin-$network-canister\"}",
               "range": true,
               "refId": "A"
             }
@@ -2124,20 +2062,11 @@
       "id": 36,
       "panels": [
         {
-          "cards": {},
-          "color": {
-            "cardColor": "#b4ff00",
-            "colorScale": "sqrt",
-            "colorScheme": "interpolateGreens",
-            "exponent": 0.5,
-            "mode": "spectrum"
-          },
-          "dataFormat": "tsbuckets",
           "datasource": {
             "type": "prometheus",
             "uid": "000000001"
           },
-          "description": "",
+          "description": "Aggregated over **$heatmap_period**",
           "fieldConfig": {
             "defaults": {
               "custom": {
@@ -2157,15 +2086,9 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 108
+            "y": 38
           },
-          "heatmap": {},
-          "hideZeroBuckets": true,
-          "highlightCards": true,
           "id": 42,
-          "legend": {
-            "show": false
-          },
           "options": {
             "calculate": false,
             "calculation": {},
@@ -2194,7 +2117,8 @@
             },
             "showValue": "never",
             "tooltip": {
-              "show": true,
+              "mode": "single",
+              "showColorScale": false,
               "yHistogram": false
             },
             "yAxis": {
@@ -2204,8 +2128,7 @@
               "unit": "Million"
             }
           },
-          "pluginVersion": "9.2.5",
-          "reverseYBuckets": false,
+          "pluginVersion": "11.3.0",
           "targets": [
             {
               "datasource": {
@@ -2213,7 +2136,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "round(\n  sum by (le) (\n    avg by(le) (\n      increase(ins_block_insertion_bucket{job=\"bitcoin-$network-canister\"}[$heatmap_period])\n    )\n  )\n)",
+              "expr": "round(\n  sum by (le) (\n    avg by(le) (\n      increase(ins_block_insertion_bucket{ic=\"$ic\", job=\"bitcoin-$network-canister\"}[$heatmap_period])\n    )\n  )\n)",
               "format": "heatmap",
               "interval": "$heatmap_period",
               "legendFormat": "{{le}}",
@@ -2222,21 +2145,7 @@
             }
           ],
           "title": "Block Insertion into Unstable Blocks",
-          "tooltip": {
-            "show": true,
-            "showHistogram": false
-          },
-          "type": "heatmap",
-          "xAxis": {
-            "show": true
-          },
-          "yAxis": {
-            "decimals": 1,
-            "format": "Million",
-            "logBase": 1,
-            "show": true
-          },
-          "yBucketBound": "auto"
+          "type": "heatmap"
         },
         {
           "datasource": {
@@ -2250,11 +2159,13 @@
                 "mode": "palette-classic"
               },
               "custom": {
+                "axisBorderShow": false,
                 "axisCenteredZero": false,
                 "axisColorMode": "text",
                 "axisLabel": "Instructions (Billion)",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
+                "barWidthFactor": 0.6,
                 "drawStyle": "line",
                 "fillOpacity": 0,
                 "gradientMode": "none",
@@ -2263,6 +2174,7 @@
                   "tooltip": false,
                   "viz": false
                 },
+                "insertNulls": false,
                 "lineInterpolation": "linear",
                 "lineWidth": 1,
                 "pointSize": 5,
@@ -2284,7 +2196,8 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green"
+                    "color": "green",
+                    "value": null
                   },
                   {
                     "color": "red",
@@ -2299,7 +2212,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 108
+            "y": 38
           },
           "id": 40,
           "options": {
@@ -2314,6 +2227,7 @@
               "sort": "none"
             }
           },
+          "pluginVersion": "11.3.0",
           "targets": [
             {
               "datasource": {
@@ -2321,7 +2235,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "block_ingestion_stats{job=\"bitcoin-$network-canister\"} / 1000000000",
+              "expr": "block_ingestion_stats{ic=\"$ic\", job=\"bitcoin-$network-canister\"} / 1000000000",
               "legendFormat": "{{instruction_count}}",
               "range": true,
               "refId": "A"
@@ -2341,11 +2255,13 @@
                 "mode": "palette-classic"
               },
               "custom": {
+                "axisBorderShow": false,
                 "axisCenteredZero": false,
                 "axisColorMode": "text",
                 "axisLabel": "",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
+                "barWidthFactor": 0.6,
                 "drawStyle": "line",
                 "fillOpacity": 0,
                 "gradientMode": "none",
@@ -2354,6 +2270,7 @@
                   "tooltip": false,
                   "viz": false
                 },
+                "insertNulls": false,
                 "lineInterpolation": "linear",
                 "lineWidth": 1,
                 "pointSize": 5,
@@ -2375,7 +2292,8 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green"
+                    "color": "green",
+                    "value": null
                   },
                   {
                     "color": "red",
@@ -2391,7 +2309,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 116
+            "y": 46
           },
           "id": 19,
           "options": {
@@ -2406,6 +2324,7 @@
               "sort": "none"
             }
           },
+          "pluginVersion": "11.3.0",
           "targets": [
             {
               "datasource": {
@@ -2413,7 +2332,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "rate(num_get_successors_rejects{ic=\"mercury\", job=\"bitcoin-$network-canister\"}[$__rate_interval])",
+              "expr": "rate(num_get_successors_rejects{ic=\"$ic\", job=\"bitcoin-$network-canister\"}[$__rate_interval])",
               "legendFormat": "get_successor rejects",
               "range": true,
               "refId": "A"
@@ -2424,7 +2343,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "rate(num_block_deserialize_errors{ic=\"mercury\", job=\"bitcoin-$network-canister\"}[$__rate_interval])",
+              "expr": "rate(num_block_deserialize_errors{ic=\"$ic\", job=\"bitcoin-$network-canister\"}[$__rate_interval])",
               "hide": false,
               "legendFormat": "block_deserialize errors",
               "range": true,
@@ -2436,7 +2355,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "rate(num_insert_block_errors{ic=\"mercury\", job=\"bitcoin-$network-canister\"}[$__rate_interval])",
+              "expr": "rate(num_insert_block_errors{ic=\"$ic\", job=\"bitcoin-$network-canister\"}[$__rate_interval])",
               "hide": false,
               "legendFormat": "insert_block errors",
               "range": true,
@@ -2445,58 +2364,179 @@
           ],
           "title": "Internal canister errors",
           "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 46
+          },
+          "id": 63,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "11.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "increase(main_chain_height{ic=\"$ic\", job=\"bitcoin-$network-canister\"}[1m])",
+              "hide": true,
+              "legendFormat": "main_chain_height",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "increase(stable_height{ic=\"$ic\", job=\"bitcoin-$network-canister\"}[1m])",
+              "hide": false,
+              "instant": false,
+              "legendFormat": "stable_height",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "increase(unstable_blocks_depth{ic=\"$ic\", job=\"bitcoin-$network-canister\"}[1m])",
+              "hide": false,
+              "instant": false,
+              "legendFormat": "unstable_blocks_depth",
+              "range": true,
+              "refId": "C"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "increase(unstable_blocks_total{ic=\"$ic\", job=\"bitcoin-$network-canister\"}[1m])",
+              "hide": false,
+              "instant": false,
+              "legendFormat": "unstable_blocks_total",
+              "range": true,
+              "refId": "D"
+            }
+          ],
+          "title": "Insertion Rate per 1m",
+          "type": "timeseries"
         }
       ],
       "title": "Other",
       "type": "row"
     }
   ],
-  "refresh": false,
-  "schemaVersion": 37,
-  "style": "dark",
+  "preload": false,
+  "refresh": "",
+  "schemaVersion": 40,
   "tags": [],
   "templating": {
     "list": [
       {
         "current": {
-          "selected": false,
           "text": "IC Metrics (cluster local)",
-          "value": "IC Metrics (cluster local)"
+          "value": "PE62C54679EC3C073"
         },
-        "hide": 0,
         "includeAll": false,
-        "multi": false,
         "name": "datasource",
         "options": [],
         "query": "prometheus",
         "refresh": 1,
         "regex": "/IC.*/",
-        "skipUrlSync": false,
         "type": "datasource"
       },
       {
         "auto": true,
         "auto_count": 50,
-        "auto_min": "20s",
+        "auto_min": "30s",
         "current": {
-          "selected": false,
-          "text": "20s",
-          "value": "20s"
+          "text": "$__auto",
+          "value": "$__auto_interval_heatmap_period"
         },
         "hide": 2,
         "label": "Heatmap aggregation period",
         "name": "heatmap_period",
         "options": [
-          {
-            "selected": false,
-            "text": "auto",
-            "value": "$__auto_interval_heatmap_period"
-          },
-          {
-            "selected": true,
-            "text": "20s",
-            "value": "20s"
-          },
           {
             "selected": false,
             "text": "30s",
@@ -2553,20 +2593,16 @@
             "value": "1d"
           }
         ],
-        "query": "20s,30s,1m,2m,5m,10m,30m,1h,3h,6h,12h,1d",
+        "query": "30s,1m,2m,5m,10m,30m,1h,3h,6h,12h,1d",
         "refresh": 2,
-        "skipUrlSync": false,
         "type": "interval"
       },
       {
         "current": {
-          "selected": true,
           "text": "mainnet",
           "value": "mainnet"
         },
-        "hide": 0,
         "includeAll": false,
-        "multi": false,
         "name": "network",
         "options": [
           {
@@ -2581,13 +2617,10 @@
           }
         ],
         "query": "mainnet,testnet",
-        "queryValue": "",
-        "skipUrlSync": false,
         "type": "custom"
       },
       {
         "current": {
-          "selected": false,
           "text": "mercury",
           "value": "mercury"
         },
@@ -2596,9 +2629,7 @@
           "uid": "000000001"
         },
         "definition": "label_values(up,ic)",
-        "hide": 0,
         "includeAll": false,
-        "multi": false,
         "name": "ic",
         "options": [],
         "query": {
@@ -2607,13 +2638,11 @@
         },
         "refresh": 1,
         "regex": "",
-        "skipUrlSync": false,
         "sort": 1,
         "type": "query"
       },
       {
         "current": {
-          "selected": false,
           "text": "All",
           "value": "$__all"
         },
@@ -2622,7 +2651,6 @@
           "uid": "000000001"
         },
         "definition": "label_values(up{ic=\"$ic\"},ic_subnet)",
-        "hide": 0,
         "includeAll": true,
         "label": "Subnet",
         "multi": true,
@@ -2634,13 +2662,11 @@
         },
         "refresh": 2,
         "regex": "",
-        "skipUrlSync": false,
         "sort": 1,
         "type": "query"
       },
       {
         "current": {
-          "selected": true,
           "text": [
             "All"
           ],
@@ -2653,7 +2679,6 @@
           "uid": "000000001"
         },
         "definition": "label_values(up{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\"}, instance)",
-        "hide": 0,
         "includeAll": true,
         "label": "Instance",
         "multi": true,
@@ -2665,7 +2690,6 @@
         },
         "refresh": 2,
         "regex": "",
-        "skipUrlSync": false,
         "sort": 1,
         "type": "query"
       }
@@ -2679,6 +2703,6 @@
   "timezone": "utc",
   "title": "Bitcoin",
   "uid": "bitcoin",
-  "version": 8,
+  "version": 9,
   "weekStart": ""
 }

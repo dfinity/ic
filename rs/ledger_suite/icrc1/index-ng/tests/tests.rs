@@ -1352,8 +1352,8 @@ mod metrics {
     use ic_icrc1_index_ng::InitArg;
 
     #[test]
-    fn should_export_total_memory_usage_bytes_metrics() {
-        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_index_total_memory_bytes_metric(
+    fn should_export_heap_memory_usage_bytes_metrics() {
+        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_index_heap_memory_bytes_metric(
             index_wasm(),
             encode_init_args,
         );

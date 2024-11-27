@@ -120,9 +120,9 @@ impl FeatureFlags {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             write_barrier: FlagStatus::Disabled,
             wasm_native_stable_memory: FlagStatus::Enabled,
-            wasm64: FlagStatus::Disabled,
+            wasm64: FlagStatus::Enabled,
             best_effort_responses: FlagStatus::Disabled,
-            canister_backtrace: FlagStatus::Disabled,
+            canister_backtrace: FlagStatus::Enabled,
         }
     }
 }
@@ -208,7 +208,11 @@ pub struct Config {
     pub max_sandbox_idle_time: Duration,
 
     /// Sandbox processes may be evicted if their total RSS exceeds
-    /// the specified amount in bytes.
+    /// the specified amount in bytes. By default, we assume that
+    /// each sandbox process has 50 MiB RSS (see `DEFAULT_SANDBOX_PROCESS_RSS`).
+    /// The actual RSS is updated in the background thread, while the
+    /// synchronous RSS-based eviction is only triggered when there is
+    /// a memory pressure (see `DEFAULT_MIN_MEM_AVAILABLE_TO_EVICT_SANDBOXES`)
     pub max_sandboxes_rss: NumBytes,
 
     /// The type of the local subnet. The default value here should be replaced

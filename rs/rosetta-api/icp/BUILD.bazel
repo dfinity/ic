@@ -14,7 +14,6 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//rs/canister_client",
-    "//rs/crypto/secp256k1",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
@@ -196,6 +195,7 @@ rust_test_suite_with_extra_srcs(
         "tests/system_tests/common/*.rs",
         "tests/system_tests/test_cases/*.rs",
     ]),
+    flaky = True,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )

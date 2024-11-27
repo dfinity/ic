@@ -1,3 +1,6 @@
+// This allow(dead_code) is necessary because some parts of this file
+// are not used in canbench-rs, but are used elsewhere.  Otherwise we get annoying clippy warnings.
+#![allow(dead_code)]
 use crate::{
     governance::{Environment, HeapGrowthPotential, RngError},
     pb::v1::{ExecuteNnsFunction, GovernanceError, OpenSnsTokenSwap},
