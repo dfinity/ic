@@ -1254,7 +1254,7 @@ fn test_upgrade_serialization() {
         upgrade_args,
         minter,
         false,
-        false,
+        true,
     );
 }
 
@@ -1314,6 +1314,7 @@ fn test_upgrade_serialization_fixed_tx() {
             Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap(),
         )
         .unwrap();
+        // wait_ledger_ready(&env, canister_id, 10);
 
         let allowance = Account::get_allowance(&env, canister_id, p1.0, p2.0);
         assert_eq!(allowance.allowance.0.to_u64().unwrap(), 120_000);
@@ -1332,8 +1333,6 @@ fn test_upgrade_serialization_fixed_tx() {
     test_upgrade(ledger_wasm_current.clone());
     // Test the new wasm serialization
     test_upgrade(ledger_wasm_current);
-    // Test if downgrade works
-    test_upgrade(ledger_wasm_mainnet);
 }
 
 #[test]
@@ -1343,7 +1342,7 @@ fn test_downgrade_from_incompatible_version() {
         ledger_wasm_next_version(),
         ledger_wasm(),
         encode_init_args,
-        true,
+        false,
     );
 }
 
