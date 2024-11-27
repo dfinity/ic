@@ -23,7 +23,6 @@ use ic_ledger_canister_core::{
     range_utils,
 };
 use ic_ledger_core::{
-    approvals::AllowancesData,
     block::{BlockIndex, BlockType, EncodedBlock},
     timestamp::TimeStamp,
     tokens::{Tokens, DECIMAL_PLACES},
@@ -58,8 +57,8 @@ use icrc_ledger_types::{
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
 use ledger_canister::{
-    is_ready, ledger_state, set_ledger_state, Ledger, LedgerField, LedgerState, LEDGER,
-    LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY,
+    clear_stable_allowance_data, is_ready, ledger_state, set_ledger_state, Ledger, LedgerField,
+    LedgerState, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY,
 };
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
@@ -820,6 +819,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
         });
     }
 
+    let upgrade_from_version = ledger.ledger_version;
     if ledger.ledger_version > LEDGER_VERSION {
         panic!(
             "Trying to downgrade from incompatible version {}. Current version is {}.",
@@ -847,12 +847,19 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
     );
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
-    set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
-    ledger.approvals.allowances_data.clear_arrivals();
-
-    migrate_next_part(
-        MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
-    );
+    set_ledger_state(LedgerState::Ready);
+    if upgrade_from_version < LEDGER_VERSION {
+        if upgrade_from_version == 0 {
+            print!("Upgrading from version 0 which does not use stable memory, clearing stable allowance data.");
+            set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
+            clear_stable_allowance_data();
+            ledger.clear_arrivals();
+        }
+        print!("Migration started.");
+        migrate_next_part(
+            MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
+        );
+    }
 
     let end = dfn_core::api::performance_counter(0);
     let post_upgrade_instructions_consumed = end - start;
@@ -861,62 +868,47 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
 }
 
 fn migrate_next_part(instruction_limit: u64) {
+    let instructions_mingration_start = instruction_counter();
     STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow_mut() += 1);
     let mut migrated_allowances = 0;
     let mut migrated_expirations = 0;
 
-    print!("Migration started.");
+    print!("Migrating part of the ledger state.");
 
-    Access::with_ledger_mut(|ledger| {
-        while instruction_counter() < instruction_limit {
-            let field = match ledger_state() {
-                LedgerState::Migrating(ledger_field) => ledger_field,
-                LedgerState::Ready => break,
-            };
-            match field {
-                LedgerField::Allowances => {
-                    match ledger.approvals.allowances_data.pop_first_allowance() {
-                        Some((account_spender, allowance)) => {
-                            ledger
-                                .stable_approvals
-                                .allowances_data
-                                .set_allowance(account_spender, allowance);
-                            migrated_allowances += 1;
-                        }
-                        None => {
-                            set_ledger_state(LedgerState::Migrating(
-                                LedgerField::AllowancesExpirations,
-                            ));
-                        }
-                    };
+    let mut ledger = LEDGER.write().unwrap();
+    while instruction_counter() < instruction_limit {
+        let field = match ledger_state() {
+            LedgerState::Migrating(ledger_field) => ledger_field,
+            LedgerState::Ready => break,
+        };
+        match field {
+            LedgerField::Allowances => {
+                if ledger.migrate_one_allowance() {
+                    migrated_allowances += 1;
+                } else {
+                    set_ledger_state(LedgerState::Migrating(LedgerField::AllowancesExpirations));
                 }
-                LedgerField::AllowancesExpirations => {
-                    match ledger.approvals.allowances_data.pop_first_expiry() {
-                        Some((timestamp, account_spender)) => {
-                            ledger
-                                .stable_approvals
-                                .allowances_data
-                                .insert_expiry(timestamp, account_spender);
-                            migrated_expirations += 1;
-                        }
-                        None => {
-                            set_ledger_state(LedgerState::Ready);
-                        }
-                    };
+            }
+            LedgerField::AllowancesExpirations => {
+                if ledger.migrate_one_expiration() {
+                    migrated_expirations += 1;
+                } else {
+                    set_ledger_state(LedgerState::Ready);
                 }
             }
         }
-        let msg = format!("Number of elements migrated: allowances:{migrated_allowances} expirations:{migrated_expirations}. Instructions used {}.",
+    }
+    let instructions_mingration = instruction_counter() - instructions_mingration_start;
+    let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations}. Migration step instructions: {instructions_mingration}, total instructions used in message: {}." ,
             instruction_counter());
-        if !is_ready() {
-            print!("Migration partially done. Scheduling the next part. {msg}");
-            ic_cdk_timers::set_timer(Duration::from_secs(0), || {
-                migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
-            });
-        } else {
-            print!("Migration completed! {msg}");
-        }
-    });
+    if !is_ready() {
+        print!("Migration partially done. Scheduling the next part. {msg}");
+        ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+            migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
+        });
+    } else {
+        print!("Migration completed! {msg}");
+    }
 }
 
 #[export_name = "canister_post_upgrade"]
@@ -1492,16 +1484,18 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         ledger.blockchain.num_archived_blocks.saturating_add(ledger.blockchain.blocks.len() as u64) as f64,
         "Total number of blocks stored in the main memory, plus total number of blocks sent to the archive.",
     )?;
-    w.encode_gauge(
-        "ledger_balances_token_pool",
-        ledger.balances.token_pool.get_tokens() as f64,
-        "Total number of Tokens in the pool.",
-    )?;
-    w.encode_gauge(
-        "ledger_balance_store_entries",
-        ledger.balances.store.len() as f64,
-        "Total number of accounts in the balance store.",
-    )?;
+    if is_ready() {
+        w.encode_gauge(
+            "ledger_balances_token_pool",
+            ledger.balances().token_pool.get_tokens() as f64,
+            "Total number of Tokens in the pool.",
+        )?;
+        w.encode_gauge(
+            "ledger_balance_store_entries",
+            ledger.balances().store.len() as f64,
+            "Total number of accounts in the balance store.",
+        )?;
+    }
     w.encode_gauge(
         "ledger_most_recent_block_time_seconds",
         ledger.blockchain.last_timestamp.as_nanos_since_unix_epoch() as f64 / 1_000_000_000.0,
@@ -1517,11 +1511,13 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         num_archives as f64,
         "Total number of archives.",
     )?;
-    w.encode_gauge(
-        "ledger_num_approvals",
-        ledger.approvals.get_num_approvals() as f64,
-        "Total number of approvals.",
-    )?;
+    if is_ready() {
+        w.encode_gauge(
+            "ledger_num_approvals",
+            ledger.approvals().get_num_approvals() as f64,
+            "Total number of approvals.",
+        )?;
+    }
     let pre_upgrade_instructions = PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
     let post_upgrade_instructions = POST_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
     w.encode_gauge(
