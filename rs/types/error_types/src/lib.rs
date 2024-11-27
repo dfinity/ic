@@ -657,10 +657,10 @@ mod tests {
         // that the reject code can be derived from the leading digit of an error code.
         for error_code in ErrorCode::iter() {
             let reject_code: RejectCode = error_code.into();
-            let error_code_as_u64 = error_code as u64;
+            let error_code_as_u64: u64 = error_code as u64;
             assert!((100..700).contains(&error_code_as_u64));
-            let derived_reject_code = error_code_as_u64 / 100;
-            assert_eq!(reject_code as u64, derived_reject_code);
+            let derived_reject_code: RejectCode = (error_code_as_u64 / 100).try_into().unwrap();
+            assert_eq!(reject_code, derived_reject_code);
         }
     }
 }
