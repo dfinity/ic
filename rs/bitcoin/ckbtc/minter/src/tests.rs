@@ -352,48 +352,55 @@ fn test_min_change_amount() {
 
 #[test]
 fn test_no_dust_outputs() {
-    let mut available_utxos = BTreeSet::new();
-    available_utxos.insert(Utxo {
+    const P2PKH_DUST_THRESHOLD: u64 = 546;
+
+    let mut available_utxos = btreeset! {Utxo {
         outpoint: OutPoint {
             txid: [0; 32].into(),
             vout: 0,
         },
         value: 100_000,
         height: 10,
-    });
+    }};
+    assert_eq!(available_utxos.len(), 1);
+    let initial_available_utxos = available_utxos.clone();
 
     let minter_addr = BitcoinAddress::P2wpkhV0([0; 20]);
     let out1_addr = BitcoinAddress::P2wpkhV0([1; 20]);
     let out2_addr = BitcoinAddress::P2wpkhV0([2; 20]);
-    let fee_per_vbyte = 10000;
 
-    assert_eq!(
-        build_unsigned_transaction(
-            &mut available_utxos,
-            vec![(out1_addr.clone(), 99_900), (out2_addr.clone(), 100)],
-            minter_addr.clone(),
-            fee_per_vbyte,
-        ),
-        Err(BuildTxError::DustOutput {
-            address: out2_addr.clone(),
-            amount: 100
-        })
-    );
+    for dust in 0..=P2PKH_DUST_THRESHOLD {
+        let fee_per_vbyte = 10000;
+        assert_eq!(
+            build_unsigned_transaction(
+                &mut available_utxos,
+                vec![(out1_addr.clone(), 99_000), (out2_addr.clone(), dust)],
+                minter_addr.clone(),
+                fee_per_vbyte,
+            ),
+            Err(BuildTxError::DustOutput {
+                address: out2_addr.clone(),
+                amount: dust
+            })
+        );
+        assert_eq!(available_utxos, initial_available_utxos);
 
-    let fee_per_vbyte = 4000;
-
-    assert_eq!(
-        build_unsigned_transaction(
-            &mut available_utxos,
-            vec![(out1_addr, 99_000), (out2_addr.clone(), 1000)],
-            minter_addr,
-            fee_per_vbyte,
-        ),
-        Err(BuildTxError::DustOutput {
-            address: out2_addr,
-            amount: 1000
-        })
-    );
+        let fee_per_vbyte = 4000;
+        assert_eq!(
+            build_unsigned_transaction(
+                &mut available_utxos,
+                vec![(out1_addr.clone(), 99_000), (out2_addr.clone(), dust)],
+                minter_addr.clone(),
+                fee_per_vbyte,
+            ),
+            Err(BuildTxError::DustOutput {
+                address: out2_addr.clone(),
+                amount: dust
+            })
+        );
+        assert_eq!(available_utxos, initial_available_utxos);
+    }
+}
 
     assert_eq!(available_utxos.len(), 1);
 }
