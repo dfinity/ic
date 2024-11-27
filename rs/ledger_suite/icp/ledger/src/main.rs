@@ -1767,13 +1767,6 @@ fn icrc10_supported_standards_candid() {
     over(candid_one, |()| icrc10_supported_standards())
 }
 
-candid::export_service!();
-
-#[export_name = "canister_query __get_candid_interface_tmp_hack"]
-fn get_canidid_interface() {
-    over(candid_one, |()| -> String { __export_service() })
-}
-
 #[candid_method(query, rename = "is_ledger_ready")]
 fn is_ledger_ready() -> bool {
     is_ready()
@@ -1782,6 +1775,13 @@ fn is_ledger_ready() -> bool {
 #[export_name = "canister_query is_ledger_ready"]
 fn is_ledger_ready_candid() {
     over(candid_one, |()| is_ledger_ready())
+}
+
+candid::export_service!();
+
+#[export_name = "canister_query __get_candid_interface_tmp_hack"]
+fn get_canidid_interface() {
+    over(candid_one, |()| -> String { __export_service() })
 }
 
 #[cfg(test)]
