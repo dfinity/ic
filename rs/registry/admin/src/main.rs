@@ -2618,6 +2618,9 @@ struct ProposeToSetBitcoinConfig {
         help = "Whether or not to disable the API if canister isn't fully synced."
     )]
     pub disable_api_if_not_fully_synced: Option<bool>,
+
+    #[clap(long, help = "Updates the fees of the Bitcoin canister.")]
+    pub fees: Option<Fees>,
 }
 
 impl ProposalTitle for ProposeToSetBitcoinConfig {
@@ -2653,6 +2656,7 @@ impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
                     Flag::Disabled
                 }
             }),
+            fees: self.fees.into(),
             ..Default::default()
         };
 
