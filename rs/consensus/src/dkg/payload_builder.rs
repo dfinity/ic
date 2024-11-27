@@ -15,7 +15,10 @@ use ic_registry_client_helpers::{
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
-    consensus::{dkg, dkg::Summary, get_faults_tolerated, Block},
+    consensus::{
+        dkg::{self, DealingMessages, DkgDataPayload, Summary},
+        get_faults_tolerated, Block,
+    },
     crypto::{
         threshold_sig::ni_dkg::{
             config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
@@ -73,7 +76,7 @@ pub fn create_payload(
     if last_dkg_summary.get_next_start_height() == height {
         // Since `height` corresponds to the start of a new DKG interval, we create a
         // new summary.
-        return create_summary_payload(
+        create_summary_payload(
             subnet_id,
             registry_client,
             crypto,
@@ -85,16 +88,34 @@ pub fn create_payload(
             validation_context,
             logger,
         )
-        .map(dkg::Payload::Summary);
+        .map(dkg::Payload::Summary)
+    } else {
+        // If the height is not a start height, create a payload with new dealings.
+        create_data_payload(
+            pool_reader,
+            parent,
+            dkg_pool,
+            last_dkg_summary,
+            max_dealings_per_block,
+            &last_summary_block,
+        )
+        .map(dkg::Payload::Data)
     }
+}
 
-    // If the height is not a start height, create a payload with new dealings.
-
+fn create_data_payload(
+    pool_reader: &PoolReader<'_>,
+    parent: &Block,
+    dkg_pool: Arc<RwLock<dyn DkgPool>>,
+    last_dkg_summary: &Summary,
+    max_dealings_per_block: usize,
+    last_summary_block: &Block,
+) -> Result<DkgDataPayload, PayloadCreationError> {
     // Get all dealer ids from the chain.
     let dealers_from_chain = utils::get_dealers_from_chain(pool_reader, parent);
     // Filter from the validated pool all dealings whose dealer has no dealing on
     // the chain yet.
-    let new_validated_dealings = dkg_pool
+    let new_validated_dealings: DealingMessages = dkg_pool
         .read()
         .expect("Couldn't lock DKG pool for reading.")
         .get_validated()
@@ -107,10 +128,16 @@ pub fn create_payload(
         .take(max_dealings_per_block)
         .cloned()
         .collect();
-    Ok(dkg::Payload::Data(dkg::DkgDataPayload::new(
-        last_summary_block.height,
-        new_validated_dealings,
-    )))
+
+    if !new_validated_dealings.is_empty() {
+        return Ok(DkgDataPayload::new(
+            last_summary_block.height,
+            new_validated_dealings,
+        ));
+    }
+
+    // TODO: Try to include remote transcripts
+    Ok(DkgDataPayload::new_empty(last_summary_block.height))
 }
 
 /// Creates a summary payload for the given parent and registry_version.
@@ -151,7 +178,7 @@ pub(super) fn create_summary_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Result<dkg::Summary, PayloadCreationError> {
-    let all_dealings = utils::get_dkg_dealings(pool_reader, parent);
+    let all_dealings = utils::get_dkg_dealings2(pool_reader, parent, false);
     let mut transcripts_for_remote_subnets = BTreeMap::new();
     let mut next_transcripts = BTreeMap::new();
     // Try to create transcripts from the last round.

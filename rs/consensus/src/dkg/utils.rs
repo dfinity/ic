@@ -10,7 +10,7 @@ pub(super) fn get_dealers_from_chain(
     pool_reader: &PoolReader<'_>,
     block: &Block,
 ) -> HashSet<(NiDkgId, NodeId)> {
-    get_dkg_dealings(pool_reader, block)
+    get_dkg_dealings2(pool_reader, block, false)
         .into_iter()
         .flat_map(|(dkg_id, dealings)| {
             dealings
@@ -23,6 +23,7 @@ pub(super) fn get_dealers_from_chain(
 // Starts with the given block and creates a nested mapping from the DKG Id to
 // the node Id to the dealing. This function panics if multiple dealings
 // from one dealer are discovered, hence, we assume a valid block chain.
+#[allow(dead_code)]
 pub(super) fn get_dkg_dealings(
     pool_reader: &PoolReader<'_>,
     block: &Block,
@@ -59,9 +60,10 @@ pub(super) fn get_dkg_dealings(
 /// It also excludes dealings for ni_dkg ids, which already have a transcript in the
 /// blockchain.
 #[allow(dead_code)]
-pub(super) fn get_unused_dkg_dealings(
+pub(super) fn get_dkg_dealings2(
     pool_reader: &PoolReader<'_>,
     block: &Block,
+    exclude_used: bool,
 ) -> BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>> {
     let mut dealings: BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>> = BTreeMap::new();
     let mut used_dealings: BTreeSet<NiDkgId> = BTreeSet::new();
@@ -74,13 +76,15 @@ pub(super) fn get_unused_dkg_dealings(
     {
         let payload = &block.payload.as_ref().as_data().dkg;
 
-        // Update used dealings
-        used_dealings.extend(
-            payload
-                .transcripts_for_remote_subnets
-                .iter()
-                .map(|transcript| transcript.0.clone()),
-        );
+        if exclude_used {
+            // Update used dealings
+            used_dealings.extend(
+                payload
+                    .transcripts_for_remote_subnets
+                    .iter()
+                    .map(|transcript| transcript.0.clone()),
+            );
+        }
 
         // Find new dealings in this payload
         for (signer, ni_dkg_id, dealing) in payload
