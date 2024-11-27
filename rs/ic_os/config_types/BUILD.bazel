@@ -28,6 +28,10 @@ rust_library(
     ),
     crate_name = "config_types",
     edition = "2021",
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = DEPENDENCIES,
 )
 
