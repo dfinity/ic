@@ -113,7 +113,7 @@ pub(crate) struct SchedulerTest {
     registry_settings: RegistryExecutionSettings,
     // Metrics Registry.
     metrics_registry: MetricsRegistry,
-    // iDKG subnet public keys.
+    // Chain key subnet public keys.
     chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     // Pre-signature IDs.
     idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
