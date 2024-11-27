@@ -4,7 +4,7 @@ use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId},
     NodeId,
 };
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 pub(super) fn get_dealers_from_chain(
     pool_reader: &PoolReader<'_>,
@@ -49,4 +49,56 @@ pub(super) fn get_dkg_dealings(
                 });
             acc
         })
+}
+
+// TODO: Remove dead_code
+#[allow(dead_code)]
+pub(super) fn get_unused_dkg_dealings(
+    pool_reader: &PoolReader<'_>,
+    block: &Block,
+) -> BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>> {
+    let mut dealings: BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>> = BTreeMap::new();
+    let mut used_dealings: BTreeSet<NiDkgId> = BTreeSet::new();
+
+    // Note that the chain iterator is guaranteed to iterate from
+    // newest to oldest blocks and that transcripts can not appear before their dealings.
+    for block in pool_reader
+        .chain_iterator(block.clone())
+        .take_while(|block| !block.payload.is_summary())
+    {
+        let payload = &block.payload.as_ref().as_data().dkg;
+
+        // Update used dealings
+        used_dealings.extend(
+            payload
+                .transcripts_for_remote_subnets
+                .iter()
+                .map(|transcript| transcript.0.clone()),
+        );
+
+        // Find new dealings in this payload
+        for (signer, ni_dkg_id, dealing) in payload
+            .messages
+            .iter()
+            // Filer out if they are already used
+            .filter(|message| !used_dealings.contains(&message.content.dkg_id))
+            .map(|message| {
+                (
+                    message.signature.signer,
+                    message.content.dkg_id.clone(),
+                    message.content.dealing.clone(),
+                )
+            })
+        {
+            let entry = dealings.entry(ni_dkg_id).or_default();
+            let old_entry = entry.insert(signer, dealing);
+
+            assert!(
+                old_entry.is_none(),
+                "Dealings from the same dealers discovered."
+            );
+        }
+    }
+
+    dealings
 }
