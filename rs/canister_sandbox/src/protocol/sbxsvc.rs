@@ -348,11 +348,9 @@ mod tests {
         id::{ExecId, MemoryId, WasmId},
         sbxsvc::{
             AbortExecutionReply, AbortExecutionRequest, CloseMemoryReply, CloseMemoryRequest,
-            CloseWasmReply, CloseWasmRequest, CreateExecutionStateReply,
-            CreateExecutionStateRequest, CreateExecutionStateSerializedReply,
+            CloseWasmReply, CloseWasmRequest, CreateExecutionStateSerializedReply,
             CreateExecutionStateSerializedRequest, CreateExecutionStateSerializedSuccessReply,
-            CreateExecutionStateSuccessReply, MemorySerialization, OpenMemoryReply,
-            OpenMemoryRequest, OpenWasmReply, OpenWasmRequest, OpenWasmSerializedReply,
+            MemorySerialization, OpenMemoryReply, OpenMemoryRequest, OpenWasmSerializedReply,
             OpenWasmSerializedRequest, ResumeExecutionReply, ResumeExecutionRequest,
             StartExecutionReply, StartExecutionRequest, TerminateReply,
         },
@@ -398,21 +396,6 @@ mod tests {
     #[test]
     fn round_trip_terminate_reply() {
         let msg = Reply::Terminate(TerminateReply {});
-        assert_eq!(round_trip_reply(&msg), msg);
-    }
-
-    #[test]
-    fn round_trip_open_wasm_request() {
-        let msg = Request::OpenWasm(OpenWasmRequest {
-            wasm_id: WasmId::new(),
-            wasm_src: vec![1, 2, 3],
-        });
-        assert_eq!(round_trip_request(&msg), msg);
-    }
-
-    #[test]
-    fn round_trip_open_wasm_reply() {
-        let msg = Reply::OpenWasm(OpenWasmReply(Ok(wasm_module())));
         assert_eq!(round_trip_reply(&msg), msg);
     }
 
@@ -581,41 +564,6 @@ mod tests {
     #[test]
     fn round_trip_abort_execution_reply() {
         let msg = Reply::AbortExecution(AbortExecutionReply { success: true });
-        assert_eq!(round_trip_reply(&msg), msg);
-    }
-
-    #[test]
-    fn round_trip_create_execution_state_request() {
-        let msg = Request::CreateExecutionState(CreateExecutionStateRequest {
-            wasm_id: WasmId::new(),
-            wasm_binary: vec![1, 2, 3],
-            wasm_page_map: PageMap::new_for_testing().serialize(),
-            next_wasm_memory_id: MemoryId::new(),
-            canister_id: canister_test_id(1),
-            stable_memory_page_map: PageMap::new_for_testing().serialize(),
-        });
-        assert_eq!(round_trip_request(&msg), msg);
-    }
-
-    #[test]
-    fn round_trip_create_execution_state_reply() {
-        let compilation = wasm_module();
-        let reply = CreateExecutionStateSuccessReply {
-            wasm_memory_modifications: MemoryModifications {
-                page_delta: PageMap::new_for_testing().serialize_delta(&[]),
-                size: NumWasmPages::new(10),
-            },
-            exported_globals: vec![
-                Global::I32(10),
-                Global::I64(32),
-                Global::F32(10.5),
-                Global::F64(12.3),
-                Global::V128(123),
-            ],
-            compilation_result: compilation.0,
-            serialized_module: compilation.1,
-        };
-        let msg = Reply::CreateExecutionState(CreateExecutionStateReply(Ok(reply)));
         assert_eq!(round_trip_reply(&msg), msg);
     }
 

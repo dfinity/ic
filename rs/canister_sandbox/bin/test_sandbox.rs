@@ -1,14 +1,7 @@
 use ic_canister_sandbox_backend_lib::{
     protocol, protocol::sbxsvc, rpc, sandbox_service, transport, transport::SocketReaderConfig,
 };
-use ic_embedders::{
-    wasm_utils::{Segments, WasmImportsDetails},
-    CompilationResult, SerializedModule, SerializedModuleBytes,
-};
-use ic_replicated_state::canister_state::execution_state::WasmMetadata;
-use ic_types::NumInstructions;
 
-use std::collections::BTreeSet;
 use std::os::unix::io::FromRawFd;
 use std::sync::Arc;
 
@@ -31,7 +24,8 @@ impl sandbox_service::SandboxService for DummySandboxService {
         &self,
         _req: sbxsvc::OpenWasmSerializedRequest,
     ) -> rpc::Call<sbxsvc::OpenWasmSerializedReply> {
-        unimplemented!();
+        println!("Sandbox: Received 'open_wasm_serialized' request");
+        rpc::Call::new_resolved(Ok(sbxsvc::OpenWasmSerializedReply(Ok(()))))
     }
 
     fn close_wasm(&self, _req: sbxsvc::CloseWasmRequest) -> rpc::Call<sbxsvc::CloseWasmReply> {
