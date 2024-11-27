@@ -23,8 +23,10 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{
-        block_maker::SubnetRecords, dkg, hashed, Block, BlockMetadata, BlockPayload, BlockProposal,
-        DataPayload, HasHeight, HasRank, HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
+        block_maker::SubnetRecords,
+        dkg::{self, DkgDataPayload},
+        hashed, Block, BlockMetadata, BlockPayload, BlockProposal, DataPayload, HasHeight, HasRank,
+        HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
     },
     replica_config::ReplicaConfig,
     time::current_time,
@@ -334,8 +336,8 @@ impl BlockMaker {
                         idkg: idkg_summary,
                     })
                 }
-                dkg::Payload::Dealings(dealings) => {
-                    let (batch_payload, dealings, idkg_data) = match status::get_status(
+                dkg::Payload::Data(dkg) => {
+                    let (batch_payload, dkg, idkg_data) = match status::get_status(
                         height,
                         self.registry_client.as_ref(),
                         self.replica_config.subnet_id,
@@ -349,7 +351,7 @@ impl BlockMaker {
                         // Use empty payload and empty DKG dealings if the replica is halting.
                         Status::Halting => (
                             BatchPayload::default(),
-                            dkg::Dealings::new_empty(dealings.start_height),
+                            DkgDataPayload::new_empty(dkg.start_height),
                             /*idkg_data=*/ None,
                         ),
                         Status::Running => {
@@ -380,7 +382,7 @@ impl BlockMaker {
                             .ok()
                             .flatten();
 
-                            (batch_payload, dealings, idkg_data)
+                            (batch_payload, dkg, idkg_data)
                         }
                     };
 
@@ -391,7 +393,7 @@ impl BlockMaker {
 
                     BlockPayload::Data(DataPayload {
                         batch: batch_payload,
-                        dealings,
+                        dkg,
                         idkg: idkg_data,
                     })
                 }
@@ -700,7 +702,7 @@ mod tests {
             let expected_payloads = PoolReader::new(&pool)
                 .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
             let returned_payload =
-                dkg::Payload::Dealings(dkg::Dealings::new_empty(Height::from(0)));
+                dkg::Payload::Data(dkg::DkgDataPayload::new_empty(Height::from(0)));
             let pool_reader = PoolReader::new(&pool);
             let expected_time = expected_payloads[0].1
                 + get_block_maker_delay(
