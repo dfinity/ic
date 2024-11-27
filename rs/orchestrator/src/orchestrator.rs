@@ -123,7 +123,7 @@ impl Orchestrator {
             1,
         );
 
-        UtilityCommand::notify_host("Please wait for a 'Join request successful!' message confirming a successful onboarding.", 3);
+        UtilityCommand::notify_host("\nONBOADING NOT YET COMPLETE:\nPlease wait for a 'Join request successful!' message confirming a successful onboarding...\n", 3);
 
         let version = replica_version.clone();
         thread::spawn(move || loop {

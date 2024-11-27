@@ -35,7 +35,7 @@ pub(super) fn get_dkg_dealings(
                 .payload
                 .as_ref()
                 .as_data()
-                .dealings
+                .dkg
                 .messages
                 .iter()
                 .for_each(|msg| {
