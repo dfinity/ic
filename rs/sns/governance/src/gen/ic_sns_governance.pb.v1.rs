@@ -3438,6 +3438,28 @@ pub struct AdvanceTargetVersionRequest {
     ::prost::Message,
 )]
 pub struct AdvanceTargetVersionResponse {}
+/// A test-only API that refreshes the cached upgrade steps.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct RefreshCachedUpgradeStepsRequest {}
+/// The response to a request to refresh the cached upgrade steps.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct RefreshCachedUpgradeStepsResponse {}
 /// Represents a single entry in the upgrade journal.
 #[derive(
     candid::CandidType,

@@ -12,7 +12,9 @@ fn main() {
 }
 
 fuzz_target!(|args: UpdateSettingsArgs| -> Corpus {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_precompiled_universal_canister(false)
+        .build();
 
     let wat = r#"(module)"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
