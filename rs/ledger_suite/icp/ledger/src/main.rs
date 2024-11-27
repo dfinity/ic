@@ -847,14 +847,13 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
     );
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
-    set_ledger_state(LedgerState::Ready);
-    if upgrade_from_version < LEDGER_VERSION {
-        if upgrade_from_version == 0 {
-            print!("Upgrading from version 0 which does not use stable memory, clearing stable allowance data.");
-            set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
-            clear_stable_allowance_data();
-            ledger.clear_arrivals();
-        }
+    if upgrade_from_version == 0 {
+        set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
+        print!("Upgrading from version 0 which does not use stable memory, clearing stable allowance data.");
+        clear_stable_allowance_data();
+        ledger.clear_arrivals();
+    }
+    if !is_ready() {
         print!("Migration started.");
         migrate_next_part(
             MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
