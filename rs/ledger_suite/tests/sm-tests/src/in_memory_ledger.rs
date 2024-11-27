@@ -722,7 +722,7 @@ where
         let mut balances_checked = 0;
         let now = Instant::now();
         for (account, balance) in self.balances.iter() {
-            let actual_balance = AccountId::get_balance(env, ledger_id, account.clone());
+            let actual_balance = AccountId::get_balance(env, ledger_id, *account);
 
             assert_eq!(
                 &Tokens::try_from(actual_balance.clone()).unwrap(),
