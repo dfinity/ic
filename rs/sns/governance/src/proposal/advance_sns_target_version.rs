@@ -239,7 +239,8 @@ fn test_no_pending_upgrades() {
         // Inspect the observed results.
         assert_eq!(
             err,
-            "Cannot advance SNS target version: there are no pending upgrades. If you think there should be (e.g. an NNS proposal recently blessed new SNS versions), you may need to wait for the upgrade steps to be refreshed. This shouldn't take more than 3600 seconds."
+            "The currently deployed SNS version is not in the cached_upgrade_steps. You may need to wait for the upgrade steps to be refreshed. \
+            This shouldn't take more than 3600 seconds."
         );
     }
 }
@@ -298,7 +299,8 @@ fn test_deployed_version_not_in_cached_upgrade_steps() {
         // Inspect the observed results.
         assert_eq!(
             err,
-            "The currently deployed SNS version is not in the cached_upgrade_steps. You may need to wait for the upgrade steps to be refreshed. This shouldn't take more than 3600 seconds."
+            "The currently deployed SNS version is not in the cached_upgrade_steps. You may need to wait for the upgrade steps to be refreshed. \
+            This shouldn't take more than 3600 seconds."
         );
     }
 }
