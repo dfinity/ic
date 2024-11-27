@@ -182,7 +182,10 @@ rust_test(
         "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
         "II_WASM": "$(rootpath @ii_dev_canister//file)",
     },
-    tags = ["cpu:8"],
+    tags = [
+        "cpu:8",
+        "test_macos",
+    ],
     deps = TEST_DEPENDENCIES,
 )
 
@@ -205,7 +208,9 @@ rust_test(
         "IC_REF_TEST_ROOT": "rs/tests/research/ic-hs",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    tags = ["cpu:8"],
+    tags = [
+        "cpu:8",
+    ],
     deps = SPEC_TEST_DEPENDENCIES,
 )
 

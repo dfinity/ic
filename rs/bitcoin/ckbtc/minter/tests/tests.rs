@@ -54,8 +54,7 @@ fn default_init_args() -> CkbtcMinterInitArgs {
         min_confirmations: Some(MIN_CONFIRMATIONS),
         mode: Mode::GeneralAvailability,
         kyt_fee: None,
-        kyt_principal: None,
-        new_kyt_principal: Some(CanisterId::from(0)),
+        kyt_principal: Some(CanisterId::from(0)),
     }
 }
 
@@ -92,7 +91,7 @@ fn bitcoin_mock_wasm() -> Vec<u8> {
     )
 }
 
-fn new_kyt_wasm() -> Vec<u8> {
+fn kyt_wasm() -> Vec<u8> {
     load_wasm(
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
             .parent()
@@ -189,7 +188,7 @@ fn test_wrong_upgrade_parameter() {
         panic!("init expected to fail")
     }
     let args = MinterArg::Init(CkbtcMinterInitArgs {
-        new_kyt_principal: None,
+        kyt_principal: None,
         ..default_init_args()
     });
     let args = Encode!(&args).unwrap();
@@ -592,7 +591,7 @@ struct CkBtcSetup {
     pub bitcoin_id: CanisterId,
     pub ledger_id: CanisterId,
     pub minter_id: CanisterId,
-    pub new_kyt_id: CanisterId,
+    pub kyt_id: CanisterId,
 }
 
 impl CkBtcSetup {
@@ -613,7 +612,7 @@ impl CkBtcSetup {
         let ledger_id = env.create_canister(None);
         let minter_id =
             env.create_canister_with_cycles(None, Cycles::new(100_000_000_000_000), None);
-        let new_kyt_id = env.create_canister(None);
+        let kyt_id = env.create_canister(None);
 
         env.install_existing_canister(
             ledger_id,
@@ -639,7 +638,7 @@ impl CkBtcSetup {
                 ledger_id,
                 max_time_in_queue_nanos: 100,
                 kyt_fee: Some(KYT_FEE),
-                new_kyt_principal: new_kyt_id.into(),
+                kyt_principal: kyt_id.into(),
                 ..default_init_args()
             }))
             .unwrap(),
@@ -649,15 +648,15 @@ impl CkBtcSetup {
         let caller = PrincipalId::new_user_test_id(1);
 
         env.install_existing_canister(
-            new_kyt_id,
-            new_kyt_wasm(),
+            kyt_id,
+            kyt_wasm(),
             Encode!(&NewKytArg::InitArg(NewKytInitArg {
                 btc_network: NewKytBtcNetwork::Mainnet,
                 kyt_mode: NewKytMode::AcceptAll,
             }))
             .unwrap(),
         )
-        .expect("failed to install the new KYT canister");
+        .expect("failed to install the KYT canister");
 
         env.execute_ingress(
             bitcoin_id,
@@ -672,7 +671,7 @@ impl CkBtcSetup {
             bitcoin_id,
             ledger_id,
             minter_id,
-            new_kyt_id,
+            kyt_id,
         }
     }
 
@@ -2037,14 +2036,14 @@ fn test_retrieve_btc_with_approval_fail() {
     ckbtc
         .env
         .upgrade_canister(
-            ckbtc.new_kyt_id,
-            new_kyt_wasm(),
+            ckbtc.kyt_id,
+            kyt_wasm(),
             Encode!(&NewKytArg::UpgradeArg(Some(NewUpgradeArg {
                 kyt_mode: Some(NewKytMode::RejectAll),
             })))
             .unwrap(),
         )
-        .expect("failed to upgrade the new KYT canister");
+        .expect("failed to upgrade the KYT canister");
 
     let retrieve_btc_result = ckbtc.retrieve_btc_with_approval(
         WITHDRAWAL_ADDRESS.to_string(),
@@ -2061,7 +2060,7 @@ fn test_retrieve_btc_with_approval_fail() {
 
     // Check that the correct error_code is returned if the call to the KYT canister fails
 
-    let stop_canister_result = ckbtc.env.stop_canister(ckbtc.new_kyt_id);
+    let stop_canister_result = ckbtc.env.stop_canister(ckbtc.kyt_id);
     assert_matches!(stop_canister_result, Ok(_));
 
     let retrieve_btc_result = ckbtc.retrieve_btc_with_approval(
