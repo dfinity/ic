@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use ic_crypto_sha2::Sha256;
 use macaddr::MacAddr6;
 
@@ -23,6 +24,44 @@ impl HwAddr {
             .as_bytes()
             .try_into()
             .expect("MAC address should always be 6 bytes")
+    }
+    /// Generates the SLAAC IPv6 address for the given prefix.
+    pub fn calculate_slaac(&self, prefix: &str) -> Result<Ipv6Addr> {
+        let mac_octets = self.octets();
+
+        // Create the EUI-64 interface identifier
+        let mut interface_id = [0u8; 8];
+
+        // Flip the Universal/Local bit in the first octet
+        interface_id[0] = mac_octets[0] ^ 0x02;
+        interface_id[1] = mac_octets[1];
+        interface_id[2] = mac_octets[2];
+        interface_id[3] = 0xff;
+        interface_id[4] = 0xfe;
+        interface_id[5] = mac_octets[3];
+        interface_id[6] = mac_octets[4];
+        interface_id[7] = mac_octets[5];
+
+        // Prepare the prefix by appending '::' if necessary
+        let full_prefix = if prefix.contains("::") || prefix.ends_with(':') {
+            prefix.to_string()
+        } else {
+            format!("{}::", prefix)
+        };
+
+        // Parse the prefix into an Ipv6Addr
+        let prefix_addr = full_prefix
+            .parse::<Ipv6Addr>()
+            .map_err(|_| anyhow!("Invalid IPv6 prefix: {}", prefix))?;
+
+        // Extract the network prefix (first 64 bits)
+        let mut addr_octets = prefix_addr.octets();
+
+        // Combine the prefix with the interface identifier
+        addr_octets[8..].copy_from_slice(&interface_id);
+
+        // Construct the full IPv6 address
+        Ok(Ipv6Addr::from(addr_octets))
     }
 }
 
@@ -100,36 +139,6 @@ pub fn calculate_deterministic_mac<T: AsRef<HwAddr>, D: fmt::Display>(
     [version, index, hash[0], hash[1], hash[2], hash[3]].into()
 }
 
-impl HwAddr {
-    pub fn calculate_slaac(&self, prefix: &str) -> Result<Ipv6Addr, AddressError> {
-        let mut octets = self.octets().to_vec();
-
-        octets.insert(3, 0xff);
-        octets.insert(4, 0xfe);
-
-        octets[0] ^= 2;
-
-        let octets = octets
-            .chunks(2)
-            .map(|v| {
-                v.iter().fold(String::new(), |mut acc, &byte| {
-                    acc.push_str(&format!("{:02x}", byte));
-                    acc
-                })
-            })
-            .reduce(|mut acc, chunk| {
-                acc.push(':');
-                acc.push_str(&chunk);
-                acc
-            })
-            .unwrap(); // We know the length, so this unwrap is OK.
-
-        let combined = format!("{}:{}", prefix, octets);
-
-        combined.parse().map_err(|_| AddressError::InvalidAddress)
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -157,9 +166,9 @@ mod test {
     }
 
     #[test]
-    fn slaac() {
-        let mac = "6a01e5962d49".parse::<HwAddr>().unwrap();
-        let prefix = "2a04:9dc0:0:108";
+    fn test_calculate_slaac() {
+        let mac = "6a:01:e5:96:2d:49".parse::<HwAddr>().unwrap();
+        let prefix = "2a04:9dc0:0:108::";
 
         let expected_ip = "2a04:9dc0:0:108:6801:e5ff:fe96:2d49"
             .parse::<Ipv6Addr>()
