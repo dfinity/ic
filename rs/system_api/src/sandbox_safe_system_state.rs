@@ -59,7 +59,8 @@ pub enum CallbackUpdate {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SystemStateChanges {
     pub(super) new_certified_data: Option<Vec<u8>>,
-    pub(super) callback_updates: Vec<CallbackUpdate>,
+    // pub for testing
+    pub callback_updates: Vec<CallbackUpdate>,
     pub(super) new_global_timer: Option<CanisterTimer>,
     // The cycles that move from the main balance to the reserved balance.
     // Invariant: `cycles_balance_change` contains
