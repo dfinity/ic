@@ -1020,7 +1020,10 @@ where
         standards.push(standard.name);
     }
     standards.sort();
-    assert_eq!(standards, vec!["ICRC-1", "ICRC-2", "ICRC-21", "ICRC-3"]);
+    assert_eq!(
+        standards,
+        vec!["ICRC-1", "ICRC-106", "ICRC-2", "ICRC-21", "ICRC-3"]
+    );
 }
 
 pub fn test_total_supply<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
@@ -3142,7 +3145,10 @@ where
         standards.push(standard.name);
     }
     standards.sort();
-    assert_eq!(standards, vec!["ICRC-1", "ICRC-2", "ICRC-21"]);
+    assert_eq!(
+        standards,
+        vec!["ICRC-1", "ICRC-106", "ICRC-2", "ICRC-21", "ICRC-187"]
+    );
 
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
