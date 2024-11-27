@@ -26,7 +26,6 @@ package(default_visibility = ["//visibility:public"])
             # Keep sorted.
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
             "//packages/icrc-ledger-types:icrc_ledger_types",
-            "//rs/crypto/tree_hash",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
@@ -36,8 +35,10 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:ciborium",
             "@crate_index//:hex",
             "@crate_index//:ic-cdk",
+            "@crate_index//:ic-certification",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
+            "@crate_index//:leb128",
             "@crate_index//:serde",
             "@crate_index//:serde_bytes",
         ] + extra_deps,
@@ -81,6 +82,15 @@ package(default_visibility = ["//visibility:public"])
             [
             ],
         ),
+        (
+            "_icrc3_compatible_data_certificate",
+            "",
+            [
+                "icrc3-compatible-data-certificate",
+            ],
+            [
+            ],
+        ),
     ]
 ]
 
@@ -108,6 +118,7 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:candid",
             "@crate_index//:ciborium",
             "@crate_index//:ic-cdk",
+            "@crate_index//:ic-certification",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
             "@crate_index//:num-traits",
@@ -191,6 +202,14 @@ package(default_visibility = ["//visibility:public"])
                 "//rs/ledger_suite/icrc1/tokens_u256",
             ],
         ),
+        (
+            "_icrc3_compatible_data_certificate",
+            ["icrc3-compatible-data-certificate"],
+            [
+                ":ledger_icrc3_compatible_data_certificate",
+                "//rs/ledger_suite/icrc1/tokens_u64",
+            ],
+        ),
     ]
 ]
 
@@ -216,6 +235,7 @@ rust_test(
             ":ledger_canister" + name_suffix + ".wasm",
             ":ledger_canister" + name_suffix + "_nextledgerversion.wasm",
             "//rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister_icrc3_compatible_data_certificate",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
             "@ic-icrc1-ledger-first-version.wasm.gz//file",
             "@mainnet_ckbtc_ic-icrc1-ledger//file",
@@ -229,6 +249,7 @@ rust_test(
             "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz)",
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
             "IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH": "$(rootpath @ic-icrc1-ledger-first-version.wasm.gz//file)",
+            "IC_ICRC1_LEDGER_ICRC3_COMPATIBLE_DATA_CERTIFICATE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_icrc3_compatible_data_certificate)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm)",
             "IC_ICRC1_LEDGER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + "_nextledgerversion.wasm)",
             "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
@@ -250,8 +271,10 @@ rust_test(
             "@crate_index//:assert_matches",
             "@crate_index//:candid",
             "@crate_index//:cddl",
+            "@crate_index//:ciborium",
             "@crate_index//:hex",
             "@crate_index//:ic-agent",
+            "@crate_index//:ic-certification",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:leb128",
             "@crate_index//:num-bigint",

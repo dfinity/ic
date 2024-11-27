@@ -13,11 +13,12 @@ use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use wasmtime::Module;
 
+use crate::compilation_cache::StoredCompilation;
 use crate::wasmtime_embedder::CanisterMemoryType;
 use crate::{
     wasm_utils::{compile, decoding::decode_wasm, Segments, WasmImportsDetails},
     wasmtime_embedder::WasmtimeInstance,
-    CompilationCache, CompilationResult, SerializedModule, WasmExecutionInput, WasmtimeEmbedder,
+    CompilationCache, CompilationResult, WasmExecutionInput, WasmtimeEmbedder,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
@@ -206,7 +207,7 @@ impl WasmExecutor for WasmExecutorImpl {
         };
 
         if let Some(serialized_module) = serialized_module {
-            self.observe_metrics(&serialized_module.imports_details);
+            self.observe_metrics(&serialized_module.imports_details());
         }
 
         let wasm_reserved_pages = get_wasm_reserved_pages(execution_state);
@@ -285,15 +286,14 @@ impl WasmExecutor for WasmExecutorImpl {
         else {
             panic!("Newly created WasmBinary must be compiled or deserialized.")
         };
-        self.observe_metrics(&serialized_module.imports_details);
-        let exported_functions = serialized_module.exported_functions.clone();
-        let wasm_metadata = serialized_module.wasm_metadata.clone();
+        self.observe_metrics(&serialized_module.imports_details());
+        let (exported_functions, wasm_metadata) = serialized_module.exports_and_metadata();
 
         let mut wasm_page_map = PageMap::new(Arc::clone(&self.fd_factory));
         let stable_memory_page_map = PageMap::new(Arc::clone(&self.fd_factory));
 
         let (globals, _wasm_page_delta, wasm_memory_size) = get_initial_globals_and_memory(
-            &serialized_module.data_segments,
+            &serialized_module.data_segments(),
             &embedder_cache,
             &self.wasm_embedder,
             &mut wasm_page_map,
@@ -315,12 +315,12 @@ impl WasmExecutor for WasmExecutorImpl {
             metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
-            is_wasm64: serialized_module.is_wasm64,
+            is_wasm64: serialized_module.is_wasm64(),
         };
 
         Ok((
             execution_state,
-            serialized_module.compilation_cost,
+            serialized_module.compilation_cost(),
             compilation_result,
         ))
     }
@@ -330,7 +330,7 @@ impl WasmExecutor for WasmExecutorImpl {
 struct CacheLookup {
     pub cache: EmbedderCache,
     /// This field will be `None` if the `EmbedderCache` was present (so no module deserialization was required).
-    pub serialized_module: Option<Arc<SerializedModule>>,
+    pub serialized_module: Option<StoredCompilation>,
     /// This field will be `None` if the `SerializedModule` was present in the `CompilationCache` (so no compilation was required).
     pub compilation_result: Option<CompilationResult>,
 }
@@ -385,7 +385,7 @@ impl WasmExecutorImpl {
             })
         } else {
             match compilation_cache.get(&wasm_binary.binary) {
-                Some(Ok(serialized_module)) => {
+                Some(Ok(StoredCompilation::Memory(serialized_module))) => {
                     let instance_pre = self
                         .wasm_embedder
                         .deserialize_module_and_pre_instantiate(&serialized_module.bytes);
@@ -394,11 +394,15 @@ impl WasmExecutorImpl {
                     match instance_pre {
                         Ok(_) => Ok(CacheLookup {
                             cache,
-                            serialized_module: Some(serialized_module),
+                            serialized_module: Some(StoredCompilation::Memory(serialized_module)),
                             compilation_result: None,
                         }),
                         Err(err) => Err(err),
                     }
+                }
+                Some(Ok(StoredCompilation::Disk(_serialized_module))) => {
+                    // TODO(EXC-1780)
+                    panic!("On disk compilation cache not yet supported");
                 }
                 Some(Err(err)) => {
                     let cache: HypervisorResult<Module> = Err(err.clone());
@@ -414,9 +418,8 @@ impl WasmExecutorImpl {
                     let (cache, result) = compile(&self.wasm_embedder, decoded_wasm.as_ref());
                     *guard = Some(cache.clone());
                     let (compilation_result, serialized_module) = result?;
-                    let serialized_module = Arc::new(serialized_module);
-                    compilation_cache
-                        .insert(&wasm_binary.binary, Ok(Arc::clone(&serialized_module)));
+                    let serialized_module =
+                        compilation_cache.insert_ok(&wasm_binary.binary, serialized_module);
                     Ok(CacheLookup {
                         cache,
                         serialized_module: Some(serialized_module),

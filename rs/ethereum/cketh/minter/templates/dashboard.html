@@ -181,6 +181,7 @@
                 <tr>
                     <th>Deposit</th>
                     <th>Address</th>
+                    <th>Status</th>
                     <th>Last synced block number</th>
                 </tr>
                 </thead>
@@ -190,6 +191,7 @@
                 <tr id="helper-smart-contract-{{ id|lower_alphanumeric }}">
                     <td>{{ id }}</td>
                     <td>{% call etherscan_address_link(scraping_state.contract_address().unwrap()) %}</td>
+                    <td>{{ scraping_state.status() }}</td>
                     <td><code>{% call etherscan_block_link(scraping_state.last_scraped_block_number()) %}</code></td>
                 </tr>
                 {% endif %}

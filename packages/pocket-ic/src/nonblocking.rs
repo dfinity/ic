@@ -17,6 +17,8 @@ use crate::management_canister::{
 };
 pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
+use backoff::backoff::Backoff;
+use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
@@ -78,6 +80,8 @@ pub struct PocketIc {
     http_gateway: Option<HttpGatewayInfo>,
     server_url: Url,
     reqwest_client: reqwest::Client,
+    // the instance should only be deleted when dropping this handle if this handle owns the instance
+    owns_instance: bool,
     _log_guard: Option<WorkerGuard>,
 }
 
@@ -89,6 +93,32 @@ impl PocketIc {
             .with_application_subnet()
             .build_async()
             .await
+    }
+
+    /// Creates a PocketIC handle to an existing instance on a running server.
+    /// Note that this handle does not extend the lifetime of the existing instance,
+    /// i.e., the existing instance is deleted and this handle stops working
+    /// when the PocketIC handle that created the existing instance is dropped.
+    pub fn new_from_existing_instance(
+        server_url: Url,
+        instance_id: InstanceId,
+        max_request_time_ms: Option<u64>,
+    ) -> Self {
+        let test_driver_pid = std::process::id();
+        let log_guard = setup_tracing(test_driver_pid);
+
+        let reqwest_client = reqwest::Client::new();
+        debug!("instance_id={} Reusing existing instance.", instance_id);
+
+        Self {
+            instance_id,
+            max_request_time_ms,
+            http_gateway: None,
+            server_url,
+            reqwest_client,
+            owns_instance: false,
+            _log_guard: log_guard,
+        }
     }
 
     pub(crate) async fn from_components(
@@ -139,8 +169,14 @@ impl PocketIc {
             http_gateway: None,
             server_url,
             reqwest_client,
+            owns_instance: true,
             _log_guard: log_guard,
         }
+    }
+
+    /// Returns the URL of the PocketIC server on which this PocketIC instance is running.
+    pub fn get_server_url(&self) -> Url {
+        self.server_url.clone()
     }
 
     /// Returns the topology of the different subnets of this PocketIC instance.
@@ -299,17 +335,15 @@ impl PocketIc {
             .map(|res| Url::parse(&format!("http://{}:{}/", LOCALHOST, res.port)).unwrap())
     }
 
-    /// Creates an HTTP gateway for this IC instance
-    /// listening on an optionally specified port
-    /// and configures the IC instance to make progress
-    /// automatically, i.e., periodically update the time
-    /// of the IC to the real time and execute rounds on the subnets.
+    /// Creates an HTTP gateway for this PocketIC instance listening
+    /// on an optionally specified port (defaults to choosing an arbitrary unassigned port)
+    /// and configures the PocketIC instance to make progress automatically, i.e.,
+    /// periodically update the time of the PocketIC instance to the real time and execute rounds on the subnets.
     /// Returns the URL at which `/api/v2` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn make_live(&mut self, listen_at: Option<u16>) -> Url {
-        self.auto_progress().await;
-        self.start_http_gateway(listen_at, None, None).await
+        self.make_live_with_params(listen_at, None, None).await
     }
 
     /// Creates an HTTP gateway for this PocketIC instance listening
@@ -327,6 +361,9 @@ impl PocketIc {
         domains: Option<Vec<String>>,
         https_config: Option<HttpsConfig>,
     ) -> Url {
+        if let Some(url) = self.url() {
+            return url;
+        }
         self.auto_progress().await;
         self.start_http_gateway(listen_at, domains, https_config)
             .await
@@ -338,9 +375,6 @@ impl PocketIc {
         domains: Option<Vec<String>>,
         https_config: Option<HttpsConfig>,
     ) -> Url {
-        if let Some(url) = self.url() {
-            return url;
-        }
         let endpoint = self.server_url.join("http_gateway").unwrap();
         let http_gateway_config = HttpGatewayConfig {
             ip_addr: None,
@@ -547,7 +581,7 @@ impl PocketIc {
         }
     }
 
-    /// Await an update call submitted previously by `submit_call_with_effective_principal`.
+    /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     pub async fn await_call(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
         let endpoint = "update/await_ingress_message";
         let result: RawCanisterResult = self.post(endpoint, message_id).await;
@@ -557,6 +591,44 @@ impl PocketIc {
                 RawWasmResult::Reject(text) => Ok(WasmResult::Reject(text)),
             },
             RawCanisterResult::Err(user_error) => Err(user_error),
+        }
+    }
+
+    /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call.
+    pub async fn ingress_status(
+        &self,
+        message_id: RawMessageId,
+    ) -> Option<Result<WasmResult, UserError>> {
+        let endpoint = "read/ingress_status";
+        let result: Option<RawCanisterResult> = self.post(endpoint, message_id).await;
+        result.map(|result| match result {
+            RawCanisterResult::Ok(raw_wasm_result) => match raw_wasm_result {
+                RawWasmResult::Reply(data) => Ok(WasmResult::Reply(data)),
+                RawWasmResult::Reject(text) => Ok(WasmResult::Reject(text)),
+            },
+            RawCanisterResult::Err(user_error) => Err(user_error),
+        })
+    }
+
+    /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
+    /// This function does not execute rounds and thus should only be called on a "live" PocketIC instance
+    /// or if rounds are executed due to separate PocketIC library calls.
+    pub async fn await_call_no_ticks(
+        &self,
+        message_id: RawMessageId,
+    ) -> Result<WasmResult, UserError> {
+        let mut retry_policy: ExponentialBackoff = ExponentialBackoffBuilder::new()
+            .with_initial_interval(Duration::from_millis(10))
+            .with_max_interval(Duration::from_secs(1))
+            .with_multiplier(2.0)
+            .build();
+        loop {
+            if let Some(ingress_status) = self.ingress_status(message_id.clone()).await {
+                break ingress_status;
+            }
+            tokio::time::sleep(retry_policy.next_backoff().unwrap()).await;
         }
     }
 
@@ -598,7 +670,11 @@ impl PocketIc {
         .await
     }
 
-    pub(crate) async fn query_call_with_effective_principal(
+    /// Execute a query call on a canister explicitly specifying an effective principal to route the request:
+    /// this API is useful for making generic query calls (including management canister query calls) without using dedicated functions from this library
+    /// (e.g., making generic query calls in dfx to a PocketIC instance).
+    #[instrument(skip(self, payload), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), effective_principal = %effective_principal.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
+    pub async fn query_call_with_effective_principal(
         &self,
         canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,
@@ -1268,11 +1344,13 @@ impl PocketIc {
 
     pub(crate) async fn do_drop(&mut self) {
         self.stop_http_gateway().await;
-        self.reqwest_client
-            .delete(self.instance_url())
-            .send()
-            .await
-            .expect("Failed to send delete request");
+        if self.owns_instance {
+            self.reqwest_client
+                .delete(self.instance_url())
+                .send()
+                .await
+                .expect("Failed to send delete request");
+        }
     }
 
     async fn get<T: DeserializeOwned>(&self, endpoint: &str) -> T {

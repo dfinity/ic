@@ -3,7 +3,8 @@ use clap::{Args, Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
-use mac_address::mac_address::{get_ipmi_mac, FormattedMacAddress};
+use deterministic_ips::{Deployment, HwAddr};
+use network::resolve_mgmt_mac;
 use regex::Regex;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -11,7 +12,7 @@ use std::path::{Path, PathBuf};
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
-use config::types::*;
+use config_types::*;
 
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
@@ -25,13 +26,13 @@ pub enum Commands {
         deployment_json_path: PathBuf,
 
         #[arg(long, default_value_t = true)]
-        nns_public_key_exists: bool,
+        use_nns_public_key: bool,
 
         #[arg(long, default_value_t = false)]
         use_ssh_authorized_keys: bool,
 
         #[arg(long, default_value_t = true)]
-        node_operator_private_key_exists: bool,
+        use_node_operator_private_key: bool,
 
         #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         setupos_config_json_path: PathBuf,
@@ -90,19 +91,19 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub node_reward_type: Option<String>,
     #[arg(long)]
-    pub mgmt_mac: Option<String>,
+    pub mgmt_mac: Option<HwAddr>,
     #[arg(long)]
-    pub deployment_environment: Option<String>,
+    pub deployment_environment: Option<Deployment>,
     #[arg(long)]
     pub elasticsearch_hosts: Option<String>,
     #[arg(long)]
     pub elasticsearch_tags: Option<String>,
     #[arg(long)]
-    pub nns_public_key_exists: Option<bool>,
+    pub use_nns_public_key: Option<bool>,
     #[arg(long)]
     pub nns_urls: Option<Vec<String>>,
     #[arg(long)]
-    pub node_operator_private_key_exists: Option<bool>,
+    pub use_node_operator_private_key: Option<bool>,
     #[arg(long)]
     pub use_ssh_authorized_keys: Option<bool>,
 
@@ -146,9 +147,9 @@ pub fn main() -> Result<()> {
         Some(Commands::CreateSetuposConfig {
             config_ini_path,
             deployment_json_path,
-            nns_public_key_exists,
+            use_nns_public_key,
             use_ssh_authorized_keys,
-            node_operator_private_key_exists,
+            use_node_operator_private_key,
             setupos_config_json_path,
         }) => {
             // get config.ini settings
@@ -198,17 +199,7 @@ pub fn main() -> Result<()> {
                 elasticsearch_tags: None,
             };
 
-            let mgmt_mac = match deployment_json_settings.deployment.mgmt_mac {
-                Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
-                    println!(
-                        "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac
-                    );
-                    mgmt_mac
-                }
-                None => get_ipmi_mac()?,
-            };
+            let mgmt_mac = resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac)?;
 
             let node_reward_type = node_reward_type.expect("Node reward type is required.");
 
@@ -223,11 +214,11 @@ pub fn main() -> Result<()> {
             let icos_settings = ICOSSettings {
                 node_reward_type: Some(node_reward_type),
                 mgmt_mac,
-                deployment_environment: deployment_json_settings.deployment.name,
+                deployment_environment: deployment_json_settings.deployment.name.parse()?,
                 logging,
-                nns_public_key_exists,
+                use_nns_public_key,
                 nns_urls: deployment_json_settings.nns.url.clone(),
-                node_operator_private_key_exists,
+                use_node_operator_private_key,
                 use_ssh_authorized_keys,
                 icos_dev_settings: ICOSDevSettings::default(),
             };
@@ -356,9 +347,9 @@ pub fn main() -> Result<()> {
                 deployment_environment: clap_args.deployment_environment,
                 elasticsearch_hosts: clap_args.elasticsearch_hosts,
                 elasticsearch_tags: clap_args.elasticsearch_tags,
-                nns_public_key_exists: clap_args.nns_public_key_exists,
+                use_nns_public_key: clap_args.use_nns_public_key,
                 nns_urls: clap_args.nns_urls,
-                node_operator_private_key_exists: clap_args.node_operator_private_key_exists,
+                use_node_operator_private_key: clap_args.use_node_operator_private_key,
                 use_ssh_authorized_keys: clap_args.use_ssh_authorized_keys,
                 inject_ic_crypto: clap_args.inject_ic_crypto,
                 inject_ic_state: clap_args.inject_ic_state,

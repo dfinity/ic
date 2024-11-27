@@ -30,7 +30,6 @@ DEPENDENCIES = [
     "@crate_index//:icrc1-test-suite",
     "@crate_index//:num-traits",
     "@crate_index//:proptest",
-    "@crate_index//:serde",
 ]
 
 MACRO_DEPENDENCIES = [

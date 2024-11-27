@@ -166,8 +166,12 @@ impl PocketIcBuilder {
     }
 
     pub fn with_bitcoind_addr(self, bitcoind_addr: SocketAddr) -> Self {
+        self.with_bitcoind_addrs(vec![bitcoind_addr])
+    }
+
+    pub fn with_bitcoind_addrs(self, bitcoind_addrs: Vec<SocketAddr>) -> Self {
         Self {
-            bitcoind_addr: Some(vec![bitcoind_addr]),
+            bitcoind_addr: Some(bitcoind_addrs),
             ..self
         }
     }
@@ -344,9 +348,33 @@ impl PocketIc {
         PocketIcBuilder::new().with_application_subnet().build()
     }
 
-    /// Returns the instance ID.
-    pub fn instance_id(&self) -> InstanceId {
-        self.pocket_ic.instance_id
+    /// Creates a PocketIC handle to an existing instance on a running server.
+    /// Note that this handle does not extend the lifetime of the existing instance,
+    /// i.e., the existing instance is deleted and this handle stops working
+    /// when the PocketIC handle that created the existing instance is dropped.
+    pub fn new_from_existing_instance(
+        server_url: Url,
+        instance_id: InstanceId,
+        max_request_time_ms: Option<u64>,
+    ) -> Self {
+        let (tx, rx) = channel();
+        let thread = thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            tx.send(rt).unwrap();
+        });
+        let runtime = rx.recv().unwrap();
+
+        let pocket_ic =
+            PocketIcAsync::new_from_existing_instance(server_url, instance_id, max_request_time_ms);
+
+        Self {
+            pocket_ic,
+            runtime: Arc::new(runtime),
+            thread: Some(thread),
+        }
     }
 
     pub(crate) fn from_components(
@@ -386,6 +414,16 @@ impl PocketIc {
             runtime: Arc::new(runtime),
             thread: Some(thread),
         }
+    }
+
+    /// Returns the URL of the PocketIC server on which this PocketIC instance is running.
+    pub fn get_server_url(&self) -> Url {
+        self.pocket_ic.get_server_url()
+    }
+
+    /// Returns the instance ID.
+    pub fn instance_id(&self) -> InstanceId {
+        self.pocket_ic.instance_id
     }
 
     /// Returns the topology of the different subnets of this PocketIC instance.
@@ -630,10 +668,29 @@ impl PocketIc {
         })
     }
 
-    /// Await an update call submitted previously by `submit_call_with_effective_principal`.
+    /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     pub fn await_call(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.await_call(message_id).await })
+    }
+
+    /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call.
+    pub fn ingress_status(
+        &self,
+        message_id: RawMessageId,
+    ) -> Option<Result<WasmResult, UserError>> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.ingress_status(message_id).await })
+    }
+
+    /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
+    /// This function does not execute rounds and thus should only be called on a "live" PocketIC instance
+    /// or if rounds are executed due to separate PocketIC library calls.
+    pub fn await_call_no_ticks(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.await_call_no_ticks(message_id).await })
     }
 
     /// Execute an update call on a canister.
@@ -1045,6 +1102,32 @@ impl PocketIc {
         runtime.block_on(async {
             self.pocket_ic
                 .update_call_with_effective_principal(
+                    canister_id,
+                    effective_principal,
+                    sender,
+                    method,
+                    payload,
+                )
+                .await
+        })
+    }
+
+    /// Execute a query call on a canister explicitly specifying an effective principal to route the request:
+    /// this API is useful for making generic query calls (including management canister query calls) without using dedicated functions from this library
+    /// (e.g., making generic query calls in dfx to a PocketIC instance).
+    #[instrument(skip(self, payload), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), effective_principal = %effective_principal.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
+    pub fn query_call_with_effective_principal(
+        &self,
+        canister_id: CanisterId,
+        effective_principal: RawEffectivePrincipal,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+    ) -> Result<WasmResult, UserError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .query_call_with_effective_principal(
                     canister_id,
                     effective_principal,
                     sender,

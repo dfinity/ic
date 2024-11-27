@@ -341,42 +341,60 @@ impl Icrc1Agent {
         };
         self.verify_root_hash(&certificate, &hash_tree.digest())
             .await?;
-
-        let last_block_hash_vec = lookup_leaf(&hash_tree, "tip_hash")?;
-        if let Some(last_block_hash_vec) = last_block_hash_vec {
-            let last_block_hash: Hash = match last_block_hash_vec.clone().try_into() {
-                Ok(last_block_hash) => last_block_hash,
-                Err(_) => {
-                    return Err(Icrc1AgentError::VerificationFailed(format!(
-                "DataCertificate last_block_hash bytes: {}, cannot be decoded as last_block_hash",
-                hex::encode(last_block_hash_vec)
-            )))
-                }
-            };
-
-            let last_block_index_vec = lookup_leaf(&hash_tree, "last_block_index")?;
-            if let Some(last_block_index_vec) = last_block_index_vec {
-                let last_block_index_bytes: [u8; 8] = match last_block_index_vec.clone().try_into()
-                {
-                    Ok(last_block_index_bytes) => last_block_index_bytes,
-                    Err(_) => {
-                        return Err(Icrc1AgentError::VerificationFailed(format!(
-                    "DataCertificate hash_tree bytes: {}, cannot be decoded as last_block_index",
-                    hex::encode(last_block_index_vec)
-                )))
-                    }
-                };
-                let last_block_index = u64::from_be_bytes(last_block_index_bytes);
-
-                return Ok(Some((last_block_hash, Nat::from(last_block_index))));
-            } else {
-                return Err(Icrc1AgentError::VerificationFailed(
-                    "certified hash_tree contains tip_hash but not last_block_index".to_string(),
-                ));
+        let last_block_index_encoded = match lookup_leaf(&hash_tree, "last_block_index")? {
+            Some(last_block_index) => last_block_index,
+            None => {
+                return Ok(None);
             }
+        };
+
+        fn convert_block_hash(block_hash: Vec<u8>) -> Result<Hash, Icrc1AgentError> {
+            block_hash
+                .clone()
+                .try_into()
+                .or(Err(Icrc1AgentError::VerificationFailed(format!(
+                "DataCertificate last_block_hash bytes: {}, cannot be decoded as last_block_hash",
+                hex::encode(block_hash)
+            ))))
         }
 
-        Ok(None)
+        // We use two different decoding strategies depending on the presence of the tip_hash in the hash_tree.
+        match (
+            lookup_leaf(&hash_tree, "tip_hash")?,
+            lookup_leaf(&hash_tree, "last_block_hash")?,
+        ) {
+            (Some(tip_hash), _) => {
+                let last_block_index_bytes: [u8; 8] =
+                    match last_block_index_encoded.clone().try_into() {
+                        Ok(last_block_index_bytes) => last_block_index_bytes,
+                        Err(_) => {
+                            return Err(Icrc1AgentError::VerificationFailed(format!(
+                    "DataCertificate hash_tree bytes: {}, cannot be decoded as last_block_index",
+                    hex::encode(last_block_index_encoded)
+                )))
+                        }
+                    };
+                let last_block_index = u64::from_be_bytes(last_block_index_bytes);
+                Ok(Some((
+                    convert_block_hash(tip_hash)?,
+                    Nat::from(last_block_index),
+                )))
+            }
+            (_, Some(last_block_hash_vec)) => {
+                let mut decode_buf = std::io::Cursor::new(&last_block_index_encoded);
+                let last_block_index = leb128::read::unsigned(&mut decode_buf).map_err(|e| {
+                    Icrc1AgentError::VerificationFailed(format!(
+                        "Unable to decode last_block_index: {}",
+                        e
+                    ))
+                })?;
+                Ok(Some((
+                    convert_block_hash(last_block_hash_vec)?,
+                    Nat::from(last_block_index),
+                )))
+            }
+            _ => Ok(None),
+        }
     }
 }
 
