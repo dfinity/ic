@@ -1144,8 +1144,7 @@ message ManageNeuron {
   // This is one way for a neuron to make sure that its deciding_voting_power is
   // not less than its potential_voting_power. See the description of those
   // fields in Neuron.
-  message RefreshVotingPower {
-  }
+  message RefreshVotingPower {}
 
   oneof command {
     Configure configure = 2;
@@ -1226,8 +1225,7 @@ message ManageNeuronResponse {
     ic_nns_common.pb.v1.NeuronId refreshed_neuron_id = 1;
   }
 
-  message RefreshVotingPowerResponse {
-  }
+  message RefreshVotingPowerResponse {}
 
   oneof command {
     GovernanceError error = 1;
