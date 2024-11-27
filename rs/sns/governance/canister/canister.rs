@@ -22,6 +22,7 @@ use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_sns_governance::pb::v1::{
     AddMaturityRequest, AddMaturityResponse, AdvanceTargetVersionRequest,
     AdvanceTargetVersionResponse, GovernanceError, MintTokensRequest, MintTokensResponse, Neuron,
+    RefreshCachedUpgradeStepsRequest, RefreshCachedUpgradeStepsResponse,
 };
 use ic_sns_governance::{
     governance::{
@@ -684,6 +685,16 @@ async fn mint_tokens(request: MintTokensRequest) -> MintTokensResponse {
 #[update]
 fn advance_target_version(request: AdvanceTargetVersionRequest) -> AdvanceTargetVersionResponse {
     governance_mut().advance_target_version(request)
+}
+
+/// Test only feature. Immediately refreshes the cached upgrade steps.
+#[cfg(feature = "test")]
+#[update]
+async fn refresh_cached_upgrade_steps(
+    _: RefreshCachedUpgradeStepsRequest,
+) -> RefreshCachedUpgradeStepsResponse {
+    governance_mut().refresh_cached_upgrade_steps().await;
+    RefreshCachedUpgradeStepsResponse {}
 }
 
 fn main() {
