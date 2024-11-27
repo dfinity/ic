@@ -642,6 +642,12 @@ impl<Tokens: TokensType> Ledger<Tokens> {
             "icrc1:max_memo_length",
             self.max_memo_length() as u64,
         ));
+        if let Some(index_principal) = self.index_principal() {
+            records.push(Value::entry(
+                "icrc106:index_principal",
+                index_principal.to_text(),
+            ));
+        }
         records
     }
 

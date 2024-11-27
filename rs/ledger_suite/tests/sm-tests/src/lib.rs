@@ -21,7 +21,7 @@ use ic_state_machine_tests::{ErrorCode, StateMachine, WasmResult};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use icp_ledger::{AccountIdentifier, IcpAllowanceArgs};
-use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
+use icrc_ledger_types::icrc::generic_metadata_value::{MetadataValue as Value, MetadataValue};
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
@@ -4121,6 +4121,9 @@ pub fn test_icrc106_standard<T, U>(
         Err(Icrc106Error::IndexNotSet),
         icrc106_get_index_principal(&env, canister_id)
     );
+    assert!(metadata(&env, canister_id)
+        .get("icrc106:index_principal")
+        .is_none());
 
     let index_principal = PrincipalId::new_user_test_id(1).0;
     let args = encode_upgrade_args(Some(index_principal));
@@ -4132,6 +4135,12 @@ pub fn test_icrc106_standard<T, U>(
     assert_eq!(
         Ok(index_principal),
         icrc106_get_index_principal(&env, canister_id)
+    );
+    assert_eq!(
+        &MetadataValue::Text(index_principal.to_text()),
+        metadata(&env, canister_id)
+            .get("icrc106:index_principal")
+            .expect("should have index principal metadata")
     );
 }
 
