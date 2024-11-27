@@ -19,6 +19,7 @@ use num_traits::ToPrimitive;
 use scopeguard::{guard, ScopeGuard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
+use std::cmp::max;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
@@ -998,9 +999,12 @@ pub fn build_unsigned_transaction(
 
     debug_assert!(inputs_value >= amount);
 
-    let minter_fee = MINTER_FEE_PER_INPUT * utxos_guard.len() as u64
-        + MINTER_FEE_PER_OUTPUT * (outputs.len() + 1) as u64
-        + MINTER_FEE_CONSTANT;
+    let minter_fee = max(
+        MINTER_FEE_PER_INPUT * utxos_guard.len() as u64
+            + MINTER_FEE_PER_OUTPUT * (outputs.len() + 1) as u64
+            + MINTER_FEE_CONSTANT,
+        main_address.dust_limit(),
+    );
 
     let change = inputs_value - amount;
     let change_output = state::ChangeOutput {

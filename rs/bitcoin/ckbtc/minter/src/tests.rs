@@ -402,7 +402,47 @@ fn test_no_dust_outputs() {
     }
 }
 
-    assert_eq!(available_utxos.len(), 1);
+#[test]
+fn test_no_dust_in_change_output() {
+    let utxo = Utxo {
+        outpoint: OutPoint {
+            txid: [0; 32].into(),
+            vout: 0,
+        },
+        value: 100_000,
+        height: 10,
+    };
+
+    let minter_addr = BitcoinAddress::P2wpkhV0([0; 20]);
+    let out1_addr = BitcoinAddress::P2wpkhV0([1; 20]);
+    let fee_per_vbyte = 1;
+
+    for change in 1..=100 {
+        let mut available_utxos = btreeset! {utxo.clone()};
+        let (tx, change_output, _utxos) = build_unsigned_transaction(
+            &mut available_utxos,
+            vec![(out1_addr.clone(), utxo.value - change)],
+            minter_addr.clone(),
+            fee_per_vbyte,
+        )
+        .expect("failed to build a transaction");
+        let fee = 294;
+
+        assert_eq!(
+            &tx.outputs,
+            &[
+                tx::TxOut {
+                    value: utxo.value - change - fee,
+                    address: out1_addr.clone()
+                },
+                tx::TxOut {
+                    value: change_output.value,
+                    address: minter_addr.clone(),
+                }
+            ]
+        );
+        assert!(change_output.value >= change + minter_addr.dust_limit());
+    }
 }
 
 fn arb_amount() -> impl Strategy<Value = Satoshi> {
