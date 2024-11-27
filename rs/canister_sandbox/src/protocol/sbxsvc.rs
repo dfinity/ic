@@ -5,7 +5,7 @@ use std::{sync::Arc, time::Duration};
 
 use crate::fdenum::EnumerateInnerFileDescriptors;
 use crate::protocol::structs;
-use ic_embedders::{CompilationResult, SerializedModule, SerializedModuleBytes};
+use ic_embedders::{SerializedModule, SerializedModuleBytes};
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::{
     page_map::{
@@ -41,25 +41,6 @@ pub struct TerminateReply {}
 /// Multiple wasms can be registered to the same sandbox (in order to
 /// support multiple code states e.g. during upgrades). A single wasm
 /// instance can be used concurrently for multiple executions.
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub struct OpenWasmRequest {
-    /// Id used to later refer to this canister runner. Must be unique
-    /// per sandbox instance.
-    pub wasm_id: WasmId,
-
-    /// Contains wasm source code as a sequence of bytes.
-    /// It would actually be preferable to move the compilation into native
-    /// code outside the sandbox itself; this way, the sandbox can be further
-    /// constrained such that it is impossible to generate and execute custom
-    /// code and will hamper an attackers ability to exploit wasm jailbreak
-    /// flaws
-    pub wasm_src: Vec<u8>,
-}
-
-/// Reply to an `OpenWasmRequest`.
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub struct OpenWasmReply(pub HypervisorResult<(CompilationResult, SerializedModule)>);
-
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct OpenWasmSerializedRequest {
     /// Id used to later refer to this canister runner. Must be unique
@@ -250,35 +231,6 @@ pub struct AbortExecutionReply {
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub struct CreateExecutionStateRequest {
-    pub wasm_id: WasmId,
-    #[serde(with = "serde_bytes")]
-    pub wasm_binary: Vec<u8>,
-    pub wasm_page_map: PageMapSerialization,
-    pub next_wasm_memory_id: MemoryId,
-    pub canister_id: CanisterId,
-    pub stable_memory_page_map: PageMapSerialization,
-}
-
-impl EnumerateInnerFileDescriptors for CreateExecutionStateRequest {
-    fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
-        self.wasm_page_map.enumerate_fds(fds);
-        self.stable_memory_page_map.enumerate_fds(fds);
-    }
-}
-
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub struct CreateExecutionStateSuccessReply {
-    pub wasm_memory_modifications: MemoryModifications,
-    pub exported_globals: Vec<Global>,
-    pub compilation_result: CompilationResult,
-    pub serialized_module: SerializedModule,
-}
-
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub struct CreateExecutionStateReply(pub HypervisorResult<CreateExecutionStateSuccessReply>);
-
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CreateExecutionStateSerializedRequest {
     pub wasm_id: WasmId,
     /// The serialization of a previously compiled `wasmtime::Module`.
@@ -319,7 +271,6 @@ pub struct CreateExecutionStateSerializedReply(
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum Request {
     Terminate(TerminateRequest),
-    OpenWasm(OpenWasmRequest),
     OpenWasmSerialized(OpenWasmSerializedRequest),
     CloseWasm(CloseWasmRequest),
     OpenMemory(OpenMemoryRequest),
@@ -327,7 +278,6 @@ pub enum Request {
     StartExecution(StartExecutionRequest),
     ResumeExecution(ResumeExecutionRequest),
     AbortExecution(AbortExecutionRequest),
-    CreateExecutionState(CreateExecutionStateRequest),
     CreateExecutionStateSerialized(CreateExecutionStateSerializedRequest),
 }
 
@@ -335,10 +285,8 @@ impl EnumerateInnerFileDescriptors for Request {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         match self {
             Request::OpenMemory(request) => request.enumerate_fds(fds),
-            Request::CreateExecutionState(request) => request.enumerate_fds(fds),
             Request::CreateExecutionStateSerialized(request) => request.enumerate_fds(fds),
             Request::Terminate(_)
-            | Request::OpenWasm(_)
             | Request::OpenWasmSerialized(_)
             | Request::CloseWasm(_)
             | Request::CloseMemory(_)
@@ -354,7 +302,6 @@ impl EnumerateInnerFileDescriptors for Request {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum Reply {
     Terminate(TerminateReply),
-    OpenWasm(OpenWasmReply),
     OpenWasmSerialized(OpenWasmSerializedReply),
     CloseWasm(CloseWasmReply),
     OpenMemory(OpenMemoryReply),
@@ -362,7 +309,6 @@ pub enum Reply {
     StartExecution(StartExecutionReply),
     ResumeExecution(ResumeExecutionReply),
     AbortExecution(AbortExecutionReply),
-    CreateExecutionState(CreateExecutionStateReply),
     CreateExecutionStateSerialized(CreateExecutionStateSerializedReply),
 }
 

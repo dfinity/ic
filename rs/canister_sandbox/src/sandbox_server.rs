@@ -32,14 +32,6 @@ impl SandboxService for SandboxServer {
         std::process::exit(0);
     }
 
-    fn open_wasm(&self, req: OpenWasmRequest) -> rpc::Call<OpenWasmReply> {
-        let result = self
-            .manager
-            .open_wasm(req.wasm_id, req.wasm_src)
-            .map(|(_cache, result, serialized_module)| (result, serialized_module));
-        rpc::Call::new_resolved(Ok(OpenWasmReply(result)))
-    }
-
     fn open_wasm_serialized(
         &self,
         req: OpenWasmSerializedRequest,
@@ -99,21 +91,6 @@ impl SandboxService for SandboxServer {
             SandboxManager::abort_execution(&self.manager, req.exec_id);
             Ok(AbortExecutionReply { success: true })
         })
-    }
-
-    fn create_execution_state(
-        &self,
-        req: CreateExecutionStateRequest,
-    ) -> rpc::Call<CreateExecutionStateReply> {
-        let result = self.manager.create_execution_state(
-            req.wasm_id,
-            req.wasm_binary,
-            req.wasm_page_map,
-            req.next_wasm_memory_id,
-            req.canister_id,
-            req.stable_memory_page_map,
-        );
-        rpc::Call::new_resolved(Ok(CreateExecutionStateReply(result)))
     }
 
     fn create_execution_state_serialized(

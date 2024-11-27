@@ -27,23 +27,6 @@ impl sandbox_service::SandboxService for DummySandboxService {
         rpc::Call::new_resolved(Ok(sbxsvc::TerminateReply {}))
     }
 
-    fn open_wasm(&self, _req: sbxsvc::OpenWasmRequest) -> rpc::Call<sbxsvc::OpenWasmReply> {
-        println!("Sandbox: Received 'open_wasm' request");
-        rpc::Call::new_resolved(Ok(sbxsvc::OpenWasmReply(Ok((
-            CompilationResult::empty_for_testing(),
-            SerializedModule {
-                bytes: Arc::new(SerializedModuleBytes::empty()),
-                exported_functions: BTreeSet::new(),
-                data_segments: Segments::default(),
-                wasm_metadata: WasmMetadata::default(),
-                compilation_cost: NumInstructions::from(0),
-                imports_details: WasmImportsDetails::default(),
-                // For these tests, it doesn't matter if it's wasm64 or not.
-                is_wasm64: false,
-            },
-        )))))
-    }
-
     fn open_wasm_serialized(
         &self,
         _req: sbxsvc::OpenWasmSerializedRequest,
@@ -84,13 +67,6 @@ impl sandbox_service::SandboxService for DummySandboxService {
         &self,
         _req: sbxsvc::AbortExecutionRequest,
     ) -> rpc::Call<sbxsvc::AbortExecutionReply> {
-        unimplemented!()
-    }
-
-    fn create_execution_state(
-        &self,
-        _req: sbxsvc::CreateExecutionStateRequest,
-    ) -> rpc::Call<sbxsvc::CreateExecutionStateReply> {
         unimplemented!()
     }
 
