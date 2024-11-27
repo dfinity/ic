@@ -328,7 +328,7 @@ fn decode_ledger_stable_memory(cbor: PathBuf, output: &Path) {
         Ok(l) => l,
     };
     let mut records: Vec<LedgerBalanceRecord> = ledger
-        .balances
+        .balances()
         .store
         .iter()
         .map(|(key, icpts)| LedgerBalanceRecord {
