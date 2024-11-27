@@ -82,7 +82,8 @@ pub struct NNSRecoveryFailoverNodesArgs {
     #[clap(long)]
     pub local_upload: Option<bool>,
 
-    /// IP address of the node to upload the new subnet state to
+    /// IP address of the node to upload the new subnet state to. Must be `None`
+    /// if `local_upload` is set to true.
     #[clap(long)]
     pub upload_node: Option<IpAddr>,
 

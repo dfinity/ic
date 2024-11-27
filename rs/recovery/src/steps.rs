@@ -586,30 +586,33 @@ impl Step for UploadAndRestartStep {
             }
         }
 
-        let ic_checkpoints_path = format!("{}/{}", IC_DATA_PATH, IC_CHECKPOINTS_PATH);
-        // upload directory to create
+        // Upload directory to create
         let upload_dir = format!("{}/{}", IC_DATA_PATH, NEW_IC_STATE);
-        // path of highest checkpoint on upload node
-        let copy_from = format!(
-            "{}/$(ls {} | sort | tail -1)",
-            ic_checkpoints_path, ic_checkpoints_path
-        );
-        // path and name of checkpoint after replay
-        let copy_to = format!("{}/{}/{}", upload_dir, CHECKPOINTS, max_checkpoint);
-        let cp = format!("sudo cp -r {} {}", copy_from, copy_to);
-
-        let cmd_create_and_copy_checkpoint_dir = format!(
-            "sudo mkdir -p {}/{}; {}; sudo chown -R {} {};",
-            upload_dir, CHECKPOINTS, cp, account, upload_dir
-        );
-
         let ic_state_path = format!("{}/{}", IC_DATA_PATH, IC_STATE);
         let cmd_replace_state =
             Self::get_state_replacement_command(ic_state_path, upload_dir.clone());
-
-        // Only for remote recoveries do we upload state via rsync.
         let src = format!("{}/", self.data_src.display());
+
+        // Decide: remote or local recovery
         if let Some(node_ip) = self.node_ip {
+            // For remote recoveries, we copy the source directory via rsync.
+            // To improve rsync times, we copy the latest checkpoint to the
+            // upload directory.
+
+            let ic_checkpoints_path = format!("{}/{}", IC_DATA_PATH, IC_CHECKPOINTS_PATH);
+            // path of highest checkpoint on upload node
+            let copy_from = format!(
+                "{}/$(ls {} | sort | tail -1)",
+                ic_checkpoints_path, ic_checkpoints_path
+            );
+            // path and name of checkpoint after replay
+            let copy_to = format!("{}/{}/{}", upload_dir, CHECKPOINTS, max_checkpoint);
+            let cp = format!("sudo cp -r {} {}", copy_from, copy_to);
+            let cmd_create_and_copy_checkpoint_dir = format!(
+                "sudo mkdir -p {}/{}; {}; sudo chown -R {} {};",
+                upload_dir, CHECKPOINTS, cp, account, upload_dir
+            );
+
             let ssh_helper = SshHelper::new(
                 self.logger.clone(),
                 account.to_string(),
@@ -636,23 +639,17 @@ impl Step for UploadAndRestartStep {
             )?;
             info!(self.logger, "Restarting replica...");
             ssh_helper.ssh(cmd_replace_state)?;
-        }
-        // For local recoveries we simply `mv` state to the upload directory.
-        else {
+        } else {
+            // For local recoveries we simply `mv` state to the upload directory.
+            // No rsync is needed, and thus no checkpoint copying.
             info!(self.logger, "Moving state locally...");
             let mut mv_to_target = Command::new("sudo");
             mv_to_target.arg("mv");
             mv_to_target.arg(src);
             mv_to_target.arg(upload_dir);
             exec_cmd(&mut mv_to_target)?;
-
             info!(self.logger, "Restarting replica...");
-
-            exec_cmd(
-                &mut Command::new("bash")
-                    .arg("-c")
-                    .arg(cmd_replace_state),
-            )?;
+            exec_cmd(&mut Command::new("bash").arg("-c").arg(cmd_replace_state))?;
         }
 
         Ok(())
