@@ -7,6 +7,7 @@ use axum::{extract::State, http::StatusCode, response::Result, Json};
 use ic_rosetta_api::models::MempoolResponse;
 use rosetta_core::{request_types::*, response_types::*};
 use std::sync::Arc;
+use prometheus::{Encoder, TextEncoder, register_counter_vec, register_histogram_vec, CounterVec, HistogramVec};
 
 // This endpoint is used to determine whether ICRC Rosetta is ready to be querried for data.
 // It returns Status Code 200 if an initial sync of the blockchain has been done
@@ -50,6 +51,16 @@ pub async fn network_status(
     verify_network_id(&request.0.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
     Ok(Json(services::network_status(&state.storage)?))
+}
+
+pub async fn metrics() -> String {
+    let encoder = TextEncoder::new();
+    let metric_families = prometheus::gather();
+    let mut buffer = Vec::new();
+
+    encoder.encode(&metric_families, &mut buffer).unwrap();
+
+    String::from_utf8(buffer).unwrap()
 }
 
 pub async fn block(

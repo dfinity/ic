@@ -1,0 +1,7 @@
+POST http://192.168.49.2:30082/network/options
+Content-Type: application/json
+@request.json
+
+POST http://192.168.49.2:30082/call
+Content-Type: application/json
+@request_range.json

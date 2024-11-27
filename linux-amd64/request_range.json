@@ -1,0 +1,5 @@
+{"network_identifier": {"blockchain": "Internet Computer", "network": "rxdbk-dyaaa-aaaaq-aabtq-cai"}, "method_name": "query_block_range",
+    "parameters":{
+        "highest_block_index": 52318,
+        "number_of_blocks": 1000
+    }}

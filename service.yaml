@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rust-rest-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rust-rest-service
+  template:
+    metadata:
+      labels:
+        app: rust-rest-service
+    spec:
+      containers:
+      - name: icrc-rosetta-api
+        image: dfinity/ic-icrc-rosetta-api:latest
+        imagePullPolicy: IfNotPresent
+        args: 
+          - "--port"
+          - "8082" 
+          - "--network-type"
+          - "mainnet"
+          - "--ledger-id"
+          - "rxdbk-dyaaa-aaaaq-aabtq-cai" 
+          - "--store-file" 
+          - "/data/db.sqlite"
+        ports:
+        - containerPort: 8082
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rust-rest-service
+  labels:
+    app: rust-rest-service
+spec:
+  selector:
+    app: rust-rest-service
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8082
+      targetPort: 8082
+      nodePort: 30082
+  type: NodePort
