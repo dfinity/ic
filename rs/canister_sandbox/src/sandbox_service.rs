@@ -6,10 +6,8 @@ pub trait SandboxService: Send + Sync {
     /// Terminate the sandbox.
     fn terminate(&self, req: TerminateRequest) -> Call<TerminateReply>;
 
-    /// Creates a canister Wasm code object. The wasm code itself or
-    /// the path to it is passed as the RPC payload.
-    fn open_wasm(&self, req: OpenWasmRequest) -> Call<OpenWasmReply>;
-
+    /// Creates a canister Wasm code object. The already compiled Wasm module is
+    /// passed in the request.
     fn open_wasm_serialized(&self, req: OpenWasmSerializedRequest)
         -> Call<OpenWasmSerializedReply>;
 
@@ -39,13 +37,6 @@ pub trait SandboxService: Send + Sync {
     /// Abort Wasm execution that was previously paused.
     fn abort_execution(&self, req: AbortExecutionRequest) -> Call<AbortExecutionReply>;
 
-    /// Perform initial parsing and evaluation needed to create the starting
-    /// execution state.
-    fn create_execution_state(
-        &self,
-        req: CreateExecutionStateRequest,
-    ) -> Call<CreateExecutionStateReply>;
-
     /// Perform deserialization of a serialized module needed to create the
     /// starting execution state.
     fn create_execution_state_serialized(
@@ -60,7 +51,6 @@ impl<Svc: SandboxService + Send + Sync> DemuxServer<Request, Reply> for Svc {
     fn dispatch(&self, req: Request) -> Call<Reply> {
         match req {
             Request::Terminate(req) => Call::new_wrap(self.terminate(req), Reply::Terminate),
-            Request::OpenWasm(req) => Call::new_wrap(self.open_wasm(req), Reply::OpenWasm),
             Request::OpenWasmSerialized(req) => {
                 Call::new_wrap(self.open_wasm_serialized(req), Reply::OpenWasmSerialized)
             }
@@ -76,10 +66,6 @@ impl<Svc: SandboxService + Send + Sync> DemuxServer<Request, Reply> for Svc {
             Request::AbortExecution(req) => {
                 Call::new_wrap(self.abort_execution(req), Reply::AbortExecution)
             }
-            Request::CreateExecutionState(req) => Call::new_wrap(
-                self.create_execution_state(req),
-                Reply::CreateExecutionState,
-            ),
             Request::CreateExecutionStateSerialized(req) => Call::new_wrap(
                 self.create_execution_state_serialized(req),
                 Reply::CreateExecutionStateSerialized,
