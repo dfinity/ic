@@ -477,16 +477,19 @@ impl GovernanceProto {
     {
         let deployed_version = self.deployed_version_or_err()?;
 
-        let upgrade_steps = {
-            let cached_upgrade_steps = self.cached_upgrade_steps_or_err()?;
-            cached_upgrade_steps.take_from(&deployed_version)?
-        };
+        let cached_upgrade_steps = self.cached_upgrade_steps_or_err()?;
 
-        if upgrade_steps.is_empty() {
-            return Err(
-                "Cannot advance SNS target version: there are no pending upgrades.".to_string(),
-            );
-        }
+        let upgrade_steps = cached_upgrade_steps.take_from(&deployed_version);
+        let upgrade_steps = match upgrade_steps {
+            Ok(upgrade_steps) if !upgrade_steps.is_empty() => upgrade_steps,
+            _ => {
+                return Err(format!(
+                    "The currently deployed SNS version is not in the cached_upgrade_steps. You may need to wait for the upgrade steps to be refreshed. \
+                    This shouldn't take more than {} seconds.", 
+                    UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS
+                ));
+            }
+        };
 
         let new_target = if let Some(new_target) = new_target {
             let new_target = Version::try_from(new_target).map_err(|err| err.to_string())?;
