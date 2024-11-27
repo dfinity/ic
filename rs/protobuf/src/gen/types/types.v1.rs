@@ -347,7 +347,7 @@ pub struct DkgMessage {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DkgPayload {
-    #[prost(oneof = "dkg_payload::Val", tags = "1, 2")]
+    #[prost(oneof = "dkg_payload::Val", tags = "1, 3")]
     pub val: ::core::option::Option<dkg_payload::Val>,
 }
 /// Nested message and enum types in `DkgPayload`.
@@ -356,12 +356,12 @@ pub mod dkg_payload {
     pub enum Val {
         #[prost(message, tag = "1")]
         Summary(super::Summary),
-        #[prost(message, tag = "2")]
-        Dealings(super::Dealings),
+        #[prost(message, tag = "3")]
+        DataPayload(super::DkgDataPayload),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Dealings {
+pub struct DkgDataPayload {
     #[prost(message, repeated, tag = "1")]
     pub dealings: ::prost::alloc::vec::Vec<DkgMessage>,
     #[prost(uint64, tag = "2")]
@@ -378,15 +378,19 @@ pub struct Summary {
     #[prost(uint64, tag = "4")]
     pub height: u64,
     #[prost(message, repeated, tag = "5")]
-    pub current_transcripts: ::prost::alloc::vec::Vec<TaggedNiDkgTranscript>,
+    pub current_transcripts_deprecated: ::prost::alloc::vec::Vec<TaggedNiDkgTranscript>,
     #[prost(message, repeated, tag = "6")]
-    pub next_transcripts: ::prost::alloc::vec::Vec<TaggedNiDkgTranscript>,
+    pub next_transcripts_deprecated: ::prost::alloc::vec::Vec<TaggedNiDkgTranscript>,
     #[prost(message, repeated, tag = "7")]
     pub configs: ::prost::alloc::vec::Vec<NiDkgConfig>,
     #[prost(message, repeated, tag = "9")]
     pub initial_dkg_attempts: ::prost::alloc::vec::Vec<InitialDkgAttemptCount>,
     #[prost(message, repeated, tag = "10")]
     pub transcripts_for_remote_subnets: ::prost::alloc::vec::Vec<CallbackIdedNiDkgTranscript>,
+    #[prost(message, repeated, tag = "11")]
+    pub current_transcripts_new: ::prost::alloc::vec::Vec<NiDkgTranscript>,
+    #[prost(message, repeated, tag = "12")]
+    pub next_transcripts_new: ::prost::alloc::vec::Vec<NiDkgTranscript>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TaggedNiDkgTranscript {

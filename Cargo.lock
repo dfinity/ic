@@ -2353,8 +2353,10 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap 4.5.20",
+ "config_types",
+ "deterministic_ips",
  "ic-types",
- "mac_address",
+ "network",
  "once_cell",
  "regex",
  "serde",
@@ -2363,6 +2365,21 @@ dependencies = [
  "tempfile",
  "url",
  "utils",
+]
+
+[[package]]
+name = "config_types"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "deterministic_ips",
+ "ic-types",
+ "once_cell",
+ "serde",
+ "serde_json",
+ "serde_with 1.14.0",
+ "tempfile",
+ "url",
 ]
 
 [[package]]
@@ -4945,7 +4962,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.20",
  "config",
- "mac_address",
+ "deterministic_ips",
  "network",
  "utils",
 ]
@@ -5864,7 +5881,9 @@ dependencies = [
  "futures",
  "ic-agent 0.37.1",
  "ic-boundary-nodes-system-test-utils",
+ "ic-crypto-tree-hash",
  "ic-system-test-driver",
+ "ic-types",
  "reqwest 0.12.9",
  "serde",
  "serde_cbor",
@@ -6708,6 +6727,7 @@ dependencies = [
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-utils-ensure",
+ "icrc-cbor",
  "icrc-ledger-client-cdk",
  "icrc-ledger-types",
  "maplit",
@@ -7693,6 +7713,7 @@ name = "ic-crypto-secp256k1"
 version = "0.9.0"
 dependencies = [
  "bip32",
+ "bitcoin 0.28.2",
  "hex",
  "hex-literal",
  "hmac",
@@ -7702,6 +7723,7 @@ dependencies = [
  "pem 1.1.1",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "secp256k1 0.22.2",
  "sha2 0.10.8",
  "simple_asn1",
  "wycheproof",
@@ -8082,6 +8104,7 @@ dependencies = [
 name = "ic-crypto-utils-canister-threshold-sig"
 version = "0.9.0"
 dependencies = [
+ "ic-crypto-internal-bls12-381-vetkd",
  "ic-crypto-internal-threshold-sig-canister-threshold-sig",
  "ic-types",
 ]
@@ -8257,8 +8280,10 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
+ "bincode",
  "candid",
  "canister-test",
+ "clap 4.5.20",
  "criterion",
  "embedders_bench",
  "ic-base-types",
@@ -8303,6 +8328,7 @@ dependencies = [
  "serde_bytes",
  "slog",
  "slog-term",
+ "tempfile",
  "wasm-encoder 0.217.0",
  "wasmparser 0.217.0",
  "wasmprinter 0.217.0",
@@ -11409,6 +11435,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-tracing",
  "ic-tracing-jaeger-exporter",
+ "ic-tracing-logging-layer",
  "ic-types",
  "ic-xnet-payload-builder",
  "libc",
@@ -12713,7 +12740,7 @@ dependencies = [
  "humantime",
  "humantime-serde",
  "hyper 1.5.1",
- "ic-agent 0.37.1",
+ "ic-agent",
  "ic-artifact-pool",
  "ic-base-types",
  "ic-btc-interface",
@@ -12977,6 +13004,7 @@ dependencies = [
 name = "ic-test-utilities-execution-environment"
 version = "0.9.0"
 dependencies = [
+ "bincode",
  "ic-base-types",
  "ic-config",
  "ic-cycles-account-manager",
@@ -13201,6 +13229,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-tracing-logging-layer"
+version = "0.9.0"
+dependencies = [
+ "ic-base-types",
+ "ic-config",
+ "time",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "ic-transport-types"
 version = "0.37.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13322,6 +13362,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-crypto-sha2",
+ "ic-embedders",
  "ic-types",
  "lazy_static",
  "serde",
@@ -13748,7 +13789,7 @@ dependencies = [
  "candid",
  "certificate_orchestrator_interface",
  "discower_bowndary",
- "ic-agent 0.37.1",
+ "ic-agent",
  "ic-base-types",
  "ic-boundary-nodes-integration-test-common",
  "ic-boundary-nodes-performance-test-common",
@@ -14034,6 +14075,18 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "icrc-cbor"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ethnum",
+ "minicbor",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "proptest",
 ]
 
 [[package]]
@@ -15343,18 +15396,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 
 [[package]]
-name = "mac_address"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "hex",
- "regex",
- "serde",
- "sha2 0.10.8",
- "utils",
-]
-
-[[package]]
 name = "mach2"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15799,10 +15840,11 @@ name = "network"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "config",
- "mac_address",
+ "config_types",
+ "deterministic_ips",
  "ping",
  "rayon",
+ "regex",
  "serde",
  "serde_json",
  "serde_with 1.14.0",
@@ -17104,6 +17146,7 @@ dependencies = [
 name = "pocket-ic"
 version = "6.0.0"
 dependencies = [
+ "backoff",
  "base64 0.13.1",
  "candid",
  "candid_parser",
@@ -19596,7 +19639,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.20",
  "config",
- "mac_address",
+ "deterministic_ips",
  "network",
  "utils",
 ]
@@ -21496,6 +21539,7 @@ dependencies = [
  "sharded-slab",
  "smallvec",
  "thread_local",
+ "time",
  "tracing",
  "tracing-core",
  "tracing-log",

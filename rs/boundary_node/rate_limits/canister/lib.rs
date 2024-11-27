@@ -9,7 +9,7 @@ mod confidentiality_formatting;
 #[allow(dead_code)]
 mod disclose;
 #[allow(dead_code)]
-mod fetcher;
+mod getter;
 #[allow(dead_code)]
 mod metrics;
 mod random;

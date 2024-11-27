@@ -419,9 +419,11 @@ async fn test_sns_lifecycle(
         swap_distribution_sns_e8s,
     );
 
-    let nervous_system_parameters =
-        sns::governance::get_nervous_system_parameters(&pocket_ic, sns.governance.canister_id)
-            .await;
+    let nervous_system_parameters = sns
+        .governance
+        .get_nervous_system_parameters(&pocket_ic)
+        .await
+        .unwrap();
     let swap_init = sns::swap::get_init(&pocket_ic, sns.swap.canister_id)
         .await
         .init
