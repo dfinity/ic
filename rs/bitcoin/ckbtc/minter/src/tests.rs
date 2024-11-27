@@ -1,5 +1,5 @@
+use crate::evaluate_minter_fee;
 use crate::state::invariants::CheckInvariantsImpl;
-use crate::MINTER_FEE_CONSTANT;
 use crate::{
     address::BitcoinAddress, build_unsigned_transaction, estimate_retrieve_btc_fee, fake_sign,
     greedy, signature::EncodedSignature, tx, BuildTxError,
@@ -259,9 +259,11 @@ fn should_have_same_input_and_output_count() {
     )
     .expect("failed to build a transaction");
 
-    let minter_fee = crate::MINTER_FEE_PER_INPUT * tx.inputs.len() as u64
-        + crate::MINTER_FEE_PER_OUTPUT * tx.outputs.len() as u64
-        + crate::MINTER_FEE_CONSTANT;
+    let minter_fee = evaluate_minter_fee(
+        tx.inputs.len() as u64,
+        tx.outputs.len() as u64,
+        &minter_addr,
+    );
 
     assert_eq!(tx.outputs.len(), tx.inputs.len());
     assert_eq!(
@@ -310,9 +312,11 @@ fn test_min_change_amount() {
     let change_value = 1;
 
     let fee = fake_sign(&tx).vsize() as u64 * fee_per_vbyte / 1000;
-    let minter_fee = crate::MINTER_FEE_PER_INPUT * tx.inputs.len() as u64
-        + crate::MINTER_FEE_PER_OUTPUT * tx.outputs.len() as u64
-        + crate::MINTER_FEE_CONSTANT;
+    let minter_fee = evaluate_minter_fee(
+        tx.inputs.len() as u64,
+        tx.outputs.len() as u64,
+        &minter_addr,
+    );
 
     assert_eq!(tx.outputs.len(), 3);
     let fee_shares = {
@@ -720,13 +724,14 @@ proptest! {
 
         let target = total_value / 2;
 
-        let fee_estimate = estimate_retrieve_btc_fee(&utxos, Some(target), fee_per_vbyte);
+        let minter_address= BitcoinAddress::P2wpkhV0(main_pkhash);
+        let fee_estimate = estimate_retrieve_btc_fee(&utxos, Some(target), fee_per_vbyte, &minter_address);
         let fee_estimate = fee_estimate.minter_fee + fee_estimate.bitcoin_fee;
 
         let (unsigned_tx, _, _) = build_unsigned_transaction(
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
-            BitcoinAddress::P2wpkhV0(main_pkhash),
+            minter_address,
             fee_per_vbyte
         )
         .expect("failed to build transaction");
@@ -788,20 +793,17 @@ proptest! {
             .iter()
             .map(|utxo| (utxo.outpoint.clone(), utxo.value))
             .collect();
-
+        let minter_address = BitcoinAddress::P2wpkhV0(main_pkhash);
         let (unsigned_tx, change_output, _) = build_unsigned_transaction(
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
-            BitcoinAddress::P2wpkhV0(main_pkhash),
+            minter_address.clone(),
             fee_per_vbyte
         )
         .expect("failed to build transaction");
 
         let fee = fake_sign(&unsigned_tx).vsize() as u64 * fee_per_vbyte / 1000;
-        let minter_fee =
-            crate::MINTER_FEE_PER_INPUT * unsigned_tx.inputs.len() as u64 +
-            crate::MINTER_FEE_PER_OUTPUT * unsigned_tx.outputs.len() as u64 +
-            MINTER_FEE_CONSTANT;
+        let minter_fee = evaluate_minter_fee(unsigned_tx.inputs.len() as u64, unsigned_tx.outputs.len() as u64, &minter_address);
 
         let inputs_value = unsigned_tx.inputs
             .iter()
@@ -817,7 +819,7 @@ proptest! {
                 },
                 tx::TxOut {
                     value: inputs_value - target + minter_fee,
-                    address: BitcoinAddress::P2wpkhV0(main_pkhash),
+                    address: minter_address,
                 },
             ]
         );
@@ -1116,11 +1118,13 @@ proptest! {
         utxos in btree_set(arb_utxo(5_000u64..1_000_000_000), 0..20),
         amount in option::of(any::<u64>()),
         fee_per_vbyte in 2000..10000u64,
+        main_pkhash in uniform20(any::<u8>()),
     ) {
         const SMALLEST_TX_SIZE_VBYTES: u64 = 140; // one input, two outputs
         const MIN_MINTER_FEE: u64 = 312;
 
-        let estimate = estimate_retrieve_btc_fee(&utxos, amount, fee_per_vbyte);
+        let minter_address= BitcoinAddress::P2wpkhV0(main_pkhash);
+        let estimate = estimate_retrieve_btc_fee(&utxos, amount, fee_per_vbyte, &minter_address);
         let lower_bound = MIN_MINTER_FEE + SMALLEST_TX_SIZE_VBYTES * fee_per_vbyte / 1000;
         let estimate_amount = estimate.minter_fee + estimate.bitcoin_fee;
         prop_assert!(

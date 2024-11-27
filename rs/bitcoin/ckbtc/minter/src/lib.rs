@@ -999,11 +999,10 @@ pub fn build_unsigned_transaction(
 
     debug_assert!(inputs_value >= amount);
 
-    let minter_fee = max(
-        MINTER_FEE_PER_INPUT * utxos_guard.len() as u64
-            + MINTER_FEE_PER_OUTPUT * (outputs.len() + 1) as u64
-            + MINTER_FEE_CONSTANT,
-        main_address.dust_limit(),
+    let minter_fee = evaluate_minter_fee(
+        utxos_guard.len() as u64,
+        (outputs.len() + 1) as u64,
+        &main_address,
     );
 
     let change = inputs_value - amount;
@@ -1078,6 +1077,19 @@ pub fn build_unsigned_transaction(
         change_output,
         ScopeGuard::into_inner(utxos_guard),
     ))
+}
+
+fn evaluate_minter_fee(
+    num_inputs: u64,
+    num_outputs: u64,
+    minter_address: &BitcoinAddress,
+) -> Satoshi {
+    max(
+        MINTER_FEE_PER_INPUT * num_inputs
+            + MINTER_FEE_PER_OUTPUT * num_outputs
+            + MINTER_FEE_CONSTANT,
+        minter_address.dust_limit(),
+    )
 }
 
 /// Distributes an amount across the specified number of shares as fairly as
@@ -1219,6 +1231,7 @@ pub fn estimate_retrieve_btc_fee(
     available_utxos: &BTreeSet<Utxo>,
     maybe_amount: Option<u64>,
     median_fee_millisatoshi_per_vbyte: u64,
+    minter_address: &BitcoinAddress,
 ) -> WithdrawalFee {
     const DEFAULT_INPUT_COUNT: u64 = 2;
     // One output for the caller and one for the change.
@@ -1243,9 +1256,7 @@ pub fn estimate_retrieve_btc_fee(
     };
 
     let vsize = tx_vsize_estimate(input_count, DEFAULT_OUTPUT_COUNT);
-    let minter_fee = MINTER_FEE_PER_INPUT * input_count
-        + MINTER_FEE_PER_OUTPUT * DEFAULT_OUTPUT_COUNT
-        + MINTER_FEE_CONSTANT;
+    let minter_fee = evaluate_minter_fee(input_count, DEFAULT_OUTPUT_COUNT, minter_address);
     // We subtract one from the outputs because the minter's output
     // does not participate in fees distribution.
     let bitcoin_fee =
