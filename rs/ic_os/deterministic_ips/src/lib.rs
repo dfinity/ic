@@ -1,4 +1,5 @@
 use ic_crypto_sha2::Sha256;
+use macaddr::MacAddr6;
 
 use std::fmt;
 use std::net::Ipv6Addr;
@@ -16,18 +17,14 @@ pub enum AddressError {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub struct HwAddr {
-    a: u8,
-    b: u8,
-    c: u8,
-    d: u8,
-    e: u8,
-    f: u8,
-}
+pub struct HwAddr(MacAddr6);
 
 impl HwAddr {
-    fn octets(&self) -> [u8; 6] {
-        [self.a, self.b, self.c, self.d, self.e, self.f]
+    pub fn octets(&self) -> [u8; 6] {
+        self.0
+            .as_bytes()
+            .try_into()
+            .expect("MAC address should always be 6 bytes")
     }
 }
 
@@ -39,10 +36,11 @@ impl AsRef<HwAddr> for HwAddr {
 
 impl fmt::Display for HwAddr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let octets = self.octets();
         write!(
             f,
             "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-            self.a, self.b, self.c, self.d, self.e, self.f
+            octets[0], octets[1], octets[2], octets[3], octets[4], octets[5]
         )
     }
 }
@@ -57,52 +55,22 @@ pub enum HwAddrParseError {
 
 impl From<[u8; 6]> for HwAddr {
     fn from(octets: [u8; 6]) -> HwAddr {
-        HwAddr {
-            a: octets[0],
-            b: octets[1],
-            c: octets[2],
-            d: octets[3],
-            e: octets[4],
-            f: octets[5],
-        }
+        HwAddr(MacAddr6::new(
+            octets[0], octets[1], octets[2], octets[3], octets[4], octets[5],
+        ))
     }
 }
 
 impl FromStr for HwAddr {
     type Err = HwAddrParseError;
     fn from_str(s: &str) -> Result<HwAddr, HwAddrParseError> {
-        let octets = match s.len() {
-            17 => s
-                .split(':')
-                .map(|v| u8::from_str_radix(v, 16).map_err(|_| HwAddrParseError::InvalidAddress))
-                .collect::<Result<Vec<u8>, HwAddrParseError>>(),
-
-            12 => {
-                let chars: Vec<char> = s.chars().collect();
-                chars
-                    .chunks(2)
-                    .map(|v| {
-                        v.iter().fold("".to_string(), |mut acc, v| {
-                            acc.push(*v);
-                            acc
-                        })
-                    })
-                    .map(|v| {
-                        u8::from_str_radix(&v, 16).map_err(|_| HwAddrParseError::InvalidAddress)
-                    })
-                    .collect::<Result<Vec<u8>, HwAddrParseError>>()
+        s.parse::<MacAddr6>().map(HwAddr).map_err(|_| {
+            if s.len() != 17 && s.len() != 12 {
+                HwAddrParseError::InvalidLength
+            } else {
+                HwAddrParseError::InvalidAddress
             }
-            _ => Err(HwAddrParseError::InvalidLength),
-        }?;
-
-        if octets.len() != 6 {
-            return Err(HwAddrParseError::InvalidAddress);
-        }
-
-        Ok([
-            octets[0], octets[1], octets[2], octets[3], octets[4], octets[5],
-        ]
-        .into())
+        })
     }
 }
 
@@ -146,14 +114,14 @@ impl HwAddr {
         let octets = octets
             .chunks(2)
             .map(|v| {
-                v.iter().fold("".to_string(), |mut acc, v| {
-                    acc.push_str(&format!("{:02x}", v));
+                v.iter().fold(String::new(), |mut acc, &byte| {
+                    acc.push_str(&format!("{:02x}", byte));
                     acc
                 })
             })
-            .reduce(|mut acc, v| {
+            .reduce(|mut acc, chunk| {
                 acc.push(':');
-                acc.push_str(&v);
+                acc.push_str(&chunk);
                 acc
             })
             .unwrap(); // We know the length, so this unwrap is OK.
@@ -181,20 +149,14 @@ mod test {
     fn invalid_mac_length() {
         let error: Result<HwAddr, _> = "11:22:33:44:55".parse();
 
-        assert!(matches!(
-            error,
-            Result::Err(HwAddrParseError::InvalidLength)
-        ));
+        assert!(matches!(error, Err(HwAddrParseError::InvalidLength)));
     }
 
     #[test]
     fn invalid_mac_contents() {
         let error: Result<HwAddr, _> = "::::::::::::".parse();
 
-        assert!(matches!(
-            error,
-            Result::Err(HwAddrParseError::InvalidAddress)
-        ));
+        assert!(matches!(error, Err(HwAddrParseError::InvalidAddress)));
     }
 
     #[test]

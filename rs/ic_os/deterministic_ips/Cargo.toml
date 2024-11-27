@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
+macaddr = { workspace = true }
 clap = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 thiserror = { workspace = true }

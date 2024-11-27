@@ -17,6 +17,7 @@ rust_library(
         # Keep sorted.
         "//rs/crypto/sha2",
         "@crate_index//:anyhow",
+        "@crate_index//:macaddr",
         "@crate_index//:thiserror",
     ],
 )
