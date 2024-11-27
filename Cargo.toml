@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+    "packages/icrc-cbor",
     "packages/icrc-ledger-agent",
     "packages/icrc-ledger-client",
     "packages/icrc-ledger-client-cdk",
@@ -169,6 +170,7 @@ members = [
     "rs/monitoring/metrics",
     "rs/monitoring/pprof",
     "rs/monitoring/tracing/jaeger_exporter",
+    "rs/monitoring/tracing/logging_layer",
     "rs/nervous_system/agent",
     "rs/nervous_system/clients",
     "rs/nervous_system/collections/union_multi_map",
@@ -732,6 +734,7 @@ tracing-subscriber = { version = "0.3.18", features = [
     "env-filter",
     "fmt",
     "json",
+    "time",
 ] }
 turmoil = "0.6.4"
 url = { version = "2.5.3", features = ["serde"] }

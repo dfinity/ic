@@ -367,10 +367,8 @@ impl PocketIc {
         });
         let runtime = rx.recv().unwrap();
 
-        let pocket_ic = runtime.block_on(async {
-            PocketIcAsync::new_from_existing_instance(server_url, instance_id, max_request_time_ms)
-                .await
-        });
+        let pocket_ic =
+            PocketIcAsync::new_from_existing_instance(server_url, instance_id, max_request_time_ms);
 
         Self {
             pocket_ic,
@@ -670,10 +668,29 @@ impl PocketIc {
         })
     }
 
-    /// Await an update call submitted previously by `submit_call_with_effective_principal`.
+    /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     pub fn await_call(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.await_call(message_id).await })
+    }
+
+    /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call.
+    pub fn ingress_status(
+        &self,
+        message_id: RawMessageId,
+    ) -> Option<Result<WasmResult, UserError>> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.ingress_status(message_id).await })
+    }
+
+    /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
+    /// This function does not execute rounds and thus should only be called on a "live" PocketIC instance
+    /// or if rounds are executed due to separate PocketIC library calls.
+    pub fn await_call_no_ticks(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.await_call_no_ticks(message_id).await })
     }
 
     /// Execute an update call on a canister.
@@ -1085,6 +1102,32 @@ impl PocketIc {
         runtime.block_on(async {
             self.pocket_ic
                 .update_call_with_effective_principal(
+                    canister_id,
+                    effective_principal,
+                    sender,
+                    method,
+                    payload,
+                )
+                .await
+        })
+    }
+
+    /// Execute a query call on a canister explicitly specifying an effective principal to route the request:
+    /// this API is useful for making generic query calls (including management canister query calls) without using dedicated functions from this library
+    /// (e.g., making generic query calls in dfx to a PocketIC instance).
+    #[instrument(skip(self, payload), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), effective_principal = %effective_principal.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
+    pub fn query_call_with_effective_principal(
+        &self,
+        canister_id: CanisterId,
+        effective_principal: RawEffectivePrincipal,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+    ) -> Result<WasmResult, UserError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .query_call_with_effective_principal(
                     canister_id,
                     effective_principal,
                     sender,

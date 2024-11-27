@@ -21,10 +21,16 @@ pub struct HealthArgs {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+struct Cycles {
+    cycles: u128,
+    freezing_threshold: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct SnsHealthInfo {
     name: String,
     memory_consumption: Vec<(u64, SnsCanisterType)>,
-    cycles: Vec<(u64, SnsCanisterType)>,
+    cycles: Vec<(Cycles, SnsCanisterType)>,
     num_remaining_upgrade_steps: usize,
 }
 
@@ -34,16 +40,21 @@ impl TableRow for SnsHealthInfo {
     }
 
     fn column_values(&self) -> Vec<String> {
+        const MEMORY_THRESHOLD_GIB: f64 = 2.5;
+        const CYCLES_THRESHOLD_TC: f64 = 10.0;
+        const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
+        const TC: f64 = 1000.0 * 1000.0 * 1000.0 * 1000.0;
+
         let high_memory_consumption = self
             .memory_consumption
             .iter()
             .filter(|(memory_consumption, _)| {
-                (*memory_consumption as f64) > 2.5 * 1024.0 * 1024.0 * 1024.0
+                (*memory_consumption as f64) > MEMORY_THRESHOLD_GIB * GIB
             })
             .map(|(memory_consumption, canister_type)| {
                 format!(
                     "{canister_type}: ({:.2} GiB)",
-                    *memory_consumption as f64 / 1024.0 / 1024.0 / 1024.0
+                    *memory_consumption as f64 / GIB
                 )
             })
             .join(", ");
@@ -57,11 +68,16 @@ impl TableRow for SnsHealthInfo {
         let low_cycles = self
             .cycles
             .iter()
-            .filter(|(cycles, _)| (*cycles as f64) < 10.0 * 1000.0 * 1000.0 * 1000.0 * 1000.0)
+            .filter(|(cycles, _)| (cycles.cycles as f64) < CYCLES_THRESHOLD_TC * TC)
             .map(|(cycles, canister_type)| {
                 format!(
-                    "{canister_type}: ({:.2} TC)",
-                    *cycles as f64 / 1000.0 / 1000.0 / 1000.0 / 1000.0
+                    "{canister_type}: ({:.2} TC{frozen})",
+                    cycles.cycles as f64 / TC,
+                    frozen = if cycles.cycles < cycles.freezing_threshold as u128 {
+                        " 🥶".to_string()
+                    } else {
+                        "".to_string()
+                    }
                 )
             })
             .join(", ");
@@ -128,7 +144,16 @@ pub async fn exec(args: HealthArgs, agent: &Agent) -> Result<()> {
                 .map(|(canister_status, ctype)| {
                     (
                         (u64::try_from(canister_status.memory_size.0).unwrap(), ctype),
-                        (u64::try_from(canister_status.cycles.0).unwrap(), ctype),
+                        (
+                            Cycles {
+                                freezing_threshold: u64::try_from(
+                                    canister_status.settings.freezing_threshold.0,
+                                )
+                                .unwrap(),
+                                cycles: u128::try_from(canister_status.cycles.0).unwrap(),
+                            },
+                            ctype,
+                        ),
                     )
                 })
                 .unzip();
