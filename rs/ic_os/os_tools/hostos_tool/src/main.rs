@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 use config::config_ini::config_map_from_path;
 use config::deployment_json::get_deployment_settings;
 use config::{DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH, DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH};
+use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant};
 use network::info::NetworkInfo;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
@@ -21,14 +22,12 @@ pub enum Commands {
         output_directory: String,
     },
     GenerateIpv6Address {
-        // 0x0 corresponds to HostOS
-        #[arg(short, long, default_value = "0")]
-        node_type: u8,
+        #[arg(short, long, default_value = "HostOS")]
+        node_type: String,
     },
     GenerateMacAddress {
-        // 0x0 corresponds to HostOS
-        #[arg(short, long, default_value = "0")]
-        node_type: u8,
+        #[arg(short, long, default_value = "HostOS")]
+        node_type: String,
     },
     FetchMacAddress {},
 }
@@ -78,7 +77,7 @@ pub fn main() -> Result<()> {
                 mgmt_mac,
                 deployment_settings.deployment.name,
                 IpVariant::V6,
-                0x0, /* 0x0 corresponds to HostOS */
+                NodeType::HostOS, /* 0x0 corresponds to HostOS */
             )?;
 
             generate_network_config(&network_info, &generated_mac, Path::new(&output_directory))
@@ -100,6 +99,7 @@ pub fn main() -> Result<()> {
                 ))?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
+            let node_type = node_type.parse::<NodeType>()?;
             let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
             let generated_mac = calculate_deterministic_mac(
                 mgmt_mac,
@@ -128,6 +128,7 @@ pub fn main() -> Result<()> {
                 ))?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
+            let node_type = node_type.parse::<NodeType>()?;
             let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
             let generated_mac = calculate_deterministic_mac(
                 mgmt_mac,

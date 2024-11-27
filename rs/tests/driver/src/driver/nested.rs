@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 use config_types::Deployment;
+use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, HwAddr, IpVariant};
 use serde::{Deserialize, Serialize};
 use slog::info;
@@ -136,10 +137,20 @@ impl NestedVms for TestEnv {
             segments[0], segments[1], segments[2], segments[3]
         );
 
-        let host_mac =
-            calculate_deterministic_mac(seed_mac, Deployment::Mainnet, IpVariant::V6, 0).unwrap();
-        let guest_mac =
-            calculate_deterministic_mac(seed_mac, Deployment::Mainnet, IpVariant::V6, 1).unwrap();
+        let host_mac = calculate_deterministic_mac(
+            seed_mac,
+            Deployment::Mainnet,
+            IpVariant::V6,
+            NodeType::HostOS,
+        )
+        .unwrap();
+        let guest_mac = calculate_deterministic_mac(
+            seed_mac,
+            Deployment::Mainnet,
+            IpVariant::V6,
+            NodeType::GuestOS,
+        )
+        .unwrap();
 
         let host_ip = host_mac.calculate_slaac(&prefix).unwrap();
         let guest_ip = guest_mac.calculate_slaac(&prefix).unwrap();

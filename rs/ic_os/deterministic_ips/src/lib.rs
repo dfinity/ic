@@ -4,6 +4,9 @@ use std::fmt;
 use std::net::Ipv6Addr;
 use std::str::FromStr;
 
+pub mod node_type;
+use node_type::NodeType;
+
 #[derive(Debug, thiserror::Error)]
 pub enum AddressError {
     #[error("index must be between 0x00 and 0x0f")]
@@ -113,11 +116,9 @@ pub fn calculate_deterministic_mac<T: AsRef<HwAddr>, D: fmt::Display>(
     mgmt_mac: T,
     deployment: D,
     ip_version: IpVariant,
-    index: u8,
+    node_type: NodeType,
 ) -> Result<HwAddr, AddressError> {
-    if index > 0x0f {
-        return Err(AddressError::InvalidIndex);
-    }
+    let index = node_type.to_index();
 
     // NOTE: In order to be backwards compatible with existing scripts, this
     // **MUST** Have a newline.
@@ -170,11 +171,9 @@ mod test {
     #[test]
     fn mac() {
         let mgmt_mac: HwAddr = "70:B5:E8:E8:25:DE".parse().unwrap();
-
         let expected_mac: HwAddr = "4a:00:f8:87:a4:8a".parse().unwrap();
-
-        let mac = calculate_deterministic_mac(mgmt_mac, "testnet", IpVariant::V4, 0).unwrap();
-
+        let mac = calculate_deterministic_mac(mgmt_mac, "testnet", IpVariant::V4, NodeType::HostOS)
+            .unwrap();
         assert_eq!(mac, expected_mac);
     }
 
@@ -216,14 +215,13 @@ mod test {
     fn mac_to_slaac() {
         let mgmt_mac = "b0:7b:25:c8:f6:c0".parse::<HwAddr>().unwrap();
         let prefix = "2602:FFE4:801:17";
-
         let expected_ip = "2602:FFE4:801:17:6801:ff:feec:bd51"
             .parse::<Ipv6Addr>()
             .unwrap();
-
-        let mac = calculate_deterministic_mac(mgmt_mac, "mainnet", IpVariant::V6, 1).unwrap();
+        let mac =
+            calculate_deterministic_mac(mgmt_mac, "mainnet", IpVariant::V6, NodeType::GuestOS)
+                .unwrap();
         let slaac = mac.calculate_slaac(prefix).unwrap();
-
         assert_eq!(slaac, expected_ip);
     }
 }
