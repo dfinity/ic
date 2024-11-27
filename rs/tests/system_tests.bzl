@@ -339,6 +339,10 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwarg
         name: the name of the system-tests.
         extra_head_nns_tags: extra tags assigned to the head_nns variant (Use `[]` to use the original tags).
         **kwargs: the arguments of the system-tests.
+
+    Returns:
+      This macro declares 3 bazel targets:
+      It returns a struct specifying test_driver_target which is the name of the test driver target ("<name>_bin") such that it can be used by other system-tests.
     """
     runtime_deps = kwargs.pop("runtime_deps", [])
     env = kwargs.pop("env", {})
