@@ -68,6 +68,7 @@ use prost::Message;
 use std::convert::{From, TryFrom};
 use std::fs::File;
 use std::fs::OpenOptions;
+use std::ops::Deref;
 use std::os::unix::io::RawFd;
 use std::os::unix::prelude::IntoRawFd;
 use std::path::{Path, PathBuf};
@@ -1454,6 +1455,8 @@ fn persist_metadata_or_die(
 }
 
 struct CreateCheckpointResult {
+    // ReplicatedState switched to the new checkpoint.
+    state: Arc<ReplicatedState>,
     state_metadata: StateMetadata,
     // TipRequest to compute manifest.
     compute_manifest_request: TipRequest,
@@ -2515,10 +2518,10 @@ impl StateManagerImpl {
     // Creates a checkpoint and switches state to it.
     fn create_checkpoint_and_switch(
         &self,
-        state: &mut ReplicatedState,
+        mut state: ReplicatedState,
         height: Height,
     ) -> CreateCheckpointResult {
-        self.observe_num_loaded_pagemaps(state);
+        self.observe_num_loaded_pagemaps(&state);
         struct PreviousCheckpointInfo {
             dirty_pages: DirtyPages,
             base_manifest: Manifest,
@@ -2562,7 +2565,7 @@ impl StateManagerImpl {
                         // new, or identical (same inode) to before.
                         let dirty_pages = match self.lsmt_status {
                             FlagStatus::Enabled => Vec::new(),
-                            FlagStatus::Disabled => get_dirty_pages(state),
+                            FlagStatus::Disabled => get_dirty_pages(&state),
                         };
                         Some(PreviousCheckpointInfo {
                             dirty_pages,
@@ -2588,11 +2591,11 @@ impl StateManagerImpl {
                 .make_checkpoint_step_duration
                 .with_label_values(&["strip_page_map_deltas"])
                 .start_timer();
-            strip_page_map_deltas(state, self.get_fd_factory());
+            strip_page_map_deltas(&mut state, self.get_fd_factory());
         }
         let result = {
             checkpoint::make_checkpoint(
-                state,
+                &state,
                 height,
                 &self.tip_channel,
                 &self.metrics.checkpoint_metrics,
@@ -2665,8 +2668,30 @@ impl StateManagerImpl {
                 .metrics
                 .checkpoint_metrics
                 .make_checkpoint_step_duration
+                .with_label_values(&["validate_eq"])
+                .start_timer();
+            if let Err(err) = checkpointed_state.validate_eq(&state) {
+                error!(
+                    self.log,
+                    "{}: Replicated state altered: {}",
+                    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT,
+                    err
+                );
+                self.metrics
+                    .checkpoint_metrics
+                    .replicated_state_altered_after_checkpoint
+                    .inc();
+            }
+        }
+        {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
                 .with_label_values(&["switch_to_checkpoint"])
                 .start_timer();
+            switch_to_checkpoint(&mut state, &checkpointed_state);
+>>>>>>> master
             self.tip_channel
                 .send(TipRequest::ValidateReplicatedState {
                     checkpoint_layout: cp_layout.clone(),
@@ -2720,18 +2745,19 @@ impl StateManagerImpl {
             let tip_requests = if self.lsmt_status == FlagStatus::Enabled {
                 vec![TipRequest::ResetTipAndMerge {
                     checkpoint_layout: cp_layout.clone(),
-                    pagemaptypes: PageMapType::list_all_including_snapshots(state),
+                    pagemaptypes: PageMapType::list_all_including_snapshots(&state),
                     is_initializing_tip: false,
                 }]
             } else {
                 vec![TipRequest::DefragTip {
                     height,
-                    page_map_types: PageMapType::list_all_without_snapshots(state),
+                    page_map_types: PageMapType::list_all_without_snapshots(&state),
                 }]
             };
 
             CreateCheckpointResult {
                 tip_requests,
+                state: Arc::new(state),
                 state_metadata: StateMetadata {
                     checkpoint_layout: Some(cp_layout.clone()),
                     bundled_manifest: None,
@@ -3433,19 +3459,20 @@ impl StateManager for StateManagerImpl {
             None;
         let mut follow_up_tip_requests = Vec::new();
 
-        let checkpointed_state = match scope {
+        let state = match scope {
             CertificationScope::Full => {
                 self.flush_canister_snapshots_and_page_maps(&mut state, height);
                 let CreateCheckpointResult {
+                    state,
                     state_metadata,
                     compute_manifest_request,
                     tip_requests,
-                } = self.create_checkpoint_and_switch(&mut state, height);
+                } = self.create_checkpoint_and_switch(state, height);
                 state_metadata_and_compute_manifest_request =
                     Some((state_metadata, compute_manifest_request));
                 follow_up_tip_requests = tip_requests;
 
-                state.clone()
+                state
             }
             CertificationScope::Metadata => {
                 match self.lsmt_status {
@@ -3474,19 +3501,12 @@ impl StateManager for StateManagerImpl {
                     }
                 }
 
-                {
-                    let _timer = self
-                        .metrics
-                        .checkpoint_op_duration
-                        .with_label_values(&["copy_state"])
-                        .start_timer();
-                    state.clone()
-                }
+                Arc::new(state)
             }
         };
 
         let certification_metadata =
-            Self::compute_certification_metadata(&self.metrics, &self.log, &checkpointed_state)
+            Self::compute_certification_metadata(&self.metrics, &self.log, &state)
                 .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
 
         let mut states = self.states.write();
@@ -3525,7 +3545,7 @@ impl StateManager for StateManagerImpl {
         {
             states.snapshots.push_back(Snapshot {
                 height,
-                state: Arc::new(checkpointed_state),
+                state: Arc::clone(&state),
             });
             states
                 .snapshots
@@ -3569,7 +3589,14 @@ impl StateManager for StateManagerImpl {
 
         // The next call to take_tip() will take care of updating the
         // tip if needed.
-        states.tip = Some((height, state));
+        {
+            let _timer = self
+                .metrics
+                .checkpoint_op_duration
+                .with_label_values(&["copy_state"])
+                .start_timer();
+            states.tip = Some((height, state.deref().clone()));
+        }
 
         if scope == CertificationScope::Full {
             self.release_lock_and_persist_metadata(states);

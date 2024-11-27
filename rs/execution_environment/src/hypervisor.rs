@@ -2,20 +2,22 @@ use ic_canister_sandbox_backend_lib::replica_controller::sandboxed_execution_con
 use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_embedders::wasm_executor::{WasmExecutionResult, WasmExecutor};
-use ic_embedders::wasm_utils::decoding::decoded_wasm_size;
-use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, WasmtimeEmbedder};
-use ic_embedders::{CompilationCache, CompilationResult};
+use ic_embedders::{
+    wasm_executor::{WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
+    wasm_utils::decoding::decoded_wasm_size,
+    CompilationCache, CompilationResult, WasmExecutionInput, WasmtimeEmbedder,
+};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types::LogVisibilityV2;
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::NetworkTopology;
 use ic_replicated_state::{page_map::allocated_pages_count, ExecutionState, SystemState};
+use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_system_api::ExecutionParameters;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{
@@ -30,9 +32,6 @@ use crate::execution::common::{apply_canister_state_changes, update_round_limits
 use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
 use crate::metrics::CallTreeMetrics;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
-
-#[cfg(test)]
-mod tests;
 
 #[doc(hidden)] // pub for usage in tests
 pub struct HypervisorMetrics {
@@ -240,7 +239,7 @@ impl Hypervisor {
         if let Err(err) = wasm_size_result {
             round_limits.instructions -= as_round_instructions(compilation_cost);
             self.compilation_cache
-                .insert(&canister_module, Err(err.clone().into()));
+                .insert_err(&canister_module, err.clone().into());
             return (compilation_cost, Err(err.into()));
         }
 
@@ -277,6 +276,7 @@ impl Hypervisor {
         cycles_account_manager: Arc<CyclesAccountManager>,
         dirty_page_overhead: NumInstructions,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         let mut embedder_config = config.embedders_config.clone();
         embedder_config.subnet_type = own_subnet_type;
@@ -289,6 +289,7 @@ impl Hypervisor {
                     metrics_registry,
                     &embedder_config,
                     Arc::clone(&fd_factory),
+                    Arc::clone(&state_reader),
                 )
                 .expect("Failed to start sandboxed execution controller");
                 Arc::new(executor)
@@ -526,5 +527,18 @@ impl Hypervisor {
     #[doc(hidden)]
     pub fn clear_compilation_cache_for_testing(&self) {
         self.compilation_cache.clear_for_testing()
+    }
+
+    /// Insert a compiled module in the compilation cache speed up tests by
+    /// skipping the Wasmtime compilation step.
+    #[doc(hidden)]
+    pub fn compilation_cache_insert_for_testing(
+        &self,
+        bytes: Vec<u8>,
+        compiled_module: ic_embedders::SerializedModule,
+    ) {
+        let canister_module = CanisterModule::new(bytes);
+        self.compilation_cache
+            .insert_ok(&canister_module, compiled_module);
     }
 }

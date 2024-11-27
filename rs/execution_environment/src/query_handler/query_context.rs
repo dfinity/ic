@@ -35,11 +35,12 @@ use ic_types::{
         RequestOrResponse, Response, NO_DEADLINE,
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
-    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, Time,
+    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, PrincipalId, SubnetId, Time,
 };
 use prometheus::IntCounter;
 use std::{
     collections::{BTreeMap, VecDeque},
+    str::FromStr,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -87,6 +88,7 @@ fn wasm_query_method(
 pub(super) struct QueryContext<'a> {
     log: &'a ReplicaLogger,
     hypervisor: &'a Hypervisor,
+    own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
     // The state against which all queries in the context will be executed.
     state: Labeled<Arc<ReplicatedState>>,
@@ -121,6 +123,7 @@ impl<'a> QueryContext<'a> {
     pub(super) fn new(
         log: &'a ReplicaLogger,
         hypervisor: &'a Hypervisor,
+        own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
         state: Labeled<Arc<ReplicatedState>>,
         data_certificate: Vec<u8>,
@@ -150,6 +153,7 @@ impl<'a> QueryContext<'a> {
         Self {
             log,
             hypervisor,
+            own_subnet_id,
             own_subnet_type,
             state,
             network_topology,
@@ -232,8 +236,13 @@ impl<'a> QueryContext<'a> {
         // If that's the case then retry query execution as `Stateful` if the
         // legacy ICQC is enabled.
 
-        let legacy_icqc_enabled = self.own_subnet_type == SubnetType::System
-            || self.own_subnet_type == SubnetType::VerifiedApplication;
+        // The legacy ICQC is only enabled for the subnet where Distrikt is. This is
+        // the last known user of this legacy feature. Work is under way to remove
+        // the dependency on it but until then allow this subnet to acces the legacy
+        // code. After Distrikt removes the dependency, the legacy code will be
+        // completely removed.
+        let legacy_icqc_enabled = self.own_subnet_id.get()
+            == PrincipalId::from_str(crate::query_handler::DISTRIKT_SUBNET_PRINCIPAL).unwrap(); // Safe to unwrap as the principal ID is hardcoded to a well known one.
 
         if let WasmMethod::Query(_) = &method {
             if let Err(err) = &result {

@@ -31,7 +31,7 @@ use ic_test_utilities_state::canister_from_exec_state;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::{
-    messages::{CallbackId, CanisterMessage, Payload, RejectContext, RequestMetadata, NO_DEADLINE},
+    messages::{CallbackId, CanisterMessage, Payload, RejectContext, NO_DEADLINE},
     methods::{Callback, WasmClosure},
     time::UNIX_EPOCH,
     Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
@@ -127,7 +127,7 @@ where
             call_origin.clone(),
             Cycles::new(10),
             UNIX_EPOCH,
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
     let callback = Callback::new(
@@ -299,6 +299,7 @@ where
         Arc::clone(&cycles_account_manager),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        Arc::new(FakeStateManager::new()),
     ));
 
     let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);

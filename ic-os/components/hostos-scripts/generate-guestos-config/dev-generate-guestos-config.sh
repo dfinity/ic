@@ -84,7 +84,8 @@ function assemble_config_media() {
     cmd=(/opt/ic/bin/build-bootstrap-config-image.sh ${MEDIA})
     cmd+=(--nns_public_key "/boot/config/nns_public_key.pem")
     cmd+=(--elasticsearch_hosts "$(/opt/ic/bin/fetch-property.sh --key=.logging.hosts --metric=hostos_logging_hosts --config=${DEPLOYMENT})")
-    cmd+=(--ipv6_address "$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)")
+    # 1 corresponds to GuestOS
+    cmd+=(--ipv6_address "$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type 1)")
     cmd+=(--ipv6_gateway "${ipv6_gateway}")
     if [[ -n "$ipv4_address" && -n "$ipv4_prefix_length" && -n "$ipv4_gateway" && -n "$domain" ]]; then
         cmd+=(--ipv4_address "${ipv4_address}/${ipv4_prefix_length}")
@@ -109,7 +110,8 @@ function assemble_config_media() {
 
 function generate_guestos_config() {
     RESOURCES_MEMORY=$(/opt/ic/bin/fetch-property.sh --key=.resources.memory --metric=hostos_resources_memory --config=${DEPLOYMENT})
-    MAC_ADDRESS=$(/opt/ic/bin/hostos_tool generate-mac-address --node-type GuestOS)
+    # 1 corresponds to GuestOS
+    MAC_ADDRESS=$(/opt/ic/bin/hostos_tool generate-mac-address --node-type 1)
     # NOTE: `fetch-property` will error if the target is not found. Here we
     # only want to act when the field is set.
     CPU_MODE=$(jq -r ".resources.cpu" ${DEPLOYMENT})

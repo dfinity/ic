@@ -1,13 +1,13 @@
-use regex::Regex;
-use std::collections::HashMap;
 use std::fs::read_to_string;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::Path;
 
+use config_types::ConfigMap;
+
 use anyhow::bail;
 use anyhow::{Context, Result};
+use regex::Regex;
 
-pub type ConfigMap = HashMap<String, String>;
 pub struct ConfigIniSettings {
     pub ipv6_prefix: String,
     pub ipv6_prefix_length: u8,
@@ -17,6 +17,7 @@ pub struct ConfigIniSettings {
     pub ipv4_prefix_length: Option<u8>,
     pub domain_name: Option<String>,
     pub verbose: bool,
+    pub node_reward_type: Option<String>,
 }
 
 // Prefix should have a max length of 19 ("1234:6789:1234:6789")
@@ -88,6 +89,8 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         .get("verbose")
         .is_some_and(|s| s.eq_ignore_ascii_case("true"));
 
+    let node_reward_type = config_map.get("node_reward_type").cloned();
+
     Ok(ConfigIniSettings {
         ipv6_prefix,
         ipv6_prefix_length,
@@ -97,6 +100,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         ipv4_prefix_length,
         domain_name,
         verbose,
+        node_reward_type,
     })
 }
 

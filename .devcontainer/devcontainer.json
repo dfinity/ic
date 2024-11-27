@@ -1,5 +1,5 @@
 {
-  "image": "ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec",
+  "image": "ghcr.io/dfinity/ic-build@sha256:6a6b2a4583db6a23f2a3a84b1051322a0f975a40aa6519442f3def9810643189",
   "remoteUser": "ubuntu",
   "privileged": true,
   "runArgs": [
@@ -57,8 +57,17 @@
         "vadimcn.vscode-lldb",
         "bazelbuild.vscode-bazel",
         "stackbuild.bazel-stack-vscode",
-        "bungcip.better-toml"
-      ]
+        "tamasfe.even-better-toml"
+      ],
+      "settings": {
+        // Exclude bazel output directories from search
+        "search.exclude": {
+          "bazel-bin/": true,
+          "bazel-ic/": true,
+          "bazel-out/": true,
+          "targets/": true
+        }
+      }
     }
   }
 }
