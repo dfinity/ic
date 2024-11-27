@@ -72,10 +72,14 @@ pub trait Crypto:
     + BasicSigner<IDkgOpeningContent>
     + BasicSigVerifier<IDkgOpeningContent>
     + IDkgProtocol
+    // Threshold ECDSA
     + ThresholdEcdsaSigner
     + ThresholdEcdsaSigVerifier
+    // Threshold Schnorr
     + ThresholdSchnorrSigner
     + ThresholdSchnorrSigVerifier
+    // VetKd
+    + VetKdProtocol
     // CanisterHttpResponse
     + BasicSigner<CanisterHttpResponseMetadata>
     + BasicSigVerifier<CanisterHttpResponseMetadata>
@@ -146,6 +150,7 @@ impl<T> Crypto for T where
         + ThresholdEcdsaSigVerifier
         + ThresholdSchnorrSigner
         + ThresholdSchnorrSigVerifier
+        + VetKdProtocol
         + BasicSigVerifierByPublicKey<MessageId>
         + BasicSigVerifierByPublicKey<WebAuthnEnvelope>
         + ThresholdSigner<CatchUpContent>

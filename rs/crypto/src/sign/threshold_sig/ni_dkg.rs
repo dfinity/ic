@@ -3,6 +3,7 @@
 use super::*;
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
+use ic_interfaces::crypto::VetKdProtocol;
 use ic_interfaces::crypto::{LoadTranscriptResult, NiDkgAlgorithm};
 use ic_logger::{debug, new_logger};
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
@@ -12,6 +13,10 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgL
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::transcripts_to_retain::TranscriptsToRetain;
 use ic_types::crypto::threshold_sig::ni_dkg::{config::NiDkgConfig, NiDkgDealing, NiDkgTranscript};
+use ic_types::crypto::vetkd::{
+    VedKdKeyShareCreationError, VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare,
+    VetKdKeyShareCombinationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
+};
 use std::collections::HashSet;
 
 mod dealing;
@@ -21,6 +26,45 @@ mod utils;
 
 #[cfg(test)]
 mod test_utils;
+
+impl<C: CryptoServiceProvider> VetKdProtocol for CryptoComponentImpl<C> {
+    fn create_encrypted_key_share(
+        &self,
+        _args: VetKdArgs,
+    ) -> Result<VetKdEncryptedKeyShare, VedKdKeyShareCreationError> {
+        Ok(VetKdEncryptedKeyShare {
+            encrypted_key_share: vec![],
+            node_signature: vec![],
+        })
+    }
+
+    fn verify_encrypted_key_share(
+        &self,
+        _signer: NodeId,
+        _key_share: &VetKdEncryptedKeyShare,
+        _args: &VetKdArgs,
+    ) -> Result<(), VetKdKeyShareVerificationError> {
+        Ok(())
+    }
+
+    fn combine_encrypted_key_shares(
+        &self,
+        _shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
+        _args: &VetKdArgs,
+    ) -> Result<VetKdEncryptedKey, VetKdKeyShareCombinationError> {
+        Ok(VetKdEncryptedKey {
+            encrypted_key: vec![],
+        })
+    }
+
+    fn verify_encrypted_key(
+        &self,
+        _key: &VetKdEncryptedKey,
+        _args: &VetKdArgs,
+    ) -> Result<(), VetKdKeyVerificationError> {
+        Ok(())
+    }
+}
 
 impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentImpl<C> {
     fn create_dealing(&self, config: &NiDkgConfig) -> Result<NiDkgDealing, DkgCreateDealingError> {

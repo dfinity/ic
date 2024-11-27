@@ -42,6 +42,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
+use ic_interfaces::crypto::VetKdProtocol;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
@@ -49,6 +50,10 @@ use ic_types::crypto::canister_threshold_sig::error::{
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgTranscriptOperation,
+};
+use ic_types::crypto::vetkd::{
+    VedKdKeyShareCreationError, VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare,
+    VetKdKeyShareCombinationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
 };
 use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
@@ -253,5 +258,32 @@ mock! {
         ) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
 
         fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, CspPublicKeyStoreError>;
+    }
+
+    impl VetKdProtocol for LocalCspVault {
+        #[allow(clippy::result_large_err)]
+        fn create_encrypted_key_share(
+            &self,
+            args: VetKdArgs,
+        ) -> Result<VetKdEncryptedKeyShare, VedKdKeyShareCreationError>;
+
+        fn verify_encrypted_key_share(
+            &self,
+            signer: NodeId,
+            key_share: &VetKdEncryptedKeyShare,
+            args: &VetKdArgs,
+        ) -> Result<(), VetKdKeyShareVerificationError>;
+
+        fn combine_encrypted_key_shares(
+            &self,
+            shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
+            args: &VetKdArgs,
+        ) -> Result<VetKdEncryptedKey, VetKdKeyShareCombinationError>;
+
+        fn verify_encrypted_key(
+            &self,
+            key: &VetKdEncryptedKey,
+            args: &VetKdArgs,
+        ) -> Result<(), VetKdKeyVerificationError>;
     }
 }

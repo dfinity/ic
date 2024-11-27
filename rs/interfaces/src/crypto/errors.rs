@@ -426,7 +426,7 @@ impl ErrorReproducibility for RegistryClientError {
     }
 }
 
-impl ErrorReproducibility for VetKdKeyShareVerificationError  {
+impl ErrorReproducibility for VetKdKeyShareVerificationError {
     fn is_reproducible(&self) -> bool {
         // The match below is intentionally explicit on all possible values,
         // to avoid defaults, which might be error-prone.
