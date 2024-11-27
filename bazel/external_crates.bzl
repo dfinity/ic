@@ -27,6 +27,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         "canbench": [crate.annotation(
             gen_binaries = True,
         )],
+        "cc": [crate.annotation(
+            # Patch for determinism issues
+            # https://github.com/rust-lang/cc-rs/issues/1271
+            patch_args = ["-p1"],
+            patches = ["@@//bazel:cc_rs.patch"],
+        )],
         "curve25519-dalek": [crate.annotation(
             rustc_flags = [
                 "-C",
