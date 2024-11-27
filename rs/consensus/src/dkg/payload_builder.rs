@@ -659,36 +659,38 @@ fn add_callback_ids_to_transcript_results(
     state: &ReplicatedState,
     log: &ReplicaLogger,
 ) -> Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)> {
-    let setup_initial_dkg_contexts = &state
-        .metadata
-        .subnet_call_context_manager
-        .setup_initial_dkg_contexts;
-
     new_transcripts
         .into_iter()
         .filter_map(|(id, result)| {
-            if let Some(callback_id) = setup_initial_dkg_contexts
-                .iter()
-                .filter_map(|(callback_id, context)| {
-                    if NiDkgTargetSubnet::Remote(context.target_id) == id.target_subnet {
-                        Some(*callback_id)
-                    } else {
-                        None
-                    }
-                })
-                .last()
-            {
-                Some((id, callback_id, result))
-            } else {
+            let triple = get_callback_id_from_id(state, &id).map(|callback_id| (id.clone(), callback_id, result));
+            if triple.is_none() {
                 error!(
                     log,
                     "Unable to find callback id associated with remote dkg id {}, this should not happen",
                     id
                 );
+            }
+            triple
+        })
+        .collect()
+}
+
+fn get_callback_id_from_id(state: &ReplicatedState, id: &NiDkgId) -> Option<CallbackId> {
+    let setup_initial_dkg_contexts = &state
+        .metadata
+        .subnet_call_context_manager
+        .setup_initial_dkg_contexts;
+
+    setup_initial_dkg_contexts
+        .iter()
+        .filter_map(|(callback_id, context)| {
+            if NiDkgTargetSubnet::Remote(context.target_id) == id.target_subnet {
+                Some(*callback_id)
+            } else {
                 None
             }
         })
-        .collect()
+        .last()
 }
 
 /// This function is called for each entry on the SubnetCallContext. It returns
