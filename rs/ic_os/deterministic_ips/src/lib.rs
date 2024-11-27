@@ -10,8 +10,6 @@ use node_type::NodeType;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AddressError {
-    #[error("index must be between 0x00 and 0x0f")]
-    InvalidIndex,
     #[error("the resulting address is invalid")]
     InvalidAddress,
 }
@@ -85,11 +83,11 @@ pub fn calculate_deterministic_mac<T: AsRef<HwAddr>, D: fmt::Display>(
     deployment: D,
     ip_version: IpVariant,
     node_type: NodeType,
-) -> Result<HwAddr, AddressError> {
+) -> HwAddr {
     let index = node_type.to_index();
 
     // NOTE: In order to be backwards compatible with existing scripts, this
-    // **MUST** Have a newline.
+    // **MUST** have a newline.
     let seed = format!("{}{}\n", mgmt_mac.as_ref(), deployment);
 
     let hash = Sha256::hash(seed.as_bytes());
@@ -99,7 +97,7 @@ pub fn calculate_deterministic_mac<T: AsRef<HwAddr>, D: fmt::Display>(
         IpVariant::V6 => 0x6a,
     };
 
-    Ok([version, index, hash[0], hash[1], hash[2], hash[3]].into())
+    [version, index, hash[0], hash[1], hash[2], hash[3]].into()
 }
 
 impl HwAddr {
@@ -140,8 +138,7 @@ mod test {
     fn mac() {
         let mgmt_mac: HwAddr = "70:B5:E8:E8:25:DE".parse().unwrap();
         let expected_mac: HwAddr = "4a:00:f8:87:a4:8a".parse().unwrap();
-        let mac = calculate_deterministic_mac(mgmt_mac, "testnet", IpVariant::V4, NodeType::HostOS)
-            .unwrap();
+        let mac = calculate_deterministic_mac(mgmt_mac, "testnet", IpVariant::V4, NodeType::HostOS);
         assert_eq!(mac, expected_mac);
     }
 
@@ -181,8 +178,7 @@ mod test {
             .parse::<Ipv6Addr>()
             .unwrap();
         let mac =
-            calculate_deterministic_mac(mgmt_mac, "mainnet", IpVariant::V6, NodeType::GuestOS)
-                .unwrap();
+            calculate_deterministic_mac(mgmt_mac, "mainnet", IpVariant::V6, NodeType::GuestOS);
         let slaac = mac.calculate_slaac(prefix).unwrap();
         assert_eq!(slaac, expected_ip);
     }

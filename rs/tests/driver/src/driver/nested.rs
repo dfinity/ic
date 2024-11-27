@@ -142,15 +142,13 @@ impl NestedVms for TestEnv {
             Deployment::Mainnet,
             IpVariant::V6,
             NodeType::HostOS,
-        )
-        .unwrap();
+        );
         let guest_mac = calculate_deterministic_mac(
             seed_mac,
             Deployment::Mainnet,
             IpVariant::V6,
             NodeType::GuestOS,
-        )
-        .unwrap();
+        );
 
         let host_ip = host_mac.calculate_slaac(&prefix).unwrap();
         let guest_ip = guest_mac.calculate_slaac(&prefix).unwrap();

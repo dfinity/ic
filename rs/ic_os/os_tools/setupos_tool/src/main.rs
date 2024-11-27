@@ -72,7 +72,7 @@ pub fn main() -> Result<()> {
                 deployment_settings.deployment.name,
                 IpVariant::V6,
                 NodeType::SetupOS, /* 0xf corresponds to SetupOS */
-            )?;
+            );
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
 
             generate_network_config(&network_info, &generated_mac, Path::new(&output_directory))
@@ -101,7 +101,7 @@ pub fn main() -> Result<()> {
                 deployment_settings.deployment.name,
                 IpVariant::V6,
                 node_type,
-            )?;
+            );
             let ipv6_address = generated_mac.calculate_slaac(&network_info.ipv6_prefix)?;
             println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
             Ok(())
