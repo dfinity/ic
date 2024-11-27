@@ -468,6 +468,23 @@ where
             }
         };
 
+        // Get the new latest version.
+        // This function is fallible (as it checks for cycles in the upgrade path), but it has no side-effects.
+        // So we want to try it first, and only if it succeeds, proceed to write the WASM to stable memory.
+        let new_latest_version = self
+            .upgrade_path
+            .get_new_latest_version(sns_canister_type, &hash);
+        let new_latest_version = match new_latest_version {
+            Ok(new_latest_version) => new_latest_version,
+            Err(err) => {
+                return AddWasmResponse {
+                    result: Some(add_wasm_response::Result::Error(SnsWasmError {
+                        message: err,
+                    })),
+                };
+            }
+        };
+
         let result = match self.stable_memory.write_wasm(wasm) {
             Ok((offset, size)) => {
                 self.wasm_indexes.insert(
@@ -480,18 +497,21 @@ where
                     },
                 );
 
-                self.upgrade_path.add_wasm(sns_canister_type, &hash);
-
-                Some(add_wasm_response::Result::Hash(hash.to_vec()))
+                if let Err(err) = self.upgrade_path.add_wasm(new_latest_version) {
+                    add_wasm_response::Result::Error(SnsWasmError { message: err })
+                } else {
+                    add_wasm_response::Result::Hash(hash.to_vec())
+                }
             }
             Err(e) => {
                 println!("{}add_wasm unable to persist WASM: {}", LOG_PREFIX, e);
 
-                Some(add_wasm_response::Result::Error(SnsWasmError {
+                add_wasm_response::Result::Error(SnsWasmError {
                     message: format!("Unable to persist WASM: {}", e),
-                }))
+                })
             }
         };
+        let result = Some(result);
 
         AddWasmResponse { result }
     }
@@ -1813,7 +1833,11 @@ pub struct UpgradePath {
 }
 
 impl UpgradePath {
-    pub fn add_wasm(&mut self, canister_type: SnsCanisterType, wasm_hash: &[u8; 32]) {
+    pub fn get_new_latest_version(
+        &self,
+        canister_type: SnsCanisterType,
+        wasm_hash: &[u8; 32],
+    ) -> Result<SnsVersion, String> {
         let mut new_latest_version = self.latest_version.clone();
 
         match canister_type {
@@ -1828,9 +1852,29 @@ impl UpgradePath {
             SnsCanisterType::Index => new_latest_version.index_wasm_hash = wasm_hash.to_vec(),
         }
 
+        if self.upgrade_path.contains_key(&new_latest_version) {
+            return Err(format!(
+                "Version {} already exists along the upgrade path - cannot add it again",
+                new_latest_version
+            ));
+        }
+
+        if self.latest_version == new_latest_version {
+            return Err(format!(
+                "Version {} is already the latest version",
+                new_latest_version
+            ));
+        }
+
+        Ok(new_latest_version)
+    }
+
+    pub fn add_wasm(&mut self, new_latest_version: SnsVersion) -> Result<(), String> {
         self.upgrade_path
             .insert(self.latest_version.clone(), new_latest_version.clone());
         self.latest_version = new_latest_version;
+
+        Ok(())
     }
 
     pub fn get_next_version(
@@ -2440,6 +2484,65 @@ mod test {
             proposal_id_response.proposal_id.unwrap(),
             expected_proposal_id
         );
+    }
+
+    #[test]
+    fn test_api_add_wasm_fails_on_duplicate_version() {
+        let mut canister = new_wasm_canister();
+
+        // Add first wasm
+        let wasm = SnsWasm {
+            canister_type: SnsCanisterType::Root.into(),
+            ..small_valid_wasm_with_id("Root")
+        };
+        let wasm_hash = wasm.sha256_hash().to_vec();
+        let response = canister.add_wasm(AddWasmRequest {
+            wasm: Some(wasm.clone()),
+            hash: wasm_hash.clone(),
+        });
+        assert_eq!(
+            response.result.unwrap(),
+            add_wasm_response::Result::Hash(wasm_hash.clone())
+        );
+
+        // Try to add same wasm again - should fail
+        let AddWasmResponse {
+            result: Some(add_wasm_response::Result::Error(SnsWasmError { message: _ })),
+        } = canister.add_wasm(AddWasmRequest {
+            wasm: Some(wasm.clone()),
+            hash: wasm_hash.clone(),
+        })
+        else {
+            panic!("Expected to fail to add duplicate version");
+        };
+
+        // Try to add a different wasm - should succeed
+        {
+            let wasm = SnsWasm {
+                canister_type: SnsCanisterType::Ledger.into(),
+                ..small_valid_wasm_with_id("Ledger")
+            };
+            let wasm_hash = wasm.sha256_hash().to_vec();
+            let response = canister.add_wasm(AddWasmRequest {
+                wasm: Some(wasm),
+                hash: wasm_hash.clone(),
+            });
+            assert_eq!(
+                response.result.unwrap(),
+                add_wasm_response::Result::Hash(wasm_hash)
+            );
+        }
+
+        // Re-add the first wasm - should still fail
+        let AddWasmResponse {
+            result: Some(add_wasm_response::Result::Error(SnsWasmError { message: _ })),
+        } = canister.add_wasm(AddWasmRequest {
+            wasm: Some(wasm.clone()),
+            hash: wasm_hash.clone(),
+        })
+        else {
+            panic!("Expected to fail to add duplicate version");
+        };
     }
 
     #[test]
