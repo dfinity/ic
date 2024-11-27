@@ -5520,13 +5520,15 @@ fn test_neuron_split() {
     let maturity_e8s = 500_000_000;
     let staked_maturity_e8s = 400_000_000;
 
-    let (driver, mut governance, id, _) = governance_with_staked_neuron(
+    let (mut driver, mut governance, id, _) = governance_with_staked_neuron(
         dissolve_delay_seconds,
         neuron_stake_e8s,
         block_height,
         from,
         nonce,
     );
+
+    driver.advance_time_by(1234);
 
     let neuron_state = governance
         .neuron_store
@@ -5593,9 +5595,10 @@ fn test_neuron_split() {
         child_neuron.staked_maturity_e8s_equivalent,
         Some(80_000_000)
     );
-    assert_eq!(
+    assert_eq!(child_neuron.created_timestamp_seconds, driver.now(),);
+    assert_ne!(
         child_neuron.created_timestamp_seconds,
-        parent_neuron.created_timestamp_seconds
+        parent_neuron.created_timestamp_seconds,
     );
     assert_eq!(
         child_neuron.aging_since_timestamp_seconds,
@@ -5603,6 +5606,21 @@ fn test_neuron_split() {
     );
     assert_eq!(child_neuron.dissolve_state, parent_neuron.dissolve_state);
     assert_eq!(child_neuron.kyc_verified, true);
+    assert_eq!(
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        Some(driver.now()),
+    );
+    assert!(
+        child_neuron
+            .voting_power_refreshed_timestamp_seconds
+            .unwrap()
+            > parent_neuron
+                .voting_power_refreshed_timestamp_seconds
+                .unwrap(),
+        "{:?} vs. {:?}",
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        parent_neuron.voting_power_refreshed_timestamp_seconds,
+    );
 
     let mut neuron_ids = governance.get_neuron_ids_by_principal(&from);
     neuron_ids.sort_unstable();
@@ -5777,7 +5795,7 @@ fn test_neuron_spawn() {
 
     // Advance the time so that we can check that the spawned neuron has the age
     // and the right creation timestamp
-    driver.advance_time_by(1);
+    driver.advance_time_by(1234);
 
     let child_nid = gov
         .spawn_neuron(
@@ -5796,11 +5814,10 @@ fn test_neuron_spawn() {
     // .. but only one ledger account since the neuron's maturity hasn't been minted yet.
     driver.assert_num_neuron_accounts_exist(1);
 
-    gov.with_neuron(&id, |parent_neuron| {
-        // Maturity on the parent neuron should be reset.
-        assert_eq!(parent_neuron.maturity_e8s_equivalent, 0);
-    })
-    .expect("The parent neuron is missing");
+    let parent_neuron = gov
+        .with_neuron(&id, |neuron| neuron.clone())
+        .expect("The parent neuron is missing");
+    assert_eq!(parent_neuron.maturity_e8s_equivalent, 0);
 
     let child_neuron = gov
         .get_full_neuron(&child_nid, &child_controller)
@@ -5832,6 +5849,19 @@ fn test_neuron_spawn() {
         parent_maturity_e8s_equivalent
     );
     assert_eq!(child_neuron.neuron_type, None);
+    assert_eq!(
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        Some(driver.now()),
+    );
+    assert!(
+        child_neuron
+            .voting_power_refreshed_timestamp_seconds
+            .unwrap()
+            > parent_neuron.voting_power_refreshed_timestamp_seconds(),
+        "{:?} vs. {:?}",
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        parent_neuron.voting_power_refreshed_timestamp_seconds(),
+    );
 
     let creation_timestamp = driver.now();
 
@@ -6501,6 +6531,21 @@ fn test_disburse_to_neuron() {
     // Instead, child is supposed to have the default followees.
     assert_ne!(child_neuron.followees, parent_neuron.followees);
     assert_eq!(child_neuron.followees, gov.heap_data.default_followees);
+    assert_eq!(
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        Some(driver.now()),
+    );
+    assert!(
+        child_neuron
+            .voting_power_refreshed_timestamp_seconds
+            .unwrap()
+            > parent_neuron
+                .voting_power_refreshed_timestamp_seconds
+                .unwrap(),
+        "{:?} vs. {:?}",
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        parent_neuron.voting_power_refreshed_timestamp_seconds,
+    );
 
     let to_subaccount = {
         let mut state = Sha256::new();
