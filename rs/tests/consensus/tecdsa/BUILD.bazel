@@ -346,8 +346,8 @@ tecdsa_performance_test_template = system_test_nns(
 
 system_test_nns(
     name = "tecdsa_performance_test",
+    tags = ["manual"],
     additional_colocate_tags = [
-        "manual",
         "system_test_benchmark",
     ],
     env = {
@@ -360,8 +360,8 @@ system_test_nns(
 
 system_test_nns(
     name = "tschnorr_ed25519_performance_test",
+    tags = ["manual"],
     additional_colocate_tags = [
-        "manual",
         "system_test_benchmark",
     ],
     env = {
@@ -374,8 +374,8 @@ system_test_nns(
 
 system_test_nns(
     name = "tschnorr_bip340_performance_test",
+    tags = ["manual"],
     additional_colocate_tags = [
-        "manual",
         "system_test_benchmark",
     ],
     env = {
