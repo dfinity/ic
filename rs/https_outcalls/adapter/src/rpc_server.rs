@@ -21,7 +21,7 @@ use ic_https_outcalls_service::{
     https_outcalls_service_server::HttpsOutcallsService, HttpHeader, HttpMethod,
     HttpsOutcallRequest, HttpsOutcallResponse,
 };
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{debug, warn, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use rand::{seq::SliceRandom, thread_rng};
@@ -63,6 +63,12 @@ pub struct CanisterHttp {
 impl CanisterHttp {
     pub fn new(config: Config, logger: ReplicaLogger, metrics: &MetricsRegistry) -> Self {
         // Socks client setup
+        eprintln!("debuggg");
+
+        warn!(logger, "debuggg new warn!");
+        info!(logger, "debuggg new info!");
+        debug!(logger, "debuggg new debug!");
+
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false);
         http_connector
@@ -102,6 +108,8 @@ impl CanisterHttp {
         http_connector
             .set_connect_timeout(Some(Duration::from_secs(self.http_connect_timeout_secs)));
 
+        let ip = format!("[{}]:1080", ip);
+
         match ip.parse() {
             Ok(proxy_addr) => {
                 let proxy_connector = SocksConnector {
@@ -136,6 +144,11 @@ impl HttpsOutcallsService for CanisterHttp {
         &self,
         request: Request<HttpsOutcallRequest>,
     ) -> Result<Response<HttpsOutcallResponse>, Status> {
+
+        warn!(self.logger, "debuggg warn!");
+        info!(self.logger, "debuggg info!");
+        debug!(self.logger, "debuggg debug!");
+
         self.metrics.requests.inc();
 
         let req = request.into_inner();
@@ -236,6 +249,8 @@ impl HttpsOutcallsService for CanisterHttp {
 
                     let mut tries = 0;
 
+                    let mut errors = format!("");
+
                     // We try the IPs only once in random order until we get a response
                     for api_bn_ip in &api_bn_ips {
                         tries += 1;
@@ -270,6 +285,10 @@ impl HttpsOutcallsService for CanisterHttp {
                                     }
                                     None => {
                                         debug!(self.logger, "Failed to create SOCKS client for IP {}", next_socks_proxy_ip);
+                                        return Err(Status::new(
+                                            tonic::Code::InvalidArgument,
+                                            format!("could not create client {}", next_socks_proxy_ip),
+                                        ));
                                         continue;
                                     }
                                 }
@@ -278,7 +297,7 @@ impl HttpsOutcallsService for CanisterHttp {
 
                         self.metrics.socks_connections_attempts.inc();
                         match socks_client.request(http_req_clone.clone()).await.map_err(|e| {
-                            format!("Request failed direct connect {direct_err} and connect through socks {e}")
+                            format!("failied socks {e}")
                         }) {
                             Ok(resp) => {
                                 response = Some(resp);
@@ -286,8 +305,8 @@ impl HttpsOutcallsService for CanisterHttp {
                                 break;
                             }
                             Err(socks_err) => {
+                                errors += &socks_err;
                                 debug!(self.logger, "Failed to connect through SOCKS with IP {}: {}", next_socks_proxy_ip, socks_err);
-                                println!("debuggg Failed to connect through SOCKS with IP {}: {}", next_socks_proxy_ip, socks_err);
                                 // Retry with a different socks client
                                 // TODO: only retry if the error couldn've been caused by the proxy itself
                             }
@@ -298,7 +317,7 @@ impl HttpsOutcallsService for CanisterHttp {
                         if api_bn_ips.is_empty() {
                             "No IPs to connect through SOCKS in the request".to_string()
                         } else {
-                            "Failed to connect through SOCKS with all IPs".to_string()
+                            format!("all IPS: {}, with error {}", api_bn_ips.join(", "), errors)
                         }
                     })
                 }

@@ -16,6 +16,7 @@ Success::
 
 end::catalog[] */
 
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use anyhow::bail;
 use anyhow::Result;
 use canister_http::*;
@@ -27,7 +28,7 @@ use ic_management_canister_types::{
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, RetrieveIpv4Addr};
+use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, NnsCustomizations, RetrieveIpv4Addr};
 use ic_system_test_driver::driver::{
     boundary_node::{BoundaryNode, BoundaryNodeVm},
     ic::{InternetComputer, Subnet},
@@ -52,6 +53,7 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
+
     let logger = env.logger();
 
     // Set up Universal VM with HTTP Bin testing service
@@ -94,11 +96,17 @@ pub fn setup(env: TestEnv) {
                 })
                 .add_nodes(4),
         )
+       .with_api_boundary_nodes(1)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
+    install_nns_with_customizations_and_check_progress(
+        env.topology_snapshot(),
+        NnsCustomizations::default(),
+    );
+
     await_nodes_healthy(&env);
-    install_nns_canisters(&env);
+    //install_nns_canisters(&env);
 
     // Start BN.
     bn_vm
@@ -129,6 +137,8 @@ pub fn test(env: TestEnv) {
     let logger = env.logger();
     let webserver_ipv4 = get_universal_vm_ipv4_address(&env);
     let webserver_url = format!("https://{webserver_ipv4}:20443");
+
+    info!(&logger, "debuggg in test");
 
     // Request from system subnet.
     let mut system_nodes = get_system_subnet_node_snapshots(&env);

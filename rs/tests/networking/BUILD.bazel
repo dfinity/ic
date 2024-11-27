@@ -72,6 +72,7 @@ system_test_nns(
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",  # needed for starting the nns.
     ],
 )
 
