@@ -13,6 +13,7 @@ use super::test_helpers::{
 use super::*;
 use crate::{
     pb::v1::{
+        governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
         manage_neuron_response,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
         neuron, Account as AccountProto, Motion, NeuronPermissionType, ProposalData, ProposalId,
@@ -1634,6 +1635,13 @@ fn test_distribute_rewards_does_not_block_upgrades() {
         GovernanceProto {
             root_canister_id: Some(root_canister_id.get()),
             deployed_version: Some(current_version.clone().into()),
+            cached_upgrade_steps: Some(CachedUpgradeStepsPb {
+                upgrade_steps: Some(Versions {
+                    versions: vec![current_version.clone().into(), next_version.clone().into()],
+                }),
+                requested_timestamp_seconds: Some(111),
+                response_timestamp_seconds: Some(222),
+            }),
             parameters: Some(NervousSystemParameters {
                 voting_rewards_parameters: Some(VotingRewardsParameters {
                     round_duration_seconds: Some(ONE_DAY_SECONDS),
@@ -1726,7 +1734,7 @@ fn test_distribute_rewards_does_not_block_upgrades() {
     assert_matches!(
         &governance.proto.upgrade_journal.clone().unwrap().entries[..],
         [UpgradeJournalEntry {
-            timestamp_seconds: _,
+            timestamp_seconds: Some(_),
             event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
                 upgrade_journal_entry::UpgradeOutcome {
                     human_readable: Some(_),
@@ -2313,7 +2321,7 @@ fn test_no_target_version_fails_check_upgrade_status() {
                 proposal_id: Some(proposal_id),
             }),
             // we make a proposal that is already decided so that it won't execute again because
-            // proposals to upgrade SNS's cannot execute if there's no deployed_version set on Governance state
+            // proposals to upgrade SNS's cannot execute if there's no target_version set on Governance state
             proposals: btreemap! {
                 proposal_id => ProposalData {
                     action: (&action).into(),
@@ -2590,6 +2598,9 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
 
     // Check that the upgrade journal reflects the succeeded upgrade.
     let upgrade_journal = governance.proto.upgrade_journal.clone().unwrap();
+
+    println!("upgrade_journal.entries = {:#?}", upgrade_journal.entries);
+
     let (reset_upgrade_steps, refreshed_versions) = assert_matches!(
         &upgrade_journal.entries[..],
         [

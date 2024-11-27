@@ -7,6 +7,7 @@ use ic_nervous_system_integration_tests::{
     },
 };
 use ic_nns_test_utils::sns_wasm::create_modified_sns_wasm;
+use ic_sns_governance::pb::v1::upgrade_journal_entry::UpgradeStepsReset;
 use ic_sns_governance::{
     governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
     pb::v1 as sns_pb,
@@ -67,9 +68,10 @@ async fn test_get_upgrade_journal() {
     // Step 1: Check that the upgrade journal contains the initial version right after SNS creation.
     let mut expected_upgrade_journal_entries = vec![];
     {
-        expected_upgrade_journal_entries.push(Event::UpgradeStepsRefreshed(
-            UpgradeStepsRefreshed::new(vec![initial_sns_version.clone()]),
-        ));
+        expected_upgrade_journal_entries.push(Event::UpgradeStepsReset(UpgradeStepsReset::new(
+            "redacted".to_string(),
+            vec![initial_sns_version.clone()],
+        )));
 
         sns::governance::assert_upgrade_journal(
             &pocket_ic,
