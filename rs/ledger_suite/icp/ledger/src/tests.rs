@@ -887,7 +887,7 @@ fn test_approvals_are_not_cumulative() {
         Allowance {
             amount: approved_amount,
             expires_at: None,
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
 
@@ -915,7 +915,7 @@ fn test_approvals_are_not_cumulative() {
         Allowance {
             amount: new_allowance,
             expires_at: Some(expiration),
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         }
     );
 }
@@ -988,7 +988,7 @@ fn test_approval_transfer_from() {
         Allowance {
             amount: tokens(40_000),
             expires_at: None,
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
 
@@ -1015,7 +1015,7 @@ fn test_approval_transfer_from() {
         Allowance {
             amount: tokens(40_000),
             expires_at: None,
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
     assert_eq!(ctx.balances().account_balance(&from), tokens(80_000),);
@@ -1048,7 +1048,7 @@ fn test_approval_expiration_override() {
         Allowance {
             amount: tokens(100_000),
             expires_at: Some(ts(2000)),
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
 
@@ -1059,7 +1059,7 @@ fn test_approval_expiration_override() {
         Allowance {
             amount: tokens(200_000),
             expires_at: Some(ts(1500)),
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
 
@@ -1070,7 +1070,7 @@ fn test_approval_expiration_override() {
         Allowance {
             amount: tokens(300_000),
             expires_at: Some(ts(2500)),
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
 
@@ -1085,7 +1085,7 @@ fn test_approval_expiration_override() {
         Allowance {
             amount: tokens(300_000),
             expires_at: Some(ts(2500)),
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
 }
@@ -1339,7 +1339,7 @@ fn test_approval_burn_from() {
         Allowance {
             amount: tokens(50_000),
             expires_at: None,
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
 
@@ -1364,7 +1364,7 @@ fn test_approval_burn_from() {
         Allowance {
             amount: tokens(50_000),
             expires_at: None,
-            arrived_at: now,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(0),
         },
     );
     assert_eq!(ctx.balances().account_balance(&from), tokens(90_000));
