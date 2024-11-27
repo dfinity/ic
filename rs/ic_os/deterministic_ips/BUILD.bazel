@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -16,8 +16,8 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/crypto/sha2",
-        "@crate_index//:thiserror",
         "@crate_index//:anyhow",
+        "@crate_index//:thiserror",
     ],
 )
 
