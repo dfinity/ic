@@ -1,8 +1,8 @@
-use crate::CallCanisters;
+use crate::{null_request::NullRequest, CallCanisters};
 use ic_base_types::PrincipalId;
 use ic_sns_governance::pb::v1::{
     GetMetadataRequest, GetMetadataResponse, GetMode, GetModeResponse, GetRunningSnsVersionRequest,
-    GetRunningSnsVersionResponse,
+    GetRunningSnsVersionResponse, NervousSystemParameters,
 };
 use serde::{Deserialize, Serialize};
 
@@ -30,6 +30,14 @@ impl GovernanceCanister {
 
     pub async fn get_mode<C: CallCanisters>(&self, agent: &C) -> Result<GetModeResponse, C::Error> {
         agent.call(self.canister_id, GetMode {}).await
+    }
+
+    pub async fn get_nervous_system_parameters<C: CallCanisters>(
+        &self,
+        agent: &C,
+    ) -> Result<NervousSystemParameters, C::Error> {
+        let request = NullRequest::new("get_nervous_system_parameters", false);
+        agent.call(self.canister_id, request).await
     }
 }
 

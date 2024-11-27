@@ -705,10 +705,13 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
     );
 }
 
-/// Advances time by up to `timeout_seconds` seconds and `timeout_seconds` tickets (1 tick = 1 second).
-/// Each tick, it observes the state using the provided `observe` function.
-/// If the observed state matches the `expected` state, it returns `Ok(())`.
-/// If the timeout is reached, it returns an error.
+/// Gradually advances time by up to `timeout_seconds` seconds, observing the state using
+/// the provided `observe` function after each (evenly-timed) tick.
+/// - If the observed state matches the `expected` state, it returns `Ok(())`.
+/// - If the timeout is reached, it returns an error with the last observation.
+///
+/// The frequency of ticks is 1 per second for small values of `timeout_seconds`, and gradually
+/// lower for larger `timeout_seconds` to guarantee at most 500 ticks.
 ///
 /// Example:
 /// ```
@@ -740,21 +743,26 @@ where
     Fut: std::future::Future<Output = T>,
 {
     let mut counter = 0;
+    let num_ticks = timeout_seconds.min(500);
+    let seconds_per_tick = (timeout_seconds as f64 / num_ticks as f64).ceil() as u64;
+
     loop {
-        pocket_ic.advance_time(Duration::from_secs(1)).await;
+        pocket_ic
+            .advance_time(Duration::from_secs(seconds_per_tick))
+            .await;
         pocket_ic.tick().await;
 
         let observed = observe(pocket_ic).await;
         if observed == *expected {
             return Ok(());
         }
-        if counter == timeout_seconds {
+
+        counter += 1;
+        if counter > num_ticks {
             return Err(format!(
-                "Observed state: {:?}\n!= Expected state {:?}\nafter {} seconds / rounds",
-                observed, expected, timeout_seconds,
+                "Observed state: {observed:?}\n!= Expected state {expected:?}\nafter {timeout_seconds} seconds ({counter} ticks of {seconds_per_tick}s each)",
             ));
         }
-        counter += 1;
     }
 }
 
@@ -1336,6 +1344,7 @@ pub mod sns {
     pub mod governance {
         use super::*;
         use ic_crypto_sha2::Sha256;
+        use ic_nervous_system_agent::sns::governance::GovernanceCanister;
         use ic_sns_governance::pb::v1::get_neuron_response;
         use pocket_ic::ErrorCode;
 
@@ -1545,29 +1554,15 @@ pub mod sns {
                 })
         }
 
+        /// This function is a wrapper around `GovernanceCanister::get_nervous_system_parameters`, kept here for convenience.
         pub async fn get_nervous_system_parameters(
             pocket_ic: &PocketIc,
             canister_id: PrincipalId,
         ) -> sns_pb::NervousSystemParameters {
-            let result = pocket_ic
-                .query_call(
-                    canister_id.into(),
-                    Principal::from(PrincipalId::new_anonymous()),
-                    "get_nervous_system_parameters",
-                    Encode!().unwrap(),
-                )
+            GovernanceCanister { canister_id }
+                .get_nervous_system_parameters(pocket_ic)
                 .await
-                .unwrap();
-            let result = match result {
-                WasmResult::Reply(reply) => reply,
-                WasmResult::Reject(reject) => {
-                    panic!(
-                        "get_nervous_system_parameters rejected by SNS governance: {:#?}",
-                        reject
-                    )
-                }
-            };
-            Decode!(&result, sns_pb::NervousSystemParameters).unwrap()
+                .unwrap()
         }
 
         pub async fn propose_to_advance_sns_target_version(
