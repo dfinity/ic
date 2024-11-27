@@ -52,6 +52,12 @@ pub(super) fn get_dkg_dealings(
 }
 
 // TODO: Remove dead_code
+
+/// Starts with the given block and creates a nested mapping from the DKG Id to
+/// the node Id to the dealing. This function panics if multiple dealings
+/// from one dealer are discovered, hence, we assume a valid block chain.
+/// It also excludes dealings for ni_dkg ids, which already have a transcript in the
+/// blockchain.
 #[allow(dead_code)]
 pub(super) fn get_unused_dkg_dealings(
     pool_reader: &PoolReader<'_>,

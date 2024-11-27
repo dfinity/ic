@@ -535,10 +535,10 @@ fn get_dkg_interval_length(
         })
 }
 
-// Reads the SubnetCallContext and attempts to create DKG configs for new
-// subnets for the next round. An Ok return value contains:
-// * configs grouped by subnet (low and high threshold configs per subnet)
-// * errors produced while generating the configs.
+/// Reads the SubnetCallContext and attempts to create DKG configs for new
+/// subnets for the next round. An Ok return value contains:
+/// * configs grouped by subnet (low and high threshold configs per subnet)
+/// * errors produced while generating the configs.
 #[allow(clippy::type_complexity)]
 fn process_subnet_call_context(
     this_subnet_id: SubnetId,
@@ -618,9 +618,9 @@ fn get_node_list(
         .collect())
 }
 
-// Compares two DKG ids without considering the start block heights. This
-// function is only used for DKGs for other subnets, as the start block height
-// is not used to differentiate two DKGs for the same subnet.
+/// Compares two DKG ids without considering the start block heights. This
+/// function is only used for DKGs for other subnets, as the start block height
+/// is not used to differentiate two DKGs for the same subnet.
 fn eq_sans_height(dkg_id1: &NiDkgId, dkg_id2: &NiDkgId) -> bool {
     dkg_id1.dealer_subnet == dkg_id2.dealer_subnet
         && dkg_id1.dkg_tag == dkg_id2.dkg_tag
@@ -664,9 +664,9 @@ fn add_callback_ids_to_transcript_results(
         .collect()
 }
 
-// This function is called for each entry on the SubnetCallContext. It returns
-// either the created high and low configs for the entry or returns two errors
-// identified by the NiDkgId.
+/// This function is called for each entry on the SubnetCallContext. It returns
+/// either the created high and low configs for the entry or returns two errors
+/// identified by the NiDkgId.
 fn create_remote_dkg_configs(
     start_block_height: Height,
     dealer_subnet: SubnetId,
