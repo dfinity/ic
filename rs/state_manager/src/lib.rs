@@ -2691,7 +2691,6 @@ impl StateManagerImpl {
                 .with_label_values(&["switch_to_checkpoint"])
                 .start_timer();
             switch_to_checkpoint(&mut state, &checkpointed_state);
->>>>>>> master
             self.tip_channel
                 .send(TipRequest::ValidateReplicatedState {
                     checkpoint_layout: cp_layout.clone(),
