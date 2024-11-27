@@ -53,9 +53,9 @@ pub const MAX_REQUESTS_PER_BATCH: usize = 100;
 
 /// The constants used to compute the minter's fee to cover its own cycle consumption.
 /// The values are set to cover the cycle cost on a 28-node subnet.
-pub const MINTER_FEE_PER_INPUT: u64 = 246;
-pub const MINTER_FEE_PER_OUTPUT: u64 = 7;
-pub const MINTER_FEE_CONSTANT: u64 = 52;
+pub const MINTER_FEE_PER_INPUT: u64 = 146;
+pub const MINTER_FEE_PER_OUTPUT: u64 = 4;
+pub const MINTER_FEE_CONSTANT: u64 = 26;
 
 /// The minimum fee increment for transaction resubmission.
 /// See https://en.bitcoin.it/wiki/Miner_fees#Relaying for more detail.
