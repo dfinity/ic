@@ -194,7 +194,7 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
-          echo "BENCHMARK_TARGETS=$(bazel query 'attr(tags, system_test_benchmark, //rs/...)' | tr '\n' ' ')" >> $GITHUB_ENV
+          echo "BENCHMARK_TARGETS=$(bazel query 'attr(tags, system_test_benchmark, //rs/...)' | grep -v head_nns | tr '\n' ' ')" >> $GITHUB_ENV
       - name: Test System Test Benchmarks
         id: bazel-system-test-benchmarks
         uses: ./.github/actions/bazel-test-all/

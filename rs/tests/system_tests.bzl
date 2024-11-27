@@ -307,14 +307,15 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwarg
     )
 
     original_tags = kwargs.pop("tags", [])
+    kwargs["test_driver_target"] = mainnet_nns_systest.test_driver_target
     system_test(
         name + "_head_nns",
-        test_driver_target = mainnet_nns_systest.test_driver_target,
         env = env | NNS_CANISTER_ENV,
         runtime_deps = runtime_deps + NNS_CANISTER_RUNTIME_DEPS,
         tags = [tag for tag in original_tags if tag not in extra_head_nns_tags] + extra_head_nns_tags,
         **kwargs
     )
+    return struct(test_driver_target = mainnet_nns_systest.test_driver_target)
 
 def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None):
     """This macro creates bazel targets for uvm config images.
