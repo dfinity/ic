@@ -129,6 +129,7 @@ fn create_data_payload(
         .cloned()
         .collect();
 
+    // If we have dealings in the payload, we will not try to make transcripts as well
     if !new_validated_dealings.is_empty() {
         return Ok(DkgDataPayload::new(
             last_summary_block.height,
@@ -138,6 +139,51 @@ fn create_data_payload(
 
     // TODO: Try to include remote transcripts
     Ok(DkgDataPayload::new_empty(last_summary_block.height))
+}
+
+fn create_early_remote_transcripts(
+    pool_reader: &PoolReader<'_>,
+    parent: &Block,
+    num_transcripts: usize,
+) -> Vec<(CallbackId, NiDkgId, NiDkgTranscript)> {
+    // Get all dealings that have not been used in a transcript already
+    let all_dealings = utils::get_dkg_dealings2(pool_reader, parent, true);
+
+    // Collect map of remote target_ids to ni_dkg_ids
+    let mut remote_contexts: BTreeMap<NiDkgTargetId, Vec<NiDkgId>> = BTreeMap::new();
+    for (target_id, ni_dkg_id) in
+        all_dealings
+            .into_iter()
+            .filter_map(|(id, _)| match id.target_subnet {
+                NiDkgTargetSubnet::Local => None,
+                NiDkgTargetSubnet::Remote(target_id) => Some((target_id, id)),
+            })
+    {
+        let entry = remote_contexts.entry(target_id).or_default();
+        entry.push(ni_dkg_id);
+    }
+
+    let x = remote_contexts
+        .iter()
+        .filter(|(_, ni_dkg_ids)| match ni_dkg_ids.len() {
+            1 => {
+                // TODO: With vetkd, we need to check that these have a HighTresholdForMasterPublicKeyId tag
+                // Sould we also check that the key exists?
+                false
+            }
+            2 => {
+                let tags = ni_dkg_ids
+                    .iter()
+                    .map(|id| id.dkg_tag.clone())
+                    .collect::<BTreeSet<_>>();
+                let expected_tags = TAGS.iter().cloned().collect::<BTreeSet<_>>();
+                tags == expected_tags
+            }
+            _ => false,
+        })
+        .take(num_transcripts);
+
+    todo!()
 }
 
 /// Creates a summary payload for the given parent and registry_version.
