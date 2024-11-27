@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+    "packages/icrc-cbor",
     "packages/icrc-ledger-agent",
     "packages/icrc-ledger-client",
     "packages/icrc-ledger-client-cdk",
@@ -31,7 +32,6 @@ members = [
     "rs/boundary_node/anonymization/client",
     "rs/boundary_node/certificate_issuance/certificate_issuer",
     "rs/boundary_node/certificate_issuance/certificate_orchestrator",
-    "rs/boundary_node/discower_bowndary",
     "rs/boundary_node/ic_boundary",
     "rs/boundary_node/rate_limits",
     "rs/boundary_node/rate_limits/api",
@@ -126,10 +126,11 @@ members = [
     "rs/http_endpoints/public",
     "rs/http_endpoints/xnet",
     "rs/http_utils",
-    "rs/ic_os/dev_test_tools/deterministic_ips",
+    "rs/ic_os/deterministic_ips",
     "rs/ic_os/build_tools/dflate",
     "rs/ic_os/build_tools/diroid",
     "rs/ic_os/config",
+    "rs/ic_os/config_types",
     "rs/ic_os/fstrim_tool",
     "rs/ic_os/metrics_tool",
     "rs/ic_os/os_tools/guestos_tool",
@@ -137,7 +138,6 @@ members = [
     "rs/ic_os/build_tools/inject_files",
     "rs/ic_os/dev_test_tools/launch-single-vm",
     "rs/ic_os/network",
-    "rs/ic_os/network/mac_address",
     "rs/ic_os/nft_exporter",
     "rs/ic_os/nss_icos",
     "rs/ic_os/dev_test_tools/setupos-inject-configuration",
@@ -169,6 +169,7 @@ members = [
     "rs/monitoring/metrics",
     "rs/monitoring/pprof",
     "rs/monitoring/tracing/jaeger_exporter",
+    "rs/monitoring/tracing/logging_layer",
     "rs/nervous_system/agent",
     "rs/nervous_system/clients",
     "rs/nervous_system/collections/union_multi_map",
@@ -732,6 +733,7 @@ tracing-subscriber = { version = "0.3.18", features = [
     "env-filter",
     "fmt",
     "json",
+    "time",
 ] }
 turmoil = "0.6.4"
 url = { version = "2.5.3", features = ["serde"] }

@@ -1931,9 +1931,9 @@ pub mod test {
     use ic_types::{
         batch::{BatchPayload, IngressPayload},
         consensus::{
-            dkg, idkg::PreSigId, BlockPayload, CatchUpPackageShare, DataPayload, EquivocationProof,
-            Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare,
-            Payload, RandomBeaconContent, RandomTapeContent, SummaryPayload,
+            dkg::DkgDataPayload, idkg::PreSigId, BlockPayload, CatchUpPackageShare, DataPayload,
+            EquivocationProof, Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon,
+            NotarizationShare, Payload, RandomBeaconContent, RandomTapeContent, SummaryPayload,
         },
         crypto::{BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
         replica_config::ReplicaConfig,
@@ -3473,7 +3473,7 @@ pub mod test {
                     ingress,
                     ..BatchPayload::default()
                 },
-                dealings: dkg::Dealings::new_empty(Height::new(0)),
+                dkg: DkgDataPayload::new_empty(Height::new(0)),
                 idkg: None,
             }),
         );
@@ -3487,7 +3487,7 @@ pub mod test {
                     ingress: IngressPayload::from(vec![]),
                     ..BatchPayload::default()
                 },
-                dealings: dkg::Dealings::new_empty(Height::new(0)),
+                dkg: DkgDataPayload::new_empty(Height::new(0)),
                 idkg: None,
             }),
         );

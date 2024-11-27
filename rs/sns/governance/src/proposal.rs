@@ -1,5 +1,4 @@
 use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
-use crate::cached_upgrade_steps::CachedUpgradeSteps;
 use crate::pb::v1::AdvanceSnsTargetVersion;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
@@ -485,14 +484,9 @@ pub(crate) async fn validate_and_render_action(
             validate_and_render_manage_dapp_canister_settings(manage_dapp_canister_settings)
         }
         proposal::Action::AdvanceSnsTargetVersion(advance_sns_target_version) => {
-            let deployed_version = governance_proto.deployed_version_or_err()?;
-            let cached_upgrade_steps = governance_proto.cached_upgrade_steps_or_err()?;
-            let upgrade_steps = cached_upgrade_steps.take_from(&deployed_version)?;
-
             return validate_and_render_advance_sns_target_version_proposal(
                 env.canister_id(),
-                upgrade_steps,
-                governance_proto.target_version.clone(),
+                governance_proto,
                 advance_sns_target_version,
             );
         }
@@ -1729,54 +1723,24 @@ fn validate_and_render_manage_dapp_canister_settings(
 /// - `new_target` comes before `current_target_version` along the `upgrade_steps`.
 ///
 /// Details:
-/// 1. Validates the action's `new_target` field, if it is `Some(new_target)`.
+/// 1. Validates the action's `new_target` field, if it is set.
 /// 2. Identifies the `new_target`, either based on the above, or using `upgrade_steps`.
 /// 3. Renders the Markdown proposal description.
-/// 4. Returns the rendering and the identified `new_target` (guaranteed to be `Some`)
-///    as `ActionAuxiliary`. This returned `new_target` should be used for executing this action,
-///    assuming the proposal will be adopted.
+/// 4. Returns the rendering and the identified `target_version`.
+///    as `ActionAuxiliary`. This returned `target_version` should be used for executing
+///    this action, assuming the proposal gets adopted.
 fn validate_and_render_advance_sns_target_version_proposal(
     sns_governance_canister_id: CanisterId,
-    upgrade_steps: CachedUpgradeSteps,
-    current_target_version: Option<Version>,
+    governance_proto: &Governance,
     advance_sns_target_version: &AdvanceSnsTargetVersion,
 ) -> Result<(String, ActionAuxiliary), String> {
-    if upgrade_steps.is_empty() {
-        return Err(
-            "Cannot advance SNS target version: there are no pending upgrades.".to_string(),
-        );
-    }
-
-    let new_target = if let Some(new_target) = &advance_sns_target_version.new_target {
-        let new_target = Version::try_from(new_target.clone()).map_err(|err| {
-            format!(
-                "Cannot validate and render AdvanceSnsTargetVersion proposal: {}",
-                err
-            )
-        })?;
-
-        upgrade_steps.validate_new_target_version(&new_target)?;
-
-        new_target
-    } else {
-        upgrade_steps.last().clone()
-    };
-
-    if let Some(current_target_version) = current_target_version {
-        let new_target_is_not_ahead_of_current_target =
-            upgrade_steps.contains_in_order(&new_target, &current_target_version)?;
-        if new_target_is_not_ahead_of_current_target {
-            return Err(format!(
-                "SNS target already set to version {}.",
-                current_target_version
-            ));
-        }
-    }
+    let (upgrade_steps, target_version) = governance_proto
+        .validate_new_target_version(advance_sns_target_version.new_target.clone())?;
 
     let valid_timestamp_seconds = upgrade_steps.approximate_time_of_validity_timestamp_seconds();
 
     let current_target_versions_render =
-        render_two_versions_as_markdown_table(upgrade_steps.current(), &new_target);
+        render_two_versions_as_markdown_table(upgrade_steps.current(), &target_version);
 
     let upgrade_journal_url_render = format!(
         "https://{}.raw.icp0.io/journal/json",
@@ -1796,7 +1760,10 @@ fn validate_and_render_advance_sns_target_version_proposal(
          {upgrade_journal_url_render}"
     );
 
-    Ok((render, ActionAuxiliary::AdvanceSnsTargetVersion(new_target)))
+    Ok((
+        render,
+        ActionAuxiliary::AdvanceSnsTargetVersion(target_version),
+    ))
 }
 
 impl ProposalData {
