@@ -310,9 +310,7 @@ UNIVERSAL_VM_RUNTIME_DEPS = [
     "//rs/tests:create-universal-vm-config-image.sh",
 ]
 
-GRAFANA_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
-    "//rs/tests:grafana_dashboards",
-]
+GRAFANA_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [] # The dashboards are being pulled from k8s repository
 
 BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
     "//ic-os/boundary-guestos:scripts/build-bootstrap-config-image.sh",

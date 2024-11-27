@@ -14,7 +14,7 @@ use maplit::hashmap;
 use reqwest::Url;
 use serde::Serialize;
 use serde_json::json;
-use slog::{debug, info, Logger};
+use slog::{debug, info, warn, Logger};
 
 use crate::driver::{
     constants::SSH_USERNAME,
@@ -152,7 +152,13 @@ impl PrometheusVm {
             std::fs::remove_dir_all(&k8s_repo)?;
         }
 
-        std::fs::create_dir_all(&k8s_repo)?;
+        let k8s_dashboards = k8s_repo.join("k8s-dashboards");
+        std::fs::create_dir_all(&k8s_dashboards)?;
+        info!(
+            logger,
+            "Created k8s dashboards folder on path: {}",
+            k8s_dashboards.display()
+        );
         Command::new("git")
             .arg("init")
             .current_dir(&k8s_repo)
@@ -186,13 +192,6 @@ impl PrometheusVm {
         info!(logger, "Pulled dashboards from dfinity-ops/k8s repo");
 
         let dashboards_root = k8s_repo.join("bases").join("apps").join("ic-dashboards");
-        let k8s_dashboards = k8s_repo.join("k8s-dashboards");
-        std::fs::create_dir_all(&k8s_dashboards)?;
-        info!(
-            logger,
-            "Created k8s dashboards folder on path: {}",
-            k8s_dashboards.display()
-        );
 
         for directory in dashboards_root.read_dir()? {
             let entry = directory?;
@@ -261,7 +260,13 @@ fi
         let grafana_dashboards_src = get_dependency_path("rs/tests/dashboards");
         let grafana_dashboards_dst = config_dir.join("grafana").join("dashboards");
 
-        Self::sync_k8s_repo_dashboards(log.clone()).unwrap();
+        if let Err(e) = Self::sync_k8s_repo_dashboards(log.clone()) {
+            warn!(
+                log,
+                "Failed to sync k8s dashboards to grafana. Error: {}",
+                e.to_string()
+            )
+        };
 
         debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
         TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst).unwrap();
