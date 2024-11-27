@@ -647,6 +647,21 @@ type Neuron = record {
 
   // The amount of "sway" this neuron has when voting on proposals.
   //
+  // When a proposal is created, each eligible neuron gets a "blank" ballot. The
+  // amount of voting power in that ballot is set to the neuron's deciding
+  // voting power at the time of proposal creation. There are two ways that a
+  // proposal can become decided:
+  //
+  //   1. Early: Either more than half of the total voting power in the ballots
+  //   votes in favor (then the proposal is approved), or at least half of the
+  //   votal voting power in the ballots votes against (then, the proposal is
+  //   rejected).
+  //
+  //   2. The proposal's voting deadline is reached. At that point, if there is
+  //   more voting power in favor than against, and at least 3% of the total
+  //   voting power voted in favor, then the proposal is approved. Otherwise, it
+  //   is rejected.
+  //
   // If a neuron regularly refreshes its voting power, this has the same value
   // as potential_voting_power. Actions that cause a refresh are as follows:
   //
