@@ -746,6 +746,72 @@ fn test_upgrade_periodic_task_lock_times_out() {
     assert!(!gov.acquire_upgrade_periodic_task_lock());
 }
 
+#[tokio::test]
+async fn test_refresh_cached_upgrade_steps_rejects_duplicate_versions() {
+    // Step 1: Prepare the world.
+    let root_canister_id = *TEST_ROOT_CANISTER_ID;
+    let governance_canister_id = *TEST_GOVERNANCE_CANISTER_ID;
+
+    let mut env = NativeEnvironment::new(Some(governance_canister_id));
+
+    let version = SnsVersion {
+        root_wasm_hash: vec![1, 2, 3],
+        governance_wasm_hash: vec![2, 3, 4],
+        ledger_wasm_hash: vec![3, 4, 5],
+        swap_wasm_hash: vec![4, 5, 6],
+        archive_wasm_hash: vec![5, 6, 7],
+        index_wasm_hash: vec![6, 7, 8],
+    };
+
+    // Set up environment to return upgrade steps with a duplicate version
+    env.set_call_canister_response(
+        SNS_WASM_CANISTER_ID,
+        "list_upgrade_steps",
+        Encode!(&ListUpgradeStepsRequest {
+            starting_at: Some(version.clone()),
+            sns_governance_canister_id: Some(governance_canister_id.into()),
+            limit: 0,
+        })
+        .unwrap(),
+        Ok(Encode!(&ListUpgradeStepsResponse {
+            steps: vec![
+                ListUpgradeStep {
+                    version: Some(version.clone())
+                },
+                ListUpgradeStep {
+                    version: Some(version.clone()) // Duplicate version
+                },
+            ]
+        })
+        .unwrap()),
+    );
+
+    let mut governance = Governance::new(
+        GovernanceProto {
+            root_canister_id: Some(root_canister_id.get()),
+            deployed_version: Some(Version::from(version.clone())),
+            ..basic_governance_proto()
+        }
+        .try_into()
+        .unwrap(),
+        Box::new(env),
+        Box::new(DoNothingLedger {}),
+        Box::new(DoNothingLedger {}),
+        Box::new(FakeCmc::new()),
+    );
+
+    // Step 2: Run code under test.
+    assert_eq!(governance.proto.cached_upgrade_steps, None);
+    governance.temporarily_lock_refresh_cached_upgrade_steps();
+    governance.refresh_cached_upgrade_steps().await;
+
+    // Step 3: Verify that the cached_upgrade_steps was not updated due to duplicate versions
+    assert_eq!(
+        governance.proto.cached_upgrade_steps.unwrap().upgrade_steps,
+        None
+    );
+}
+
 #[test]
 fn test_upgrade_periodic_task_lock_doesnt_get_stuck_during_overflow() {
     let env = NativeEnvironment::new(Some(*TEST_GOVERNANCE_CANISTER_ID));
