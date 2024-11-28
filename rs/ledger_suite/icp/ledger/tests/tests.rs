@@ -30,7 +30,7 @@ use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -1274,6 +1274,18 @@ fn test_downgrade_from_incompatible_version() {
         ledger_wasm(),
         encode_init_args,
         false,
+    );
+}
+
+#[test]
+fn test_stable_migration_endpoints_disabled() {
+    let ledger_wasm_mainnet = ledger_wasm_mainnet();
+    let ledger_wasm_low_limits: Vec<u8> = ledger_wasm_low_instruction_limits();
+
+    ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
+        ledger_wasm_mainnet,
+        ledger_wasm_low_limits,
+        encode_init_args,
     );
 }
 
