@@ -117,7 +117,7 @@ fn cache_upgrade_steps_sns_w_response_conversions() {
         )
         .unwrap_err();
 
-        assert_eq!(err, "CachedUpgradeSteps.upgrade_steps must be specified.");
+        assert!(err.contains("SnsW.list_upgrade_steps response had invalid fields"));
     }
 
     // Scenario C: Conversion fails if there are no versions.
@@ -129,7 +129,7 @@ fn cache_upgrade_steps_sns_w_response_conversions() {
         )
         .unwrap_err();
 
-        assert_eq!(err, "CachedUpgradeSteps.upgrade_steps must be specified.");
+        assert_eq!(err, "ListUpgradeStepsResponse.steps must not be empty.");
     }
 
     // Scenario D: Conversion fails if there are duplicate versions.
@@ -144,7 +144,13 @@ fn cache_upgrade_steps_sns_w_response_conversions() {
         )
         .unwrap_err();
 
-        assert_eq!(err, "CachedUpgradeSteps.upgrade_steps must be specified.");
+        assert_eq!(
+            err,
+            "ListUpgradeStepsResponse.steps must not contain duplicates: SnsVersion { \
+                root:000000, governance:010101, swap:030303, \
+                index:050505, ledger:020202, archive:040404 \
+             } occurres more than once.",
+        );
     }
 }
 
