@@ -811,19 +811,37 @@ async fn test_refresh_cached_upgrade_steps_rejects_duplicate_versions() {
         Box::new(FakeCmc::new()),
     );
 
-    // Step 2: Run code under test.
+    // Precondition
     assert_eq!(governance.proto.cached_upgrade_steps, None);
+
+    // Form the expectations
+    let expected_cached_upgrade_steps = Some(CachedUpgradeStepsPb {
+        upgrade_steps: Some(Versions {
+            versions: vec![version.clone().into()],
+        }),
+        requested_timestamp_seconds: Some(governance.env.now()),
+        response_timestamp_seconds: Some(governance.env.now()),
+    });
+
+    // Step 2: Run code under test. This should initialize the cache
     let deployed_version = governance
         .try_temporarily_lock_refresh_cached_upgrade_steps()
         .unwrap();
+
+    assert_eq!(deployed_version, version.into());
+    assert_eq!(
+        governance.proto.cached_upgrade_steps,
+        expected_cached_upgrade_steps
+    );
+
     governance
         .refresh_cached_upgrade_steps(deployed_version)
         .await;
 
-    // Step 3: Verify that the cached_upgrade_steps was not updated due to duplicate versions
+    // Postcondition: Verify that the cached_upgrade_steps was not updated due to duplicate versions
     assert_eq!(
-        governance.proto.cached_upgrade_steps.unwrap().upgrade_steps,
-        None
+        governance.proto.cached_upgrade_steps,
+        expected_cached_upgrade_steps
     );
 }
 

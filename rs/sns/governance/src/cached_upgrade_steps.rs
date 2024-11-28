@@ -43,6 +43,18 @@ impl From<CachedUpgradeSteps> for CachedUpgradeStepsPb {
     }
 }
 
+impl Versions {
+    fn validate_no_duplicates(&self) -> Result<(), String> {
+        let mut seen = std::collections::HashSet::new();
+        for version in &self.versions {
+            if !seen.insert(version) {
+                return Err(format!("{} occurres more than once.", version));
+            }
+        }
+        Ok(())
+    }
+}
+
 impl TryFrom<&CachedUpgradeStepsPb> for CachedUpgradeSteps {
     type Error = String;
 
@@ -56,23 +68,16 @@ impl TryFrom<&CachedUpgradeStepsPb> for CachedUpgradeSteps {
             response_timestamp_seconds,
         } = src
         else {
-            return Err("Cannot interpret CachedUpgradeSteps; \
-                 please specify the required field upgrade_steps"
-                .to_string());
+            return Err("CachedUpgradeSteps.upgrade_steps must be specified.".to_string());
         };
 
         // Check for duplicate versions in the response
-        {
-            let mut seen = std::collections::HashSet::new();
-            for version in &upgrade_steps.versions {
-                if !seen.insert(version) {
-                    return Err(
-                        "CachedUpgradeSteps.upgrade_steps must not contain duplicate versions."
-                            .to_string(),
-                    );
-                }
-            }
-        }
+        upgrade_steps.validate_no_duplicates().map_err(|err| {
+            format!(
+                "CachedUpgradeSteps.upgrade_steps must not contain duplicates: {}",
+                err
+            )
+        })?;
 
         let Some((current_version, subsequent_versions)) = upgrade_steps.versions.split_first()
         else {
@@ -239,7 +244,16 @@ impl CachedUpgradeSteps {
             })
             .collect::<Result<_, _>>()?;
 
-        let mut versions = versions.into_iter();
+        let versions = Versions { versions };
+
+        versions.validate_no_duplicates().map_err(|err| {
+            format!(
+                "ListUpgradeStepsResponse.steps must not contain duplicates: {}",
+                err
+            )
+        })?;
+
+        let mut versions = versions.versions.into_iter();
 
         let Some(current_version) = versions.next() else {
             return Err("ListUpgradeStepsResponse.steps must not be empty.".to_string());
