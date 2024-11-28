@@ -159,7 +159,7 @@ fn create_data_payload(
     if !remote_dkg_transcripts.is_empty() {
         info!(
             logger,
-            "Including {} early remote DKG transcripts in rregular block payload",
+            "Including {} early remote DKG transcripts in regular block payload",
             remote_dkg_transcripts.len()
         );
     }
@@ -193,7 +193,7 @@ fn create_early_remote_transcripts(
     // Remote DKG contexts
 
     // Get all dealings that have not been used in a transcript already
-    let all_dealings = utils::get_dkg_dealings2(pool_reader, parent, true);
+    let all_dealings = utils::get_dkg_dealings(pool_reader, parent, true);
 
     // Collect map of remote target_ids to ni_dkg_ids
     let mut remote_contexts: BTreeMap<NiDkgTargetId, Vec<NiDkgId>> = BTreeMap::new();
@@ -311,7 +311,7 @@ pub(super) fn create_summary_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Result<dkg::Summary, PayloadCreationError> {
-    let all_dealings = utils::get_dkg_dealings2(pool_reader, parent, false);
+    let all_dealings = utils::get_dkg_dealings(pool_reader, parent, false);
     let mut transcripts_for_remote_subnets = BTreeMap::new();
     let mut next_transcripts = BTreeMap::new();
     // Try to create transcripts from the last round.
