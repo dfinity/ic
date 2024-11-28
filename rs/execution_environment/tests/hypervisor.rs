@@ -5041,6 +5041,7 @@ fn cannot_stop_canister_with_open_call_context() {
 #[test]
 fn can_use_more_instructions_during_install_code() {
     let mut test = ExecutionTestBuilder::new()
+        .with_precompiled_universal_canister(false)
         .with_instruction_limit(1_000_000)
         .with_cost_to_compile_wasm_instruction(0)
         .with_install_code_instruction_limit(

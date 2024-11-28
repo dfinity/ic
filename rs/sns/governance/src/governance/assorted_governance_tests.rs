@@ -2669,29 +2669,6 @@ fn test_upgrade_periodic_task_lock() {
 }
 
 #[test]
-fn test_upgrade_periodic_task_lock_times_out() {
-    let env = NativeEnvironment::new(Some(*TEST_GOVERNANCE_CANISTER_ID));
-    let mut gov = Governance::new(
-        basic_governance_proto().try_into().unwrap(),
-        Box::new(env),
-        Box::new(DoNothingLedger {}),
-        Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
-    );
-
-    assert!(gov.acquire_upgrade_periodic_task_lock());
-    assert!(!gov.acquire_upgrade_periodic_task_lock());
-    assert!(gov.upgrade_periodic_task_lock.is_some());
-
-    // advance time
-    gov.env.set_time_warp(TimeWarp {
-        delta_s: UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS as i64 + 1,
-    });
-    assert!(gov.acquire_upgrade_periodic_task_lock()); // The lock should successfully be acquired, since the previous one timed out
-    assert!(!gov.acquire_upgrade_periodic_task_lock());
-}
-
-#[test]
 fn test_check_upgrade_can_succeed_if_archives_out_of_sync() {
     let root_canister_id = *TEST_ROOT_CANISTER_ID;
     let governance_canister_id = *TEST_GOVERNANCE_CANISTER_ID;

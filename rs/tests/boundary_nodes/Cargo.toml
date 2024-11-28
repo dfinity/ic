@@ -10,7 +10,6 @@ documentation.workspace = true
 anyhow = { workspace = true }
 candid = { workspace = true }
 certificate_orchestrator_interface = { path = "../../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
-discower_bowndary = { path = "../../boundary_node/discower_bowndary" }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-boundary-nodes-system-test-utils = { path = "utils" }

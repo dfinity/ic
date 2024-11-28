@@ -339,6 +339,10 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwarg
         name: the name of the system-tests.
         extra_head_nns_tags: extra tags assigned to the head_nns variant (Use `[]` to use the original tags).
         **kwargs: the arguments of the system-tests.
+
+    Returns:
+      This macro declares 2 bazel targets.
+      It returns a struct specifying test_driver_target which is the name of the test driver target ("<name>_bin") such that it can be used by other system-tests.
     """
     runtime_deps = kwargs.pop("runtime_deps", [])
     env = kwargs.pop("env", {})
@@ -351,14 +355,15 @@ def system_test_nns(name, extra_head_nns_tags = ["system_test_nightly"], **kwarg
     )
 
     original_tags = kwargs.pop("tags", [])
+    kwargs["test_driver_target"] = mainnet_nns_systest.test_driver_target
     system_test(
         name + "_head_nns",
-        test_driver_target = mainnet_nns_systest.test_driver_target,
         env = env | NNS_CANISTER_ENV,
         runtime_deps = runtime_deps + NNS_CANISTER_RUNTIME_DEPS,
         tags = [tag for tag in original_tags if tag not in extra_head_nns_tags] + extra_head_nns_tags,
         **kwargs
     )
+    return struct(test_driver_target = mainnet_nns_systest.test_driver_target)
 
 def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_paths = None):
     """This macro creates bazel targets for uvm config images.

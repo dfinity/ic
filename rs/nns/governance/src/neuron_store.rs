@@ -8,7 +8,7 @@ use crate::{
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
         governance_error::ErrorType,
-        GovernanceError, Neuron as NeuronProto, NeuronState, Topic,
+        GovernanceError, Neuron as NeuronProto, Topic,
     },
     storage::{
         neuron_indexes::{CorruptedNeuronIndexes, NeuronIndex},
@@ -722,7 +722,7 @@ impl NeuronStore {
         &self,
         neuron_id: NeuronId,
     ) -> Result<(Cow<Neuron>, StorageLocation), NeuronStoreError> {
-        self.load_neuron_with_sections(neuron_id, NeuronSections::all())
+        self.load_neuron_with_sections(neuron_id, NeuronSections::ALL)
     }
 
     fn update_neuron(
@@ -809,7 +809,7 @@ impl NeuronStore {
         &self,
         callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Cow<Neuron>> + 'b>) -> R,
     ) -> R {
-        self.with_active_neurons_iter_sections(callback, NeuronSections::all())
+        self.with_active_neurons_iter_sections(callback, NeuronSections::ALL)
     }
 
     fn with_active_neurons_iter_sections<R>(
@@ -912,16 +912,7 @@ impl NeuronStore {
 
     /// List all neurons that are spawning
     pub fn list_ready_to_spawn_neuron_ids(&self, now_seconds: u64) -> Vec<NeuronId> {
-        let filter = |n: &Neuron| {
-            let spawning_state = n.state(now_seconds) == NeuronState::Spawning;
-            if !spawning_state {
-                return false;
-            }
-            // spawning_state is calculated based on presence of spawn_at_timestamp_seconds
-            // so it would be quite surprising if it is missing here (impossible in fact)
-            now_seconds >= n.spawn_at_timestamp_seconds.unwrap_or(u64::MAX)
-        };
-        self.filter_map_active_neurons(filter, |n| n.id())
+        self.filter_map_active_neurons(|neuron| neuron.ready_to_spawn(now_seconds), |n| n.id())
     }
 
     pub fn create_ballots_for_standard_proposal(
@@ -963,7 +954,7 @@ impl NeuronStore {
                     process_neuron(neuron.as_ref());
                 }
             },
-            NeuronSections::default(),
+            NeuronSections::NONE,
         );
 
         (ballots, deciding_voting_power, potential_voting_power)
@@ -1006,7 +997,7 @@ impl NeuronStore {
             &neuron_id,
             NeuronSections {
                 hot_keys: true,
-                ..Default::default()
+                ..NeuronSections::NONE
             },
             |neuron| neuron.is_authorized_to_vote(&principal_id),
         )

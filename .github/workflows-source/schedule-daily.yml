@@ -18,7 +18,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:1d775e6d161dee883d10f082ab7fdde3e3d26061e1209255fb6514f8b62b206b
+    image: ghcr.io/dfinity/ic-build@sha256:3cc80d1a2d5789b69f6a7f170280bb3763a54acce299430903f59718f904f273
   dind-large-setup: &dind-large-setup
     runs-on:
       group: zh1
@@ -153,7 +153,7 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
-          echo "BENCHMARK_TARGETS=$(bazel query 'attr(tags, system_test_benchmark, //rs/...)' | tr '\n' ' ')" >> $GITHUB_ENV
+          echo "BENCHMARK_TARGETS=$(bazel query 'attr(tags, system_test_benchmark, //rs/...)' | grep -v head_nns | tr '\n' ' ')" >> $GITHUB_ENV
       - name: Test System Test Benchmarks
         id: bazel-system-test-benchmarks
         uses: ./.github/actions/bazel-test-all/
@@ -193,7 +193,8 @@ jobs:
         id: setup-environment-deps
         shell: bash
         run: |
-          pip3 install --ignore-installed -r requirements.txt
+          # Ignore externally-managed-environment pip error, install packages system-wide.
+          PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
           cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
           source "${NVM_DIR}/nvm.sh"
           nvm use ${DEFAULT_NODE_VERSION}
