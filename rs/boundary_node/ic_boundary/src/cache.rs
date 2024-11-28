@@ -2,7 +2,7 @@ use std::{fmt, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context, Error};
 use axum::{
-    body::Body,
+    body::{Body, HttpBody},
     extract::{Request, State},
     http::StatusCode,
     middleware::Next,
@@ -11,13 +11,13 @@ use axum::{
 };
 use bytes::Bytes;
 use http::{
-    header::{HeaderMap, CACHE_CONTROL, CONTENT_LENGTH},
+    header::{HeaderMap, CACHE_CONTROL},
     response, Version,
 };
 use ic_bn_lib::http::body::buffer_body;
 use moka::future::{Cache as MokaCache, CacheBuilder as MokaCacheBuilder};
 
-use crate::routes::{ApiError, ErrorCause, RequestContext};
+use crate::routes::{ApiError, RequestContext};
 
 // A list of possible Cache-Control directives that ask us not to cache the response
 const SKIP_CACHE_DIRECTIVES: &[&str] = &["no-store", "no-cache", "max-age=0"];
@@ -186,16 +186,6 @@ impl Cache {
     }
 }
 
-// Try to get & parse content-length header
-fn extract_content_length(resp: &Response) -> Result<Option<u64>, Error> {
-    let size = match resp.headers().get(CONTENT_LENGTH) {
-        Some(v) => v.to_str()?.parse::<u64>()?,
-        None => return Ok(None),
-    };
-
-    Ok(Some(size))
-}
-
 // Axum middleware that handles response caching
 pub async fn cache_middleware(
     State(cache): State<Arc<Cache>>,
@@ -243,12 +233,8 @@ pub async fn cache_middleware(
         return Ok(CacheStatus::Bypass(CacheBypassReason::HTTPError).with_response(response));
     }
 
-    let content_length = extract_content_length(&response).map_err(|_| {
-        ErrorCause::MalformedResponse("Malformed Content-Length header in response".into())
-    })?;
-
     // Do not cache responses that have no known size (probably streaming etc)
-    let body_size = match content_length {
+    let body_size = match response.body().size_hint().exact() {
         Some(v) => v,
         None => {
             return Ok(CacheStatus::Bypass(CacheBypassReason::SizeUnknown).with_response(response))

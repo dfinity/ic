@@ -47,16 +47,15 @@ use crate::{
             GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
             GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
             GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
-            GetSnsInitializationParametersResponse, GetUpgradeJournalResponse,
-            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
-            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
-            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
-            ManageSnsMetadata, MintSnsTokens, MintTokensRequest, MintTokensResponse,
-            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-            RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote,
-            WaitForQuietState,
+            GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
+            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
+            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
+            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
+            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
+            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
+            RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds,
+            UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
     proposal::{
@@ -478,16 +477,19 @@ impl GovernanceProto {
     {
         let deployed_version = self.deployed_version_or_err()?;
 
-        let upgrade_steps = {
-            let cached_upgrade_steps = self.cached_upgrade_steps_or_err()?;
-            cached_upgrade_steps.take_from(&deployed_version)?
-        };
+        let cached_upgrade_steps = self.cached_upgrade_steps_or_err()?;
 
-        if upgrade_steps.is_empty() {
-            return Err(
-                "Cannot advance SNS target version: there are no pending upgrades.".to_string(),
-            );
-        }
+        let upgrade_steps = cached_upgrade_steps.take_from(&deployed_version);
+        let upgrade_steps = match upgrade_steps {
+            Ok(upgrade_steps) if !upgrade_steps.is_empty() => upgrade_steps,
+            _ => {
+                return Err(format!(
+                    "The currently deployed SNS version is not in the cached_upgrade_steps. You may need to wait for the upgrade steps to be refreshed. \
+                    This shouldn't take more than {} seconds.", 
+                    UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS
+                ));
+            }
+        };
 
         let new_target = if let Some(new_target) = new_target {
             let new_target = Version::try_from(new_target).map_err(|err| err.to_string())?;
@@ -5054,28 +5056,6 @@ impl Governance {
 
     fn release_upgrade_periodic_task_lock(&mut self) {
         self.upgrade_periodic_task_lock = None;
-    }
-
-    pub fn get_upgrade_journal(&self) -> GetUpgradeJournalResponse {
-        let cached_upgrade_steps = self.proto.cached_upgrade_steps.clone();
-        match cached_upgrade_steps {
-            Some(cached_upgrade_steps) => GetUpgradeJournalResponse {
-                upgrade_steps: cached_upgrade_steps.upgrade_steps,
-                response_timestamp_seconds: cached_upgrade_steps.response_timestamp_seconds,
-                target_version: self.proto.target_version.clone(),
-                deployed_version: self.proto.deployed_version.clone(),
-                // TODO(NNS1-3416): Bound the size of the response.
-                upgrade_journal: self.proto.upgrade_journal.clone(),
-            },
-            None => GetUpgradeJournalResponse {
-                upgrade_steps: None,
-                response_timestamp_seconds: None,
-                target_version: None,
-                deployed_version: self.proto.deployed_version.clone(),
-                // TODO(NNS1-3416): Bound the size of the response.
-                upgrade_journal: self.proto.upgrade_journal.clone(),
-            },
-        }
     }
 
     // This is a test-only function, so panicking should be okay.

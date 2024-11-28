@@ -2909,7 +2909,17 @@ async fn test_refresh_cached_upgrade_steps_noop_if_deployed_version_none() {
 async fn test_refresh_cached_upgrade_steps() {
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
-    let expected_upgrade_steps = vec![Version::default(), Version::default(), Version::default()];
+    let v1 = Version::default();
+    let v2 = Version {
+        governance_wasm_hash: vec![1],
+        ..v1.clone()
+    };
+    let v3 = Version {
+        governance_wasm_hash: vec![1, 2],
+        ..v2.clone()
+    };
+
+    let expected_upgrade_steps = vec![v1.clone(), v2.clone(), v3.clone()];
 
     // Set up the fixture state
     {
@@ -2927,7 +2937,7 @@ async fn test_refresh_cached_upgrade_steps() {
         canister_fixture
             .environment_fixture
             .push_mocked_canister_reply(ListUpgradeStepsResponse { steps });
-        canister_fixture.governance.proto.deployed_version = Some(Version::default());
+        canister_fixture.governance.proto.deployed_version = Some(v1);
     }
 
     // Check that the initial state is None
