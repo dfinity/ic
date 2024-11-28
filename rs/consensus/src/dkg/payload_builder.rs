@@ -99,6 +99,8 @@ pub fn create_payload(
             last_dkg_summary,
             max_dealings_per_block,
             &last_summary_block,
+            state_manager,
+            validation_context,
             logger,
         )
         .map(dkg::Payload::Data)
@@ -113,6 +115,8 @@ fn create_data_payload(
     last_dkg_summary: &Summary,
     max_dealings_per_block: usize,
     last_summary_block: &Block,
+    state_manager: &dyn StateManager<State = ReplicatedState>,
+    validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Result<DkgDataPayload, PayloadCreationError> {
     // Get all dealer ids from the chain.
@@ -144,7 +148,16 @@ fn create_data_payload(
     // Try to include remote transcripts
     Ok(DkgDataPayload::new_with_remote_dkg_transcripts(
         last_summary_block.height,
-        create_early_remote_transcripts(pool_reader, crypto, parent, 1, last_dkg_summary, logger),
+        create_early_remote_transcripts(
+            pool_reader,
+            crypto,
+            parent,
+            1,
+            last_dkg_summary,
+            state_manager,
+            validation_context,
+            logger,
+        ),
     ))
 }
 
@@ -154,8 +167,17 @@ fn create_early_remote_transcripts(
     parent: &Block,
     num_transcripts: usize,
     last_dkg_summary: &Summary,
+    state_manager: &dyn StateManager<State = ReplicatedState>,
+    validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)> {
+    let state = state_manager
+        .get_state_at(validation_context.certified_height)
+        .unwrap();
+    //TODO: .map_err(PayloadCreationError::StateManagerError)?;
+    // TODO: Since this function is relatively expensive, we should only do this if there are any outstanding
+    // Remote DKG contexts
+
     // Get all dealings that have not been used in a transcript already
     let all_dealings = utils::get_dkg_dealings2(pool_reader, parent, true);
 
@@ -173,56 +195,69 @@ fn create_early_remote_transcripts(
         entry.push(dkg_id.clone());
     }
 
-    let x = remote_contexts
-        .iter()
-        // Lookup the config from the summary
-        .map(|(_, dkg_id)| {
-            dkg_id
-                .iter()
-                .filter_map(|ni_dkg_id| {
-                    last_dkg_summary
-                        .configs
-                        .get(ni_dkg_id)
-                        .map(|config| (ni_dkg_id, config))
-                })
-                .collect::<BTreeMap<&NiDkgId, &NiDkgConfig>>()
-        })
+    let mut selected_transcripts = vec![];
+    for (_, dkg_ids) in remote_contexts {
+        // For each target_id, try to build the necessary transcripts
+        let mut transcripts = dkg_ids
+            .iter()
+            // Lookup the config from the summary
+            .filter_map(|dkg_id| {
+                last_dkg_summary
+                    .configs
+                    .get(dkg_id)
+                    .map(|config| (dkg_id, config))
+            })
+            // Lookup the callback id
+            .filter_map(|(dkg_id, config)| {
+                get_callback_id_from_id(state.get_ref(), dkg_id)
+                    .map(|callback_id| (dkg_id, callback_id, config))
+            })
+            // Generate the transcripts, not that we just skip errors, they will
+            // be handled in the summary block, if we fail to create an early transcript
+            .filter_map(|(dkg_id, callback_id, config)| {
+                match create_transcript(crypto, config, &all_dealings, &logger) {
+                    Ok(transcript) => {
+                        Some((dkg_id.clone(), callback_id, Ok::<_, String>(transcript)))
+                    }
+                    Err(_) => None,
+                }
+            })
+            .collect::<Vec<_>>();
+
         // For inital DKG transcripts, we need a pair of values while for VetKD we need a single config
         // Here we do some matching, to check that we have the right number of configs
-        .filter(|ni_dkgs| match ni_dkgs.len() {
+        match transcripts.len() {
             // TODO: Warn for 0?
             1 => {
                 // TODO: With vetkd, we need to check that these have a HighTresholdForMasterPublicKeyId tag
-                // Sould we also check that the key exists?
-                false
+                // Sould we also check that the keys exists?
+                continue;
             }
             // If we have two transcripts for the same ID, we check that it is one low and one high threshold transcript
             // Note: We do not really need to check whether there is an actual context, since this will happen later when we map
             // the transcripts to callback ids
             2 => {
-                let tags = ni_dkgs
-                    .keys()
-                    .map(|dkg_id| dkg_id.dkg_tag.clone())
+                let tags = transcripts
+                    .iter()
+                    .map(|(dkg_id, _, _)| dkg_id.dkg_tag.clone())
                     .collect::<BTreeSet<_>>();
                 let expected_tags = TAGS.iter().cloned().collect::<BTreeSet<_>>();
-                tags == expected_tags
+
+                if tags != expected_tags {
+                    continue;
+                }
             }
             // Other combinations are not supported
-            _ => false,
-        })
-        // // Generate the actual transcripts
-        // .filter_map(|(ni_dkg_id, config)| {
-        //     match create_transcript(crypto, config, &all_dealings, &logger) {
-        //         Ok(_) => todo!(),
-        //         Err(_) => None,
-        //     }
-        // })
-        // // Take only the number of transcripts
-        // .take(num_transcripts)
-        .take(num_transcripts)
-        .collect::<Vec<_>>();
+            _ => continue,
+        }
 
-    todo!()
+        selected_transcripts.append(&mut transcripts);
+        if selected_transcripts.len() >= num_transcripts {
+            break;
+        }
+    }
+
+    selected_transcripts
 }
 
 /// Creates a summary payload for the given parent and registry_version.
