@@ -1,4 +1,6 @@
 use super::CanisterInput;
+#[cfg(feature = "fuzzing_code")]
+use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_types::messages::{
@@ -8,6 +10,7 @@ use ic_types::time::CoarseTime;
 use ic_types::{CountBytes, Time};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
+use std::collections::VecDeque;
 use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
 use std::ops::{AddAssign, SubAssign};
@@ -24,7 +27,7 @@ pub const REQUEST_LIFETIME: Duration = Duration::from_secs(300);
 /// Bit encoding the message kind (request or response).
 #[repr(u64)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub(super) enum Kind {
+pub enum Kind {
     Request = 0,
     Response = Self::BIT,
 }
@@ -134,7 +137,7 @@ impl Id {
 /// A typed reference -- inbound (`CanisterInput`) or outbound
 /// (`RequestOrResponse`) -- to a message in the `MessagePool`.
 #[derive(Debug)]
-pub(super) struct Reference<T>(u64, PhantomData<T>);
+pub struct Reference<T>(u64, PhantomData<T>);
 
 impl<T> Reference<T>
 where
@@ -150,7 +153,7 @@ where
 }
 
 impl<T> Reference<T> {
-    pub(super) fn kind(&self) -> Kind {
+    pub fn kind(&self) -> Kind {
         Id::from(self).kind()
     }
 
@@ -214,8 +217,38 @@ impl<T> From<Reference<T>> for Id {
     }
 }
 
+pub const QUEUE_BOUND: usize = 5000;
+
+#[derive(Debug)]
+#[cfg(feature = "fuzzing_code")]
+pub struct ArbitraryVec<T>(pub VecDeque<T>);
+
+impl<'a> Arbitrary<'a> for ArbitraryVec<InboundReference> {
+    fn arbitrary(u: &mut Unstructured<'a>) -> ArbitraryResult<Self> {
+        if u.is_empty() {
+            return Ok(ArbitraryVec(VecDeque::new()));
+        }
+
+        let range: usize = u.int_in_range(1..=QUEUE_BOUND).unwrap();
+        let queue: VecDeque<InboundReference> = (0..range)
+            .map(|g| g as u64)
+            .map(|g| {
+                *u.choose(&[
+                    Reference::new(Class::BestEffort, Kind::Request, g),
+                    Reference::new(Class::BestEffort, Kind::Response, g),
+                    Reference::new(Class::GuaranteedResponse, Kind::Request, g),
+                    Reference::new(Class::GuaranteedResponse, Kind::Response, g),
+                ])
+                .unwrap()
+            })
+            .collect();
+
+        Ok(ArbitraryVec(queue))
+    }
+}
+
 /// A reference to an inbound message (returned as a `CanisterInput`).
-pub(super) type InboundReference = Reference<CanisterInput>;
+pub type InboundReference = Reference<CanisterInput>;
 
 /// A reference to an outbound message (returned as a `RequestOrResponse`).
 pub(super) type OutboundReference = Reference<RequestOrResponse>;

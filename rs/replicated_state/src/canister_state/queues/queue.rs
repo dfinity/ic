@@ -42,7 +42,7 @@ mod tests;
 /// the queue; so we must additionally explicitly limit the number of slots used
 /// by requests to the queue capacity.
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub(crate) struct CanisterQueue<T> {
+pub struct CanisterQueue<T> {
     /// A FIFO queue of request and response weak references into the pool.
     ///
     /// Since responses may be enqueued at arbitrary points in time, reserved slots
@@ -94,7 +94,7 @@ pub(crate) struct CanisterQueue<T> {
 
 /// An `InputQueue` is a `CanisterQueue` holding references to `CanisterInput`
 /// items, i.e. either pooled messages or compact responses.
-pub(super) type InputQueue = CanisterQueue<CanisterInput>;
+pub type InputQueue = CanisterQueue<CanisterInput>;
 
 /// An `OutputQueue` is a `CanisterQueue` holding references to outbound
 /// `RequestOrResponse` items.
@@ -102,7 +102,7 @@ pub(super) type OutputQueue = CanisterQueue<RequestOrResponse>;
 
 impl<T> CanisterQueue<T> {
     /// Creates a new `CanisterQueue` with the given capacity.
-    pub(super) fn new(capacity: usize) -> Self {
+    pub fn new(capacity: usize) -> Self {
         Self {
             queue: VecDeque::new(),
             capacity,
@@ -113,14 +113,14 @@ impl<T> CanisterQueue<T> {
     }
 
     /// Returns the number of slots available for requests.
-    pub(super) fn available_request_slots(&self) -> usize {
+    pub fn available_request_slots(&self) -> usize {
         debug_assert!(self.request_slots <= self.capacity);
         self.capacity - self.request_slots
     }
 
     /// Returns `Ok(())` if there exists at least one available request slot,
     /// `Err(StateError::QueueFull)` otherwise.
-    pub(super) fn check_has_request_slot(&self) -> Result<(), StateError> {
+    pub fn check_has_request_slot(&self) -> Result<(), StateError> {
         if self.request_slots >= self.capacity {
             return Err(StateError::QueueFull {
                 capacity: self.capacity,
@@ -132,7 +132,7 @@ impl<T> CanisterQueue<T> {
     /// Enqueues a request.
     ///
     /// Panics if there is no available request slot.
-    pub(super) fn push_request(&mut self, reference: Reference<T>) {
+    pub fn push_request(&mut self, reference: Reference<T>) {
         debug_assert!(reference.kind() == Kind::Request);
         assert!(self.request_slots < self.capacity);
 
@@ -143,14 +143,14 @@ impl<T> CanisterQueue<T> {
     }
 
     /// Returns the number of response slots available for reservation.
-    pub(super) fn available_response_slots(&self) -> usize {
+    pub fn available_response_slots(&self) -> usize {
         debug_assert!(self.response_slots <= self.capacity);
         self.capacity - self.response_slots
     }
 
     /// Reserves a slot for a response, if available; else returns
     /// `Err(StateError::QueueFull)`.
-    pub(super) fn try_reserve_response_slot(&mut self) -> Result<(), StateError> {
+    pub fn try_reserve_response_slot(&mut self) -> Result<(), StateError> {
         debug_assert!(self.response_slots <= self.capacity);
         if self.response_slots >= self.capacity {
             return Err(StateError::QueueFull {
@@ -167,21 +167,21 @@ impl<T> CanisterQueue<T> {
     ///
     /// This is used when a request in the reverse queue is dropped before having
     /// had a chance to be popped.
-    pub(super) fn release_reserved_response_slot(&mut self) {
+    pub fn release_reserved_response_slot(&mut self) {
         debug_assert!(self.response_slots > 0);
 
         self.response_slots = self.response_slots.saturating_sub(1);
     }
 
     /// Returns the number of reserved response slots.
-    pub(super) fn reserved_slots(&self) -> usize {
+    pub fn reserved_slots(&self) -> usize {
         debug_assert!(self.request_slots + self.response_slots >= self.queue.len());
         self.request_slots + self.response_slots - self.queue.len()
     }
 
     /// Returns `Ok(())` if there exists at least one reserved response slot,
     /// `Err(())` otherwise.
-    pub(super) fn check_has_reserved_response_slot(&self) -> Result<(), ()> {
+    pub fn check_has_reserved_response_slot(&self) -> Result<(), ()> {
         if self.request_slots + self.response_slots <= self.queue.len() {
             return Err(());
         }
@@ -192,7 +192,7 @@ impl<T> CanisterQueue<T> {
     /// Enqueues a response into a reserved slot, consuming the slot.
     ///
     /// Panics if there is no reserved response slot.
-    pub(super) fn push_response(&mut self, reference: Reference<T>) {
+    pub fn push_response(&mut self, reference: Reference<T>) {
         debug_assert!(reference.kind() == Kind::Response);
         self.check_has_reserved_response_slot()
             .expect("No reserved response slot");
@@ -202,7 +202,7 @@ impl<T> CanisterQueue<T> {
     }
 
     /// Pops a reference from the queue. Returns `None` if the queue is empty.
-    pub(super) fn pop(&mut self) -> Option<Reference<T>> {
+    pub fn pop(&mut self) -> Option<Reference<T>> {
         let reference = self.queue.pop_front()?;
 
         if reference.kind() == Kind::Response {
@@ -218,7 +218,7 @@ impl<T> CanisterQueue<T> {
     }
 
     /// Returns the next reference in the queue; or `None` if the queue is empty.
-    pub(super) fn peek(&self) -> Option<Reference<T>> {
+    pub fn peek(&self) -> Option<Reference<T>> {
         self.queue.front().cloned()
     }
 
@@ -227,7 +227,7 @@ impl<T> CanisterQueue<T> {
     /// This is basically an `is_empty()` test, except it also looks at reserved
     /// slots, so it is named differently to make it clear it doesn't only check for
     /// enqueued references.
-    pub(super) fn has_used_slots(&self) -> bool {
+    pub fn has_used_slots(&self) -> bool {
         !self.queue.is_empty() || self.response_slots > 0
     }
 
@@ -253,7 +253,7 @@ impl<T> CanisterQueue<T> {
     /// to be called during checkpoint loading or from within a `debug_assert!()`.
     ///
     /// Time complexity: `O(n)`.
-    fn check_invariants(&self) -> Result<(), String> {
+    pub fn check_invariants(&self) -> Result<(), String> {
         // Requests and response slots at or below capacity.
         if self.request_slots > self.capacity || self.response_slots > self.capacity {
             return Err(format!(

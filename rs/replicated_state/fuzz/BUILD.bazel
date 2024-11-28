@@ -13,3 +13,15 @@ rust_fuzz_test_binary_afl(
         "@crate_index//:libfuzzer-sys",
     ],
 )
+
+rust_fuzz_test_binary_afl(
+    name = "canister_queue_push_and_pop",
+    srcs = [
+        "fuzz_targets/canister_queue_push_and_pop.rs",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/replicated_state",
+        "@crate_index//:libfuzzer-sys",
+    ],
+)

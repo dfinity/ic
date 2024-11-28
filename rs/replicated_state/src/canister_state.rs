@@ -1,5 +1,5 @@
 pub mod execution_state;
-pub(crate) mod queues;
+pub mod queues;
 pub mod system_state;
 #[cfg(test)]
 mod tests;
