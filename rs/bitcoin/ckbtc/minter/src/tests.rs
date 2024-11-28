@@ -430,7 +430,11 @@ fn test_no_dust_in_change_output() {
             fee_per_vbyte,
         )
         .expect("failed to build a transaction");
-        let fee = 294;
+        let fee = evaluate_minter_fee(
+            tx.inputs.len() as u64,
+            tx.outputs.len() as u64,
+            &minter_addr,
+        );
 
         assert_eq!(
             &tx.outputs,

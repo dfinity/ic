@@ -86,12 +86,13 @@ impl BitcoinAddress {
     }
 
     pub fn dust_limit(&self) -> Satoshi {
+        // We use the maximum dust limit over all address types for simplicity
         match self {
-            BitcoinAddress::P2wpkhV0(_) => 294,
-            BitcoinAddress::P2wshV0(_) => 330,
-            BitcoinAddress::P2trV1(_) => 330,
-            BitcoinAddress::P2pkh(_) => 546,
-            BitcoinAddress::P2sh(_) => 546,
+            BitcoinAddress::P2wpkhV0(_)
+            | BitcoinAddress::P2wshV0(_)
+            | BitcoinAddress::P2trV1(_)
+            | BitcoinAddress::P2pkh(_)
+            | BitcoinAddress::P2sh(_) => 546,
         }
     }
 }
