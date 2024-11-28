@@ -764,7 +764,7 @@ const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 190_000_000_000;
 const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 1_900_000_000;
 
 #[cfg(feature = "low-upgrade-instruction-limits")]
-const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 13_000_000;
+const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 5_000_000;
 #[cfg(feature = "low-upgrade-instruction-limits")]
 const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 500_000;
 
@@ -788,7 +788,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
         if !memory_manager_found {
             let msg =
                 "Cannot upgrade from scratch stable memory, please upgrade to memory manager first.";
-            print!("{msg}");
+            print(format!("{msg}"));
             panic!("{msg}");
         }
         *ledger = UPGRADES_MEMORY.with_borrow(|bs| {
@@ -846,7 +846,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
         }
     }
     if !is_ready() {
-        print!("Migration started.");
+        print("Migration started.");
         migrate_next_part(
             MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
         );
@@ -864,7 +864,7 @@ fn migrate_next_part(instruction_limit: u64) {
     let mut migrated_allowances = 0;
     let mut migrated_expirations = 0;
 
-    print!("Migrating part of the ledger state.");
+    print("Migrating part of the ledger state.");
 
     let mut ledger = LEDGER.write().unwrap();
     while instruction_counter() < instruction_limit {
@@ -893,12 +893,14 @@ fn migrate_next_part(instruction_limit: u64) {
     let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
             instruction_counter());
     if !is_ready() {
-        print!("Migration partially done. Scheduling the next part. {msg}");
+        print(format!(
+            "Migration partially done. Scheduling the next part. {msg}"
+        ));
         ic_cdk_timers::set_timer(Duration::from_secs(0), || {
             migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
         });
     } else {
-        print!("Migration completed! {msg}");
+        print(format!("Migration completed! {msg}"));
     }
 }
 
