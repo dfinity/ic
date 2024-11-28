@@ -270,22 +270,10 @@ async fn send_transmit_to_all_peers(
 
                     if !is_initiated {
                         let child_token = cancellation_token.child_token();
-                        let child_token_clone = child_token.clone();
                         metrics.send_view_send_to_peer_total.inc();
-
-                        let transport = transport.clone();
-                        let body = body.clone();
-                        let route = route.clone();
-
-                        let send_future = async move {
-                            select! {
-                                _ = send_transmit_to_peer(transport, body, peer, route) => {},
-                                _ = child_token.cancelled() => {},
-                            }
-                        };
-
-                        in_progress_transmissions.spawn_on(send_future, &rt_handle);
-                        initiated_transmissions.insert(peer, (connection_id, child_token_clone));
+                        let send_fut = send_transmit_to_peer(transport.clone(), body.clone(), peer, route.clone(), child_token.clone());
+                        in_progress_transmissions.spawn_on(send_fut, &rt_handle);
+                        initiated_transmissions.insert(peer, (connection_id, child_token));
                     }
                 }
             }
@@ -310,6 +298,7 @@ async fn send_transmit_to_peer(
     message: Bytes,
     peer: NodeId,
     route: String,
+    cancellation_token: CancellationToken,
 ) {
     let mut backoff = ExponentialBackoffBuilder::new()
         .with_initial_interval(MIN_BACKOFF_INTERVAL)
@@ -324,13 +313,22 @@ async fn send_transmit_to_peer(
             .body(message.clone())
             .expect("Building from typed values");
 
-        // TODO: NET-1748
-        if transport.rpc(&peer, request).await.is_ok() {
-            return;
+        select! {
+            // TODO: NET-1748
+            rpc_result = transport.rpc(&peer, request) => {
+                if rpc_result.is_ok() {
+                    return;
+                }
+            },
+            _ = cancellation_token.cancelled() => return,
         }
 
         let backoff_duration = backoff.next_backoff().unwrap_or(MAX_BACKOFF_INTERVAL);
-        time::sleep(backoff_duration).await;
+        let timeout = time::sleep(backoff_duration);
+        select! {
+            _ = timeout => (),
+            _ = cancellation_token.cancelled() => return,
+        }
     }
 }
 
