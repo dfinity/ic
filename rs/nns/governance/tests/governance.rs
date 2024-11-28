@@ -26,7 +26,7 @@ use ic_nervous_system_common::{
     cmc::CMC,
     ledger,
     ledger::{compute_neuron_staking_subaccount_bytes, IcpLedger},
-    NervousSystemError, E8, ONE_DAY_SECONDS, ONE_YEAR_SECONDS,
+    NervousSystemError, E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -10170,6 +10170,168 @@ fn test_neuron_set_visibility() {
     assert_neuron_visibility(typical_neuron.id.unwrap(), Some(Visibility::Public));
 
     assert_neuron_visibility(known_neuron.id.unwrap(), Some(Visibility::Public));
+}
+
+#[test]
+fn test_deciding_and_potential_voting_power() {
+    // Step 1: Prepare the world.
+
+    let neuron = Neuron {
+        id: Some(NeuronId { id: 42 }),
+        controller: Some(PrincipalId::new_user_test_id(42)),
+        account: account(42),
+
+        // Factors that affect POTENTIAL voting power.
+        cached_neuron_stake_e8s: 10 * E8, // Base
+        // Bonuses factors.
+        dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
+        // (Remember, birth day does not change with time, but age does...)
+        aging_since_timestamp_seconds: START_TIMESTAMP_SECONDS,
+
+        // Additional factor that affects DECIDING voting power.
+        voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
+
+        ..Default::default()
+    };
+
+    let controller = neuron.controller.unwrap();
+    let original_potential_voting_power = neuron.potential_voting_power();
+
+    let governance_proto = GovernanceProto {
+        economics: Some(NetworkEconomics::with_default_values()),
+        neurons: btreemap! {
+            42 => neuron,
+        },
+        ..Default::default()
+    };
+
+    let mut driver = fake::FakeDriver::default()
+        .at(START_TIMESTAMP_SECONDS)
+        .with_supply(Tokens::new(200, 0).unwrap());
+
+    let governance = Governance::new(
+        governance_proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Call the code under test.
+    let mut previous_timestamp_seconds = START_TIMESTAMP_SECONDS;
+    let mut previous_potential_voting_power = original_potential_voting_power;
+    let mut get_voting_power_ratio = |seconds_since_start| -> f64 {
+        // Advance time.
+        let new_timestamp_seconds = START_TIMESTAMP_SECONDS + seconds_since_start;
+        assert!(
+            new_timestamp_seconds > previous_potential_voting_power,
+            "{} vs. {}",
+            new_timestamp_seconds,
+            previous_potential_voting_power,
+        );
+        driver.advance_time_by(new_timestamp_seconds - previous_timestamp_seconds);
+        previous_timestamp_seconds = new_timestamp_seconds;
+
+        // Read Neurons
+
+        let full_neuron = governance
+            .get_full_neuron(&NeuronId { id: 42 }, &controller)
+            .unwrap();
+
+        let neuron_info = governance
+            .get_neuron_info(&NeuronId { id: 42 }, controller)
+            .unwrap();
+
+        // Compare the two. They should at least be consistent.
+        assert_eq!(
+            full_neuron.potential_voting_power,
+            neuron_info.potential_voting_power
+        );
+        assert_eq!(
+            full_neuron.deciding_voting_power,
+            neuron_info.deciding_voting_power
+        );
+
+        let deciding_voting_power = full_neuron.deciding_voting_power.unwrap();
+        let potential_voting_power = full_neuron.potential_voting_power.unwrap();
+
+        // Because of age bonus, voting power increases.
+        assert!(
+            potential_voting_power > previous_potential_voting_power,
+            "{} vs. {}",
+            potential_voting_power,
+            previous_potential_voting_power,
+        );
+        previous_potential_voting_power = potential_voting_power;
+
+        println!("{} vs. {}", deciding_voting_power, potential_voting_power);
+        deciding_voting_power as f64 / potential_voting_power as f64
+    };
+
+    // Step 3: Inspect results.
+
+    // Step 3.1: For 6 months, there is no reduction in voting power
+    // (i.e. deciding voting power == potential voting power).
+    for seconds_after_start in [
+        0,
+        1,
+        2,
+        3,
+        ONE_MONTH_SECONDS,
+        2 * ONE_MONTH_SECONDS,
+        3 * ONE_MONTH_SECONDS,
+        6 * ONE_MONTH_SECONDS - 1,
+        6 * ONE_MONTH_SECONDS,
+    ] {
+        assert_eq!(
+            get_voting_power_ratio(seconds_after_start),
+            1.0,
+            "at {} seconds ({} months) after start.",
+            seconds_after_start,
+            seconds_after_start / ONE_MONTH_SECONDS,
+        );
+    }
+
+    // Step 3.2 (the interesting phase): Then, for the next month, voting power goes down linearly.
+    for (seconds_after_decline_starts, expected_ratio) in [
+        (ONE_MONTH_SECONDS / 5, 0.8),
+        (ONE_MONTH_SECONDS / 2, 0.5),
+        (ONE_MONTH_SECONDS / 4 * 3, 0.25),
+    ] {
+        let observed_ratio =
+            get_voting_power_ratio(6 * ONE_MONTH_SECONDS + seconds_after_decline_starts);
+
+        fn abs_relative_error(observed: f64, expected: f64) -> f64 {
+            ((observed - expected) / expected).abs()
+        }
+
+        assert!(
+            abs_relative_error(observed_ratio, expected_ratio) < 1e-8,
+            "{} vs. {} @ {} months after start of decline.",
+            observed_ratio,
+            expected_ratio,
+            seconds_after_decline_starts as f64 / ONE_MONTH_SECONDS as f64,
+        );
+    }
+
+    // Step 3.3: Once voting power decline finishes, deciding voting power stays at 0.
+    for seconds_after_decline_ends in [
+        0,
+        1,
+        2,
+        3,
+        ONE_MONTH_SECONDS,
+        2 * ONE_MONTH_SECONDS,
+        3 * ONE_MONTH_SECONDS,
+        6 * ONE_MONTH_SECONDS - 1,
+        6 * ONE_MONTH_SECONDS,
+    ] {
+        assert_eq!(
+            get_voting_power_ratio(7 * ONE_MONTH_SECONDS + seconds_after_decline_ends),
+            0.0,
+            "{} seconds after deciding voting power decline ends.",
+            seconds_after_decline_ends,
+        );
+    }
 }
 
 #[test]
