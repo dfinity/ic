@@ -4106,7 +4106,7 @@ pub fn test_icrc106_standard<T, U>(
 {
     fn assert_icrc106_supported(env: &StateMachine, canister_id: CanisterId) {
         let mut found = false;
-        for standard in supported_standards(&env, canister_id) {
+        for standard in supported_standards(env, canister_id) {
             if standard.name == "ICRC-106" {
                 found = true;
                 break;
@@ -4121,9 +4121,7 @@ pub fn test_icrc106_standard<T, U>(
         Err(Icrc106Error::IndexPrincipalNotSet),
         icrc106_get_index_principal(&env, canister_id)
     );
-    assert!(metadata(&env, canister_id)
-        .get("icrc106:index_principal")
-        .is_none());
+    assert!(!metadata(&env, canister_id).contains_key("icrc106:index_principal"));
 
     let index_principal = PrincipalId::new_user_test_id(1).0;
     let args = encode_upgrade_args(Some(index_principal));
