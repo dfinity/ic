@@ -4482,6 +4482,10 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
     } else {
         None
     };
+    let expected_voting_power = neuron_stake_e8s
+        // Age bonus.
+        * 17
+        / 16;
     assert_eq!(
         gov.get_full_neuron(&id, &from).unwrap(),
         Neuron {
@@ -4495,6 +4499,8 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             kyc_verified: true,
             visibility,
             voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
+            deciding_voting_power: Some(expected_voting_power),
+            potential_voting_power: Some(expected_voting_power),
             ..Default::default()
         }
     );
