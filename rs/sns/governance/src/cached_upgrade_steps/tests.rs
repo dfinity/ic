@@ -43,7 +43,7 @@ fn cache_upgrade_steps_proto_conversions() {
     {
         let mut pb = pb.clone();
         let mut versions = pb.upgrade_steps.clone().unwrap().versions;
-        versions.extend(versions.clone().into_iter());
+        versions.extend(versions.clone());
         pb.upgrade_steps = Some(Versions { versions });
         let err = CachedUpgradeSteps::try_from(&pb).unwrap_err();
         assert_eq!(
@@ -186,4 +186,5 @@ fn cached_upgrade_steps_without_pending_upgrades() {
         cached_upgrade_steps.validate_new_target_version(&v),
         Err("new_target_version must differ from the current version.".to_string())
     );
+    assert_eq!(cached_upgrade_steps.into_iter().collect(), vec![v]);
 }

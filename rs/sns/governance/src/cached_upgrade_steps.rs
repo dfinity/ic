@@ -310,6 +310,14 @@ impl CachedUpgradeSteps {
         self.subsequent_versions.first()
     }
 
+    // Clippy wants us to implement `Iterator for CachedUpgradeSteps`, but that would require adding
+    // iterator-specific state to this type, which is an overkill for the purpose of having a simple
+    // self-consuming method with an intuitive name.
+    #[allow(clippy::should_implement_trait)]
+    pub fn into_iter(self) -> impl Iterator<Item = Version> {
+        std::iter::once(self.current_version).chain(self.subsequent_versions)
+    }
+
     pub fn current(&self) -> &Version {
         &self.current_version
     }
@@ -490,18 +498,22 @@ impl Governance {
             }
         };
 
+        // This copy of the data would go to the upgrade journal for auditability.
+        let versions = upgrade_steps.clone().into_iter().collect();
+
+        // This copy would be stored in the cache.
         let new_cache = CachedUpgradeStepsPb::from(upgrade_steps);
 
-        let identical_upgrade_steps = self
+        let received_upgrade_steps_same_as_previous = self
             .proto
             .cached_upgrade_steps
             .as_ref()
             .map(|cache| cache.upgrade_steps == new_cache.upgrade_steps)
             .unwrap_or_default();
 
-        if !identical_upgrade_steps {
+        if !received_upgrade_steps_same_as_previous {
             self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsRefreshed::new(
-                new_cache.clone().upgrade_steps.unwrap_or_default().versions,
+                versions,
             ));
         }
 

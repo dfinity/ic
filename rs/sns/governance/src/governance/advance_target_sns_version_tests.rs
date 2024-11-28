@@ -879,7 +879,7 @@ fn get_or_reset_upgrade_steps_leads_to_should_refresh_cached_upgrade_steps() {
             deployed_version: Some(version_a.clone()),
             cached_upgrade_steps: Some(CachedUpgradeStepsPb {
                 upgrade_steps: Some(Versions {
-                    versions: vec![version_a],
+                    versions: vec![version_a.clone()],
                 }),
                 requested_timestamp_seconds: Some(env.now()),
                 response_timestamp_seconds: Some(env.now()),
@@ -901,7 +901,7 @@ fn get_or_reset_upgrade_steps_leads_to_should_refresh_cached_upgrade_steps() {
     // Run code under test and assert intermediate conditions
     {
         let cached_upgrade_steps = gov.get_or_reset_upgrade_steps(&version_b);
-        let cached_upgrade_steps = CachedUpgradeStepsPb::try_from(cached_upgrade_steps).unwrap();
+        let cached_upgrade_steps = CachedUpgradeStepsPb::from(cached_upgrade_steps);
         assert_eq!(
             gov.proto.cached_upgrade_steps,
             Some(cached_upgrade_steps.clone())
