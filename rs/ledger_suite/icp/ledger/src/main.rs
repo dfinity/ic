@@ -900,8 +900,8 @@ fn migrate_next_part(instruction_limit: u64) {
             }
         }
     }
-    let instructions_mingration = instruction_counter() - instructions_migration_start;
-    let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations}. Migration step instructions: {instructions_mingration}, total instructions used in message: {}." ,
+    let instructions_migration = instruction_counter() - instructions_migration_start;
+    let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
             instruction_counter());
     if !is_ready() {
         print!("Migration partially done. Scheduling the next part. {msg}");
