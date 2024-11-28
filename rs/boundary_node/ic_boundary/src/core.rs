@@ -3,7 +3,7 @@ use std::{
     error::Error as StdError,
     net::{Ipv6Addr, SocketAddr},
     sync::Arc,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 
 use anonymization_client::{
@@ -46,7 +46,7 @@ use ic_registry_replicator::RegistryReplicator;
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId};
 use nix::unistd::{getpgid, setpgid, Pid};
 use prometheus::Registry;
-use rand::{rngs::StdRng, SeedableRng};
+use rand::rngs::OsRng;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tower::{limit::ConcurrencyLimitLayer, util::MapResponseLayer, ServiceBuilder};
@@ -454,8 +454,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             );
 
             // Rng
-            let rng_seed = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-            let rng = Box::new(StdRng::seed_from_u64(rng_seed as u64));
+            let rng = Box::new(OsRng);
 
             // Tracker
             let tracker = AnonymizationTracker::new(rng, c.into())?;
