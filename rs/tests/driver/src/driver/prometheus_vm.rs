@@ -147,6 +147,23 @@ impl PrometheusVm {
     }
 
     fn sync_k8s_repo_dashboards(logger: Logger) -> Result<()> {
+        match std::env::var("SSH_AUTH_SOCK") {
+            Ok(_) => {}
+            Err(e) => warn!(
+                logger,
+                "SSH_AUTH_SOCK not found! It is possible that dashboards sync won't work because of this. Error: {:?}", e
+            ),
+        }
+
+        let output = Command::new("ssh")
+            .arg("-T")
+            .arg("git@github.com")
+            .output()?;
+        info!(
+            logger,
+            "Connection to github ssh socket response: {:?}", output
+        );
+
         let destination = get_dependency_path("rs/tests/dashboards");
         let k8s_repo = get_dependency_path("rs/tests/k8s-dashboards");
         if k8s_repo.exists() {
@@ -161,6 +178,8 @@ impl PrometheusVm {
         );
         Command::new("git")
             .arg("init")
+            .arg("-b")
+            .arg("main")
             .current_dir(&k8s_repo)
             .output()?;
 
@@ -183,14 +202,19 @@ impl PrometheusVm {
         let paths_to_sparse_checkout = &["bases/apps/ic-dashboards"];
         write!(file, "{}", paths_to_sparse_checkout.iter().join("\n"))?;
 
-        Command::new("git")
+        // This command is the only one likely to fail due to misconfigured ssh
+        let output = Command::new("git")
             .arg("pull")
             .arg("origin")
             .arg("main")
             .arg("--depth=1")
             .current_dir(&k8s_repo)
             .output()?;
-        info!(logger, "Pulled dashboards from dfinity-ops/k8s repo");
+
+        info!(
+            logger,
+            "Pulled dashboards from dfinity-ops/k8s repo with output: {:?}", output
+        );
 
         let dashboards_root = k8s_repo.join("bases").join("apps").join("ic-dashboards");
 

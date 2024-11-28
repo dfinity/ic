@@ -183,6 +183,12 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 		}
 		command := []string{"bazel", "test", target, "--config=systest"}
 		command = append(command, "--cache_test_results=no")
+		sshAuthSock := os.Getenv("SSH_AUTH_SOCK")
+		if sshAuthSock != "" {
+			command = append(command, "--test_env=SSH_AUTH_SOCK="+sshAuthSock)
+		} else {
+			cmd.PrintErrln(YELLOW + "Environment variable SSH_AUTH_SOCK is not found. If in devenv it is possible that grafana dashboards won't be able to sync because of this.")
+		}
 		command = append(command, fmt.Sprintf("--test_timeout=%s", strconv.Itoa(TESTNET_DEPLOYMENT_TIMEOUT_SEC)))
 		// We let the test-driver (and Bazel command) finish without deleting Farm group.
 		// Afterwards, we interact with the group's ttl via Farm API.
