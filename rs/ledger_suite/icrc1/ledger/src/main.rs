@@ -237,21 +237,19 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
-    if upgrade_from_version < LEDGER_VERSION {
-        if upgrade_from_version == 0 {
-            log_message("Upgrading from version 0 which does not use stable structures, clearing stable allowance data.");
-            clear_stable_allowance_data();
-        }
+    if upgrade_from_version == 0 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
+        log_message("Upgrading from version 0 which does not use stable structures, clearing stable allowance data.");
+        clear_stable_allowance_data();
         Access::with_ledger_mut(|ledger| {
             ledger.clear_arrivals();
         });
+    }
+    if !is_ready() {
         log_message("Migration started.");
         migrate_next_part(
             MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
         );
-    } else {
-        set_ledger_state(LedgerState::Ready);
     }
 
     let end = ic_cdk::api::instruction_counter();
