@@ -129,16 +129,23 @@ fn validate_required_field<'a, Inner>(
 /// Return an Err whose inner value describes (in detail) what is wrong with a field value (should
 /// be bounded), and where within some (Protocol Buffers message) struct.
 ///
-/// It is the responsibility of the caller to sanitize / bound the value being invalidated,
-/// i.e., `field_value`. However, only up to the first `MAX_SCALAR_FIELD_LEN_BYTES` bytes
-/// will be taken.
+/// Only up to the first `MAX_SCALAR_FIELD_LEN_BYTES` bytes will be taken from `field_value`.
 fn field_err(field_name: &str, field_value: String, defect: &str) -> Result<(), String> {
-    let mut field_value = field_value.chars();
     let mut bounded_field_value = String::new();
-    while bounded_field_value.len() < MAX_SCALAR_FIELD_LEN_BYTES {
-        if let Some(c) = field_value.next() {
-            bounded_field_value.push(c);
-        } else {
+    // Searching for the longest byte prefix that is a valid string is expensive in the worst case.
+    // This is because unicode characters are unbounded. Instead, concatenate characters one-by-one,
+    // until we either run out of characters or exceed the limit (in which case we pop the last
+    // character to still comply with the limits). Note that a `char` is always 4 bytes, but
+    // pushing it to a string does not always increase a string's byte size by 4 bytes.
+    // For example:
+    // ```
+    // println!("bytes = {}", std::mem::size_of_val(&'\u{200D}')); // bytes = 4
+    // println!("bytes = {}", std::mem::size_of_val("\u{200D}"));  // bytes = 3
+    // ```
+    for c in field_value.chars() {
+        bounded_field_value.push(c);
+        if bounded_field_value.len() > MAX_SCALAR_FIELD_LEN_BYTES {
+            bounded_field_value.pop();
             break;
         }
     }
@@ -303,26 +310,33 @@ mod tests {
 
     #[test]
     fn test_giant_field_err() {
-        let expected_upper_bound = 50_000;
+        let expected_upper_bound = 12_500;
 
         let run_test_for_value_of_size = |value_size| {
-            let mut input_value: String = (0..value_size).map(|i| (i % 2) as u8 as char).collect();
+            let input_value: String = (0..value_size).map(|_| '🤝').collect();
+            // Sanity check: We construct a string in which each character is encoded as 4 bytes.
+            assert_eq!(input_value.len(), 4 * input_value.chars().count());
             let observer_err = field_err("foo", input_value.clone(), "bar").unwrap_err();
             (input_value, observer_err)
         };
 
         // Scenario A: maximum size that still fits.
         {
-            let (input_value, observer_err) = run_test_for_value_of_size(expected_upper_bound - 1);
-            assert!(err.contains(&input_value));
+            let (input_value, observer_err) = run_test_for_value_of_size(expected_upper_bound);
+            assert!(observer_err.contains(&input_value));
         }
 
         // Scenario B: minimum size that no longer fits.
         {
-            let (input_value, observer_err) = run_test_for_value_of_size(expected_upper_bound - 1);
-            assert!(!err.contains(&input_value));
+            let (input_value, observer_err) = run_test_for_value_of_size(expected_upper_bound + 1);
+            assert!(
+                !observer_err.contains(&input_value),
+                "Expected ```{}``` not to contain ```{}```.",
+                observer_err,
+                input_value
+            );
             // Only the last character was dropped.
-            assert!(err.contains(input_value[..input_value.len() - 1]));
+            assert!(observer_err.contains(&input_value[..(input_value.chars().count() - 1)]));
         }
     }
 }
