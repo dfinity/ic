@@ -10,7 +10,7 @@ pub(super) fn get_dealers_from_chain(
     pool_reader: &PoolReader<'_>,
     block: &Block,
 ) -> HashSet<(NiDkgId, NodeId)> {
-    get_dkg_dealings2(pool_reader, block, false)
+    get_dkg_dealings(pool_reader, block, false)
         .into_iter()
         .flat_map(|(dkg_id, dealings)| {
             dealings
@@ -20,47 +20,12 @@ pub(super) fn get_dealers_from_chain(
         .collect()
 }
 
-// Starts with the given block and creates a nested mapping from the DKG Id to
-// the node Id to the dealing. This function panics if multiple dealings
-// from one dealer are discovered, hence, we assume a valid block chain.
-#[allow(dead_code)]
-pub(super) fn get_dkg_dealings(
-    pool_reader: &PoolReader<'_>,
-    block: &Block,
-) -> BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>> {
-    pool_reader
-        .chain_iterator(block.clone())
-        .take_while(|block| !block.payload.is_summary())
-        .fold(Default::default(), |mut acc, block| {
-            block
-                .payload
-                .as_ref()
-                .as_data()
-                .dkg
-                .messages
-                .iter()
-                .for_each(|msg| {
-                    let collected_dealings = acc.entry(msg.content.dkg_id.clone()).or_default();
-                    assert!(
-                        collected_dealings
-                            .insert(msg.signature.signer, msg.content.dealing.clone())
-                            .is_none(),
-                        "Dealings from the same dealers discovered."
-                    );
-                });
-            acc
-        })
-}
-
-// TODO: Remove dead_code
-
 /// Starts with the given block and creates a nested mapping from the DKG Id to
 /// the node Id to the dealing. This function panics if multiple dealings
 /// from one dealer are discovered, hence, we assume a valid block chain.
 /// It also excludes dealings for ni_dkg ids, which already have a transcript in the
 /// blockchain.
-#[allow(dead_code)]
-pub(super) fn get_dkg_dealings2(
+pub(super) fn get_dkg_dealings(
     pool_reader: &PoolReader<'_>,
     block: &Block,
     exclude_used: bool,

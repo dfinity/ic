@@ -1490,7 +1490,7 @@ mod tests {
                                 dependencies.state_manager.clone(),
                                 dependencies.registry.get_latest_version(),
                                 vec![],
-                                Some(1),
+                                Some(100),
                                 None,
                             );
 
