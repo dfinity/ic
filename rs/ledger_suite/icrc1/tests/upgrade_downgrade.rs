@@ -67,16 +67,16 @@ fn should_upgrade_and_downgrade_ledger_canister_suite() {
     )
     .unwrap();
 
-    // Downgrade to mainnet is not possible for this version.
-    // env.advance_time(Duration::from_secs(60));
-    // env.tick();
+    Downgrade to mainnet is not possible for this version.
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
 
-    // env.upgrade_canister(
-    //     index_id,
-    //     index_ng_mainnet_wasm(),
-    //     Encode!(&index_upgrade_arg).unwrap(),
-    // )
-    // .unwrap();
+    env.upgrade_canister(
+        index_id,
+        index_ng_mainnet_wasm(),
+        Encode!(&index_upgrade_arg).unwrap(),
+    )
+    .unwrap();
 
     match env.upgrade_canister(
         ledger_id,
