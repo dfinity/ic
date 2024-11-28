@@ -87,6 +87,20 @@ impl Block {
         if code.contains("$empty_return_call") {
             self.import("(func $empty_return_call (result i32) return_call $empty)");
         }
+        if code.contains("$recurse_call") {
+            self.import(
+                &RECURSIVE
+                    .replace("<NAME>", "$recurse_call")
+                    .replace("<RETURN>", ""),
+            );
+        }
+        if code.contains("$recurse_return_call") {
+            self.import(
+                &RECURSIVE
+                    .replace("<NAME>", "$recurse_return_call")
+                    .replace("<RETURN>", "return_"),
+            );
+        }
         if code.contains("$result_i32") || code.contains("table.get") || code.contains("table.size")
         {
             self.import("(type $result_i32 (func (result i32)))")
@@ -213,3 +227,18 @@ pub fn src_type(op: &str) -> &'static str {
     // Fallback to the destination type, i.e. for `i64.eqz` returns `i64`.
     dst_type(op)
 }
+
+const RECURSIVE: &str = r#"
+(func <NAME> (param $n i32) (result i32)
+    (i32.eqz (local.get $n))
+    (if (result i32)
+      (then
+      	(local.get $n)
+      )
+      (else
+      	(i32.sub (local.get $n) (i32.const 1))
+        (<RETURN>call <NAME>)
+      )
+    )
+)
+"#;
