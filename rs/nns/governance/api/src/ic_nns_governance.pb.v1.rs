@@ -308,12 +308,6 @@ pub struct Neuron {
     /// Cf. \[Neuron::stop_dissolving\] and \[Neuron::start_dissolving\].
     #[prost(oneof = "neuron::DissolveState", tags = "9, 10")]
     pub dissolve_state: Option<neuron::DissolveState>,
-
-    /// =============================================================
-    /// FIELDS THAT DO NOT CORRESPOND TO ANYTHING IN governance.proto
-    /// =============================================================
-    /// The numbering of tags here begins at 9000.
-
     /// The amount of "sway" this neuron has when voting on proposals.
     ///
     /// When a proposal is created, each eligible neuron gets a "blank" ballot. The
@@ -349,9 +343,8 @@ pub struct Neuron {
     /// For details, see https://dashboard.internetcomputer.org/proposal/132411.
     ///
     /// Per NNS policy, this is opt. Nevertheless, it will never be null.
-    #[prost(uint64, optional, tag = "9001")]
+    #[prost(uint64, optional, tag = "26")]
     pub deciding_voting_power: Option<u64>,
-
     /// The amount of "sway" this neuron can have if it refreshes its voting power
     /// frequently enough.
     ///
@@ -370,7 +363,7 @@ pub struct Neuron {
     ///        are considered to have 0 voting power.
     ///
     /// Per NNS policy, this is opt. Nevertheless, it will never be null.
-    #[prost(uint64, optional, tag = "9002")]
+    #[prost(uint64, optional, tag = "27")]
     pub potential_voting_power: Option<u64>,
 }
 /// Nested message and enum types in `Neuron`.
