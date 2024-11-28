@@ -165,8 +165,15 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
 
             StepType::WaitForCUP => {
-                if self.params.upload_node.is_none() {
-                    self.params.upload_node = read_optional(&self.logger, "Enter upload IP:");
+                if self.params.local_upload.is_none() {
+                    self.params.local_upload = consent_given_optional(
+                        &self.logger,
+                        "Are you currently performing a local recovery directly on the node?",
+                    );
+                }
+                if self.params.upload_node.is_none() && self.params.local_upload == Some(false) {
+                    self.params.upload_node =
+                        read_optional(&self.logger, "Enter IP of node with admin access: ");
                 }
             }
 
@@ -264,7 +271,12 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             )),
 
             StepType::WaitForCUP => {
-                if let Some(node_ip) = self.params.upload_node {
+                if self.params.local_upload.is_some() {
+                    let node_ip = if let Some(ip) = self.params.upload_node {
+                        ip
+                    } else {
+                        IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1))
+                    };
                     Ok(Box::new(self.recovery.get_wait_for_cup_step(node_ip)))
                 } else {
                     Err(RecoveryError::StepSkipped)

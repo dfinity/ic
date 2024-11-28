@@ -14,7 +14,7 @@ use ic_base_types::{NodeId, SubnetId};
 use ic_types::ReplicaVersion;
 use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
-use std::{iter::Peekable, net::IpAddr};
+use std::{iter::Peekable, net::IpAddr, net::Ipv6Addr};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 use url::Url;
@@ -413,7 +413,12 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             StepType::WaitForCUP => {
-                if let Some(node_ip) = self.params.upload_node {
+                if self.params.local_upload.is_some() {
+                    let node_ip = if let Some(ip) = self.params.upload_node {
+                        ip
+                    } else {
+                        IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1))
+                    };
                     Ok(Box::new(self.recovery.get_wait_for_cup_step(node_ip)))
                 } else {
                     Err(RecoveryError::StepSkipped)
