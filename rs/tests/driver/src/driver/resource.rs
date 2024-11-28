@@ -238,9 +238,9 @@ pub fn get_resource_request_for_nested_nodes(
 
 /// The SHA-256 hash of the Universal VM disk image.
 /// The latest hash can be retrieved by downloading the SHA256SUMS file from:
-/// https://hydra.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img.x86_64-linux/latest
+/// https://hydra-int.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img.x86_64-linux/latest
 const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
-    "5995c7653ffd1d325f1e2bf931893860b890a799da324cb5acb55e0c285dcd9e";
+    "807fd5d3d1c5fb71000bec1a1d5b10e7bcd063abb4186dc9954d8b6b614ef15d";
 
 pub fn get_resource_request_for_universal_vm(
     universal_vm: &UniversalVm,
