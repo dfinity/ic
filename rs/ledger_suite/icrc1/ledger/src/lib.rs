@@ -1228,6 +1228,14 @@ impl AllowancesData for StableAllowancesData {
     ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)> {
         panic!("The method `pop_first_allowance` should not be called for StableAllowancesData")
     }
+
+    fn len_allowances(&self) -> usize {
+        ALLOWANCES_MEMORY
+            .with_borrow(|allowances| allowances.len())
+            .try_into()
+            .unwrap()
+    }
+        
     fn len_expirations(&self) -> usize {
         ALLOWANCES_EXPIRATIONS_MEMORY
             .with_borrow(|expirations| expirations.len())
