@@ -132,17 +132,17 @@ enum ConnectionEstablishError {
         peer_id: NodeId,
         cause: TlsConfigError,
     },
-    #[error("Failed to connect to peer {peer_id:?}. {cause:?}")]
-    ConnectError {
-        peer_id: NodeId,
-        cause: ConnectError,
-    },
     #[error("Incoming connection failed. {cause:?}")]
     ConnectionError {
         peer_id: Option<NodeId>,
         cause: ConnectionError,
     },
     // The following errors should be infallible.
+    #[error("Failed to establish outbound connection to peer {peer_id:?} due to errors in the parameters being used. {cause:?}")]
+    BadConnectParameters {
+        peer_id: NodeId,
+        cause: ConnectError,
+    },
     #[error("No peer identity available.")]
     MissingPeerIdentity,
     #[error("Malformed peer identity. {0}")]
@@ -453,18 +453,20 @@ impl ConnectionManager {
             .map_err(|cause| ConnectionEstablishError::TlsClientConfigError { peer_id, cause })
             .unwrap();
         let transport_config = self.transport_config.clone();
+        let quinn_client_config = QuicClientConfig::try_from(rustls_client_config).unwrap();
+        let mut client_config = quinn::ClientConfig::new(Arc::new(quinn_client_config));
+        client_config.transport_config(transport_config);
         let conn_fut = async move {
-            let quinn_client_config = QuicClientConfig::try_from(rustls_client_config).unwrap();
-            let mut client_config = quinn::ClientConfig::new(Arc::new(quinn_client_config));
-            client_config.transport_config(transport_config);
-            let connecting = endpoint.connect_with(client_config, addr, "irrelevant");
-            let established = connecting
-                .map_err(|cause| ConnectionEstablishError::ConnectError { peer_id, cause })?
-                .await
-                .map_err(|cause| ConnectionEstablishError::ConnectionError {
-                    peer_id: Some(peer_id),
-                    cause,
-                })?;
+            let connecting = endpoint
+                .connect_with(client_config, addr, "irrelevant")
+                .map_err(|cause| ConnectionEstablishError::BadConnectParameters { peer_id, cause })?;
+            let established =
+                connecting
+                    .await
+                    .map_err(|cause| ConnectionEstablishError::ConnectionError {
+                        peer_id: Some(peer_id),
+                        cause,
+                    })?;
 
             Ok::<_, ConnectionEstablishError>(ConnectionWithPeerId {
                 peer_id,
