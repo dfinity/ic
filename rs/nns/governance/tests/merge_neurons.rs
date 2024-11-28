@@ -14,7 +14,7 @@ use ic_nns_governance::{
     pb::v1::{
         manage_neuron::{Command, Merge},
         manage_neuron_response::{Command as CommandResponse, MergeResponse},
-        ManageNeuron, NetworkEconomics, Neuron,
+        ManageNeuron, NetworkEconomics,
     },
 };
 use proptest::prelude::{proptest, TestCaseError};
@@ -132,14 +132,14 @@ fn do_test_merge_neurons(
                 source_neuron,
                 nns.governance
                     .neuron_store
-                    .with_neuron(&source_neuron_id, |n| Neuron::from(n.clone()))
+                    .with_neuron(&source_neuron_id, |n| n.clone().into_proto(epoch))
                     .unwrap()
             );
             pretty_assertions::assert_eq!(
                 target_neuron,
                 nns.governance
                     .neuron_store
-                    .with_neuron(&target_neuron_id, |n| Neuron::from(n.clone()))
+                    .with_neuron(&target_neuron_id, |n| n.clone().into_proto(epoch))
                     .unwrap()
             );
             pretty_assertions::assert_eq!(
