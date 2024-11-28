@@ -67,7 +67,6 @@ fn should_upgrade_and_downgrade_ledger_canister_suite() {
     )
     .unwrap();
 
-    // Downgrade to mainnet is not possible for this version.
     env.advance_time(Duration::from_secs(60));
     env.tick();
 
