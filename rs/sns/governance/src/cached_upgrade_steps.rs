@@ -328,7 +328,7 @@ impl CachedUpgradeSteps {
 
     /// Returns whether there are no pending upgrades.
     pub fn has_pending_upgrades(&self) -> bool {
-        self.next().is_none()
+        self.next().is_some()
     }
 
     /// Returns a new instance of `Self` starting with `version` in the `Ok` result

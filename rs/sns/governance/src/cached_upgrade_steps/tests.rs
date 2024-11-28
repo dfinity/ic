@@ -186,5 +186,8 @@ fn cached_upgrade_steps_without_pending_upgrades() {
         cached_upgrade_steps.validate_new_target_version(&v),
         Err("new_target_version must differ from the current version.".to_string())
     );
-    assert_eq!(cached_upgrade_steps.into_iter().collect(), vec![v]);
+    assert_eq!(
+        cached_upgrade_steps.into_iter().collect::<Vec<_>>(),
+        vec![v]
+    );
 }
