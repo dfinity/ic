@@ -113,6 +113,16 @@ pub struct NeuronInfo {
     /// after the UNIX epoch).
     #[prost(uint64, optional, tag = "13")]
     pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
+
+    /// =============================================================
+    /// FIELDS THAT DO NOT CORRESPOND TO ANYTHING IN governance.proto
+    /// =============================================================
+    /// The numbering of tags here begins at 9000.
+
+    #[prost(uint64, optional, tag = "9001")]
+    pub deciding_voting_power: Option<u64>,
+    #[prost(uint64, optional, tag = "9002")]
+    pub potential_voting_power: Option<u64>,
 }
 /// A transfer performed from some account to stake a new neuron.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -302,6 +312,70 @@ pub struct Neuron {
     /// Cf. \[Neuron::stop_dissolving\] and \[Neuron::start_dissolving\].
     #[prost(oneof = "neuron::DissolveState", tags = "9, 10")]
     pub dissolve_state: Option<neuron::DissolveState>,
+
+    /// =============================================================
+    /// FIELDS THAT DO NOT CORRESPOND TO ANYTHING IN governance.proto
+    /// =============================================================
+    /// The numbering of tags here begins at 9000.
+
+    /// The amount of "sway" this neuron has when voting on proposals.
+    ///
+    /// When a proposal is created, each eligible neuron gets a "blank" ballot. The
+    /// amount of voting power in that ballot is set to the neuron's deciding
+    /// voting power at the time of proposal creation. There are two ways that a
+    /// proposal can become decided:
+    ///
+    ///   1. Early: Either more than half of the total voting power in the ballots
+    ///   votes in favor (then the proposal is approved), or at least half of the
+    ///   votal voting power in the ballots votes against (then, the proposal is
+    ///   rejected).
+    ///
+    ///   2. The proposal's voting deadline is reached. At that point, if there is
+    ///   more voting power in favor than against, and at least 3% of the total
+    ///   voting power voted in favor, then the proposal is approved. Otherwise, it
+    ///   is rejected.
+    ///
+    /// If a neuron regularly refreshes its voting power, this has the same value
+    /// as potential_voting_power. Actions that cause a refresh are as follows:
+    ///
+    ///     1. voting directly (not via following)
+    ///     2. set following
+    ///     3. refresh voting power
+    ///
+    /// (All of these actions are performed via the manage_neuron method.)
+    ///
+    /// However, if a neuron has not refreshed in a "long" time, this will be less
+    /// than potential voting power. See VotingPowerEconomics. As a further result
+    /// of less deciding voting power, not only does it have less influence on the
+    /// outcome of proposals, the neuron receives less voting rewards (when it
+    /// votes indirectly via following).
+    ///
+    /// For details, see https://dashboard.internetcomputer.org/proposal/132411.
+    ///
+    /// Per NNS policy, this is opt. Nevertheless, it will never be null.
+    #[prost(uint64, optional, tag = "9001")]
+    pub deciding_voting_power: Option<u64>,
+
+    /// The amount of "sway" this neuron can have if it refreshes its voting power
+    /// frequently enough.
+    ///
+    /// Unlike deciding_voting_power, this does NOT take refreshing into account.
+    /// Rather, this only takes three factors into account:
+    ///
+    ///     1. (Net) staked amount - This is the "base" of a neuron's voting power.
+    ///        This primarily consists of the neuron's ICP balance.
+    ///
+    ///     2. Age - Neurons with more age have more voting power (all else being
+    ///        equal).
+    ///
+    ///     3. Dissolve delay - Neurons with longer dissolve delay have more voting
+    ///        power (all else being equal). Neurons with a dissolve delay of less
+    ///        than six months are not eligible to vote. Therefore, such neurons
+    ///        are considered to have 0 voting power.
+    ///
+    /// Per NNS policy, this is opt. Nevertheless, it will never be null.
+    #[prost(uint64, optional, tag = "9002")]
+    pub potential_voting_power: Option<u64>,
 }
 /// Nested message and enum types in `Neuron`.
 pub mod neuron {

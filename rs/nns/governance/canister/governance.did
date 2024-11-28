@@ -578,6 +578,63 @@ type Neuron = record {
   known_neuron_data : opt KnownNeuronData;
   spawn_at_timestamp_seconds : opt nat64;
   voting_power_refreshed_timestamp_seconds : opt nat64;
+
+  // The amount of "sway" this neuron has when voting on proposals.
+  //
+  // When a proposal is created, each eligible neuron gets a "blank" ballot. The
+  // amount of voting power in that ballot is set to the neuron's deciding
+  // voting power at the time of proposal creation. There are two ways that a
+  // proposal can become decided:
+  //
+  //   1. Early: Either more than half of the total voting power in the ballots
+  //   votes in favor (then the proposal is approved), or at least half of the
+  //   votal voting power in the ballots votes against (then, the proposal is
+  //   rejected).
+  //
+  //   2. The proposal's voting deadline is reached. At that point, if there is
+  //   more voting power in favor than against, and at least 3% of the total
+  //   voting power voted in favor, then the proposal is approved. Otherwise, it
+  //   is rejected.
+  //
+  // If a neuron regularly refreshes its voting power, this has the same value
+  // as potential_voting_power. Actions that cause a refresh are as follows:
+  //
+  //     1. voting directly (not via following)
+  //     2. set following
+  //     3. refresh voting power
+  //
+  // (All of these actions are performed via the manage_neuron method.)
+  //
+  // However, if a neuron has not refreshed in a "long" time, this will be less
+  // than potential voting power. See VotingPowerEconomics. As a further result
+  // of less deciding voting power, not only does it have less influence on the
+  // outcome of proposals, the neuron receives less voting rewards (when it
+  // votes indirectly via following).
+  //
+  // For details, see https://dashboard.internetcomputer.org/proposal/132411.
+  //
+  // Per NNS policy, this is opt. Nevertheless, it will never be null.
+  deciding_voting_power : opt nat64;
+
+  // The amount of "sway" this neuron can have if it refreshes its voting power
+  // frequently enough.
+  //
+  // Unlike deciding_voting_power, this does NOT take refreshing into account.
+  // Rather, this only takes three factors into account:
+  //
+  //     1. (Net) staked amount - This is the "base" of a neuron's voting power.
+  //        This primarily consists of the neuron's ICP balance.
+  //
+  //     2. Age - Neurons with more age have more voting power (all else being
+  //        equal).
+  //
+  //     3. Dissolve delay - Neurons with longer dissolve delay have more voting
+  //        power (all else being equal). Neurons with a dissolve delay of less
+  //        than six months are not eligible to vote. Therefore, such neurons
+  //        are considered to have 0 voting power.
+  //
+  // Per NNS policy, this is opt. Nevertheless, it will never be null.
+  potential_voting_power : opt nat64;
 };
 
 type NeuronBasketConstructionParameters = record {
@@ -616,6 +673,7 @@ type NeuronInFlightCommand = record {
   timestamp : nat64;
 };
 
+// In general, this is a subset of Neuron.
 type NeuronInfo = record {
   dissolve_delay_seconds : nat64;
   recent_ballots : vec BallotInfo;
@@ -627,9 +685,19 @@ type NeuronInfo = record {
   retrieved_at_timestamp_seconds : nat64;
   visibility : opt int32;
   known_neuron_data : opt KnownNeuronData;
-  voting_power : nat64;
   age_seconds : nat64;
+
+  // Deprecated. Use either deciding_voting_power or potential_voting_power
+  // instead. Has the same value as deciding_voting_power.
+  //
+  // Previously, if a neuron had < 6 months dissolve delay (making it ineligible
+  // to vote), this would not get set to 0 (zero). That was pretty confusing.
+  // Now that this is set to deciding_voting_power, this actually does get
+  // zeroed out.
+  voting_power : nat64;
   voting_power_refreshed_timestamp_seconds : opt nat64;
+  deciding_voting_power : opt nat64;
+  potential_voting_power : opt nat64;
 };
 
 type NeuronStakeTransfer = record {
