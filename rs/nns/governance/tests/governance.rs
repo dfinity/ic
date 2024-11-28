@@ -11,7 +11,9 @@ use assert_matches::assert_matches;
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use common::increase_dissolve_delay_raw;
-use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
+use comparable::{
+    Changed, I32Change, MapChange, OptionChange, StringChange, U32Change, U64Change, VecChange,
+};
 use fixtures::{
     account, environment_fixture::CanisterCallReply, new_motion_proposal, principal, NNSBuilder,
     NNSStateChange, NeuronBuilder, ProposalNeuronBehavior, NNS,
@@ -70,7 +72,8 @@ use ic_nns_governance::{
             disburse::Amount,
             ChangeAutoStakeMaturity, ClaimOrRefresh, Command, Configure, Disburse,
             DisburseToNeuron, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund,
-            MergeMaturity, NeuronIdOrSubaccount, SetVisibility, Spawn, Split, StartDissolving,
+            MergeMaturity, NeuronIdOrSubaccount, RefreshVotingPower, SetVisibility, Spawn, Split,
+            StartDissolving,
         },
         manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
         neuron::{self, DissolveState, Followees},
@@ -126,7 +129,7 @@ use std::{
     collections::{BTreeMap, HashSet, VecDeque},
     convert::{TryFrom, TryInto},
     iter::{self, once},
-    ops::Div,
+    ops::{Deref, Div},
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -290,6 +293,7 @@ fn test_single_neuron_proposal_new() {
                                 ),
                             ),
                         ),
+                        NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(U32Change(0, 1,),),),
                     ],
                 )]),
                 GovernanceChange::Proposals(vec![MapChange::Added(
@@ -910,6 +914,7 @@ async fn test_cascade_following_new() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     // The fee should now be 1 ICP since the fees are charged upfront.
@@ -960,6 +965,9 @@ async fn test_cascade_following_new() {
                             DEFAULT_TEST_START_TIMESTAMP_SECONDS,
                         ),
                     ),),
+                    NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(U32Change(
+                        0, 1,
+                    ),),),
                 ],
             )]),
             GovernanceChange::Proposals(vec![MapChange::Added(
@@ -1114,6 +1122,9 @@ async fn test_cascade_following_new() {
                             DEFAULT_TEST_START_TIMESTAMP_SECONDS,
                         ),
                     ),),
+                    NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(U32Change(
+                        0, 1,
+                    ),),),
                 ],
             )]),
             GovernanceChange::Proposals(vec![MapChange::Changed(
@@ -1182,29 +1193,39 @@ async fn test_cascade_following_new() {
                 ),
                 MapChange::Changed(
                     2,
-                    vec![NeuronChange::RecentBallots(vec![VecChange::Added(
-                        0,
-                        vec![
-                            BallotInfoChange::ProposalId(OptionChange::Different(
-                                None,
-                                Some(ProposalId { id: 1 }),
-                            )),
-                            BallotInfoChange::Vote(I32Change(0, 1)),
-                        ],
-                    )])],
+                    vec![
+                        NeuronChange::RecentBallots(vec![VecChange::Added(
+                            0,
+                            vec![
+                                BallotInfoChange::ProposalId(OptionChange::Different(
+                                    None,
+                                    Some(ProposalId { id: 1 }),
+                                )),
+                                BallotInfoChange::Vote(I32Change(0, 1)),
+                            ],
+                        )]),
+                        NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(
+                            U32Change(0, 1,),
+                        ),),
+                    ],
                 ),
                 MapChange::Changed(
                     3,
-                    vec![NeuronChange::RecentBallots(vec![VecChange::Added(
-                        0,
-                        vec![
-                            BallotInfoChange::ProposalId(OptionChange::Different(
-                                None,
-                                Some(ProposalId { id: 1 }),
-                            )),
-                            BallotInfoChange::Vote(I32Change(0, 1)),
-                        ],
-                    )])],
+                    vec![
+                        NeuronChange::RecentBallots(vec![VecChange::Added(
+                            0,
+                            vec![
+                                BallotInfoChange::ProposalId(OptionChange::Different(
+                                    None,
+                                    Some(ProposalId { id: 1 }),
+                                )),
+                                BallotInfoChange::Vote(I32Change(0, 1)),
+                            ],
+                        )]),
+                        NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(
+                            U32Change(0, 1,),
+                        ),),
+                    ],
                 ),
                 MapChange::Changed(
                     6,
@@ -1226,6 +1247,9 @@ async fn test_cascade_following_new() {
                                 DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
                                 DEFAULT_TEST_START_TIMESTAMP_SECONDS,
                             ),
+                        ),),
+                        NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(
+                            U32Change(0, 1,),
                         ),),
                     ],
                 ),
@@ -1356,6 +1380,7 @@ async fn test_cascade_following() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 
     // The fee should now be 1 ICP since the fees are charged upfront.
@@ -1481,6 +1506,7 @@ async fn test_minimum_icp_xdr_conversion_rate() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap_err()
         .error_type
     );
@@ -1505,6 +1531,7 @@ async fn test_minimum_icp_xdr_conversion_rate() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
@@ -1654,6 +1681,7 @@ async fn test_node_provider_must_be_registered() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap_err()
         .error_type
     );
@@ -1676,6 +1704,7 @@ async fn test_node_provider_must_be_registered() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
@@ -1712,6 +1741,7 @@ async fn test_sufficient_stake() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap_err()
         .error_type
     );
@@ -1735,6 +1765,7 @@ async fn test_sufficient_stake() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
@@ -1775,8 +1806,7 @@ async fn test_all_follow_proposer() {
             })),
         },
     )
-    .now_or_never()
-    .unwrap()
+    .await
     .panic_if_error("Manage neuron failed");
 
     // Assert that neuron 5's voting power was refreshed. More concretely,
@@ -1807,8 +1837,7 @@ async fn test_all_follow_proposer() {
             })),
         },
     )
-    .now_or_never()
-    .unwrap()
+    .await
     .panic_if_error("Manage neuron failed");
 
     gov.make_proposal(
@@ -1824,6 +1853,7 @@ async fn test_all_follow_proposer() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     // The proposal should now be accepted and executed.
     assert_eq!(
@@ -1866,6 +1896,7 @@ async fn test_follow_negative() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     // Vote for 4 with a wrong controller.
     let result = fake::register_vote(
@@ -1953,6 +1984,7 @@ async fn test_no_default_follow_for_governance() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     // Now vote yes for neurons 5-7.
     for i in 5..=7 {
@@ -2022,6 +2054,7 @@ async fn test_no_voting_after_deadline() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
     let proposal_data = gov.get_proposal_data(proposal_id).unwrap();
     let deadline_seconds = proposal_data
@@ -2394,6 +2427,7 @@ async fn test_manage_neuron() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     assert_eq!(
         ProposalStatus::Open,
@@ -2507,6 +2541,7 @@ async fn test_manage_neuron() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     // Now process the proposals: proposal should be executed as
     // neuron 2 is the sole followee of neuron 1 on the manage neuron
@@ -2586,6 +2621,7 @@ async fn test_sufficient_stake_for_manage_neuron() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap_err();
     assert_eq!(
         ErrorType::InsufficientFunds,
@@ -2617,6 +2653,7 @@ async fn test_sufficient_stake_for_manage_neuron() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
@@ -2684,6 +2721,7 @@ async fn test_invalid_proposals_fail() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
@@ -2722,6 +2760,7 @@ async fn test_compute_tally_while_open() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     // Tally should have the smaller neuron voting yes.
@@ -2765,6 +2804,7 @@ async fn test_compute_tally_after_decided() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     // Tally should have the larger neuron voting yes, and the proposal is decided.
@@ -2829,6 +2869,7 @@ async fn test_no_compute_tally_after_deadline() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     // Advance time past the deadline.
@@ -2938,6 +2979,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     // Let's advance time by two reward periods, but less than the
@@ -3123,6 +3165,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 
     {
@@ -3328,6 +3371,7 @@ async fn test_genesis_in_the_future_in_supported() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
     let short_proposal_pid = gov
         .make_proposal(
@@ -3350,6 +3394,7 @@ async fn test_genesis_in_the_future_in_supported() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
@@ -3415,6 +3460,7 @@ async fn test_genesis_in_the_future_in_supported() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
@@ -5475,13 +5521,15 @@ fn test_neuron_split() {
     let maturity_e8s = 500_000_000;
     let staked_maturity_e8s = 400_000_000;
 
-    let (driver, mut governance, id, _) = governance_with_staked_neuron(
+    let (mut driver, mut governance, id, _) = governance_with_staked_neuron(
         dissolve_delay_seconds,
         neuron_stake_e8s,
         block_height,
         from,
         nonce,
     );
+
+    driver.advance_time_by(1234);
 
     let neuron_state = governance
         .neuron_store
@@ -5548,9 +5596,10 @@ fn test_neuron_split() {
         child_neuron.staked_maturity_e8s_equivalent,
         Some(80_000_000)
     );
-    assert_eq!(
+    assert_eq!(child_neuron.created_timestamp_seconds, driver.now(),);
+    assert_ne!(
         child_neuron.created_timestamp_seconds,
-        parent_neuron.created_timestamp_seconds
+        parent_neuron.created_timestamp_seconds,
     );
     assert_eq!(
         child_neuron.aging_since_timestamp_seconds,
@@ -5558,6 +5607,21 @@ fn test_neuron_split() {
     );
     assert_eq!(child_neuron.dissolve_state, parent_neuron.dissolve_state);
     assert_eq!(child_neuron.kyc_verified, true);
+    assert_eq!(
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        Some(driver.now()),
+    );
+    assert!(
+        child_neuron
+            .voting_power_refreshed_timestamp_seconds
+            .unwrap()
+            > parent_neuron
+                .voting_power_refreshed_timestamp_seconds
+                .unwrap(),
+        "{:?} vs. {:?}",
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        parent_neuron.voting_power_refreshed_timestamp_seconds,
+    );
 
     let mut neuron_ids = governance.get_neuron_ids_by_principal(&from);
     neuron_ids.sort_unstable();
@@ -5732,7 +5796,7 @@ fn test_neuron_spawn() {
 
     // Advance the time so that we can check that the spawned neuron has the age
     // and the right creation timestamp
-    driver.advance_time_by(1);
+    driver.advance_time_by(1234);
 
     let child_nid = gov
         .spawn_neuron(
@@ -5751,11 +5815,10 @@ fn test_neuron_spawn() {
     // .. but only one ledger account since the neuron's maturity hasn't been minted yet.
     driver.assert_num_neuron_accounts_exist(1);
 
-    gov.with_neuron(&id, |parent_neuron| {
-        // Maturity on the parent neuron should be reset.
-        assert_eq!(parent_neuron.maturity_e8s_equivalent, 0);
-    })
-    .expect("The parent neuron is missing");
+    let parent_neuron = gov
+        .with_neuron(&id, |neuron| neuron.clone())
+        .expect("The parent neuron is missing");
+    assert_eq!(parent_neuron.maturity_e8s_equivalent, 0);
 
     let child_neuron = gov
         .get_full_neuron(&child_nid, &child_controller)
@@ -5787,6 +5850,19 @@ fn test_neuron_spawn() {
         parent_maturity_e8s_equivalent
     );
     assert_eq!(child_neuron.neuron_type, None);
+    assert_eq!(
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        Some(driver.now()),
+    );
+    assert!(
+        child_neuron
+            .voting_power_refreshed_timestamp_seconds
+            .unwrap()
+            > parent_neuron.voting_power_refreshed_timestamp_seconds(),
+        "{:?} vs. {:?}",
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        parent_neuron.voting_power_refreshed_timestamp_seconds(),
+    );
 
     let creation_timestamp = driver.now();
 
@@ -6456,6 +6532,21 @@ fn test_disburse_to_neuron() {
     // Instead, child is supposed to have the default followees.
     assert_ne!(child_neuron.followees, parent_neuron.followees);
     assert_eq!(child_neuron.followees, gov.heap_data.default_followees);
+    assert_eq!(
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        Some(driver.now()),
+    );
+    assert!(
+        child_neuron
+            .voting_power_refreshed_timestamp_seconds
+            .unwrap()
+            > parent_neuron
+                .voting_power_refreshed_timestamp_seconds
+                .unwrap(),
+        "{:?} vs. {:?}",
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        parent_neuron.voting_power_refreshed_timestamp_seconds,
+    );
 
     let to_subaccount = {
         let mut state = Sha256::new();
@@ -6535,49 +6626,53 @@ async fn test_not_for_profit_neurons() {
 
     // A normal neuron can't issue a manage neuron proposal to disburse,
     // split or disburse-to-neuron.
-    let result = gov.make_proposal(
-        normal_neuron.id.as_ref().unwrap(),
-        normal_neuron.controller.as_ref().unwrap(),
-        &Proposal {
-            title: Some("A Reasonable Title".to_string()),
-            action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                    normal_neuron.id.unwrap(),
-                )),
-                id: None,
-                command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
-                    amount: None,
-                    to_account: None,
-                })),
-            }))),
-            summary: "".to_string(),
-            url: "".to_string(),
-        },
-    );
+    let result = gov
+        .make_proposal(
+            normal_neuron.id.as_ref().unwrap(),
+            normal_neuron.controller.as_ref().unwrap(),
+            &Proposal {
+                title: Some("A Reasonable Title".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                        normal_neuron.id.unwrap(),
+                    )),
+                    id: None,
+                    command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
+                        amount: None,
+                        to_account: None,
+                    })),
+                }))),
+                summary: "".to_string(),
+                url: "".to_string(),
+            },
+        )
+        .await;
     assert!(result.is_err());
     assert_eq!(result.err().unwrap().error_type(), ErrorType::NotAuthorized);
 
     // A not for profit neuron, on the other hand, can.
     // The followee of the managed neuron must make the proposal, in this case.
-    let result = gov.make_proposal(
-        normal_neuron.id.as_ref().unwrap(),
-        normal_neuron.controller.as_ref().unwrap(),
-        &Proposal {
-            title: Some("A Reasonable Title".to_string()),
-            action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                    not_for_profit_neuron.id.unwrap(),
-                )),
-                id: None,
-                command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
-                    amount: None,
-                    to_account: None,
-                })),
-            }))),
-            summary: "".to_string(),
-            url: "".to_string(),
-        },
-    );
+    let result = gov
+        .make_proposal(
+            normal_neuron.id.as_ref().unwrap(),
+            normal_neuron.controller.as_ref().unwrap(),
+            &Proposal {
+                title: Some("A Reasonable Title".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                        not_for_profit_neuron.id.unwrap(),
+                    )),
+                    id: None,
+                    command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
+                        amount: None,
+                        to_account: None,
+                    })),
+                }))),
+                summary: "".to_string(),
+                url: "".to_string(),
+            },
+        )
+        .await;
 
     result.expect("Failed.");
 }
@@ -6793,30 +6888,35 @@ fn test_are_set_visibility_proposals_enabled_flag() {
     );
 
     let mut make_set_visibility_proposal = || -> Result<ProposalId, GovernanceError> {
-        governance.make_proposal(
-            leader.id.as_ref().unwrap(),
-            leader.controller.as_ref().unwrap(),
-            &Proposal {
-                title: Some("SetVisibility of puppet to Public".to_string()),
-                summary: "SetVisibility of puppet to Public".to_string(),
-                url: "https://forum.dfinity.org/set_visibility".to_string(),
-                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
-                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                        puppet.id.unwrap(),
-                    )),
-                    command: Some(manage_neuron::Command::Configure(
-                        manage_neuron::Configure {
-                            operation: Some(manage_neuron::configure::Operation::SetVisibility(
-                                SetVisibility {
-                                    visibility: Some(Visibility::Public as i32),
-                                },
-                            )),
-                        },
-                    )),
-                    id: None,
-                }))),
-            },
-        )
+        governance
+            .make_proposal(
+                leader.id.as_ref().unwrap(),
+                leader.controller.as_ref().unwrap(),
+                &Proposal {
+                    title: Some("SetVisibility of puppet to Public".to_string()),
+                    summary: "SetVisibility of puppet to Public".to_string(),
+                    url: "https://forum.dfinity.org/set_visibility".to_string(),
+                    action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                            puppet.id.unwrap(),
+                        )),
+                        command: Some(manage_neuron::Command::Configure(
+                            manage_neuron::Configure {
+                                operation: Some(
+                                    manage_neuron::configure::Operation::SetVisibility(
+                                        SetVisibility {
+                                            visibility: Some(Visibility::Public as i32),
+                                        },
+                                    ),
+                                ),
+                            },
+                        )),
+                        id: None,
+                    }))),
+                },
+            )
+            .now_or_never()
+            .unwrap()
     };
 
     // Case A: SetVisibility (ManageNeuron) proposals are disabled. When we
@@ -7166,9 +7266,11 @@ fn test_manage_and_reward_node_providers() {
         ProposalStatus::Executed
     );
     // Find the neuron...
-    let neuron = gov
-        .neuron_store
-        .with_active_neurons_iter(|mut iter| iter.find(|x| x.controller() == np_pid).unwrap());
+    let neuron = gov.neuron_store.with_active_neurons_iter(|mut iter| {
+        iter.find(|x| x.controller() == np_pid)
+            .map(|n| n.deref().clone())
+            .unwrap()
+    });
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
     driver.assert_account_contains(
@@ -7474,9 +7576,11 @@ fn test_manage_and_reward_multiple_node_providers() {
 
     // Check third reward
     // Find the neuron...
-    let neuron = gov
-        .neuron_store
-        .with_active_neurons_iter(|mut iter| iter.find(|x| x.controller() == np_pid_2).unwrap());
+    let neuron = gov.neuron_store.with_active_neurons_iter(|mut iter| {
+        iter.find(|x| x.controller() == np_pid_2)
+            .map(|n| n.deref().clone())
+            .unwrap()
+    });
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
     driver.assert_account_contains(
@@ -8787,6 +8891,7 @@ async fn test_max_number_of_proposals_with_ballots() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
     }
     assert_eq!(
@@ -8806,7 +8911,7 @@ async fn test_max_number_of_proposals_with_ballots() {
             })),
             ..Default::default()
         },
-    ), Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
+    ).await, Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
     // Let's try an Installcode for Governance itself. This proposal type is whitelisted, so it can
     // be submitted even though the max is reached.
     assert_matches!(
@@ -8827,7 +8932,8 @@ async fn test_max_number_of_proposals_with_ballots() {
                 })),
                 ..Default::default()
             },
-        ),
+        )
+        .await,
         Ok(_)
     );
 
@@ -8858,7 +8964,7 @@ async fn test_max_number_of_proposals_with_ballots() {
             })),
             ..Default::default()
         },
-    ), Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
+    ).await, Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
 
     // Let's make a reward event happen
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
@@ -8878,6 +8984,7 @@ async fn test_max_number_of_proposals_with_ballots() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 }
 
@@ -9036,6 +9143,7 @@ async fn test_id_v1_works() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     assert_eq!(
         ProposalStatus::Open,
@@ -10224,6 +10332,133 @@ fn test_include_public_neurons_in_full_neurons() {
     assert_eq!(list_neurons_response.full_neurons, expected_full_neurons);
 }
 
+#[tokio::test]
+async fn test_refresh_voting_power() {
+    // Step 1: Prepare the world. This mostly consists of constructing a
+    // Governance with one neuron. The code under test will operate on that
+    // neuron.
+
+    let controller = PrincipalId::new_user_test_id(42);
+    let hot_key = PrincipalId::new_user_test_id(43);
+
+    let neuron = Neuron {
+        id: Some(NeuronId { id: 42 }),
+        account: account(42),
+        hot_keys: vec![hot_key],
+        cached_neuron_stake_e8s: 10 * E8,
+        controller: Some(controller),
+        dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
+        aging_since_timestamp_seconds: 1_721_727_936,
+        voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
+
+        ..Default::default()
+    };
+
+    let governance_proto = GovernanceProto {
+        economics: Some(NetworkEconomics::default()),
+        neurons: btreemap! {
+            42 => neuron,
+        },
+        ..Default::default()
+    };
+
+    let total_icp_suppply = Tokens::new(200, 0).unwrap();
+    let mut driver = fake::FakeDriver::default()
+        .at(START_TIMESTAMP_SECONDS)
+        .with_supply(total_icp_suppply);
+
+    let mut governance = Governance::new(
+        governance_proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    let delta_seconds = 99;
+    driver.advance_time_by(delta_seconds);
+
+    // Step 2: Call code under test, which modifies the one neuron.
+    async fn refresh_voting_power(
+        governance: &mut Governance,
+        caller: PrincipalId,
+    ) -> manage_neuron_response::Command {
+        let refresh_voting_power = ManageNeuron {
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 42 })),
+            command: Some(manage_neuron::Command::RefreshVotingPower(
+                RefreshVotingPower {},
+            )),
+            id: None,
+        };
+
+        governance
+            .manage_neuron(&caller, &refresh_voting_power)
+            .await
+            .command
+            .unwrap()
+    }
+
+    // Step 3: Inspect the neuron.
+    let get_voting_power_refreshed_timestamp_seconds = |governance: &mut Governance| {
+        governance
+            .with_neuron(&NeuronId { id: 42 }, |neuron| {
+                neuron.voting_power_refreshed_timestamp_seconds()
+            })
+            .unwrap()
+    };
+
+    // Sad case: Rando principal tries to refresh voting power.
+    let rando_principal = PrincipalId::new_user_test_id(0xDEAD_BEEF);
+    let err = refresh_voting_power(&mut governance, rando_principal).await;
+    assert_eq!(
+        get_voting_power_refreshed_timestamp_seconds(&mut governance),
+        START_TIMESTAMP_SECONDS,
+    );
+    match err {
+        manage_neuron_response::Command::Error(error) => {
+            let GovernanceError {
+                error_type,
+                error_message,
+            } = &error;
+
+            assert_eq!(
+                ErrorType::try_from(*error_type),
+                Ok(ErrorType::NotAuthorized),
+                "{:?}",
+                error
+            );
+
+            let error_message = error_message.to_lowercase();
+            for key_word in ["auth", "refresh", "voting power", "42"] {
+                assert!(error_message.contains(key_word), "{:?}", error);
+            }
+        }
+
+        wrong => panic!("{:?}", wrong),
+    }
+
+    // Main happy case: Controller tries to refresh voting power.
+    match refresh_voting_power(&mut governance, controller).await {
+        manage_neuron_response::Command::RefreshVotingPower(_ok) => {}
+        wrong => panic!("{:?}", wrong),
+    }
+    assert_eq!(
+        get_voting_power_refreshed_timestamp_seconds(&mut governance),
+        START_TIMESTAMP_SECONDS + 99,
+    );
+
+    // Secondary happy case: Hot key tries to refresh voting power.
+    let delta_seconds = 51;
+    driver.advance_time_by(delta_seconds);
+    match refresh_voting_power(&mut governance, hot_key).await {
+        manage_neuron_response::Command::RefreshVotingPower(_ok) => {}
+        wrong => panic!("{:?}", wrong),
+    }
+    assert_eq!(
+        get_voting_power_refreshed_timestamp_seconds(&mut governance),
+        START_TIMESTAMP_SECONDS + 99 + 51,
+    );
+}
+
 /// Struct to help with the wait for quiet tests.
 struct NeuronVote {
     vote_and_time: Option<(Vote, u64)>,
@@ -10295,6 +10530,8 @@ fn wait_for_quiet_test_helper(
                 ..Default::default()
             },
         )
+        .now_or_never()
+        .unwrap()
         .unwrap();
     let expected_initial_deadline_seconds =
         DEFAULT_TEST_START_TIMESTAMP_SECONDS + initial_expiration_seconds;
@@ -11210,6 +11447,7 @@ async fn test_known_neurons() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 
     gov.make_proposal(
@@ -11228,6 +11466,7 @@ async fn test_known_neurons() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     assert_eq!(
         gov.get_neuron_info(&NeuronId { id: 1 }, *RANDOM_PRINCIPAL_ID)
@@ -11276,6 +11515,7 @@ async fn test_known_neurons() {
                 ..Default::default()
             },
         )
+        .await
         .unwrap();
 
     assert_eq!(
@@ -11308,6 +11548,7 @@ async fn test_known_neurons() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
     assert_eq!(
         gov.get_neuron_info(&NeuronId { id: 2 }, *RANDOM_PRINCIPAL_ID)
@@ -12247,6 +12488,7 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_sns_w_fail
             &principal(1),
             &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
         )
+        .await
         .unwrap();
 
     // Step 3: Inspect results.
@@ -12381,6 +12623,7 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_ledger_fai
             &principal(1),
             &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
         )
+        .await
         .unwrap();
 
     // Step 3: Inspect results.
@@ -12517,6 +12760,7 @@ async fn test_create_service_nervous_system_failure_due_to_swap_deployment_error
         &principal(1),
         &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
     )
+    .await
     .unwrap();
 
     // Step 3: Inspect results.
@@ -12618,6 +12862,7 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
         &principal(1),
         &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
     )
+    .await
     .unwrap();
 
     // Step 3: Inspect results.
@@ -12764,6 +13009,7 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
         &principal(1),
         &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
     )
+    .await
     .unwrap();
 
     // Step 3: Inspect results.
@@ -12921,6 +13167,7 @@ async fn test_create_service_nervous_system_proposal_execution_fails() {
         &principal(1),
         &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
     )
+    .await
     .unwrap();
 
     // Step 3: Inspect results.
@@ -13023,6 +13270,7 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
             &principal(1),
             &CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL,
         )
+        .await
         .unwrap();
 
     let proposal = gov.get_proposal_data(proposal_id).unwrap();
@@ -13365,6 +13613,7 @@ async fn test_proposal_url_not_on_list_fails() {
             url: "https://foo.com".to_string(),
         },
     )
+    .await
     .unwrap_err();
 
     // Submit a proposal with a URL on the whitelist
@@ -13381,6 +13630,7 @@ async fn test_proposal_url_not_on_list_fails() {
             url: "https://forum.dfinity.org/anything".to_string(),
         },
     )
+    .await
     .unwrap();
 }
 

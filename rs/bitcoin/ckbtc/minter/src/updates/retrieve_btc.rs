@@ -8,6 +8,7 @@ use crate::{
     address::{account_to_bitcoin_address, BitcoinAddress, ParseAddressError},
     guard::{retrieve_btc_guard, GuardError},
     state::{self, mutate_state, read_state, RetrieveBtcRequest},
+    IC_CANISTER_RUNTIME,
 };
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
@@ -185,13 +186,13 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         return Err(RetrieveBtcError::InsufficientFunds { balance });
     }
 
-    let new_kyt_principal = read_state(|s| {
-        s.new_kyt_principal
-            .expect("BUG: upgrade procedure must ensure that the new KYT principal is set")
+    let kyt_principal = read_state(|s| {
+        s.kyt_principal
+            .expect("BUG: upgrade procedure must ensure that the KYT principal is set")
             .get()
             .into()
     });
-    let status = new_kyt_check_address(new_kyt_principal, args.address.clone()).await?;
+    let status = kyt_check_address(kyt_principal, args.address.clone()).await?;
     match status {
         BtcAddressCheckStatus::Tainted => {
             log!(
@@ -243,7 +244,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         read_state(|s| s.retrieve_btc_status(block_index))
     );
 
-    schedule_now(TaskType::ProcessLogic);
+    schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
 
     Ok(RetrieveBtcOk { block_index })
 }
@@ -285,14 +286,14 @@ pub async fn retrieve_btc_with_approval(
         ));
     }
 
-    let new_kyt_principal = read_state(|s| {
-        s.new_kyt_principal
-            .expect("BUG: upgrade procedure must ensure that the new KYT principal is set")
+    let kyt_principal = read_state(|s| {
+        s.kyt_principal
+            .expect("BUG: upgrade procedure must ensure that the KYT principal is set")
             .get()
             .into()
     });
 
-    match new_kyt_check_address(new_kyt_principal, parsed_address.display(btc_network)).await {
+    match kyt_check_address(kyt_principal, parsed_address.display(btc_network)).await {
         Err(error) => {
             return Err(RetrieveBtcWithApprovalError::GenericError {
                 error_message: format!("Failed to call KYT canister with error: {:?}", error),
@@ -344,7 +345,7 @@ pub async fn retrieve_btc_with_approval(
         read_state(|s| s.retrieve_btc_status(block_index))
     );
 
-    schedule_now(TaskType::ProcessLogic);
+    schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
 
     Ok(RetrieveBtcOk { block_index })
 }
@@ -518,11 +519,11 @@ pub enum BtcAddressCheckStatus {
     /// The KYT check found issues with the address in question.
     Tainted,
 }
-async fn new_kyt_check_address(
-    new_kyt_principal: Principal,
+async fn kyt_check_address(
+    kyt_principal: Principal,
     address: String,
 ) -> Result<BtcAddressCheckStatus, RetrieveBtcError> {
-    match check_withdrawal_destination_address(new_kyt_principal, address.clone())
+    match check_withdrawal_destination_address(kyt_principal, address.clone())
         .await
         .map_err(|call_err| {
             RetrieveBtcError::TemporarilyUnavailable(format!(

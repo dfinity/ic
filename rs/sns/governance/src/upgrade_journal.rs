@@ -2,7 +2,7 @@ use crate::governance::Governance;
 use crate::pb::v1::{
     governance::{Version, Versions},
     upgrade_journal_entry::{self, upgrade_outcome, upgrade_started},
-    Empty, ProposalId, UpgradeJournal, UpgradeJournalEntry,
+    Empty, GetUpgradeJournalResponse, ProposalId, UpgradeJournal, UpgradeJournalEntry,
 };
 
 impl upgrade_journal_entry::UpgradeStepsRefreshed {
@@ -73,9 +73,9 @@ impl upgrade_journal_entry::UpgradeStarted {
 
 impl upgrade_journal_entry::UpgradeOutcome {
     /// Creates a new successful upgrade outcome
-    pub fn success(message: Option<String>) -> Self {
+    pub fn success(message: String) -> Self {
         Self {
-            human_readable: message,
+            human_readable: Some(message),
             status: Some(upgrade_outcome::Status::Success(Empty {})),
         }
     }
@@ -128,6 +128,28 @@ impl Governance {
             }
         }
     }
+
+    pub fn get_upgrade_journal(&self) -> GetUpgradeJournalResponse {
+        let cached_upgrade_steps = self.proto.cached_upgrade_steps.clone();
+        match cached_upgrade_steps {
+            Some(cached_upgrade_steps) => GetUpgradeJournalResponse {
+                upgrade_steps: cached_upgrade_steps.upgrade_steps,
+                response_timestamp_seconds: cached_upgrade_steps.response_timestamp_seconds,
+                target_version: self.proto.target_version.clone(),
+                deployed_version: self.proto.deployed_version.clone(),
+                // TODO(NNS1-3416): Bound the size of the response.
+                upgrade_journal: self.proto.upgrade_journal.clone(),
+            },
+            None => GetUpgradeJournalResponse {
+                upgrade_steps: None,
+                response_timestamp_seconds: None,
+                target_version: None,
+                deployed_version: self.proto.deployed_version.clone(),
+                // TODO(NNS1-3416): Bound the size of the response.
+                upgrade_journal: self.proto.upgrade_journal.clone(),
+            },
+        }
+    }
 }
 
 impl From<upgrade_journal_entry::UpgradeStepsRefreshed> for upgrade_journal_entry::Event {
@@ -158,5 +180,33 @@ impl From<upgrade_journal_entry::TargetVersionSet> for upgrade_journal_entry::Ev
 impl From<upgrade_journal_entry::TargetVersionReset> for upgrade_journal_entry::Event {
     fn from(event: upgrade_journal_entry::TargetVersionReset) -> Self {
         upgrade_journal_entry::Event::TargetVersionReset(event)
+    }
+}
+
+impl upgrade_journal_entry::Event {
+    /// Useful for specifying expected states of the SNS upgrade journal in a way that isn't
+    /// overly fragile.
+    pub fn redact_human_readable(self) -> Self {
+        match self {
+            Self::UpgradeOutcome(upgrade_outcome) => {
+                Self::UpgradeOutcome(upgrade_journal_entry::UpgradeOutcome {
+                    human_readable: None,
+                    ..upgrade_outcome
+                })
+            }
+            Self::UpgradeStepsReset(upgrade_steps_reset) => {
+                Self::UpgradeStepsReset(upgrade_journal_entry::UpgradeStepsReset {
+                    human_readable: None,
+                    ..upgrade_steps_reset
+                })
+            }
+            Self::TargetVersionReset(target_version_reset) => {
+                Self::TargetVersionReset(upgrade_journal_entry::TargetVersionReset {
+                    human_readable: None,
+                    ..target_version_reset
+                })
+            }
+            event => event,
+        }
     }
 }

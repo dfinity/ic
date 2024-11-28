@@ -10,6 +10,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nervous_system_proto::pb::v1::{Percentage, Principals};
+use ic_sns_governance::pb::v1::governance::CachedUpgradeSteps;
 use ic_sns_governance::{
     governance::{
         MATURITY_DISBURSEMENT_DELAY_SECONDS, UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
@@ -2908,7 +2909,17 @@ async fn test_refresh_cached_upgrade_steps_noop_if_deployed_version_none() {
 async fn test_refresh_cached_upgrade_steps() {
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
-    let expected_upgrade_steps = vec![Version::default(), Version::default(), Version::default()];
+    let v1 = Version::default();
+    let v2 = Version {
+        governance_wasm_hash: vec![1],
+        ..v1.clone()
+    };
+    let v3 = Version {
+        governance_wasm_hash: vec![1, 2],
+        ..v2.clone()
+    };
+
+    let expected_upgrade_steps = vec![v1.clone(), v2.clone(), v3.clone()];
 
     // Set up the fixture state
     {
@@ -2926,7 +2937,7 @@ async fn test_refresh_cached_upgrade_steps() {
         canister_fixture
             .environment_fixture
             .push_mocked_canister_reply(ListUpgradeStepsResponse { steps });
-        canister_fixture.governance.proto.deployed_version = Some(Version::default());
+        canister_fixture.governance.proto.deployed_version = Some(v1);
     }
 
     // Check that the initial state is None
@@ -3052,6 +3063,78 @@ async fn test_refresh_cached_upgrade_steps() {
             }]
         );
     }
+}
+
+#[tokio::test]
+async fn test_refresh_cached_upgrade_steps_doesnt_panic_on_invalid_response() {
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+
+    // Set up the fixture state with a deployed version
+    canister_fixture.governance.proto.deployed_version = Some(Version::default());
+
+    // Mock SNS-W to return an invalid response (empty steps)
+    canister_fixture
+        .environment_fixture
+        .push_mocked_canister_reply(ListUpgradeStepsResponse { steps: vec![] });
+
+    // Initial state should be None
+    assert_eq!(canister_fixture.governance.proto.cached_upgrade_steps, None);
+
+    // Refresh should not panic on empty response
+    let now = canister_fixture.governance.env.now();
+    canister_fixture
+        .governance
+        .temporarily_lock_refresh_cached_upgrade_steps();
+    canister_fixture
+        .governance
+        .refresh_cached_upgrade_steps()
+        .await;
+    let expected_upgrade_steps = Some(CachedUpgradeSteps {
+        upgrade_steps: Some(Versions {
+            versions: Vec::new(),
+        }),
+        requested_timestamp_seconds: Some(now),
+        response_timestamp_seconds: Some(now),
+    });
+    assert_eq!(
+        canister_fixture.governance.proto.cached_upgrade_steps,
+        expected_upgrade_steps
+    );
+}
+
+#[tokio::test]
+async fn test_refresh_cached_upgrade_steps_handles_sns_w_error() {
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+
+    // Set up the fixture state with a deployed version
+    canister_fixture.governance.proto.deployed_version = Some(Version::default());
+
+    // Mock SNS-W to return an error
+    canister_fixture
+        .environment_fixture
+        .push_mocked_canister_panic("SNS-W error response");
+
+    let now = canister_fixture.governance.env.now();
+    let expected_upgrade_steps = Some(CachedUpgradeSteps {
+        upgrade_steps: Some(Versions {
+            versions: Vec::new(),
+        }),
+        requested_timestamp_seconds: Some(now),
+        response_timestamp_seconds: Some(now),
+    });
+    canister_fixture.governance.proto.cached_upgrade_steps = expected_upgrade_steps.clone();
+
+    // Refresh should not panic on error response
+    canister_fixture
+        .governance
+        .refresh_cached_upgrade_steps()
+        .await;
+
+    // State should remain None after error
+    assert_eq!(
+        canister_fixture.governance.proto.cached_upgrade_steps,
+        expected_upgrade_steps
+    );
 }
 
 #[tokio::test]

@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "//rs/bitcoin/ckbtc/kyt",
     "//rs/bitcoin/ckbtc/minter",
     "//rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
-    "//rs/boundary_node/discower_bowndary:discower-bowndary",
     "//rs/canister_client",
     "//rs/canister_client/sender",
     "//rs/ledger_suite/icrc1/test_utils",
@@ -26,7 +25,7 @@ DEPENDENCIES = [
     "//rs/cycles_account_manager",
     "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
     "//rs/http_utils",
-    "//rs/ic_os/dev_test_tools/deterministic_ips",
+    "//rs/ic_os/deterministic_ips",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/nervous_system/clients",
@@ -315,8 +314,6 @@ GRAFANA_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
 ]
 
 BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
-    "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst.cas-url",
-    "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst.sha256",
     "//ic-os/boundary-guestos:scripts/build-bootstrap-config-image.sh",
 ]
 

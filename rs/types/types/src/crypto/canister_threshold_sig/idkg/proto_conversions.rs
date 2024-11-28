@@ -4,7 +4,7 @@ use crate::crypto::canister_threshold_sig::idkg::{
     IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType, InitialIDkgDealings,
     SignedIDkgDealing,
 };
-use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
+use crate::crypto::ExtendedDerivationPath;
 use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHashOf};
 use crate::signature::{BasicSignature, BasicSignatureBatch};
 use crate::{node_id_into_protobuf, node_id_try_from_option, Height, NodeIndex};
