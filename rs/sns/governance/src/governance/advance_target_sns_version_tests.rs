@@ -846,7 +846,7 @@ async fn test_refresh_cached_upgrade_steps_rejects_duplicate_versions() {
 }
 
 #[test]
-fn test_upgrade_periodic_task_lock_doesnt_get_stuck_during_overflow() {
+fn test_upgrade_periodic_task_lock_does_not_get_stuck_during_overflow() {
     let env = NativeEnvironment::new(Some(*TEST_GOVERNANCE_CANISTER_ID));
     let mut gov = Governance::new(
         basic_governance_proto().try_into().unwrap(),
@@ -858,6 +858,68 @@ fn test_upgrade_periodic_task_lock_doesnt_get_stuck_during_overflow() {
 
     gov.upgrade_periodic_task_lock = Some(u64::MAX);
     assert!(gov.acquire_upgrade_periodic_task_lock());
+}
+
+#[test]
+fn get_or_reset_upgrade_steps_leads_to_should_refresh_cached_upgrade_steps() {
+    let version_a = Version {
+        root_wasm_hash: vec![1, 2, 3],
+        governance_wasm_hash: vec![2, 3, 4],
+        ledger_wasm_hash: vec![3, 4, 5],
+        swap_wasm_hash: vec![4, 5, 6],
+        archive_wasm_hash: vec![5, 6, 7],
+        index_wasm_hash: vec![6, 7, 8],
+    };
+    let mut version_b = version_a.clone();
+    version_b.root_wasm_hash = vec![9, 9, 9];
+
+    let env = NativeEnvironment::new(Some(*TEST_GOVERNANCE_CANISTER_ID));
+    let mut gov = Governance::new(
+        GovernanceProto {
+            deployed_version: Some(version_a.clone()),
+            cached_upgrade_steps: Some(CachedUpgradeStepsPb {
+                upgrade_steps: Some(Versions {
+                    versions: vec![version_a],
+                }),
+                requested_timestamp_seconds: Some(env.now()),
+                response_timestamp_seconds: Some(env.now()),
+            }),
+            ..basic_governance_proto()
+        }
+        .try_into()
+        .unwrap(),
+        Box::new(env),
+        Box::new(DoNothingLedger {}),
+        Box::new(DoNothingLedger {}),
+        Box::new(FakeCmc::new()),
+    );
+
+    // Precondition
+    assert!(!gov.should_refresh_cached_upgrade_steps());
+    assert_ne!(version_a, version_b);
+
+    // Run code under test and assert intermediate conditions
+    {
+        let cached_upgrade_steps = gov.get_or_reset_upgrade_steps(&version_b);
+        let cached_upgrade_steps = CachedUpgradeStepsPb::try_from(cached_upgrade_steps).unwrap();
+        assert_eq!(
+            gov.proto.cached_upgrade_steps,
+            Some(cached_upgrade_steps.clone())
+        );
+        assert_eq!(
+            cached_upgrade_steps,
+            CachedUpgradeStepsPb {
+                upgrade_steps: Some(Versions {
+                    versions: vec![version_b],
+                }),
+                requested_timestamp_seconds: Some(0),
+                response_timestamp_seconds: Some(gov.env.now()),
+            }
+        );
+    }
+
+    // Postcondition
+    assert!(gov.should_refresh_cached_upgrade_steps());
 }
 
 fn add_environment_mock_calls_for_initiate_upgrade(

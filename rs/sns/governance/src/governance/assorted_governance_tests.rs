@@ -2599,8 +2599,6 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
     // Check that the upgrade journal reflects the succeeded upgrade.
     let upgrade_journal = governance.proto.upgrade_journal.clone().unwrap();
 
-    println!("upgrade_journal.entries = {:#?}", upgrade_journal.entries);
-
     let (reset_upgrade_steps, refreshed_versions) = assert_matches!(
         &upgrade_journal.entries[..],
         [
@@ -3855,10 +3853,6 @@ fn test_disburse_maturity_succeeds_with_multiple_disbursals() {
         let expected_disbursing_maturity =
             remaining_maturity.saturating_mul(*percentage_to_disburse as u64) / 100;
         let in_progress = &neuron.disburse_maturity_in_progress[i];
-        println!(
-            "i: {}, {}, {}",
-            i, percentage_to_disburse, in_progress.amount_e8s
-        );
         assert_eq!(
             in_progress.amount_e8s, expected_disbursing_maturity,
             "unexpected disbursing maturity for percentage {}",

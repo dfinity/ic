@@ -306,12 +306,12 @@ impl CachedUpgradeSteps {
         Ok(contains_in_order)
     }
 
-    pub fn current(&self) -> &Version {
-        &self.current_version
-    }
-
     pub fn next(&self) -> Option<&Version> {
         self.subsequent_versions.first()
+    }
+
+    pub fn current(&self) -> &Version {
+        &self.current_version
     }
 
     pub fn is_current(&self, version: &Version) -> bool {
@@ -320,7 +320,7 @@ impl CachedUpgradeSteps {
 
     /// Returns whether there are no pending upgrades.
     pub fn has_pending_upgrades(&self) -> bool {
-        !self.subsequent_versions.is_empty()
+        self.next().is_none()
     }
 
     /// Returns a new instance of `Self` starting with `version` in the `Ok` result
@@ -461,7 +461,9 @@ impl Governance {
             let requested_timestamp_seconds = cached_upgrade_steps
                 .requested_timestamp_seconds
                 .unwrap_or(0);
-            if now - requested_timestamp_seconds < UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS {
+            if now.saturating_sub(requested_timestamp_seconds)
+                < UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS
+            {
                 return false;
             }
         }
@@ -575,3 +577,6 @@ impl GovernancePb {
         Ok((upgrade_steps, new_target))
     }
 }
+
+#[cfg(test)]
+mod tests;

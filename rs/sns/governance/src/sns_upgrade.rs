@@ -650,11 +650,11 @@ pub struct ListUpgradeStepsRequest {
     /// Limit to number of entries (for paging)
     pub limit: u32,
 }
-#[derive(candid::CandidType, candid::Deserialize, Debug)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
 pub struct ListUpgradeStepsResponse {
     pub steps: ::prost::alloc::vec::Vec<ListUpgradeStep>,
 }
-#[derive(candid::CandidType, candid::Deserialize, Debug, Clone)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
 pub struct ListUpgradeStep {
     pub version: ::core::option::Option<SnsVersion>,
 }
