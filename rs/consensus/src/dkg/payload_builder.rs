@@ -6,7 +6,7 @@ use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_registry_client_helpers::{
     crypto::{initial_ni_dkg_transcript_from_registry_record, DkgTranscripts},
@@ -145,19 +145,29 @@ fn create_data_payload(
         ));
     }
 
+    let remote_dkg_transcripts = create_early_remote_transcripts(
+        pool_reader,
+        crypto,
+        parent,
+        1,
+        last_dkg_summary,
+        state_manager,
+        validation_context,
+        logger.clone(),
+    );
+
+    if !remote_dkg_transcripts.is_empty() {
+        info!(
+            logger,
+            "Including {} early remote DKG transcripts in rregular block payload",
+            remote_dkg_transcripts.len()
+        );
+    }
+
     // Try to include remote transcripts
     Ok(DkgDataPayload::new_with_remote_dkg_transcripts(
         last_summary_block.height,
-        create_early_remote_transcripts(
-            pool_reader,
-            crypto,
-            parent,
-            1,
-            last_dkg_summary,
-            state_manager,
-            validation_context,
-            logger,
-        ),
+        remote_dkg_transcripts,
     ))
 }
 
@@ -171,10 +181,14 @@ fn create_early_remote_transcripts(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)> {
-    let state = state_manager
-        .get_state_at(validation_context.certified_height)
-        .unwrap();
-    //TODO: .map_err(PayloadCreationError::StateManagerError)?;
+    // If we cannot access the state manage, we don't return an error.
+    // This is because the early remote transcripts is an optimization.
+    // If we don't return any transcripts here, the protocol will continue anyway
+    // and return the transcripts in the summary block
+    let Ok(state) = state_manager.get_state_at(validation_context.certified_height) else {
+        return vec![];
+    };
+
     // TODO: Since this function is relatively expensive, we should only do this if there are any outstanding
     // Remote DKG contexts
 
@@ -227,7 +241,6 @@ fn create_early_remote_transcripts(
         // For inital DKG transcripts, we need a pair of values while for VetKD we need a single config
         // Here we do some matching, to check that we have the right number of configs
         match transcripts.len() {
-            // TODO: Warn for 0?
             1 => {
                 // TODO: With vetkd, we need to check that these have a HighTresholdForMasterPublicKeyId tag
                 // Sould we also check that the keys exists?
