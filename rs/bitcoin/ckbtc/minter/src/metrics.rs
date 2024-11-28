@@ -6,7 +6,6 @@ thread_local! {
     pub static GET_UTXOS_MINTER_CALLS: Cell<u64> = Cell::default();
 }
 
-//TODO XC-230: add metrics about discarded UTXOs
 pub fn encode_metrics(
     metrics: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
 ) -> std::io::Result<()> {
