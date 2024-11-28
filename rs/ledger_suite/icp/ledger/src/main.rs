@@ -788,7 +788,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
         if !memory_manager_found {
             let msg =
                 "Cannot upgrade from scratch stable memory, please upgrade to memory manager first.";
-            print(format!("{msg}"));
+            print(msg.to_string());
             panic!("{msg}");
         }
         *ledger = UPGRADES_MEMORY.with_borrow(|bs| {
