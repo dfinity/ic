@@ -457,9 +457,13 @@ impl ConnectionManager {
         let mut client_config = quinn::ClientConfig::new(Arc::new(quinn_client_config));
         client_config.transport_config(transport_config);
         let conn_fut = async move {
+            // 'connect_with' is placed inside the async block so the event loop retries on failure.
             let connecting = endpoint
                 .connect_with(client_config, addr, "irrelevant")
-                .map_err(|cause| ConnectionEstablishError::BadConnectParameters { peer_id, cause })?;
+                .map_err(|cause| ConnectionEstablishError::BadConnectParameters {
+                    peer_id,
+                    cause,
+                })?;
             let established =
                 connecting
                     .await
