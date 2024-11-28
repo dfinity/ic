@@ -293,6 +293,14 @@ fn test_single_neuron_proposal_new() {
                             ),
                         ),
                         NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(U32Change(0, 1,),),),
+                        NeuronChange::DecidingVotingPower(
+                            OptionChange::BothSome(
+                                U64Change(
+                                    1,
+                                    0,
+                                ),
+                            ),
+                        ),
                     ],
                 )]),
                 GovernanceChange::Proposals(vec![MapChange::Added(
@@ -967,6 +975,12 @@ async fn test_cascade_following_new() {
                     NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(U32Change(
                         0, 1,
                     ),),),
+                    NeuronChange::DecidingVotingPower(OptionChange::BothSome(U64Change(
+                        1406250000, 0,
+                    ),),),
+                    NeuronChange::PotentialVotingPower(OptionChange::BothSome(U64Change(
+                        1406250000, 1265625000,
+                    ),),),
                 ],
             )]),
             GovernanceChange::Proposals(vec![MapChange::Added(
@@ -1124,6 +1138,9 @@ async fn test_cascade_following_new() {
                     NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(U32Change(
                         0, 1,
                     ),),),
+                    NeuronChange::DecidingVotingPower(OptionChange::BothSome(U64Change(
+                        1406250000, 0,
+                    ),),),
                 ],
             )]),
             GovernanceChange::Proposals(vec![MapChange::Changed(
@@ -1188,7 +1205,12 @@ async fn test_cascade_following_new() {
             GovernanceChange::Neurons(vec![
                 MapChange::Changed(
                     1,
-                    vec![NeuronChange::NeuronFeesE8S(U64Change(100000000, 0))],
+                    vec![
+                        NeuronChange::NeuronFeesE8S(U64Change(100000000, 0)),
+                        NeuronChange::PotentialVotingPower(OptionChange::BothSome(U64Change(
+                            1265625000, 1406250000,
+                        ),),),
+                    ],
                 ),
                 MapChange::Changed(
                     2,
@@ -1250,6 +1272,9 @@ async fn test_cascade_following_new() {
                         NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(
                             U32Change(0, 1,),
                         ),),
+                        NeuronChange::DecidingVotingPower(OptionChange::BothSome(U64Change(
+                            1406250000, 0,
+                        ),),),
                     ],
                 ),
             ]),
@@ -10379,9 +10404,11 @@ fn test_include_public_neurons_in_full_neurons() {
 
             cached_neuron_stake_e8s: 10 * E8,
             controller: Some(controller),
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
-            aging_since_timestamp_seconds: 1_721_727_936,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(8 * ONE_YEAR_SECONDS)),
+            aging_since_timestamp_seconds: START_TIMESTAMP_SECONDS,
             voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
+            deciding_voting_power: Some(20 * E8),
+            potential_voting_power: Some(20 * E8),
 
             ..Default::default()
         }
