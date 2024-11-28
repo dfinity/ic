@@ -381,7 +381,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     ) {
         (Some(crypto_config), Some(log_anonymization_cid)) => {
             let c = tokio::task::spawn_blocking({
-                let registry_client = registry_client.clone();
+                let registry_client = Arc::clone(&registry_client);
 
                 move || {
                     Arc::new(CryptoComponent::new(
@@ -396,7 +396,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             .await?;
 
             let pk = tokio::task::spawn_blocking({
-                let c = c.clone();
+                let c = Arc::clone(&c);
 
                 move || {
                     c.current_node_public_keys()
