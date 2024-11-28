@@ -1235,7 +1235,7 @@ impl AllowancesData for StableAllowancesData {
             .try_into()
             .unwrap()
     }
-        
+
     fn len_expirations(&self) -> usize {
         ALLOWANCES_EXPIRATIONS_MEMORY
             .with_borrow(|expirations| expirations.len())
