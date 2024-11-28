@@ -1,6 +1,6 @@
 mod processable_utxos_for_account {
     use crate::state::invariants::CheckInvariantsImpl;
-    use crate::state::{CkBtcMinterState, DiscardedReason, ProcessableUtxos};
+    use crate::state::{CkBtcMinterState, ProcessableUtxos, SuspendedReason};
     use crate::test_fixtures::{ignored_utxo, init_args, ledger_account, quarantined_utxo, utxo};
     use candid::Principal;
     use ic_btc_interface::{OutPoint, Utxo};
@@ -30,8 +30,8 @@ mod processable_utxos_for_account {
         };
         assert_ne!(account, other_account);
         let mut state = CkBtcMinterState::from(init_args());
-        state.discard_utxo(ignored_utxo(), account, DiscardedReason::ValueTooSmall);
-        state.discard_utxo(
+        state.suspend_utxo(ignored_utxo(), account, SuspendedReason::ValueTooSmall);
+        state.suspend_utxo(
             Utxo {
                 outpoint: OutPoint {
                     txid: "2e0bf7c2d9db13143cbb317ad4726ee2d39a83275b275be83c989ea956202410"
@@ -42,12 +42,12 @@ mod processable_utxos_for_account {
                 ..ignored_utxo()
             },
             other_account,
-            DiscardedReason::ValueTooSmall,
+            SuspendedReason::ValueTooSmall,
         );
-        assert_eq!(state.discarded_utxos.num_utxos(), 2);
+        assert_eq!(state.suspended_utxos.num_utxos(), 2);
 
-        state.discard_utxo(quarantined_utxo(), account, DiscardedReason::Quarantined);
-        state.discard_utxo(
+        state.suspend_utxo(quarantined_utxo(), account, SuspendedReason::Quarantined);
+        state.suspend_utxo(
             Utxo {
                 outpoint: OutPoint {
                     txid: "017ad4dc53443f81c35996e553ff0c913d3873b98cbbdea12f5418b13877cd65"
@@ -58,9 +58,9 @@ mod processable_utxos_for_account {
                 ..quarantined_utxo()
             },
             other_account,
-            DiscardedReason::Quarantined,
+            SuspendedReason::Quarantined,
         );
-        assert_eq!(state.discarded_utxos.num_utxos(), 4);
+        assert_eq!(state.suspended_utxos.num_utxos(), 4);
 
         state.add_utxos::<CheckInvariantsImpl>(account, vec![utxo()]);
         state.add_utxos::<CheckInvariantsImpl>(
@@ -102,87 +102,87 @@ mod processable_utxos_for_account {
     }
 }
 
-mod discarded_utxos {
-    use crate::state::{DiscardedReason, DiscardedUtxos};
+mod suspended_utxos {
+    use crate::state::{SuspendedReason, SuspendedUtxos};
     use crate::test_fixtures::{ledger_account, utxo};
 
     #[test]
-    fn should_be_nop_when_already_discarded_for_some_reason() {
-        for reason in all_discarded_reasons() {
-            let mut discarded_utxos = DiscardedUtxos::default();
+    fn should_be_nop_when_already_suspended_for_some_reason() {
+        for reason in all_suspended_reasons() {
+            let mut suspended_utxos = SuspendedUtxos::default();
 
-            assert!(discarded_utxos.insert(ledger_account(), utxo(), reason));
-            assert_eq!(discarded_utxos.num_utxos(), 1);
+            assert!(suspended_utxos.insert(ledger_account(), utxo(), reason));
+            assert_eq!(suspended_utxos.num_utxos(), 1);
 
-            assert!(!discarded_utxos.insert(ledger_account(), utxo(), reason));
-            assert_eq!(discarded_utxos.num_utxos(), 1);
+            assert!(!suspended_utxos.insert(ledger_account(), utxo(), reason));
+            assert_eq!(suspended_utxos.num_utxos(), 1);
         }
     }
 
     #[test]
     #[allow(deprecated)]
     fn should_add_account_information_to_utxo() {
-        for first_reason in all_discarded_reasons() {
-            for second_reason in all_discarded_reasons() {
-                let mut discarded_utxos = DiscardedUtxos::default();
+        for first_reason in all_suspended_reasons() {
+            for second_reason in all_suspended_reasons() {
+                let mut suspended_utxos = SuspendedUtxos::default();
                 let utxo = utxo();
 
-                discarded_utxos.insert_without_account(utxo.clone(), first_reason);
-                assert_eq!(discarded_utxos.num_utxos(), 1);
+                suspended_utxos.insert_without_account(utxo.clone(), first_reason);
+                assert_eq!(suspended_utxos.num_utxos(), 1);
 
-                assert!(discarded_utxos.insert(ledger_account(), utxo, second_reason));
-                assert_eq!(discarded_utxos.num_utxos(), 1);
+                assert!(suspended_utxos.insert(ledger_account(), utxo, second_reason));
+                assert_eq!(suspended_utxos.num_utxos(), 1);
             }
         }
     }
 
     #[test]
-    fn should_register_change_of_discarded_reason() {
-        for reason in all_discarded_reasons() {
-            let mut discarded_utxos = DiscardedUtxos::default();
+    fn should_register_change_of_suspended_reason() {
+        for reason in all_suspended_reasons() {
+            let mut suspended_utxos = SuspendedUtxos::default();
             let utxo = utxo();
-            assert!(discarded_utxos.insert(ledger_account(), utxo.clone(), reason));
-            assert_eq!(discarded_utxos.num_utxos(), 1);
+            assert!(suspended_utxos.insert(ledger_account(), utxo.clone(), reason));
+            assert_eq!(suspended_utxos.num_utxos(), 1);
 
             let other_reason = match reason {
-                DiscardedReason::ValueTooSmall => DiscardedReason::Quarantined,
-                DiscardedReason::Quarantined => DiscardedReason::ValueTooSmall,
+                SuspendedReason::ValueTooSmall => SuspendedReason::Quarantined,
+                SuspendedReason::Quarantined => SuspendedReason::ValueTooSmall,
             };
-            assert!(discarded_utxos.insert(ledger_account(), utxo.clone(), other_reason));
-            assert_eq!(discarded_utxos.num_utxos(), 1);
+            assert!(suspended_utxos.insert(ledger_account(), utxo.clone(), other_reason));
+            assert_eq!(suspended_utxos.num_utxos(), 1);
         }
     }
 
     #[test]
     #[allow(deprecated)]
     fn should_remove_utxo() {
-        for reason in all_discarded_reasons() {
-            let mut discarded_utxos = DiscardedUtxos::default();
+        for reason in all_suspended_reasons() {
+            let mut suspended_utxos = SuspendedUtxos::default();
             let utxo = utxo();
 
-            discarded_utxos.insert_without_account(utxo.clone(), reason);
-            assert_eq!(discarded_utxos.num_utxos(), 1);
-            discarded_utxos.remove_without_account(&utxo);
-            assert_eq!(discarded_utxos.num_utxos(), 0);
+            suspended_utxos.insert_without_account(utxo.clone(), reason);
+            assert_eq!(suspended_utxos.num_utxos(), 1);
+            suspended_utxos.remove_without_account(&utxo);
+            assert_eq!(suspended_utxos.num_utxos(), 0);
 
-            discarded_utxos.insert_without_account(utxo.clone(), reason);
-            assert_eq!(discarded_utxos.num_utxos(), 1);
-            discarded_utxos.remove(&ledger_account(), &utxo);
-            assert_eq!(discarded_utxos.num_utxos(), 0);
+            suspended_utxos.insert_without_account(utxo.clone(), reason);
+            assert_eq!(suspended_utxos.num_utxos(), 1);
+            suspended_utxos.remove(&ledger_account(), &utxo);
+            assert_eq!(suspended_utxos.num_utxos(), 0);
 
-            discarded_utxos.insert(ledger_account(), utxo.clone(), reason);
-            assert_eq!(discarded_utxos.num_utxos(), 1);
-            discarded_utxos.remove_without_account(&utxo);
-            assert_eq!(discarded_utxos.num_utxos(), 0);
+            suspended_utxos.insert(ledger_account(), utxo.clone(), reason);
+            assert_eq!(suspended_utxos.num_utxos(), 1);
+            suspended_utxos.remove_without_account(&utxo);
+            assert_eq!(suspended_utxos.num_utxos(), 0);
 
-            discarded_utxos.insert(ledger_account(), utxo.clone(), reason);
-            assert_eq!(discarded_utxos.num_utxos(), 1);
-            discarded_utxos.remove(&ledger_account(), &utxo);
-            assert_eq!(discarded_utxos.num_utxos(), 0);
+            suspended_utxos.insert(ledger_account(), utxo.clone(), reason);
+            assert_eq!(suspended_utxos.num_utxos(), 1);
+            suspended_utxos.remove(&ledger_account(), &utxo);
+            assert_eq!(suspended_utxos.num_utxos(), 0);
         }
     }
 
-    fn all_discarded_reasons() -> Vec<DiscardedReason> {
-        vec![DiscardedReason::Quarantined, DiscardedReason::ValueTooSmall]
+    fn all_suspended_reasons() -> Vec<SuspendedReason> {
+        vec![SuspendedReason::Quarantined, SuspendedReason::ValueTooSmall]
     }
 }

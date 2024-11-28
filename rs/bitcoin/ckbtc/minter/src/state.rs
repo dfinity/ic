@@ -394,8 +394,8 @@ pub struct CkBtcMinterState {
     /// A cache of UTXO KYT check statuses.
     pub checked_utxos: BTreeMap<Utxo, CheckedUtxo>,
 
-    /// UTXOs that cannot be processed.
-    pub discarded_utxos: DiscardedUtxos,
+    /// UTXOs that cannot be yet processed.
+    pub suspended_utxos: SuspendedUtxos,
 
     /// Map from burn block index to amount to reimburse because of
     /// KYT fees.
@@ -961,11 +961,11 @@ impl CkBtcMinterState {
         let mut previously_quarantined_utxos = BTreeSet::new();
 
         for utxo in all_utxos_for_account.into_iter() {
-            match self.discarded_utxos.contains_utxo(&utxo, account) {
-                Some(DiscardedReason::ValueTooSmall) => {
+            match self.suspended_utxos.contains_utxo(&utxo, account) {
+                Some(SuspendedReason::ValueTooSmall) => {
                     previously_ignored_utxos.insert(utxo);
                 }
-                Some(DiscardedReason::Quarantined) => {
+                Some(SuspendedReason::Quarantined) => {
                     previously_quarantined_utxos.insert(utxo);
                 }
                 None => {
@@ -998,25 +998,25 @@ impl CkBtcMinterState {
         }
     }
 
-    /// Adds given UTXO to the set of discarded UTXOs.
-    pub fn discard_utxo(&mut self, utxo: Utxo, account: Account, reason: DiscardedReason) -> bool {
+    /// Adds given UTXO to the set of suspended UTXOs.
+    pub fn suspend_utxo(&mut self, utxo: Utxo, account: Account, reason: SuspendedReason) -> bool {
         self.ensure_reason_consistent_with_state(&utxo, reason);
-        self.discarded_utxos.insert(account, utxo, reason)
+        self.suspended_utxos.insert(account, utxo, reason)
     }
 
     #[deprecated(note = "Use discard_utxo() instead")]
-    pub fn discard_utxo_without_account(&mut self, utxo: Utxo, reason: DiscardedReason) {
+    pub fn discard_utxo_without_account(&mut self, utxo: Utxo, reason: SuspendedReason) {
         self.ensure_reason_consistent_with_state(&utxo, reason);
         #[allow(deprecated)]
-        self.discarded_utxos.insert_without_account(utxo, reason)
+        self.suspended_utxos.insert_without_account(utxo, reason)
     }
 
-    fn ensure_reason_consistent_with_state(&self, utxo: &Utxo, reason: DiscardedReason) {
+    fn ensure_reason_consistent_with_state(&self, utxo: &Utxo, reason: SuspendedReason) {
         match reason {
-            DiscardedReason::ValueTooSmall => {
+            SuspendedReason::ValueTooSmall => {
                 assert!(utxo.value <= self.kyt_fee);
             }
-            DiscardedReason::Quarantined => {}
+            SuspendedReason::Quarantined => {}
         }
     }
 
@@ -1031,7 +1031,7 @@ impl CkBtcMinterState {
         kyt_provider: Option<Principal>,
     ) {
         #[allow(deprecated)]
-        self.discarded_utxos.remove_without_account(&utxo);
+        self.suspended_utxos.remove_without_account(&utxo);
         if self
             .checked_utxos
             .insert(
@@ -1054,7 +1054,7 @@ impl CkBtcMinterState {
 
     /// Marks the given UTXO as successfully checked.
     fn mark_utxo_checked_v2(&mut self, utxo: Utxo, account: &Account) {
-        self.discarded_utxos.remove(account, &utxo);
+        self.suspended_utxos.remove(account, &utxo);
         self.checked_utxos.insert(
             utxo,
             CheckedUtxo {
@@ -1159,9 +1159,9 @@ impl CkBtcMinterState {
             "utxos_state_addresses do not match"
         );
         ensure_eq!(
-            self.discarded_utxos,
-            other.discarded_utxos,
-            "discarded_utxos do not match"
+            self.suspended_utxos,
+            other.suspended_utxos,
+            "suspended_utxos do not match"
         );
 
         ensure_eq!(
@@ -1240,16 +1240,16 @@ impl CkBtcMinterState {
     }
 
     pub fn ignored_utxos(&self) -> impl Iterator<Item = &Utxo> {
-        self.discarded_utxos.iter().filter_map(|(u, r)| match r {
-            DiscardedReason::ValueTooSmall => Some(u),
-            DiscardedReason::Quarantined => None,
+        self.suspended_utxos.iter().filter_map(|(u, r)| match r {
+            SuspendedReason::ValueTooSmall => Some(u),
+            SuspendedReason::Quarantined => None,
         })
     }
 
     pub fn quarantined_utxos(&self) -> impl Iterator<Item = &Utxo> {
-        self.discarded_utxos.iter().filter_map(|(u, r)| match r {
-            DiscardedReason::ValueTooSmall => None,
-            DiscardedReason::Quarantined => Some(u),
+        self.suspended_utxos.iter().filter_map(|(u, r)| match r {
+            SuspendedReason::ValueTooSmall => None,
+            SuspendedReason::Quarantined => Some(u),
         })
     }
 }
@@ -1286,25 +1286,25 @@ impl IntoIterator for ProcessableUtxos {
 }
 
 #[derive(Eq, Clone, PartialEq, Debug, Default)]
-pub struct DiscardedUtxos {
-    /// Discarded UTXOS were initially stored without account information.
-    /// A discarded UTXO is periodically reevaluated when the user calls `update_balance`,
-    /// which will remove it from this data structure if the UTXO is no longer to be discarded,
+pub struct SuspendedUtxos {
+    /// Suspended UTXOS were initially stored without account information.
+    /// A suspended UTXO is periodically reevaluated when the user calls `update_balance`,
+    /// which will remove it from this data structure if the UTXO is no longer to be suspended,
     /// or move it to the other field containing this time the `Account` information.
-    utxos_without_account: BTreeMap<Utxo, DiscardedReason>,
-    utxos: BTreeMap<Account, BTreeMap<Utxo, DiscardedReason>>,
+    utxos_without_account: BTreeMap<Utxo, SuspendedReason>,
+    utxos: BTreeMap<Account, BTreeMap<Utxo, SuspendedReason>>,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Serialize, Deserialize)]
-pub enum DiscardedReason {
+pub enum SuspendedReason {
     /// UTXO whose value is too small to pay the KYT check fee.
     ValueTooSmall,
     /// UTXO that the KYT provider considered tainted.
     Quarantined,
 }
 
-impl DiscardedUtxos {
-    pub fn insert(&mut self, account: Account, utxo: Utxo, reason: DiscardedReason) -> bool {
+impl SuspendedUtxos {
+    pub fn insert(&mut self, account: Account, utxo: Utxo, reason: SuspendedReason) -> bool {
         if self.utxos.get(&account).and_then(|u| u.get(&utxo)) == Some(&reason) {
             return false;
         }
@@ -1315,18 +1315,18 @@ impl DiscardedUtxos {
     }
 
     #[deprecated(note = "Use insert() instead")]
-    pub fn insert_without_account(&mut self, utxo: Utxo, reason: DiscardedReason) {
+    pub fn insert_without_account(&mut self, utxo: Utxo, reason: SuspendedReason) {
         debug_assert!(self.utxos.values().all(|utxos| !utxos.contains_key(&utxo)));
         self.utxos_without_account.insert(utxo, reason);
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&Utxo, &DiscardedReason)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&Utxo, &SuspendedReason)> {
         self.utxos_without_account
             .iter()
             .chain(self.utxos.values().flat_map(|v| v.iter()))
     }
 
-    pub fn contains_utxo(&self, utxo: &Utxo, account: &Account) -> Option<&DiscardedReason> {
+    pub fn contains_utxo(&self, utxo: &Utxo, account: &Account) -> Option<&SuspendedReason> {
         self.utxos
             .get(account)
             .and_then(|u| u.get(utxo))
@@ -1350,12 +1350,12 @@ impl DiscardedUtxos {
         }
     }
 
-    /// Number of discarded UTXOs
+    /// Number of suspended UTXOs
     pub fn num_utxos(&self) -> usize {
         self.utxos_without_account.len() + self.utxos.values().map(|u| u.len()).sum::<usize>()
     }
 
-    pub fn utxos_without_account(&self) -> &BTreeMap<Utxo, DiscardedReason> {
+    pub fn utxos_without_account(&self) -> &BTreeMap<Utxo, SuspendedReason> {
         &self.utxos_without_account
     }
 }
@@ -1407,7 +1407,7 @@ impl From<InitArgs> for CkBtcMinterState {
                 .unwrap_or(crate::lifecycle::init::DEFAULT_KYT_FEE),
             owed_kyt_amount: Default::default(),
             checked_utxos: Default::default(),
-            discarded_utxos: Default::default(),
+            suspended_utxos: Default::default(),
             pending_reimbursements: Default::default(),
             reimbursed_transactions: Default::default(),
         }

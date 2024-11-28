@@ -2,8 +2,8 @@ use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::state::invariants::CheckInvariants;
 use crate::state::{
-    ChangeOutput, CkBtcMinterState, DiscardedReason, FinalizedBtcRetrieval, FinalizedStatus,
-    Overdraft, RetrieveBtcRequest, SubmittedBtcTransaction, UtxoCheckStatus,
+    ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, Overdraft,
+    RetrieveBtcRequest, SubmittedBtcTransaction, SuspendedReason, UtxoCheckStatus,
 };
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit, ReimbursementReason};
 use candid::Principal;
@@ -25,7 +25,7 @@ pub struct GetEventsArg {
 #[allow(deprecated)]
 mod event {
     use super::*;
-    use crate::state::DiscardedReason;
+    use crate::state::SuspendedReason;
 
     #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
     pub enum Event {
@@ -138,14 +138,14 @@ mod event {
 
         /// Indicates that the given UTXO's value is too small to pay for a KYT check.
         #[serde(rename = "ignored_utxo")]
-        #[deprecated(note = "Use DiscardedUtxo")]
+        #[deprecated(note = "Use SuspendedUtxo")]
         IgnoredUtxo { utxo: Utxo },
 
-        #[serde(rename = "discarded_utxo")]
-        DiscardedUtxo {
+        #[serde(rename = "suspended_utxo")]
+        SuspendedUtxo {
             utxo: Utxo,
             account: Account,
-            reason: DiscardedReason,
+            reason: SuspendedReason,
         },
 
         /// Indicates that the given KYT provider received owed fees.
@@ -352,7 +352,7 @@ pub fn replay<I: CheckInvariants>(
                     );
                 }
                 UtxoCheckStatus::Tainted => {
-                    state.discard_utxo_without_account(utxo, DiscardedReason::Quarantined);
+                    state.discard_utxo_without_account(utxo, SuspendedReason::Quarantined);
                 }
             },
             Event::CheckedUtxoV2 { utxo, account } => {
@@ -360,14 +360,14 @@ pub fn replay<I: CheckInvariants>(
             }
             #[allow(deprecated)] //need to replay past events
             Event::IgnoredUtxo { utxo } => {
-                state.discard_utxo_without_account(utxo, DiscardedReason::ValueTooSmall);
+                state.discard_utxo_without_account(utxo, SuspendedReason::ValueTooSmall);
             }
-            Event::DiscardedUtxo {
+            Event::SuspendedUtxo {
                 utxo,
                 account,
                 reason,
             } => {
-                state.discarded_utxos.insert(account, utxo, reason);
+                state.suspended_utxos.insert(account, utxo, reason);
             }
             Event::DistributedKytFee {
                 kyt_provider,

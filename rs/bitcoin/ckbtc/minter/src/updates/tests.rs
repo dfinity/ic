@@ -1,5 +1,5 @@
 mod update_balance {
-    use crate::state::{audit, eventlog::Event, mutate_state, read_state, DiscardedReason};
+    use crate::state::{audit, eventlog::Event, mutate_state, read_state, SuspendedReason};
     use crate::storage;
     use crate::test_fixtures::{
         ecdsa_public_key, get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
@@ -66,15 +66,15 @@ mod update_balance {
         assert_eq!(result, Ok(vec![UtxoStatus::Tainted(ignored_utxo.clone())]));
         assert_has_new_events(
             &events_before,
-            &[Event::DiscardedUtxo {
+            &[Event::SuspendedUtxo {
                 utxo: ignored_utxo.clone(),
                 account,
-                reason: DiscardedReason::Quarantined,
+                reason: SuspendedReason::Quarantined,
             }],
         );
         assert_eq!(
-            discarded_utxo(&ignored_utxo),
-            Some(DiscardedReason::Quarantined)
+            suspended_utxo(&ignored_utxo),
+            Some(SuspendedReason::Quarantined)
         );
     }
 
@@ -110,7 +110,7 @@ mod update_balance {
         )
         .await;
 
-        assert_eq!(discarded_utxo(&ignored_utxo), None);
+        assert_eq!(suspended_utxo(&ignored_utxo), None);
         assert_eq!(
             result,
             Ok(vec![UtxoStatus::Minted {
@@ -194,7 +194,7 @@ mod update_balance {
         )
         .await;
 
-        assert_eq!(discarded_utxo(&quarantined_utxo), None);
+        assert_eq!(suspended_utxo(&quarantined_utxo), None);
         assert_eq!(
             result,
             Ok(vec![UtxoStatus::Minted {
@@ -290,12 +290,12 @@ mod update_balance {
         Event::CheckedUtxoV2 { utxo, account }
     }
 
-    fn discarded_utxo(utxo: &Utxo) -> Option<DiscardedReason> {
+    fn suspended_utxo(utxo: &Utxo) -> Option<SuspendedReason> {
         read_state(|s| {
-            s.discarded_utxos
+            s.suspended_utxos
                 .iter()
-                .find_map(|(discarded_utxo, reason)| {
-                    if discarded_utxo == utxo {
+                .find_map(|(suspended_utxo, reason)| {
+                    if suspended_utxo == utxo {
                         Some(*reason)
                     } else {
                         None

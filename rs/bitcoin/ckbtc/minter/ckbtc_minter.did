@@ -319,7 +319,7 @@ type ReimbursementReason = variant {
     };
 };
 
-type DiscardedReason = variant {
+type SuspendedReason = variant {
     // The minter ignored this UTXO because UTXO's value is too small to pay
     // the KYT fees.
     ValueTooSmall;
@@ -372,7 +372,7 @@ type Event = variant {
         account : Account;
     };
     ignored_utxo : record { utxo: Utxo; };
-    discarded_utxo : record { utxo: Utxo; account: Account; reason: DiscardedReason };
+    suspended_utxo : record { utxo: Utxo; account: Account; reason: SuspendedReason };
     retrieve_btc_kyt_failed : record {
         address : text;
         amount : nat64;

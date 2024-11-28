@@ -1,8 +1,8 @@
 //! State modifications that should end up in the event log.
 
 use super::{
-    eventlog::Event, CkBtcMinterState, DiscardedReason, FinalizedBtcRetrieval, FinalizedStatus,
-    RetrieveBtcRequest, SubmittedBtcTransaction,
+    eventlog::Event, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, RetrieveBtcRequest,
+    SubmittedBtcTransaction, SuspendedReason,
 };
 use crate::state::invariants::CheckInvariantsImpl;
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit};
@@ -80,23 +80,23 @@ pub fn mark_utxo_checked(state: &mut CkBtcMinterState, utxo: Utxo, account: Acco
 }
 
 pub fn quarantine_utxo(state: &mut CkBtcMinterState, utxo: Utxo, account: Account) {
-    discard_utxo(state, utxo, account, DiscardedReason::Quarantined);
+    discard_utxo(state, utxo, account, SuspendedReason::Quarantined);
 }
 
 pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo, account: Account) {
-    discard_utxo(state, utxo, account, DiscardedReason::ValueTooSmall);
+    discard_utxo(state, utxo, account, SuspendedReason::ValueTooSmall);
 }
 
 fn discard_utxo(
     state: &mut CkBtcMinterState,
     utxo: Utxo,
     account: Account,
-    reason: DiscardedReason,
+    reason: SuspendedReason,
 ) {
     // ignored UTXOs are periodically re-evaluated and should not trigger
     // an event if they are still ignored.
-    if state.discard_utxo(utxo.clone(), account, reason) {
-        record_event(&Event::DiscardedUtxo {
+    if state.suspend_utxo(utxo.clone(), account, reason) {
+        record_event(&Event::SuspendedUtxo {
             utxo,
             account,
             reason,
