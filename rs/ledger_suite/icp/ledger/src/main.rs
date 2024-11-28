@@ -851,7 +851,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
 
         if upgrade_from_version == 0 {
             set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
-            print!("Upgrading from version 0 which does not use stable memory, clearing stable allowance data.");
+            print!("Upgrading from version 0 which does not use stable structures, clearing stable allowance data.");
             clear_stable_allowance_data();
             ledger.clear_arrivals();
         }
