@@ -82,12 +82,15 @@ pub enum VedKdKeyShareCreationError {
 impl_display_using_debug!(VedKdKeyShareCreationError);
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub enum VetKdKeyShareVerificationError {}
+pub enum VetKdKeyShareVerificationError {
+    InvalidSignature,
+}
 impl_display_using_debug!(VetKdKeyShareVerificationError);
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum VetKdKeyShareCombinationError {
     InvalidShares(Vec<NodeId>),
+    UnsatisfiedReconstructionThreshold { threshold: u32, share_count: usize },
 }
 impl_display_using_debug!(VetKdKeyShareCombinationError);
 

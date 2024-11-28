@@ -10,6 +10,7 @@ use crate::{
             ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
             ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
         },
+        vetkd::{VetKdArgs, VetKdEncryptedKey},
         AlgorithmId,
     },
     messages::CallbackId,
@@ -1109,6 +1110,7 @@ fn err_schnorr(err: ThresholdSchnorrSigInputsError) -> ThresholdSigInputsResult 
 pub enum ThresholdSigInputsRef {
     Ecdsa(ThresholdEcdsaSigInputsRef),
     Schnorr(ThresholdSchnorrSigInputsRef),
+    VetKd(VetKdArgs),
 }
 
 impl ThresholdSigInputsRef {
@@ -1120,6 +1122,9 @@ impl ThresholdSigInputsRef {
             ThresholdSigInputsRef::Schnorr(inputs) => {
                 PreSignatureRef::Schnorr(inputs.presig_transcript_ref.clone())
             }
+            // TODO: this function is actually only used by tests, so move it into
+            // test-only scope. Then panicking should be fine.
+            _ => panic!(),
         }
     }
 
@@ -1127,6 +1132,7 @@ impl ThresholdSigInputsRef {
         match self {
             ThresholdSigInputsRef::Ecdsa(inputs) => inputs.derivation_path.caller,
             ThresholdSigInputsRef::Schnorr(inputs) => inputs.derivation_path.caller,
+            ThresholdSigInputsRef::VetKd(inputs) => inputs.derivation_path.caller,
         }
     }
 
@@ -1134,6 +1140,7 @@ impl ThresholdSigInputsRef {
         match self {
             ThresholdSigInputsRef::Ecdsa(_) => SignatureScheme::Ecdsa,
             ThresholdSigInputsRef::Schnorr(_) => SignatureScheme::Schnorr,
+            ThresholdSigInputsRef::VetKd(_) => SignatureScheme::VetKd,
         }
     }
 
@@ -1145,6 +1152,7 @@ impl ThresholdSigInputsRef {
             ThresholdSigInputsRef::Schnorr(inputs_ref) => inputs_ref
                 .translate(resolver)
                 .map_or_else(err_schnorr, ok_schnorr),
+            ThresholdSigInputsRef::VetKd(inputs) => Ok(ThresholdSigInputs::VetKd(inputs.clone())),
         }
     }
 }
@@ -1152,18 +1160,21 @@ impl ThresholdSigInputsRef {
 pub enum ThresholdSigInputs {
     Ecdsa(ThresholdEcdsaSigInputs),
     Schnorr(ThresholdSchnorrSigInputs),
+    VetKd(VetKdArgs),
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CombinedSignature {
     Ecdsa(ThresholdEcdsaCombinedSignature),
     Schnorr(ThresholdSchnorrCombinedSignature),
+    VetKd(VetKdEncryptedKey),
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum SignatureScheme {
     Ecdsa,
     Schnorr,
+    VetKd,
 }
 
 impl Display for SignatureScheme {
@@ -1171,6 +1182,7 @@ impl Display for SignatureScheme {
         match self {
             SignatureScheme::Ecdsa => write!(f, "ECDSA"),
             SignatureScheme::Schnorr => write!(f, "Schnorr"),
+            SignatureScheme::VetKd => write!(f, "VetKd"),
         }
     }
 }

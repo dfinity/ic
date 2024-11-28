@@ -600,6 +600,14 @@ fn validate_new_signature_agreements(
                         .map_err(ThresholdSchnorrVerifyCombinedSignatureError)?;
                         new_signatures.insert(*id, CombinedSignature::Schnorr(signature));
                     }
+                    ThresholdSigInputsRef::VetKd(_) => {
+                        // We don't expect to find signature agreements for vet KD contexts in the
+                        // IDKG payload
+                        return Err(
+                            // TODO: Return dedicated error
+                            InvalidIDkgPayloadReason::NewSignatureUnexpected(*random_id).into(),
+                        );
+                    }
                 }
             }
         }
