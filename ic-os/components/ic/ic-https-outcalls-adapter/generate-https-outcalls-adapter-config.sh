@@ -46,6 +46,8 @@ if [ "${SOCKS_FILE}" != "" -a -e "${SOCKS_FILE}" ]; then
     read_socks_proxy "${SOCKS_FILE}"
 fi
 
+REGISTRY_CLIENT_LOCAL_STORE="/some_temp_directory/ic_registry_local_store/"
+
 if [ "${OUT_FILE}" == "" ]; then
     usage
     exit 1

@@ -29,7 +29,9 @@ pub struct Config {
     /// `Option<String>` can't be used because the decision on using a proxy is based on the subnet and this information
     /// is not present at adapter startup. So to enable/disable the proxy there exists a `socks_proxy_allowed` field in
     /// the adapter request.
-    pub socks_proxy: String,
+    pub socks_proxy: String,mihailjianu
+    //TOOD(): this shoudl instead be a pointer to the replica config. 
+    pub registry_client_local_store: PathBuf,
 }
 
 impl Default for Config {
@@ -40,6 +42,7 @@ impl Default for Config {
             incoming_source: IncomingSource::default(),
             logger: LoggerConfig::default(),
             socks_proxy: "socks5://notaproxy:1080".to_string(),
+            registry_client_local_store: PathBuf::from("/tmp/registry_client_local_store"),
         }
     }
 }

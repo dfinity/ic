@@ -322,7 +322,7 @@ impl RegistryClient for RegistryClientImpl {
     }
 
     fn get_latest_version(&self) -> RegistryVersion {
-        let _timer = self
+        let _timer = self 
             .metrics
             .api_call_duration
             .with_label_values(&["get_latest_version"])

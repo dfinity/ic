@@ -11,7 +11,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-struct BoundaryNodeProcess {
+struct BoundaryNodeProcess { 
     version: ReplicaVersion,
     binary: String,
     args: Vec<String>,
