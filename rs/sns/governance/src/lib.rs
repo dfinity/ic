@@ -1,5 +1,5 @@
 use crate::pb::v1::Subaccount as SubaccountProto;
-use std::{convert::TryInto, fmt::Debug};
+use std::convert::TryInto;
 
 mod cached_upgrade_steps;
 pub mod canister_control;
@@ -20,29 +20,37 @@ trait Len {
     fn len(&self) -> usize;
 }
 
+/// Maximum size, in bytes, of a scalar field (e.g., of type `String` or numeric types) that.
+/// Scalar values greater than this will be truncated during error reporting.
+pub const MAX_SCALAR_FIELD_LEN_BYTES: usize = 50_000;
+
 /// Warning: the len method on str and String is in bytes, not characters. If
 /// you want to constrain the number of characters, look at
 /// validate_chars_count.
 fn validate_len<V>(field_name: &str, field_value: &V, min: usize, max: usize) -> Result<(), String>
 where
-    V: Len + Debug,
+    V: Len + ToString,
 {
     let len = field_value.len();
 
     if len < min {
-        return field_err(
-            field_name,
-            field_value,
-            &format!("too short (min = {} vs. observed = {})", min, len),
-        );
+        let defect = &format!("too short (min = {} vs. observed = {})", min, len);
+
+        let bounded_field_value = field_value.to_string();
+
+        return field_err(field_name, bounded_field_value, defect);
     }
 
     if len > max {
-        return field_err(
-            field_name,
-            field_value,
-            &format!("too long (min = {} vs. observed = {})", min, len),
-        );
+        let defect = &format!("too long (max = {} vs. observed = {})", max, len);
+
+        let bounded_field_value = field_value
+            .to_string()
+            .chars()
+            .take(max)
+            .collect::<String>();
+
+        return field_err(field_name, bounded_field_value, defect);
     }
 
     Ok(())
@@ -94,19 +102,16 @@ fn validate_chars_count(
     let len = field_value.chars().count();
 
     if len < min {
-        return field_err(
-            field_name,
-            field_value,
-            &format!("too short (min = {} vs. observed = {})", min, len),
-        );
+        let defect = &format!("too short (min = {} vs. observed = {})", min, len);
+
+        return field_err(field_name, field_value.to_string(), defect);
     }
 
     if len > max {
-        return field_err(
-            field_name,
-            field_value,
-            &format!("too long (max = {} vs. observed = {})", max, len),
-        );
+        let defect = &format!("too long (max = {} vs. observed = {})", max, len);
+        let bounded_field_value = field_value.chars().take(max).collect::<String>();
+
+        return field_err(field_name, bounded_field_value, defect);
     }
 
     Ok(())
@@ -121,12 +126,28 @@ fn validate_required_field<'a, Inner>(
         .ok_or_else(|| format!("The {} field must be populated.", field_name))
 }
 
-/// Return an Err whose inner value describes (in detail) what is wrong with a
-/// field value, and where within some (Protocol Buffers message) struct.
-fn field_err(field_name: &str, field_value: impl Debug, defect: &str) -> Result<(), String> {
+/// Return an Err whose inner value describes (in detail) what is wrong with a field value (should
+/// be bounded), and where within some (Protocol Buffers message) struct.
+///
+/// It is the responsibility of the caller to sanitize / bound the value being invalidated,
+/// i.e., `field_value`. However, only up to the first `MAX_SCALAR_FIELD_LEN_BYTES` bytes
+/// will be taken.
+fn field_err(field_name: &str, field_value: String, defect: &str) -> Result<(), String> {
+    let mut field_value = field_value.chars();
+    let mut bounded_field_value = String::new();
+    while bounded_field_value.len() < MAX_SCALAR_FIELD_LEN_BYTES {
+        if let Some(c) = field_value.next() {
+            bounded_field_value.push(c);
+        } else {
+            break;
+        }
+    }
     Err(format!(
-        "The value in field {} is {}: {:?}",
-        field_name, defect, field_value
+        "The first {} characters of the value in field `{}` are {}: `{}`",
+        bounded_field_value.chars().count(),
+        field_name,
+        defect,
+        bounded_field_value
     ))
 }
 
@@ -201,6 +222,14 @@ mod tests {
         assert_is_ok(validate(&"abcde"));
 
         assert_is_err(validate(&"abcd\u{1F389}"));
+        assert_eq!(
+            validate(&"abcdefg"),
+            Err(
+                "The first 5 characters of the value in field `field_name` are too long \
+                 (max = 5 vs. observed = 7): `abcde`"
+                    .to_string()
+            ),
+        );
     }
 
     #[test]
@@ -261,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_field_err() {
-        let result = field_err("my_field", 41, "not the meaning of life");
+        let result = field_err("my_field", 41.to_string(), "not the meaning of life");
         match result {
             Ok(()) => panic!("field_err is supposed to always return an Err."),
             Err(err) => {
@@ -269,6 +298,31 @@ mod tests {
                 assert!(err.contains("41"), "err: {}", err);
                 assert!(err.contains("not the meaning of life"), "err: {}", err);
             }
+        }
+    }
+
+    #[test]
+    fn test_giant_field_err() {
+        let expected_upper_bound = 50_000;
+
+        let run_test_for_value_of_size = |value_size| {
+            let mut input_value: String = (0..value_size).map(|i| (i % 2) as u8 as char).collect();
+            let observer_err = field_err("foo", input_value.clone(), "bar").unwrap_err();
+            (input_value, observer_err)
+        };
+
+        // Scenario A: maximum size that still fits.
+        {
+            let (input_value, observer_err) = run_test_for_value_of_size(expected_upper_bound - 1);
+            assert!(err.contains(&input_value));
+        }
+
+        // Scenario B: minimum size that no longer fits.
+        {
+            let (input_value, observer_err) = run_test_for_value_of_size(expected_upper_bound - 1);
+            assert!(!err.contains(&input_value));
+            // Only the last character was dropped.
+            assert!(err.contains(input_value[..input_value.len() - 1]));
         }
     }
 }
