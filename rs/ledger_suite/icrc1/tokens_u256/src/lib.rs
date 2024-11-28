@@ -13,8 +13,6 @@ use serde::{
 use std::borrow::Cow;
 use std::fmt;
 
-pub mod minicbor_u256;
-
 /// The tag number for big positive integers.
 // See https://www.rfc-editor.org/rfc/rfc8949.html#name-bignums
 const BIGNUM_CBOR_TAG: u64 = 2;
