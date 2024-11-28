@@ -368,15 +368,33 @@ impl Governance {
         self.proto.target_version = None;
     }
 
-    /// Returns the upgrade steps that are guaranteed to start from `current_version`, resetting
-    /// `cached_upgrade_steps` and `target_version` if an inconsistency is detected.
+    /// Returns the upgrade steps that are guaranteed to start from `current_version`.
+    ///
+    /// - Initialized the cache if it has not been initialized yet.
+    /// - Resets `cached_upgrade_steps` and `target_version` if an inconsistency is detected.
     pub(crate) fn get_or_reset_upgrade_steps(
         &mut self,
         current_version: &Version,
     ) -> CachedUpgradeSteps {
-        let error_message = match self
-            .proto
-            .cached_upgrade_steps_or_err()
+        let cached_upgrade_steps =
+            if let Some(cached_upgrade_steps_pb) = &self.proto.cached_upgrade_steps {
+                CachedUpgradeSteps::try_from(cached_upgrade_steps_pb)
+            } else {
+                // Make a new, valid `cached_upgrade_steps_pb` instance and initialize
+                // the cache with it.
+                let cached_upgrade_steps_pb =
+                    CachedUpgradeStepsPb::from(CachedUpgradeSteps::without_pending_upgrades(
+                        current_version.clone(),
+                        self.env.now(),
+                    ));
+                let cached_upgrade_steps = CachedUpgradeSteps::try_from(&cached_upgrade_steps_pb);
+                self.proto
+                    .cached_upgrade_steps
+                    .replace(cached_upgrade_steps_pb);
+                cached_upgrade_steps
+            };
+
+        let error_message = match cached_upgrade_steps
             .and_then(|cached_upgrade_steps| cached_upgrade_steps.take_from(current_version))
         {
             Ok(upgrade_steps) => {
@@ -476,7 +494,7 @@ impl Governance {
 }
 
 impl GovernancePb {
-    pub(crate) fn cached_upgrade_steps_or_err(&self) -> Result<CachedUpgradeSteps, String> {
+    fn cached_upgrade_steps_or_err(&self) -> Result<CachedUpgradeSteps, String> {
         let Some(cached_upgrade_steps) = &self.cached_upgrade_steps else {
             return Err(
                 "Internal error: GovernanceProto.cached_upgrade_steps must be specified."
