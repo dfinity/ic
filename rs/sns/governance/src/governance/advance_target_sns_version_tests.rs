@@ -11,7 +11,10 @@ use crate::sns_upgrade::GetWasmResponse;
 use crate::sns_upgrade::SnsWasm;
 use crate::sns_upgrade::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use crate::{
-    pb::v1::{governance::Versions, ProposalData, Tally, UpgradeSnsToNextVersion},
+    pb::v1::{
+        governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
+        ProposalData, Tally, UpgradeSnsToNextVersion,
+    },
     sns_upgrade::{ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsVersion},
     types::test_helpers::NativeEnvironment,
 };
@@ -810,8 +813,12 @@ async fn test_refresh_cached_upgrade_steps_rejects_duplicate_versions() {
 
     // Step 2: Run code under test.
     assert_eq!(governance.proto.cached_upgrade_steps, None);
-    governance.temporarily_lock_refresh_cached_upgrade_steps();
-    governance.refresh_cached_upgrade_steps().await;
+    let deployed_version = governance
+        .try_temporarily_lock_refresh_cached_upgrade_steps()
+        .unwrap();
+    governance
+        .refresh_cached_upgrade_steps(deployed_version)
+        .await;
 
     // Step 3: Verify that the cached_upgrade_steps was not updated due to duplicate versions
     assert_eq!(

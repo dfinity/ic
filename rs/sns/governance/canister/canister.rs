@@ -693,7 +693,13 @@ fn advance_target_version(request: AdvanceTargetVersionRequest) -> AdvanceTarget
 async fn refresh_cached_upgrade_steps(
     _: RefreshCachedUpgradeStepsRequest,
 ) -> RefreshCachedUpgradeStepsResponse {
-    governance_mut().refresh_cached_upgrade_steps().await;
+    let goverance = governance_mut();
+    let deployed_version = goverance
+        .try_temporarily_lock_refresh_cached_upgrade_steps()
+        .unwrap();
+    goverance
+        .refresh_cached_upgrade_steps(deployed_version)
+        .await;
     RefreshCachedUpgradeStepsResponse {}
 }
 

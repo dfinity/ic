@@ -5,6 +5,7 @@ use crate::pb::v1::governance::CachedUpgradeSteps as CachedUpgradeStepsPb;
 use crate::pb::v1::governance::Version;
 use crate::pb::v1::governance::Versions;
 use crate::pb::v1::upgrade_journal_entry;
+use crate::pb::v1::Governance as GovernancePb;
 use crate::sns_upgrade::ListUpgradeStep;
 use crate::sns_upgrade::ListUpgradeStepsResponse;
 use crate::sns_upgrade::SnsCanisterType;
@@ -65,16 +66,17 @@ impl TryFrom<&CachedUpgradeStepsPb> for CachedUpgradeSteps {
             let mut seen = std::collections::HashSet::new();
             for version in &upgrade_steps.versions {
                 if !seen.insert(version) {
-                    return Err("Cannot refresh cached_upgrade_steps: SNS-W response contains duplicate versions".to_string());
+                    return Err(
+                        "CachedUpgradeSteps.upgrade_steps must not contain duplicate versions."
+                            .to_string(),
+                    );
                 }
             }
         }
 
         let Some((current_version, subsequent_versions)) = upgrade_steps.versions.split_first()
         else {
-            return Err(
-                "Cannot interpret CachedUpgradeSteps: upgrade_steps must not be empty.".to_string(),
-            );
+            return Err("CachedUpgradeSteps.upgrade_steps must not be empty.".to_string());
         };
 
         let requested_timestamp_seconds = requested_timestamp_seconds.unwrap_or_default();
@@ -240,9 +242,7 @@ impl CachedUpgradeSteps {
         let mut versions = versions.into_iter();
 
         let Some(current_version) = versions.next() else {
-            return Err(
-                "Unexpected ListUpgradeStepsResponse: steps must not be empty.".to_string(),
-            );
+            return Err("ListUpgradeStepsResponse.steps must not be empty.".to_string());
         };
 
         Ok(Self {
@@ -254,11 +254,13 @@ impl CachedUpgradeSteps {
     }
 
     /// Creates an instance of `Self` capturing a situation with no pending upgrades.
-    pub fn without_pending_upgrades(current_version: Version, now_timestamp_seconds: u64) -> Self {
+    fn without_pending_upgrades(current_version: Version, now_timestamp_seconds: u64) -> Self {
         Self {
             current_version,
             subsequent_versions: vec![],
-            // Having zero here makes the cache refresh happen ASAP.
+            // Since this function is used when get_or_reset_upgrade_steps resets the upgrade steps,
+            // having zero here makes the cache refresh happen ASAP after the upgrade steps
+            // are invalidated.
             requested_timestamp_seconds: 0,
             response_timestamp_seconds: now_timestamp_seconds,
         }
@@ -303,8 +305,8 @@ impl CachedUpgradeSteps {
     }
 
     /// Returns whether there are no pending upgrades.
-    pub fn is_empty(&self) -> bool {
-        self.subsequent_versions.is_empty()
+    pub fn has_pending_upgrades(&self) -> bool {
+        !self.subsequent_versions.is_empty()
     }
 
     /// Returns a new instance of `Self` starting with `version` in the `Ok` result
@@ -356,6 +358,53 @@ impl CachedUpgradeSteps {
 }
 
 impl Governance {
+    /// Invalidates the cached upgrade steps.
+    pub(crate) fn invalidate_target_version(&mut self, reason: String) {
+        self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionReset::new(
+            self.proto.target_version.clone(),
+            None,
+            reason,
+        ));
+        self.proto.target_version = None;
+    }
+
+    /// Returns the upgrade steps that are guaranteed to start from `current_version`, resetting
+    /// `cached_upgrade_steps` and `target_version` if an inconsistency is detected.
+    pub(crate) fn get_or_reset_upgrade_steps(
+        &mut self,
+        current_version: &Version,
+    ) -> CachedUpgradeSteps {
+        let error_message = match self
+            .proto
+            .cached_upgrade_steps_or_err()
+            .and_then(|cached_upgrade_steps| cached_upgrade_steps.take_from(current_version))
+        {
+            Ok(upgrade_steps) => {
+                // Happy case.
+                return upgrade_steps;
+            }
+            Err(err) => err,
+        };
+
+        self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset::new(
+            error_message.clone(),
+            vec![current_version.clone()],
+        ));
+
+        let cached_upgrade_steps =
+            CachedUpgradeSteps::without_pending_upgrades(current_version.clone(), self.env.now());
+
+        self.proto
+            .cached_upgrade_steps
+            .replace(CachedUpgradeStepsPb::from(cached_upgrade_steps.clone()));
+
+        if self.proto.target_version.is_some() {
+            self.invalidate_target_version(error_message)
+        }
+
+        cached_upgrade_steps
+    }
+
     pub fn try_temporarily_lock_refresh_cached_upgrade_steps(&mut self) -> Result<Version, String> {
         let deployed_version = self
             .proto
@@ -363,19 +412,7 @@ impl Governance {
             .clone()
             .ok_or("Cannot lock refresh_cached_upgrade_steps: deployed_version not set.")?;
 
-        let mut cached_upgrade_steps = match self.proto.cached_upgrade_steps_or_err() {
-            Ok(cached_upgrade_steps) => cached_upgrade_steps,
-            Err(message) => {
-                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset::new(
-                    message,
-                    vec![deployed_version.clone()],
-                ));
-                CachedUpgradeSteps::without_pending_upgrades(
-                    deployed_version.clone(),
-                    self.env.now(),
-                )
-            }
-        };
+        let mut cached_upgrade_steps = self.get_or_reset_upgrade_steps(&deployed_version);
 
         // Lock the upgrade mechanism.
         cached_upgrade_steps.requested_timestamp_seconds = self.env.now();
@@ -435,5 +472,74 @@ impl Governance {
         }
 
         self.proto.cached_upgrade_steps.replace(new_cache);
+    }
+}
+
+impl GovernancePb {
+    pub(crate) fn cached_upgrade_steps_or_err(&self) -> Result<CachedUpgradeSteps, String> {
+        let Some(cached_upgrade_steps) = &self.cached_upgrade_steps else {
+            return Err(
+                "Internal error: GovernanceProto.cached_upgrade_steps must be specified."
+                    .to_string(),
+            );
+        };
+
+        let cached_upgrade_steps = CachedUpgradeSteps::try_from(cached_upgrade_steps)
+            .map_err(|err| format!("Internal error: {}", err))?;
+
+        Ok(cached_upgrade_steps)
+    }
+
+    pub(crate) fn validate_new_target_version<V>(
+        &self,
+        new_target: Option<V>,
+    ) -> Result<
+        (
+            /* pending_upgrade_steps */ CachedUpgradeSteps,
+            /* valid_target_version */ Version,
+        ),
+        String,
+    >
+    where
+        Version: TryFrom<V>,
+        <Version as TryFrom<V>>::Error: ToString,
+    {
+        let deployed_version = self.deployed_version_or_err()?;
+
+        let cached_upgrade_steps = self.cached_upgrade_steps_or_err()?;
+
+        let upgrade_steps = cached_upgrade_steps.take_from(&deployed_version);
+        let upgrade_steps = match upgrade_steps {
+            Ok(upgrade_steps) if upgrade_steps.has_pending_upgrades() => upgrade_steps,
+            _ => {
+                return Err(format!(
+                    "Currently, the SNS does not have pending upgrades. \
+                     You may need to wait for the upgrade steps to be refreshed. \
+                     This shouldn't take more than {} seconds.",
+                    UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS
+                ));
+            }
+        };
+
+        let new_target = if let Some(new_target) = new_target {
+            let new_target = Version::try_from(new_target).map_err(|err| err.to_string())?;
+            upgrade_steps.validate_new_target_version(&new_target)?;
+            new_target
+        } else {
+            upgrade_steps.last().clone()
+        };
+
+        if let Some(current_target_version) = &self.target_version {
+            let new_target_is_not_ahead_of_current_target =
+                upgrade_steps.contains_in_order(&new_target, current_target_version)?;
+            if new_target_is_not_ahead_of_current_target {
+                return Err(format!(
+                    "SNS target already set to {}.",
+                    current_target_version
+                ));
+            }
+        }
+
+        Ok((upgrade_steps, new_target))
     }
 }
