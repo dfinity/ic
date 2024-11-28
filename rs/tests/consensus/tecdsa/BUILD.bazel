@@ -403,7 +403,7 @@ system_test_nns(
     },
     env = {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "schnorr_bip340",
-        "BENCHMARK_NAME": "tschnorr_ed25519_performance_test",
+        "BENCHMARK_NAME": "tschnorr_bip340_performance_test",
     },
     tags = [
         "experimental_system_test_colocation",
