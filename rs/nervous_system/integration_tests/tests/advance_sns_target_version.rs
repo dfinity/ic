@@ -69,7 +69,7 @@ async fn test_get_upgrade_journal() {
     let mut expected_upgrade_journal_entries = vec![];
     {
         expected_upgrade_journal_entries.push(Event::UpgradeStepsReset(UpgradeStepsReset::new(
-            "redacted".to_string(),
+            "this message will be redacted to keep the test spec more abstract".to_string(),
             vec![initial_sns_version.clone()],
         )));
 
@@ -230,7 +230,9 @@ async fn test_get_upgrade_journal() {
 
         expected_upgrade_journal_entries.push(
             sns_pb::upgrade_journal_entry::Event::UpgradeOutcome(
-                sns_pb::upgrade_journal_entry::UpgradeOutcome::success("redacted".to_string()),
+                sns_pb::upgrade_journal_entry::UpgradeOutcome::success(
+                    "this message will be redacted to keep the test spec more abstract".to_string(),
+                ),
             ),
         );
 
@@ -245,7 +247,9 @@ async fn test_get_upgrade_journal() {
 
         expected_upgrade_journal_entries.push(
             sns_pb::upgrade_journal_entry::Event::UpgradeOutcome(
-                sns_pb::upgrade_journal_entry::UpgradeOutcome::success("redacted".to_string()),
+                sns_pb::upgrade_journal_entry::UpgradeOutcome::success(
+                    "this message will be redacted to keep the test spec more abstract".to_string(),
+                ),
             ),
         );
 
