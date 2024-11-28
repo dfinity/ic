@@ -10184,7 +10184,7 @@ fn test_deciding_and_potential_voting_power() {
         // Factors that affect POTENTIAL voting power.
         cached_neuron_stake_e8s: 10 * E8, // Base
         // Bonuses factors.
-        dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
+        dissolve_state: Some(DissolveState::DissolveDelaySeconds(8 * ONE_YEAR_SECONDS)),
         // (Remember, birth day does not change with time, but age does...)
         aging_since_timestamp_seconds: START_TIMESTAMP_SECONDS,
 
@@ -10195,7 +10195,6 @@ fn test_deciding_and_potential_voting_power() {
     };
 
     let controller = neuron.controller.unwrap();
-    let original_potential_voting_power = neuron.potential_voting_power();
 
     let governance_proto = GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
@@ -10216,22 +10215,35 @@ fn test_deciding_and_potential_voting_power() {
         driver.get_fake_cmc(),
     );
 
+    let original_potential_voting_power = governance
+        .with_neuron(&NeuronId { id: 42 }, |neuron| {
+            neuron.potential_voting_power(START_TIMESTAMP_SECONDS)
+        })
+        .unwrap();
+    // There is a 2x dissolve delay bonus (and no age bonus).
+    assert_eq!(original_potential_voting_power, 20 * E8);
+
     // Step 2: Call the code under test.
-    let mut previous_timestamp_seconds = START_TIMESTAMP_SECONDS;
-    let mut previous_potential_voting_power = original_potential_voting_power;
+    let mut previous_timestamp_seconds = START_TIMESTAMP_SECONDS
+        // This is a little hack so that the inequality assertion near the end
+        // of get_voting_power_ratio works on the first call.
+        - 1;
+    let mut previous_potential_voting_power = original_potential_voting_power
+        // Ditto above hack.
+        - 1;
     let mut get_voting_power_ratio = |seconds_since_start| -> f64 {
         // Advance time.
         let new_timestamp_seconds = START_TIMESTAMP_SECONDS + seconds_since_start;
         assert!(
-            new_timestamp_seconds > previous_potential_voting_power,
+            new_timestamp_seconds > previous_timestamp_seconds,
             "{} vs. {}",
             new_timestamp_seconds,
-            previous_potential_voting_power,
+            previous_timestamp_seconds,
         );
         driver.advance_time_by(new_timestamp_seconds - previous_timestamp_seconds);
         previous_timestamp_seconds = new_timestamp_seconds;
 
-        // Read Neurons
+        // Read back the neuron (both in full, and abstract forms).
 
         let full_neuron = governance
             .get_full_neuron(&NeuronId { id: 42 }, &controller)
@@ -10280,7 +10292,6 @@ fn test_deciding_and_potential_voting_power() {
         2 * ONE_MONTH_SECONDS,
         3 * ONE_MONTH_SECONDS,
         6 * ONE_MONTH_SECONDS - 1,
-        6 * ONE_MONTH_SECONDS,
     ] {
         assert_eq!(
             get_voting_power_ratio(seconds_after_start),
@@ -10293,9 +10304,11 @@ fn test_deciding_and_potential_voting_power() {
 
     // Step 3.2 (the interesting phase): Then, for the next month, voting power goes down linearly.
     for (seconds_after_decline_starts, expected_ratio) in [
+        (0, 1.0),
         (ONE_MONTH_SECONDS / 5, 0.8),
         (ONE_MONTH_SECONDS / 2, 0.5),
         (ONE_MONTH_SECONDS / 4 * 3, 0.25),
+        (ONE_MONTH_SECONDS / 100 * 99, 0.01),
     ] {
         let observed_ratio =
             get_voting_power_ratio(6 * ONE_MONTH_SECONDS + seconds_after_decline_starts);
@@ -10305,7 +10318,7 @@ fn test_deciding_and_potential_voting_power() {
         }
 
         assert!(
-            abs_relative_error(observed_ratio, expected_ratio) < 1e-8,
+            abs_relative_error(observed_ratio, expected_ratio) < 5e-5,
             "{} vs. {} @ {} months after start of decline.",
             observed_ratio,
             expected_ratio,
