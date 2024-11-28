@@ -186,6 +186,18 @@ fn test_upgrade() {
     ic_ledger_suite_state_machine_tests::test_upgrade(ledger_wasm(), encode_init_args)
 }
 
+// #[test]
+// fn test_install_mainnet_ledger_then_upgrade_then_downgrade() {
+//     ic_ledger_suite_state_machine_tests::test_install_upgrade_downgrade(
+//         ledger_mainnet_wasm(),
+//         encode_init_args,
+//         ledger_wasm(),
+//         encode_upgrade_args,
+//         ledger_mainnet_wasm(),
+//         encode_upgrade_args,
+//     )
+// }
+
 #[test]
 fn test_upgrade_archive_options() {
     ic_ledger_suite_state_machine_tests::test_upgrade_archive_options(
