@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    hash::BuildHasherDefault,
-};
+use std::collections::HashMap;
 
 use candid::CandidType;
 use ic_base_types::PrincipalId;
@@ -12,13 +9,11 @@ use crate::v1_logs::RewardsLog;
 
 pub type NodeMultiplierStats = (PrincipalId, MultiplierStats);
 pub type RewardablesWithNodesMetrics = (
-    AHashMap<RegionNodeTypeCategory, u32>,
-    AHashMap<RewardableNode, Vec<DailyNodeMetrics>>,
+    HashMap<RegionNodeTypeCategory, u32>,
+    HashMap<RewardableNode, Vec<DailyNodeMetrics>>,
 );
 pub type RegionNodeTypeCategory = (String, String);
 pub type TimestampNanos = u64;
-pub type AHashSet<K> = HashSet<K, BuildHasherDefault<ahash::AHasher>>;
-pub type AHashMap<K, V> = HashMap<K, V, BuildHasherDefault<ahash::AHasher>>;
 
 #[derive(Clone, Hash, Eq, PartialEq)]
 pub struct RewardableNode {
@@ -37,12 +32,12 @@ pub struct DailyNodeMetrics {
 
 pub struct NodesMetricsHistory(Vec<NodeMetricsHistoryResponse>);
 
-impl From<NodesMetricsHistory> for AHashMap<PrincipalId, Vec<DailyNodeMetrics>> {
+impl From<NodesMetricsHistory> for HashMap<PrincipalId, Vec<DailyNodeMetrics>> {
     fn from(nodes_metrics: NodesMetricsHistory) -> Self {
         let mut sorted_metrics = nodes_metrics.0;
         sorted_metrics.sort_by_key(|metrics| metrics.timestamp_nanos);
-        let mut sorted_metrics_per_node: AHashMap<PrincipalId, Vec<NodeMetrics>> =
-            AHashMap::default();
+        let mut sorted_metrics_per_node: HashMap<PrincipalId, Vec<NodeMetrics>> =
+            HashMap::default();
 
         for metrics in sorted_metrics {
             for node_metrics in metrics.node_metrics {
@@ -103,8 +98,8 @@ pub struct MultiplierStats {
 }
 
 pub struct RewardsPerNodeProvider {
-    pub rewards_per_node_provider: AHashMap<PrincipalId, (Rewards, Vec<NodeMultiplierStats>)>,
-    pub rewards_log_per_node_provider: AHashMap<PrincipalId, RewardsLog>,
+    pub rewards_per_node_provider: HashMap<PrincipalId, (Rewards, Vec<NodeMultiplierStats>)>,
+    pub rewards_log_per_node_provider: HashMap<PrincipalId, RewardsLog>,
 }
 
 #[derive(Debug, Clone)]

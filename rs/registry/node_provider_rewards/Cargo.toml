@@ -8,9 +8,6 @@ edition.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../../types/base_types" }
-ahash = { version = "0.8.11", default-features = false, features = [
-    "compile-time-rng",
-] }
 ic-protobuf = { path = "../../protobuf" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
