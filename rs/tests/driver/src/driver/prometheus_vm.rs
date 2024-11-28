@@ -281,6 +281,7 @@ if uname -a | grep -q Ubuntu; then
   # k8s
   chmod g+s /etc/prometheus
   cp -f /config/prometheus/prometheus.yml /etc/prometheus/prometheus.yml
+  mkdir -p /config/grafana/dashboards
   cp -R /config/grafana/dashboards /var/lib/grafana/
   chown -R grafana:grafana /var/lib/grafana/dashboards
   chown -R {SSH_USERNAME}:prometheus /etc/prometheus
@@ -293,8 +294,6 @@ fi
                 ),
             )
             .unwrap();
-        let grafana_dashboards_src = get_dependency_path("rs/tests/dashboards");
-        let grafana_dashboards_dst = config_dir.join("grafana").join("dashboards");
 
         if let Err(e) = Self::sync_k8s_repo_dashboards(log.clone()) {
             warn!(
@@ -302,10 +301,13 @@ fi
                 "Failed to sync k8s dashboards to grafana. Error: {}",
                 e.to_string()
             )
-        };
+        } else {
+            let grafana_dashboards_src = get_dependency_path("rs/tests/dashboards");
+            let grafana_dashboards_dst = config_dir.join("grafana").join("dashboards");
+            debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
+            TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst).unwrap();
+        }
 
-        debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
-        TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst).unwrap();
         write_prometheus_config_dir(config_dir.clone(), self.scrape_interval).unwrap();
 
         self.universal_vm
