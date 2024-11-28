@@ -3098,7 +3098,7 @@ pub fn test_metrics_while_migrating<T>(
     assert!(
         !metrics
             .iter()
-            .any(|line| line.contains("ledger_total_supply")),
+            .any(|line| line.contains("ledger_num_approvals")),
         "ledger_total_supply should not be in metrics"
     );
 
@@ -3123,7 +3123,7 @@ pub fn test_metrics_while_migrating<T>(
     assert!(
         metrics
             .iter()
-            .any(|line| line.contains("ledger_total_supply")),
+            .any(|line| line.contains("ledger_num_approvals")),
         "Did not find ledger_total_supply metric"
     );
 }

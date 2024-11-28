@@ -1299,6 +1299,24 @@ fn test_incomplete_migration() {
 }
 
 #[test]
+fn test_incomplete_migration_to_current() {
+    ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
+        ledger_wasm_mainnet(),
+        ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_metrics_while_migrating() {
+    ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
+        ledger_wasm_mainnet(),
+        ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_approve_smoke() {
     ic_ledger_suite_state_machine_tests::test_approve_smoke(ledger_wasm(), encode_init_args);
 }
