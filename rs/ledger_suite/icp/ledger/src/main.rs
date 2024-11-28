@@ -786,39 +786,28 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
     {
         let mut ledger = LEDGER.write().unwrap();
         if !memory_manager_found {
-            // The ledger was written with dfn_core and has to be read with dfn_core in order
-            // to skip the first bytes that contain the length of the stable memory.
-            let mut stable_reader = dfn_core::stable::StableReader::new();
-            *ledger = ciborium::de::from_reader(&mut stable_reader)
-                .expect("Decoding stable memory failed");
+            let msg =
+                "Cannot upgrade from scratch stable memory, please upgrade to memory manager first.";
+            print!(msg);
+            panic!("{msg}");
+        }
+        *ledger = UPGRADES_MEMORY.with_borrow(|bs| {
+            let reader = Reader::new(bs, 0);
+            let mut buffered_reader = BufferedReader::new(BUFFER_SIZE, reader);
+            let ledger_state = ciborium::de::from_reader(&mut buffered_reader).expect(
+                "Failed to read the Ledger state from memory manager managed stable memory",
+            );
             let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
             pre_upgrade_instructions_consumed =
-                match stable_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
+                match buffered_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
                     Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
                     Err(_) => {
                         // If upgrading from a version that didn't write the instructions counter to stable memory
                         0u64
                     }
                 };
-        } else {
-            *ledger = UPGRADES_MEMORY.with_borrow(|bs| {
-                let reader = Reader::new(bs, 0);
-                let mut buffered_reader = BufferedReader::new(BUFFER_SIZE, reader);
-                let ledger_state = ciborium::de::from_reader(&mut buffered_reader).expect(
-                    "Failed to read the Ledger state from memory manager managed stable memory",
-                );
-                let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
-                pre_upgrade_instructions_consumed =
-                    match buffered_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
-                        Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
-                        Err(_) => {
-                            // If upgrading from a version that didn't write the instructions counter to stable memory
-                            0u64
-                        }
-                    };
-                ledger_state
-            });
-        }
+            ledger_state
+        });
 
         let upgrade_from_version = ledger.ledger_version;
         if ledger.ledger_version > LEDGER_VERSION {
