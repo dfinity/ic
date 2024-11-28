@@ -14927,6 +14927,7 @@ dependencies = [
  "minicbor",
  "num-traits",
  "on_wire",
+ "proptest",
  "serde",
  "serde_bytes",
  "serde_cbor",

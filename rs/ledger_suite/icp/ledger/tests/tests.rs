@@ -1287,6 +1287,7 @@ fn test_stable_migration_endpoints_disabled() {
         ledger_wasm_low_limits,
         encode_init_args,
     );
+    //TODO: test ICP specific endpoints
 }
 
 #[test]

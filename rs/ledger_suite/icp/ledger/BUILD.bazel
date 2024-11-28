@@ -72,6 +72,7 @@ rust_test(
     rustc_env = {
         "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath //rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm.wasm.gz)",
     },
+    deps = ["@crate_index//:proptest"],
 )
 
 rust_ledger_canister(name = "ledger-canister-wasm")
