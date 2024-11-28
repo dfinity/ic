@@ -1139,10 +1139,8 @@ impl Neuron {
 impl Neuron {
     pub fn into_proto(self, now_seconds: u64) -> NeuronProto {
         let visibility = self.visibility().map(|visibility| visibility as i32);
-        let deciding_voting_power =
-            Some(self.deciding_voting_power(now_seconds));
-        let potential_voting_power =
-            Some(self.potential_voting_power(now_seconds));
+        let deciding_voting_power = Some(self.deciding_voting_power(now_seconds));
+        let potential_voting_power = Some(self.potential_voting_power(now_seconds));
 
         let Neuron {
             id,
@@ -1179,8 +1177,7 @@ impl Neuron {
         } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
         let voting_power_refreshed_timestamp_seconds =
             Some(voting_power_refreshed_timestamp_seconds);
-        let recent_ballots_next_entry_index =
-            recent_ballots_next_entry_index.map(|x| x as u32);
+        let recent_ballots_next_entry_index = recent_ballots_next_entry_index.map(|x| x as u32);
 
         NeuronProto {
             id,
@@ -1245,7 +1242,6 @@ impl TryFrom<NeuronProto> for Neuron {
 
             // Derived Fields (and therefore, no need to transcribe).
             // --------------
-
             deciding_voting_power: _,
             potential_voting_power: _,
         } = proto;
