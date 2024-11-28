@@ -87,17 +87,17 @@ impl Block {
         if code.contains("$empty_return_call") {
             self.import("(func $empty_return_call (result i32) return_call $empty)");
         }
-        if code.contains("$recurse_call") {
+        if code.contains("$recursive_call") {
             self.import(
                 &RECURSIVE
-                    .replace("<NAME>", "$recurse_call")
+                    .replace("<NAME>", "$recursive_call")
                     .replace("<RETURN>", ""),
             );
         }
-        if code.contains("$recurse_return_call") {
+        if code.contains("$recursive_return_call") {
             self.import(
                 &RECURSIVE
-                    .replace("<NAME>", "$recurse_return_call")
+                    .replace("<NAME>", "$recursive_return_call")
                     .replace("<RETURN>", "return_"),
             );
         }

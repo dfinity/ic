@@ -486,13 +486,13 @@ pub fn benchmarks() -> Vec<Benchmark> {
     // stack, the larger the improvement. In the call-depth range 1-10000, 'return_call'
     // is approximately 1.5 times faster on average than 'call'.
     benchmarks.extend(benchmark_with_confirmation(
-        "ctrlop/return_call*",
-        "(global.set $x_i32 (call $recurse_return_call (i32.const 1)))",
+        "ctrlop/recursive_return_call*",
+        "(global.set $x_i32 (call $recursive_return_call (i32.const 10)))",
     ));
     // This is a reference for the 'return_call' benchmark above.
     benchmarks.extend(benchmark_with_confirmation(
-        "ctrlop/regular_call*",
-        "(global.set $x_i32 (call $recurse_call (i32.const 1)))",
+        "ctrlop/recursive_call*",
+        "(global.set $x_i32 (call $recursive_call (i32.const 10)))",
     ));
 
     benchmarks
