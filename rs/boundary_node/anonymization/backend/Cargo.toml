@@ -3,8 +3,8 @@ name = "anonymization-backend"
 version = "0.1.0"
 edition = "2021"
 
-[[bin]]
-name = "anonymization-backend"
+[lib]
+crate-type = ["cdylib"]
 path = "src/lib.rs"
 
 [dependencies]
