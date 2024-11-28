@@ -387,6 +387,16 @@ pub struct ReplicatedState {
     pub metadata: SystemMetadata,
 
     /// Queues for holding messages sent/received by the subnet.
+    ///
+    /// The Management Canister does not make outgoing calls as itself (it does so
+    /// on behalf of canisters, but those messages are enqueued in the canister's
+    /// output queue). Therefore, there's only a `push_subnet_output_response()`
+    /// method (no equivalent for requests) and an explicit check against inducting
+    /// responses into the subnet queues. This assumption is used in a number of
+    /// places (e.g. when shedding or timing out messages), so adding support for
+    /// outgoing calls in the future will likely require significant changes across
+    /// `ReplicatedState` and `SystemState`.
+    //
     // Must remain private.
     #[validate_eq(CompareWithValidateEq)]
     subnet_queues: CanisterQueues,
@@ -953,6 +963,14 @@ impl ReplicatedState {
             self.canister_states.insert(canister_id, canister);
         }
 
+        if self.subnet_queues.has_expired_deadlines(current_time) {
+            timed_out_messages_count += self.subnet_queues.time_out_messages(
+                current_time,
+                &self.metadata.own_subnet_id.into(),
+                &self.canister_states,
+            );
+        }
+
         timed_out_messages_count
     }
 
@@ -1280,7 +1298,6 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
 pub mod testing {
     use super::*;
     use crate::metadata_state::testing::StreamsTesting;
-    use crate::testing::CanisterQueuesTesting;
 
     /// Exposes `ReplicatedState` internals for use in other crates' unit tests.
     pub trait ReplicatedStateTesting {
@@ -1332,9 +1349,9 @@ pub mod testing {
         fn output_message_count(&self) -> usize {
             self.canister_states
                 .values()
-                .map(|canister| canister.system_state.queues().output_message_count())
+                .map(|canister| canister.system_state.queues().output_queues_message_count())
                 .sum::<usize>()
-                + self.subnet_queues.output_message_count()
+                + self.subnet_queues.output_queues_message_count()
         }
     }
 

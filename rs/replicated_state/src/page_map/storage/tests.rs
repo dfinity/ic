@@ -676,15 +676,16 @@ fn write_overlays_and_verify_with_tempdir(
 /// after every step.
 /// Use unsharded LSMT config.
 fn write_overlays_and_verify_unsharded(instructions: Vec<Instruction>) -> MetricsRegistry {
-    let tempdir = Builder::new()
+    let tdir = Builder::new()
         .prefix("write_overlays_and_verify_unsharded")
         .tempdir()
         .unwrap();
     let metrics =
-        write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tempdir);
-    tempdir
-        .close()
-        .expect("Unable to delete temporary directory");
+        write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tdir);
+
+    #[cfg(feature = "fuzzing_code")]
+    remove_tempdir(tdir);
+
     metrics
 }
 
@@ -692,15 +693,16 @@ fn write_overlays_and_verify_unsharded(instructions: Vec<Instruction>) -> Metric
 /// after every step.
 /// Use sharded LSMT config
 fn write_overlays_and_verify_sharded(instructions: Vec<Instruction>) -> MetricsRegistry {
-    let tempdir = Builder::new()
+    let tdir = Builder::new()
         .prefix("write_overlays_and_verify_sharded")
         .tempdir()
         .unwrap();
     let metrics =
-        write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_sharded(), &tempdir);
-    tempdir
-        .close()
-        .expect("Unable to delete temporary directory");
+        write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_sharded(), &tdir);
+
+    #[cfg(feature = "fuzzing_code")]
+    remove_tempdir(tdir);
+
     metrics
 }
 
@@ -709,6 +711,21 @@ fn write_overlays_and_verify_sharded(instructions: Vec<Instruction>) -> MetricsR
 pub fn write_overlays_and_verify(instructions: Vec<Instruction>) {
     write_overlays_and_verify_sharded(instructions.clone());
     write_overlays_and_verify_unsharded(instructions);
+}
+
+/// Force removes a given temporary directory
+/// Only used in fuzzing due to AFL's handling of terminating forked processes.
+/// See: https://docs.rs/tempfile/latest/tempfile/struct.TempDir.html#resource-leaking
+///
+/// For normal tests, the drop implementation is sufficient.
+///
+/// # Panics
+/// This method panics if the remove didn't succeed
+#[doc(hidden)]
+#[cfg(feature = "fuzzing_code")]
+fn remove_tempdir(tdir: TempDir) {
+    let tmp_path = tdir.into_path();
+    std::fs::remove_dir_all(tmp_path).expect("Unable to delete temporary directoy");
 }
 
 #[test]

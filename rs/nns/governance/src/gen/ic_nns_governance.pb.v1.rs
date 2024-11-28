@@ -306,6 +306,11 @@ pub struct Neuron {
     /// after the UNIX epoch).
     #[prost(uint64, optional, tag = "24")]
     pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
+    /// The index of the next entry in the recent_ballots list that will be
+    /// used for the circular buffer. This is used to determine which entry
+    /// to overwrite next.
+    #[prost(uint32, optional, tag = "25")]
+    pub recent_ballots_next_entry_index: ::core::option::Option<u32>,
     /// At any time, at most one of `when_dissolved` and
     /// `dissolve_delay` are specified.
     ///
@@ -433,6 +438,8 @@ pub struct AbridgedNeuron {
     pub visibility: ::core::option::Option<i32>,
     #[prost(uint64, optional, tag = "24")]
     pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
+    #[prost(uint32, optional, tag = "25")]
+    pub recent_ballots_next_entry_index: ::core::option::Option<u32>,
     #[prost(oneof = "abridged_neuron::DissolveState", tags = "9, 10")]
     pub dissolve_state: ::core::option::Option<abridged_neuron::DissolveState>,
 }
@@ -847,7 +854,7 @@ pub struct ManageNeuron {
     pub neuron_id_or_subaccount: ::core::option::Option<manage_neuron::NeuronIdOrSubaccount>,
     #[prost(
         oneof = "manage_neuron::Command",
-        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15"
+        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16"
     )]
     pub command: ::core::option::Option<manage_neuron::Command>,
 }
@@ -1323,6 +1330,20 @@ pub mod manage_neuron {
             NeuronIdOrSubaccount(super::super::Empty),
         }
     }
+    /// This is one way for a neuron to make sure that its deciding_voting_power is
+    /// not less than its potential_voting_power. See the description of those
+    /// fields in Neuron.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct RefreshVotingPower {}
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     #[derive(
         candid::CandidType,
@@ -1374,6 +1395,8 @@ pub mod manage_neuron {
         Merge(Merge),
         #[prost(message, tag = "15")]
         StakeMaturity(StakeMaturity),
+        #[prost(message, tag = "16")]
+        RefreshVotingPower(RefreshVotingPower),
     }
 }
 /// The response of the ManageNeuron command
@@ -1391,7 +1414,7 @@ pub mod manage_neuron {
 pub struct ManageNeuronResponse {
     #[prost(
         oneof = "manage_neuron_response::Command",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14"
     )]
     pub command: ::core::option::Option<manage_neuron_response::Command>,
 }
@@ -1582,6 +1605,17 @@ pub mod manage_neuron_response {
         serde::Serialize,
         comparable::Comparable,
         Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct RefreshVotingPowerResponse {}
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
         PartialEq,
         ::prost::Oneof,
     )]
@@ -1612,6 +1646,8 @@ pub mod manage_neuron_response {
         Merge(MergeResponse),
         #[prost(message, tag = "13")]
         StakeMaturity(StakeMaturityResponse),
+        #[prost(message, tag = "14")]
+        RefreshVotingPower(RefreshVotingPowerResponse),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]

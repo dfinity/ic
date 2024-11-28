@@ -215,6 +215,11 @@ RUN addgroup node_exporter && \
 RUN adduser --system --disabled-password --home /var/lib/metrics-proxy --group --no-create-home metrics-proxy && \
     usermod -a -G node_exporter metrics-proxy
 
+# The user to run the SOCKS proxy
+RUN addgroup socks && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Dante SOCKS Proxy" socks && \
+    adduser socks socks && chmod +s /usr/sbin/danted
+
 # ------ INSTALL SCRIPTS -----------------------------------------
 
 # Install IC binaries and other data late -- this means everything above

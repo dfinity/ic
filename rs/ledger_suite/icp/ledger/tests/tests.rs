@@ -1352,6 +1352,7 @@ fn test_incomplete_migration() {
         ledger_wasm_mainnet(),
         ledger_wasm_low_instruction_limits(),
         encode_init_args,
+        true,
     );
 }
 

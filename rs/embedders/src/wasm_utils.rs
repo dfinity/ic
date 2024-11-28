@@ -24,7 +24,7 @@ pub mod instrumentation;
 mod system_api_replacements;
 pub mod validation;
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct WasmImportsDetails {
     // True if the module imports these IC0 methods.
     pub imports_call_cycles_add: bool,

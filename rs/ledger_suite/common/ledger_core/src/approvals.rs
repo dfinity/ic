@@ -148,10 +148,6 @@ where
         self.allowances.pop_first()
     }
 
-    fn len_allowances(&self) -> usize {
-        self.allowances.len()
-    }
-
     fn len_expirations(&self) -> usize {
         self.expiration_queue.len()
     }

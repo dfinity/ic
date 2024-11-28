@@ -1,11 +1,16 @@
 use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
+use crate::management::CallError;
 use crate::memo::Status;
 use crate::queries::WithdrawalFee;
 use crate::state::ReimbursementReason;
+use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
-use candid::{CandidType, Deserialize};
-use ic_btc_interface::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo};
+use candid::{CandidType, Deserialize, Principal};
+use ic_btc_interface::{
+    GetUtxosRequest, GetUtxosResponse, MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo,
+};
+use ic_btc_kyt::CheckTransactionResponse;
 use ic_canister_log::log;
 use ic_management_canister_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
@@ -133,7 +138,11 @@ fn undo_sign_request(requests: Vec<state::RetrieveBtcRequest>, utxos: Vec<Utxo>)
 
 /// Updates the UTXOs for the main account of the minter to pick up change from
 /// previous retrieve BTC requests.
-async fn fetch_main_utxos(main_account: &Account, main_address: &BitcoinAddress) -> Vec<Utxo> {
+async fn fetch_main_utxos<R: CanisterRuntime>(
+    main_account: &Account,
+    main_address: &BitcoinAddress,
+    runtime: &R,
+) -> Vec<Utxo> {
     let (btc_network, min_confirmations) =
         state::read_state(|s| (s.btc_network, s.min_confirmations));
 
@@ -142,6 +151,7 @@ async fn fetch_main_utxos(main_account: &Account, main_address: &BitcoinAddress)
         &main_address.display(btc_network),
         min_confirmations,
         management::CallSource::Minter,
+        runtime,
     )
     .await
     {
@@ -502,7 +512,7 @@ async fn finalize_requests() {
     };
 
     let main_address = address::account_to_bitcoin_address(&ecdsa_public_key, &main_account);
-    let new_utxos = fetch_main_utxos(&main_account, &main_address).await;
+    let new_utxos = fetch_main_utxos(&main_account, &main_address, &IC_CANISTER_RUNTIME).await;
 
     // Transactions whose change outpoint is present in the newly fetched UTXOs
     // can be finalized. Note that all new minter transactions must have a
@@ -565,6 +575,7 @@ async fn finalize_requests() {
         &main_address.display(btc_network),
         /*min_confirmations=*/ 0,
         management::CallSource::Minter,
+        &IC_CANISTER_RUNTIME,
     )
     .await
     {
@@ -1244,6 +1255,12 @@ pub fn estimate_retrieve_btc_fee(
 
 #[async_trait]
 pub trait CanisterRuntime {
+    /// Returns the caller of the current call.
+    fn caller(&self) -> Principal;
+
+    /// Returns the canister id
+    fn id(&self) -> Principal;
+
     /// Gets current timestamp, in nanoseconds since the epoch (1970-01-01)
     fn time(&self) -> u64;
 
@@ -1251,17 +1268,73 @@ pub trait CanisterRuntime {
     /// The time must be provided as nanoseconds since 1970-01-01.
     /// See the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#global-timer-1).
     fn global_timer_set(&self, timestamp: u64);
+
+    /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified Bitcoin network.
+    async fn bitcoin_get_utxos(
+        &self,
+        request: &GetUtxosRequest,
+        cycles: u64,
+    ) -> Result<GetUtxosResponse, CallError>;
+
+    async fn check_transaction(
+        &self,
+        kyt_principal: Principal,
+        utxo: &Utxo,
+        cycle_payment: u128,
+    ) -> Result<CheckTransactionResponse, CallError>;
+
+    async fn mint_ckbtc(
+        &self,
+        amount: u64,
+        to: Account,
+        memo: Memo,
+    ) -> Result<u64, UpdateBalanceError>;
 }
 
 #[derive(Copy, Clone)]
 pub struct IcCanisterRuntime {}
 
+#[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
+    fn caller(&self) -> Principal {
+        ic_cdk::caller()
+    }
+
+    fn id(&self) -> Principal {
+        ic_cdk::id()
+    }
+
     fn time(&self) -> u64 {
         ic_cdk::api::time()
     }
 
     fn global_timer_set(&self, timestamp: u64) {
         ic_cdk::api::set_global_timer(timestamp);
+    }
+
+    async fn bitcoin_get_utxos(
+        &self,
+        request: &GetUtxosRequest,
+        cycles: u64,
+    ) -> Result<GetUtxosResponse, CallError> {
+        management::call("bitcoin_get_utxos", cycles, &request).await
+    }
+
+    async fn check_transaction(
+        &self,
+        kyt_principal: Principal,
+        utxo: &Utxo,
+        cycle_payment: u128,
+    ) -> Result<CheckTransactionResponse, CallError> {
+        management::check_transaction(kyt_principal, utxo, cycle_payment).await
+    }
+
+    async fn mint_ckbtc(
+        &self,
+        amount: u64,
+        to: Account,
+        memo: Memo,
+    ) -> Result<u64, UpdateBalanceError> {
+        updates::update_balance::mint(amount, to, memo).await
     }
 }
