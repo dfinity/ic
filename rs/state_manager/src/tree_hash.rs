@@ -219,10 +219,10 @@ mod tests {
             for i in 1..6 {
                 stream.push(
                     RequestBuilder::new()
-                        .metadata(Some(RequestMetadata::new(
+                        .metadata(RequestMetadata::new(
                             i % 3,
                             Time::from_nanos_since_unix_epoch(i % 2),
-                        )))
+                        ))
                         .deadline(maybe_deadline(i))
                         .build()
                         .into(),

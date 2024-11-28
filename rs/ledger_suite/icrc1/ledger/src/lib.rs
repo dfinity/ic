@@ -1265,6 +1265,7 @@ impl AllowancesData for StableAllowancesData {
     }
 
     fn len_arrivals(&self) -> usize {
+        // We do not store arrivals in stable structures.
         0
     }
 

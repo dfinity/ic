@@ -2470,7 +2470,7 @@ pub fn test_upgrade_serialization<Tokens>(
         .unwrap();
 }
 
-pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
+pub fn icrc1_test_multi_step_migration<T>(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current_lowinstructionlimits: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
@@ -2885,6 +2885,85 @@ pub fn test_incomplete_migration<T>(
     wait_ledger_ready(&env, canister_id, 20);
 
     check_approvals(5);
+}
+
+pub fn test_incomplete_migration_to_current<T>(
+    ledger_wasm_mainnet: Vec<u8>,
+    ledger_wasm_current_lowinstructionlimits: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let account = Account::from(PrincipalId::new_user_test_id(1).0);
+    let initial_balances = vec![(account, 100_000_000u64)];
+
+    // Setup ledger as it is deployed on the mainnet.
+    let (env, canister_id) = setup(
+        ledger_wasm_mainnet.clone(),
+        encode_init_args,
+        initial_balances,
+    );
+
+    const APPROVE_AMOUNT: u64 = 150_000;
+
+    const NUM_APPROVALS: u64 = 20;
+
+    let send_approvals = || {
+        for i in 2..2 + NUM_APPROVALS {
+            let spender = Account::from(PrincipalId::new_user_test_id(i).0);
+            let approve_args = default_approve_args(spender, APPROVE_AMOUNT);
+            send_approval(&env, canister_id, account.owner, &approve_args)
+                .expect("approval failed");
+        }
+    };
+
+    send_approvals();
+
+    let check_approvals = |non_zero_from: u64| {
+        for i in 2..2 + NUM_APPROVALS {
+            let allowance = Account::get_allowance(
+                &env,
+                canister_id,
+                account,
+                Account::from(PrincipalId::new_user_test_id(i).0),
+            );
+            let expected_allowance = if i < non_zero_from {
+                Nat::from(0u64)
+            } else {
+                Nat::from(APPROVE_AMOUNT)
+            };
+            assert_eq!(allowance.allowance, expected_allowance);
+        }
+    };
+
+    check_approvals(2);
+
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_current_lowinstructionlimits.clone(),
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .unwrap();
+
+    let is_ledger_ready = Decode!(
+        &env.query(canister_id, "is_ledger_ready", Encode!().unwrap())
+            .expect("failed to call is_ledger_ready")
+            .bytes(),
+        bool
+    )
+    .expect("failed to decode is_ledger_ready response");
+    assert!(!is_ledger_ready);
+
+    // Upgrade to current without completing the migration.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_current_lowinstructionlimits,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .unwrap();
+
+    wait_ledger_ready(&env, canister_id, 20);
+    check_approvals(2);
 }
 
 pub fn test_migration_resumes_from_frozen<T>(

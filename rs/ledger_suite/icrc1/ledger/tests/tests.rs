@@ -186,6 +186,18 @@ fn test_upgrade() {
     ic_ledger_suite_state_machine_tests::test_upgrade(ledger_wasm(), encode_init_args)
 }
 
+// #[test]
+// fn test_install_mainnet_ledger_then_upgrade_then_downgrade() {
+//     ic_ledger_suite_state_machine_tests::test_install_upgrade_downgrade(
+//         ledger_mainnet_wasm(),
+//         encode_init_args,
+//         ledger_wasm(),
+//         encode_upgrade_args,
+//         ledger_mainnet_wasm(),
+//         encode_upgrade_args,
+//     )
+// }
+
 #[test]
 fn test_upgrade_archive_options() {
     ic_ledger_suite_state_machine_tests::test_upgrade_archive_options(
@@ -454,8 +466,8 @@ fn icrc1_test_upgrade_serialization() {
 }
 
 #[test]
-fn icrc1_test_upgrade_serialization_fixed_tx() {
-    ic_ledger_suite_state_machine_tests::icrc1_test_upgrade_serialization_fixed_tx(
+fn icrc1_test_multi_step_migration() {
+    ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
         ledger_mainnet_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
@@ -485,6 +497,15 @@ fn icrc1_test_stable_migration_endpoints_disabled() {
 #[test]
 fn icrc1_test_incomplete_migration() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration(
+        ledger_mainnet_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn icrc1_test_incomplete_migration_to_current() {
+    ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
         ledger_mainnet_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,

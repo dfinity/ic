@@ -237,21 +237,19 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
-    if upgrade_from_version < LEDGER_VERSION {
-        if upgrade_from_version == 0 {
-            log_message("Upgrading from version 0 which does not use stable memory, clearing stable allowance data.");
-            clear_stable_allowance_data();
-        }
+    if upgrade_from_version == 0 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
+        log_message("Upgrading from version 0 which does not use stable structures, clearing stable allowance data.");
+        clear_stable_allowance_data();
         Access::with_ledger_mut(|ledger| {
             ledger.clear_arrivals();
         });
+    }
+    if !is_ready() {
         log_message("Migration started.");
         migrate_next_part(
             MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
         );
-    } else {
-        set_ledger_state(LedgerState::Ready);
     }
 
     let end = ic_cdk::api::instruction_counter();
@@ -260,7 +258,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 }
 
 fn migrate_next_part(instruction_limit: u64) {
-    let instructions_mingration_start = instruction_counter();
+    let instructions_migration_start = instruction_counter();
     STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow_mut() += 1);
     let mut migrated_allowances = 0;
     let mut migrated_expirations = 0;
@@ -292,8 +290,8 @@ fn migrate_next_part(instruction_limit: u64) {
                 }
             }
         }
-        let instructions_mingration = instruction_counter() - instructions_mingration_start;
-        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations}. Migration step instructions: {instructions_mingration}, total instructions used in message: {}." ,
+        let instructions_migration = instruction_counter() - instructions_migration_start;
+        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
             instruction_counter());
         if !is_ready() {
             log_message(
@@ -356,7 +354,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         pre_upgrade_instructions.saturating_add(post_upgrade_instructions) as f64,
         "Total number of instructions consumed during the last upgrade.",
     )?;
-    w.encode_gauge(
+    w.encode_counter(
         "ledger_stable_upgrade_migration_steps",
         stable_upgrade_migration_steps as f64,
         "Number of steps used to migrate data to stable structures.",

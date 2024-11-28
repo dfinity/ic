@@ -47,7 +47,7 @@ pub struct ReceivedEthEvent {
     pub from_address: Address,
     #[n(4)]
     pub value: Wei,
-    #[cbor(n(5), with = "crate::cbor::principal")]
+    #[cbor(n(5), with = "icrc_cbor::principal")]
     pub principal: Principal,
     #[n(6)]
     pub subaccount: Option<LedgerSubaccount>,
@@ -65,7 +65,7 @@ pub struct ReceivedErc20Event {
     pub from_address: Address,
     #[n(4)]
     pub value: Erc20Value,
-    #[cbor(n(5), with = "crate::cbor::principal")]
+    #[cbor(n(5), with = "icrc_cbor::principal")]
     pub principal: Principal,
     #[n(6)]
     pub erc20_contract_address: Address,
