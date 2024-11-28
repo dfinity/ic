@@ -155,27 +155,42 @@ fn create_early_remote_transcripts(
     num_transcripts: usize,
     last_dkg_summary: &Summary,
     logger: ReplicaLogger,
-) -> Vec<(CallbackId, NiDkgId, NiDkgTranscript)> {
+) -> Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)> {
     // Get all dealings that have not been used in a transcript already
     let all_dealings = utils::get_dkg_dealings2(pool_reader, parent, true);
 
     // Collect map of remote target_ids to ni_dkg_ids
     let mut remote_contexts: BTreeMap<NiDkgTargetId, Vec<NiDkgId>> = BTreeMap::new();
-    for (target_id, ni_dkg_id) in all_dealings
-        .iter()
-        .filter_map(|(id, _)| match id.target_subnet {
-            NiDkgTargetSubnet::Local => None,
-            NiDkgTargetSubnet::Remote(target_id) => Some((target_id, id)),
-        })
+    for (target_id, dkg_id) in
+        all_dealings
+            .iter()
+            .filter_map(|(dkg_id, _)| match dkg_id.target_subnet {
+                NiDkgTargetSubnet::Local => None,
+                NiDkgTargetSubnet::Remote(target_id) => Some((target_id, dkg_id)),
+            })
     {
         let entry = remote_contexts.entry(target_id).or_default();
-        entry.push(ni_dkg_id.clone());
+        entry.push(dkg_id.clone());
     }
 
     let x = remote_contexts
         .iter()
-        // For inital DKG transcripts, we need a pair of
-        .filter(|(_, ni_dkg_ids)| match ni_dkg_ids.len() {
+        // Lookup the config from the summary
+        .map(|(_, dkg_id)| {
+            dkg_id
+                .iter()
+                .filter_map(|ni_dkg_id| {
+                    last_dkg_summary
+                        .configs
+                        .get(ni_dkg_id)
+                        .map(|config| (ni_dkg_id, config))
+                })
+                .collect::<BTreeMap<&NiDkgId, &NiDkgConfig>>()
+        })
+        // For inital DKG transcripts, we need a pair of values while for VetKD we need a single config
+        // Here we do some matching, to check that we have the right number of configs
+        .filter(|ni_dkgs| match ni_dkgs.len() {
+            // TODO: Warn for 0?
             1 => {
                 // TODO: With vetkd, we need to check that these have a HighTresholdForMasterPublicKeyId tag
                 // Sould we also check that the key exists?
@@ -185,38 +200,27 @@ fn create_early_remote_transcripts(
             // Note: We do not really need to check whether there is an actual context, since this will happen later when we map
             // the transcripts to callback ids
             2 => {
-                let tags = ni_dkg_ids
-                    .iter()
-                    .map(|id| id.dkg_tag.clone())
+                let tags = ni_dkgs
+                    .keys()
+                    .map(|dkg_id| dkg_id.dkg_tag.clone())
                     .collect::<BTreeSet<_>>();
                 let expected_tags = TAGS.iter().cloned().collect::<BTreeSet<_>>();
                 tags == expected_tags
             }
-            // Other combinations should never happen and we discard them here
+            // Other combinations are not supported
             _ => false,
         })
-        // Lookup the config from the summary
-        .filter_map(|(_, ni_dkg_id)| {
-            // TODO: Find ALL configs here
-            last_dkg_summary
-                .configs
-                .iter()
-                .find(ni_dkg_id)
-                .map(|config| (ni_dkg_id, config))
-        })
-        // Generate the actual transcripts
-        .map(|(ni_dkg_id, config)| {
-            (
-                ni_dkg_id,
-                create_transcript(crypto, config, &all_dealings, &logger),
-            )
-        })
-        .filter_map(|(ni_dkg_id, maybe_transcript)| match maybe_transcript {
-            Ok(_) => todo!(),
-            Err(_) => None,
-        })
-        // Take only the number of transcripts
-        .take(num_transcripts);
+        // // Generate the actual transcripts
+        // .filter_map(|(ni_dkg_id, config)| {
+        //     match create_transcript(crypto, config, &all_dealings, &logger) {
+        //         Ok(_) => todo!(),
+        //         Err(_) => None,
+        //     }
+        // })
+        // // Take only the number of transcripts
+        // .take(num_transcripts)
+        .take(num_transcripts)
+        .collect::<Vec<_>>();
 
     todo!()
 }
