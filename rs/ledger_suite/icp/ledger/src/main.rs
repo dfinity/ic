@@ -764,7 +764,7 @@ const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 190_000_000_000;
 const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 1_900_000_000;
 
 #[cfg(feature = "low-upgrade-instruction-limits")]
-const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 0;
+const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 13_000_000;
 #[cfg(feature = "low-upgrade-instruction-limits")]
 const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 500_000;
 
