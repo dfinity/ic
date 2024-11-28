@@ -164,7 +164,7 @@ The ERC-20 -> ckERC-20 flow involves the following steps:
 .. The ERC-20 smart contract address. This identifies the ERC-20 token being deposited.
 .. The amount of ERC-20 tokens being deposited.
 .. The IC principal encoded as a `bytes32`.
-.. The IC ledger subaccount, use `0x` to use the default subaccount. Together with the IC principal, they uniquely identify an IC ledger account to which the amount of ckERC-20 should be minted.
+.. The IC ledger subaccount (use `0x` for the default subaccount). The IC principal together with the IC ledger subaccount uniquely identify an IC ledger account to which the amount of ckERC-20 should be minted.
 . The helper smart contract does the following steps within the *same* Ethereum transaction
 .. Call `transferFrom` on the ERC-20 smart contract to transfer the given amount of ERC-20 tokens from the user’s address to the minter’s address. (This requires that the smart contract’s address was previously approved as in step 2).
 .. Emits the `ReceivedEthOrErc20(address,address,uint,bytes32,bytes32)` event
@@ -172,10 +172,10 @@ The ERC-20 -> ckERC-20 flow involves the following steps:
 ... The second `address` argument is the source Ethereum address.
 ... The `uint` argument is the deposit value.
 ... The first `bytes32` argument encodes the IC principal.
-... The second `bytes32` argument encodes the ledger subaccount. Both principal and subaccount identify the receiver of ckERC20 on the IC.
+... The second `bytes32` argument encodes the ledger subaccount. The principal and subaccount together identify the receiver of ckERC20 on the IC.
 . The scrapping of the logs will be done as in ckETH, meaning that ckETH minter executes the following steps on a timer:
 .. Query the latest finalized block number using the `eth_getBlockByNumber` RPC endpoint. If the finalized block number hasn't changed since the last timer execution, skip the rest of the timer logic.
-.. Use the `eth_getLogs` RPC endpoint to fetch the helper smart contract logs from the previous finalized block number to the block number obtained at the previous step. The response is an array of events, where each event includes in particular the transaction hash `transactionHash` and the log entry index `logIndex`. Parse `ReceivedEthOrErc20` events contained in the logs.
+.. Use the `eth_getLogs` RPC endpoint to fetch the helper smart contract logs from the previous finalized block number to the block number obtained in the previous step. The response is an array of events, where each event includes in particular the transaction hash `transactionHash` and the log entry index `logIndex`. Parse `ReceivedEthOrErc20` events contained in the logs.
 .. For each new event, if the `transactionHash` was not seen before (minter keeps track of minted transactions), check that the sender of the transaction is not on the blocklist and mint ckERC20 and include the transaction hash and the log entry index in the ckERC-20 mint transaction memo (ICRC-1 ledger feature). Add the `transactionHash` to the list of seen transactions kept by the minter. If the sender of the transaction was a blocked address, then the minter does not mint ckERC20, but still marks the transaction hash as seen.
 
 

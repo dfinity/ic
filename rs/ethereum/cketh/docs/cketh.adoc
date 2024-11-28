@@ -108,11 +108,11 @@ bazel run //rs/ethereum/cketh/minter:principal_to_hex -- $(dfx identity get-prin
 
 Call the link:https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e00E68#writeContract[minter helper contract] `depositEth` function with your principal encoded and the amount as parameters.
 
-Call the link:https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e00E68#writeContract[minter helper contract] `depositEth` method of the helper smart contract (can be called from contract's Etherscan page) specifying
+Call the link:https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e00E68#writeContract[minter helper contract] `depositEth` method of the helper smart contract (can be called from the contract's Etherscan page) specifying
 
 . The amount of ETH being deposited.
 . The IC principal encoded as a `bytes32`.
-. The IC ledger subaccount, use `0x` to use the default subaccount. Together with the IC principal, they uniquely identify an IC ledger account to which the amount of ckETH should be minted.
+. The IC ledger subaccount (use `0x` for the default subaccount). The IC principal together with the IC ledger subaccount uniquely identify an IC ledger account to which the amount of ckERC-20 should be minted.
 
 [WARNING]
 ====
