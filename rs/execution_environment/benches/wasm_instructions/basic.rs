@@ -481,7 +481,7 @@ pub fn benchmarks() -> Vec<Benchmark> {
     ));
     // This benchmark inevitably contains many more instructions than the one we wish to
     // benchmark, so the absolute values of the results are not very interesting.
-    // What matters is the comparison with the 'regular_call*' results below, which
+    // What matters is the comparison with the 'recursive_call*' results below, which
     // shows that 'return_call' is at least as efficient as 'call'. The deeper the call-
     // stack, the larger the improvement. In the call-depth range 1-10000, 'return_call'
     // is approximately 1.5 times faster on average than 'call'.
