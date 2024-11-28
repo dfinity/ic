@@ -36,7 +36,7 @@ use axum::{
 use futures::StreamExt;
 use ic_async_utils::JoinMap;
 use ic_base_types::NodeId;
-use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
+use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig};
 use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
@@ -127,11 +127,6 @@ enum ConnectionEstablishError {
         CONNECT_TIMEOUT
     )]
     Timeout,
-    #[error("Failed to get rustls client config for peer {peer_id:?}. {cause:?}")]
-    TlsClientConfigError {
-        peer_id: NodeId,
-        cause: TlsConfigError,
-    },
     #[error("Incoming connection failed. {cause:?}")]
     ConnectionError {
         peer_id: Option<NodeId>,
@@ -207,7 +202,9 @@ pub(crate) fn start_connection_manager(
             SomeOrAllNodes::Some(BTreeSet::new()),
             registry_client.get_latest_version(),
         )
-        .expect("Failed to get rustls server config, so transport can't start.");
+        .expect(
+            "The rustls server config must be locally available, otherwise transport can't start.",
+        );
 
     let mut transport_config = quinn::TransportConfig::default();
 
@@ -450,8 +447,7 @@ impl ConnectionManager {
         let rustls_client_config = self
             .tls_config
             .client_config(peer_id, self.topology.latest_registry_version())
-            .map_err(|cause| ConnectionEstablishError::TlsClientConfigError { peer_id, cause })
-            .unwrap();
+            .expect("The rustls client config must be locally available, otherwise transport can't start.");
         let transport_config = self.transport_config.clone();
         let quinn_client_config = QuicClientConfig::try_from(rustls_client_config).unwrap();
         let mut client_config = quinn::ClientConfig::new(Arc::new(quinn_client_config));
