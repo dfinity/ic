@@ -854,7 +854,7 @@ pub struct ManageNeuron {
     pub neuron_id_or_subaccount: ::core::option::Option<manage_neuron::NeuronIdOrSubaccount>,
     #[prost(
         oneof = "manage_neuron::Command",
-        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15"
+        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16"
     )]
     pub command: ::core::option::Option<manage_neuron::Command>,
 }
@@ -1330,6 +1330,20 @@ pub mod manage_neuron {
             NeuronIdOrSubaccount(super::super::Empty),
         }
     }
+    /// This is one way for a neuron to make sure that its deciding_voting_power is
+    /// not less than its potential_voting_power. See the description of those
+    /// fields in Neuron.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct RefreshVotingPower {}
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     #[derive(
         candid::CandidType,
@@ -1381,6 +1395,8 @@ pub mod manage_neuron {
         Merge(Merge),
         #[prost(message, tag = "15")]
         StakeMaturity(StakeMaturity),
+        #[prost(message, tag = "16")]
+        RefreshVotingPower(RefreshVotingPower),
     }
 }
 /// The response of the ManageNeuron command
@@ -1398,7 +1414,7 @@ pub mod manage_neuron {
 pub struct ManageNeuronResponse {
     #[prost(
         oneof = "manage_neuron_response::Command",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14"
     )]
     pub command: ::core::option::Option<manage_neuron_response::Command>,
 }
@@ -1589,6 +1605,17 @@ pub mod manage_neuron_response {
         serde::Serialize,
         comparable::Comparable,
         Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct RefreshVotingPowerResponse {}
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
         PartialEq,
         ::prost::Oneof,
     )]
@@ -1619,6 +1646,8 @@ pub mod manage_neuron_response {
         Merge(MergeResponse),
         #[prost(message, tag = "13")]
         StakeMaturity(StakeMaturityResponse),
+        #[prost(message, tag = "14")]
+        RefreshVotingPower(RefreshVotingPowerResponse),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
