@@ -375,7 +375,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         // If the latest CUP is corrupted we can't deploy read-only access
         pub_key: (!cfg.corrupt_cup).then_some(pub_key),
         download_node: None,
-        local_upload: None,
+        local_upload: Some(false),
         upload_node: Some(upload_node.get_ip_addr()),
         chain_key_subnet_id: cfg.chain_key.then_some(root_subnet_id),
         next_step: None,
