@@ -712,7 +712,7 @@ impl AllowancesData for StableAllowancesData {
     fn pop_first_allowance(
         &mut self,
     ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)> {
-        panic!("The method should not be called for StableAllowancesData")
+        panic!("The method `pop_first_allowance` should not be called for StableAllowancesData")
     }
 
     fn len_allowances(&self) -> usize {
@@ -730,6 +730,6 @@ impl AllowancesData for StableAllowancesData {
     }
 
     fn clear_arrivals(&mut self) {
-        panic!("The method should not be called for StableAllowancesData")
+        panic!("The method `clear_arrivals` should not be called for StableAllowancesData")
     }
 }
