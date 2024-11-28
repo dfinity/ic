@@ -865,7 +865,7 @@ fn icrc106_get_index_principal() -> Result<Principal, Icrc106Error> {
         if let Some(index_principal) = ledger.index_principal() {
             Ok(index_principal)
         } else {
-            Err(Icrc106Error::IndexNotSet)
+            Err(Icrc106Error::IndexPrincipalNotSet)
         }
     })
 }

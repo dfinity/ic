@@ -3,7 +3,7 @@ use serde::Serialize;
 
 #[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Icrc106Error {
-    IndexNotSet,
+    IndexPrincipalNotSet,
     GenericError {
         error_code: Nat,
         description: String,

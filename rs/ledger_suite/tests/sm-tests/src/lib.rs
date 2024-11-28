@@ -4118,7 +4118,7 @@ pub fn test_icrc106_standard<T, U>(
     let (env, canister_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
     assert_icrc106_supported(&env, canister_id);
     assert_eq!(
-        Err(Icrc106Error::IndexNotSet),
+        Err(Icrc106Error::IndexPrincipalNotSet),
         icrc106_get_index_principal(&env, canister_id)
     );
     assert!(metadata(&env, canister_id)
