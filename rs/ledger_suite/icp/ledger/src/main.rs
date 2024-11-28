@@ -1526,7 +1526,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         pre_upgrade_instructions.saturating_add(post_upgrade_instructions) as f64,
         "Total number of instructions consumed during the last upgrade.",
     )?;
-    w.encode_gauge(
+    w.encode_counter(
         "ledger_stable_upgrade_migration_steps",
         STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow()) as f64,
         "Number of steps used to migrate data to stable structures.",
