@@ -2371,7 +2371,6 @@ pub fn test_upgrade_serialization<Tokens>(
     upgrade_args: Vec<u8>,
     minter: Arc<BasicIdentity>,
     verify_blocks: bool,
-    migration_to_stable_structures: bool,
 ) where
     Tokens: TokensType + Default + std::fmt::Display + From<u64>,
 {
@@ -2421,12 +2420,10 @@ pub fn test_upgrade_serialization<Tokens>(
                 let mut test_upgrade = |ledger_wasm: Vec<u8>, expected_migration_steps: u64| {
                     env.upgrade_canister(ledger_id, ledger_wasm, upgrade_args.clone())
                         .unwrap();
-                    if migration_to_stable_structures {
-                        wait_ledger_ready(&env, ledger_id, 10);
-                        let stable_upgrade_migration_steps =
-                            parse_metric(&env, ledger_id, "ledger_stable_upgrade_migration_steps");
-                        assert_eq!(stable_upgrade_migration_steps, expected_migration_steps);
-                    }
+                    wait_ledger_ready(&env, ledger_id, 10);
+                    let stable_upgrade_migration_steps =
+                        parse_metric(&env, ledger_id, "ledger_stable_upgrade_migration_steps");
+                    assert_eq!(stable_upgrade_migration_steps, expected_migration_steps);
                     add_tx_and_verify();
                 };
 
@@ -2436,26 +2433,21 @@ pub fn test_upgrade_serialization<Tokens>(
                 test_upgrade(ledger_wasm_current.clone(), 0);
                 // Test deserializing from memory manager
                 test_upgrade(ledger_wasm_current.clone(), 0);
-                if !migration_to_stable_structures {
-                    // Test downgrade to mainnet wasm
-                    test_upgrade(ledger_wasm_mainnet.clone(), 0);
-                } else {
-                    // Downgrade from stable structures to mainnet not possible.
-                    match env.upgrade_canister(
-                        ledger_id,
-                        ledger_wasm_mainnet.clone(),
-                        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-                    ) {
-                        Ok(_) => {
-                            panic!("Upgrade from future ledger version should fail!")
-                        }
-                        Err(e) => {
-                            assert!(e
-                                .description()
-                                .contains("Trying to downgrade from incompatible version"))
-                        }
-                    };
-                }
+                // Downgrade from stable structures to mainnet not possible.
+                match env.upgrade_canister(
+                    ledger_id,
+                    ledger_wasm_mainnet.clone(),
+                    Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+                ) {
+                    Ok(_) => {
+                        panic!("Upgrade from future ledger version should fail!")
+                    }
+                    Err(e) => {
+                        assert!(e
+                            .description()
+                            .contains("Trying to downgrade from incompatible version"))
+                    }
+                };
                 if verify_blocks {
                     // This will also verify the ledger blocks.
                     // The current implementation of the InMemoryLedger cannot get blocks

@@ -1254,7 +1254,6 @@ fn test_upgrade_serialization() {
         upgrade_args,
         minter,
         false,
-        true,
     );
 }
 
