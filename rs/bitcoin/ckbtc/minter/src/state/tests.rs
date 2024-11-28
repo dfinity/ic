@@ -107,7 +107,7 @@ mod discarded_utxos {
     use crate::test_fixtures::{ledger_account, utxo};
 
     #[test]
-    fn should_be_nop_when_already_discarded_for_same_reason() {
+    fn should_be_nop_when_already_discarded_for_some_reason() {
         for reason in all_discarded_reasons() {
             let mut discarded_utxos = DiscardedUtxos::default();
 
