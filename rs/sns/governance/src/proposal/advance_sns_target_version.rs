@@ -239,7 +239,68 @@ fn test_no_pending_upgrades() {
         // Inspect the observed results.
         assert_eq!(
             err,
-            "Cannot advance SNS target version: there are no pending upgrades."
+            "The currently deployed SNS version is not in the cached_upgrade_steps. You may need to wait for the upgrade steps to be refreshed. \
+            This shouldn't take more than 3600 seconds."
+        );
+    }
+}
+
+#[test]
+fn test_deployed_version_not_in_cached_upgrade_steps() {
+    // Prepare the world.
+    let pre_deployed_version = sns_version_for_tests();
+    let deployed_version = Version {
+        root_wasm_hash: vec![
+            67, 28, 179, 51, 254, 179, 247, 98, 247, 66, 176, 222, 165, 135, 69, 99, 58, 42, 44,
+            164, 16, 117, 233, 147, 49, 131, 216, 80, 180, 221, 178, 89,
+        ],
+        ..pre_deployed_version.clone()
+    };
+    let non_existent_version = Version {
+        root_wasm_hash: vec![
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+            25, 26, 27, 28, 29, 30,
+        ],
+        ..deployed_version.clone()
+    };
+
+    // Smoke check: Make sure all versions are different
+    let versions = vec![pre_deployed_version.clone(), non_existent_version.clone()];
+    assert!(
+        versions.iter().collect::<HashSet::<_>>().len() == versions.len(),
+        "Duplicates!"
+    );
+
+    let mut governance_proto = standard_governance_proto_for_tests(Some(deployed_version.clone()));
+    governance_proto.cached_upgrade_steps = Some(CachedUpgradeStepsPb {
+        upgrade_steps: Some(Versions { versions }),
+        ..Default::default()
+    });
+    let env = NativeEnvironment::new(Some(canister_test_id(501)));
+
+    // Run code under test.
+    for action in [
+        Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion { new_target: None }),
+        Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
+            new_target: Some(SnsVersion::from(deployed_version)),
+        }),
+        Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
+            new_target: Some(SnsVersion::from(pre_deployed_version)),
+        }),
+        Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
+            new_target: Some(SnsVersion::from(non_existent_version)),
+        }),
+    ] {
+        let err = validate_and_render_action(&Some(action), &env, &governance_proto, vec![])
+            .now_or_never()
+            .unwrap()
+            .unwrap_err();
+
+        // Inspect the observed results.
+        assert_eq!(
+            err,
+            "The currently deployed SNS version is not in the cached_upgrade_steps. You may need to wait for the upgrade steps to be refreshed. \
+            This shouldn't take more than 3600 seconds."
         );
     }
 }

@@ -3,7 +3,8 @@ use clap::{Args, Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
-use mac_address::mac_address::{get_ipmi_mac, FormattedMacAddress};
+use deterministic_ips::{Deployment, HwAddr};
+use network::resolve_mgmt_mac;
 use regex::Regex;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -11,7 +12,7 @@ use std::path::{Path, PathBuf};
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
-use config::types::*;
+use config_types::*;
 
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
@@ -90,9 +91,9 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub node_reward_type: Option<String>,
     #[arg(long)]
-    pub mgmt_mac: Option<String>,
+    pub mgmt_mac: Option<HwAddr>,
     #[arg(long)]
-    pub deployment_environment: Option<String>,
+    pub deployment_environment: Option<Deployment>,
     #[arg(long)]
     pub elasticsearch_hosts: Option<String>,
     #[arg(long)]
@@ -198,17 +199,7 @@ pub fn main() -> Result<()> {
                 elasticsearch_tags: None,
             };
 
-            let mgmt_mac = match deployment_json_settings.deployment.mgmt_mac {
-                Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
-                    println!(
-                        "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac
-                    );
-                    mgmt_mac
-                }
-                None => get_ipmi_mac()?,
-            };
+            let mgmt_mac = resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac)?;
 
             let node_reward_type = node_reward_type.expect("Node reward type is required.");
 
@@ -223,7 +214,7 @@ pub fn main() -> Result<()> {
             let icos_settings = ICOSSettings {
                 node_reward_type: Some(node_reward_type),
                 mgmt_mac,
-                deployment_environment: deployment_json_settings.deployment.name,
+                deployment_environment: deployment_json_settings.deployment.name.parse()?,
                 logging,
                 use_nns_public_key,
                 nns_urls: deployment_json_settings.nns.url.clone(),

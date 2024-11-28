@@ -768,3 +768,104 @@ fn test_recent_ballots_accessor_pre_and_post_migration() {
 
     assert_eq!(neuron.sorted_recent_ballots(), expected_updated_ballots);
 }
+
+#[test]
+fn test_ready_to_unstake_maturity() {
+    let now = 123_456_789;
+
+    let create_neuron_with_state_and_staked_maturity =
+        |dissolve_state_and_age, staked_maturity| -> Neuron {
+            NeuronBuilder::new(
+                NeuronId { id: 1 },
+                Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+                PrincipalId::new_user_test_id(1),
+                dissolve_state_and_age,
+                123_456_789,
+            )
+            .with_staked_maturity_e8s_equivalent(staked_maturity)
+            .build()
+        };
+
+    // Ready to unstake maturity since it's both dissolved and has staked maturity.
+    assert!(create_neuron_with_state_and_staked_maturity(
+        DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now,
+        },
+        1
+    )
+    .ready_to_unstake_maturity(now));
+
+    // Not ready to unstake maturity since it's not dissolved yet.
+    assert!(!create_neuron_with_state_and_staked_maturity(
+        DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now + 1,
+        },
+        1
+    )
+    .ready_to_unstake_maturity(now));
+
+    // Not ready to unstake maturity since it is non-dissolving.
+    assert!(!create_neuron_with_state_and_staked_maturity(
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 1,
+            aging_since_timestamp_seconds: now,
+        },
+        1
+    )
+    .ready_to_unstake_maturity(now));
+
+    // Not ready to unstake maturity since it has no staked maturity.
+    assert!(!create_neuron_with_state_and_staked_maturity(
+        DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now,
+        },
+        0
+    )
+    .ready_to_unstake_maturity(now));
+}
+
+#[test]
+fn test_ready_to_spawn() {
+    let now = 123_456_789;
+
+    // Ready to spawn since it has a spawn timestamp in the past.
+    let neuron_ready_to_spawn = NeuronBuilder::new(
+        NeuronId { id: 1 },
+        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        PrincipalId::new_user_test_id(1),
+        DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now - 1,
+        },
+        0, // created
+    )
+    .with_spawn_at_timestamp_seconds(now - 1)
+    .build();
+    assert!(neuron_ready_to_spawn.ready_to_spawn(now));
+
+    // Not ready to spawn since it has a spawn timestamp in the future.
+    let neuron_not_ready_to_spawn = NeuronBuilder::new(
+        NeuronId { id: 1 },
+        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        PrincipalId::new_user_test_id(1),
+        DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now + 1,
+        },
+        0, // created
+    )
+    .with_spawn_at_timestamp_seconds(now + 1)
+    .build();
+    assert!(!neuron_not_ready_to_spawn.ready_to_spawn(now));
+
+    // Not ready to spawn since it has no spawn timestamp.
+    let neuron_no_spawn_timestamp = NeuronBuilder::new(
+        NeuronId { id: 1 },
+        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        PrincipalId::new_user_test_id(1),
+        DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now - 1,
+        },
+        0, // created
+    )
+    .build();
+    assert!(!neuron_no_spawn_timestamp.ready_to_spawn(now));
+}

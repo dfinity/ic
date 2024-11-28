@@ -25,8 +25,8 @@ use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::messages::{
-    CallContextId, CallbackId, CanisterCall, CanisterMessageOrTask, RequestMetadata,
-    StopCanisterCallId, StopCanisterContext, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+    CallContextId, CallbackId, CanisterCall, CanisterMessageOrTask, StopCanisterCallId,
+    StopCanisterContext, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::nominal_cycles::NominalCycles;
@@ -105,7 +105,7 @@ impl CanisterStateFixture {
                 CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1), NO_DEADLINE),
                 Cycles::zero(),
                 Time::from_nanos_since_unix_epoch(0),
-                RequestMetadata::new(0, UNIX_EPOCH),
+                Default::default(),
             )
             .unwrap();
         self.canister_state
@@ -415,6 +415,7 @@ fn canister_state_push_input_best_effort_response_duplicate_of_paused_response()
 }
 
 #[test]
+#[should_panic(expected = "Failed to induct message to self: NonMatchingResponse")]
 fn canister_state_induct_messages_to_self_guaranteed_response_duplicate_of_paused_response() {
     canister_state_induct_messages_to_self_duplicate_of_paused_response(NO_DEADLINE);
 }
@@ -1236,7 +1237,7 @@ fn reverts_stopping_status_after_split() {
         false,
         Cycles::from(0u128),
         Time::from_nanos_since_unix_epoch(0),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
     ));
     canister_state
         .system_state
