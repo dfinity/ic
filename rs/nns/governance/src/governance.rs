@@ -2313,7 +2313,7 @@ impl Governance {
                             && neuron.visibility() == Some(Visibility::Public)
                         );
                 if let_caller_read_full_neuron {
-                    let mut proto = NeuronProto::from(neuron.clone());
+                    let mut proto = neuron.clone().into_proto(now);
                     // We get the recent_ballots from the neuron itself, because
                     // we are using a circular buffer to store them.  This solution is not ideal, but
                     // we need to do a larger refactoring to use the correct API types instead of the internal
@@ -3638,9 +3638,11 @@ impl Governance {
         id: &NeuronId,
         caller: &PrincipalId,
     ) -> Result<NeuronProto, GovernanceError> {
+        let now_seconds = self.env.now();
+
         self.neuron_store
             .get_full_neuron(*id, *caller)
-            .map(NeuronProto::from)
+            .map(|neuron| neuron.into_proto(now_seconds))
             .map_err(GovernanceError::from)
     }
 

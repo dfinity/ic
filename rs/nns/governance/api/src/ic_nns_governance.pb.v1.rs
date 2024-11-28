@@ -113,15 +113,11 @@ pub struct NeuronInfo {
     /// after the UNIX epoch).
     #[prost(uint64, optional, tag = "13")]
     pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
-
-    /// =============================================================
-    /// FIELDS THAT DO NOT CORRESPOND TO ANYTHING IN governance.proto
-    /// =============================================================
-    /// The numbering of tags here begins at 9000.
-
-    #[prost(uint64, optional, tag = "9001")]
+    /// See analogous field in Neuron.
+    #[prost(uint64, optional, tag = "14")]
     pub deciding_voting_power: Option<u64>,
-    #[prost(uint64, optional, tag = "9002")]
+    /// See analogous field in Neuron.
+    #[prost(uint64, optional, tag = "15")]
     pub potential_voting_power: Option<u64>,
 }
 /// A transfer performed from some account to stake a new neuron.

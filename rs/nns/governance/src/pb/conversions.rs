@@ -66,6 +66,8 @@ impl From<pb::NeuronInfo> for pb_api::NeuronInfo {
             neuron_type: item.neuron_type,
             visibility: item.visibility,
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
+            deciding_voting_power: item.deciding_voting_power,
+            potential_voting_power: item.potential_voting_power,
         }
     }
 }
@@ -85,6 +87,8 @@ impl From<pb_api::NeuronInfo> for pb::NeuronInfo {
             neuron_type: item.neuron_type,
             visibility: item.visibility,
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
+            deciding_voting_power: item.deciding_voting_power,
+            potential_voting_power: item.potential_voting_power,
         }
     }
 }
@@ -146,6 +150,8 @@ impl From<pb::Neuron> for pb_api::Neuron {
             dissolve_state: item.dissolve_state.map(|x| x.into()),
             visibility: item.visibility,
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
+            deciding_voting_power: item.deciding_voting_power,
+            potential_voting_power: item.potential_voting_power,
         }
     }
 }
@@ -181,6 +187,8 @@ impl From<pb_api::Neuron> for pb::Neuron {
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
             // This field is internal only and should not be read from API types.
             recent_ballots_next_entry_index: None,
+            deciding_voting_power: item.deciding_voting_power,
+            potential_voting_power: item.potential_voting_power,
         }
     }
 }
