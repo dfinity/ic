@@ -22,6 +22,7 @@ rust_fuzz_test_binary_afl(
     deps = [
         # Keep sorted.
         "//rs/replicated_state",
+        "@crate_index//:arbitrary",
         "@crate_index//:libfuzzer-sys",
     ],
 )

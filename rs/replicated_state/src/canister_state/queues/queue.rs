@@ -98,7 +98,7 @@ pub type InputQueue = CanisterQueue<CanisterInput>;
 
 /// An `OutputQueue` is a `CanisterQueue` holding references to outbound
 /// `RequestOrResponse` items.
-pub(super) type OutputQueue = CanisterQueue<RequestOrResponse>;
+pub type OutputQueue = CanisterQueue<RequestOrResponse>;
 
 impl<T> CanisterQueue<T> {
     /// Creates a new `CanisterQueue` with the given capacity.

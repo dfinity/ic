@@ -223,6 +223,30 @@ pub const QUEUE_BOUND: usize = 5000;
 #[cfg(feature = "fuzzing_code")]
 pub struct ArbitraryVec<T>(pub VecDeque<T>);
 
+impl<'a> Arbitrary<'a> for ArbitraryVec<OutboundReference> {
+    fn arbitrary(u: &mut Unstructured<'a>) -> ArbitraryResult<Self> {
+        if u.is_empty() {
+            return Ok(ArbitraryVec(VecDeque::new()));
+        }
+
+        let range: usize = u.int_in_range(1..=QUEUE_BOUND).unwrap();
+        let queue: VecDeque<OutboundReference> = (0..range)
+            .map(|g| g as u64)
+            .map(|g| {
+                *u.choose(&[
+                    Reference::new(Class::BestEffort, Kind::Request, g),
+                    Reference::new(Class::BestEffort, Kind::Response, g),
+                    Reference::new(Class::GuaranteedResponse, Kind::Request, g),
+                    Reference::new(Class::GuaranteedResponse, Kind::Response, g),
+                ])
+                .unwrap()
+            })
+            .collect();
+
+        Ok(ArbitraryVec(queue))
+    }
+}
+
 impl<'a> Arbitrary<'a> for ArbitraryVec<InboundReference> {
     fn arbitrary(u: &mut Unstructured<'a>) -> ArbitraryResult<Self> {
         if u.is_empty() {
@@ -251,7 +275,7 @@ impl<'a> Arbitrary<'a> for ArbitraryVec<InboundReference> {
 pub type InboundReference = Reference<CanisterInput>;
 
 /// A reference to an outbound message (returned as a `RequestOrResponse`).
-pub(super) type OutboundReference = Reference<RequestOrResponse>;
+pub type OutboundReference = Reference<RequestOrResponse>;
 
 /// A means for queue item types to declare whether they're inbound or outbound.
 pub(super) trait ToContext {
