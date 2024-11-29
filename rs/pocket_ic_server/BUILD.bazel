@@ -214,24 +214,36 @@ rust_test(
     deps = SPEC_TEST_DEPENDENCIES,
 )
 
-rust_test(
-    name = "bitcoin_integration_tests",
-    size = "small",
-    srcs = [
-        "tests/bitcoin_integration_tests.rs",
-    ],
-    aliases = {},
-    data = [
-        ":pocket-ic-server",
-        "@bitcoin_core//:bitcoind",
-        "@bitcoin_example_canister//file",
-        "@btc_canister//file",
-    ],
-    env = {
-        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
-        "BASIC_BITCOIN_WASM": "$(rootpath @bitcoin_example_canister//file)",
-        "BITCOIND_BIN": "$(rootpath @bitcoin_core//:bitcoind)",
-        "BTC_WASM": "$(rootpath @btc_canister//file)",
-    },
-    deps = TEST_DEPENDENCIES,
-)
+[
+    rust_test(
+        name = "bitcoin_integration_tests_" + arch,
+        size = "small",
+        srcs = [
+            "tests/bitcoin_integration_tests.rs",
+        ],
+        aliases = {},
+        data = [
+            ":pocket-ic-server",
+            "@bitcoin_core_" + arch + "//:bitcoind",
+            "@bitcoin_example_canister//file",
+            "@btc_canister//file",
+        ],
+        env = {
+            "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
+            "BASIC_BITCOIN_WASM": "$(rootpath @bitcoin_example_canister//file)",
+            "BITCOIND_BIN": "$(rootpath @bitcoin_core_" + arch + "//:bitcoind)",
+            "BTC_WASM": "$(rootpath @btc_canister//file)",
+        },
+        tags = ["test_macos"],
+        target_compatible_with = [
+            "@platforms//os:" + os,
+            "@platforms//cpu:" + cpu,
+        ],
+        deps = TEST_DEPENDENCIES,
+    )
+    for (arch, os, cpu) in [
+        ("x86_64-linux-gnu", "linux", "x86_64"),
+        ("x86_64-apple-darwin", "mac", "x86_64"),
+        ("arm64-apple-darwin", "mac", "arm64"),
+    ]
+]
