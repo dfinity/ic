@@ -2414,7 +2414,6 @@ fn test_no_target_version_fails_check_upgrade_status() {
         Box::new(FakeCmc::new()),
     );
 
-    // After we run our periodic tasks, the version should be marked as successful
     governance.run_periodic_tasks().now_or_never();
 
     assert!(governance.proto.pending_version.is_none());
@@ -2447,20 +2446,33 @@ fn test_no_target_version_fails_check_upgrade_status() {
     // Check that the upgrade journal reflects the failed upgrade attempt
     assert_matches!(
         &governance.proto.upgrade_journal.clone().unwrap().entries[..],
-        [UpgradeJournalEntry {
-            timestamp_seconds: _,
-            event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
-                upgrade_journal_entry::UpgradeOutcome {
-                    human_readable: Some(_),
-                    status: Some(
-                        upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
-                            upgrade_journal_entry::upgrade_outcome::InvalidState { version: None }
-                        )
-                    ),
-                }
-            )),
-        }]
-    )
+        [
+            UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                    upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: Some(_),
+                        status: Some(
+                            upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
+                                upgrade_journal_entry::upgrade_outcome::InvalidState {
+                                    version: None
+                                }
+                            )
+                        ),
+                    }
+                )),
+            },
+            UpgradeJournalEntry {
+                timestamp_seconds: Some(now),
+                event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                    upgrade_journal_entry::UpgradeStepsReset {
+                        human_readable: Some(_),
+                        upgrade_steps: Some(Versions { versions }),
+                    }
+                )),
+            },
+        ]
+    );
 }
 
 #[test]
