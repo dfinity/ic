@@ -13,6 +13,7 @@ use crate::{
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use canbench_rs::{bench, bench_fn, BenchResult};
+use futures::FutureExt;
 use ic_base_types::PrincipalId;
 use ic_nns_common::{
     pb::v1::{NeuronId as NeuronIdProto, ProposalId},
@@ -325,12 +326,10 @@ fn cast_vote_cascade_helper(strategy: SetUpStrategy, topic: Topic) -> BenchResul
 
     let proposal_id = ProposalId { id: 1 };
     bench_fn(|| {
-        governance.cast_vote_and_cascade_follow(proposal_id, neuron_id.into(), Vote::Yes, topic);
-        // let yes_votes = ballots
-        //     .iter()
-        //     .filter(|(id, ballot)| ballot.vote == Vote::Yes as i32)
-        //     .count();
-        // panic!("Number of cascaded votes: {}, {}", ballots.len(), yes_votes)
+        governance
+            .cast_vote_and_cascade_follow(proposal_id, neuron_id.into(), Vote::Yes, topic)
+            .now_or_never()
+            .unwrap();
     })
 }
 
@@ -385,6 +384,7 @@ fn make_neuron(
             vote: Vote::Yes as i32,
         })
         .collect();
+    neuron.recent_ballots_next_entry_index = Some(0);
 
     neuron
 }
@@ -484,6 +484,8 @@ fn centralized_following_all_stable() -> BenchResult {
 //
 #[bench(raw)]
 fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
+    let now_seconds = 1732817584;
+
     let _f = temporarily_enable_active_neurons_in_stable_memory();
     let neurons = (0..100)
         .map(|id| {
@@ -495,7 +497,7 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
                     1_000_000_000,
                     hashmap! {}, // get the default followees
                 )
-                .into(),
+                .into_proto(now_seconds),
             )
         })
         .collect::<BTreeMap<u64, NeuronProto>>();
@@ -507,7 +509,7 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
 
     let mut governance = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment::new(Default::default(), 0)),
+        Box::new(MockEnvironment::new(vec![], now_seconds)),
         Box::new(StubIcpLedger {}),
         Box::new(StubCMC {}),
     );

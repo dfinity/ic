@@ -1,6 +1,5 @@
 //! Replica -- Internet Computer
 
-use anyhow::anyhow;
 use ic_async_utils::{abort_on_panic, shutdown_signal};
 use ic_config::Config;
 use ic_crypto_sha2::Sha256;
@@ -10,20 +9,16 @@ use ic_metrics::MetricsRegistry;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
 use ic_tracing::ReloadHandles;
+use ic_tracing_jaeger_exporter::jaeger_exporter;
+use ic_tracing_logging_layer::logging_layer;
 use ic_types::{
     consensus::CatchUpPackage, replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion,
     SubnetId,
 };
 use nix::unistd::{setpgid, Pid};
-use opentelemetry::{trace::TracerProvider, KeyValue};
-use opentelemetry_otlp::SpanExporter;
-use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::{trace, Resource};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{signal, SignalKind};
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::Layer;
-use tracing_subscriber::Registry;
+use tracing_subscriber::{filter::filter_fn, layer::SubscriberExt, Layer};
 
 #[cfg(target_os = "linux")]
 mod jemalloc_metrics;
@@ -43,45 +38,6 @@ use regex::Regex;
 use std::fs::File;
 #[cfg(feature = "profiler")]
 use std::io::Write;
-
-pub type BoxedRegistryLayer = Box<dyn Layer<Registry> + Send + Sync>;
-
-fn layer_for_exporting_spans_to_jaeger(
-    config: &Config,
-    rt_handle: &tokio::runtime::Handle,
-) -> Result<BoxedRegistryLayer, anyhow::Error> {
-    // TODO: the replica config has empty string instead of a None value for the 'jaeger_addr'. It needs to be fixed.
-    let jager_addr = config
-        .tracing
-        .jaeger_addr
-        .clone()
-        .ok_or(anyhow!("No jaeger addr."))?;
-    if jager_addr.is_empty() {
-        return Err(anyhow!("Empty jaeger addr."));
-    }
-
-    let _rt_enter = rt_handle.enter();
-
-    let span_exporter = SpanExporter::builder()
-        .with_tonic()
-        .with_endpoint(jager_addr)
-        .with_protocol(opentelemetry_otlp::Protocol::Grpc)
-        .build()?;
-
-    let tracer = opentelemetry_sdk::trace::TracerProvider::builder()
-        .with_config(
-            trace::Config::default()
-                .with_sampler(opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(0.01))
-                .with_resource(Resource::new(vec![KeyValue::new(
-                    "service.name",
-                    "replica",
-                )])),
-        )
-        .with_batch_exporter(span_exporter, opentelemetry_sdk::runtime::Tokio)
-        .build();
-
-    Ok(tracing_opentelemetry::OpenTelemetryLayer::new(tracer.tracer("jaeger")).boxed())
-}
 
 /// Determine sha256 hash of the current replica binary
 ///
@@ -272,19 +228,30 @@ fn main() -> io::Result<()> {
     context.subnet_id = format!("{}", subnet_id.get());
     let logger = logger.with_new_context(context);
 
-    // Set up tracing
-    let mut tracing_layers = vec![];
+    // Setup the tracing subscriber
+    //   1. Log to stdout
+    //   2. Layers for generating flamegraphs
+    //   3. Jeager exporter if enabled
 
-    if let Ok(jager_exporter_layer) = layer_for_exporting_spans_to_jaeger(&config, rt_main.handle())
-    {
-        tracing_layers.push(jager_exporter_layer);
-    }
+    let (logging, _logging_drop_guard) = logging_layer(&config.logger, node_id, subnet_id);
+    // TARPC is way too verbose. Turn it off for now.
+    let logging = logging.with_filter(filter_fn(|metadata| metadata.target() != "tarpc::client"));
+
+    let mut tracing_layers = vec![logging.boxed()];
 
     let (reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(vec![]);
     let tracing_handle = ReloadHandles::new(reload_handle);
     tracing_layers.push(reload_layer.boxed());
 
-    let subscriber = tracing_subscriber::Registry::default().with(tracing_layers);
+    // TODO: the replica config has empty string instead of a None value for the 'jaeger_addr'. It needs to be fixed.
+    if let Some(jaeger_addr) = &config.tracing.jaeger_addr {
+        match jaeger_exporter(jaeger_addr, "replica", rt_main.handle()) {
+            Ok(layer) => tracing_layers.push(layer.boxed()),
+            Err(err) => info!(logger, "{:?}", err),
+        }
+    }
+
+    let subscriber = tracing_subscriber::registry().with(tracing_layers);
 
     if let Err(err) = tracing::subscriber::set_global_default(subscriber) {
         tracing::warn!("Failed to set global subscriber: {:#?}", err);

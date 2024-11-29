@@ -1141,6 +1141,7 @@ mod cast_vote_and_cascade_follow {
         pb::v1::{neuron::Followees, Ballot, ProposalData, Topic, Vote},
         test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
     };
+    use futures::FutureExt;
     use ic_base_types::PrincipalId;
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
     use icp_ledger::Subaccount;
@@ -1233,7 +1234,7 @@ mod cast_vote_and_cascade_follow {
         let governance_proto = crate::pb::v1::Governance {
             neurons: heap_neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into()))
+                .map(|(id, neuron)| (id, neuron.into_proto(now)))
                 .collect(),
             proposals: btreemap! {
                 1 => ProposalData {
@@ -1251,12 +1252,15 @@ mod cast_vote_and_cascade_follow {
             Box::new(StubCMC {}),
         );
 
-        governance.cast_vote_and_cascade_follow(
-            ProposalId { id: 1 },
-            NeuronId { id: 1 },
-            Vote::Yes,
-            topic,
-        );
+        governance
+            .cast_vote_and_cascade_follow(
+                ProposalId { id: 1 },
+                NeuronId { id: 1 },
+                Vote::Yes,
+                topic,
+            )
+            .now_or_never()
+            .unwrap();
 
         let deciding_voting_power = |neuron_id| {
             governance
@@ -1320,7 +1324,7 @@ mod cast_vote_and_cascade_follow {
         let governance_proto = crate::pb::v1::Governance {
             neurons: neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into()))
+                .map(|(id, neuron)| (id, neuron.into_proto(now)))
                 .collect(),
             proposals: btreemap! {
                 1 => ProposalData {
@@ -1338,12 +1342,15 @@ mod cast_vote_and_cascade_follow {
             Box::new(StubCMC {}),
         );
 
-        governance.cast_vote_and_cascade_follow(
-            ProposalId { id: 1 },
-            NeuronId { id: 1 },
-            Vote::Yes,
-            topic,
-        );
+        governance
+            .cast_vote_and_cascade_follow(
+                ProposalId { id: 1 },
+                NeuronId { id: 1 },
+                Vote::Yes,
+                topic,
+            )
+            .now_or_never()
+            .unwrap();
 
         let deciding_voting_power = |neuron_id| {
             governance
@@ -1768,7 +1775,7 @@ fn test_compute_ballots_for_new_proposal() {
         )
         .with_cached_neuron_stake_e8s(i * E8)
         .build()
-        .into()
+        .into_proto(CREATED_TIMESTAMP_SECONDS + 999)
     }
 
     let mut neuron_10 = new_neuron(10);
