@@ -1,0 +1,15 @@
+[package]
+name = "verification"
+description = "Remote attestation TODO."
+license = "Apache-2.0"
+edition = "2021"
+#version.workspace = true
+#authors.workspace = true
+#edition.workspace = true
+#documentation.workspace = true
+
+[dependencies]
+sev = "4.0.0"
+
+#[[bin]]
+#name = "main"
