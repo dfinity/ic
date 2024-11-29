@@ -16,8 +16,8 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/canister_client/sender",
     "//rs/canister_client/read_state_response_parser",
+    "//rs/canister_client/sender",
     "//rs/canonical_state",
     "//rs/certification",
     "//rs/crypto/secp256k1",
