@@ -580,7 +580,7 @@ impl LedgerClient {
 
         let url = self
             .ic_url
-            .join(&ic_canister_client::update_path(canister_id))
+            .join(&update_path(canister_id))
             .expect("URL join failed");
 
         // Submit the update call (with retry).
