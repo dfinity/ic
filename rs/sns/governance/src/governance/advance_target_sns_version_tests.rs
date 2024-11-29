@@ -72,7 +72,6 @@ async fn test_initiate_upgrade_blocked_by_upgrade_proposal() {
         GovernanceProto {
             root_canister_id: Some(root_canister_id.get()),
             deployed_version: Some(Version::from(current_version.clone())),
-            target_version: Some(Version::from(target_version.clone())),
             // Add an upgrade proposal that is adopted but not executed
             proposals: btreemap! {
                 proposal_id => proposal
@@ -107,6 +106,8 @@ async fn test_initiate_upgrade_blocked_by_upgrade_proposal() {
             .len(),
         2
     );
+
+    governance.proto.target_version = Some(Version::from(target_version.clone()));
 
     governance
         .initiate_upgrade_if_sns_behind_target_version()
