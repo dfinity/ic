@@ -2274,17 +2274,28 @@ fn test_check_upgrade_fails_if_canister_summary_errs_and_past_mark_failed_at_tim
     // Check that the upgrade journal reflects the timed-out upgrade attempt
     assert_matches!(
         &governance.proto.upgrade_journal.clone().unwrap().entries[..],
-        [UpgradeJournalEntry {
-            timestamp_seconds: _,
-            event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
-                upgrade_journal_entry::UpgradeOutcome {
-                    human_readable: Some(_),
-                    status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
-                        Empty {}
-                    )),
-                }
-            )),
-        }]
+        [
+            UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                    upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: Some(_),
+                        status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
+                            Empty {}
+                        )),
+                    }
+                )),
+            },
+            UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                    upgrade_journal_entry::UpgradeStepsReset {
+                        human_readable: Some(_),
+                        upgrade_steps: Some(_),
+                    },
+                )),
+            },
+        ]
     )
 }
 
