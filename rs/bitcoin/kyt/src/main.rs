@@ -145,6 +145,10 @@ fn post_upgrade(arg: KytArg) {
 
 #[ic_cdk::query(hidden = true)]
 fn http_request(req: http::HttpRequest) -> http::HttpResponse {
+    if ic_cdk::api::data_certificate().is_none() {
+        ic_cdk::trap("update call rejected");
+    }
+
     if req.path() == "/metrics" {
         let mut writer =
             ic_metrics_encoder::MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
