@@ -1858,7 +1858,12 @@ fn test_check_upgrade_status_fails_if_upgrade_not_finished_in_time() {
         ] => observed_upgrade_steps
     );
 
-    assert_eq!(observed_upgrade_steps, &Versions { versions: vec![current_version.into()] });
+    assert_eq!(
+        observed_upgrade_steps,
+        &Versions {
+            versions: vec![current_version.into()]
+        }
+    );
 }
 
 #[test]
@@ -2099,7 +2104,7 @@ fn test_check_upgrade_not_yet_failed_if_canister_summary_errs_and_before_mark_fa
     );
     assert_eq!(
         governance.proto.deployed_version.clone().unwrap(),
-        current_version.into()
+        current_version.clone().into()
     );
     // After we run our periodic tasks, the version should be marked as successful
     governance.run_periodic_tasks().now_or_never();
@@ -2131,8 +2136,21 @@ fn test_check_upgrade_not_yet_failed_if_canister_summary_errs_and_before_mark_fa
 
     assert!(proposal_data.failure_reason.is_none());
 
-    // Check that the upgrade journal has not been appended to
-    assert_eq!(governance.proto.upgrade_journal, None)
+    let journal = governance.proto.upgrade_journal.unwrap();
+    assert_eq!(
+        &journal.entries[..],
+        [UpgradeJournalEntry {
+            timestamp_seconds: Some(governance.env.now(),),
+            event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                upgrade_journal_entry::UpgradeStepsReset {
+                    human_readable: Some("Initializing the cache".to_string(),),
+                    upgrade_steps: Some(Versions {
+                        versions: vec![current_version.into()],
+                    },),
+                },
+            ),),
+        }],
+    );
 }
 
 #[test]
