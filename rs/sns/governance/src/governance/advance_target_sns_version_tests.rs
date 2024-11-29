@@ -565,7 +565,6 @@ async fn test_initiate_upgrade_blocked_by_pending_upgrade() {
         GovernanceProto {
             root_canister_id: Some(root_canister_id.get()),
             deployed_version: Some(Version::from(current_version.clone())),
-            target_version: Some(Version::from(target_version.clone())),
             // There's already an upgrade pending
             pending_version: Some(PendingVersion {
                 target_version: Some(pending_version.clone()),
@@ -603,6 +602,8 @@ async fn test_initiate_upgrade_blocked_by_pending_upgrade() {
             .len(),
         2
     );
+
+    governance.proto.target_version = Some(Version::from(target_version.clone()));
 
     governance
         .initiate_upgrade_if_sns_behind_target_version()
