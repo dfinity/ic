@@ -8475,6 +8475,7 @@ dependencies = [
  "ic-metrics",
  "ic-pprof",
  "ic-protobuf",
+ "ic-read-state-response-parser",
  "ic-registry-client-helpers",
  "ic-registry-keys",
  "ic-registry-provisional-whitelist",
