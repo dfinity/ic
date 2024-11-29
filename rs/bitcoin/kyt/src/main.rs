@@ -149,6 +149,17 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
         ic_cdk::trap("update call rejected");
     }
 
+    #[cfg(target_arch = "wasm32")]
+    fn heap_memory_size_bytes() -> usize {
+        const WASM_PAGE_SIZE_BYTES: usize = 65536;
+        core::arch::wasm32::memory_size(0) * WASM_PAGE_SIZE_BYTES
+    }
+
+    #[cfg(not(any(target_arch = "wasm32")))]
+    fn heap_memory_size_bytes() -> usize {
+        0
+    }
+
     if req.path() == "/metrics" {
         let mut writer =
             ic_metrics_encoder::MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
@@ -159,6 +170,14 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
             .gauge_vec("cycle_balance", "The canister cycle balance.")
             .unwrap()
             .value(&[("canister", "btc-kyt")], cycle_balance)
+            .unwrap();
+
+        writer
+            .encode_gauge(
+                "heap_memory_bytes",
+                heap_memory_size_bytes() as f64,
+                "Size of the heap memory allocated by this canister.",
+            )
             .unwrap();
 
         writer
