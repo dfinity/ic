@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "//rs/bitcoin/ckbtc/kyt",
     "//rs/bitcoin/ckbtc/minter",
     "//rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
-    "//rs/boundary_node/discower_bowndary:discower-bowndary",
     "//rs/canister_client",
     "//rs/canister_client/sender",
     "//rs/ledger_suite/icrc1/test_utils",

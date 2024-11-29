@@ -240,7 +240,6 @@ system_test_nns(
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
-        "//rs/boundary_node/discower_bowndary:discower-bowndary",
         "//rs/canister_client",
         "//rs/nervous_system/common/test_keys",
         "//rs/nns/common",

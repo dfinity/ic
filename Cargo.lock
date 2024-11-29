@@ -829,9 +829,9 @@ checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
 name = "axum"
-version = "0.7.7"
+version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "504e3947307ac8326a5437504c517c4b56716c9d98fac0028c2acc7ca47d70ae"
+checksum = "edca88bc138befd0323b20752846e6587272d3b03b0343c8ea28a6f819e6e71f"
 dependencies = [
  "async-trait",
  "axum-core",
@@ -840,7 +840,7 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-util",
  "itoa",
  "matchit",
@@ -917,7 +917,7 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-util",
  "pin-project-lite",
  "rustls 0.21.12",
@@ -1687,7 +1687,7 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "once_cell",
  "pin-project-lite",
  "regex",
@@ -3545,26 +3545,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "discower_bowndary"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arc-swap",
- "async-trait",
- "http 1.1.0",
- "ic-agent",
- "rand 0.8.5",
- "ring 0.17.8",
- "simple_moving_average",
- "thiserror 2.0.3",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "url",
-]
-
-[[package]]
 name = "displaydoc"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4450,7 +4430,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f2f12607f92c69b12ed746fabf9ca4f5c482cba46679c1a75b874ed7c26adb"
 dependencies = [
  "futures-io",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "rustls-pki-types",
 ]
 
@@ -5071,9 +5051,9 @@ version = "0.9.0"
 dependencies = [
  "axum",
  "clap 4.5.20",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-util",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "rustls-pemfile 2.2.0",
  "serde_json",
  "tokio",
@@ -5138,9 +5118,9 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "1.5.0"
+version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbbff0a806a4728c99295b254c8838933b5b082d75e3cb70c8dab21fdfbcfa9a"
+checksum = "97818827ef4f364230e16705d4706e2897df2bb60617d6ca15d598025a3c481f"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -5167,7 +5147,7 @@ dependencies = [
  "futures-util",
  "headers 0.4.0",
  "http 1.1.0",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-rustls 0.27.3",
  "hyper-util",
  "pin-project-lite",
@@ -5199,10 +5179,10 @@ checksum = "08afdbb5c31130e3034af566421053ab03787c640246a446327f550d11bcb333"
 dependencies = [
  "futures-util",
  "http 1.1.0",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-util",
  "log",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "rustls-native-certs 0.8.0",
  "rustls-pki-types",
  "tokio",
@@ -5219,7 +5199,7 @@ checksum = "51c227614c208f7e7c2e040526912604a1a957fe467c9c2f5b06c5d032337dab"
 dependencies = [
  "async-socks5",
  "http 1.1.0",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-util",
  "thiserror 1.0.68",
  "tokio",
@@ -5232,7 +5212,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3203a961e5c83b6f5498933e78b6b263e208c197b63e9c6c53cc82ffd3f63793"
 dependencies = [
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-util",
  "pin-project-lite",
  "tokio",
@@ -5250,7 +5230,7 @@ dependencies = [
  "futures-util",
  "http 1.1.0",
  "http-body 1.0.1",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "pin-project-lite",
  "socket2 0.5.7",
  "tokio",
@@ -5415,7 +5395,7 @@ dependencies = [
  "http-body 1.0.1",
  "http-body-to-bytes",
  "http-body-util",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-rustls 0.27.3",
  "hyper-util",
  "ic-certification 2.6.0",
@@ -5550,7 +5530,7 @@ dependencies = [
  "bytes",
  "futures",
  "futures-util",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "rand 0.8.5",
  "slog",
  "tokio",
@@ -5670,7 +5650,7 @@ dependencies = [
  "http-body 1.0.1",
  "http-body-util",
  "humantime",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-util",
  "instant-acme",
  "mockall",
@@ -5682,7 +5662,7 @@ dependencies = [
  "rand 0.8.5",
  "rcgen",
  "reqwest 0.12.9",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "rustls-acme",
  "rustls-pemfile 2.2.0",
  "rustls-platform-verifier",
@@ -5767,7 +5747,7 @@ dependencies = [
  "rcgen",
  "regex",
  "reqwest 0.12.9",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "rustls-pemfile 2.2.0",
  "serde",
  "serde_bytes",
@@ -6084,7 +6064,7 @@ dependencies = [
  "futures-util",
  "hex",
  "http-body-util",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-rustls 0.27.3",
  "hyper-util",
  "ic-canister-client-sender",
@@ -6106,7 +6086,7 @@ dependencies = [
  "prost 0.13.3",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "serde",
  "serde_cbor",
  "tokio",
@@ -6996,7 +6976,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rsa",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "serde",
  "sha2 0.10.8",
  "simple_asn1",
@@ -7756,7 +7736,7 @@ dependencies = [
  "ic-types-test-utils",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "tempfile",
  "tokio",
 ]
@@ -7956,7 +7936,7 @@ dependencies = [
  "ic-types",
  "pkcs8",
  "rand 0.8.5",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "signature",
  "time",
  "tokio",
@@ -7992,7 +7972,7 @@ dependencies = [
  "ic-types",
  "json5",
  "maplit",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "serde",
  "thiserror 2.0.3",
  "x509-parser",
@@ -8005,7 +7985,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-tls-interfaces",
  "mockall",
- "rustls 0.23.17",
+ "rustls 0.23.18",
 ]
 
 [[package]]
@@ -8472,7 +8452,7 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-util",
  "ic-async-utils",
  "ic-canister-client",
@@ -8521,7 +8501,7 @@ dependencies = [
  "rand 0.8.5",
  "reqwest 0.12.9",
  "rstest",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -8545,7 +8525,7 @@ dependencies = [
  "axum",
  "bytes",
  "crossbeam-channel",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-util",
  "ic-async-utils",
  "ic-config",
@@ -8627,7 +8607,7 @@ dependencies = [
  "futures",
  "http 1.1.0",
  "http-body-util",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-rustls 0.27.3",
  "hyper-socks2",
  "hyper-util",
@@ -8641,7 +8621,7 @@ dependencies = [
  "prometheus",
  "rand 0.8.5",
  "rstest",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "rustls-pemfile 2.2.0",
  "serde",
  "serde_json",
@@ -9106,7 +9086,9 @@ dependencies = [
  "ic-canisters-http-types",
  "ic-cdk 0.16.0",
  "ic-cdk-macros 0.9.0",
+ "ic-cdk-timers",
  "ic-certification 2.6.0",
+ "ic-crypto-tree-hash",
  "ic-icrc1",
  "ic-icrc1-test-utils",
  "ic-icrc1-tokens-u256",
@@ -9121,6 +9103,7 @@ dependencies = [
  "ic-test-utilities-load-wasm",
  "icrc-ledger-types",
  "leb128",
+ "minicbor",
  "num-bigint 0.4.6",
  "num-traits",
  "proptest",
@@ -9161,6 +9144,8 @@ dependencies = [
  "hex",
  "ic-ledger-core",
  "ic-stable-structures",
+ "icrc-cbor",
+ "minicbor",
  "num-bigint 0.4.6",
  "num-traits",
  "proptest",
@@ -9175,6 +9160,7 @@ dependencies = [
  "ciborium",
  "ic-ledger-core",
  "ic-stable-structures",
+ "minicbor",
  "num-traits",
  "proptest",
  "serde",
@@ -9397,6 +9383,7 @@ dependencies = [
  "candid",
  "ic-ledger-hash-of",
  "ic-stable-structures",
+ "minicbor",
  "num-traits",
  "proptest",
  "serde",
@@ -9481,6 +9468,7 @@ name = "ic-ledger-suite-state-machine-tests"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "assert_matches",
  "async-trait",
  "candid",
  "cddl",
@@ -9489,6 +9477,7 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-canisters-http-types",
+ "ic-config",
  "ic-error-types",
  "ic-icrc1",
  "ic-icrc1-ledger",
@@ -9499,6 +9488,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-management-canister-types",
+ "ic-registry-subnet-type",
  "ic-rosetta-test-utils",
  "ic-state-machine-tests",
  "ic-types",
@@ -10754,7 +10744,7 @@ dependencies = [
  "quinn",
  "quinn-udp",
  "rcgen",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "serde",
  "slog",
  "tempfile",
@@ -10918,7 +10908,7 @@ dependencies = [
  "prost 0.13.3",
  "quinn",
  "rstest",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "slog",
  "socket2 0.5.7",
  "thiserror 2.0.3",
@@ -12691,7 +12681,7 @@ dependencies = [
  "http 1.1.0",
  "humantime",
  "humantime-serde",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "ic-agent",
  "ic-artifact-pool",
  "ic-base-types",
@@ -13596,7 +13586,7 @@ dependencies = [
 name = "ic-xnet-hyper"
 version = "0.9.0"
 dependencies = [
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-rustls 0.27.3",
  "hyper-util",
  "ic-crypto-tls-interfaces",
@@ -13614,7 +13604,7 @@ dependencies = [
  "async-trait",
  "axum",
  "http-body-util",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-util",
  "ic-base-types",
  "ic-canonical-state",
@@ -13722,7 +13712,6 @@ dependencies = [
  "anyhow",
  "candid",
  "certificate_orchestrator_interface",
- "discower_bowndary",
  "ic-agent",
  "ic-base-types",
  "ic-boundary-nodes-integration-test-common",
@@ -14067,7 +14056,9 @@ dependencies = [
  "crc32fast",
  "hex",
  "ic-stable-structures",
+ "icrc-cbor",
  "itertools 0.12.1",
+ "minicbor",
  "num-bigint 0.4.6",
  "num-traits",
  "proptest",
@@ -14472,7 +14463,7 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-rustls 0.27.3",
  "hyper-util",
  "ring 0.17.8",
@@ -14745,7 +14736,7 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-http-proxy",
  "hyper-rustls 0.27.3",
  "hyper-timeout",
@@ -14754,7 +14745,7 @@ dependencies = [
  "k8s-openapi",
  "kube-core",
  "pem 3.0.4",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "rustls-pemfile 2.2.0",
  "secrecy",
  "serde",
@@ -15661,7 +15652,7 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-util",
  "log",
  "rand 0.8.5",
@@ -16471,7 +16462,7 @@ dependencies = [
  "get_if_addrs",
  "hex",
  "http-body-util",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-rustls 0.27.3",
  "hyper-util",
  "ic-async-utils",
@@ -17136,7 +17127,7 @@ dependencies = [
  "hex",
  "http 1.1.0",
  "http-body-util",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-util",
  "ic-agent",
  "ic-boundary",
@@ -17807,7 +17798,7 @@ dependencies = [
  "quinn-proto",
  "quinn-udp",
  "rustc-hash 2.0.0",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "socket2 0.5.7",
  "thiserror 1.0.68",
  "tokio",
@@ -17824,7 +17815,7 @@ dependencies = [
  "rand 0.8.5",
  "ring 0.17.8",
  "rustc-hash 2.0.0",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "slab",
  "thiserror 1.0.68",
  "tinyvec",
@@ -18430,7 +18421,7 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-rustls 0.27.3",
  "hyper-util",
  "ipnet",
@@ -18442,7 +18433,7 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "quinn",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "rustls-native-certs 0.8.0",
  "rustls-pemfile 2.2.0",
  "rustls-pki-types",
@@ -18857,9 +18848,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.17"
+version = "0.23.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f1a745511c54ba6d4465e8d5dfbd81b45791756de28d4981af70d6dca128f1e"
+checksum = "9c9cc1d47e243d655ace55ed38201c19ae02c148ae56412ab8750e8f0166ab7f"
 dependencies = [
  "brotli 7.0.0",
  "brotli-decompressor",
@@ -18959,7 +18950,7 @@ dependencies = [
  "jni",
  "log",
  "once_cell",
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "rustls-native-certs 0.7.3",
  "rustls-platform-verifier-android",
  "rustls-webpki 0.102.8",
@@ -21055,7 +21046,7 @@ version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c7bc40d0e5a97695bb96e27995cd3a08538541b0a846f65bba7a359f36700d4"
 dependencies = [
- "rustls 0.23.17",
+ "rustls 0.23.18",
  "rustls-pki-types",
  "tokio",
 ]
@@ -21173,7 +21164,7 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.5.0",
+ "hyper 1.5.1",
  "hyper-timeout",
  "hyper-util",
  "percent-encoding",
