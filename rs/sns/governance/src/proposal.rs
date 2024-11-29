@@ -1742,9 +1742,8 @@ fn validate_and_render_advance_sns_target_version_proposal(
         let timestamp_seconds = upgrade_steps.approximate_time_of_validity_timestamp_seconds();
         i64::try_from(timestamp_seconds)
             .ok()
-            .map(|timestamp_seconds| DateTime::from_timestamp(timestamp_seconds, 0))
-            .flatten()
-            .map(|datetime| format!("{}", datetime))
+            .and_then(|timestamp_seconds| DateTime::from_timestamp(timestamp_seconds, 0))
+            .map(|datetime| datetime.to_string())
             // This fallback should not occur unless `timestamp_seconds` is outside of the range
             // from +  1970-01-01 00:00:00 UTC (0)
             // till +262142-12-31 23:59:59 UTC (8210266876799).

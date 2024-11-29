@@ -5,6 +5,7 @@ use crate::pb::v1::Governance as GovernancePb;
 use crate::types::test_helpers::NativeEnvironment;
 use futures::FutureExt;
 use ic_test_utilities_types::ids::canister_test_id;
+use pretty_assertions::assert_eq;
 
 fn sns_version_for_tests() -> Version {
     Version {
