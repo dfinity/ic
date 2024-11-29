@@ -484,6 +484,8 @@ fn centralized_following_all_stable() -> BenchResult {
 //
 #[bench(raw)]
 fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
+    let now_seconds = 1732817584;
+
     let _f = temporarily_enable_active_neurons_in_stable_memory();
     let neurons = (0..100)
         .map(|id| {
@@ -495,7 +497,7 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
                     1_000_000_000,
                     hashmap! {}, // get the default followees
                 )
-                .into(),
+                .into_proto(now_seconds),
             )
         })
         .collect::<BTreeMap<u64, NeuronProto>>();
@@ -507,7 +509,7 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
 
     let mut governance = Governance::new(
         governance_proto,
-        Box::new(MockEnvironment::new(Default::default(), 0)),
+        Box::new(MockEnvironment::new(vec![], now_seconds)),
         Box::new(StubIcpLedger {}),
         Box::new(StubCMC {}),
     );

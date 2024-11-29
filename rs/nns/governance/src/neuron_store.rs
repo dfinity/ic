@@ -394,10 +394,12 @@ impl NeuronStore {
 
     /// Takes the neuron store state which should be persisted through upgrades.
     pub fn take(self) -> NeuronStoreState {
+        let now_seconds = self.now();
+
         (
             self.heap_neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into()))
+                .map(|(id, neuron)| (id, neuron.into_proto(now_seconds)))
                 .collect(),
             heap_topic_followee_index_to_proto(self.topic_followee_index),
         )
@@ -441,16 +443,18 @@ impl NeuronStore {
     /// Clones all the neurons. This is only used for testing.
     /// TODO(NNS-2474) clean it up after NNSState stop using GovernanceProto.
     pub fn __get_neurons_for_tests(&self) -> BTreeMap<u64, NeuronProto> {
+        let now_seconds = self.now();
+
         let mut stable_neurons = with_stable_neuron_store(|stable_store| {
             stable_store
                 .range_neurons(..)
-                .map(|neuron| (neuron.id().id, neuron.into()))
+                .map(|neuron| (neuron.id().id, neuron.into_proto(now_seconds)))
                 .collect::<BTreeMap<u64, NeuronProto>>()
         });
         let heap_neurons = self
             .heap_neurons
             .iter()
-            .map(|(id, neuron)| (*id, neuron.clone().into()))
+            .map(|(id, neuron)| (*id, neuron.clone().into_proto(now_seconds)))
             .collect::<BTreeMap<u64, NeuronProto>>();
 
         stable_neurons.extend(heap_neurons);
