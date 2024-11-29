@@ -140,6 +140,7 @@ pub mod tla;
 
 #[cfg(feature = "tla")]
 pub use tla::{
+    spawn_neuron_desc, spawn_neurons_desc,
     tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, MERGE_NEURONS_DESC,
     SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
 };
@@ -3100,6 +3101,7 @@ impl Governance {
     /// - The parent neuron is not spawning itself.
     /// - The maturity to move to the new neuron must be such that, with every maturity modulation, at least
     ///   NetworkEconomics::neuron_minimum_spawn_stake_e8s are created when the maturity is spawn.
+    #[tla_update_method(spawn_neuron_desc())]
     pub fn spawn_neuron(
         &mut self,
         id: &NeuronId,
@@ -6702,6 +6704,7 @@ impl Governance {
     /// This means that programming in this method needs to be extra-defensive on the handling of results so that
     /// we're sure not to trap after we've acquired the global lock and made an async call, as otherwise the global
     /// lock will be permanently held and no spawning will occur until a upgrade to fix it is made.
+    #[tla_update_method(spawn_neurons_desc())]
     async fn spawn_neurons(&mut self) {
         if !self.can_spawn_neurons() {
             return;
