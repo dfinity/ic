@@ -26,6 +26,7 @@ use ic_consensus_utils::{
 use ic_interfaces::{
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, MessageRoutingError},
+    time_source::system_time_now,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, trace, ReplicaLogger};
@@ -116,7 +117,7 @@ impl Finalizer {
             .collect()
     }
 
-    // Write logs, report metrics depending on the batch deliver result.
+    /// Write logs, report metrics depending on the batch deliver result.
     #[allow(clippy::too_many_arguments)]
     fn process_batch_delivery_result(
         &self,
@@ -133,6 +134,13 @@ impl Finalizer {
                         .observe(now.duration_since(last_batch_delivered_at).as_secs_f64());
                 }
                 self.last_batch_delivered_at.borrow_mut().replace(now);
+                // Batch creation time is essentially wall time (on some replica), so the median
+                // duration across the subnet is meaningful.
+                self.metrics.finalization_latency.observe(
+                    system_time_now()
+                        .saturating_duration_since(block_stats.block_time)
+                        .as_secs_f64(),
+                );
 
                 self.metrics.process(&block_stats, &batch_stats);
 

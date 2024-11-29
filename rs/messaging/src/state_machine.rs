@@ -7,6 +7,7 @@ use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
     ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
+use ic_interfaces::time_source::system_time_now;
 use ic_logger::{error, fatal, ReplicaLogger};
 use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
@@ -145,6 +146,13 @@ impl StateMachine for StateMachineImpl {
         // Preprocess messages and add messages to the induction pool through the Demux.
         let since = Instant::now();
         let mut state_with_messages = self.demux.process_payload(state, batch.messages);
+        // Batch creation time is essentially wall time (on some replica), so the median
+        // duration should be meaningful.
+        self.metrics.induct_batch_latency.observe(
+            system_time_now()
+                .saturating_duration_since(batch.time)
+                .as_secs_f64(),
+        );
 
         // Append additional responses to the consensus queue.
         state_with_messages
