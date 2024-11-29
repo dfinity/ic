@@ -493,7 +493,7 @@ version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8824ecca2e851cec16968d54a01dd372ef8f95b244fb84b84e70128be347c3c6"
 dependencies = [
- "term 0.7.0",
+ "term",
 ]
 
 [[package]]
@@ -3503,16 +3503,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dirs"
-version = "2.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13aea89a5c93364a98e9b37b2fa237effbb694d5cfe01c5b70941f7eb087d5e3"
-dependencies = [
- "cfg-if 0.1.10",
- "dirs-sys",
-]
-
-[[package]]
 name = "dirs-next"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3520,17 +3510,6 @@ checksum = "b98cf8ebf19c3d1b223e151f99a4f9f0690dca41414773390fc824184ac833e1"
 dependencies = [
  "cfg-if 1.0.0",
  "dirs-sys-next",
-]
-
-[[package]]
-name = "dirs-sys"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b1d1d91c932ef41c0f2663aa8b0ca0342d444d842c06914aa0a7e352d0bada6"
-dependencies = [
- "libc",
- "redox_users",
- "winapi 0.3.9",
 ]
 
 [[package]]
@@ -11682,37 +11661,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-scenario-tests"
-version = "0.9.0"
-dependencies = [
- "candid",
- "canister-test",
- "chrono",
- "colored",
- "dfn_candid",
- "dfn_json",
- "futures",
- "ic-base-types",
- "ic-canister-client",
- "ic-crypto-ed25519",
- "ic-crypto-utils-threshold-sig-der",
- "ic-metrics",
- "ic-protobuf",
- "ic-registry-client",
- "ic-registry-client-helpers",
- "ic-registry-nns-data-provider-wrappers",
- "ic-registry-routing-table",
- "ic-test-identity",
- "ic-types",
- "serde",
- "slog",
- "tester",
- "tokio",
- "url",
- "xnet-test",
-]
-
-[[package]]
 name = "ic-sender-canister"
 version = "0.9.0"
 dependencies = [
@@ -14802,7 +14750,7 @@ dependencies = [
  "regex",
  "regex-syntax 0.8.5",
  "string_cache",
- "term 0.7.0",
+ "term",
  "tiny-keccak",
  "unicode-xid",
  "walkdir",
@@ -19809,7 +19757,7 @@ checksum = "b6e022d0b998abfe5c3782c1f03551a596269450ccd677ea51c56f8b214610e8"
 dependencies = [
  "is-terminal",
  "slog",
- "term 0.7.0",
+ "term",
  "thread_local",
  "time",
 ]
@@ -20448,16 +20396,6 @@ dependencies = [
 
 [[package]]
 name = "term"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0863a3345e70f61d613eab32ee046ccd1bcc5f9105fe402c61fcd0c13eeb8b5"
-dependencies = [
- "dirs",
- "winapi 0.3.9",
-]
-
-[[package]]
-name = "term"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c59df8ac95d96ff9bede18eb7300b0fda5e5d8d90960e76f8e14ae765eedbf1f"
@@ -20523,17 +20461,6 @@ dependencies = [
  "quote",
  "structmeta 0.3.0",
  "syn 2.0.87",
-]
-
-[[package]]
-name = "tester"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee72ec31009a42b53de9a6b7d8f462b493ab3b1e4767bda1fcdbb52127f13b6c"
-dependencies = [
- "getopts",
- "libc",
- "term 0.6.1",
 ]
 
 [[package]]

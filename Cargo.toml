@@ -329,7 +329,6 @@ members = [
     "rs/rust_canisters/statesync_test",
     "rs/rust_canisters/tests",
     "rs/rust_canisters/xnet_test",
-    "rs/scenario_tests",
     "rs/sns/audit",
     "rs/sns/cli",
     "rs/sns/governance",
