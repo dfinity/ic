@@ -28,6 +28,7 @@ use state::{get_config, set_config, Config, FetchGuardError, HttpGetTxError};
 #[derive(Default)]
 struct Stats {
     https_outcall_status: BTreeMap<u16, u64>,
+    http_response_size: BTreeMap<u32, u64>,
     check_transaction_count: u64,
     check_address_count: u64,
 }
@@ -201,6 +202,17 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
                     .value(&[("status", status.to_string().as_str())], *count as f64)
                     .unwrap();
             }
+            let mut counter = writer
+                .counter_vec(
+                    "btc_kyt_http_response_size",
+                    "The byte sizes of http outcall responses.",
+                )
+                .unwrap();
+            for (size, count) in stats.http_response_size.iter() {
+                counter = counter
+                    .value(&[("size", size.to_string().as_str())], *count as f64)
+                    .unwrap();
+            }
             writer
                 .counter_vec(
                     "ckbtc_kyt_requests_total",
@@ -321,10 +333,15 @@ impl FetchEnv for KytCanisterEnv {
         match http_request(request.clone(), cycles).await {
             Ok((response,)) => {
                 STATS.with(|s| {
-                    *s.borrow_mut()
+                    let mut stat = s.borrow_mut();
+                    *stat
                         .https_outcall_status
                         .entry(response.status.0.to_u16().unwrap())
-                        .or_default() += 1
+                        .or_default() += 1;
+                    // Calculate size bucket as a series of power of 2s.
+                    // Note that the max is bounded by `max_response_bytes`, which fits `u32`.
+                    let size = 2u32.pow((response.body.len() as f64).log2().floor() as u32);
+                    *stat.http_response_size.entry(size).or_default() += 1;
                 });
 
                 // Ensure response is 200 before decoding
