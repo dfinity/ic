@@ -380,14 +380,45 @@ impl CachedUpgradeSteps {
 }
 
 impl Governance {
-    /// Invalidates the cached upgrade steps.
+    /// Invalidates the target version.
     pub(crate) fn invalidate_target_version(&mut self, reason: String) {
         self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionReset::new(
             self.proto.target_version.clone(),
             None,
             reason,
         ));
+
         self.proto.target_version = None;
+    }
+
+    /// Resets the cached upgrade steps to a new instance without pending upgrades.
+    ///
+    /// Additionally, invalidates the target version, if it was set.
+    ///
+    /// Returns the new instance.
+    fn reset_cached_upgrade_steps(
+        &mut self,
+        current_version: &Version,
+        reason: String,
+    ) -> CachedUpgradeSteps {
+        self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset::new(
+            reason.clone(),
+            vec![current_version.clone()],
+        ));
+
+        let cached_upgrade_steps =
+            CachedUpgradeSteps::without_pending_upgrades(current_version.clone(), self.env.now());
+
+        let cached_upgrade_steps_pb = CachedUpgradeStepsPb::from(cached_upgrade_steps.clone());
+        self.proto
+            .cached_upgrade_steps
+            .replace(cached_upgrade_steps_pb);
+
+        if self.proto.target_version.is_some() {
+            self.invalidate_target_version(reason)
+        }
+
+        cached_upgrade_steps
     }
 
     /// Returns the upgrade steps that are guaranteed to start from `current_version`.
@@ -398,51 +429,21 @@ impl Governance {
         &mut self,
         current_version: &Version,
     ) -> CachedUpgradeSteps {
-        let cached_upgrade_steps =
-            if let Some(cached_upgrade_steps_pb) = &self.proto.cached_upgrade_steps {
-                CachedUpgradeSteps::try_from(cached_upgrade_steps_pb)
-            } else {
-                // Make a new, valid `cached_upgrade_steps_pb` instance and initialize
-                // the cache with it.
-                let cached_upgrade_steps_pb =
-                    CachedUpgradeStepsPb::from(CachedUpgradeSteps::without_pending_upgrades(
-                        current_version.clone(),
-                        self.env.now(),
-                    ));
-                let cached_upgrade_steps = CachedUpgradeSteps::try_from(&cached_upgrade_steps_pb);
-                self.proto
-                    .cached_upgrade_steps
-                    .replace(cached_upgrade_steps_pb);
-                cached_upgrade_steps
-            };
-
-        let error_message = match cached_upgrade_steps
-            .and_then(|cached_upgrade_steps| cached_upgrade_steps.take_from(current_version))
-        {
-            Ok(upgrade_steps) => {
-                // Happy case.
-                return upgrade_steps;
+        let reason = if let Some(cached_upgrade_steps_pb) = &self.proto.cached_upgrade_steps {
+            match CachedUpgradeSteps::try_from(cached_upgrade_steps_pb)
+                .and_then(|cached_upgrade_steps| cached_upgrade_steps.take_from(current_version))
+            {
+                Ok(upgrade_steps) => {
+                    // Happy case.
+                    return upgrade_steps;
+                }
+                Err(err) => err,
             }
-            Err(err) => err,
+        } else {
+            "Initializing the cache".to_string()
         };
 
-        self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset::new(
-            error_message.clone(),
-            vec![current_version.clone()],
-        ));
-
-        let cached_upgrade_steps =
-            CachedUpgradeSteps::without_pending_upgrades(current_version.clone(), self.env.now());
-
-        self.proto
-            .cached_upgrade_steps
-            .replace(CachedUpgradeStepsPb::from(cached_upgrade_steps.clone()));
-
-        if self.proto.target_version.is_some() {
-            self.invalidate_target_version(error_message)
-        }
-
-        cached_upgrade_steps
+        self.reset_cached_upgrade_steps(current_version, reason)
     }
 
     pub fn try_temporarily_lock_refresh_cached_upgrade_steps(&mut self) -> Result<Version, String> {

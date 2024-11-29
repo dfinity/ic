@@ -1827,24 +1827,38 @@ fn test_check_upgrade_status_fails_if_upgrade_not_finished_in_time() {
     assert!(governance.proto.pending_version.is_none());
     assert_eq!(
         governance.proto.deployed_version.unwrap(),
-        current_version.into()
+        current_version.clone().into()
     );
 
     // Check that the upgrade journal reflects the timed-out upgrade attempt
-    assert_matches!(
-        &governance.proto.upgrade_journal.clone().unwrap().entries[..],
-        [UpgradeJournalEntry {
-            timestamp_seconds: _,
-            event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
-                upgrade_journal_entry::UpgradeOutcome {
-                    human_readable: Some(_),
-                    status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
-                        Empty {}
-                    )),
-                }
-            )),
-        }]
-    )
+    let upgrade_journal = governance.proto.upgrade_journal.clone().unwrap();
+    let observed_upgrade_steps = assert_matches!(
+        &upgrade_journal.entries[..],
+        [
+            UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                    upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: Some(_),
+                        status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
+                            Empty {}
+                        )),
+                    }
+                )),
+            },
+            UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                    upgrade_journal_entry::UpgradeStepsReset {
+                        human_readable: Some(_),
+                        upgrade_steps: Some(observed_upgrade_steps),
+                    }
+                )),
+            },
+        ] => observed_upgrade_steps
+    );
+
+    assert_eq!(observed_upgrade_steps, &Versions { versions: vec![current_version.into()] });
 }
 
 #[test]
