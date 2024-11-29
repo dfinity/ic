@@ -1765,7 +1765,7 @@ fn validate_and_render_advance_sns_target_version_proposal(
          ### Upgrade steps\n\n\
          {upgrade_steps}\n\n\
          ### Monitoring the upgrade process\n\n\
-         Please note: the upgrade steps above (valid around {time_of_validity}) \
+         Please note: the upgrade steps mentioned above (valid around {time_of_validity}) \
          might change during this proposal's voting period.\n\n\
          The **upgrade journal** provides up-to-date information on this SNS's upgrade process:\n\n\
          {upgrade_journal_url_render}"

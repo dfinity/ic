@@ -176,7 +176,7 @@ fn test_validate_and_render_advance_target_version_action() {
 
 ### Monitoring the upgrade process
 
-Please note: the upgrade steps above (valid around 1970-01-01 00:00:00 UTC) might change during this proposal's voting period.
+Please note: the upgrade steps mentioned above (valid around 1970-01-01 00:00:00 UTC) might change during this proposal's voting period.
 
 The **upgrade journal** provides up-to-date information on this SNS's upgrade process:
 
