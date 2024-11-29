@@ -10,6 +10,7 @@ use crate::sns_upgrade::ListUpgradeStep;
 use crate::sns_upgrade::ListUpgradeStepsResponse;
 use crate::sns_upgrade::SnsCanisterType;
 use ic_canister_log::log;
+use ic_sns_governance_api::pb::v1::format_full_hash;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct CachedUpgradeSteps {
@@ -101,14 +102,6 @@ impl TryFrom<&CachedUpgradeStepsPb> for CachedUpgradeSteps {
 pub fn format_short_hash(hash: &[u8]) -> String {
     hash.iter()
         .take(3)
-        .map(|b| format!("{:02x}", b))
-        .collect::<Vec<_>>()
-        .join("")
-}
-
-/// Formats the 32 bytes of a hash as a hexadecimal string. Corresponds to 64 ascii symbols.
-pub fn format_full_hash(hash: &[u8]) -> String {
-    hash.iter()
         .map(|b| format!("{:02x}", b))
         .collect::<Vec<_>>()
         .join("")
