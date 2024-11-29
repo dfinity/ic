@@ -58,6 +58,7 @@ pub struct CanisterHttp {
     logger: ReplicaLogger,
     metrics: AdapterMetrics,
     http_connect_timeout_secs: u64,
+    proxy_url: String,
 }
 
 impl CanisterHttp {
@@ -95,6 +96,7 @@ impl CanisterHttp {
             logger,
             metrics: AdapterMetrics::new(metrics),
             http_connect_timeout_secs: config.http_connect_timeout_secs,
+            proxy_url: config.socks_proxy,
         }
     }
 
@@ -108,7 +110,11 @@ impl CanisterHttp {
         http_connector
             .set_connect_timeout(Some(Duration::from_secs(self.http_connect_timeout_secs)));
 
-        let ip = format!("[{}]:1080", ip);
+        let mut ip = ip.to_string();
+
+        if !ip.starts_with("socks5") {
+            ip = format!("socks5://[{}]:1080", ip);
+        }
 
         match ip.parse() {
             Ok(proxy_addr) => {
@@ -243,6 +249,9 @@ impl HttpsOutcallsService for CanisterHttp {
                     let mut api_bn_ips = req.api_bn_ips;
                     api_bn_ips.shuffle(&mut thread_rng());
 
+                    //TODO(mihailjianu): we should not try with the proxy from the config. 
+                    //api_bn_ips.push(self.proxy_url.clone());
+
                     let request_ips: HashSet<&String> = api_bn_ips.iter().collect();
 
                     let mut response = None;
@@ -317,7 +326,7 @@ impl HttpsOutcallsService for CanisterHttp {
                         if api_bn_ips.is_empty() {
                             "No IPs to connect through SOCKS in the request".to_string()
                         } else {
-                            format!("all IPS: {}, with error {}", api_bn_ips.join(", "), errors)
+                            format!("all IPS: {}, real ip: {}, with error {}", api_bn_ips.join(", "), self.proxy_url, errors)
                         }
                     })
                 }

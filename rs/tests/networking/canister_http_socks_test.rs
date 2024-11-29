@@ -79,7 +79,7 @@ pub fn setup(env: TestEnv) {
 
     // Create IC with injected socks proxy.
     InternetComputer::new()
-        .with_socks_proxy(format!("socks5://[{bn_ipv6}]:1080"))
+        .with_socks_proxy(format!("socks5://[{}]:1080", bn_ipv6))
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_features(SubnetFeatures {
@@ -96,7 +96,7 @@ pub fn setup(env: TestEnv) {
                 })
                 .add_nodes(4),
         )
-       .with_api_boundary_nodes(1)
+        .with_api_boundary_nodes(1)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
