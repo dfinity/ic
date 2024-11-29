@@ -11793,7 +11793,6 @@ dependencies = [
  "build-info-build",
  "candid",
  "candid_parser",
- "chrono",
  "clap 4.5.20",
  "comparable",
  "futures",
@@ -11857,6 +11856,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "tempfile",
+ "time",
  "tokio",
  "tokio-test",
 ]

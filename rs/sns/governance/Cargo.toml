@@ -30,7 +30,6 @@ build-info = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
-chrono = { workspace = true }
 clap = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
 hex = { workspace = true }
@@ -81,6 +80,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
+time = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 ic-types = { path = "../../types/types" }

@@ -44,7 +44,6 @@ DEPENDENCIES = [
     "@crate_index//:base64",
     "@crate_index//:build-info",
     "@crate_index//:candid",
-    "@crate_index//:chrono",
     "@crate_index//:clap",
     "@crate_index//:comparable",
     "@crate_index//:futures",
@@ -62,6 +61,7 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:strum",
+    "@crate_index//:time",
 ]
 
 MACRO_DEPENDENCIES = [

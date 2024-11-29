@@ -30,7 +30,6 @@ use crate::{
     validate_chars_count, validate_len, validate_required_field,
 };
 use candid::Principal;
-use chrono::DateTime;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
@@ -53,6 +52,7 @@ use std::{
     convert::TryFrom,
     fmt::Write,
 };
+use time;
 
 /// The maximum number of bytes in an SNS proposal's title.
 pub const PROPOSAL_TITLE_BYTES_MAX: usize = 256;
@@ -1717,6 +1717,21 @@ fn validate_and_render_manage_dapp_canister_settings(
     }
 }
 
+/// Attempts to format `` as a human-readable string.
+///
+/// For example:
+/// ```
+/// assert_eq!(format_timestamp(1732896850), Some("2024-11-29 16:14:10 UTC".to_string()));
+/// ```
+fn format_timestamp(timestamp_seconds: u64) -> Option<String> {
+    let timestamp_seconds = i64::try_from(timestamp_seconds).ok()?;
+    let dt_offset = time::OffsetDateTime::from_unix_timestamp(timestamp_seconds).ok()?;
+    let format =
+        time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second] UTC")
+            .ok()?;
+    dt_offset.format(&format).ok()
+}
+
 /// Attempts to validate an `AdvanceSnsTargetVersion` action and render its human-readable text.
 /// Invalidates the action in the following cases:
 /// - There are no pending upgrades.
@@ -1740,13 +1755,10 @@ fn validate_and_render_advance_sns_target_version_proposal(
 
     let time_of_validity = {
         let timestamp_seconds = upgrade_steps.approximate_time_of_validity_timestamp_seconds();
-        i64::try_from(timestamp_seconds)
-            .ok()
-            .and_then(|timestamp_seconds| DateTime::from_timestamp(timestamp_seconds, 0))
-            .map(|datetime| datetime.to_string())
-            // This fallback should not occur unless `timestamp_seconds` is outside of the range
-            // from +  1970-01-01 00:00:00 UTC (0)
-            // till +262142-12-31 23:59:59 UTC (8210266876799).
+        // This fallback should not occur unless `timestamp_seconds` is outside of the range
+        // from +1970-01-01 00:00:00 UTC (0)
+        // till +9999-12-31 23:59:59 UTC (253402300799).
+        format_timestamp(timestamp_seconds)
             .unwrap_or_else(|| format!("timestamp {} seconds", timestamp_seconds))
     };
 
