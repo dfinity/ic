@@ -750,7 +750,7 @@ impl Ledger {
         self.stable_balances.token_pool = self.balances.token_pool;
     }
 
-    pub fn balances_len(&self) -> u64{
+    pub fn balances_len(&self) -> u64 {
         BALANCES_MEMORY.with_borrow_mut(|balances| balances.len())
     }
 }
