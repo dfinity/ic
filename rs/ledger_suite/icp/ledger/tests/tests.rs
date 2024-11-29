@@ -10,7 +10,7 @@ use ic_ledger_core::{block::BlockType, Tokens};
 use ic_ledger_suite_state_machine_tests::{
     balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
     send_approval, send_transfer_from, setup, supported_standards, total_supply, transfer,
-    AllowanceProvider, FEE, MINTER,
+    wait_ledger_ready, AllowanceProvider, FEE, MINTER,
 };
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
@@ -18,8 +18,8 @@ use icp_ledger::{
     CandidOperation, CandidTransaction, FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult,
     GetEncodedBlocksResult, IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes,
     LedgerCanisterInitPayload, LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation,
-    QueryBlocksResponse, QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
-    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
+    QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, TimeStamp, UpgradeArgs,
+    DEFAULT_TRANSFER_FEE, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -1278,16 +1278,107 @@ fn test_downgrade_from_incompatible_version() {
 }
 
 #[test]
-fn test_stable_migration_endpoints_disabled() {
-    let ledger_wasm_mainnet = ledger_wasm_mainnet();
-    let ledger_wasm_low_limits: Vec<u8> = ledger_wasm_low_instruction_limits();
-
+fn test_stable_migration_icrc_endpoints_disabled() {
     ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
-        ledger_wasm_mainnet,
-        ledger_wasm_low_limits,
+        ledger_wasm_mainnet(),
+        ledger_wasm_low_instruction_limits(),
         encode_init_args,
     );
-    //TODO: test ICP specific endpoints
+}
+
+#[test]
+fn test_stable_migration_icp_endpoints_disabled() {
+    let p1 = PrincipalId::new_user_test_id(1);
+    let accounts = vec![Account::from(p1.0)];
+
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    for account in &accounts {
+        initial_balances.insert((*account).into(), Tokens::from_e8s(100_000_000));
+    }
+
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .icrc1_minting_account(MINTER)
+        .initial_values(initial_balances)
+        .transfer_fee(Tokens::from_e8s(10_000))
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(
+            ledger_wasm_mainnet(),
+            CandidOne(payload).into_bytes().unwrap(),
+            None,
+        )
+        .expect("Unable to install the Ledger canister with the new init");
+
+    for i in 2..40 {
+        let spender = Account::from(PrincipalId::new_user_test_id(i).0);
+        let approve_args = default_approve_args(spender, 150_000);
+        send_approval(&env, canister_id, p1.into(), &approve_args).expect("approval failed");
+    }
+
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_low_instruction_limits(),
+        Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap(),
+    )
+    .unwrap();
+
+    let test_endpoint = |endpoint_name: &str, args: Vec<u8>, expect_error: bool| {
+        println!("testing endpoint {endpoint_name}");
+        let result = env.execute_ingress_as(p1.into(), canister_id, endpoint_name, args);
+        if expect_error {
+            result
+                .unwrap_err()
+                .assert_contains(ErrorCode::CanisterCalledTrap, "The Ledger is not ready.");
+        } else {
+            assert!(result.is_ok());
+        }
+    };
+
+    let send_pb_args = ProtoBuf(SendArgs {
+        memo: icp_ledger::Memo::default(),
+        amount: Tokens::from_e8s(1),
+        fee: Tokens::from_e8s(10_000),
+        from_subaccount: None,
+        to: PrincipalId::new_user_test_id(2).into(),
+        created_at_time: None,
+    })
+    .into_bytes()
+    .unwrap();
+
+    let send_dfx_args = Encode!(&SendArgs {
+        memo: icp_ledger::Memo::default(),
+        amount: Tokens::from_e8s(1),
+        fee: Tokens::from_e8s(10_000),
+        from_subaccount: None,
+        to: PrincipalId::new_user_test_id(2).into(),
+        created_at_time: None,
+    })
+    .unwrap();
+
+    let ai = AccountIdentifier { hash: [1u8; 28] };
+    let transfer_args = Encode!(&icp_ledger::TransferArgs {
+        memo: icp_ledger::Memo::default(),
+        amount: Tokens::from_e8s(1),
+        fee: Tokens::from_e8s(10_000),
+        from_subaccount: None,
+        to: ai.to_address(),
+        created_at_time: None,
+    })
+    .unwrap();
+
+    test_endpoint("send_pb", send_pb_args.clone(), true);
+    test_endpoint("send_dfx", send_dfx_args.clone(), true);
+    test_endpoint("transfer", transfer_args.clone(), true);
+
+    wait_ledger_ready(&env, canister_id, 10);
+
+    test_endpoint("send_pb", send_pb_args, false);
+    test_endpoint("send_dfx", send_dfx_args, false);
+    test_endpoint("transfer", transfer_args, false);
 }
 
 #[test]
