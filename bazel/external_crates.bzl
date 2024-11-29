@@ -20,6 +20,8 @@ def sanitize_external_crates(sanitizers_enabled):
 
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
+CERTIFICATION_REV = "dcbd7d471e1a5f95d8b1e8a66c4a35fd2a68268f"
+
 BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
 
 def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enabled):
@@ -593,13 +595,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.1",
             ),
             "ic-certification": crate.spec(
-                version = "2.6.0",
+                git = "https://github.com/dfinity/response-verification",
+                rev = CERTIFICATION_REV,
             ),
             "ic-certificate-verification": crate.spec(
-                version = "2.6.0",
+                git = "https://github.com/dfinity/response-verification",
+                rev = CERTIFICATION_REV,
             ),
             "ic-http-certification": crate.spec(
-                version = "2.6.0",
+                git = "https://github.com/dfinity/response-verification",
+                rev = CERTIFICATION_REV,
             ),
             "ic-http-gateway": crate.spec(
                 git = "https://github.com/dfinity/http-gateway",
