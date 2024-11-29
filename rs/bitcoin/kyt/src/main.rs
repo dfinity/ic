@@ -22,7 +22,7 @@ mod providers;
 mod state;
 
 use fetch::{FetchEnv, FetchResult, TryFetchResult};
-use logs::{Log, LogEntry, Priority, P0, P1};
+use logs::{Log, LogEntry, Priority, INFO, WARN};
 use state::{get_config, set_config, Config, FetchGuardError, HttpGetTxError};
 
 #[derive(Default)]
@@ -216,21 +216,21 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
         };
 
         let mut entries: Log = Default::default();
-        for entry in export_logs(&P0) {
+        for entry in export_logs(&WARN) {
             entries.entries.push(LogEntry {
                 timestamp: entry.timestamp,
                 counter: entry.counter,
-                priority: Priority::P0,
+                priority: Priority::WARN,
                 file: entry.file.to_string(),
                 line: entry.line,
                 message: entry.message,
             });
         }
-        for entry in export_logs(&P1) {
+        for entry in export_logs(&INFO) {
             entries.entries.push(LogEntry {
                 timestamp: entry.timestamp,
                 counter: entry.counter,
-                priority: Priority::P1,
+                priority: Priority::INFO,
                 file: entry.file.to_string(),
                 line: entry.line,
                 message: entry.message,
@@ -346,7 +346,7 @@ impl FetchEnv for KytCanisterEnv {
             Err((r, m)) if is_response_too_large(&r, &m) => Err(HttpGetTxError::ResponseTooLarge),
             Err((r, m)) => {
                 log!(
-                    P1,
+                    INFO,
                     "The http_request resulted into error. RejectionCode: {r:?}, Error: {m}"
                 );
                 Err(HttpGetTxError::Rejected {

@@ -2,15 +2,15 @@ use ic_canister_log::declare_log_buffer;
 use serde::{Deserialize, Serialize};
 
 // High-priority messages.
-declare_log_buffer!(name = P0, capacity = 1000);
+declare_log_buffer!(name = WARN, capacity = 1000);
 
 // Low-priority info messages.
-declare_log_buffer!(name = P1, capacity = 1000);
+declare_log_buffer!(name = INFO, capacity = 1000);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum Priority {
-    P0,
-    P1,
+    WARN,
+    INFO,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

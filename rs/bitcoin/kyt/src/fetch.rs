@@ -1,4 +1,4 @@
-use crate::logs::P0;
+use crate::logs::WARN;
 use crate::state::{
     FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError,
     TransactionKytData,
@@ -222,7 +222,7 @@ pub trait FetchEnv {
                                 "Tx {} vout {} has no address, but is vin {} of tx {}",
                                 input.txid, input.vout, index, txid
                             );
-                            log!(P0, "{msg}");
+                            log!(WARN, "{msg}");
                             return CheckTransactionIrrecoverableError::InvalidTransaction(msg)
                                 .into();
                         }
@@ -264,7 +264,7 @@ pub trait FetchEnv {
                             "Tx {} vout {} has no address, but is vin {} of tx {}",
                             input_txid, vout, index, txid
                         );
-                        log!(P0, "{msg}");
+                        log!(WARN, "{msg}");
                         error = Some(
                             CheckTransactionIrrecoverableError::InvalidTransaction(msg).into(),
                         );
