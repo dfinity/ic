@@ -66,6 +66,7 @@ ALIASES = {}
 
 rust_library(
     name = "canister_client",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_canister_client",

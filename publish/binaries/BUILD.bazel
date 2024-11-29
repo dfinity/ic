@@ -49,16 +49,23 @@ TESTONLY_BINARIES = [
     "drun",
     "e2e-test-driver",
     "ic-admin",
+    "ic-backup",
     "ic-boundary",
     "ic-boundary-tls",
     "ic-https-outcalls-adapter",
     "ic-nns-init",
     "ic-prep",
+    "ic-recovery",
+    "ic-regedit",
+    "ic-registry-replicator",
+    "ic-replay",
     "ic-starter",
     "ic-test-state-machine",
+    "orchestrator",
     "pocket-ic",
     "types-test",
     "replicated-state-test",
+    "ic-workload-generator",
 ]
 
 # We don't strip the more complex binaries

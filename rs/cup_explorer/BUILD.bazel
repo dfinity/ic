@@ -17,6 +17,7 @@ DEPENDENCIES = [
 
 rust_library(
     name = "cup_explorer",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_cup_explorer",
     version = "0.9.0",
@@ -25,6 +26,7 @@ rust_library(
 
 rust_binary(
     name = "cup_explorer_bin",
+    testonly = True,
     srcs = glob(["src/**"]),
     deps = DEPENDENCIES + [":cup_explorer"],
 )
