@@ -1986,21 +1986,34 @@ fn test_check_upgrade_status_succeeds() {
     // Check that the upgrade journal reflects the succeeded upgrade
     assert_eq!(
         governance.proto.upgrade_journal.clone().unwrap().entries,
-        vec![UpgradeJournalEntry {
-            timestamp_seconds: Some(now),
-            event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
-                upgrade_journal_entry::UpgradeOutcome {
-                    human_readable: Some(format!(
-                        "Upgrade marked successful at timestamp {} seconds, new {:?}",
-                        governance.env.now(),
-                        Version::from(next_version),
-                    )),
-                    status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
-                        Empty {}
-                    )),
-                }
-            )),
-        }]
+        vec![
+            UpgradeJournalEntry {
+                timestamp_seconds: Some(now),
+                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                    upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: Some(format!(
+                            "Upgrade marked successful at timestamp {} seconds, new {:?}",
+                            governance.env.now(),
+                            Version::from(next_version.clone()),
+                        )),
+                        status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
+                            Empty {}
+                        )),
+                    }
+                )),
+            },
+            UpgradeJournalEntry {
+                timestamp_seconds: Some(now),
+                event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                    upgrade_journal_entry::UpgradeStepsReset {
+                        human_readable: Some("Initializing the cache".to_string()),
+                        upgrade_steps: Some(Versions {
+                            versions: vec![Version::from(next_version)],
+                        }),
+                    }
+                )),
+            },
+        ]
     )
 }
 
@@ -2146,7 +2159,7 @@ fn test_check_upgrade_not_yet_failed_if_canister_summary_errs_and_before_mark_fa
                     human_readable: Some("Initializing the cache".to_string(),),
                     upgrade_steps: Some(Versions {
                         versions: vec![current_version.into()],
-                    },),
+                    }),
                 },
             ),),
         }],
