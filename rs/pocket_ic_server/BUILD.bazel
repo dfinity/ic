@@ -243,7 +243,7 @@ rust_test(
     )
     for (arch, os, cpu) in [
         ("x86_64-linux-gnu", "linux", "x86_64"),
-        ("x86_64-apple-darwin", "mac", "x86_64"),
-        ("arm64-apple-darwin", "mac", "arm64"),
+        ("x86_64-apple-darwin", "macos", "x86_64"),
+        ("arm64-apple-darwin", "macos", "arm64"),
     ]
 ]
