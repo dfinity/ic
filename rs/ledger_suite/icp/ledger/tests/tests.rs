@@ -1338,26 +1338,17 @@ fn test_stable_migration_icp_endpoints_disabled() {
         }
     };
 
-    let send_pb_args = ProtoBuf(SendArgs {
+    let send_args = SendArgs {
         memo: icp_ledger::Memo::default(),
         amount: Tokens::from_e8s(1),
         fee: Tokens::from_e8s(10_000),
         from_subaccount: None,
         to: PrincipalId::new_user_test_id(2).into(),
         created_at_time: None,
-    })
-    .into_bytes()
-    .unwrap();
+    };
 
-    let send_dfx_args = Encode!(&SendArgs {
-        memo: icp_ledger::Memo::default(),
-        amount: Tokens::from_e8s(1),
-        fee: Tokens::from_e8s(10_000),
-        from_subaccount: None,
-        to: PrincipalId::new_user_test_id(2).into(),
-        created_at_time: None,
-    })
-    .unwrap();
+    let send_dfx_args = Encode!(&send_args).unwrap();
+    let send_pb_args = ProtoBuf(send_args).into_bytes().unwrap();
 
     let ai = AccountIdentifier { hash: [1u8; 28] };
     let transfer_args = Encode!(&icp_ledger::TransferArgs {
