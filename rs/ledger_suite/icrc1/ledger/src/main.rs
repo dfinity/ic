@@ -237,6 +237,11 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
+    if upgrade_from_version < 2 {
+        set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
+        log_message("Upgrading from version {upgrade_from_version} which does store balances in stable structures, clearing stable balances data.");
+        clear_stable_balances_data();
+    }
     if upgrade_from_version == 0 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
         log_message("Upgrading from version 0 which does not use stable structures, clearing stable allowance data.");
@@ -262,6 +267,7 @@ fn migrate_next_part(instruction_limit: u64) {
     STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow_mut() += 1);
     let mut migrated_allowances = 0;
     let mut migrated_expirations = 0;
+    let mut migrated_balances = 0;
 
     log_message("Migrating part of the ledger state.");
 
@@ -285,13 +291,22 @@ fn migrate_next_part(instruction_limit: u64) {
                     if ledger.migrate_one_expiration() {
                         migrated_expirations += 1;
                     } else {
+                        set_ledger_state(LedgerState::Migrating(
+                            LedgerField::Balances,
+                        ));
+                    }
+                }
+                LedgerField::Balances => {
+                    if ledger.migrate_one_balance() {
+                        migrated_balances += 1;
+                    } else {
                         set_ledger_state(LedgerState::Ready);
                     }
                 }
             }
         }
         let instructions_migration = instruction_counter() - instructions_migration_start;
-        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
+        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances {migrated_balances}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
             instruction_counter());
         if !is_ready() {
             log_message(

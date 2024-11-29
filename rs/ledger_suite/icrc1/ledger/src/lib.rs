@@ -25,6 +25,7 @@ use ic_ledger_canister_core::{
     ledger::{apply_transaction, block_locations, LedgerContext, LedgerData, TransactionInfo},
     range_utils,
 };
+use ic_ledger_core::balances::BalancesStore;
 use ic_ledger_core::{
     approvals::{Allowance, AllowanceTable, AllowancesData},
     balances::Balances,
@@ -82,11 +83,12 @@ pub type Tokens = ic_icrc1_tokens_u256::U256;
 /// We have the following ledger versions:
 ///   * 0 - the whole ledger state is stored on the heap.
 ///   * 1 - the allowances are stored in stable structures.
+///   * 2 - the balances are stored in stable structures.
 #[cfg(not(feature = "next-ledger-version"))]
-pub const LEDGER_VERSION: u64 = 1;
+pub const LEDGER_VERSION: u64 = 2;
 
 #[cfg(feature = "next-ledger-version")]
-pub const LEDGER_VERSION: u64 = 2;
+pub const LEDGER_VERSION: u64 = 3;
 
 #[derive(Clone, Debug)]
 pub struct Icrc1ArchiveWasm;
@@ -499,6 +501,7 @@ pub enum LedgerArgument {
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
 const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
+const BALANCES_MEMORY_ID: MemoryId = MemoryId::new(3);
 
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
@@ -520,12 +523,17 @@ thread_local! {
     #[allow(clippy::type_complexity)]
     pub static ALLOWANCES_EXPIRATIONS_MEMORY: RefCell<StableBTreeMap<Expiration, (), VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_EXPIRATIONS_MEMORY_ID))));
+
+    // account -> tokens - map storing ledger balances.
+    pub static BALANCES_MEMORY: RefCell<StableBTreeMap<Account, Tokens, VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BALANCES_MEMORY_ID))));
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
 pub enum LedgerField {
     Allowances,
     AllowancesExpirations,
+    Balances,
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -540,10 +548,14 @@ impl Default for LedgerState {
     }
 }
 
+type StableLedgerBalances = Balances<StableBalances>;
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct Ledger {
     balances: LedgerBalances<Tokens>,
+    #[serde(default)]
+    stable_balances: StableLedgerBalances,
     #[serde(default)]
     approvals: LedgerAllowances<Tokens>,
     #[serde(default)]
@@ -643,6 +655,7 @@ impl Ledger {
         }
         let mut ledger = Self {
             balances: LedgerBalances::default(),
+            stable_balances: StableLedgerBalances::default(),
             approvals: Default::default(),
             stable_approvals: Default::default(),
             blockchain: Blockchain::new_with_archive(archive_options),
@@ -719,6 +732,16 @@ impl Ledger {
         }
     }
 
+    pub fn migrate_one_balance(&mut self) -> bool {
+        match self.balances.store.pop_first() {
+            Some((account, tokens)) => {
+                self.stable_balances.credit(&account, tokens);
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn clear_arrivals(&mut self) {
         self.approvals.allowances_data.clear_arrivals();
     }
@@ -727,17 +750,17 @@ impl Ledger {
 impl LedgerContext for Ledger {
     type AccountId = Account;
     type AllowancesData = StableAllowancesData;
-    type BalancesStore = BTreeMap<Self::AccountId, Tokens>;
+    type BalancesStore = StableBalances;
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
         panic_if_not_ready();
-        &self.balances
+        &self.stable_balances
     }
 
     fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
         panic_if_not_ready();
-        &mut self.balances
+        &mut self.stable_balances
     }
 
     fn approvals(&self) -> &AllowanceTable<Self::AllowancesData> {
@@ -1149,6 +1172,12 @@ pub fn clear_stable_allowance_data() {
     });
 }
 
+pub fn clear_stable_balances_data() {
+    BALANCES_MEMORY.with_borrow_mut(|balances| {
+        balances.clear_new();
+    });
+}
+
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct StableAllowancesData {}
 
@@ -1271,5 +1300,42 @@ impl AllowancesData for StableAllowancesData {
 
     fn clear_arrivals(&mut self) {
         panic!("The method `clear_arrivals` should not be called for StableAllowancesData")
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
+pub struct StableBalances {}
+
+impl BalancesStore for StableBalances {
+    type AccountId = Account;
+    type Tokens = Tokens;
+
+    fn get_balance(&self, k: &Account) -> Option<Tokens> {
+        BALANCES_MEMORY.with_borrow(|balances| balances.get(k))
+    }
+
+    fn update<F, E>(&mut self, k: Account, mut f: F) -> Result<Tokens, E>
+    where
+        F: FnMut(Option<&Tokens>) -> Result<Tokens, E>,
+    {
+        let entry = BALANCES_MEMORY.with_borrow(|balances| balances.get(&k));
+        match entry {
+            Some(v) => {
+                let new_v = f(Some(&v))?;
+                if new_v != Tokens::ZERO {
+                    BALANCES_MEMORY.with_borrow_mut(|balances| balances.insert(k, new_v));
+                } else {
+                    BALANCES_MEMORY.with_borrow_mut(|balances| balances.remove(&k));
+                }
+                Ok(new_v)
+            }
+            None => {
+                let new_v = f(None)?;
+                if new_v != Tokens::ZERO {
+                    BALANCES_MEMORY.with_borrow_mut(|balances| balances.insert(k, new_v));
+                }
+                Ok(new_v)
+            }
+        }
     }
 }
