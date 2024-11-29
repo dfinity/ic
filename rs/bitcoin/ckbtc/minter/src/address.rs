@@ -2,7 +2,7 @@
 
 use crate::ECDSAPublicKey;
 use bech32::Variant;
-use ic_btc_interface::{Network, Satoshi};
+use ic_btc_interface::Network;
 use ic_crypto_sha2::Sha256;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
@@ -82,17 +82,6 @@ impl BitcoinAddress {
             Some('T') => parse_bip173_address(address, network),
             Some(_) => Err(ParseAddressError::UnsupportedAddressType),
             None => Err(ParseAddressError::NoData),
-        }
-    }
-
-    pub fn dust_limit(&self) -> Satoshi {
-        // We use the maximum dust limit over all address types for simplicity
-        match self {
-            BitcoinAddress::P2wpkhV0(_)
-            | BitcoinAddress::P2wshV0(_)
-            | BitcoinAddress::P2trV1(_)
-            | BitcoinAddress::P2pkh(_)
-            | BitcoinAddress::P2sh(_) => 546,
         }
     }
 }

@@ -57,6 +57,10 @@ pub const MAX_REQUESTS_PER_BATCH: usize = 100;
 pub const MINTER_FEE_PER_INPUT: u64 = 146;
 pub const MINTER_FEE_PER_OUTPUT: u64 = 4;
 pub const MINTER_FEE_CONSTANT: u64 = 26;
+/// Dust limit for the minter's address.
+/// The minter's address is of type P2WPKH which means it has a dust limit of 294 sats.
+/// For additional safety, we round that value up.
+pub const MINTER_ADDRESS_DUST_LIMIT: Satoshi = 300;
 
 /// The minimum fee increment for transaction resubmission.
 /// See https://en.bitcoin.it/wiki/Miner_fees#Relaying for more detail.
@@ -999,11 +1003,7 @@ pub fn build_unsigned_transaction(
 
     debug_assert!(inputs_value >= amount);
 
-    let minter_fee = evaluate_minter_fee(
-        utxos_guard.len() as u64,
-        (outputs.len() + 1) as u64,
-        &main_address,
-    );
+    let minter_fee = evaluate_minter_fee(utxos_guard.len() as u64, (outputs.len() + 1) as u64);
 
     let change = inputs_value - amount;
     let change_output = state::ChangeOutput {
@@ -1079,16 +1079,12 @@ pub fn build_unsigned_transaction(
     ))
 }
 
-fn evaluate_minter_fee(
-    num_inputs: u64,
-    num_outputs: u64,
-    minter_address: &BitcoinAddress,
-) -> Satoshi {
+fn evaluate_minter_fee(num_inputs: u64, num_outputs: u64) -> Satoshi {
     max(
         MINTER_FEE_PER_INPUT * num_inputs
             + MINTER_FEE_PER_OUTPUT * num_outputs
             + MINTER_FEE_CONSTANT,
-        minter_address.dust_limit(),
+        MINTER_ADDRESS_DUST_LIMIT,
     )
 }
 
@@ -1231,7 +1227,6 @@ pub fn estimate_retrieve_btc_fee(
     available_utxos: &BTreeSet<Utxo>,
     maybe_amount: Option<u64>,
     median_fee_millisatoshi_per_vbyte: u64,
-    minter_address: &BitcoinAddress,
 ) -> WithdrawalFee {
     const DEFAULT_INPUT_COUNT: u64 = 2;
     // One output for the caller and one for the change.
@@ -1256,7 +1251,7 @@ pub fn estimate_retrieve_btc_fee(
     };
 
     let vsize = tx_vsize_estimate(input_count, DEFAULT_OUTPUT_COUNT);
-    let minter_fee = evaluate_minter_fee(input_count, DEFAULT_OUTPUT_COUNT, minter_address);
+    let minter_fee = evaluate_minter_fee(input_count, DEFAULT_OUTPUT_COUNT);
     // We subtract one from the outputs because the minter's output
     // does not participate in fees distribution.
     let bitcoin_fee =

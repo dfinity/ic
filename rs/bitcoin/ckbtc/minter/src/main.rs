@@ -22,7 +22,6 @@ use ic_ckbtc_minter::updates::{
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
 use ic_ckbtc_minter::{
-    address,
     state::eventlog::{Event, GetEventsArg},
     storage, {Log, LogEntry, Priority},
 };
@@ -212,25 +211,11 @@ async fn get_canister_status() -> ic_cdk::api::management_canister::main::Canist
 
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
-    let ecdsa_public_key = read_state(|s| {
-        s.ecdsa_public_key
-            .clone()
-            .expect("ERROR: minter ECDSA public key not yet available!")
-    });
-
-    let main_account = Account {
-        owner: ic_cdk::id(),
-        subaccount: None,
-    };
-
-    let main_address = address::account_to_bitcoin_address(&ecdsa_public_key, &main_account);
-
     read_state(|s| {
         ic_ckbtc_minter::estimate_retrieve_btc_fee(
             &s.available_utxos,
             arg.amount,
             s.last_fee_per_vbyte[50],
-            &main_address,
         )
     })
 }
