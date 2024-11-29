@@ -89,5 +89,5 @@ jobs:
           for tag in "v${ICRC_ROSETTA_RELEASE_VERSION}" latest; do
             bazel run --stamp --embed_label="$tag" //rs/rosetta-api/icrc1:push_ic_icrc_rosetta_image
           done
-          git tag "icrc-rosetta-release-$ICRC_ROSETTA_RELEASE_VERSION" "${{ github.sha }}"
-          git push origin "icrc-rosetta-release-$ICRC_ROSETTA_RELEASE_VERSION"
+          git tag "rosetta-icrc-release-$ICRC_ROSETTA_RELEASE_VERSION" "${{ github.sha }}"
+          git push origin "rosetta-icrc-release-$ICRC_ROSETTA_RELEASE_VERSION"
