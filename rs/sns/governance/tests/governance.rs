@@ -2896,7 +2896,7 @@ async fn test_refresh_cached_upgrade_steps() {
         canister_fixture
             .environment_fixture
             .push_mocked_canister_reply(ListUpgradeStepsResponse { steps });
-        canister_fixture.governance.proto.deployed_version = Some(v1);
+        canister_fixture.governance.proto.deployed_version = Some(v1.clone());
     }
 
     // Check that the initial state is None
@@ -3004,8 +3004,8 @@ async fn test_refresh_cached_upgrade_steps() {
             .await;
     }
 
-    // Check that only one refresh has been recorded in the upgrade journal (because the 2nd one
-    // is identical to the 1st).
+    // Check that after the initialization, only one refresh has been recorded
+    // in the upgrade journal (because the 2nd one is identical to the 1st).
     {
         let upgrade_journal = canister_fixture
             .governance
@@ -3015,18 +3015,29 @@ async fn test_refresh_cached_upgrade_steps() {
             .unwrap();
         assert_eq!(
             upgrade_journal.entries,
-            vec![UpgradeJournalEntry {
-                // we advanced time by one second after the first refresh
-                timestamp_seconds: Some(DEFAULT_TEST_START_TIMESTAMP_SECONDS),
-                // the event contains the upgrade steps
-                event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
-                    upgrade_journal_entry::UpgradeStepsRefreshed {
-                        upgrade_steps: Some(Versions {
-                            versions: expected_upgrade_steps
-                        }),
-                    }
-                )),
-            }]
+            vec![
+                UpgradeJournalEntry {
+                    timestamp_seconds: Some(DEFAULT_TEST_START_TIMESTAMP_SECONDS),
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                        upgrade_journal_entry::UpgradeStepsReset {
+                            human_readable: Some("Initializing the cache".to_string()),
+                            upgrade_steps: Some(Versions { versions: vec![v1] }),
+                        }
+                    )),
+                },
+                UpgradeJournalEntry {
+                    // we advanced time by one second after the first refresh
+                    timestamp_seconds: Some(DEFAULT_TEST_START_TIMESTAMP_SECONDS),
+                    // the event contains the upgrade steps
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
+                        upgrade_journal_entry::UpgradeStepsRefreshed {
+                            upgrade_steps: Some(Versions {
+                                versions: expected_upgrade_steps
+                            }),
+                        }
+                    )),
+                },
+            ]
         );
     }
 }
