@@ -219,26 +219,19 @@ mod tests {
             for i in 1..6 {
                 stream.push(
                     RequestBuilder::new()
-                        .metadata(
-                            (certification_version >= CertificationVersion::V14 && i % 5 != 0)
-                                .then_some(RequestMetadata::new(
-                                    i % 3,
-                                    Time::from_nanos_since_unix_epoch(i % 2),
-                                )),
-                        )
+                        .metadata(RequestMetadata::new(
+                            i % 3,
+                            Time::from_nanos_since_unix_epoch(i % 2),
+                        ))
                         .deadline(maybe_deadline(i))
                         .build()
                         .into(),
                 );
             }
-            if certification_version >= CertificationVersion::V8 {
-                stream.push_reject_signal(RejectReason::CanisterMigrating);
-            }
-            if certification_version >= CertificationVersion::V17 {
-                stream.set_reverse_stream_flags(StreamFlags {
-                    deprecated_responses_only: true,
-                });
-            }
+            stream.push_reject_signal(RejectReason::CanisterMigrating);
+            stream.set_reverse_stream_flags(StreamFlags {
+                deprecated_responses_only: true,
+            });
             if certification_version >= CertificationVersion::V19 {
                 stream.push_reject_signal(RejectReason::CanisterNotFound);
                 stream.push_reject_signal(RejectReason::QueueFull);
@@ -259,21 +252,19 @@ mod tests {
                 );
             }
 
-            if certification_version >= CertificationVersion::V11 {
-                state.set_ingress_status(
-                    message_test_id(7),
-                    IngressStatus::Known {
-                        state: IngressState::Failed(UserError::new(
-                            ErrorCode::CanisterNotFound,
-                            "canister not found",
-                        )),
-                        receiver: canister_id.into(),
-                        user_id: user_test_id(1),
-                        time: Time::from_nanos_since_unix_epoch(12345),
-                    },
-                    NumBytes::from(u64::MAX),
-                );
-            }
+            state.set_ingress_status(
+                message_test_id(7),
+                IngressStatus::Known {
+                    state: IngressState::Failed(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        "canister not found",
+                    )),
+                    receiver: canister_id.into(),
+                    user_id: user_test_id(1),
+                    time: Time::from_nanos_since_unix_epoch(12345),
+                },
+                NumBytes::from(u64::MAX),
+            );
 
             state.metadata.node_public_keys = btreemap! {
                 node_test_id(1) => vec![1; 44],
@@ -367,9 +358,9 @@ mod tests {
         // BACKWARD COMPATIBILITY CODE FOR OLD CERTIFICATION VERSIONS THAT
         // NEED TO BE SUPPORTED.
         let expected_hashes: [&str; 3] = [
-            "D13F75C42D3E2BDA2F742510029088A9ADB119E30241AC969DE24936489168B5",
-            "E739B8EA1585E9BB97988C80ED0C0CDFDF064D4BC5A2B6B06EB414BFF6139CCE",
-            "31F4593CC82CDB0B858F190E00112AF4599B5333F7AED9403EEAE88B656738D5",
+            "0BD567305B9828C7BDE2A03E25871C382742A2598308761A47745BAA9E3495FF",
+            "28BCC63FA7C215C8308EE8201CDEBDC06B62AFB2E9F4C2AB31452A4DBBD73B90",
+            "4677DFA14CC8B349B1F0D88651CD961FE8DF2E905C3C886B9116972D798B1C1E",
         ];
         assert_eq!(expected_hashes.len(), all_supported_versions().count());
 

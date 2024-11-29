@@ -34,31 +34,31 @@ pub use split_neuron::SPLIT_NEURON_DESC;
 
 fn neuron_global(gov: &Governance) -> TlaValue {
     let neuron_map: BTreeMap<u64, TlaValue> = with_stable_neuron_store(|store| {
-        gov.neuron_store
-            .active_neurons_iter()
-            .cloned()
-            .chain(store.range_neurons(std::ops::RangeFull))
-            .map(|neuron| {
-                (
-                    neuron.id().id,
-                    TlaValue::Record(BTreeMap::from([
-                        (
-                            "cached_stake".to_string(),
-                            neuron.cached_neuron_stake_e8s.to_tla_value(),
-                        ),
-                        (
-                            "account".to_string(),
-                            subaccount_to_tla(&neuron.subaccount()),
-                        ),
-                        ("fees".to_string(), neuron.neuron_fees_e8s.to_tla_value()),
-                        (
-                            "maturity".to_string(),
-                            neuron.maturity_e8s_equivalent.to_tla_value(),
-                        ),
-                    ])),
-                )
-            })
-            .collect()
+        gov.neuron_store.with_active_neurons_iter(|iter| {
+            iter.map(|n| (*n).clone())
+                .chain(store.range_neurons(std::ops::RangeFull))
+                .map(|neuron| {
+                    (
+                        neuron.id().id,
+                        TlaValue::Record(BTreeMap::from([
+                            (
+                                "cached_stake".to_string(),
+                                neuron.cached_neuron_stake_e8s.to_tla_value(),
+                            ),
+                            (
+                                "account".to_string(),
+                                subaccount_to_tla(&neuron.subaccount()),
+                            ),
+                            ("fees".to_string(), neuron.neuron_fees_e8s.to_tla_value()),
+                            (
+                                "maturity".to_string(),
+                                neuron.maturity_e8s_equivalent.to_tla_value(),
+                            ),
+                        ])),
+                    )
+                })
+                .collect()
+        })
     });
     neuron_map.to_tla_value()
 }

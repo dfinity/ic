@@ -10,7 +10,7 @@ use ic_interfaces::messaging::{
     LABEL_VALUE_CANISTER_OUT_OF_CYCLES, LABEL_VALUE_CANISTER_STOPPED,
     LABEL_VALUE_CANISTER_STOPPING, LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
 };
-use ic_logger::{debug, error, fatal, info, trace, ReplicaLogger};
+use ic_logger::{debug, error, info, trace, ReplicaLogger};
 use ic_metrics::{
     buckets::{add_bucket, decimal_buckets},
     MetricsRegistry,
@@ -873,22 +873,13 @@ impl StreamHandlerImpl {
                         return Some((RejectReason::CanisterMigrating, msg));
                     }
                     RequestOrResponse::Response(response) => {
-                        if state.metadata.certification_version >= CertificationVersion::V9 {
-                            debug!(
-                                self.log,
-                                "Inducting response failed: Canister {} is migrating\n{:?}",
-                                response.originator,
-                                response
-                            );
-                            return Some((RejectReason::CanisterMigrating, msg));
-                        } else {
-                            fatal!(
-                                self.log,
-                                "Canister {} is being migrated, but cannot produce reject signal for response {:?}",
-                                response.originator,
-                                response
-                            );
-                        }
+                        debug!(
+                            self.log,
+                            "Inducting response failed: Canister {} is migrating\n{:?}",
+                            response.originator,
+                            response
+                        );
+                        return Some((RejectReason::CanisterMigrating, msg));
                     }
                 }
             }

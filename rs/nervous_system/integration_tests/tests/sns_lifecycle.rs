@@ -142,7 +142,7 @@ impl NeuronsFundConfig {
 ///     2. `{  neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeSuccessfully   { direct_participation_icp_e8s==650_000 * E8 && neurons_fund_participation_icp_e8s==150_000 * E8 }`
 ///     3. `{ !neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeUnSuccessfully { direct_participation_icp_e8s==0            && neurons_fund_participation_icp_e8s==0 }`
 ///     4. `{ !neurons_fund_participation && direct_participation_icp_e8s==0 && neurons_fund_participation_icp_e8s==0 } FinalizeSuccessfully   { direct_participation_icp_e8s==650_000 * E8 && neurons_fund_participation_icp_e8s==0 }`
-///     
+///
 ///     Unused portions of Neurons' Fund maturity reserved at SNS creation time are refunded.
 ///
 /// 5. Control over the dapp:
@@ -363,7 +363,7 @@ async fn test_sns_lifecycle(
             "My Test Dapp",
             dapp_canister_id,
             vec![],
-            Wasm::from_bytes(UNIVERSAL_CANISTER_WASM),
+            Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()),
             original_controllers.clone(),
         )
         .await;
@@ -419,9 +419,11 @@ async fn test_sns_lifecycle(
         swap_distribution_sns_e8s,
     );
 
-    let nervous_system_parameters =
-        sns::governance::get_nervous_system_parameters(&pocket_ic, sns.governance.canister_id)
-            .await;
+    let nervous_system_parameters = sns
+        .governance
+        .get_nervous_system_parameters(&pocket_ic)
+        .await
+        .unwrap();
     let swap_init = sns::swap::get_init(&pocket_ic, sns.swap.canister_id)
         .await
         .init
@@ -443,8 +445,10 @@ async fn test_sns_lifecycle(
 
     // Assert that the mode of SNS Governance is `PreInitializationSwap`.
     assert_eq!(
-        sns::governance::get_mode(&pocket_ic, sns.governance.canister_id)
+        sns.governance
+            .get_mode(&pocket_ic)
             .await
+            .unwrap()
             .mode
             .unwrap(),
         sns_pb::governance::Mode::PreInitializationSwap as i32
@@ -1111,16 +1115,20 @@ async fn test_sns_lifecycle(
     // Assert that the mode of SNS Governance is correct
     if swap_finalization_status == SwapFinalizationStatus::Aborted {
         assert_eq!(
-            sns::governance::get_mode(&pocket_ic, sns.governance.canister_id)
+            sns.governance
+                .get_mode(&pocket_ic)
                 .await
+                .unwrap()
                 .mode
                 .unwrap(),
             sns_pb::governance::Mode::PreInitializationSwap as i32,
         );
     } else {
         assert_eq!(
-            sns::governance::get_mode(&pocket_ic, sns.governance.canister_id)
+            sns.governance
+                .get_mode(&pocket_ic)
                 .await
+                .unwrap()
                 .mode
                 .unwrap(),
             sns_pb::governance::Mode::Normal as i32

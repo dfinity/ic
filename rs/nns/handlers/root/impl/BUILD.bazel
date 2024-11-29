@@ -207,6 +207,7 @@ rust_ic_test_suite(
         "//rs/nns/handlers/lifeline/impl:lifeline_canister",
         "//rs/nns/sns-wasm:sns-wasm-canister",
         "//rs/registry/canister:registry-canister",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/handlers/root/impl",
@@ -219,6 +220,7 @@ rust_ic_test_suite(
         "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
         "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
         "UPGRADE_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:upgrade-test-canister)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":root"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],

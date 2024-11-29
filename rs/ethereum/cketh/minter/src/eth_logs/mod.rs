@@ -11,17 +11,17 @@ use candid::Principal;
 use hex_literal::hex;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
+use icrc_ledger_types::icrc1::account::Account;
 use minicbor::{Decode, Encode};
-use std::fmt;
-use std::fmt::{Debug, Formatter};
-use thiserror::Error;
-
 pub use parser::{
     LogParser, ReceivedErc20LogParser, ReceivedEthLogParser, ReceivedEthOrErc20LogParser,
 };
 pub use scraping::{
     LogScraping, ReceivedErc20LogScraping, ReceivedEthLogScraping, ReceivedEthOrErc20LogScraping,
 };
+use std::fmt;
+use std::fmt::{Debug, Display, Formatter};
+use thiserror::Error;
 
 // Keccak256("ReceivedEth(address,uint256,bytes32)")
 const RECEIVED_ETH_EVENT_TOPIC: [u8; 32] =
@@ -47,7 +47,7 @@ pub struct ReceivedEthEvent {
     pub from_address: Address,
     #[n(4)]
     pub value: Wei,
-    #[cbor(n(5), with = "crate::cbor::principal")]
+    #[cbor(n(5), with = "icrc_cbor::principal")]
     pub principal: Principal,
     #[n(6)]
     pub subaccount: Option<LedgerSubaccount>,
@@ -65,7 +65,7 @@ pub struct ReceivedErc20Event {
     pub from_address: Address,
     #[n(4)]
     pub value: Erc20Value,
-    #[cbor(n(5), with = "crate::cbor::principal")]
+    #[cbor(n(5), with = "icrc_cbor::principal")]
     pub principal: Principal,
     #[n(6)]
     pub erc20_contract_address: Address,
@@ -171,10 +171,16 @@ impl ReceivedEvent {
             ReceivedEvent::Erc20(evt) => evt.from_address,
         }
     }
-    pub fn principal(&self) -> Principal {
+    pub fn beneficiary(&self) -> Account {
         match self {
-            ReceivedEvent::Eth(evt) => evt.principal,
-            ReceivedEvent::Erc20(evt) => evt.principal,
+            ReceivedEvent::Eth(evt) => Account {
+                owner: evt.principal,
+                subaccount: evt.subaccount.as_ref().map(|s| s.clone().to_bytes()),
+            },
+            ReceivedEvent::Erc20(evt) => Account {
+                owner: evt.principal,
+                subaccount: evt.subaccount.as_ref().map(|s| s.clone().to_bytes()),
+            },
         }
     }
     pub fn block_number(&self) -> BlockNumber {
@@ -311,5 +317,11 @@ impl LedgerSubaccount {
 impl Debug for LedgerSubaccount {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "LedgerSubaccount({:x?})", self.0.to_be_bytes())
+    }
+}
+
+impl Display for LedgerSubaccount {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+        write!(f, "{}", hex::encode(self.0.to_be_bytes()))
     }
 }

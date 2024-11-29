@@ -1,7 +1,7 @@
 #![cfg_attr(feature = "fuzzing_code", allow(dead_code, unused_imports))]
 use std::{
     collections::BTreeMap,
-    fs::File,
+    fs::{File, OpenOptions},
     io::Write,
     os::{fd::FromRawFd, unix::prelude::FileExt},
     path::{Path, PathBuf},
@@ -9,11 +9,11 @@ use std::{
 
 use crate::page_map::{
     storage::{
-        Checkpoint, FileIndex, MergeCandidate, MergeDestination, OverlayFile, PageIndexRange,
-        Shard, Storage, StorageLayout, CURRENT_OVERLAY_VERSION, PAGE_INDEX_RANGE_NUM_BYTES,
-        SIZE_NUM_BYTES, VERSION_NUM_BYTES,
+        verify, Checkpoint, FileIndex, MergeCandidate, MergeDestination, OverlayFile,
+        PageIndexRange, Shard, Storage, StorageLayout, CURRENT_OVERLAY_VERSION,
+        PAGE_INDEX_RANGE_NUM_BYTES, SIZE_NUM_BYTES, VERSION_NUM_BYTES,
     },
-    test_utils::{ShardedTestStorageLayout, TestStorageLayout},
+    test_utils::{base_only_storage_layout, ShardedTestStorageLayout, TestStorageLayout},
     FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocator, PageDelta, PageMap,
     PersistenceError, StorageMetrics, MAX_NUMBER_OF_FILES,
 };
@@ -362,7 +362,7 @@ fn verify_storage(dir: &Path, expected: &PageDelta) {
         base: dir.join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
     };
-    let storage = Storage::load(&storage_layout).unwrap();
+    let storage = Storage::lazy_load(Box::new(storage_layout.clone())).unwrap();
 
     let expected_num_pages = if let Some(max) = expected.max_page_index() {
         max.get() + 1
@@ -676,15 +676,16 @@ fn write_overlays_and_verify_with_tempdir(
 /// after every step.
 /// Use unsharded LSMT config.
 fn write_overlays_and_verify_unsharded(instructions: Vec<Instruction>) -> MetricsRegistry {
-    let tempdir = Builder::new()
+    let tdir = Builder::new()
         .prefix("write_overlays_and_verify_unsharded")
         .tempdir()
         .unwrap();
     let metrics =
-        write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tempdir);
-    tempdir
-        .close()
-        .expect("Unable to delete temporary directory");
+        write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tdir);
+
+    #[cfg(feature = "fuzzing_code")]
+    remove_tempdir(tdir);
+
     metrics
 }
 
@@ -692,15 +693,16 @@ fn write_overlays_and_verify_unsharded(instructions: Vec<Instruction>) -> Metric
 /// after every step.
 /// Use sharded LSMT config
 fn write_overlays_and_verify_sharded(instructions: Vec<Instruction>) -> MetricsRegistry {
-    let tempdir = Builder::new()
+    let tdir = Builder::new()
         .prefix("write_overlays_and_verify_sharded")
         .tempdir()
         .unwrap();
     let metrics =
-        write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_sharded(), &tempdir);
-    tempdir
-        .close()
-        .expect("Unable to delete temporary directory");
+        write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_sharded(), &tdir);
+
+    #[cfg(feature = "fuzzing_code")]
+    remove_tempdir(tdir);
+
     metrics
 }
 
@@ -709,6 +711,21 @@ fn write_overlays_and_verify_sharded(instructions: Vec<Instruction>) -> MetricsR
 pub fn write_overlays_and_verify(instructions: Vec<Instruction>) {
     write_overlays_and_verify_sharded(instructions.clone());
     write_overlays_and_verify_unsharded(instructions);
+}
+
+/// Force removes a given temporary directory
+/// Only used in fuzzing due to AFL's handling of terminating forked processes.
+/// See: https://docs.rs/tempfile/latest/tempfile/struct.TempDir.html#resource-leaking
+///
+/// For normal tests, the drop implementation is sufficient.
+///
+/// # Panics
+/// This method panics if the remove didn't succeed
+#[doc(hidden)]
+#[cfg(feature = "fuzzing_code")]
+fn remove_tempdir(tdir: TempDir) {
+    let tmp_path = tdir.into_path();
+    std::fs::remove_dir_all(tmp_path).expect("Unable to delete temporary directoy");
 }
 
 #[test]
@@ -1371,7 +1388,7 @@ fn overlapping_shards_is_an_error() {
             tempdir.path().join("000000_010_vmemory_0.overlay"),
         ]
     );
-    assert!(Storage::load(&ShardedTestStorageLayout {
+    assert!(verify(&ShardedTestStorageLayout {
         dir_path: tempdir.path().to_path_buf(),
         base: tempdir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
@@ -1382,13 +1399,42 @@ fn overlapping_shards_is_an_error() {
         tempdir.path().join("000000_011_vmemory_0.overlay"),
     )
     .unwrap();
-    assert!(Storage::load(&ShardedTestStorageLayout {
+    assert!(verify(&ShardedTestStorageLayout {
         dir_path: tempdir.path().to_path_buf(),
         base: tempdir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
     })
     .is_err());
 }
+
+#[test]
+fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
+    use std::io::Write;
+
+    let tmp = tempfile::Builder::new()
+        .prefix("checkpoints")
+        .tempdir()
+        .unwrap();
+    let heap_file = tmp.path().join("heap");
+    OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&heap_file)
+        .unwrap()
+        .write_all(&vec![1; PAGE_SIZE / 2])
+        .unwrap();
+
+    match verify(&base_only_storage_layout(heap_file.to_path_buf())) {
+        Err(err) => assert!(
+            err.is_invalid_heap_file(),
+            "Expected invalid heap file error, got {:?}",
+            err
+        ),
+        Ok(_) => panic!("Expected a invalid heap file error, got Ok(_)"),
+    }
+}
+
 #[test]
 fn sharded_base_file() {
     // Base only files; expect get_base_memory_instructions to be exhaustive
@@ -1398,11 +1444,11 @@ fn sharded_base_file() {
         &lsmt_config_sharded(),
         &dir,
     );
-    let storage = Storage::load(&ShardedTestStorageLayout {
+    let storage = Storage::lazy_load(Box::new(ShardedTestStorageLayout {
         dir_path: dir.path().to_path_buf(),
         base: dir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
-    })
+    }))
     .unwrap();
     let full_range = PageIndex::new(0)..PageIndex::new(11);
     let filter = BitVec::from_elem(
@@ -1431,11 +1477,11 @@ fn sharded_base_file() {
         &lsmt_config_sharded(),
         &dir,
     );
-    let storage = Storage::load(&ShardedTestStorageLayout {
+    let storage = Storage::lazy_load(Box::new(ShardedTestStorageLayout {
         dir_path: dir.path().to_path_buf(),
         base: dir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
-    })
+    }))
     .unwrap();
     assert!(!storage
         .get_memory_instructions(full_range, &mut filter.clone())

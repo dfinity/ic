@@ -53,16 +53,6 @@ impl ProposalTemplate {
             .expect("failed to write binary args");
     }
 
-    pub fn write_hex_args<W: Write>(&self, writer: &mut W) {
-        let hex_args = match self {
-            ProposalTemplate::Upgrade(template) => template.upgrade_args.upgrade_args_hex(),
-            ProposalTemplate::Install(template) => template.install_args.upgrade_args_hex(),
-        };
-        writer
-            .write_all(hex_args.as_bytes())
-            .expect("failed to write hex args");
-    }
-
     pub fn args_sha256_hex(&self) -> String {
         match self {
             ProposalTemplate::Upgrade(template) => template.upgrade_args.args_sha256_hex(),

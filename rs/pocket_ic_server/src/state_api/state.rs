@@ -33,7 +33,8 @@ use hyper::{Request, Response as HyperResponse};
 use hyper_util::client::legacy::{connect::HttpConnector, Client};
 use ic_http_endpoints_public::cors_layer;
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
-use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, SubnetId};
+use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, PrincipalId, SubnetId};
+use itertools::Itertools;
 use pocket_ic::common::rest::{
     CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpGatewayInfo, Topology,
@@ -41,8 +42,13 @@ use pocket_ic::common::rest::{
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::atomic::AtomicU64, sync::Arc,
-    time::Duration,
+    collections::HashMap,
+    fmt,
+    path::PathBuf,
+    str::FromStr,
+    sync::atomic::AtomicU64,
+    sync::Arc,
+    time::{Duration, SystemTime},
 };
 use tokio::{
     sync::mpsc::error::TryRecvError,
@@ -120,6 +126,26 @@ struct Instance {
     state: InstanceState,
 }
 
+struct HttpGateway {
+    details: HttpGatewayDetails,
+    shutdown_handle: Handle,
+}
+
+impl HttpGateway {
+    fn new(details: HttpGatewayDetails, shutdown_handle: Handle) -> Self {
+        Self {
+            details,
+            shutdown_handle,
+        }
+    }
+}
+
+impl Drop for HttpGateway {
+    fn drop(&mut self) {
+        self.shutdown_handle.shutdown();
+    }
+}
+
 /// The state of the PocketIC API.
 pub struct ApiState {
     // impl note: If locks are acquired on both fields, acquire first on `instances` and then on `graph`.
@@ -130,7 +156,7 @@ pub struct ApiState {
     // PocketIC server port
     port: Option<u16>,
     // HTTP gateway infos (`None` = stopped)
-    http_gateways: Arc<RwLock<Vec<Option<HttpGatewayDetails>>>>,
+    http_gateways: Arc<RwLock<Vec<Option<HttpGateway>>>>,
 }
 
 #[derive(Default)]
@@ -206,6 +232,7 @@ pub enum OpOut {
     Time(u64),
     CanisterResult(Result<WasmResult, UserError>),
     CanisterId(CanisterId),
+    Controllers(Vec<PrincipalId>),
     Cycles(u128),
     Bytes(Vec<u8>),
     StableMemBytes(Vec<u8>),
@@ -220,11 +247,14 @@ pub enum OpOut {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum PocketIcError {
     CanisterNotFound(CanisterId),
+    CanisterIsEmpty(CanisterId),
     BadIngressMessage(String),
     SubnetNotFound(candid::Principal),
     RequestRoutingError(String),
     InvalidCanisterHttpRequestId((SubnetId, CanisterHttpRequestId)),
     InvalidMockCanisterHttpResponses((usize, usize)),
+    InvalidRejectCode(u64),
+    SettingTimeIntoPast((u64, u64)),
 }
 
 impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>> for OpOut {
@@ -252,11 +282,19 @@ impl std::fmt::Debug for OpOut {
             OpOut::Time(x) => write!(f, "Time({})", x),
             OpOut::Topology(t) => write!(f, "Topology({:?})", t),
             OpOut::CanisterId(cid) => write!(f, "CanisterId({})", cid),
+            OpOut::Controllers(controllers) => write!(
+                f,
+                "Controllers({})",
+                controllers.iter().map(|c| c.to_string()).join(",")
+            ),
             OpOut::Cycles(x) => write!(f, "Cycles({})", x),
             OpOut::CanisterResult(Ok(x)) => write!(f, "CanisterResult: Ok({:?})", x),
             OpOut::CanisterResult(Err(x)) => write!(f, "CanisterResult: Err({})", x),
             OpOut::Error(PocketIcError::CanisterNotFound(cid)) => {
                 write!(f, "CanisterNotFound({})", cid)
+            }
+            OpOut::Error(PocketIcError::CanisterIsEmpty(cid)) => {
+                write!(f, "CanisterIsEmpty({})", cid)
             }
             OpOut::Error(PocketIcError::BadIngressMessage(msg)) => {
                 write!(f, "BadIngressMessage({})", msg)
@@ -283,6 +321,12 @@ impl std::fmt::Debug for OpOut {
                     "InvalidMockCanisterHttpResponses(actual={},expected={})",
                     actual, expected
                 )
+            }
+            OpOut::Error(PocketIcError::InvalidRejectCode(code)) => {
+                write!(f, "InvalidRejectCode({})", code)
+            }
+            OpOut::Error(PocketIcError::SettingTimeIntoPast((current, set))) => {
+                write!(f, "SettingTimeIntoPast(current={},set={})", current, set)
             }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
@@ -886,14 +930,27 @@ impl ApiState {
             handler_api_subnet(ApiVersion::V2, replica_url, subnet_id, "read_state", bytes).await
         }
 
+        let https_config = if let Some(ref https_config) = http_gateway_config.https_config {
+            Some(
+                RustlsConfig::from_pem_file(
+                    PathBuf::from(https_config.cert_path.clone()),
+                    PathBuf::from(https_config.key_path.clone()),
+                )
+                .await
+                .map_err(|e| format!("TLS config could not be created: {}", e))?,
+            )
+        } else {
+            None
+        };
+
         let ip_addr = http_gateway_config
             .ip_addr
+            .clone()
             .unwrap_or("127.0.0.1".to_string());
         let port = http_gateway_config.port.unwrap_or_default();
         let addr = format!("{}:{}", ip_addr, port);
         let listener = std::net::TcpListener::bind(&addr)
-            .unwrap_or_else(|_| panic!("Failed to start HTTP gateway on port {}", port));
-        let real_port = listener.local_addr().unwrap().port();
+            .map_err(|e| format!("Failed to bind to address {}: {}", addr, e))?;
 
         let pocket_ic_server_port = self.port.unwrap();
         let replica_url = match http_gateway_config.forward_to {
@@ -913,22 +970,15 @@ impl ApiState {
 
         let replica_url = replica_url.trim_end_matches('/').to_string();
 
-        let mut http_gateways = self.http_gateways.write().await;
-        let instance_id = http_gateways.len();
-        let http_gateway_details = HttpGatewayDetails {
-            instance_id,
-            port: real_port,
-            forward_to: http_gateway_config.forward_to.clone(),
-            domains: http_gateway_config.domains.clone(),
-            https_config: http_gateway_config.https_config.clone(),
-        };
-        http_gateways.push(Some(http_gateway_details));
-        drop(http_gateways);
-
-        let http_gateways = self.http_gateways.clone();
         let handle = Handle::new();
-        let shutdown_handle = handle.clone();
         let axum_handle = handle.clone();
+        let domains = http_gateway_config
+            .domains
+            .clone()
+            .unwrap_or(vec!["localhost".to_string()])
+            .iter()
+            .map(|d| fqdn!(d))
+            .collect();
         spawn(async move {
             let http_gateway_client = ic_http_gateway::HttpGatewayClientBuilder::new()
                 .with_agent(agent)
@@ -936,14 +986,7 @@ impl ApiState {
                 .unwrap();
             let backend_client =
                 Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
-            let domain_resolver = DomainResolver::new(
-                http_gateway_config
-                    .domains
-                    .unwrap_or(vec!["localhost".to_string()])
-                    .iter()
-                    .map(|d| fqdn!(d))
-                    .collect(),
-            );
+            let domain_resolver = DomainResolver::new(domains);
             let state_handler = Arc::new(HandlerState::new(
                 http_gateway_client,
                 backend_client,
@@ -1003,52 +1046,47 @@ impl ApiState {
                 .with_state(replica_url)
                 .into_make_service();
 
-            let http_gateways_for_shutdown = http_gateways.clone();
-            tokio::spawn(async move {
-                loop {
-                    let guard = http_gateways_for_shutdown.read().await;
-                    if guard[instance_id].is_none() {
-                        shutdown_handle.shutdown();
-                        break;
-                    }
-                    drop(guard);
-                    tokio::time::sleep(Duration::from_secs(1)).await;
+            match https_config {
+                Some(config) => {
+                    axum_server::from_tcp_rustls(listener, config)
+                        .handle(axum_handle)
+                        .serve(router)
+                        .await
+                        .unwrap();
                 }
-            });
-            if let Some(https_config) = http_gateway_config.https_config {
-                let config = RustlsConfig::from_pem_file(
-                    PathBuf::from(https_config.cert_path),
-                    PathBuf::from(https_config.key_path),
-                )
-                .await;
-                match config {
-                    Ok(config) => {
-                        axum_server::from_tcp_rustls(listener, config)
-                            .handle(axum_handle)
-                            .serve(router)
-                            .await
-                            .unwrap();
-                    }
-                    Err(e) => {
-                        error!("TLS config could not be created: {:?}", e);
-                        let mut guard = http_gateways.write().await;
-                        guard[instance_id] = None;
-                        return;
-                    }
+                None => {
+                    axum_server::from_tcp(listener)
+                        .handle(axum_handle)
+                        .serve(router)
+                        .await
+                        .unwrap();
                 }
-            } else {
-                axum_server::from_tcp(listener)
-                    .handle(axum_handle)
-                    .serve(router)
-                    .await
-                    .unwrap();
             }
 
             debug!("Terminating HTTP gateway.");
         });
 
         // Wait until the HTTP gateway starts listening.
-        while handle.listening().await.is_none() {}
+        let real_port = loop {
+            if let Some(socket_addr) = handle.listening().await {
+                break socket_addr.port();
+            }
+            sleep(Duration::from_millis(20)).await;
+        };
+
+        let mut http_gateways = self.http_gateways.write().await;
+        let instance_id = http_gateways.len();
+        let http_gateway_details = HttpGatewayDetails {
+            instance_id,
+            port: real_port,
+            forward_to: http_gateway_config.forward_to.clone(),
+            domains: http_gateway_config.domains.clone(),
+            https_config: http_gateway_config.https_config.clone(),
+        };
+        let shutdown_handle = handle.clone();
+        let http_gateway = HttpGateway::new(http_gateway_details, shutdown_handle);
+        http_gateways.push(Some(http_gateway));
+        drop(http_gateways);
 
         Ok(HttpGatewayInfo {
             instance_id,
@@ -1060,6 +1098,13 @@ impl ApiState {
         let mut http_gateways = self.http_gateways.write().await;
         if instance_id < http_gateways.len() {
             http_gateways[instance_id] = None;
+        }
+    }
+
+    pub async fn stop_all_http_gateways(&self) {
+        let mut http_gateways = self.http_gateways.write().await;
+        for i in 0..http_gateways.len() {
+            http_gateways[i] = None;
         }
     }
 
@@ -1076,11 +1121,12 @@ impl ApiState {
         if instance.progress_thread.is_none() {
             let (tx, mut rx) = mpsc::channel::<()>(1);
             let handle = spawn(async move {
-                let mut now = Instant::now();
+                debug!("Starting auto progress for instance {}.", instance_id);
+                let mut now = SystemTime::now();
                 loop {
                     let start = Instant::now();
-                    let old = std::mem::replace(&mut now, Instant::now());
-                    let op = AdvanceTimeAndTick(now.duration_since(old));
+                    let old = std::mem::replace(&mut now, SystemTime::now());
+                    let op = AdvanceTimeAndTick(now.duration_since(old).unwrap_or_default());
                     if Self::execute_operation(
                         instances_clone.clone(),
                         graph.clone(),
@@ -1091,7 +1137,7 @@ impl ApiState {
                     .await
                     .is_none()
                     {
-                        return;
+                        break;
                     }
                     let op = ProcessCanisterHttpInternal;
                     if Self::execute_operation(
@@ -1104,7 +1150,7 @@ impl ApiState {
                     .await
                     .is_none()
                     {
-                        return;
+                        break;
                     }
                     let duration = start.elapsed();
                     sleep(std::cmp::max(
@@ -1113,9 +1159,10 @@ impl ApiState {
                     ))
                     .await;
                     if received_stop_signal(&mut rx) {
-                        return;
+                        break;
                     }
                 }
+                debug!("Stopping auto progress for instance {}.", instance_id);
             });
             instance.progress_thread = Some(ProgressThread { handle, sender: tx });
             Ok(())
@@ -1158,9 +1205,8 @@ impl ApiState {
         self.http_gateways
             .read()
             .await
-            .clone()
-            .into_iter()
-            .flatten()
+            .iter()
+            .filter_map(|gateway| gateway.as_ref().map(|g| g.details.clone()))
             .collect()
     }
 

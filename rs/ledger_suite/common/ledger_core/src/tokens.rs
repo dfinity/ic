@@ -287,6 +287,12 @@ impl TryFrom<Nat> for Tokens {
     }
 }
 
+impl From<u64> for Tokens {
+    fn from(value: u64) -> Self {
+        Tokens::from_e8s(value)
+    }
+}
+
 impl From<Tokens> for Nat {
     fn from(value: Tokens) -> Self {
         Nat::from(value.e8s)

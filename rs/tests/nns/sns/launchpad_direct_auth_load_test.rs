@@ -1,11 +1,10 @@
 use anyhow::Result;
-use std::time::Duration;
-
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::systest;
-use ic_tests::nns_tests::sns_aggregator::{benchmark_config_with_auth, workload_direct_auth};
-use ic_tests::nns_tests::sns_deployment::initiate_token_swap_with_oc_parameters;
+use sns_system_test_lib::sns_aggregator::{benchmark_config_with_auth, workload_direct_auth};
+use sns_system_test_lib::sns_deployment::initiate_token_swap_with_oc_parameters;
+use std::time::Duration;
 
 const WORKLOAD_DURATION: Duration = Duration::from_secs(2 * 60);
 

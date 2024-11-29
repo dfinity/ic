@@ -17,7 +17,7 @@ jobs:
       uses: actions/checkout@v4
       with:
         ref: 'master-private'
-        token: ${{ secrets.IDX_PUSH_TO_PR }}
+        token: ${{ secrets.PUSH_TO_IC_PRIVATE }}
 
     - name: Sync changes from public ic
       run: |

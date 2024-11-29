@@ -111,7 +111,7 @@ pub const NAME_MAX_LEN: u32 = 253;
 
 #[derive(PartialEq, Debug, thiserror::Error)]
 pub enum NameError {
-    #[error("Name has size '{0}' but must not exceed size {}", NAME_MAX_LEN)]
+    #[error("Name has size '{0}' but must not exceed size {len}", len = NAME_MAX_LEN)]
     InvalidSize(usize),
 
     #[error("domains with a dot suffix are not supported")]
@@ -281,6 +281,18 @@ pub enum RemoveRegistrationResponse {
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum ListRegistrationsError {
+    Unauthorized,
+    UnexpectedError(String),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum ListRegistrationsResponse {
+    Ok(Vec<(String, Registration)>),
+    Err(ListRegistrationsError),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum GetCertificateError {
     NotFound,
     Unauthorized,
@@ -369,6 +381,31 @@ pub enum DispenseTaskError {
 pub enum DispenseTaskResponse {
     Ok(Id),
     Err(DispenseTaskError),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum RemoveTaskError {
+    NotFound,
+    Unauthorized,
+    UnexpectedError(String),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum RemoveTaskResponse {
+    Ok,
+    Err(RemoveTaskError),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum ListTasksError {
+    Unauthorized,
+    UnexpectedError(String),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum ListTasksResponse {
+    Ok(Vec<(String, u64, Registration)>),
+    Err(ListTasksError),
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]

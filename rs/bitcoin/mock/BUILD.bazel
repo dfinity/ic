@@ -52,10 +52,12 @@ rust_ic_test(
     srcs = ["tests/tests.rs"],
     data = [
         ":bitcoin_canister_mock",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/mock",
         "IC_BITCOIN_CANISTER_MOCK_WASM_PATH": "$(rootpath :bitcoin_canister_mock)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     deps = [

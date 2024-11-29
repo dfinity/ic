@@ -16,7 +16,7 @@ fn env_and_canister(canister_size: u64) -> (StateMachine, CanisterId) {
     let env = env();
     let canister_id = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             Cycles::new(u128::MAX / 2),
