@@ -362,16 +362,15 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
         let changeset = dealings
             .par_iter()
             .map(|dealings| {
-                {
-                    self.validate_dealings_for_dealer(
-                        dkg_pool,
-                        &dkg_summary.configs,
-                        start_height,
-                        dealings.to_vec(),
-                    )
-                }
-                .into_par_iter()
+                self.validate_dealings_for_dealer(
+                    dkg_pool,
+                    &dkg_summary.configs,
+                    start_height,
+                    dealings.to_vec(),
+                )
             })
+            .collect::<Vec<Mutations>>()
+            .into_iter()
             .flatten()
             .collect::<Mutations>();
 
