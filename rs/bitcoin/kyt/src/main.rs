@@ -22,7 +22,7 @@ mod providers;
 mod state;
 
 use fetch::{FetchEnv, FetchResult, TryFetchResult};
-use logs::{Log, LogEntry, Priority, INFO, WARN};
+use logs::{Log, LogEntry, Priority, DEBUG, WARN};
 use state::{get_config, set_config, Config, FetchGuardError, HttpGetTxError};
 
 #[derive(Default)]
@@ -221,28 +221,29 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
 
         let mut entries: Log = Default::default();
         for entry in export_logs(&WARN) {
-            entries.entries.push(LogEntry {
-                timestamp: entry.timestamp,
-                counter: entry.counter,
-                priority: Priority::WARN,
-                file: entry.file.to_string(),
-                line: entry.line,
-                message: entry.message,
-            });
+            if entry.timestamp >= max_skip_timestamp {
+                entries.entries.push(LogEntry {
+                    timestamp: entry.timestamp,
+                    counter: entry.counter,
+                    priority: Priority::WARN,
+                    file: entry.file.to_string(),
+                    line: entry.line,
+                    message: entry.message,
+                });
+            }
         }
-        for entry in export_logs(&INFO) {
-            entries.entries.push(LogEntry {
-                timestamp: entry.timestamp,
-                counter: entry.counter,
-                priority: Priority::INFO,
-                file: entry.file.to_string(),
-                line: entry.line,
-                message: entry.message,
-            });
+        for entry in export_logs(&DEBUG) {
+            if entry.timestamp >= max_skip_timestamp {
+                entries.entries.push(LogEntry {
+                    timestamp: entry.timestamp,
+                    counter: entry.counter,
+                    priority: Priority::DEBUG,
+                    file: entry.file.to_string(),
+                    line: entry.line,
+                    message: entry.message,
+                });
+            }
         }
-        entries
-            .entries
-            .retain(|entry| entry.timestamp >= max_skip_timestamp);
         http::HttpResponseBuilder::ok()
             .header("Content-Type", "application/json; charset=utf-8")
             .with_body_and_content_length(serde_json::to_string(&entries).unwrap_or_default())
@@ -350,8 +351,8 @@ impl FetchEnv for KytCanisterEnv {
             Err((r, m)) if is_response_too_large(&r, &m) => Err(HttpGetTxError::ResponseTooLarge),
             Err((r, m)) => {
                 log!(
-                    INFO,
-                    "The http_request resulted into error. RejectionCode: {r:?}, Error: {m}"
+                    DEBUG,
+                    "The http_request resulted into error. RejectionCode: {r:?}, Error: {m}, Request: {request:?}"
                 );
                 Err(HttpGetTxError::Rejected {
                     code: r,

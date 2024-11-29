@@ -5,12 +5,12 @@ use serde::{Deserialize, Serialize};
 declare_log_buffer!(name = WARN, capacity = 1000);
 
 // Low-priority info messages.
-declare_log_buffer!(name = INFO, capacity = 1000);
+declare_log_buffer!(name = DEBUG, capacity = 1000);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum Priority {
     WARN,
-    INFO,
+    DEBUG,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
