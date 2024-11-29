@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
-    "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/internal/crypto_service_provider",
     "//rs/crypto/internal/logmon",

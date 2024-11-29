@@ -3,7 +3,7 @@ use crate::helpers::*;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode, Principal};
-use clap::{Args, Parser};
+use clap::{Args, Parser, ValueEnum};
 use create_subnet::ProposeToCreateSubnetCmd;
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
@@ -245,7 +245,7 @@ struct Opts {
     #[clap(
         long = "nns-public-key-pem-file",
         help = "PEM file to overwrite the mainnet NNS public key. Requires --verify-nns-responses.",
-        requires = "verify-nns-responses"
+        requires = "verify_nns_responses"
     )]
     nns_public_key_pem_file: Option<PathBuf>,
 
@@ -259,8 +259,8 @@ struct Opts {
 }
 
 /// List of sub-commands accepted by `ic-admin`.
-#[derive(Parser)]
 #[allow(clippy::large_enum_variant)]
+#[derive(clap::Subcommand)]
 enum SubCommand {
     /// Get the last version of a node's public key from the registry.
     GetPublicKey(GetPublicKeyCmd),
@@ -460,7 +460,7 @@ enum SubCommand {
 }
 
 /// Indicates whether a value should be added or removed.
-#[derive(Parser)]
+#[derive(Clone, ValueEnum)]
 enum AddOrRemove {
     /// Whether the value should be added
     Add,
@@ -511,11 +511,11 @@ struct ProposeToChangeSubnetMembershipCmd {
     /// The subnet to modify
     subnet: SubnetDescriptor,
 
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     /// The node IDs of the nodes that should be added to the subnet.
     pub node_ids_add: Vec<PrincipalId>,
 
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     /// The node IDs of the nodes that should be removed from the subnet.
     pub node_ids_remove: Vec<PrincipalId>,
 }
@@ -612,7 +612,7 @@ struct ProposeToDeployGuestosToAllSubnetNodesCmd {
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToRemoveNodeOperatorsCmd {
     /// List of principal ids of node operators to remove
-    #[clap(multiple_values(true))]
+    #[clap(num_args(1..))]
     node_operators_to_remove: Vec<PrincipalId>,
 }
 
@@ -715,7 +715,7 @@ impl ProposalPayload<DeployGuestosToAllUnassignedNodesPayload>
 struct ProposeToUpdateSshReadonlyAccessForAllUnassignedNodesCmd {
     /// The list of public keys whose owners have "readonly" SSH access to all
     /// unassigned nodes.
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     pub ssh_readonly_access: Vec<String>,
 }
 
@@ -876,12 +876,12 @@ struct ProposeToReviseElectedGuestssVersionsCmd {
     /// 'release_package_urls'.
     pub release_package_sha256_hex: Option<String>,
 
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     /// The URLs against which an HTTP GET request will return a release
     /// package that corresponds to this version.
     pub release_package_urls: Vec<String>,
 
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     /// The replica version ids to remove.
     pub replica_versions_to_unelect: Vec<String>,
 }
@@ -1182,7 +1182,7 @@ struct ProposeToUpdateCanisterSettingsCmd {
     canister_id: CanisterId,
 
     /// If set, it will update the canister's controllers to this value.
-    #[clap(long, multiple_values(true), group = "update_controllers")]
+    #[clap(long, num_args(1..), group = "update_controllers")]
     controllers: Option<Vec<PrincipalId>>,
     /// If set, it will remove all controllers of the canister.
     #[clap(long, group = "update_controllers")]
@@ -1489,7 +1489,7 @@ struct ProposeToInsertSnsWasmUpgradePathEntriesCmd {
     ///     '{"archive":"archive-B","governance":"gov-A","index":"index-A","ledger":"ledger-A","root":"root-A","swap":"swap-A"}'
     ///     '{"archive":"archive-B","governance":"gov-C","index":"index-A","ledger":"ledger-A","root":"root-A","swap":"swap-A"}'
     ///  and the path will be two step entries from the first to the second, then the second to the third.
-    #[clap(required(true), multiple_values(true))]
+    #[clap(required(true), num_args(1..))]
     pub versions: Vec<JsonSnsVersion>,
 }
 
@@ -1681,7 +1681,7 @@ struct ProposeToSetAuthorizedSubnetworksCmd {
     /// The list of subnets that `who` would be authorized to create subnets on.
     /// If `subnets` is `None`, then `who` is removed from the list of
     /// authorized users.
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     pub subnets: Option<Vec<PrincipalId>>,
 }
 
@@ -2032,11 +2032,11 @@ struct ProposeToAddOrRemoveDataCentersCmd {
     /// Example:
     /// '{ "id": "AN1", "region": "us-west", "owner": "DC Corp", "gps": {
     /// "latitude": 37.774929,    "longitude": -122.419416 } }'
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     pub data_centers_to_add: Vec<String>,
 
     /// The IDs of data centers to remove
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     pub data_centers_to_remove: Vec<String>,
 
     /// If true, skips printing out the `AddOrRemoveDataCentersProposalPayload`
@@ -2405,7 +2405,7 @@ struct GetFirewallRulesetHashCmd {
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToRemoveNodesCmd {
     /// The IDs of the nodes to remove.
-    #[clap(name = "NODE_ID", multiple_values(true), required = true)]
+    #[clap(name = "NODE_ID", num_args(1..), required = true)]
     pub node_ids: Vec<PrincipalId>,
 }
 
@@ -2484,7 +2484,7 @@ struct VoteOnRootProposalToUpgradeGovernanceCanisterCmd {
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToPrepareCanisterMigrationCmd {
     /// The list of canister ID ranges in migration.
-    #[clap(long, multiple_values(true), required = true)]
+    #[clap(long, num_args(1..), required = true)]
     canister_id_ranges: Vec<CanisterIdRange>,
     /// The source of the canister ID ranges.
     #[clap(long, required = true)]
@@ -2524,7 +2524,7 @@ impl ProposalPayload<PrepareCanisterMigrationPayload> for ProposeToPrepareCanist
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToRerouteCanisterRangesCmd {
     /// The list of canister ID ranges to be rerouted.
-    #[clap(long, multiple_values(true), required = true)]
+    #[clap(long, num_args(1..), required = true)]
     canister_id_ranges: Vec<CanisterIdRange>,
     /// The source of the canister ID ranges.
     #[clap(long, required = true)]
@@ -2564,10 +2564,10 @@ impl ProposalPayload<RerouteCanisterRangesPayload> for ProposeToRerouteCanisterR
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToCompleteCanisterMigrationCmd {
     /// The list of canister ID ranges to be removed from canister migrations.
-    #[clap(long, multiple_values(true), required = true)]
+    #[clap(long, num_args(1..), required = true)]
     canister_id_ranges: Vec<CanisterIdRange>,
     /// The migration trace containing a list of subnet IDs.
-    #[clap(long, multiple_values(true), required = true)]
+    #[clap(long, num_args(1..), required = true)]
     migration_trace: Vec<PrincipalId>,
 }
 
@@ -3142,12 +3142,12 @@ struct ProposeToReviseElectedHostosVersionsCmd {
     /// 'release_package_urls'.
     pub release_package_sha256_hex: Option<String>,
 
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     /// The URLs against which an HTTP GET request will return a release
     /// package that corresponds to this version.
     pub release_package_urls: Vec<String>,
 
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     /// The HostOS version ids to remove.
     pub hostos_versions_to_unelect: Vec<String>,
 }
@@ -3190,7 +3190,7 @@ struct ProposeToUpdateNodesHostosVersionCmd {}
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToDeployHostosToSomeNodesCmd {
     /// The list of nodes on which to set the given HostosVersion
-    #[clap(name = "NODE_ID", multiple_values(true), required = true)]
+    #[clap(name = "NODE_ID", num_args(1..), required = true)]
     pub node_ids: Vec<PrincipalId>,
 
     #[clap(flatten)]
@@ -3261,7 +3261,7 @@ impl ProposalPayload<DeployHostosToSomeNodes> for ProposeToDeployHostosToSomeNod
 #[derive_common_proposal_fields]
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToAddApiBoundaryNodesCmd {
-    #[clap(long, required = true, multiple_values(true), alias = "node-ids")]
+    #[clap(long, required = true, num_args(1..), alias = "node-ids")]
     /// The nodes to assign as an API Boundary Node
     nodes: Vec<PrincipalId>,
 
@@ -3299,7 +3299,7 @@ impl ProposalPayload<AddApiBoundaryNodesPayload> for ProposeToAddApiBoundaryNode
 #[derive_common_proposal_fields]
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToRemoveApiBoundaryNodesCmd {
-    #[clap(long, required = true, multiple_values(true), alias = "node-ids")]
+    #[clap(long, required = true, num_args(1..), alias = "node-ids")]
     /// The set of API Boundary Nodes that should be returned to an unassigned state
     nodes: Vec<PrincipalId>,
 }
@@ -3337,7 +3337,7 @@ struct ProposeToUpdateApiBoundaryNodesVersionCmd {}
 #[derive_common_proposal_fields]
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToDeployGuestosToSomeApiBoundaryNodesCmd {
-    #[clap(long, required = true, multiple_values(true), alias = "node-ids")]
+    #[clap(long, required = true, num_args(1..), alias = "node-ids")]
     /// The set of API Boundary Nodes that should have their version updated
     nodes: Vec<PrincipalId>,
 

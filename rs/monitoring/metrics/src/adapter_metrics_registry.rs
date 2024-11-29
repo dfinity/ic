@@ -2,9 +2,9 @@ use crate::buckets::{add_bucket, decimal_buckets};
 use futures::future::join_all;
 use futures::future::FutureExt;
 use ic_adapter_metrics_client::AdapterMetrics;
+use parking_lot::RwLock;
 use prometheus::{proto::MetricFamily, Error, HistogramOpts, HistogramVec, Registry};
 use std::{sync::Arc, time::Duration};
-use tokio::sync::RwLock;
 
 /// Registry for remote process adapters.
 #[derive(Clone, Debug)]
@@ -53,24 +53,22 @@ impl AdapterMetricsRegistry {
     /// Write accesses to here can not be starved by `gather()` calls, due to
     /// the write-preffering behaviour of the used `tokio::sync::RwLock`.
     pub fn register(&self, adapter_metrics: AdapterMetrics) -> Result<(), Error> {
-        if self
-            .adapters
-            .blocking_read()
+        let mut adapters = self.adapters.write();
+        if adapters
             .iter()
             .any(|a| a.get_name() == adapter_metrics.get_name())
         {
             return Err(Error::AlreadyReg);
         }
-        self.adapters.blocking_write().push(adapter_metrics);
+        adapters.push(adapter_metrics);
         Ok(())
     }
 
     /// Concurrently scrapes metrics from all registered adapters.
     pub async fn gather(&self, timeout: Duration) -> Vec<MetricFamily> {
+        let adapters = self.adapters.read().clone();
         join_all(
-            self.adapters
-                .read()
-                .await
+            adapters
                 .iter()
                 .map(|a| {
                     let scrape_duration = self.metrics.scrape_duration.clone();

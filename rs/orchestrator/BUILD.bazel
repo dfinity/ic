@@ -46,7 +46,8 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:backoff",
         "@crate_index//:candid",
-        "@crate_index//:clap_3_2_25",
+        "@crate_index//:clap",
+        "@crate_index//:env-file-reader",
         "@crate_index//:exec",
         "@crate_index//:get_if_addrs",
         "@crate_index//:hex",
@@ -78,7 +79,7 @@ rust_binary(
         # Keep sorted.
         ":lib",
         "//rs/async_utils",
-        "@crate_index//:clap_3_2_25",
+        "@crate_index//:clap",
         "@crate_index//:tokio",
     ],
 )
@@ -89,7 +90,7 @@ rust_test(
     data = [
         "testdata/nftables_assigned_replica.conf.golden",
         "testdata/nftables_boundary_node.conf.golden",
-        "//ic-os/components:ic/ic.json5.template",
+        "//ic-os/components:ic/generate-ic-config/ic.json5.template",
     ],
     deps = [
         # Keep sorted.
@@ -99,6 +100,7 @@ rust_test(
         "//rs/crypto/test_utils/tls",
         "//rs/registry/fake",
         "//rs/registry/proto_data_provider",
+        "//rs/registry/subnet_type",
         "//rs/test_utilities",
         "//rs/test_utilities/consensus",
         "//rs/test_utilities/in_memory_logger",

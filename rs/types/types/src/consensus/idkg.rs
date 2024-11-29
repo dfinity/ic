@@ -32,9 +32,10 @@ use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::MasterPublicKeyId;
+use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
-    registry::{crypto::v1 as crypto_pb, subnet::v1 as subnet_pb},
+    registry::subnet::v1 as subnet_pb,
     types::v1 as pb,
 };
 use phantom_newtype::Id;
@@ -64,6 +65,84 @@ pub enum CompletedSignature {
     Unreported(crate::batch::ConsensusResponse),
 }
 
+/// A [`MasterPublicKeyId`], that contains a variant that is compatible with the IDKG protocol.
+///
+/// The [`MasterPublicKeyId`] can hold a number of different key types.
+/// Some of them can be used with the IDKG protocol, while others can not.
+/// The [`IDkgMasterPublicKeyId`] type indicates, that this key id can be used with a IDKG protocol.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct IDkgMasterPublicKeyId(MasterPublicKeyId);
+
+impl TryFrom<MasterPublicKeyId> for IDkgMasterPublicKeyId {
+    type Error = String;
+
+    fn try_from(val: MasterPublicKeyId) -> Result<Self, Self::Error> {
+        if !val.is_idkg_key() {
+            Err("This key is not an idkg key".to_string())
+        } else {
+            Ok(Self(val))
+        }
+    }
+}
+
+impl From<IDkgMasterPublicKeyId> for MasterPublicKeyId {
+    fn from(val: IDkgMasterPublicKeyId) -> Self {
+        val.0
+    }
+}
+
+impl IDkgMasterPublicKeyId {
+    pub fn inner(&self) -> &MasterPublicKeyId {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for IDkgMasterPublicKeyId {
+    type Target = MasterPublicKeyId;
+
+    fn deref(&self) -> &<Self as std::ops::Deref>::Target {
+        self.inner()
+    }
+}
+
+impl std::borrow::Borrow<MasterPublicKeyId> for IDkgMasterPublicKeyId {
+    fn borrow(&self) -> &MasterPublicKeyId {
+        self.inner()
+    }
+}
+
+impl std::fmt::Display for IDkgMasterPublicKeyId {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(fmt, "{}", &self.0)
+    }
+}
+
+impl Serialize for IDkgMasterPublicKeyId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for IDkgMasterPublicKeyId {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<IDkgMasterPublicKeyId, D::Error> {
+        use serde::de::Error;
+
+        let master_public_key_id: MasterPublicKeyId =
+            serde::Deserialize::deserialize(deserializer)?;
+
+        if !master_public_key_id.is_idkg_key() {
+            Err(D::Error::custom(
+                "expected an idkg variant of MasterPublicKeyId",
+            ))
+        } else {
+            Ok(Self(master_public_key_id))
+        }
+    }
+}
+
 /// Common data that is carried in both `IDkgSummaryPayload` and `IDkgDataPayload`.
 /// published on every consensus round. It represents the current state of the
 /// protocol since the summary block.
@@ -91,7 +170,7 @@ pub struct IDkgPayload {
     pub xnet_reshare_agreements: BTreeMap<IDkgReshareRequest, CompletedReshareRequest>,
 
     /// State of the key transcripts.
-    pub key_transcripts: BTreeMap<MasterPublicKeyId, MasterKeyTranscript>,
+    pub key_transcripts: BTreeMap<IDkgMasterPublicKeyId, MasterKeyTranscript>,
 }
 
 impl IDkgPayload {
@@ -169,7 +248,7 @@ impl IDkgPayload {
     /// Return an iterator of all ids of pre-signatures for the given key in the payload.
     pub fn iter_pre_signature_ids<'a>(
         &'a self,
-        key_id: &'a MasterPublicKeyId,
+        key_id: &'a IDkgMasterPublicKeyId,
     ) -> impl Iterator<Item = PreSigId> + '_ {
         let available_pre_signature_ids = self
             .available_pre_signatures
@@ -367,11 +446,11 @@ pub struct MasterKeyTranscript {
     /// Progress of creating the next key transcript.
     pub next_in_creation: KeyTranscriptCreation,
     /// Master key Id allowing different signature schemes.
-    pub master_key_id: MasterPublicKeyId,
+    pub master_key_id: IDkgMasterPublicKeyId,
 }
 
 impl MasterKeyTranscript {
-    pub fn new(key_id: MasterPublicKeyId, next_in_creation: KeyTranscriptCreation) -> Self {
+    pub fn new(key_id: IDkgMasterPublicKeyId, next_in_creation: KeyTranscriptCreation) -> Self {
         Self {
             current: None,
             next_in_creation,
@@ -486,8 +565,8 @@ impl From<MasterKeyTranscript> for pb::MasterKeyTranscript {
             next_in_creation: Some(pb::KeyTranscriptCreation::from(
                 &transcript.next_in_creation,
             )),
-            master_key_id: Some(crypto_pb::MasterPublicKeyId::from(
-                &transcript.master_key_id,
+            master_key_id: Some(pb_types::MasterPublicKeyId::from(
+                transcript.master_key_id.inner(),
             )),
         }
     }
@@ -514,8 +593,9 @@ impl TryFrom<pb::MasterKeyTranscript> for MasterKeyTranscript {
             "KeyTranscript::next_in_creation",
         )?;
 
-        let master_key_id =
+        let master_key_id: MasterPublicKeyId =
             try_from_option_field(proto.master_key_id, "KeyTranscript::master_key_id")?;
+        let master_key_id = master_key_id.try_into().map_err(ProxyDecodeError::Other)?;
 
         Ok(Self {
             current,
@@ -661,7 +741,7 @@ impl TryFrom<&pb::KeyTranscriptCreation> for KeyTranscriptCreation {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgReshareRequest {
-    pub master_key_id: MasterPublicKeyId,
+    pub master_key_id: IDkgMasterPublicKeyId,
     pub receiving_node_ids: Vec<NodeId>,
     pub registry_version: RegistryVersion,
 }
@@ -672,8 +752,10 @@ impl From<&IDkgReshareRequest> for pb::IDkgReshareRequest {
         for node in &request.receiving_node_ids {
             receiving_node_ids.push(node_id_into_protobuf(*node));
         }
+
+        let master_key_id: &MasterPublicKeyId = &request.master_key_id;
         Self {
-            master_key_id: Some((&request.master_key_id).into()),
+            master_key_id: Some((master_key_id).into()),
             receiving_node_ids,
             registry_version: request.registry_version.get(),
         }
@@ -689,10 +771,11 @@ impl TryFrom<&pb::IDkgReshareRequest> for IDkgReshareRequest {
             .map(|node| node_id_try_from_option(Some(node.clone())))
             .collect::<Result<Vec<_>, ProxyDecodeError>>()?;
 
-        let master_key_id = try_from_option_field(
+        let master_key_id: MasterPublicKeyId = try_from_option_field(
             request.master_key_id.clone(),
             "IDkgReshareRequest::master_key_id",
         )?;
+        let master_key_id = master_key_id.try_into().map_err(ProxyDecodeError::Other)?;
 
         Ok(Self {
             master_key_id,
@@ -936,7 +1019,7 @@ pub fn ecdsa_sig_share_prefix(
     sig_share_node_id.hash(&mut hasher);
 
     IDkgPrefixOf::new(IDkgPrefix::new(
-        request_id.pre_signature_id.id(),
+        request_id.callback_id.get(),
         hasher.finish(),
     ))
 }
@@ -950,7 +1033,7 @@ pub fn schnorr_sig_share_prefix(
     sig_share_node_id.hash(&mut hasher);
 
     IDkgPrefixOf::new(IDkgPrefix::new(
-        request_id.pre_signature_id.id(),
+        request_id.callback_id.get(),
         hasher.finish(),
     ))
 }
@@ -1275,7 +1358,7 @@ impl From<&EcdsaSigShare> for pb::EcdsaSigShare {
     fn from(value: &EcdsaSigShare) -> Self {
         Self {
             signer_id: Some(node_id_into_protobuf(value.signer_id)),
-            request_id: Some(pb::RequestId::from(value.request_id.clone())),
+            request_id: Some(pb::RequestId::from(value.request_id)),
             sig_share_raw: value.share.sig_share_raw.clone(),
         }
     }
@@ -1324,7 +1407,7 @@ impl From<&SchnorrSigShare> for pb::SchnorrSigShare {
     fn from(value: &SchnorrSigShare) -> Self {
         Self {
             signer_id: Some(node_id_into_protobuf(value.signer_id)),
-            request_id: Some(pb::RequestId::from(value.request_id.clone())),
+            request_id: Some(pb::RequestId::from(value.request_id)),
             sig_share_raw: value.share.sig_share_raw.clone(),
         }
     }
@@ -1381,8 +1464,8 @@ impl SigShare {
 
     pub fn request_id(&self) -> RequestId {
         match self {
-            SigShare::Ecdsa(share) => share.request_id.clone(),
-            SigShare::Schnorr(share) => share.request_id.clone(),
+            SigShare::Ecdsa(share) => share.request_id,
+            SigShare::Schnorr(share) => share.request_id,
         }
     }
 
@@ -2011,67 +2094,69 @@ impl From<&IDkgMessage> for IDkgArtifactId {
     }
 }
 
-pub trait HasMasterPublicKeyId {
+pub trait HasIDkgMasterPublicKeyId {
     /// Returns a reference to the [`MasterPublicKeyId`] associated with the object.
-    fn key_id(&self) -> MasterPublicKeyId;
+    fn key_id(&self) -> IDkgMasterPublicKeyId;
 }
 
-impl HasMasterPublicKeyId for QuadrupleInCreation {
-    fn key_id(&self) -> MasterPublicKeyId {
-        MasterPublicKeyId::Ecdsa(self.key_id.clone())
+impl HasIDkgMasterPublicKeyId for QuadrupleInCreation {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
+        IDkgMasterPublicKeyId(MasterPublicKeyId::Ecdsa(self.key_id.clone()))
     }
 }
 
-impl HasMasterPublicKeyId for PreSignatureQuadrupleRef {
-    fn key_id(&self) -> MasterPublicKeyId {
-        MasterPublicKeyId::Ecdsa(self.key_id.clone())
+impl HasIDkgMasterPublicKeyId for PreSignatureQuadrupleRef {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
+        IDkgMasterPublicKeyId(MasterPublicKeyId::Ecdsa(self.key_id.clone()))
     }
 }
 
-impl HasMasterPublicKeyId for PreSignatureInCreation {
-    fn key_id(&self) -> MasterPublicKeyId {
-        match self {
+impl HasIDkgMasterPublicKeyId for PreSignatureInCreation {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
+        let key = match self {
             PreSignatureInCreation::Ecdsa(quadruple) => {
                 MasterPublicKeyId::Ecdsa(quadruple.key_id.clone())
             }
             PreSignatureInCreation::Schnorr(transcript) => {
                 MasterPublicKeyId::Schnorr(transcript.key_id.clone())
             }
-        }
+        };
+        IDkgMasterPublicKeyId(key)
     }
 }
 
-impl HasMasterPublicKeyId for PreSignatureRef {
-    fn key_id(&self) -> MasterPublicKeyId {
-        match self {
+impl HasIDkgMasterPublicKeyId for PreSignatureRef {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
+        let key = match self {
             PreSignatureRef::Ecdsa(quadruple) => MasterPublicKeyId::Ecdsa(quadruple.key_id.clone()),
             PreSignatureRef::Schnorr(transcript) => {
                 MasterPublicKeyId::Schnorr(transcript.key_id.clone())
             }
-        }
+        };
+        IDkgMasterPublicKeyId(key)
     }
 }
 
-impl HasMasterPublicKeyId for IDkgReshareRequest {
-    fn key_id(&self) -> MasterPublicKeyId {
+impl HasIDkgMasterPublicKeyId for IDkgReshareRequest {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
         self.master_key_id.clone()
     }
 }
 
-impl HasMasterPublicKeyId for MasterKeyTranscript {
-    fn key_id(&self) -> MasterPublicKeyId {
+impl HasIDkgMasterPublicKeyId for MasterKeyTranscript {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
         self.master_key_id.clone()
     }
 }
 
-impl<T: HasMasterPublicKeyId, U> HasMasterPublicKeyId for (T, U) {
-    fn key_id(&self) -> MasterPublicKeyId {
+impl<T: HasIDkgMasterPublicKeyId, U> HasIDkgMasterPublicKeyId for (T, U) {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
         self.0.key_id()
     }
 }
 
-impl<T: HasMasterPublicKeyId> HasMasterPublicKeyId for &T {
-    fn key_id(&self) -> MasterPublicKeyId {
+impl<T: HasIDkgMasterPublicKeyId> HasIDkgMasterPublicKeyId for &T {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
         (*self).key_id()
     }
 }

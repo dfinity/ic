@@ -1,4 +1,7 @@
-use crate::types::BtcNetwork;
+use crate::{
+    providers::{parse_authorization_header_from_url, Provider},
+    BtcNetwork, KytMode,
+};
 use bitcoin::{Address, Transaction};
 use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
@@ -8,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
+use std::fmt;
 
 #[cfg(test)]
 mod tests;
@@ -27,6 +31,22 @@ pub enum HttpGetTxError {
     },
 }
 
+impl fmt::Display for HttpGetTxError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use HttpGetTxError::*;
+        match self {
+            TxEncoding(s) => write!(f, "TxEncoding: {}", s),
+            TxidMismatch { expected, decoded } => write!(
+                f,
+                "TxidMismatch: expected {} but decoded {}",
+                expected, decoded
+            ),
+            ResponseTooLarge => write!(f, "ResponseTooLarge"),
+            Rejected { code, message } => write!(f, "Rejected: code {:?}, {}", code, message),
+        }
+    }
+}
+
 /// We store in state the `FetchStatus` for every `Txid` we fetch.
 /// It transitions from `PendingOutcall` to any one of the three
 /// possible outcomes: `PendingRetry`, `Error`, or `Fetched`.
@@ -34,8 +54,15 @@ pub enum HttpGetTxError {
 pub enum FetchTxStatus {
     PendingOutcall,
     PendingRetry { max_response_bytes: u32 },
-    Error(HttpGetTxError),
+    Error(FetchTxStatusError),
     Fetched(FetchedTx),
+}
+
+#[derive(Debug, Clone)]
+pub struct FetchTxStatusError {
+    pub provider: Provider,
+    pub max_response_bytes: u32,
+    pub error: HttpGetTxError,
 }
 
 /// Once the transaction data is successfully fetched, we create
@@ -45,8 +72,52 @@ pub enum FetchTxStatus {
 /// input address will be computed and filled in.
 #[derive(Clone, Debug)]
 pub struct FetchedTx {
-    pub tx: Transaction,
+    pub tx: TransactionKytData,
     pub input_addresses: Vec<Option<Address>>,
+}
+
+/// Instead of storing the full transaction data, we only
+/// store relevant bits, including inputs (which are previous
+/// outputs) and output addresses.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TransactionKytData {
+    pub inputs: Vec<PreviousOutput>,
+    pub outputs: Vec<Option<Address>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct PreviousOutput {
+    pub txid: Txid,
+    pub vout: u32,
+}
+
+impl TransactionKytData {
+    pub fn from_transaction(
+        btc_network: &BtcNetwork,
+        tx: Transaction,
+    ) -> Result<Self, bitcoin::address::FromScriptError> {
+        let inputs = tx
+            .input
+            .iter()
+            .map(|input| PreviousOutput {
+                txid: Txid::from(*(input.previous_output.txid.as_ref() as &[u8; 32])),
+                vout: input.previous_output.vout,
+            })
+            .collect();
+        let mut outputs = Vec::new();
+        for output in tx.output.iter() {
+            // Some outputs do not have addresses. These outputs will never be
+            // inputs of other transactions, so it is okay to treat them as `None`.
+            outputs.push(
+                Address::from_script(
+                    &output.script_pubkey,
+                    bitcoin::Network::from(btc_network.clone()),
+                )
+                .ok(),
+            )
+        }
+        Ok(Self { inputs, outputs })
+    }
 }
 
 // Max number of concurrent http outcalls.
@@ -209,7 +280,28 @@ impl Drop for FetchGuard {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
-    pub btc_network: BtcNetwork,
+    btc_network: BtcNetwork,
+    kyt_mode: KytMode,
+}
+
+impl Config {
+    pub fn new_and_validate(btc_network: BtcNetwork, kyt_mode: KytMode) -> Result<Self, String> {
+        if let BtcNetwork::Regtest { json_rpc_url } = &btc_network {
+            let _ = parse_authorization_header_from_url(json_rpc_url)?;
+        }
+        Ok(Self {
+            btc_network,
+            kyt_mode,
+        })
+    }
+
+    pub fn btc_network(&self) -> BtcNetwork {
+        self.btc_network.clone()
+    }
+
+    pub fn kyt_mode(&self) -> KytMode {
+        self.kyt_mode
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

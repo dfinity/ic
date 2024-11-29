@@ -384,7 +384,7 @@ pub struct NeuronDistribution {
     #[prost(uint64, tag = "3")]
     pub memo: u64,
     /// The amount of time denominated in seconds that the neuron will have its dissolve delay
-    /// set to. This value cannot be changed until after the decentralization sale is complete.
+    /// set to. This value cannot be changed until after the decentralization swap is complete.
     #[prost(uint64, tag = "4")]
     pub dissolve_delay_seconds: u64,
     /// The duration that this neuron is vesting.

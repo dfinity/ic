@@ -31,7 +31,7 @@
 #       //rs/ic_os/dev_test_tools/launch-single-vm:__pkg__ depends on
 #           //rs/tests/driver:ic-system-test-driver
 #       //rs/pocket_ic_server:__pkg__ depends on
-#           //rs/tests:ic-hs
+#           //rs/tests/research:ic-hs
 #           //rs/tests/httpbin-rs:httpbin
 #           //rs/tests/testing_verification:spec_compliance
 package_group(

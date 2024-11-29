@@ -34,7 +34,6 @@ use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
-use ic_types::batch::{BatchMessages, BlockmakerMetrics};
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{
     batch::Batch,
@@ -42,6 +41,10 @@ use ic_types::{
     messages::{MessageId, SignedIngress},
     replica_config::ReplicaConfig,
     time, CanisterId, NodeId, NumInstructions, PrincipalId, Randomness, RegistryVersion, SubnetId,
+};
+use ic_types::{
+    batch::{BatchMessages, BlockmakerMetrics},
+    ReplicaVersion,
 };
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::StdRng;
@@ -386,6 +389,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
         time: time::current_time(),
         consensus_responses: vec![],
         blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+        replica_version: ReplicaVersion::default(),
     }
 }
 /// Block till the given ingress message has finished executing and

@@ -1,6 +1,6 @@
 use crate::{
     cli::{print_height_info, read_optional, read_optional_version},
-    error::RecoveryError,
+    error::{GracefulExpect, RecoveryError},
     file_sync_helper::create_dir,
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
@@ -42,11 +42,11 @@ pub enum StepType {
 #[clap(version = "1.0")]
 pub struct NNSRecoverySameNodesArgs {
     /// Id of the broken subnet
-    #[clap(long, parse(try_from_str=crate::util::subnet_id_from_str))]
+    #[clap(long, value_parser=crate::util::subnet_id_from_str)]
     pub subnet_id: SubnetId,
 
     /// Replica version to upgrade the broken subnet to
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub upgrade_version: Option<ReplicaVersion>,
 
     #[clap(long)]
@@ -54,11 +54,11 @@ pub struct NNSRecoverySameNodesArgs {
     pub replay_until_height: Option<u64>,
 
     /// URL of the upgrade image
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub upgrade_image_url: Option<Url>,
 
     /// SHA256 hash of the upgrade image
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub upgrade_image_hash: Option<String>,
 
     /// IP address of the node to download the subnet state from. Should be different to node used in nns-url.
@@ -96,10 +96,10 @@ impl NNSRecoverySameNodes {
             recovery_args.nns_url.clone(),
             RegistryPollingStrategy::OnlyOnInit,
         )
-        .expect("Failed to init recovery");
+        .expect_graceful("Failed to init recovery");
 
         let new_state_dir = recovery.work_dir.join("new_ic_state");
-        create_dir(&new_state_dir).expect("Failed to create state directory for upload.");
+        create_dir(&new_state_dir).expect_graceful("Failed to create state directory for upload.");
         Self {
             step_iterator: StepType::iter().peekable(),
             params: subnet_args,

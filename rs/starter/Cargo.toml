@@ -10,7 +10,7 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 ic-config = { path = "../config" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types = { path = "../types/management_canister_types" }

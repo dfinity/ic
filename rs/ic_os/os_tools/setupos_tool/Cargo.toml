@@ -12,4 +12,5 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 config = { path = "../../config" }
 network = { path = "../../network" }
+deterministic_ips = { path = "../../deterministic_ips" }
 utils = { path = "../../utils" }

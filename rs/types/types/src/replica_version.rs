@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
+use std::str::FromStr;
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct ReplicaVersion {
@@ -68,6 +69,14 @@ impl AsRef<str> for ReplicaVersion {
 /// Checks if a valid replica version is allowed to contain specified char.
 fn is_valid_version_symbol(c: char) -> bool {
     matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '_' | '-')
+}
+
+impl FromStr for ReplicaVersion {
+    type Err = ReplicaVersionParseError;
+
+    fn from_str(version_str: &str) -> Result<Self, Self::Err> {
+        ReplicaVersion::try_from(version_str)
+    }
 }
 
 impl TryFrom<&str> for ReplicaVersion {

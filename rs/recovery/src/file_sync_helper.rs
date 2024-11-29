@@ -85,9 +85,7 @@ pub fn rsync_with_retries(
             require_confirmation,
             key_file,
         ) {
-            Err(e) => {
-                warn!(logger, "Rsync failed: {:?}, retrying...", e);
-            }
+            Err(e) => warn!(logger, "Rsync failed: {:?}, retrying...", e),
             success => return success,
         }
         thread::sleep(time::Duration::from_secs(10));
@@ -180,6 +178,26 @@ pub fn path_exists(path: &Path) -> RecoveryResult<bool> {
 pub fn remove_dir(path: &Path) -> RecoveryResult<()> {
     if path_exists(path)? {
         fs::remove_dir_all(path).map_err(|e| RecoveryError::dir_error(path, e))
+    } else {
+        Ok(())
+    }
+}
+
+pub fn clear_dir(path: &Path) -> RecoveryResult<()> {
+    if path_exists(path)? {
+        for entry in fs::read_dir(path).map_err(|e| RecoveryError::dir_error(path, e))? {
+            let entry = entry.map_err(|e| RecoveryError::dir_error(path, e))?;
+            let file_type = entry
+                .file_type()
+                .map_err(|e| RecoveryError::dir_error(path, e))?;
+            if file_type.is_dir() {
+                fs::remove_dir_all(entry.path())
+            } else {
+                fs::remove_file(entry.path())
+            }
+            .map_err(|e| RecoveryError::dir_error(entry.path().as_path(), e))?
+        }
+        Ok(())
     } else {
         Ok(())
     }

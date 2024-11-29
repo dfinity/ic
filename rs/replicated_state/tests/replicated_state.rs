@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_btc_interface::Network;
 use ic_btc_replica_types::{
@@ -11,13 +12,18 @@ use ic_management_canister_types::{
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::BitcoinSendTransactionInternalContext;
+use ic_replicated_state::canister_state::execution_state::{
+    CustomSection, CustomSectionType, WasmMetadata,
+};
+use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+    BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
+};
 use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
+use ic_replicated_state::replicated_state::{
+    MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting,
+};
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
-    canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
-    metadata_state::subnet_call_context_manager::{BitcoinGetSuccessorsContext, SubnetCallContext},
-    replicated_state::{MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting},
     CanisterState, IngressHistoryState, InputSource, ReplicatedState, SchedulerState, StateError,
     SystemState,
 };
@@ -26,13 +32,12 @@ use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{CallbackId, RejectContext};
-use ic_types::{
-    messages::{
-        CanisterMessage, Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
-    },
-    time::UNIX_EPOCH,
-    CountBytes, Cycles, MemoryAllocation, Time,
+use ic_types::messages::{
+    CanisterMessage, Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
 };
+use ic_types::time::CoarseTime;
+use ic_types::time::UNIX_EPOCH;
+use ic_types::{CountBytes, Cycles, MemoryAllocation, Time};
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::collections::{BTreeMap, VecDeque};
@@ -44,13 +49,13 @@ const SUBNET_ID: SubnetId = SubnetId::new(PrincipalId::new(29, [0xfc; 29]));
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
 const SUBNET_AVAILABLE_MEMORY: i64 = i64::MAX / 2;
+const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
 
-fn request_from(canister_id: CanisterId) -> RequestOrResponse {
+fn request_from(canister_id: CanisterId) -> Request {
     RequestBuilder::default()
         .sender(canister_id)
         .receiver(CANISTER_ID)
         .build()
-        .into()
 }
 
 fn request_to(canister_id: CanisterId) -> Request {
@@ -247,7 +252,7 @@ fn memory_taken_by_canister_queues() {
     fixture
         .state
         .push_input(
-            request_from(OTHER_CANISTER_ID),
+            request_from(OTHER_CANISTER_ID).into(),
             &mut subnet_available_memory,
         )
         .unwrap();
@@ -381,7 +386,7 @@ fn memory_taken_by_wasm_custom_sections() {
     fixture
         .state
         .push_input(
-            request_from(OTHER_CANISTER_ID),
+            request_from(OTHER_CANISTER_ID).into(),
             &mut subnet_available_memory,
         )
         .unwrap();
@@ -521,18 +526,20 @@ fn push_input_queues_respects_local_remote_subnet() {
 
     // Push message from the remote canister, should be in the remote subnet
     // queue.
-    fixture.push_input(request_from(OTHER_CANISTER_ID)).unwrap();
+    fixture
+        .push_input(request_from(OTHER_CANISTER_ID).into())
+        .unwrap();
     assert_eq!(fixture.remote_subnet_input_schedule(&CANISTER_ID).len(), 1);
 
     // Push message from the local canister, should be in the local subnet queue.
-    fixture.push_input(request_from(CANISTER_ID)).unwrap();
+    fixture
+        .push_input(request_from(CANISTER_ID).into())
+        .unwrap();
     assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 1);
 
     // Push message from the local subnet, should be in the local subnet queue.
     fixture
-        .push_input(request_from(CanisterId::unchecked_from_principal(
-            SUBNET_ID.get(),
-        )))
+        .push_input(request_from(CanisterId::unchecked_from_principal(SUBNET_ID.get())).into())
         .unwrap();
     assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 2);
 }
@@ -680,7 +687,7 @@ fn insert_bitcoin_send_transaction_reject_response() {
 fn time_out_messages_updates_subnet_input_schedules_correctly() {
     let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
 
-    // Push 3 requests into the canister with id `local_canister_id1`:
+    // Enqueue 3 outgoing requests for `CANISTER_ID`:
     // - one to self.
     // - one to a another local canister.
     // - one to a remote canister.
@@ -708,6 +715,90 @@ fn time_out_messages_updates_subnet_input_schedules_correctly() {
         fixture.remote_subnet_input_schedule(&CANISTER_ID),
         &VecDeque::from(vec![remote_canister_id])
     );
+}
+
+#[test]
+fn time_out_messages_in_subnet_queues() {
+    let mut fixture = ReplicatedStateFixture::new();
+
+    // Enqueue 2 incoming best-effort requests for `SUBNET_ID`.
+    for i in 0..2 {
+        let mut request = request_to(SUBNET_ID.into());
+        request.deadline = CoarseTime::from_secs_since_unix_epoch(1000 + i as u32);
+        fixture.push_input(request.into()).unwrap();
+    }
+
+    // Time out the first request.
+    let second_request_deadline = CoarseTime::from_secs_since_unix_epoch(1001);
+    fixture.state.metadata.batch_time = second_request_deadline.into();
+    assert_eq!(1, fixture.state.time_out_messages());
+
+    // Second request should still be in the queue.
+    assert_matches!(
+        fixture.state.pop_subnet_input(),
+        Some(CanisterMessage::Request(request)) if request.deadline == second_request_deadline
+    );
+    assert_eq!(None, fixture.state.pop_subnet_input());
+}
+
+#[test]
+fn enforce_best_effort_message_limit() {
+    let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
+
+    // Enqueue 4 best-effort incoming requests of increasing sizes for
+    // `CANISTER_ID`, `OTHER_CANISTER_ID` and `own_subnet_id` (i.e. subnet queues).
+    let own_subnet_id = CanisterId::from(fixture.state.metadata.own_subnet_id);
+    let mut message_sizes = Vec::new();
+    for (i, receiver) in [CANISTER_ID, OTHER_CANISTER_ID, CANISTER_ID, own_subnet_id]
+        .iter()
+        .enumerate()
+    {
+        let mut request = request_to(*receiver);
+        request.deadline = SOME_DEADLINE;
+        request.method_name = String::from_utf8(vec![b'x'; i * 10 + 1]).unwrap();
+        message_sizes.push(NumBytes::from(request.count_bytes() as u64));
+        fixture.push_input(request.into()).unwrap();
+    }
+
+    assert_eq!(
+        (0, 0.into()),
+        fixture
+            .state
+            .enforce_best_effort_message_limit(u64::MAX.into()),
+    );
+
+    let best_effort_memory_usage = fixture.state.best_effort_message_memory_taken();
+    assert_eq!(
+        (0, 0.into()),
+        fixture
+            .state
+            .enforce_best_effort_message_limit(best_effort_memory_usage),
+    );
+
+    // Enforce a limit equal to the mean message size. This should shed everything
+    // but the first message we enqueued.
+    let mean_message_size = best_effort_memory_usage / 4;
+    assert_eq!(
+        (3, message_sizes[1] + message_sizes[2] + message_sizes[3]),
+        fixture
+            .state
+            .enforce_best_effort_message_limit(mean_message_size),
+    );
+
+    // A second identical call should be a no-op.
+    assert_eq!(
+        (0, 0.into()),
+        fixture
+            .state
+            .enforce_best_effort_message_limit(mean_message_size),
+    );
+
+    // Pop the remaining message.
+    assert!(fixture.pop_input().is_some());
+
+    // There should now be no more inbound or outbound messages left.
+    assert!(fixture.pop_input().is_none());
+    assert!(fixture.state.output_into_iter().next().is_none());
 }
 
 #[test]

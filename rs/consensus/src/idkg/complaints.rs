@@ -981,9 +981,9 @@ mod tests {
     use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
-    use ic_management_canister_types::MasterPublicKeyId;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
+    use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
     use ic_types::consensus::idkg::{IDkgObject, TranscriptRef};
     use ic_types::crypto::AlgorithmId;
     use ic_types::time::UNIX_EPOCH;
@@ -992,7 +992,7 @@ mod tests {
     // Tests the Action logic
     #[test]
     fn test_ecdsa_complaint_action() {
-        let key_id = fake_ecdsa_master_public_key_id();
+        let key_id = fake_ecdsa_idkg_master_public_key_id();
         let (id_1, id_2, id_3, id_4, id_5) = (
             create_transcript_id(1),
             create_transcript_id(2),
@@ -1049,7 +1049,7 @@ mod tests {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
                 let crypto = env.nodes.iter().next().unwrap().crypto();
                 let (_, complaint_handler) =
@@ -1076,7 +1076,7 @@ mod tests {
         }
     }
 
-    fn test_validate_complaints(key_id: MasterPublicKeyId) {
+    fn test_validate_complaints(key_id: IDkgMasterPublicKeyId) {
         let (id_1, id_2, id_3) = (
             create_transcript_id_with_height(1, Height::from(200)),
             create_transcript_id_with_height(2, Height::from(20)),
@@ -1174,7 +1174,7 @@ mod tests {
     fn test_ecdsa_duplicate_complaints() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let id_1 = create_transcript_id_with_height(1, Height::from(30));
@@ -1269,7 +1269,7 @@ mod tests {
     fn test_ecdsa_duplicate_complaints_in_batch() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let id_1 = create_transcript_id_with_height(1, Height::from(30));
@@ -1317,7 +1317,7 @@ mod tests {
         }
     }
 
-    fn test_send_openings(key_id: MasterPublicKeyId) {
+    fn test_send_openings(key_id: IDkgMasterPublicKeyId) {
         let (id_1, id_2, id_3) = (
             create_transcript_id(1),
             create_transcript_id(2),
@@ -1400,7 +1400,7 @@ mod tests {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
                 let crypto = env.nodes.iter().next().unwrap().crypto();
                 let (_, complaint_handler) =
@@ -1433,7 +1433,7 @@ mod tests {
         }
     }
 
-    fn test_validate_openings(key_id: MasterPublicKeyId) {
+    fn test_validate_openings(key_id: IDkgMasterPublicKeyId) {
         let (id_1, id_2, id_3, id_4) = (
             create_transcript_id_with_height(1, Height::from(400)),
             create_transcript_id_with_height(2, Height::from(20)),
@@ -1547,7 +1547,7 @@ mod tests {
     fn test_ecdsa_duplicate_openings() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let id_1 = create_transcript_id_with_height(1, Height::from(20));
@@ -1586,7 +1586,7 @@ mod tests {
     fn test_ecdsa_duplicate_openings_in_batch() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let id_1 = create_transcript_id_with_height(1, Height::from(20));
@@ -1641,7 +1641,7 @@ mod tests {
     fn test_ecdsa_purge_unvalidated_complaints() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
@@ -1693,7 +1693,7 @@ mod tests {
     fn test_ecdsa_purge_validated_complaints() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
@@ -1742,7 +1742,7 @@ mod tests {
     fn test_ecdsa_purge_unvalidated_openings() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
@@ -1794,7 +1794,7 @@ mod tests {
     fn test_ecdsa_purge_validated_openings() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
@@ -1881,7 +1881,7 @@ mod tests {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
                 let receivers: Vec<_> = env.nodes.ids();
                 let t = create_transcript(&key_id, create_transcript_id(1), &receivers[..]);
@@ -1905,7 +1905,7 @@ mod tests {
         }
     }
 
-    fn test_load_transcript_failure_to_create_complaint(key_id: MasterPublicKeyId) {
+    fn test_load_transcript_failure_to_create_complaint(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 eyre = "0.6.8"
 ic-config = { path = "../../config" }
 ic-replicated-state = { path = "../../replicated_state" }

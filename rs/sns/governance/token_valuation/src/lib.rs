@@ -136,7 +136,7 @@ impl ValuationFactors {
 ///   IcpsPerIcpClient in this crate.
 /// * `xdrs_per_icp_client` - Supplies the ICP -> XDR conversion rate. This is probably the most
 ///   interesting of the clients used. A object suitable for production can be constructed by
-///   calling new_standard_xdrs_per_icp_client::<DfnRuntime> with zero arguments.
+///   calling new_standard_xdrs_per_icp_client::<CdkRuntime> with zero arguments.
 async fn try_get_balance_valuation_factors(
     account: Account,
     icrc1_client: &mut dyn Icrc1Client,

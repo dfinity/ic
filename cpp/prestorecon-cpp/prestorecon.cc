@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <condition_variable>
 #include <cstring>
 #include <filesystem>
@@ -473,6 +474,7 @@ parse_args(int argc, char** argv)
 
 int main(int argc, char** argv)
 {
+    auto start_time = std::chrono::steady_clock::now();
     auto args = parse_args(argc, argv);
 
     GlobalWorkPool global_pool;
@@ -480,17 +482,17 @@ int main(int argc, char** argv)
 
     std::vector<std::thread> threads;
     std::vector<relabel_stats> stats(args.jobs);
+    auto selabel_hdl = selabel_open(SELABEL_CTX_FILE, nullptr, 0);
+
     for (std::size_t n = 0; n < args.jobs; ++n) {
         threads.emplace_back(
-            [&global_pool, &args, &stats, n] () {
-                auto hdl = selabel_open(SELABEL_CTX_FILE, nullptr ,0);
+            [&global_pool, &args, &stats, n, selabel_hdl] () {
                 parallel_work(
                     global_pool,
                     list_dir,
-                    [hdl, &args, &stats, n] (const std::vector<std::pair<std::string, mode_t>>& paths) {
-                        apply_labels(paths, hdl, args.verbosity, args.dry_run, stats[n]);
+                    [selabel_hdl, &args, &stats, n] (const std::vector<std::pair<std::string, mode_t>>& paths) {
+                        apply_labels(paths, selabel_hdl, args.verbosity, args.dry_run, stats[n]);
                     });
-                selabel_close(hdl);
             }
         );
     }
@@ -503,7 +505,14 @@ int main(int argc, char** argv)
         global_stats.inodes_relabeled += stats[n].inodes_relabeled;
     }
 
-    std::cout << "Processed: " << global_stats.inodes_processed << " Relabeled: " << global_stats.inodes_relabeled << "\n";
+    selabel_close(selabel_hdl);
+
+    auto end_time = std::chrono::steady_clock::now();
+    long long elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+
+    std::cout << "Processed: " << global_stats.inodes_processed
+              << " Relabeled: " << global_stats.inodes_relabeled
+              << " Elapsed: " << elapsed_ms << "ms\n";
 
     return 0;
 }

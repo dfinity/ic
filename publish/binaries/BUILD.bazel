@@ -39,8 +39,6 @@ ALL_BINARIES = {
     "types-test": "//rs/types/types:types_test",
     "replicated-state-test": "//rs/replicated_state:replicated_state_test_binary",
     # needed by DRE for release qualification
-    "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
-    # needed by DRE for release qualification
     "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
 }
 
@@ -57,7 +55,6 @@ TESTONLY_BINARIES = [
     "ic-starter",
     "ic-test-state-machine",
     "pocket-ic",
-    "sns-test-feature",
     "types-test",
     "replicated-state-test",
 ]

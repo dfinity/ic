@@ -4,10 +4,13 @@ use ic_protobuf::registry::{
     node_operator::v1::NodeOperatorRecord,
     node_rewards::v2::{NodeRewardRate, NodeRewardsTable},
 };
+use logs::{LogEntry, RewardsPerNodeProviderLog};
 use std::collections::{BTreeMap, HashMap};
+pub mod logs;
 
 pub struct RewardsPerNodeProvider {
     pub rewards_per_node_provider: BTreeMap<PrincipalId, u64>,
+    pub computation_log: BTreeMap<PrincipalId, RewardsPerNodeProviderLog>,
 }
 
 pub fn calculate_rewards_v0(
@@ -21,6 +24,7 @@ pub fn calculate_rewards_v0(
     let mut np_coefficients: HashMap<String, f64> = HashMap::new();
 
     let mut rewards = BTreeMap::new();
+    let mut computation_log = BTreeMap::new();
 
     for (key_string, node_operator) in node_operators.iter() {
         let node_operator_id = PrincipalId::try_from(&node_operator.node_operator_principal_id)
@@ -50,16 +54,20 @@ pub fn calculate_rewards_v0(
         let region = &dc.region;
 
         let np_rewards = rewards.entry(node_provider_id).or_default();
+        let np_log = computation_log
+            .entry(node_provider_id)
+            .or_insert(RewardsPerNodeProviderLog::new(node_provider_id));
+
         for (node_type, node_count) in node_operator.rewardable_nodes.iter() {
             let rate = match rewards_table.get_rate(region, node_type) {
                 Some(rate) => rate,
                 None => {
-                    println!(
-                                "The Node Rewards Table does not have an entry for \
-                             node type '{}' within region '{}' or parent region, defaulting to 1 xdr per month per node, for \
-                             NodeProvider '{}' on Node Operator '{}'",
-                                node_type, region, node_provider_id, node_operator_id
-                            );
+                    np_log.add_entry(LogEntry::RateNotFoundInRewardTable {
+                        region: region.clone(),
+                        node_type: node_type.clone(),
+                        node_operator_id,
+                    });
+
                     NodeRewardRate {
                         xdr_permyriad_per_node_per_month: 1,
                         reward_coefficient_percent: Some(100),
@@ -119,15 +127,13 @@ pub fn calculate_rewards_v0(
                     let mut dc_reward = 0;
                     for i in 0..*node_count {
                         let node_reward = (reward_base * np_coeff) as u64;
-                        println!(
-                            "NodeProvider {} {}/{} {} node in {} DC: reward {}",
-                            node_provider_id,
-                            i + 1,
-                            node_count,
-                            node_type.as_str(),
-                            node_operator.dc_id,
-                            node_reward,
-                        );
+                        np_log.add_entry(LogEntry::NodeRewards {
+                            node_type: node_type.clone(),
+                            node_idx: i,
+                            dc_id: node_operator.dc_id.clone(),
+                            rewardable_count: *node_count,
+                            rewards_xdr_permyriad: node_reward,
+                        });
                         dc_reward += node_reward;
                         np_coeff *= dc_reward_coefficient_percent;
                     }
@@ -137,19 +143,18 @@ pub fn calculate_rewards_v0(
                 _ => *node_count as u64 * rate.xdr_permyriad_per_node_per_month,
             };
 
-            println!(
-                "NodeProvider {} reward for all {} {} nodes in {} DC: reward {}",
-                node_provider_id,
-                node_count,
-                node_type.as_str(),
-                node_operator.dc_id,
-                dc_reward,
-            );
+            np_log.add_entry(LogEntry::DCRewards {
+                dc_id: node_operator.dc_id.clone(),
+                node_type: node_type.clone(),
+                rewardable_count: *node_count,
+                rewards_xdr_permyriad: dc_reward,
+            });
             *np_rewards += dc_reward;
         }
     }
 
     Ok(RewardsPerNodeProvider {
         rewards_per_node_provider: rewards,
+        computation_log,
     })
 }

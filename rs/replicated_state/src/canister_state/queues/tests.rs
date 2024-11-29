@@ -1,6 +1,6 @@
 use super::input_schedule::testing::InputScheduleTesting;
 use super::message_pool::{MessageStats, REQUEST_LIFETIME};
-use super::testing::{new_canister_output_queues_for_test, CanisterQueuesTesting};
+use super::testing::new_canister_output_queues_for_test;
 use super::*;
 use crate::{CanisterState, InputQueueType::*, SchedulerState, SystemState};
 use assert_matches::assert_matches;
@@ -657,20 +657,20 @@ fn test_shed_inbound_response() {
     const NO_LOCAL_CANISTERS: BTreeMap<CanisterId, CanisterState> = BTreeMap::new();
 
     // Shed the largest response (callback ID 3).
-    let memory_usage3 = queues.best_effort_memory_usage();
+    let memory_usage3 = queues.best_effort_message_memory_usage();
     assert!(queues.shed_largest_message(&this, &NO_LOCAL_CANISTERS));
-    let memory_usage2 = queues.best_effort_memory_usage();
+    let memory_usage2 = queues.best_effort_message_memory_usage();
     assert!(memory_usage2 < memory_usage3);
 
     // Shed the next largest response (callback ID 2).
     assert!(queues.shed_largest_message(&this, &NO_LOCAL_CANISTERS));
-    let memory_usage1 = queues.best_effort_memory_usage();
+    let memory_usage1 = queues.best_effort_message_memory_usage();
     assert!(memory_usage1 < memory_usage2);
 
     // Pop the response for callback ID 1.
     assert_matches!(queues.pop_input(), Some(CanisterInput::Response(response)) if response.originator_reply_callback.get() == 1);
     assert_eq!(2, queues.input_queues_response_count());
-    assert_eq!(0, queues.best_effort_memory_usage());
+    assert_eq!(0, queues.best_effort_message_memory_usage());
 
     // There's nothing else to shed.
     assert!(!queues.shed_largest_message(&this, &NO_LOCAL_CANISTERS));
@@ -1599,7 +1599,7 @@ fn test_output_into_iter() {
     let other_3 = canister_test_id(3);
 
     let mut queues = CanisterQueues::default();
-    assert_eq!(0, queues.output_message_count());
+    assert_eq!(0, queues.output_queues_message_count());
 
     let destinations = [other_1, other_2, other_1, other_3, other_2, other_1];
     for (i, id) in destinations.iter().enumerate() {
@@ -1624,7 +1624,7 @@ fn test_output_into_iter() {
         (&other_2, 4),
         (&other_1, 5),
     ];
-    assert_eq!(expected.len(), queues.output_message_count());
+    assert_eq!(expected.len(), queues.output_queues_message_count());
 
     for (i, msg) in queues.output_into_iter().enumerate() {
         match msg {
@@ -1637,7 +1637,7 @@ fn test_output_into_iter() {
         }
     }
 
-    assert_eq!(0, queues.output_message_count());
+    assert_eq!(0, queues.output_queues_message_count());
     assert!(queues.store.is_empty());
 }
 
@@ -2018,7 +2018,6 @@ fn decode_with_duplicate_reference() {
     // Replace the reference to the second response with a duplicate reference to
     // the third.
     let input_queue = encoded.canister_queues[0].input_queue.as_mut().unwrap();
-    input_queue.deprecated_queue[1] = input_queue.deprecated_queue.get(2).cloned().unwrap();
     input_queue.queue[1] = input_queue.queue[2];
 
     let metrics = CountingMetrics(RefCell::new(0));
@@ -2085,7 +2084,6 @@ fn decode_with_unreferenced_inbound_response() {
 
     // Remove the reference to the second response.
     let input_queue = encoded.canister_queues[0].input_queue.as_mut().unwrap();
-    input_queue.deprecated_queue.remove(1);
     input_queue.queue.remove(1);
 
     let metrics = CountingMetrics(RefCell::new(0));
@@ -2103,7 +2101,6 @@ fn decode_with_unreferenced_shed_response() {
 
     // Remove the reference to the third (shed) response.
     let input_queue = encoded.canister_queues[0].input_queue.as_mut().unwrap();
-    input_queue.deprecated_queue.remove(2);
     input_queue.queue.remove(2);
 
     assert_matches!(
@@ -2946,7 +2943,7 @@ fn output_into_iter_leaves_non_consumed_messages_untouched(
         }
 
         prop_assert_eq!(
-            canister_queues.output_message_count(),
+            canister_queues.output_queues_message_count(),
             num_requests - num_requests / 2
         );
     }
@@ -2962,7 +2959,7 @@ fn output_into_iter_leaves_non_consumed_messages_untouched(
     }
 
     // Ensure that there are no messages left in the canister queues.
-    prop_assert_eq!(canister_queues.output_message_count(), 0);
+    prop_assert_eq!(canister_queues.output_queues_message_count(), 0);
     // And the pool is empty.
     prop_assert!(canister_queues.store.is_empty());
 }
@@ -3003,7 +3000,7 @@ fn output_into_iter_with_exclude_leaves_excluded_queues_untouched(
             prop_assert_eq!(&popped_message, &expected_message);
         }
 
-        prop_assert_eq!(canister_queues.output_message_count(), excluded);
+        prop_assert_eq!(canister_queues.output_queues_message_count(), excluded);
     }
 
     // Ensure that the messages that have not been consumed above are still in the queues
@@ -3017,7 +3014,7 @@ fn output_into_iter_with_exclude_leaves_excluded_queues_untouched(
     }
 
     // Ensure that there are no messages left in the canister queues.
-    prop_assert_eq!(canister_queues.output_message_count(), 0);
+    prop_assert_eq!(canister_queues.output_queues_message_count(), 0);
     // And the pool is empty.
     prop_assert!(canister_queues.store.is_empty());
 }
@@ -3233,7 +3230,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
                     payment: Cycles::from(7_u64),
                     method_name: "No-Op".to_string(),
                     method_payload: vec![],
-                    metadata: None,
+                    metadata: Default::default(),
                     deadline,
                 }),
                 time,

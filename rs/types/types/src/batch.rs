@@ -22,7 +22,7 @@ use crate::{
     crypto::canister_threshold_sig::MasterPublicKey,
     messages::{CallbackId, Payload, SignedIngress},
     xnet::CertifiedStreamSlice,
-    Height, Randomness, RegistryVersion, SubnetId, Time,
+    Height, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time,
 };
 use ic_base_types::NodeId;
 use ic_btc_replica_types::BitcoinAdapterResponse;
@@ -64,6 +64,8 @@ pub struct Batch {
     pub consensus_responses: Vec<ConsensusResponse>,
     /// Information about block makers
     pub blockmaker_metrics: BlockmakerMetrics,
+    /// The current replica version.
+    pub replica_version: ReplicaVersion,
 }
 
 /// The context built by Consensus for deterministic processing. Captures all

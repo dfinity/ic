@@ -91,6 +91,7 @@ fn can_validate_valid_export_section() {
                   (export "canister_init" (func $x))
                   (export "canister_heartbeat" (func $x))
                   (export "canister_global_timer" (func $x))
+                  (export "canister_on_low_wasm_memory" (func $x))
                   (export "canister_pre_upgrade" (func $x))
                   (export "canister_post_upgrade" (func $x))
                   (export "canister_query read" (func $x))
@@ -116,6 +117,7 @@ fn can_validate_valid_export_section_with_no_space_after_canister_query() {
                   (export "canister_init" (func $x))
                   (export "canister_heartbeat" (func $x))
                   (export "canister_global_timer" (func $x))
+                  (export "canister_on_low_wasm_memory" (func $x))
                   (export "canister_pre_upgrade" (func $x))
                   (export "canister_post_upgrade" (func $x))
                   (export "canister_query read" (func $x))
@@ -139,6 +141,7 @@ fn can_validate_valid_export_section_with_reserved_functions() {
                   (export "canister_init" (func $x))
                   (export "canister_heartbeat" (func $x))
                   (export "canister_global_timer" (func $x))
+                  (export "canister_on_low_wasm_memory" (func $x))
                   (export "canister_pre_upgrade" (func $x))
                   (export "canister_post_upgrade" (func $x))
                   (export "canister_query read" (func $x))
@@ -212,6 +215,20 @@ fn can_validate_canister_global_timer_with_invalid_return() {
 }
 
 #[test]
+fn can_validate_canister_on_low_wasm_memory_with_invalid_return() {
+    let wasm = wat2wasm(
+        r#"(module
+                  (func $x (result i32) (i32.const 0))
+                  (export "canister_on_low_wasm_memory" (func $x)))"#,
+    )
+    .unwrap();
+    assert_matches!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidFunctionSignature(_))
+    );
+}
+
+#[test]
 fn can_validate_canister_heartbeat_with_invalid_params() {
     let wasm = wat2wasm(
         r#"(module
@@ -231,6 +248,20 @@ fn can_validate_canister_global_timer_with_invalid_params() {
         r#"(module
                   (func $x (param $y i32))
                   (export "canister_global_timer" (func $x)))"#,
+    )
+    .unwrap();
+    assert_matches!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidFunctionSignature(_))
+    );
+}
+
+#[test]
+fn can_validate_canister_on_low_wasm_memory_with_invalid_params() {
+    let wasm = wat2wasm(
+        r#"(module
+                  (func $x (param $y i32))
+                  (export "canister_on_low_wasm_memory" (func $x)))"#,
     )
     .unwrap();
     assert_matches!(
@@ -1163,5 +1194,32 @@ fn test_wasm64_initial_wasm_memory_size_validation() {
             declared_size: declared_wasm_memory_size_in_pages,
             allowed_size: allowed_wasm_memory_size_in_pages
         })
+    );
+}
+
+#[test]
+fn test_validate_table64() {
+    use ic_config::embedders::FeatureFlags;
+    use ic_config::flag_status::FlagStatus;
+
+    let embedders_config = EmbeddersConfig {
+        feature_flags: FeatureFlags {
+            wasm64: FlagStatus::Enabled,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let wasm = wat2wasm(
+        r#"(module
+            (table i64 1 funcref)
+            (memory i64 1 1)
+        )"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        validate_wasm_binary(&wasm, &embedders_config),
+        Ok(WasmValidationDetails::default())
     );
 }

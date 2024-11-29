@@ -37,7 +37,7 @@ pub(crate) struct ProposeToUpdateRecoveryCupCmd {
     /// The hash of the state
     pub state_hash: String,
 
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     /// Replace the members of the given subnet with these nodes
     pub replacement_nodes: Option<Vec<PrincipalId>>,
 

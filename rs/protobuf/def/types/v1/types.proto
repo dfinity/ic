@@ -32,6 +32,7 @@ message NiDkgId {
   bytes dealer_subnet = 2;
   NiDkgTag dkg_tag = 4;
   google.protobuf.BytesValue remote_target_id = 5;
+  optional MasterPublicKeyId key_id = 6;
 }
 
 // A non-interactive distributed key generation (NI-DKG) tag.
@@ -39,9 +40,51 @@ enum NiDkgTag {
   NI_DKG_TAG_UNSPECIFIED = 0;
   NI_DKG_TAG_LOW_THRESHOLD = 1;
   NI_DKG_TAG_HIGH_THRESHOLD = 2;
+  NI_DKG_TAG_HIGH_THRESHOLD_FOR_KEY = 3;
 }
 
 message NominalCycles {
   uint64 high = 1;
   uint64 low = 2;
+}
+
+// Types of curves that can be used for ECDSA signatures.
+enum EcdsaCurve {
+  ECDSA_CURVE_UNSPECIFIED = 0;
+  ECDSA_CURVE_SECP256K1 = 1;
+}
+
+message EcdsaKeyId {
+  EcdsaCurve curve = 1;
+  string name = 2;
+}
+
+// Types of curves that can be used for Schnorr signatures.
+enum SchnorrAlgorithm {
+  SCHNORR_ALGORITHM_UNSPECIFIED = 0;
+  SCHNORR_ALGORITHM_BIP340SECP256K1 = 1;
+  SCHNORR_ALGORITHM_ED25519 = 2;
+}
+
+message SchnorrKeyId {
+  SchnorrAlgorithm algorithm = 1;
+  string name = 2;
+}
+
+enum VetKdCurve {
+  VET_KD_CURVE_UNSPECIFIED = 0;
+  VET_KD_CURVE_BLS12_381_G2 = 1;
+}
+
+message VetKdKeyId {
+  VetKdCurve curve = 1;
+  string name = 2;
+}
+
+message MasterPublicKeyId {
+  oneof key_id {
+    EcdsaKeyId ecdsa = 1;
+    SchnorrKeyId schnorr = 2;
+    VetKdKeyId vetkd = 3;
+  }
 }

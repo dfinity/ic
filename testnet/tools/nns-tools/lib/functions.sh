@@ -110,6 +110,11 @@ propose_upgrade_canister_wasm_file_pem() {
     echo "Testnet $CANISTER_ID upgrade" >$PROPOSAL
 
     local WASM_SHA=$(sha_256 "$WASM_FILE")
+    local ENCODED_ARGS_SHA=""
+
+    if [ -f "$ENCODED_ARGS_FILE" ]; then
+        local ENCODED_ARGS_SHA=$(sha_256 "$ENCODED_ARGS_FILE")
+    fi
 
     $IC_ADMIN --nns-url "$NNS_URL" -s "$PEM" \
         propose-to-change-nns-canister --mode=upgrade \
@@ -119,7 +124,8 @@ propose_upgrade_canister_wasm_file_pem() {
         --summary-file $PROPOSAL \
         --proposer "$NEURON_ID" \
         $([ "${SKIP_STOPPING:-no}" == "yes" ] && echo "--skip-stopping-before-installing") \
-        $([ -z "$ENCODED_ARGS_FILE" ] || echo "--arg $ENCODED_ARGS_FILE")
+        $([ -z "$ENCODED_ARGS_FILE" ] || echo "--arg $ENCODED_ARGS_FILE") \
+        $([ -z "$ENCODED_ARGS_SHA" ] || echo "--arg-sha256 $ENCODED_ARGS_SHA")
 
     rm -rf $PROPOSAL
 }
@@ -270,7 +276,7 @@ top_up_canister() {
         --amount "$AMOUNT" "$CANISTER"
 }
 
-# Note, this will be deprecated soon when get_state is deprecated from sale canister.
+# Note, this will be deprecated soon when get_state is deprecated from swap canister.
 call_swap() {
     local NNS_URL=$1
     local SWAP_CANISTER_ID=$2
@@ -284,7 +290,7 @@ call_swap() {
         $SWAP_CANISTER_ID $METHOD '(record {})'
 }
 
-sns_quill_participate_in_sale() {
+sns_quill_participate_in_swap() {
     ensure_variable_set SNS_QUILL
 
     # Please forgive me we need separate urls for these subnets until we get the boundary node in the script :(
@@ -341,7 +347,7 @@ sns_get_sns_canisters_summary() {
         "$SNS_ROOT_CANISTER_ID" get_sns_canisters_summary '(record {})'
 }
 
-sns_finalize_sale() {
+sns_finalize_swap() {
     local SNS_URL=$1
     local SWAP_CANISTER_ID=$2
 

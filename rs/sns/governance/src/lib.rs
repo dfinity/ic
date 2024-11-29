@@ -1,6 +1,7 @@
 use crate::pb::v1::Subaccount as SubaccountProto;
 use std::{convert::TryInto, fmt::Debug};
 
+mod cached_upgrade_steps;
 pub mod canister_control;
 pub mod governance;
 pub mod init;
@@ -11,9 +12,9 @@ pub mod proposal;
 mod request_impls;
 pub mod reward;
 pub mod sns_upgrade;
-pub mod types;
-
 mod treasury;
+pub mod types;
+pub mod upgrade_journal;
 
 trait Len {
     fn len(&self) -> usize;

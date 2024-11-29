@@ -1,6 +1,6 @@
+use crate::Request;
 use candid::Principal;
-use ic_nervous_system_clients::Request;
-use pocket_ic::PocketIc;
+use pocket_ic::nonblocking::PocketIc;
 use thiserror::Error;
 
 use crate::CallCanisters;
@@ -27,22 +27,23 @@ impl CallCanisters for PocketIc {
         request: R,
     ) -> Result<R::Response, Self::Error> {
         let canister_id = canister_id.into();
-        let request_bytes =
-            candid::encode_one(&request).map_err(PocketIcCallError::CandidEncode)?;
-        let response = if R::UPDATE {
+        let request_bytes = request.payload();
+        let response = if request.update() {
             self.update_call(
                 canister_id,
                 Principal::anonymous(),
-                R::METHOD,
+                request.method(),
                 request_bytes,
             )
+            .await
         } else {
             self.query_call(
                 canister_id,
                 Principal::anonymous(),
-                R::METHOD,
+                request.method(),
                 request_bytes,
             )
+            .await
         }
         .map_err(PocketIcCallError::PocketIc)?;
 

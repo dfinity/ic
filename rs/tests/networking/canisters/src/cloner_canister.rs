@@ -32,10 +32,7 @@ async fn spinup_canister(wasm_module: Vec<u8>) -> CallResult<()> {
         CreateCanisterArgument {
             settings: Some(CanisterSettings {
                 controllers: Some(vec![ic_cdk::api::id()]),
-                compute_allocation: None,
-                memory_allocation: None,
-                freezing_threshold: None,
-                reserved_cycles_limit: None,
+                ..CanisterSettings::default()
             }),
         },
         INITIAL_CYCLES_BALANCE,

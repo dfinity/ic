@@ -24,7 +24,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 strum_macros = { workspace = true }
-subtle = "2.4"
+subtle = { workspace = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]

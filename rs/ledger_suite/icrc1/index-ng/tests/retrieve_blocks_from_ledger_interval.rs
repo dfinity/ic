@@ -2,13 +2,20 @@ use crate::common::{
     default_archive_options, index_ng_wasm, install_index_ng, install_ledger,
     wait_until_sync_is_completed, MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT, STARTING_CYCLES_PER_CANISTER,
 };
-use candid::{CandidType, Deserialize, Encode, Principal};
+use candid::{CandidType, Deserialize, Encode, Nat, Principal};
 use ic_agent::Identity;
 use ic_base_types::CanisterId;
 use ic_icrc1_index_ng::{IndexArg, InitArg, UpgradeArg};
-use ic_icrc1_test_utils::minter_identity;
+use ic_icrc1_test_utils::{arb_account, minter_identity};
+use ic_ledger_suite_state_machine_tests::send_transfer;
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, Time, UserError};
+use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError};
+use ic_types::{Cycles, Time};
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::TransferArg;
+use num_traits::ToPrimitive;
+use proptest::prelude::Strategy;
+use proptest::test_runner::TestRunner;
 use std::time::{Duration, SystemTime};
 
 mod common;
@@ -44,7 +51,7 @@ fn install_and_upgrade(
         index_ng_wasm(),
         Encode!(&args).unwrap(),
         None,
-        ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )?;
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -113,6 +120,137 @@ fn should_install_and_upgrade_with_valid_values() {
 }
 
 #[test]
+fn should_sync_according_to_interval() {
+    const INITIAL_BALANCE: u64 = 1_000_000_000;
+    const TRANSFER_AMOUNT: u64 = 1_000_000;
+    const DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: u64 = 1;
+
+    fn send_transaction_and_verify_index_sync(
+        env: &StateMachine,
+        ledger_id: CanisterId,
+        index_id: CanisterId,
+        a1: Account,
+        a2: Account,
+        install_interval: Option<u64>,
+        upgrade_interval: Option<u64>,
+    ) {
+        let ledger_chain_length = send_transfer(
+            env,
+            ledger_id,
+            a1.owner,
+            &TransferArg {
+                from_subaccount: a1.subaccount,
+                to: a2,
+                fee: None,
+                created_at_time: None,
+                memo: None,
+                amount: Nat::from(TRANSFER_AMOUNT),
+            },
+        )
+        .expect("send_transfer should succeed")
+        .checked_add(1)
+        .expect("should be able to add 1 to block index");
+        let mut index_num_blocks_synced = common::status(env, index_id)
+            .num_blocks_synced
+            .0
+            .to_u64()
+            .expect("should retrieve num_blocks_synced from index");
+        if index_num_blocks_synced != ledger_chain_length {
+            let time_to_advance = upgrade_interval
+                .or(install_interval)
+                .unwrap_or(DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL);
+            if time_to_advance > 0 {
+                env.advance_time(Duration::from_secs(time_to_advance));
+                env.tick();
+            }
+            index_num_blocks_synced = common::status(env, index_id)
+                .num_blocks_synced
+                .0
+                .to_u64()
+                .expect("should retrieve num_blocks_synced from index");
+        }
+        assert_eq!(ledger_chain_length, index_num_blocks_synced);
+    }
+
+    let mut runner = TestRunner::new(proptest::test_runner::Config::with_cases(10));
+    runner
+        .run(
+            &(
+                proptest::option::of(0..(max_value_for_interval() / 2)),
+                proptest::option::of(0..(max_value_for_interval() / 2)),
+                arb_account(),
+                arb_account(),
+            )
+                .prop_filter("The accounts must be different", |(_, _, a1, a2)| a1 != a2)
+                .no_shrink(),
+            |(install_interval, upgrade_interval, a1, a2)| {
+                // Create a new environment with an application subnet
+                let env = &StateMachineBuilder::new()
+                    .with_subnet_type(SubnetType::Application)
+                    .with_subnet_size(28)
+                    .with_time(GENESIS)
+                    .build();
+                // Install a ledger with an initial balance for a1
+                let ledger_id = install_ledger(
+                    env,
+                    vec![(a1, INITIAL_BALANCE)],
+                    default_archive_options(),
+                    None,
+                    minter_identity().sender().unwrap(),
+                );
+                // Install an index with a specific interval
+                let args = IndexArg::Init(InitArg {
+                    ledger_id: Principal::from(ledger_id),
+                    retrieve_blocks_from_ledger_interval_seconds: install_interval,
+                });
+                let index_id = env.install_canister_with_cycles(
+                    index_ng_wasm(),
+                    Encode!(&args).unwrap(),
+                    None,
+                    Cycles::new(STARTING_CYCLES_PER_CANISTER),
+                )?;
+
+                // Send a transaction and verify that the index is synced after the interval
+                // specified during the install, or the default value if the interval specified
+                // during the install was None.
+                send_transaction_and_verify_index_sync(
+                    env,
+                    ledger_id,
+                    index_id,
+                    a1,
+                    a2,
+                    install_interval,
+                    None,
+                );
+
+                // Upgrade the index with a specific interval
+                let upgrade_arg = IndexArg::Upgrade(UpgradeArg {
+                    ledger_id: None,
+                    retrieve_blocks_from_ledger_interval_seconds: upgrade_interval,
+                });
+                env.upgrade_canister(index_id, index_ng_wasm(), Encode!(&upgrade_arg).unwrap())?;
+
+                // Send a transaction and verify that the index is synced after the interval
+                // specified during the upgrade, or if it is None, the interval specified during
+                // the install, or the default value if the interval specified during the install
+                // was None.
+                send_transaction_and_verify_index_sync(
+                    env,
+                    ledger_id,
+                    index_id,
+                    a1,
+                    a2,
+                    install_interval,
+                    upgrade_interval,
+                );
+
+                Ok(())
+            },
+        )
+        .unwrap();
+}
+
+#[test]
 fn should_install_and_upgrade_without_build_index_interval_field_set() {
     #[derive(Clone, Debug, CandidType, Deserialize)]
     enum OldIndexArg {
@@ -149,7 +287,7 @@ fn should_install_and_upgrade_without_build_index_interval_field_set() {
             index_ng_wasm(),
             Encode!(&args).unwrap(),
             None,
-            ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+            Cycles::new(STARTING_CYCLES_PER_CANISTER),
         )
         .unwrap();
 
@@ -237,8 +375,8 @@ fn should_consume_expected_amount_of_cycles() {
             initial_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
             upgrade_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
             assert_cost: |initial, upgrade| {
-                const EXPECTED_LEDGER_CYCLES_CONSUMPTION: i128 = 124_445_767;
-                const EXPECTED_INDEX_CYCLES_CONSUMPTION: i128 = 449_388_554;
+                const EXPECTED_LEDGER_CYCLES_CONSUMPTION: i128 = 706_075_016;
+                const EXPECTED_INDEX_CYCLES_CONSUMPTION: i128 = 2_783_783_209;
                 for ledger_consumption in [initial.ledger, upgrade.ledger] {
                     assert!(
                         abs_relative_difference(

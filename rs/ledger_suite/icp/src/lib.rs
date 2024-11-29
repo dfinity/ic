@@ -1038,6 +1038,12 @@ impl TryFrom<CandidBlock> for Block {
     }
 }
 
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub struct IcpAllowanceArgs {
+    pub account: AccountIdentifier,
+    pub spender: AccountIdentifier,
+}
+
 /// Argument taken by the transfer fee endpoint
 ///
 /// The reason it is a struct is so that it can be extended -- e.g., to be able

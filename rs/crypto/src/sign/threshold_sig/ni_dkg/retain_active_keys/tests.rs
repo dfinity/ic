@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use crate::sign::tests::{REG_V1, REG_V2};
 use crate::sign::threshold_sig::ni_dkg::retain_active_keys::retain_only_active_keys;
 use crate::sign::threshold_sig::ni_dkg::utils::epoch;

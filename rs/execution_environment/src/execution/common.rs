@@ -460,6 +460,7 @@ pub fn apply_canister_state_changes(
     {
         let clean_system_state = system_state.clone();
         let clean_subnet_available_memory = round_limits.subnet_available_memory;
+        let callbacks_created = system_state_changes.callbacks_created();
         // Everything that is passed via a mutable reference in this function
         // should be cloned and restored in case of an error.
         match try_apply_canister_state_changes(
@@ -481,6 +482,7 @@ pub fn apply_canister_state_changes(
                 // i.e., `(start)`, `canister_init`, `canister_pre_upgrade`, and `canister_post_upgrade`)
                 // call this `apply_canister_state_change` to finish execution.
                 system_state.canister_version += 1;
+                round_limits.subnet_available_callbacks -= callbacks_created as i64;
 
                 call_tree_metrics.observe(request_stats, call_context_creation_time, time);
             }

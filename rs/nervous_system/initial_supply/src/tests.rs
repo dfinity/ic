@@ -210,6 +210,10 @@ async fn test_initial_supply() {
         fn spawn_future<F: 'static + Future<Output = ()>>(_future: F) {
             unimplemented!()
         }
+
+        fn canister_version() -> u64 {
+            unimplemented!()
+        }
     }
 
     // Step 2: Call the code under test.

@@ -17,6 +17,12 @@ jobs:
     name: Generate CI
     runs-on: ubuntu-latest
     steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
       - name: Checkout
         uses: actions/checkout@v4
         # If this is a pull request, use the HEAD ref instead of the merge commit
@@ -24,16 +30,16 @@ jobs:
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ secrets.IDX_PUSH_TO_PR }}
+          token: ${{ steps.app-token.outputs.token }}
       - name: Checkout
         uses: actions/checkout@v4
         if: github.event_name != 'pull_request'
         with:
-          token: ${{ secrets.IDX_PUSH_TO_PR }}
+          token: ${{ steps.app-token.outputs.token }}
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.12"
       - name: Run Generate CI
         id: generate-ci
         run: |

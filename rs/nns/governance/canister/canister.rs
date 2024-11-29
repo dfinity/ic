@@ -7,7 +7,7 @@ use ic_cdk::{
     println, query, spawn, update,
 };
 use ic_management_canister_types::IC_00;
-use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
+use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
     serve_metrics,
@@ -60,6 +60,14 @@ use std::{
     str::FromStr,
     time::{Duration, SystemTime},
 };
+
+#[cfg(not(feature = "tla"))]
+use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
+
+#[cfg(feature = "tla")]
+mod tla_ledger;
+#[cfg(feature = "tla")]
+use tla_ledger::LoggingIcpLedgerCanister as IcpLedgerCanister;
 
 /// WASM memory equivalent to 4GiB, which we want to reserve for upgrades memory. The heap memory
 /// limit is 4GiB but its serialized form with prost should be smaller, so we reserve for 4GiB. This
@@ -150,6 +158,11 @@ fn set_governance(gov: Governance) {
         .expect("Error initializing the governance canister.");
 }
 
+fn schedule_timers() {
+    schedule_seeding(Duration::from_nanos(0));
+    schedule_adjust_neurons_storage(Duration::from_nanos(0), NeuronIdProto { id: 0 });
+}
+
 // Seeding interval seeks to find a balance between the need for rng secrecy, and
 // avoiding the overhead of frequent reseeding.
 const SEEDING_INTERVAL: Duration = Duration::from_secs(3600);
@@ -177,6 +190,29 @@ fn schedule_seeding(duration: Duration) {
             // Schedule reseeding on a timer with duration SEEDING_INTERVAL
             schedule_seeding(SEEDING_INTERVAL);
         })
+    });
+}
+
+// The interval before adjusting neuron storage for the next batch of neurons starting from last
+// neuron id scanned in the last batch.
+const ADJUST_NEURON_STORAGE_BATCH_INTERVAL: Duration = Duration::from_secs(5);
+// The interval before adjusting neuron storage for the next round starting from the smallest neuron
+// id.
+const ADJUST_NEURON_STORAGE_ROUND_INTERVAL: Duration = Duration::from_secs(3600);
+
+fn schedule_adjust_neurons_storage(delay: Duration, start_neuron_id: NeuronIdProto) {
+    ic_cdk_timers::set_timer(delay, move || {
+        let next_neuron_id = governance_mut().batch_adjust_neurons_storage(start_neuron_id);
+        match next_neuron_id {
+            Some(next_neuron_id) => schedule_adjust_neurons_storage(
+                ADJUST_NEURON_STORAGE_BATCH_INTERVAL,
+                next_neuron_id,
+            ),
+            None => schedule_adjust_neurons_storage(
+                ADJUST_NEURON_STORAGE_ROUND_INTERVAL,
+                NeuronIdProto { id: 0 },
+            ),
+        };
     });
 }
 
@@ -400,7 +436,7 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
         init_payload.neurons.len()
     );
 
-    schedule_seeding(Duration::from_nanos(0));
+    schedule_timers();
     set_governance(Governance::new(
         InternalGovernanceProto::from(init_payload),
         Box::new(CanisterEnv::new()),
@@ -444,7 +480,7 @@ fn canister_post_upgrade() {
         restored_state.xdr_conversion_rate,
     );
 
-    schedule_seeding(Duration::from_nanos(0));
+    schedule_timers();
     set_governance(Governance::new_restored(
         restored_state,
         Box::new(CanisterEnv::new()),
@@ -1071,18 +1107,6 @@ fn add_proposal_id_to_add_wasm_request(
     let payload = Encode!(&add_wasm_request).unwrap();
 
     Ok(payload)
-}
-
-/// Deprecated: The blessed alternative is to do (the equivalent of)
-/// `dfx canister metadata $CANISTER 'candid:service'`.
-#[query(hidden = true)]
-fn __get_candid_interface_tmp_hack() -> String {
-    #[cfg(not(feature = "test"))]
-    let declared_interface = include_str!("governance.did");
-    #[cfg(feature = "test")]
-    let declared_interface = include_str!("governance_test.did");
-
-    declared_interface.to_string()
 }
 
 fn main() {
