@@ -22,9 +22,7 @@ rust_library(
         "//rs/state_machine_tests",
         "//rs/types/base_types",
         "@crate_index//:candid",
-        "@crate_index//:candid_parser",
         "@crate_index//:hex",
-        "@crate_index//:maplit",
         "@crate_index//:serde",
     ],
 )

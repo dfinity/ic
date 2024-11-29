@@ -47,10 +47,10 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
-    ExtendedDerivationPath,
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    BatchSignedIDkgDealing, IDkgTranscriptOperation,
 };
+use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use mockall::mock;
@@ -211,6 +211,7 @@ mock! {
             &self,
             derivation_path: ExtendedDerivationPath,
             message: Vec<u8>,
+            taproot_tree_root: Option<Vec<u8>>,
             nonce: Randomness,
             key_raw: IDkgTranscriptInternalBytes,
             presig_raw: IDkgTranscriptInternalBytes,

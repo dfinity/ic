@@ -4,6 +4,7 @@ use bitcoincore_rpc::RpcApi;
 use candid::Principal;
 use ic_agent::identity::Secp256k1Identity;
 use ic_base_types::PrincipalId;
+use ic_btc_kyt::KytMode as NewKytMode;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{
     lifecycle::upgrade::UpgradeArgs,
@@ -24,7 +25,7 @@ use ic_system_test_driver::{
 };
 use ic_tests_ckbtc::{
     activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, set_kyt_api_key, setup, subnet_sys,
+    install_ledger, install_minter, setup, subnet_sys, upgrade_kyt,
     utils::{
         assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
         assert_temporarily_unavailable, ensure_wallet, generate_blocks, get_btc_address,
@@ -74,15 +75,7 @@ pub fn test_update_balance(env: TestEnv) {
 
         let minting_user = minter_canister.canister_id().get();
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let agent_principal = agent.get_principal().unwrap();
-        let kyt_id = install_kyt(
-            &mut kyt_canister,
-            &logger,
-            Principal::from(minting_user),
-            vec![agent_principal],
-        )
-        .await;
-        set_kyt_api_key(&agent, &kyt_id.get().0, "fake key".to_string()).await;
+        let kyt_id = install_kyt(&mut kyt_canister, &env).await;
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
         let minter_id = install_minter(&mut minter_canister, ledger_id, &logger, 0, kyt_id).await;
         let minter = Principal::from(minter_id.get());
@@ -130,6 +123,11 @@ pub fn test_update_balance(env: TestEnv) {
             owner: caller,
             subaccount: Some(subaccount3),
         };
+
+        // Because bitcoind only allows to see one's own transaction, and we
+        // are using multiple addresses in this test. We have to change KYT
+        // mode to AcceptAll, otherwise bitcoind will return 500 error.
+        upgrade_kyt(&mut kyt_canister, NewKytMode::AcceptAll).await;
 
         // Get the BTC address of the caller's sub-accounts.
         let btc_address0 = get_btc_address(&minter_agent, &logger, subaccount0).await;

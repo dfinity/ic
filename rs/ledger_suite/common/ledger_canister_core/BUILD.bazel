@@ -21,7 +21,6 @@ rust_library(
         "//rs/types/management_canister_types",
         "//rs/utils",
         "@crate_index//:candid",
-        "@crate_index//:num-traits",
         "@crate_index//:serde",
     ],
 )

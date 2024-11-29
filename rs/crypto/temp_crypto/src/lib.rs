@@ -1,8 +1,8 @@
 use ic_crypto_internal_csp::Csp;
 use ic_interfaces::time_source::SysTimeSource;
 use ic_limits::INITIAL_NOTARY_DELAY;
-use ic_protobuf::registry::crypto::v1::{EcdsaCurve, EcdsaKeyId};
 use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, KeyConfig, SubnetRecord, SubnetType};
+use ic_protobuf::types::v1 as pb_types;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
@@ -850,7 +850,7 @@ pub mod internal {
             &self,
             signature: &ThresholdSigShareOf<T>,
             message: &T,
-            dkg_id: NiDkgId,
+            dkg_id: &NiDkgId,
             signer: NodeId,
         ) -> CryptoResult<()> {
             self.crypto_component
@@ -860,7 +860,7 @@ pub mod internal {
         fn combine_threshold_sig_shares(
             &self,
             shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
-            dkg_id: NiDkgId,
+            dkg_id: &NiDkgId,
         ) -> CryptoResult<CombinedThresholdSigOf<T>> {
             self.crypto_component
                 .combine_threshold_sig_shares(shares, dkg_id)
@@ -870,7 +870,7 @@ pub mod internal {
             &self,
             signature: &CombinedThresholdSigOf<T>,
             message: &T,
-            dkg_id: NiDkgId,
+            dkg_id: &NiDkgId,
         ) -> CryptoResult<()> {
             self.crypto_component
                 .verify_threshold_sig_combined(signature, message, dkg_id)
@@ -972,7 +972,7 @@ pub mod internal {
         fn sign_threshold(
             &self,
             message: &T,
-            dkg_id: NiDkgId,
+            dkg_id: &NiDkgId,
         ) -> CryptoResult<ThresholdSigShareOf<T>> {
             self.crypto_component.sign_threshold(message, dkg_id)
         }
@@ -1051,17 +1051,15 @@ impl EcdsaSubnetConfig {
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
                 ecdsa_config: None,
-                chain_key_config:  Some(ChainKeyConfig {
+                chain_key_config: Some(ChainKeyConfig {
                     key_configs: vec![KeyConfig {
-                        key_id: Some(ic_protobuf::registry::crypto::v1::MasterPublicKeyId {
-                            key_id: Some(
-                                ic_protobuf::registry::crypto::v1::master_public_key_id::KeyId::Ecdsa(
-                                    EcdsaKeyId {
-                                        curve: EcdsaCurve::Secp256k1.into(),
-                                        name: "dummy_ecdsa_key_id".to_string(),
-                                    },
-                                ),
-                            ),
+                        key_id: Some(ic_protobuf::types::v1::MasterPublicKeyId {
+                            key_id: Some(pb_types::master_public_key_id::KeyId::Ecdsa(
+                                pb_types::EcdsaKeyId {
+                                    curve: pb_types::EcdsaCurve::Secp256k1.into(),
+                                    name: "dummy_ecdsa_key_id".to_string(),
+                                },
+                            )),
                         }),
                         pre_signatures_to_create_in_advance: Some(1),
                         max_queue_size: Some(20),

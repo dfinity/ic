@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 //! Verifies the implementation of SecretKeyStoreCspVault for LocalCspVault.
 use crate::vault::api::BasicSignatureCspVault;
 use crate::vault::api::SecretKeyStoreCspVault;

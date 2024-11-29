@@ -57,7 +57,6 @@ TESTONLY_BINARIES = [
     "ic-starter",
     "ic-test-state-machine",
     "pocket-ic",
-    "sns-test-feature",
     "types-test",
     "replicated-state-test",
 ]

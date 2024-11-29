@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 //! Tests for the CLib NiDKG forward secure encryption
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 pub use rand::{RngCore, SeedableRng};

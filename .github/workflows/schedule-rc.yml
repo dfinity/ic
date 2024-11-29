@@ -17,12 +17,12 @@ jobs:
         with:
           repository: ${{ github.repository }}
           ref: ${{ github.ref }}
-          token: ${{ secrets.IDX_PUSH_TO_PR }}
+          token: ${{ secrets.PUSH_TO_IC }}
       - name: Cut Release Candidate
         shell: bash
         run: |
           git config --global user.email "infra+github-automation@dfinity.org"
-          git config --global user.name "IDX GitLab Automation"
+          git config --global user.name "IDX GitHub Automation"
 
           RC_BRANCH_NAME="rc--$(date '+%Y-%m-%d_%H-%M')"
           git switch --force-create "$RC_BRANCH_NAME" HEAD

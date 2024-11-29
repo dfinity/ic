@@ -475,6 +475,7 @@ fn pre_upgrade() {
     eval(&get_pre_upgrade());
 }
 
+#[cfg(feature = "heartbeat")]
 #[export_name = "canister_heartbeat"]
 fn heartbeat() {
     setup();
@@ -536,6 +537,7 @@ lazy_static! {
 fn set_heartbeat(data: Vec<u8>) {
     *HEARTBEAT.lock().unwrap() = data;
 }
+#[cfg(feature = "heartbeat")]
 fn get_heartbeat() -> Vec<u8> {
     HEARTBEAT.lock().unwrap().clone()
 }

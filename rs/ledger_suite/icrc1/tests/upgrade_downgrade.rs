@@ -77,12 +77,20 @@ fn should_upgrade_and_downgrade_ledger_canister_suite() {
     )
     .unwrap();
 
-    env.upgrade_canister(
+    match env.upgrade_canister(
         ledger_id,
         ledger_mainnet_wasm(),
         Encode!(&ledger_upgrade_arg).unwrap(),
-    )
-    .unwrap();
+    ) {
+        Ok(_) => {
+            panic!("Upgrade to mainnet should fail!")
+        }
+        Err(e) => {
+            assert!(e
+                .description()
+                .contains("Trying to downgrade from incompatible version"))
+        }
+    };
 }
 
 fn default_archive_options() -> ArchiveOptions {
@@ -128,7 +136,7 @@ fn install_ledger(
         ledger_mainnet_wasm(),
         Encode!(&LedgerArgument::Init(builder.build())).unwrap(),
         None,
-        ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }
@@ -139,7 +147,7 @@ fn install_index_ng(env: &StateMachine, init_arg: IndexInitArg) -> CanisterId {
         index_ng_mainnet_wasm(),
         Encode!(&args).unwrap(),
         None,
-        ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }

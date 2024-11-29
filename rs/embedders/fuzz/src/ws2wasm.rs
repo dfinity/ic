@@ -8,8 +8,7 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::PathBuf;
 use std::sync::Arc;
-mod ic_wasm;
-use ic_wasm::ICWasmModule;
+use wasm_fuzzers::ic_wasm::ICWasmModule;
 use wasmprinter::print_bytes;
 
 use ic_embedders::{

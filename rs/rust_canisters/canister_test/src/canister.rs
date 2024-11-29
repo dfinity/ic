@@ -426,6 +426,18 @@ impl<'a> Runtime {
             .await
             .map_err(|e| format!("Creation of a canister timed out. Last error was: {}", e))
     }
+
+    pub async fn tick(&'a self) {
+        match self {
+            Runtime::Remote(_) | Runtime::Local(_) => {
+                tokio::time::sleep(Duration::from_millis(100)).await
+            }
+            Runtime::StateMachine(state_machine) => {
+                state_machine.tick();
+                state_machine.advance_time(Duration::from_millis(1000));
+            }
+        }
+    }
 }
 
 /// An Internet Computer test runtime that talks to the IC using http

@@ -157,6 +157,7 @@ fn main() {
             public_api: SocketAddr::new(ipv6_addr, 8080),
             node_operator_principal_id: None,
             secret_key_store: None,
+            domain: None,
         },
     )]);
 

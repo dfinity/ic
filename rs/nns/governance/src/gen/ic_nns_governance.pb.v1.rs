@@ -113,6 +113,21 @@ pub struct NeuronInfo {
     /// See the Visibility enum.
     #[prost(enumeration = "Visibility", optional, tag = "12")]
     pub visibility: ::core::option::Option<i32>,
+    /// The last time that voting power was "refreshed". There are two ways to
+    /// refresh the voting power of a neuron: set following, or vote directly. In
+    /// the future, there will be a dedicated API for refreshing. Note that direct
+    /// voting implies that refresh also occurs when a proposal is created, because
+    /// direct voting is part of proposal creation.
+    ///
+    /// Effect: When this becomes > 6 months ago, the amount of voting power that
+    /// this neuron can exercise decreases linearly down to 0 over the course of 1
+    /// month. After that, following is cleared, except for ManageNeuron proposals.
+    ///
+    /// This will always be populated. If the underlying neuron was never
+    /// refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
+    /// after the UNIX epoch).
+    #[prost(uint64, optional, tag = "13")]
+    pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
 }
 /// A transfer performed from some account to stake a new neuron.
 #[derive(
@@ -276,6 +291,26 @@ pub struct Neuron {
     /// See the Visibility enum.
     #[prost(enumeration = "Visibility", optional, tag = "23")]
     pub visibility: ::core::option::Option<i32>,
+    /// The last time that voting power was "refreshed". There are two ways to
+    /// refresh the voting power of a neuron: set following, or vote directly. In
+    /// the future, there will be a dedicated API for refreshing. Note that direct
+    /// voting implies that refresh also occurs when a proposal is created, because
+    /// direct voting is part of proposal creation.
+    ///
+    /// Effect: When this becomes > 6 months ago, the amount of voting power that
+    /// this neuron can exercise decreases linearly down to 0 over the course of 1
+    /// month. After that, following is cleared, except for ManageNeuron proposals.
+    ///
+    /// This will always be populated. If the underlying neuron was never
+    /// refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
+    /// after the UNIX epoch).
+    #[prost(uint64, optional, tag = "24")]
+    pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
+    /// The index of the next entry in the recent_ballots list that will be
+    /// used for the circular buffer. This is used to determine which entry
+    /// to overwrite next.
+    #[prost(uint32, optional, tag = "25")]
+    pub recent_ballots_next_entry_index: ::core::option::Option<u32>,
     /// At any time, at most one of `when_dissolved` and
     /// `dissolve_delay` are specified.
     ///
@@ -401,6 +436,10 @@ pub struct AbridgedNeuron {
     pub neuron_type: ::core::option::Option<i32>,
     #[prost(enumeration = "Visibility", optional, tag = "23")]
     pub visibility: ::core::option::Option<i32>,
+    #[prost(uint64, optional, tag = "24")]
+    pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
+    #[prost(uint32, optional, tag = "25")]
+    pub recent_ballots_next_entry_index: ::core::option::Option<u32>,
     #[prost(oneof = "abridged_neuron::DissolveState", tags = "9, 10")]
     pub dissolve_state: ::core::option::Option<abridged_neuron::DissolveState>,
 }
@@ -815,7 +854,7 @@ pub struct ManageNeuron {
     pub neuron_id_or_subaccount: ::core::option::Option<manage_neuron::NeuronIdOrSubaccount>,
     #[prost(
         oneof = "manage_neuron::Command",
-        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15"
+        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16"
     )]
     pub command: ::core::option::Option<manage_neuron::Command>,
 }
@@ -1291,6 +1330,20 @@ pub mod manage_neuron {
             NeuronIdOrSubaccount(super::super::Empty),
         }
     }
+    /// This is one way for a neuron to make sure that its deciding_voting_power is
+    /// not less than its potential_voting_power. See the description of those
+    /// fields in Neuron.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct RefreshVotingPower {}
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     #[derive(
         candid::CandidType,
@@ -1342,6 +1395,8 @@ pub mod manage_neuron {
         Merge(Merge),
         #[prost(message, tag = "15")]
         StakeMaturity(StakeMaturity),
+        #[prost(message, tag = "16")]
+        RefreshVotingPower(RefreshVotingPower),
     }
 }
 /// The response of the ManageNeuron command
@@ -1359,7 +1414,7 @@ pub mod manage_neuron {
 pub struct ManageNeuronResponse {
     #[prost(
         oneof = "manage_neuron_response::Command",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14"
     )]
     pub command: ::core::option::Option<manage_neuron_response::Command>,
 }
@@ -1550,6 +1605,17 @@ pub mod manage_neuron_response {
         serde::Serialize,
         comparable::Comparable,
         Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct RefreshVotingPowerResponse {}
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
         PartialEq,
         ::prost::Oneof,
     )]
@@ -1580,6 +1646,8 @@ pub mod manage_neuron_response {
         Merge(MergeResponse),
         #[prost(message, tag = "13")]
         StakeMaturity(StakeMaturityResponse),
+        #[prost(message, tag = "14")]
+        RefreshVotingPower(RefreshVotingPowerResponse),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -1841,6 +1909,13 @@ pub struct ProposalData {
     /// `cf_participants` and use only this field for managing the Neurons' Fund swap participation.
     #[prost(message, optional, tag = "21")]
     pub neurons_fund_data: ::core::option::Option<NeuronsFundData>,
+    /// This is the amount of voting power that would be available if all neurons
+    /// kept themselves "refreshed". This is used as the baseline for voting
+    /// rewards. That is, the amount of maturity that a neuron receives is the
+    /// amount of voting power that it exercised (so called "deciding" voting
+    /// power) in proportion to this.
+    #[prost(uint64, optional, tag = "22")]
+    pub total_potential_voting_power: ::core::option::Option<u64>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(
@@ -2343,6 +2418,9 @@ pub struct ProposalInfo {
     pub deadline_timestamp_seconds: ::core::option::Option<u64>,
     #[prost(message, optional, tag = "20")]
     pub derived_proposal_information: ::core::option::Option<DerivedProposalInformation>,
+    /// See \[ProposalData::total_potential_voting_power\].
+    #[prost(uint64, optional, tag = "21")]
+    pub total_potential_voting_power: ::core::option::Option<u64>,
 }
 /// Network economics contains the parameters for several operations related
 /// to the economy of the network. When submitting a NetworkEconomics proposal

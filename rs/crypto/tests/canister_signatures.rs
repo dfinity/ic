@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 use assert_matches::assert_matches;
 use ic_crypto_interfaces_sig_verification::CanisterSigVerifier;
 use ic_crypto_internal_basic_sig_der_utils::subject_public_key_info_der;

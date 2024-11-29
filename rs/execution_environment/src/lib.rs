@@ -113,6 +113,7 @@ impl ExecutionServices {
             Arc::clone(&cycles_account_manager),
             scheduler_config.dirty_page_overhead,
             Arc::clone(&fd_factory),
+            Arc::clone(&state_reader),
         ));
 
         let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
@@ -135,7 +136,7 @@ impl ExecutionServices {
             metrics_registry,
             own_subnet_id,
             own_subnet_type,
-            SchedulerImpl::compute_capacity_percent(scheduler_config.scheduler_cores),
+            RoundSchedule::compute_capacity_percent(scheduler_config.scheduler_cores),
             config.clone(),
             Arc::clone(&cycles_account_manager),
             scheduler_config.scheduler_cores,
@@ -147,6 +148,7 @@ impl ExecutionServices {
         let sync_query_handler = Arc::new(InternalHttpQueryHandler::new(
             logger.clone(),
             hypervisor,
+            own_subnet_id,
             own_subnet_type,
             config.clone(),
             metrics_registry,
