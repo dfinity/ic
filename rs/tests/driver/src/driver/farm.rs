@@ -455,8 +455,8 @@ impl GroupSpec {
         };
 
         // Acquire bazel's volatile status containing key value pairs like USER and CI_JOB_NAME:
-        let volatile_status_file_path = std::env::var("VOLATILE_STATUS_FILE_PATH")
-            .expect("Expected the environment variable VOLATILE_STATUS_FILE_PATH to be defined!");
+        let volatile_status_file_path = std::env::var("FARM_METADATA_PATH")
+            .expect("Expected the environment variable FARM_METADATA_PATH to be defined!");
         let volatile_status = read_dependency_to_string(&volatile_status_file_path)
             .unwrap_or_else(|e| {
                 panic!("Couldn't read content of the volatile status file {volatile_status_file_path}: {e:?}")
