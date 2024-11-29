@@ -85,6 +85,7 @@ ROSETTA_VERSION = "1.1.2"
 
 rust_library(
     name = "ic-icrc-rosetta",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_icrc_rosetta",
@@ -95,6 +96,7 @@ rust_library(
 
 rust_binary(
     name = "ic-icrc-rosetta-bin",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -246,6 +248,7 @@ oci_image(
 ## The final image we can publish.
 pkg_tar(
     name = "ic_icrc_rosetta_image_homedir",
+    testonly = True,
     srcs = [":ic-icrc-rosetta-bin"],
     package_dir = "/home/ic_icrc_rosetta",
 )

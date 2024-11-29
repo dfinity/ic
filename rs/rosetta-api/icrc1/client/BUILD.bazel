@@ -33,6 +33,7 @@ DEV_DEPENDENCIES = [
 
 rust_library(
     name = "ic-icrc-rosetta-client",
+    testonly = True,
     srcs = ["src/lib.rs"],
     crate_name = "ic_icrc_rosetta_client",
     deps = DEPENDENCIES,
@@ -60,6 +61,7 @@ rust_test(
 
 rust_binary(
     name = "ic-icrc-rosetta-client-bin",
+    testonly = True,
     srcs = ["src/main.rs"],
     deps = DEPENDENCIES + [":ic-icrc-rosetta-client"],
 )

@@ -103,6 +103,7 @@ ROSETTA_VERSION = "2.1.0"
 
 rust_library(
     name = "rosetta-api",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_rosetta_api",
@@ -113,6 +114,7 @@ rust_library(
 
 rust_binary(
     name = "ic-rosetta-api",
+    testonly = True,    
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -122,6 +124,7 @@ rust_binary(
 
 rust_binary(
     name = "ic-rosetta-api-rosetta-blocks",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_features = ["rosetta-blocks"],
@@ -235,6 +238,7 @@ passwd(
 
 pkg_tar(
     name = "rosetta_image_homedir",
+    testonly = True,
     srcs = [":ic-rosetta-api"],
     package_dir = "/home/rosetta",
 )
@@ -278,6 +282,7 @@ oci_image(
 
 oci_image(
     name = "rosetta_image",
+    testonly = True,
     base = ":rosetta_image_base",
     entrypoint = ["/home/rosetta/ic-rosetta-api"],
     tags = ["manual"],
