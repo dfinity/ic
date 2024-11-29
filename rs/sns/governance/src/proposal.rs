@@ -30,6 +30,7 @@ use crate::{
     validate_chars_count, validate_len, validate_required_field,
 };
 use candid::Principal;
+use chrono::DateTime;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
@@ -1737,7 +1738,18 @@ fn validate_and_render_advance_sns_target_version_proposal(
     let (upgrade_steps, target_version) = governance_proto
         .validate_new_target_version(advance_sns_target_version.new_target.clone())?;
 
-    let valid_timestamp_seconds = upgrade_steps.approximate_time_of_validity_timestamp_seconds();
+    let time_of_validity = {
+        let timestamp_seconds = upgrade_steps.approximate_time_of_validity_timestamp_seconds();
+        i64::try_from(timestamp_seconds)
+            .ok()
+            .map(|timestamp_seconds| DateTime::from_timestamp(timestamp_seconds, 0))
+            .flatten()
+            .map(|datetime| format!("{}", datetime))
+            // This fallback should not occur unless `timestamp_seconds` is outside of the range
+            // from +  1970-01-01 00:00:00 UTC (0)
+            // till +262142-12-31 23:59:59 UTC (8210266876799).
+            .unwrap_or_else(|| format!("timestamp {} seconds", timestamp_seconds))
+    };
 
     let current_target_versions_render =
         render_two_versions_as_markdown_table(upgrade_steps.current(), &target_version);
@@ -1753,9 +1765,8 @@ fn validate_and_render_advance_sns_target_version_proposal(
          ### Upgrade steps\n\n\
          {upgrade_steps}\n\n\
          ### Monitoring the upgrade process\n\n\
-         Please note: the upgrade steps above (valid around timestamp {valid_timestamp_seconds} \
-         seconds) might change during this proposal's voting period. Such changes are unlikely and \
-         are subject to NNS community's approval.\n\n\
+         Please note: the upgrade steps above (valid around {time_of_validity}) \
+         might change during this proposal's voting period.\n\n\
          The **upgrade journal** provides up-to-date information on this SNS's upgrade process:\n\n\
          {upgrade_journal_url_render}"
     );
