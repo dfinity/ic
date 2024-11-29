@@ -5535,10 +5535,7 @@ impl Governance {
                     self.env.now(),
                     running_version,
                 );
-                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset::new(
-                    message,
-                    vec![running_version.clone()],
-                ));
+                self.reset_cached_upgrade_steps(&running_version, message);
 
                 self.proto.deployed_version = Some(running_version.clone());
 

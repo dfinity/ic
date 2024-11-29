@@ -396,7 +396,7 @@ impl Governance {
     /// Additionally, invalidates the target version, if it was set.
     ///
     /// Returns the new instance.
-    fn reset_cached_upgrade_steps(
+    pub(crate) fn reset_cached_upgrade_steps(
         &mut self,
         current_version: &Version,
         reason: String,
