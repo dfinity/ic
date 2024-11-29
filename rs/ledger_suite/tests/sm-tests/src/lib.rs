@@ -2694,6 +2694,7 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current_lowinstructionlimits: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
+    additional_endpoints: Vec<(&str, Vec<u8>)>,
 ) where
     T: CandidType,
 {
@@ -2766,6 +2767,9 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
     test_endpoint("icrc2_allowance", Encode!(&allowance_args).unwrap(), true);
     test_endpoint("icrc1_balance_of", Encode!(&account).unwrap(), true);
     test_endpoint("icrc1_total_supply", Encode!().unwrap(), true);
+    for (endpoint_name, args) in additional_endpoints.clone() {
+        test_endpoint(endpoint_name, args, true);
+    }
 
     wait_ledger_ready(&env, canister_id, 10);
 
@@ -2779,6 +2783,9 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
     test_endpoint("icrc2_allowance", Encode!(&allowance_args).unwrap(), false);
     test_endpoint("icrc1_balance_of", Encode!(&account).unwrap(), false);
     test_endpoint("icrc1_total_supply", Encode!().unwrap(), false);
+    for (endpoint_name, args) in additional_endpoints {
+        test_endpoint(endpoint_name, args, false);
+    }
 }
 
 pub fn test_incomplete_migration<T>(

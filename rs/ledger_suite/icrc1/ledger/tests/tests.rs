@@ -481,6 +481,7 @@ fn icrc1_test_stable_migration_endpoints_disabled() {
         ledger_mainnet_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
+        vec![],
     );
 }
 
