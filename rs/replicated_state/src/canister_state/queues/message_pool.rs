@@ -1,6 +1,4 @@
 use super::CanisterInput;
-#[cfg(feature = "fuzzing_code")]
-use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_types::messages::{
@@ -10,7 +8,6 @@ use ic_types::time::CoarseTime;
 use ic_types::{CountBytes, Time};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use std::collections::VecDeque;
 use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
 use std::ops::{AddAssign, SubAssign};
@@ -62,7 +59,7 @@ impl Context {
 /// Bit encoding the message class (guaranteed response vs best-effort).
 #[repr(u64)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub(super) enum Class {
+pub enum Class {
     GuaranteedResponse = 0,
     BestEffort = Self::BIT,
 }
@@ -144,7 +141,7 @@ where
     T: ToContext,
 {
     /// Constructs a new `Reference<T>` of the given `class` and `kind`.
-    fn new(class: Class, kind: Kind, generator: u64) -> Self {
+    pub fn new(class: Class, kind: Kind, generator: u64) -> Self {
         Self(
             T::context() as u64 | class as u64 | kind as u64 | generator << Id::BITMASK_LEN,
             PhantomData,
@@ -214,60 +211,6 @@ impl<T> From<&Reference<T>> for Id {
 impl<T> From<Reference<T>> for Id {
     fn from(reference: Reference<T>) -> Id {
         Id(reference.0)
-    }
-}
-
-pub const QUEUE_BOUND: usize = 5000;
-
-#[derive(Debug)]
-#[cfg(feature = "fuzzing_code")]
-pub struct ArbitraryVec<T>(pub VecDeque<T>);
-
-impl<'a> Arbitrary<'a> for ArbitraryVec<OutboundReference> {
-    fn arbitrary(u: &mut Unstructured<'a>) -> ArbitraryResult<Self> {
-        if u.is_empty() {
-            return Ok(ArbitraryVec(VecDeque::new()));
-        }
-
-        let range: usize = u.int_in_range(1..=QUEUE_BOUND).unwrap();
-        let queue: VecDeque<OutboundReference> = (0..range)
-            .map(|g| g as u64)
-            .map(|g| {
-                *u.choose(&[
-                    Reference::new(Class::BestEffort, Kind::Request, g),
-                    Reference::new(Class::BestEffort, Kind::Response, g),
-                    Reference::new(Class::GuaranteedResponse, Kind::Request, g),
-                    Reference::new(Class::GuaranteedResponse, Kind::Response, g),
-                ])
-                .unwrap()
-            })
-            .collect();
-
-        Ok(ArbitraryVec(queue))
-    }
-}
-
-impl<'a> Arbitrary<'a> for ArbitraryVec<InboundReference> {
-    fn arbitrary(u: &mut Unstructured<'a>) -> ArbitraryResult<Self> {
-        if u.is_empty() {
-            return Ok(ArbitraryVec(VecDeque::new()));
-        }
-
-        let range: usize = u.int_in_range(1..=QUEUE_BOUND).unwrap();
-        let queue: VecDeque<InboundReference> = (0..range)
-            .map(|g| g as u64)
-            .map(|g| {
-                *u.choose(&[
-                    Reference::new(Class::BestEffort, Kind::Request, g),
-                    Reference::new(Class::BestEffort, Kind::Response, g),
-                    Reference::new(Class::GuaranteedResponse, Kind::Request, g),
-                    Reference::new(Class::GuaranteedResponse, Kind::Response, g),
-                ])
-                .unwrap()
-            })
-            .collect();
-
-        Ok(ArbitraryVec(queue))
     }
 }
 
