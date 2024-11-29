@@ -1081,6 +1081,7 @@ pub fn build_unsigned_transaction(
 ///
 /// For example, `distribute(5, 3) = [2, 2, 1]`.
 fn distribute(amount: u64, n: u64) -> Vec<u64> {
+    // HELLO!
     if n == 0 {
         return vec![];
     }
