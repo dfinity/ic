@@ -27,7 +27,7 @@ use state::{get_config, set_config, Config, FetchGuardError, HttpGetTxError};
 
 #[derive(Default)]
 struct Stats {
-    https_outcall_status: BTreeMap<u16, u64>,
+    https_outcall_status: BTreeMap<(String, u16), u64>,
     http_response_size: BTreeMap<u32, u64>,
     check_transaction_count: u64,
     check_address_count: u64,
@@ -197,9 +197,15 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
                     "The number of http outcalls made since the last canister upgrade.",
                 )
                 .unwrap();
-            for (status, count) in stats.https_outcall_status.iter() {
+            for ((provider, status), count) in stats.https_outcall_status.iter() {
                 counter = counter
-                    .value(&[("status", status.to_string().as_str())], *count as f64)
+                    .value(
+                        &[
+                            ("provider", provider.as_str()),
+                            ("status", status.to_string().as_str()),
+                        ],
+                        *count as f64,
+                    )
                     .unwrap();
             }
             let mut counter = writer
@@ -336,7 +342,7 @@ impl FetchEnv for KytCanisterEnv {
                     let mut stat = s.borrow_mut();
                     *stat
                         .https_outcall_status
-                        .entry(response.status.0.to_u16().unwrap())
+                        .entry((provider.name(), response.status.0.to_u16().unwrap()))
                         .or_default() += 1;
                     // Calculate size bucket as a series of power of 2s.
                     // Note that the max is bounded by `max_response_bytes`, which fits `u32`.
