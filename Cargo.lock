@@ -14763,7 +14763,7 @@ dependencies = [
  "regex",
  "regex-syntax 0.6.29",
  "string_cache",
- "term 0.7.0",
+ "term",
  "tiny-keccak",
  "unicode-xid",
 ]
