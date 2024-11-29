@@ -596,6 +596,14 @@ impl ManageNeuronResponse {
             )),
         }
     }
+
+    pub fn refresh_voting_power_response(_: ()) -> Self {
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::RefreshVotingPower(
+                manage_neuron_response::RefreshVotingPowerResponse {},
+            )),
+        }
+    }
 }
 
 impl NnsFunction {
@@ -2313,7 +2321,13 @@ impl Governance {
                             && neuron.visibility() == Some(Visibility::Public)
                         );
                 if let_caller_read_full_neuron {
-                    full_neurons.push(NeuronProto::from(neuron.clone()));
+                    let mut proto = neuron.clone().into_proto(now);
+                    // We get the recent_ballots from the neuron itself, because
+                    // we are using a circular buffer to store them.  This solution is not ideal, but
+                    // we need to do a larger refactoring to use the correct API types instead of the internal
+                    // governance proto at this level.
+                    proto.recent_ballots = neuron.sorted_recent_ballots();
+                    full_neurons.push(proto);
                 }
             });
         }
@@ -3632,9 +3646,11 @@ impl Governance {
         id: &NeuronId,
         caller: &PrincipalId,
     ) -> Result<NeuronProto, GovernanceError> {
+        let now_seconds = self.env.now();
+
         self.neuron_store
             .get_full_neuron(*id, *caller)
-            .map(NeuronProto::from)
+            .map(|neuron| neuron.into_proto(now_seconds))
             .map_err(GovernanceError::from)
     }
 
@@ -5597,7 +5613,16 @@ impl Governance {
 
         self.process_proposal(proposal_num);
 
-        self.refresh_voting_power(proposer_id);
+        if let Err(err) = self.refresh_voting_power(proposer_id, caller) {
+            // This is unreachable, but if it is reached, just log. Do not blow
+            // up the whole operation, because this is just a secondary
+            // suboperation, not the main thing.
+            println!(
+                "{}WARNING: Unable to refresh voting power as part of making a \
+                 proposal (which involves direct voting). Err: {:?}",
+                LOG_PREFIX, err,
+            );
+        }
 
         Ok(proposal_id)
     }
@@ -5822,12 +5847,37 @@ impl Governance {
 
         self.process_proposal(proposal_id.id);
 
-        self.refresh_voting_power(neuron_id);
+        if let Err(err) = self.refresh_voting_power(neuron_id, caller) {
+            // This is unreachable, but if it is reached, just log. Do not blow
+            // up the whole operation, because this is just a secondary
+            // suboperation, not the main thing.
+            println!(
+                "{}WARNING: Unable to refresh voting power as part of \
+                 voting directly. Err: {:?}",
+                LOG_PREFIX, err,
+            );
+        }
 
         Ok(())
     }
 
-    fn refresh_voting_power(&mut self, neuron_id: &NeuronId) {
+    fn refresh_voting_power(
+        &mut self,
+        neuron_id: &NeuronId,
+        caller: &PrincipalId,
+    ) -> Result<(), GovernanceError> {
+        let is_authorized =
+            self.with_neuron(neuron_id, |neuron| neuron.is_authorized_to_vote(caller))?;
+        if !is_authorized {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::NotAuthorized,
+                format!(
+                    "The caller ({}) is not authorized to refresh the voting power of neuron {}.",
+                    caller, neuron_id.id,
+                ),
+            ));
+        }
+
         let now_seconds = self.env.now();
 
         let result = self.with_neuron_mut(neuron_id, |neuron| {
@@ -5835,12 +5885,17 @@ impl Governance {
         });
 
         if let Err(err) = result {
-            println!(
-                "{}WARNING: Tried to refresh the voting power of neuron {}, \
-                 but was unable to find it: {}",
-                LOG_PREFIX, neuron_id.id, err,
-            );
+            return Err(GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                format!(
+                    "Tried to refresh the voting power of neuron {}, \
+                     but was unable to find it: {:?}",
+                    neuron_id.id, err,
+                ),
+            ));
         }
+
+        Ok(())
     }
 
     /// Add or remove followees for this neuron for a specified topic.
@@ -6344,6 +6399,9 @@ impl Governance {
             Some(Command::ClaimOrRefresh(_)) => {
                 panic!("This should have already returned")
             }
+            Some(Command::RefreshVotingPower(_)) => self
+                .refresh_voting_power(&id, caller)
+                .map(ManageNeuronResponse::refresh_voting_power_response),
             None => panic!(),
         }
     }

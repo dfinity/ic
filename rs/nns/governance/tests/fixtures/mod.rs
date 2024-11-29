@@ -382,6 +382,7 @@ impl NeuronBuilder {
             joined_community_fund_timestamp_seconds: self.joined_community_fund,
             spawn_at_timestamp_seconds: self.spawn_at_timestamp_seconds,
             neuron_type: self.neuron_type,
+            recent_ballots_next_entry_index: Some(0),
             ..Neuron::default()
         }
     }
@@ -901,7 +902,7 @@ impl NNS {
     pub fn get_neuron(&self, ident: &NeuronId) -> Neuron {
         self.governance
             .neuron_store
-            .with_neuron(ident, |n| Neuron::from(n.clone()))
+            .with_neuron(ident, |n| n.clone().into_proto(self.now()))
             .unwrap()
     }
 

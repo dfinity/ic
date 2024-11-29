@@ -8,7 +8,7 @@ use crate::{
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
         governance_error::ErrorType,
-        GovernanceError, Neuron as NeuronProto, NeuronState, Topic,
+        GovernanceError, Neuron as NeuronProto, Topic,
     },
     storage::{
         neuron_indexes::{CorruptedNeuronIndexes, NeuronIndex},
@@ -25,7 +25,7 @@ use ic_nervous_system_governance::index::{
     neuron_following::{HeapNeuronFollowingIndex, NeuronFollowingIndex},
     neuron_principal::NeuronPrincipalIndex,
 };
-use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::{AccountIdentifier, Subaccount};
 use std::{
     borrow::Cow,
@@ -394,10 +394,12 @@ impl NeuronStore {
 
     /// Takes the neuron store state which should be persisted through upgrades.
     pub fn take(self) -> NeuronStoreState {
+        let now_seconds = self.now();
+
         (
             self.heap_neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into()))
+                .map(|(id, neuron)| (id, neuron.into_proto(now_seconds)))
                 .collect(),
             heap_topic_followee_index_to_proto(self.topic_followee_index),
         )
@@ -441,16 +443,18 @@ impl NeuronStore {
     /// Clones all the neurons. This is only used for testing.
     /// TODO(NNS-2474) clean it up after NNSState stop using GovernanceProto.
     pub fn __get_neurons_for_tests(&self) -> BTreeMap<u64, NeuronProto> {
+        let now_seconds = self.now();
+
         let mut stable_neurons = with_stable_neuron_store(|stable_store| {
             stable_store
                 .range_neurons(..)
-                .map(|neuron| (neuron.id().id, neuron.into()))
+                .map(|neuron| (neuron.id().id, neuron.into_proto(now_seconds)))
                 .collect::<BTreeMap<u64, NeuronProto>>()
         });
         let heap_neurons = self
             .heap_neurons
             .iter()
-            .map(|(id, neuron)| (*id, neuron.clone().into()))
+            .map(|(id, neuron)| (*id, neuron.clone().into_proto(now_seconds)))
             .collect::<BTreeMap<u64, NeuronProto>>();
 
         stable_neurons.extend(heap_neurons);
@@ -582,10 +586,10 @@ impl NeuronStore {
     /// Adjusts the storage location of neurons, since active neurons might become inactive due to
     /// passage of time.
     pub fn batch_adjust_neurons_storage(&mut self, start_neuron_id: NeuronId) -> Option<NeuronId> {
-        static BATCH_SIZE_FOR_MOVING_NEURONS: usize = 1000;
+        static BATCH_SIZE_FOR_MOVING_NEURONS: usize = 200;
 
         #[cfg(target_arch = "wasm32")]
-        static MAX_NUM_INSTRUCTIONS_PER_BATCH: u64 = 5_000_000_000;
+        static MAX_NUM_INSTRUCTIONS_PER_BATCH: u64 = 1_000_000_000;
 
         #[cfg(target_arch = "wasm32")]
         let max_instructions_reached =
@@ -722,7 +726,7 @@ impl NeuronStore {
         &self,
         neuron_id: NeuronId,
     ) -> Result<(Cow<Neuron>, StorageLocation), NeuronStoreError> {
-        self.load_neuron_with_sections(neuron_id, NeuronSections::all())
+        self.load_neuron_with_sections(neuron_id, NeuronSections::ALL)
     }
 
     fn update_neuron(
@@ -807,14 +811,14 @@ impl NeuronStore {
     }
     pub fn with_active_neurons_iter<R>(
         &self,
-        callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Neuron> + 'b>) -> R,
+        callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Cow<Neuron>> + 'b>) -> R,
     ) -> R {
-        self.with_active_neurons_iter_sections(callback, NeuronSections::all())
+        self.with_active_neurons_iter_sections(callback, NeuronSections::ALL)
     }
 
     fn with_active_neurons_iter_sections<R>(
         &self,
-        callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Neuron> + 'b>) -> R,
+        callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Cow<Neuron>> + 'b>) -> R,
         sections: NeuronSections,
     ) -> R {
         if self.use_stable_memory_for_all_neurons {
@@ -825,13 +829,13 @@ impl NeuronStore {
                     stable_store
                         .range_neurons_sections(.., sections)
                         .filter(|n| !n.is_inactive(now))
-                        .chain(self.heap_neurons.values().cloned()),
-                ) as Box<dyn Iterator<Item = Neuron>>;
+                        .map(Cow::Owned)
+                        .chain(self.heap_neurons.values().map(Cow::Borrowed)),
+                );
                 callback(iter)
             })
         } else {
-            let iter =
-                Box::new(self.heap_neurons.values().cloned()) as Box<dyn Iterator<Item = Neuron>>;
+            let iter = Box::new(self.heap_neurons.values().map(Cow::Borrowed));
             callback(iter)
         }
     }
@@ -870,9 +874,13 @@ impl NeuronStore {
     fn filter_map_active_neurons<R>(
         &self,
         filter: impl Fn(&Neuron) -> bool,
-        f: impl FnMut(Neuron) -> R,
+        f: impl Fn(&Neuron) -> R,
     ) -> Vec<R> {
-        self.with_active_neurons_iter(|iter| iter.filter(|n| filter(n)).map(f).collect())
+        self.with_active_neurons_iter(|iter| {
+            iter.filter(|n| filter(n.as_ref()))
+                .map(|n| f(n.as_ref()))
+                .collect()
+        })
     }
 
     fn is_active_neurons_fund_neuron(neuron: &Neuron, now: u64) -> bool {
@@ -908,16 +916,7 @@ impl NeuronStore {
 
     /// List all neurons that are spawning
     pub fn list_ready_to_spawn_neuron_ids(&self, now_seconds: u64) -> Vec<NeuronId> {
-        let filter = |n: &Neuron| {
-            let spawning_state = n.state(now_seconds) == NeuronState::Spawning;
-            if !spawning_state {
-                return false;
-            }
-            // spawning_state is calculated based on presence of spawn_at_timestamp_seconds
-            // so it would be quite surprising if it is missing here (impossible in fact)
-            now_seconds >= n.spawn_at_timestamp_seconds.unwrap_or(u64::MAX)
-        };
-        self.filter_map_active_neurons(filter, |n| n.id())
+        self.filter_map_active_neurons(|neuron| neuron.ready_to_spawn(now_seconds), |n| n.id())
     }
 
     pub fn create_ballots_for_standard_proposal(
@@ -932,7 +931,7 @@ impl NeuronStore {
         let mut deciding_voting_power: u128 = 0;
         let mut potential_voting_power: u128 = 0;
 
-        let mut process_neuron = |neuron: Neuron| {
+        let mut process_neuron = |neuron: &Neuron| {
             if neuron.is_inactive(now_seconds)
                 || neuron.dissolve_delay_seconds(now_seconds)
                     < MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
@@ -956,10 +955,10 @@ impl NeuronStore {
         self.with_active_neurons_iter_sections(
             |iter| {
                 for neuron in iter {
-                    process_neuron(neuron);
+                    process_neuron(neuron.as_ref());
                 }
             },
-            NeuronSections::default(),
+            NeuronSections::NONE,
         );
 
         (ballots, deciding_voting_power, potential_voting_power)
@@ -1002,7 +1001,7 @@ impl NeuronStore {
             &neuron_id,
             NeuronSections {
                 hot_keys: true,
-                ..Default::default()
+                ..NeuronSections::NONE
             },
             |neuron| neuron.is_authorized_to_vote(&principal_id),
         )
@@ -1108,6 +1107,31 @@ impl NeuronStore {
         self.with_neuron_sections(&neuron_id, needed_sections, |neuron| {
             neuron.would_follow_ballots(topic, ballots)
         })
+    }
+
+    pub fn register_recent_neuron_ballot(
+        &mut self,
+        neuron_id: NeuronId,
+        topic: Topic,
+        proposal_id: ProposalId,
+        vote: Vote,
+    ) -> Result<(), NeuronStoreError> {
+        if self.heap_neurons.contains_key(&neuron_id.id) {
+            self.with_neuron_mut(&neuron_id, |neuron| {
+                neuron.register_recent_ballot(topic, &proposal_id, vote)
+            })?;
+        } else {
+            with_stable_neuron_store_mut(|stable_neuron_store| {
+                stable_neuron_store.register_recent_neuron_ballot(
+                    neuron_id,
+                    topic,
+                    proposal_id,
+                    vote,
+                )
+            })?;
+        }
+
+        Ok(())
     }
 
     // Below are indexes related methods. They don't have a unified interface yet, but NNS1-2507 will change that.

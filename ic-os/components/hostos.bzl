@@ -79,7 +79,9 @@ component_files = {
     Label("networking/fallback.conf"): "/etc/systemd/resolved.conf.d/fallback.conf",
     Label("networking/resolv.conf"): "/etc/resolv.conf",
     Label("networking/network-tweaks.conf"): "/etc/sysctl.d/network-tweaks.conf",
-    Label("networking/nftables/nftables-hostos.conf"): "/etc/nftables.conf",
+    Label("networking/nftables/hostos/nftables.template"): "/opt/ic/share/nftables.template",
+    Label("networking/nftables/hostos/setup-nftables.service"): "/etc/systemd/system/setup-nftables.service",
+    Label("networking/nftables/hostos/setup-nftables.sh"): "/opt/ic/bin/setup-nftables.sh",
     Label("networking/hosts"): "/etc/hosts",
 
     # ssh

@@ -188,9 +188,12 @@ impl ProposalVotingStateMachine {
         }
 
         while let Some((neuron_id, vote)) = self.recent_neuron_ballots_to_record.pop_first() {
-            match neuron_store.with_neuron_mut(&neuron_id, |neuron| {
-                neuron.register_recent_ballot(self.topic, &self.proposal_id, vote)
-            }) {
+            match neuron_store.register_recent_neuron_ballot(
+                neuron_id,
+                self.topic,
+                self.proposal_id,
+                vote,
+            ) {
                 Ok(_) => {}
                 Err(e) => {
                     // This is a bad inconsistency, but there is

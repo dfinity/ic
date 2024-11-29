@@ -448,7 +448,7 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
             let neuron_info = neuron.get_neuron_info(timestamp_seconds, principal_id);
             assert_eq!(neuron_info.visibility, Some(visibility as i32),);
 
-            let neuron_proto = NeuronProto::from(neuron);
+            let neuron_proto = neuron.into_proto(timestamp_seconds);
             assert_eq!(neuron_proto.visibility, Some(visibility as i32),);
         }
     }
@@ -463,7 +463,7 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
         let neuron_info = neuron.get_neuron_info(timestamp_seconds, principal_id);
         assert_eq!(neuron_info.visibility, None,);
 
-        let neuron_proto = NeuronProto::from(neuron.clone());
+        let neuron_proto = neuron.clone().into_proto(timestamp_seconds);
         assert_eq!(neuron_proto.visibility, None,);
     }
     {
@@ -474,7 +474,7 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
         let neuron_info = neuron.get_neuron_info(timestamp_seconds, principal_id);
         assert_eq!(neuron_info.visibility, Some(Visibility::Private as i32),);
 
-        let neuron_proto = NeuronProto::from(neuron);
+        let neuron_proto = neuron.into_proto(timestamp_seconds);
         assert_eq!(neuron_proto.visibility, Some(Visibility::Private as i32),);
     }
 
@@ -496,7 +496,7 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
         let neuron_info = neuron.get_neuron_info(timestamp_seconds, principal_id);
         assert_eq!(neuron_info.visibility, Some(Visibility::Public as i32),);
 
-        let neuron_proto = NeuronProto::from(neuron.clone());
+        let neuron_proto = neuron.clone().into_proto(timestamp_seconds);
         assert_eq!(neuron_proto.visibility, Some(Visibility::Public as i32),);
     }
 }
@@ -630,4 +630,242 @@ fn test_adjust_voting_power_disabled() {
             current_potential_voting_power,
         );
     }
+}
+
+#[test]
+fn test_conversion_from_old_ballot_storage_full() {
+    let principal_id = PrincipalId::new_user_test_id(42);
+    let created_timestamp_seconds = 1729791574;
+
+    let recent_ballots: Vec<_> = (0..100)
+        .map(|id| BallotInfo {
+            proposal_id: Some(ProposalId { id }),
+            vote: Vote::Yes as i32,
+        })
+        .collect();
+
+    let mut neuron = NeuronBuilder::new(
+        NeuronId { id: 42 },
+        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
+        principal_id,
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
+            aging_since_timestamp_seconds: created_timestamp_seconds + 42,
+        },
+        created_timestamp_seconds, // created
+    )
+    .with_recent_ballots(recent_ballots.clone())
+    .build();
+    neuron.recent_ballots_next_entry_index = None;
+
+    assert_eq!(neuron.recent_ballots, recent_ballots);
+
+    neuron.register_recent_ballot(Topic::NetworkEconomics, &ProposalId { id: 100 }, Vote::No);
+
+    assert_eq!(neuron.recent_ballots_next_entry_index, Some(1));
+
+    let expected_updated_ballots = {
+        let mut recent_ballots = recent_ballots.clone();
+        recent_ballots.reverse();
+        recent_ballots[0] = BallotInfo {
+            proposal_id: Some(ProposalId { id: 100 }),
+            vote: Vote::No as i32,
+        };
+        recent_ballots
+    };
+
+    assert_eq!(neuron.recent_ballots, expected_updated_ballots);
+}
+
+#[test]
+fn test_conversion_from_old_ballot_storage_not_full() {
+    let principal_id = PrincipalId::new_user_test_id(42);
+    let created_timestamp_seconds = 1729791574;
+
+    let recent_ballots: Vec<_> = (0..75)
+        .map(|id| BallotInfo {
+            proposal_id: Some(ProposalId { id }),
+            vote: Vote::Yes as i32,
+        })
+        .collect();
+
+    let mut neuron = NeuronBuilder::new(
+        NeuronId { id: 42 },
+        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
+        principal_id,
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
+            aging_since_timestamp_seconds: created_timestamp_seconds + 42,
+        },
+        created_timestamp_seconds, // created
+    )
+    .with_recent_ballots(recent_ballots.clone())
+    .build();
+    neuron.recent_ballots_next_entry_index = None;
+
+    assert_eq!(neuron.recent_ballots, recent_ballots);
+
+    neuron.register_recent_ballot(Topic::NetworkEconomics, &ProposalId { id: 100 }, Vote::No);
+
+    assert_eq!(neuron.recent_ballots_next_entry_index, Some(76));
+
+    let expected_updated_ballots = {
+        let mut recent_ballots = recent_ballots.clone();
+        recent_ballots.reverse();
+        recent_ballots.push(BallotInfo {
+            proposal_id: Some(ProposalId { id: 100 }),
+            vote: Vote::No as i32,
+        });
+        recent_ballots
+    };
+
+    assert_eq!(neuron.recent_ballots, expected_updated_ballots);
+}
+
+#[test]
+fn test_recent_ballots_accessor_pre_and_post_migration() {
+    let principal_id = PrincipalId::new_user_test_id(42);
+    let created_timestamp_seconds = 1729791574;
+
+    let recent_ballots: Vec<_> = (0..100)
+        .map(|id| BallotInfo {
+            proposal_id: Some(ProposalId { id }),
+            vote: Vote::Yes as i32,
+        })
+        .collect();
+
+    let mut neuron = NeuronBuilder::new(
+        NeuronId { id: 42 },
+        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
+        principal_id,
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
+            aging_since_timestamp_seconds: created_timestamp_seconds + 42,
+        },
+        created_timestamp_seconds, // created
+    )
+    .with_recent_ballots(recent_ballots.clone())
+    .build();
+    neuron.recent_ballots_next_entry_index = None;
+
+    assert_eq!(neuron.sorted_recent_ballots(), recent_ballots);
+
+    neuron.register_recent_ballot(Topic::NetworkEconomics, &ProposalId { id: 100 }, Vote::No);
+    assert_eq!(neuron.recent_ballots_next_entry_index, Some(1));
+
+    let expected_updated_ballots = {
+        let mut recent_ballots = recent_ballots.clone();
+        recent_ballots.insert(
+            0,
+            BallotInfo {
+                proposal_id: Some(ProposalId { id: 100 }),
+                vote: Vote::No as i32,
+            },
+        );
+        recent_ballots.pop();
+        recent_ballots
+    };
+
+    assert_eq!(neuron.sorted_recent_ballots(), expected_updated_ballots);
+}
+
+#[test]
+fn test_ready_to_unstake_maturity() {
+    let now = 123_456_789;
+
+    let create_neuron_with_state_and_staked_maturity =
+        |dissolve_state_and_age, staked_maturity| -> Neuron {
+            NeuronBuilder::new(
+                NeuronId { id: 1 },
+                Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+                PrincipalId::new_user_test_id(1),
+                dissolve_state_and_age,
+                123_456_789,
+            )
+            .with_staked_maturity_e8s_equivalent(staked_maturity)
+            .build()
+        };
+
+    // Ready to unstake maturity since it's both dissolved and has staked maturity.
+    assert!(create_neuron_with_state_and_staked_maturity(
+        DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now,
+        },
+        1
+    )
+    .ready_to_unstake_maturity(now));
+
+    // Not ready to unstake maturity since it's not dissolved yet.
+    assert!(!create_neuron_with_state_and_staked_maturity(
+        DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now + 1,
+        },
+        1
+    )
+    .ready_to_unstake_maturity(now));
+
+    // Not ready to unstake maturity since it is non-dissolving.
+    assert!(!create_neuron_with_state_and_staked_maturity(
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 1,
+            aging_since_timestamp_seconds: now,
+        },
+        1
+    )
+    .ready_to_unstake_maturity(now));
+
+    // Not ready to unstake maturity since it has no staked maturity.
+    assert!(!create_neuron_with_state_and_staked_maturity(
+        DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now,
+        },
+        0
+    )
+    .ready_to_unstake_maturity(now));
+}
+
+#[test]
+fn test_ready_to_spawn() {
+    let now = 123_456_789;
+
+    // Ready to spawn since it has a spawn timestamp in the past.
+    let neuron_ready_to_spawn = NeuronBuilder::new(
+        NeuronId { id: 1 },
+        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        PrincipalId::new_user_test_id(1),
+        DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now - 1,
+        },
+        0, // created
+    )
+    .with_spawn_at_timestamp_seconds(now - 1)
+    .build();
+    assert!(neuron_ready_to_spawn.ready_to_spawn(now));
+
+    // Not ready to spawn since it has a spawn timestamp in the future.
+    let neuron_not_ready_to_spawn = NeuronBuilder::new(
+        NeuronId { id: 1 },
+        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        PrincipalId::new_user_test_id(1),
+        DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now + 1,
+        },
+        0, // created
+    )
+    .with_spawn_at_timestamp_seconds(now + 1)
+    .build();
+    assert!(!neuron_not_ready_to_spawn.ready_to_spawn(now));
+
+    // Not ready to spawn since it has no spawn timestamp.
+    let neuron_no_spawn_timestamp = NeuronBuilder::new(
+        NeuronId { id: 1 },
+        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        PrincipalId::new_user_test_id(1),
+        DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now - 1,
+        },
+        0, // created
+    )
+    .build();
+    assert!(!neuron_no_spawn_timestamp.ready_to_spawn(now));
 }

@@ -3,6 +3,9 @@
 //! The state is stored in the global thread-level variable `__STATE`.
 //! This module provides utility functions to manage the state. Most
 //! code should use those functions instead of touching `__STATE` directly.
+#[cfg(test)]
+mod tests;
+
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -26,6 +29,8 @@ use ic_utils_ensure::ensure_eq;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
 use std::collections::btree_map::Entry;
+use std::collections::btree_set;
+use std::iter::Chain;
 
 /// The maximum number of finalized BTC retrieval requests that we keep in the
 /// history.
@@ -237,7 +242,7 @@ impl Default for Mode {
 }
 
 /// The outcome of a UTXO KYT check.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, serde::Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum UtxoCheckStatus {
     /// The KYT check did not reveal any problems.
     Clean,
@@ -262,7 +267,7 @@ impl UtxoCheckStatus {
 /// Relevant data for a checked UTXO. The UUID and `kyt_provider` are kept for
 /// backward-compatibility reasons. They should be set to `None` since
 /// we dont use KYT providers anymore.
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, serde::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CheckedUtxo {
     pub(crate) status: UtxoCheckStatus,
     uuid: Option<String>,
@@ -276,7 +281,7 @@ pub struct Overdraft(pub u64);
 /// The state of the ckBTC Minter.
 ///
 /// Every piece of state of the Minter should be stored as field of this struct.
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, serde::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CkBtcMinterState {
     /// The bitcoin network that the minter will connect to
     pub btc_network: Network,
@@ -347,8 +352,8 @@ pub struct CkBtcMinterState {
     /// The CanisterId of the ckBTC Ledger.
     pub ledger_id: CanisterId,
 
-    /// The new principal of the KYT canister.
-    pub new_kyt_principal: Option<CanisterId>,
+    /// The principal of the KYT canister.
+    pub kyt_principal: Option<CanisterId>,
 
     /// The set of UTXOs unused in pending transactions.
     pub available_utxos: BTreeSet<Utxo>,
@@ -371,10 +376,8 @@ pub struct CkBtcMinterState {
     pub finalized_utxos: BTreeMap<Principal, BTreeSet<Utxo>>,
 
     /// Process one timer event at a time.
-    #[serde(skip)]
     pub is_timer_running: bool,
 
-    #[serde(skip)]
     pub is_distributing_fee: bool,
 
     /// The mode in which the minter runs.
@@ -391,11 +394,8 @@ pub struct CkBtcMinterState {
     /// A cache of UTXO KYT check statuses.
     pub checked_utxos: BTreeMap<Utxo, CheckedUtxo>,
 
-    /// UTXOs whose values are too small to pay the KYT check fee.
-    pub ignored_utxos: BTreeSet<Utxo>,
-
-    /// UTXOs that the KYT provider considered tainted.
-    pub quarantined_utxos: BTreeSet<Utxo>,
+    /// UTXOs that cannot be yet processed.
+    pub suspended_utxos: SuspendedUtxos,
 
     /// Map from burn block index to amount to reimburse because of
     /// KYT fees.
@@ -441,8 +441,7 @@ impl CkBtcMinterState {
             min_confirmations,
             mode,
             kyt_fee,
-            new_kyt_principal,
-            kyt_principal: _,
+            kyt_principal,
         }: InitArgs,
     ) {
         self.btc_network = btc_network.into();
@@ -452,7 +451,7 @@ impl CkBtcMinterState {
         self.ledger_id = ledger_id;
         self.max_time_in_queue_nanos = max_time_in_queue_nanos;
         self.mode = mode;
-        self.new_kyt_principal = new_kyt_principal;
+        self.kyt_principal = kyt_principal;
         if let Some(kyt_fee) = kyt_fee {
             self.kyt_fee = kyt_fee;
         }
@@ -468,9 +467,8 @@ impl CkBtcMinterState {
             max_time_in_queue_nanos,
             min_confirmations,
             mode,
-            new_kyt_principal,
             kyt_fee,
-            kyt_principal: _,
+            kyt_principal,
         }: UpgradeArgs,
     ) {
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
@@ -495,8 +493,8 @@ impl CkBtcMinterState {
         if let Some(mode) = mode {
             self.mode = mode;
         }
-        if let Some(new_kyt_principal) = new_kyt_principal {
-            self.new_kyt_principal = Some(new_kyt_principal);
+        if let Some(kyt_principal) = kyt_principal {
+            self.kyt_principal = Some(kyt_principal);
         }
         if let Some(kyt_fee) = kyt_fee {
             self.kyt_fee = kyt_fee;
@@ -510,7 +508,7 @@ impl CkBtcMinterState {
         if self.ecdsa_key_name.is_empty() {
             ic_cdk::trap("ecdsa_key_name is not set");
         }
-        if self.new_kyt_principal.is_none() {
+        if self.kyt_principal.is_none() {
             ic_cdk::trap("New KYT principal is not set");
         }
     }
@@ -935,66 +933,136 @@ impl CkBtcMinterState {
         }
     }
 
-    /// Filters out known UTXOs of the given account from the given UTXO list.
-    pub fn new_utxos_for_account(&self, mut utxos: Vec<Utxo>, account: &Account) -> Vec<Utxo> {
-        let maybe_existing_utxos = self.utxos_state_addresses.get(account);
-        let maybe_finalized_utxos = self.finalized_utxos.get(&account.owner);
-        utxos.retain(|utxo| {
-            !maybe_existing_utxos
+    /// Returns the UTXOs that can be processed for the given account.
+    ///
+    /// The returned UTXOs include:
+    /// * new UTXOs that are not known to the minter,
+    /// * UTXOs that were previously ignored and that can be re-evaluated,
+    /// * UTXOs that were previously quarantined and that can be re-evaluated.
+    pub fn processable_utxos_for_account<I: IntoIterator<Item = Utxo>>(
+        &self,
+        all_utxos_for_account: I,
+        account: &Account,
+    ) -> ProcessableUtxos {
+        let is_known = |utxo: &Utxo| {
+            self.utxos_state_addresses
+                .get(account)
                 .map(|utxos| utxos.contains(utxo))
                 .unwrap_or(false)
-                && !maybe_finalized_utxos
+                || self
+                    .finalized_utxos
+                    .get(&account.owner)
                     .map(|utxos| utxos.contains(utxo))
                     .unwrap_or(false)
-                && !self.ignored_utxos.contains(utxo)
-                && !self.quarantined_utxos.contains(utxo)
-        });
-        utxos
+        };
+        let mut new_utxos = BTreeSet::new();
+        //TODO XC-230: only re-evaluate the ignored and quarantined utxos at most once a day
+        let mut previously_ignored_utxos = BTreeSet::new();
+        let mut previously_quarantined_utxos = BTreeSet::new();
+
+        for utxo in all_utxos_for_account.into_iter() {
+            match self.suspended_utxos.contains_utxo(&utxo, account) {
+                Some(SuspendedReason::ValueTooSmall) => {
+                    previously_ignored_utxos.insert(utxo);
+                }
+                Some(SuspendedReason::Quarantined) => {
+                    previously_quarantined_utxos.insert(utxo);
+                }
+                None => {
+                    if !is_known(&utxo) {
+                        new_utxos.insert(utxo);
+                    }
+                }
+            }
+        }
+
+        debug_assert_eq!(
+            new_utxos.intersection(&previously_ignored_utxos).next(),
+            None
+        );
+        debug_assert_eq!(
+            new_utxos.intersection(&previously_quarantined_utxos).next(),
+            None
+        );
+        debug_assert_eq!(
+            previously_ignored_utxos
+                .intersection(&previously_quarantined_utxos)
+                .next(),
+            None
+        );
+
+        ProcessableUtxos {
+            new_utxos,
+            previously_ignored_utxos,
+            previously_quarantined_utxos,
+        }
     }
 
-    /// Adds given UTXO to the set of ignored UTXOs.
-    fn ignore_utxo(&mut self, utxo: Utxo) {
-        assert!(utxo.value <= self.kyt_fee);
-        self.ignored_utxos.insert(utxo);
+    /// Adds given UTXO to the set of suspended UTXOs.
+    pub fn suspend_utxo(&mut self, utxo: Utxo, account: Account, reason: SuspendedReason) -> bool {
+        self.ensure_reason_consistent_with_state(&utxo, reason);
+        self.suspended_utxos.insert(account, utxo, reason)
     }
 
-    /// Marks the given UTXO as checked.
-    /// If the UTXO is clean, we increase the owed KYT amount if there is a KYT provider, and
+    #[deprecated(note = "Use discard_utxo() instead")]
+    pub fn discard_utxo_without_account(&mut self, utxo: Utxo, reason: SuspendedReason) {
+        self.ensure_reason_consistent_with_state(&utxo, reason);
+        #[allow(deprecated)]
+        self.suspended_utxos.insert_without_account(utxo, reason)
+    }
+
+    fn ensure_reason_consistent_with_state(&self, utxo: &Utxo, reason: SuspendedReason) {
+        match reason {
+            SuspendedReason::ValueTooSmall => {
+                assert!(utxo.value <= self.kyt_fee);
+            }
+            SuspendedReason::Quarantined => {}
+        }
+    }
+
+    /// Marks the given UTXO as successfully checked.
+    /// We increase the owed KYT amount if there is a KYT provider, and
     /// remember that UTXO until we see it again in an [add_utxos] call.
-    /// If the UTXO is tainted, we put it in the quarantine area without increasing the owed KYT
-    /// amount.
+    #[deprecated(note = "Use mark_utxo_checked_v2() instead")]
     fn mark_utxo_checked(
         &mut self,
         utxo: Utxo,
         uuid: Option<String>,
-        status: UtxoCheckStatus,
         kyt_provider: Option<Principal>,
     ) {
-        match status {
-            UtxoCheckStatus::Clean => {
-                if self
-                    .checked_utxos
-                    .insert(
-                        utxo,
-                        CheckedUtxo {
-                            uuid,
-                            status,
-                            kyt_provider,
-                        },
-                    )
-                    .is_none()
-                {
-                    // Updated the owed amount only if it's the first time we mark this UTXO as
-                    // clean.
-                    if let Some(provider) = kyt_provider {
-                        *self.owed_kyt_amount.entry(provider).or_insert(0) += self.kyt_fee;
-                    }
-                }
-            }
-            UtxoCheckStatus::Tainted => {
-                self.quarantined_utxos.insert(utxo);
+        #[allow(deprecated)]
+        self.suspended_utxos.remove_without_account(&utxo);
+        if self
+            .checked_utxos
+            .insert(
+                utxo,
+                CheckedUtxo {
+                    uuid,
+                    status: UtxoCheckStatus::Clean,
+                    kyt_provider,
+                },
+            )
+            .is_none()
+        {
+            // Updated the owed amount only if it's the first time we mark this UTXO as
+            // clean.
+            if let Some(provider) = kyt_provider {
+                *self.owed_kyt_amount.entry(provider).or_insert(0) += self.kyt_fee;
             }
         }
+    }
+
+    /// Marks the given UTXO as successfully checked.
+    fn mark_utxo_checked_v2(&mut self, utxo: Utxo, account: &Account) {
+        self.suspended_utxos.remove(account, &utxo);
+        self.checked_utxos.insert(
+            utxo,
+            CheckedUtxo {
+                uuid: None,
+                status: UtxoCheckStatus::Clean,
+                kyt_provider: None,
+            },
+        );
     }
 
     /// Decreases the owed amount for the given provider by the amount.
@@ -1091,15 +1159,9 @@ impl CkBtcMinterState {
             "utxos_state_addresses do not match"
         );
         ensure_eq!(
-            self.quarantined_utxos,
-            other.quarantined_utxos,
-            "quarantined_utxos do not match"
-        );
-
-        ensure_eq!(
-            self.ignored_utxos,
-            other.ignored_utxos,
-            "ignored_utxos do not match"
+            self.suspended_utxos,
+            other.suspended_utxos,
+            "suspended_utxos do not match"
         );
 
         ensure_eq!(
@@ -1117,9 +1179,9 @@ impl CkBtcMinterState {
         );
 
         ensure_eq!(
-            self.new_kyt_principal,
-            other.new_kyt_principal,
-            "new_kyt_principal does not match"
+            self.kyt_principal,
+            other.kyt_principal,
+            "kyt_principal does not match"
         );
 
         ensure_eq!(
@@ -1176,6 +1238,126 @@ impl CkBtcMinterState {
         total_btc += self.available_utxos.iter().map(|u| u.value).sum::<u64>();
         total_btc
     }
+
+    pub fn ignored_utxos(&self) -> impl Iterator<Item = &Utxo> {
+        self.suspended_utxos.iter().filter_map(|(u, r)| match r {
+            SuspendedReason::ValueTooSmall => Some(u),
+            SuspendedReason::Quarantined => None,
+        })
+    }
+
+    pub fn quarantined_utxos(&self) -> impl Iterator<Item = &Utxo> {
+        self.suspended_utxos.iter().filter_map(|(u, r)| match r {
+            SuspendedReason::ValueTooSmall => None,
+            SuspendedReason::Quarantined => Some(u),
+        })
+    }
+}
+
+#[derive(Eq, PartialEq, Debug, Default)]
+pub struct ProcessableUtxos {
+    new_utxos: BTreeSet<Utxo>,
+    previously_ignored_utxos: BTreeSet<Utxo>,
+    previously_quarantined_utxos: BTreeSet<Utxo>,
+}
+
+impl ProcessableUtxos {
+    pub fn iter(&self) -> impl Iterator<Item = &Utxo> {
+        self.new_utxos
+            .iter()
+            .chain(&self.previously_ignored_utxos)
+            .chain(&self.previously_quarantined_utxos)
+    }
+}
+
+impl IntoIterator for ProcessableUtxos {
+    type Item = Utxo;
+    type IntoIter = Chain<
+        Chain<btree_set::IntoIter<Utxo>, btree_set::IntoIter<Utxo>>,
+        btree_set::IntoIter<Utxo>,
+    >;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.new_utxos
+            .into_iter()
+            .chain(self.previously_ignored_utxos)
+            .chain(self.previously_quarantined_utxos)
+    }
+}
+
+#[derive(Eq, Clone, PartialEq, Debug, Default)]
+pub struct SuspendedUtxos {
+    /// Suspended UTXOS were initially stored without account information.
+    /// A suspended UTXO is periodically reevaluated when the user calls `update_balance`,
+    /// which will remove it from this data structure if the UTXO is no longer to be suspended,
+    /// or move it to the other field containing this time the `Account` information.
+    utxos_without_account: BTreeMap<Utxo, SuspendedReason>,
+    utxos: BTreeMap<Account, BTreeMap<Utxo, SuspendedReason>>,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Serialize, Deserialize)]
+pub enum SuspendedReason {
+    /// UTXO whose value is too small to pay the KYT check fee.
+    ValueTooSmall,
+    /// UTXO that the KYT provider considered tainted.
+    Quarantined,
+}
+
+impl SuspendedUtxos {
+    pub fn insert(&mut self, account: Account, utxo: Utxo, reason: SuspendedReason) -> bool {
+        if self.utxos.get(&account).and_then(|u| u.get(&utxo)) == Some(&reason) {
+            return false;
+        }
+        self.utxos_without_account.remove(&utxo);
+        let utxos = self.utxos.entry(account).or_default();
+        utxos.insert(utxo, reason);
+        true
+    }
+
+    #[deprecated(note = "Use insert() instead")]
+    pub fn insert_without_account(&mut self, utxo: Utxo, reason: SuspendedReason) {
+        debug_assert!(self.utxos.values().all(|utxos| !utxos.contains_key(&utxo)));
+        self.utxos_without_account.insert(utxo, reason);
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&Utxo, &SuspendedReason)> {
+        self.utxos_without_account
+            .iter()
+            .chain(self.utxos.values().flat_map(|v| v.iter()))
+    }
+
+    pub fn contains_utxo(&self, utxo: &Utxo, account: &Account) -> Option<&SuspendedReason> {
+        self.utxos
+            .get(account)
+            .and_then(|u| u.get(utxo))
+            .or_else(|| self.utxos_without_account.get(utxo))
+    }
+
+    pub fn remove(&mut self, account: &Account, utxo: &Utxo) {
+        self.utxos_without_account.remove(utxo);
+        if let Some(utxos) = self.utxos.get_mut(account) {
+            utxos.remove(utxo);
+        }
+    }
+
+    #[deprecated(note = "Use remove() instead")]
+    pub fn remove_without_account(&mut self, utxo: &Utxo) {
+        self.utxos_without_account.remove(utxo);
+        for utxos in self.utxos.values_mut() {
+            if utxos.remove(utxo).is_some() {
+                return; //UTXO can belong to at most one account
+            }
+        }
+    }
+
+    /// Number of suspended UTXOs
+    pub fn num_utxos(&self) -> usize {
+        self.utxos_without_account.len() + self.utxos.values().map(|u| u.len()).sum::<usize>()
+    }
+
+    pub fn utxos_without_account(&self) -> &BTreeMap<Utxo, SuspendedReason> {
+        &self.utxos_without_account
+    }
 }
 
 fn as_sorted_vec<T, K: Ord>(values: impl Iterator<Item = T>, key: impl Fn(&T) -> K) -> Vec<T> {
@@ -1211,7 +1393,7 @@ impl From<InitArgs> for CkBtcMinterState {
             tokens_minted: 0,
             tokens_burned: 0,
             ledger_id: args.ledger_id,
-            new_kyt_principal: args.new_kyt_principal,
+            kyt_principal: args.kyt_principal,
             available_utxos: Default::default(),
             outpoint_account: Default::default(),
             utxos_state_addresses: Default::default(),
@@ -1225,8 +1407,7 @@ impl From<InitArgs> for CkBtcMinterState {
                 .unwrap_or(crate::lifecycle::init::DEFAULT_KYT_FEE),
             owed_kyt_amount: Default::default(),
             checked_utxos: Default::default(),
-            ignored_utxos: Default::default(),
-            quarantined_utxos: Default::default(),
+            suspended_utxos: Default::default(),
             pending_reimbursements: Default::default(),
             reimbursed_transactions: Default::default(),
         }
