@@ -515,6 +515,10 @@ fn update_path(cid: CanisterId) -> String {
     format!("api/v2/canister/{}/call", cid)
 }
 
+fn read_state_path(cid: CanisterId) -> String {
+    format!("api/v2/canister/{}/read_state", cid)
+}
+
 impl LedgerClient {
     // Exponential backoff from 100ms to 10s with a multiplier of 1.3.
     const MIN_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -731,7 +735,7 @@ impl LedgerClient {
             let wait_timeout = Self::TIMEOUT - start_time.elapsed();
             let url = self
                 .ic_url
-                .join(&ic_canister_client::read_state_path(canister_id))
+                .join(&read_state_path(canister_id))
                 .expect("URL join failed");
 
             match send_post_request(
