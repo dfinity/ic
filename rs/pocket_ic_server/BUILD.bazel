@@ -233,5 +233,6 @@ rust_test(
         "BITCOIND_BIN": "$(rootpath @bitcoin-core//:bitcoind)",
         "BTC_WASM": "$(rootpath @btc_canister//file)",
     },
+    tags = ["test_macos"],
     deps = TEST_DEPENDENCIES,
 )
