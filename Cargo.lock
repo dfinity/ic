@@ -6065,6 +6065,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-management-canister-types",
  "ic-protobuf",
+ "ic-read-state-response-parser",
  "ic-test-utilities",
  "ic-test-utilities-types",
  "ic-types",
