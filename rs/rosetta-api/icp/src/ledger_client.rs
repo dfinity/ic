@@ -746,7 +746,7 @@ impl LedgerClient {
                         let cbor: serde_cbor::Value = serde_cbor::from_slice(&body)
                             .map_err(|err| format!("While parsing the status body: {}", err))?;
 
-                        let status = ic_canister_client::parse_read_state_response(
+                        let status = ic_read_state_response_parser::parse_read_state_response(
                             &request_id,
                             &canister_id,
                             self.root_key.as_ref(),
