@@ -60,19 +60,19 @@ fn disclose_rules(
 ) -> Result<(), DiscloseRulesError> {
     let mut rules = Vec::with_capacity(rule_ids.len());
 
-    // Validate and collect rule metadata, failing fast on first missing rule
+    // Validate and collect rules, failing fast on first missing rule
     for rule_id in rule_ids.iter() {
-        let rule_metadata = canister_api
+        let rule = canister_api
             .get_rule(rule_id)
             .ok_or_else(|| DiscloseRulesError::RuleIdNotFound(*rule_id))?;
-        rules.push((rule_id, rule_metadata));
+        rules.push((rule_id, rule));
     }
 
     // Update disclosed rules, marking them with current timestamp
-    for (rule_id, mut metadata) in rules {
-        if metadata.disclosed_at.is_none() {
-            metadata.disclosed_at = Some(time);
-            let _ = canister_api.upsert_rule(*rule_id, metadata);
+    for (rule_id, mut rule) in rules {
+        if rule.disclosed_at.is_none() {
+            rule.disclosed_at = Some(time);
+            canister_api.upsert_rule(*rule_id, rule);
         }
     }
 
@@ -85,25 +85,25 @@ fn disclose_incidents(
     time: Timestamp,
     incident_ids: &[IncidentId],
 ) -> Result<(), DiscloseRulesError> {
-    let mut incidents_metadata: Vec<(_, _)> = Vec::with_capacity(incident_ids.len());
+    let mut incidents: Vec<(_, _)> = Vec::with_capacity(incident_ids.len());
 
-    // Validate and collect incident metadata, failing fast on first missing incident
+    // Validate and collect incidents, failing fast on first missing incident
     for incident_id in incident_ids.iter() {
-        let incident_metadata = canister_api
+        let incident = canister_api
             .get_incident(incident_id)
             .ok_or_else(|| DiscloseRulesError::IncidentIdNotFound(*incident_id))?;
-        incidents_metadata.push((*incident_id, incident_metadata));
+        incidents.push((*incident_id, incident));
     }
 
     // Disclose incidents and their associated rules
-    for (incident_id, mut metadata) in incidents_metadata {
-        if !metadata.is_disclosed {
+    for (incident_id, mut incident) in incidents {
+        if !incident.is_disclosed {
             // Ensure all associated rules are disclosed first
-            let rule_ids: Vec<RuleId> = metadata.rule_ids.iter().cloned().collect();
+            let rule_ids: Vec<RuleId> = incident.rule_ids.iter().cloned().collect();
             disclose_rules(canister_api, time, &rule_ids)?;
             // Mark incident as disclosed too
-            metadata.is_disclosed = true;
-            let _ = canister_api.upsert_incident(incident_id, metadata);
+            incident.is_disclosed = true;
+            canister_api.upsert_incident(incident_id, incident);
         }
     }
 
@@ -121,11 +121,11 @@ mod tests {
     use std::collections::HashSet;
 
     use crate::state::MockCanisterApi;
-    use crate::storage::{StorableIncidentMetadata, StorableRuleMetadata};
+    use crate::storage::{StorableIncident, StorableRule};
 
-    // Helper to create a mock rule metadata
-    fn create_mock_rule_metadata(disclosed_at: Option<Timestamp>) -> StorableRuleMetadata {
-        StorableRuleMetadata {
+    // Helper to create a mock rule
+    fn create_mock_rule(disclosed_at: Option<Timestamp>) -> StorableRule {
+        StorableRule {
             incident_id: IncidentId(Uuid::new_v4()),
             rule_raw: vec![],
             description: "".to_string(),
@@ -149,20 +149,20 @@ mod tests {
             let rule_id_4 = RuleId(Uuid::new_v4());
             let rule_id_5 = RuleId(Uuid::new_v4());
             // Two rules are disclosed, and three are not
-            let rule_1 = create_mock_rule_metadata(None);
-            let rule_2 = create_mock_rule_metadata(Some(25u64));
-            let rule_3 = create_mock_rule_metadata(None);
-            let rule_4 = create_mock_rule_metadata(Some(30u64));
-            let rule_5 = create_mock_rule_metadata(None);
+            let rule_1 = create_mock_rule(None);
+            let rule_2 = create_mock_rule(Some(25u64));
+            let rule_3 = create_mock_rule(None);
+            let rule_4 = create_mock_rule(Some(30u64));
+            let rule_5 = create_mock_rule(None);
             // Two incidents
             let incident_id_1 = IncidentId(Uuid::new_v4());
             let incident_id_2 = IncidentId(Uuid::new_v4());
             // One incident is disclosed and one is not
-            let incident_1 = StorableIncidentMetadata {
+            let incident_1 = StorableIncident {
                 is_disclosed: false,
                 rule_ids: HashSet::from_iter(vec![rule_id_1, rule_id_2, rule_id_3]),
             };
-            let incident_2 = StorableIncidentMetadata {
+            let incident_2 = StorableIncident {
                 is_disclosed: true,
                 rule_ids: HashSet::from_iter(vec![rule_id_4]),
             };

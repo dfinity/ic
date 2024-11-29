@@ -179,6 +179,8 @@ impl From<pb_api::Neuron> for pb::Neuron {
             dissolve_state: item.dissolve_state.map(|x| x.into()),
             visibility: item.visibility,
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
+            // This field is internal only and should not be read from API types.
+            recent_ballots_next_entry_index: None,
         }
     }
 }
@@ -1022,6 +1024,17 @@ impl From<pb_api::manage_neuron::StakeMaturity> for pb::manage_neuron::StakeMatu
     }
 }
 
+impl From<pb::manage_neuron::RefreshVotingPower> for pb_api::manage_neuron::RefreshVotingPower {
+    fn from(_item: pb::manage_neuron::RefreshVotingPower) -> Self {
+        Self {}
+    }
+}
+impl From<pb_api::manage_neuron::RefreshVotingPower> for pb::manage_neuron::RefreshVotingPower {
+    fn from(_item: pb_api::manage_neuron::RefreshVotingPower) -> Self {
+        Self {}
+    }
+}
+
 impl From<pb::manage_neuron::DisburseToNeuron> for pb_api::manage_neuron::DisburseToNeuron {
     fn from(item: pb::manage_neuron::DisburseToNeuron) -> Self {
         Self {
@@ -1204,6 +1217,9 @@ impl From<pb::manage_neuron::Command> for pb_api::manage_neuron::Command {
             pb::manage_neuron::Command::StakeMaturity(v) => {
                 pb_api::manage_neuron::Command::StakeMaturity(v.into())
             }
+            pb::manage_neuron::Command::RefreshVotingPower(v) => {
+                pb_api::manage_neuron::Command::RefreshVotingPower(v.into())
+            }
         }
     }
 }
@@ -1239,6 +1255,9 @@ impl From<pb_api::manage_neuron::Command> for pb::manage_neuron::Command {
             pb_api::manage_neuron::Command::Merge(v) => pb::manage_neuron::Command::Merge(v.into()),
             pb_api::manage_neuron::Command::StakeMaturity(v) => {
                 pb::manage_neuron::Command::StakeMaturity(v.into())
+            }
+            pb_api::manage_neuron::Command::RefreshVotingPower(v) => {
+                pb::manage_neuron::Command::RefreshVotingPower(v.into())
             }
         }
     }
@@ -1393,6 +1412,21 @@ impl From<pb_api::manage_neuron_response::StakeMaturityResponse>
             maturity_e8s: item.maturity_e8s,
             staked_maturity_e8s: item.staked_maturity_e8s,
         }
+    }
+}
+
+impl From<pb::manage_neuron_response::RefreshVotingPowerResponse>
+    for pb_api::manage_neuron_response::RefreshVotingPowerResponse
+{
+    fn from(_item: pb::manage_neuron_response::RefreshVotingPowerResponse) -> Self {
+        Self {}
+    }
+}
+impl From<pb_api::manage_neuron_response::RefreshVotingPowerResponse>
+    for pb::manage_neuron_response::RefreshVotingPowerResponse
+{
+    fn from(_item: pb_api::manage_neuron_response::RefreshVotingPowerResponse) -> Self {
+        Self {}
     }
 }
 
@@ -1571,6 +1605,9 @@ impl From<pb::manage_neuron_response::Command> for pb_api::manage_neuron_respons
             pb::manage_neuron_response::Command::StakeMaturity(v) => {
                 pb_api::manage_neuron_response::Command::StakeMaturity(v.into())
             }
+            pb::manage_neuron_response::Command::RefreshVotingPower(v) => {
+                pb_api::manage_neuron_response::Command::RefreshVotingPower(v.into())
+            }
         }
     }
 }
@@ -1615,6 +1652,9 @@ impl From<pb_api::manage_neuron_response::Command> for pb::manage_neuron_respons
             }
             pb_api::manage_neuron_response::Command::StakeMaturity(v) => {
                 pb::manage_neuron_response::Command::StakeMaturity(v.into())
+            }
+            pb_api::manage_neuron_response::Command::RefreshVotingPower(v) => {
+                pb::manage_neuron_response::Command::RefreshVotingPower(v.into())
             }
         }
     }

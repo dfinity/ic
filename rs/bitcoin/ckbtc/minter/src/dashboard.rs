@@ -314,7 +314,7 @@ pub fn build_metadata(s: &CkBtcMinterState) -> String {
             .unwrap_or_default(),
         s.min_confirmations,
         s.ledger_id,
-        s.new_kyt_principal
+        s.kyt_principal
             .map(|p| p.to_string())
             .unwrap_or_else(|| "N/A".to_string()),
         DisplayAmount(s.kyt_fee),
@@ -441,7 +441,7 @@ pub fn build_finalized_requests(s: &CkBtcMinterState) -> String {
 
 pub fn build_quarantined_utxos(s: &CkBtcMinterState) -> String {
     with_utf8_buffer(|buf| {
-        for utxo in &s.quarantined_utxos {
+        for utxo in s.quarantined_utxos() {
             writeln!(
                 buf,
                 "<tr>
@@ -462,7 +462,7 @@ pub fn build_quarantined_utxos(s: &CkBtcMinterState) -> String {
 
 pub fn build_ignored_utxos(s: &CkBtcMinterState) -> String {
     with_utf8_buffer(|buf| {
-        for utxo in &s.ignored_utxos {
+        for utxo in s.ignored_utxos() {
             writeln!(
                 buf,
                 "<tr>

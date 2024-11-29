@@ -234,7 +234,7 @@ pub async fn update_balance<R: CanisterRuntime>(
     let mut utxo_statuses: Vec<UtxoStatus> = vec![];
     for utxo in processable_utxos {
         if utxo.value <= kyt_fee {
-            mutate_state(|s| crate::state::audit::ignore_utxo(s, utxo.clone()));
+            mutate_state(|s| state::audit::ignore_utxo(s, utxo.clone(), caller_account));
             log!(
                 P1,
                 "Ignored UTXO {} for account {caller_account} because UTXO value {} is lower than the KYT fee {}",
@@ -246,8 +246,13 @@ pub async fn update_balance<R: CanisterRuntime>(
             continue;
         }
         let status = kyt_check_utxo(&utxo, &args, runtime).await?;
-        mutate_state(|s| {
-            crate::state::audit::mark_utxo_checked(s, &utxo, None, status, None);
+        mutate_state(|s| match status {
+            UtxoCheckStatus::Clean => {
+                state::audit::mark_utxo_checked(s, utxo.clone(), caller_account);
+            }
+            UtxoCheckStatus::Tainted => {
+                state::audit::quarantine_utxo(s, utxo.clone(), caller_account);
+            }
         });
         match status {
             UtxoCheckStatus::Tainted => {
@@ -311,9 +316,9 @@ async fn kyt_check_utxo<R: CanisterRuntime>(
 ) -> Result<UtxoCheckStatus, UpdateBalanceError> {
     use ic_btc_kyt::{CheckTransactionStatus, CHECK_TRANSACTION_CYCLES_REQUIRED};
 
-    let new_kyt_principal = read_state(|s| {
-        s.new_kyt_principal
-            .expect("BUG: upgrade procedure must ensure that the new KYT principal is set")
+    let kyt_principal = read_state(|s| {
+        s.kyt_principal
+            .expect("BUG: upgrade procedure must ensure that the KYT principal is set")
             .get()
             .into()
     });
@@ -323,7 +328,7 @@ async fn kyt_check_utxo<R: CanisterRuntime>(
     }
     for i in 0..MAX_CHECK_TRANSACTION_RETRY {
         match runtime
-            .check_transaction(new_kyt_principal, utxo, CHECK_TRANSACTION_CYCLES_REQUIRED)
+            .check_transaction(kyt_principal, utxo, CHECK_TRANSACTION_CYCLES_REQUIRED)
             .await
             .map_err(|call_err| {
                 UpdateBalanceError::TemporarilyUnavailable(format!(
