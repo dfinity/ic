@@ -510,6 +510,11 @@ impl LedgerAccess for LedgerClient {
     }
 }
 
+/// The HTTP path for update calls on the replica.
+fn update_path(cid: CanisterId) -> String {
+    format!("api/v2/canister/{}/call", cid)
+}
+
 impl LedgerClient {
     // Exponential backoff from 100ms to 10s with a multiplier of 1.3.
     const MIN_POLL_INTERVAL: Duration = Duration::from_millis(100);
