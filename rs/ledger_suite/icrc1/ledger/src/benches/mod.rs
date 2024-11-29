@@ -43,7 +43,7 @@ pub fn icrc1_transfer(
 
 fn assert_has_num_balances(num_balances: u32) {
     Access::with_ledger(|ledger| {
-        assert_eq!(ledger.balances().store.len() as u32, num_balances);
+        assert_eq!(ledger.balances_len() as u32, num_balances);
     });
 }
 
