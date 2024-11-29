@@ -2463,11 +2463,11 @@ fn test_no_target_version_fails_check_upgrade_status() {
                 )),
             },
             UpgradeJournalEntry {
-                timestamp_seconds: Some(now),
+                timestamp_seconds: Some(_),
                 event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
                     upgrade_journal_entry::UpgradeStepsReset {
                         human_readable: Some(_),
-                        upgrade_steps: Some(Versions { versions }),
+                        upgrade_steps: Some(Versions { versions: _ }),
                     }
                 )),
             },
