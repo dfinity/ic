@@ -275,9 +275,10 @@ pub enum EncryptedKeyCombinationError {
     DuplicateNodeIndex,
     /// There were insufficient shares to perform combination
     InsufficientShares,
-    /// Some of the key shares are invalid; the Vec contains the list of
-    /// node indexes whose shares were malformed
-    InvalidKeyShares(Vec<NodeIndex>),
+    /// Not enough valid shares
+    InsufficientValidKeyShares,
+    /// Some of the key shares are invalid
+    InvalidShares,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -292,8 +293,58 @@ impl EncryptedKey {
     /// The length of the serialized encoding of this type
     pub const BYTES: usize = 2 * G1Affine::BYTES + G2Affine::BYTES;
 
-    /// Combine several shares into an encrypted key
-    pub fn combine(
+    /// Combine, unchecked.
+    /// The returned key may be invalid.
+    fn combine_unchecked(
+        nodes: &[(NodeIndex, EncryptedKeyShare)],
+        reconstruction_threshold: usize,
+    ) -> Result<Self, EncryptedKeyCombinationError> {
+        if nodes.len() < reconstruction_threshold {
+            return Err(EncryptedKeyCombinationError::InsufficientShares);
+        }
+
+        let l = LagrangeCoefficients::at_zero(&nodes.iter().map(|i| i.0).collect::<Vec<_>>())
+            .map_err(|_| EncryptedKeyCombinationError::DuplicateNodeIndex)?;
+
+        let c1 = l
+            .interpolate_g1(&nodes.iter().map(|i| &i.1.c1).collect::<Vec<_>>())
+            .expect("Number of nodes and shares guaranteed equal");
+        let c2 = l
+            .interpolate_g2(&nodes.iter().map(|i| &i.1.c2).collect::<Vec<_>>())
+            .expect("Number of nodes and shares guaranteed equal");
+        let c3 = l
+            .interpolate_g1(&nodes.iter().map(|i| &i.1.c3).collect::<Vec<_>>())
+            .expect("Number of nodes and shares guaranteed equal");
+
+        Ok(Self { c1, c2, c3 })
+    }
+
+    /// Combines all the given shares into an encrypted key.
+    /// The returned key is guaranteed to be valid.
+    /// Returns the combined key, if it is valid.
+    /// Does not take the nodes individual public keys as input.
+    pub fn combine_all(
+        nodes: &[(NodeIndex, EncryptedKeyShare)],
+        reconstruction_threshold: usize,
+        master_pk: &G2Affine,
+        tpk: &TransportPublicKey,
+        derivation_path: &DerivationPath,
+        did: &[u8],
+    ) -> Result<Self, EncryptedKeyCombinationError> {
+        let c = Self::combine_unchecked(nodes, reconstruction_threshold)?;
+        if !c.is_valid(master_pk, derivation_path, did, tpk) {
+            return Err(EncryptedKeyCombinationError::InvalidShares);
+        }
+        Ok(c)
+    }
+
+    /// Filters the valid shares from the given ones, and combines them into a valid key, if possible.
+    /// The returned key is guaranteed to be valid.
+    /// Returns an error if not sufficient shares are given or if not sufficient valid shares are given.
+    /// Takes also the node's individual public keys as input, which means the individual public keys
+    /// must be available: calculating them is comparatively expensive. Note that combine_all does not
+    /// take the individual public keys as input.
+    pub fn combine_valid_shares(
         nodes: &[(NodeIndex, G2Affine, EncryptedKeyShare)],
         reconstruction_threshold: usize,
         master_pk: &G2Affine,
@@ -305,33 +356,24 @@ impl EncryptedKey {
             return Err(EncryptedKeyCombinationError::InsufficientShares);
         }
 
-        let l = LagrangeCoefficients::at_zero(&nodes.iter().map(|i| i.0).collect::<Vec<_>>())
-            .map_err(|_| EncryptedKeyCombinationError::DuplicateNodeIndex)?;
+        let valid_shares: Vec<_> = nodes
+            .iter()
+            .filter(|(_node_index, node_pk, node_eks)| {
+                node_eks.is_valid(master_pk, node_pk, derivation_path, did, tpk)
+            })
+            .take(reconstruction_threshold)
+            .cloned() // TODO: can we avoid cloning somehow?
+            .map(|(node_index, _node_pk, node_eks)| (node_index, node_eks))
+            .collect();
 
-        let c1 = l
-            .interpolate_g1(&nodes.iter().map(|i| &i.2.c1).collect::<Vec<_>>())
-            .expect("Number of nodes and shares guaranteed equal");
-        let c2 = l
-            .interpolate_g2(&nodes.iter().map(|i| &i.2.c2).collect::<Vec<_>>())
-            .expect("Number of nodes and shares guaranteed equal");
-        let c3 = l
-            .interpolate_g1(&nodes.iter().map(|i| &i.2.c3).collect::<Vec<_>>())
-            .expect("Number of nodes and shares guaranteed equal");
-
-        let c = Self { c1, c2, c3 };
-
-        if !c.is_valid(master_pk, derivation_path, did, tpk) {
-            // Detect and return the invalid share id(s)
-            let mut invalid = vec![];
-
-            for (node_id, node_pk, node_eks) in nodes {
-                if !node_eks.is_valid(master_pk, node_pk, derivation_path, did, tpk) {
-                    invalid.push(*node_id);
-                }
-            }
-
-            return Err(EncryptedKeyCombinationError::InvalidKeyShares(invalid));
+        if valid_shares.len() < reconstruction_threshold {
+            return Err(EncryptedKeyCombinationError::InsufficientValidKeyShares);
         }
+
+        // TODO: If combining sufficient valid shares does not guarantee a valid key, we
+        // have to use combine_all (which includes the validity check) instead of
+        // combine_unchecked here (or add an explicit validity check here).
+        let c = Self::combine_unchecked(&valid_shares, reconstruction_threshold)?;
 
         Ok(c)
     }
