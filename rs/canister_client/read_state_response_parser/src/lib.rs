@@ -120,67 +120,6 @@ pub fn parse_subnet_read_state_response(
     }
 }
 
-/// Given a CBOR response from a `query`, extract the response.
-pub fn parse_query_response(message: &CBOR) -> Result<RequestStatus, String> {
-    let content = match message {
-        CBOR::Map(content) => Ok(content),
-        cbor => Err(format!(
-            "Expected a Map in the reply root but found {:?}",
-            cbor
-        )),
-    }?;
-
-    let status_key = &CBOR::Text("status".to_string());
-    let status = match &content.get(status_key) {
-        Some(CBOR::Text(t)) => Ok(t.to_string()),
-        Some(cbor) => Err(format!(
-            "Expected Text at key '{:?}', but found '{:?}'",
-            status_key, cbor
-        )),
-        None => Err(format!(
-            "Key '{:?}' not found in '{:?}'",
-            status_key, &content
-        )),
-    }?;
-
-    let reply_key = CBOR::Text("reply".to_string());
-    let reply = match &content.get(&reply_key) {
-        Some(CBOR::Map(btree)) => Ok(Some(btree)),
-        Some(cbor) => Err(format!(
-            "Expected Map at key '{:?}' but found '{:?}'",
-            reply_key, cbor
-        )),
-        None => Ok(None),
-    }?;
-
-    let reply = match reply {
-        None => Ok(None),
-        Some(r) => {
-            let arg_key = CBOR::Text("arg".to_string());
-            match r.get(&arg_key) {
-                Some(CBOR::Bytes(bytes)) => Ok(Some(bytes.to_vec())),
-                Some(cbor) => Err(format!(
-                    "Expected the value of key '{:?}' to be bytes, but found '{:?}'",
-                    arg_key, cbor
-                )),
-                None => Ok(None),
-            }
-        }
-    }?;
-
-    // Attempt to extract reject message from reply
-    let mut reject_message = None;
-    if let Some(CBOR::Text(b)) = &content.get(&CBOR::Text("reject_message".to_string())) {
-        reject_message = Some(b.to_string());
-    }
-
-    Ok(RequestStatus {
-        status,
-        reply,
-        reject_message,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
