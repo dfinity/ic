@@ -9,8 +9,8 @@ declare_log_buffer!(name = DEBUG, capacity = 1000);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum Priority {
-    WARN,
-    DEBUG,
+    Warn,
+    Debug,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

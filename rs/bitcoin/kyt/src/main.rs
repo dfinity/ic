@@ -244,7 +244,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
                 entries.entries.push(LogEntry {
                     timestamp: entry.timestamp,
                     counter: entry.counter,
-                    priority: Priority::WARN,
+                    priority: Priority::Warn,
                     file: entry.file.to_string(),
                     line: entry.line,
                     message: entry.message,
@@ -256,7 +256,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
                 entries.entries.push(LogEntry {
                     timestamp: entry.timestamp,
                     counter: entry.counter,
-                    priority: Priority::DEBUG,
+                    priority: Priority::Debug,
                     file: entry.file.to_string(),
                     line: entry.line,
                     message: entry.message,
