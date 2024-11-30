@@ -3,7 +3,7 @@ use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use ic_canister_log::Sink;
 use ic_ledger_canister_core::ledger::{
-    blocks_to_archive, remove_archived_blocks, LedgerAccess,
+    blocks_to_archive, remove_archived_blocks, LedgerAccess, LedgerContext,
 };
 use ic_ledger_core::block::BlockIndex;
 use icrc_ledger_types::icrc1::account::Account;
