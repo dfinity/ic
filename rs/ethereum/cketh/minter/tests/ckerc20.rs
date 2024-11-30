@@ -1701,7 +1701,7 @@ fn should_retrieve_minter_info() {
     );
 }
 
-// In case a contract needs to be changed, the contract ABI must be preserved
+// If a contract needs to be changed, the contract ABI must be preserved,
 // otherwise this will be a breaking change for clients (e.g. front-ends).
 #[test]
 #[allow(deprecated)]
