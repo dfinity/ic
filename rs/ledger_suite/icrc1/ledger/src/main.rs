@@ -16,8 +16,8 @@ use ic_icrc1::{
     Operation, Transaction,
 };
 use ic_icrc1_ledger::{
-    balances_len, clear_stable_allowance_data, clear_stable_balances_data, is_ready, ledger_state,
-    panic_if_not_ready, set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
+    clear_stable_allowance_data, is_ready, ledger_state, panic_if_not_ready, set_ledger_state,
+    LEDGER_VERSION, UPGRADES_MEMORY,
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_ledger_canister_core::ledger::{
@@ -241,9 +241,6 @@ fn post_upgrade(args: Option<LedgerArgument>) {
         set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
         log_message("Upgrading from version {upgrade_from_version} which does store balances in stable structures, clearing stable balances data.");
         clear_stable_balances_data();
-        Access::with_ledger_mut(|ledger| {
-            ledger.copy_token_pool();
-        });
     }
     if upgrade_from_version == 0 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
@@ -294,7 +291,9 @@ fn migrate_next_part(instruction_limit: u64) {
                     if ledger.migrate_one_expiration() {
                         migrated_expirations += 1;
                     } else {
-                        set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
+                        set_ledger_state(LedgerState::Migrating(
+                            LedgerField::Balances,
+                        ));
                     }
                 }
                 LedgerField::Balances => {
@@ -419,7 +418,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             )?;
             w.encode_gauge(
                 "ledger_balance_store_entries",
-                balances_len() as f64,
+                ledger.balances().store.len() as f64,
                 "Total number of accounts in the balance store.",
             )?;
         }

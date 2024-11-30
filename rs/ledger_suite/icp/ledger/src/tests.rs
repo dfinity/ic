@@ -32,6 +32,71 @@ fn ts(n: u64) -> TimeStamp {
 }
 
 #[test]
+fn balances_overflow() {
+    let balances = LedgerBalances::new();
+    let mut state = Ledger {
+        balances,
+        maximum_number_of_accounts: 8,
+        accounts_overflow_trim_quantity: 2,
+        minting_account_id: Some(PrincipalId::new_user_test_id(137).into()),
+        ..Default::default()
+    };
+    assert_eq!(state.balances.token_pool, Tokens::MAX);
+    println!(
+        "minting canister initial balance: {}",
+        state.balances.token_pool
+    );
+    let mut credited = Tokens::ZERO;
+
+    // 11 accounts. The one with 0 will not be added
+    // The rest will be added and trigger a trim of 2 once
+    // the total number reaches 8 + 2
+    // the number of active accounts won't go below 8 after trimming
+    for i in 0..11 {
+        let amount = Tokens::new(i, 0).unwrap();
+        state
+            .add_payment(
+                Memo::default(),
+                Operation::Mint {
+                    to: PrincipalId::new_user_test_id(i).into(),
+                    amount,
+                },
+                None,
+            )
+            .unwrap();
+        credited = credited.checked_add(&amount).unwrap();
+    }
+    println!("amount credited to accounts: {}", credited);
+
+    println!("balances: {:?}", state.balances);
+
+    // The two accounts with lowest balances, 0 and 1 respectively, have been
+    // removed
+    assert_eq!(state.balances.store.len(), 8);
+    assert_eq!(
+        state
+            .balances
+            .account_balance(&PrincipalId::new_user_test_id(0).into()),
+        Tokens::ZERO
+    );
+    assert_eq!(
+        state
+            .balances
+            .account_balance(&PrincipalId::new_user_test_id(1).into()),
+        Tokens::ZERO
+    );
+    // We have credited 55 Tokens to various accounts but the three accounts
+    // with lowest balances, 0, 1 and 2, should have been removed and their
+    // balance returned to the minting canister
+    let expected_minting_canister_balance = Tokens::MAX
+        .checked_sub(&credited)
+        .unwrap()
+        .checked_add(&Tokens::new(1 + 2, 0).unwrap())
+        .unwrap();
+    assert_eq!(state.balances.token_pool, expected_minting_canister_balance);
+}
+
+#[test]
 fn balances_remove_accounts_with_zero_balance() {
     let mut ctx = Ledger::default();
     let canister = CanisterId::from_u64(7).get().into();
