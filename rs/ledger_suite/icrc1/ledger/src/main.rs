@@ -16,7 +16,7 @@ use ic_icrc1::{
     Operation, Transaction,
 };
 use ic_icrc1_ledger::{
-    clear_stable_allowance_data, clear_stable_balances_data, is_ready, ledger_state,
+    balances_len, clear_stable_allowance_data, clear_stable_balances_data, is_ready, ledger_state,
     panic_if_not_ready, set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
@@ -419,7 +419,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             )?;
             w.encode_gauge(
                 "ledger_balance_store_entries",
-                ledger.balances_len() as f64,
+                balances_len() as f64,
                 "Total number of accounts in the balance store.",
             )?;
         }
