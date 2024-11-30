@@ -748,7 +748,7 @@ impl Ledger {
 
     pub fn copy_token_pool(&mut self) {
         self.stable_balances.token_pool = self.balances.token_pool;
-    }
+    }    
 }
 
 impl LedgerContext for Ledger {
