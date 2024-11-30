@@ -172,7 +172,7 @@ type MinterInfo = record {
     // Address of the ERC20 helper smart contract
     erc20_helper_contract_address: opt text;
 
-    // Address of the ETH or ERC20 deposit with subaccount helper smart contract
+    // Address of the ETH or ERC20 deposit with subaccount helper smart contract.
     deposit_with_subaccount_helper_contract_address: opt text;
 
     // Information of supported ERC20 tokens.
