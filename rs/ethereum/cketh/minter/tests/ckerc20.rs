@@ -1681,6 +1681,7 @@ fn should_retrieve_minter_info() {
             erc20_helper_contract_address: Some(format_ethereum_address_to_eip_55(
                 ERC20_HELPER_CONTRACT_ADDRESS
             )),
+            deposit_with_subaccount_helper_contract_address: None,
             supported_ckerc20_tokens: Some(supported_ckerc20_tokens),
             minimum_withdrawal_amount: Some(Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT)),
             ethereum_block_height: Some(Finalized),
@@ -1690,6 +1691,9 @@ fn should_retrieve_minter_info() {
             erc20_balances: Some(erc20_balances),
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
+            last_deposit_with_subaccount_scraped_block_number: Some(
+                LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()
+            ),
             cketh_ledger_id: Some(ckerc20.cketh_ledger_id()),
             evm_rpc_id: ckerc20.cketh.evm_rpc_id.map(Principal::from),
         }
