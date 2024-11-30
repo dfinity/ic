@@ -226,7 +226,7 @@ pub struct FinalizerMetrics {
     pub batches_delivered: IntCounterVec,
     pub batch_height: IntGauge,
     pub batch_delivery_interval: Histogram,
-    pub finalization_latency: Histogram,
+    pub batch_delivery_latency: Histogram,
     pub ingress_messages_delivered: Histogram,
     pub ingress_message_bytes_delivered: Histogram,
     pub xnet_bytes_delivered: Histogram,
@@ -262,11 +262,11 @@ impl FinalizerMetrics {
                 // 1ms, 2ms, 5ms, ..., 10s, 20s, 50s
                 decimal_buckets(-3, 1),
             ),
-            finalization_latency: metrics_registry.histogram(
-                "consensus_finalization_latency_seconds",
-                "Wall time duration between block making and block finalization, in seconds",
-                // 100ms, 200ms, 500ms, ..., 10s, 20s, 50s
-                decimal_buckets(-1, 2),
+            batch_delivery_latency: metrics_registry.histogram(
+                "consensus_batch_delivery_latency_seconds",
+                "Wall time duration between block making and batch delivery, in seconds",
+                // 10ms, 20ms, 50ms, ..., 10s, 20s, 50s
+                decimal_buckets(-2, 2),
             ),
             finalization_certified_state_difference: metrics_registry.int_gauge(
                 "consensus_finalization_certified_state_difference",

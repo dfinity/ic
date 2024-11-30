@@ -136,7 +136,7 @@ impl Finalizer {
                 self.last_batch_delivered_at.borrow_mut().replace(now);
                 // Batch creation time is essentially wall time (on some replica), so the median
                 // duration across the subnet is meaningful.
-                self.metrics.finalization_latency.observe(
+                self.metrics.batch_delivery_latency.observe(
                     system_time_now()
                         .saturating_duration_since(block_stats.block_time)
                         .as_secs_f64(),
