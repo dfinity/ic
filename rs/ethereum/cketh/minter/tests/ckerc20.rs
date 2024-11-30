@@ -25,7 +25,8 @@ use ic_cketh_test_utils::{
     format_ethereum_address_to_eip_55, CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
     DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
     DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
-    DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_USER_SUBACCOUNT, EFFECTIVE_GAS_PRICE,
+    DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_USER_SUBACCOUNT,
+    DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS, EFFECTIVE_GAS_PRICE,
     ERC20_HELPER_CONTRACT_ADDRESS, ETH_HELPER_CONTRACT_ADDRESS, GAS_USED,
     LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
 };
@@ -1698,6 +1699,45 @@ fn should_retrieve_minter_info() {
             evm_rpc_id: ckerc20.cketh.evm_rpc_id.map(Principal::from),
         }
     );
+}
+
+// In case a contract needs to be changed, the contract ABI must be preserved
+// otherwise this will be a breaking change for clients (e.g. front-ends).
+#[test]
+#[allow(deprecated)]
+fn should_not_change_address_of_other_contracts_when_adding_new_contract() {
+    let ckerc20 = CkErc20Setup::default();
+    let info_at_start = ckerc20.cketh.get_minter_info();
+    assert_eq!(
+        info_at_start,
+        MinterInfo {
+            smart_contract_address: Some(format_ethereum_address_to_eip_55(
+                ETH_HELPER_CONTRACT_ADDRESS
+            )),
+            eth_helper_contract_address: Some(format_ethereum_address_to_eip_55(
+                ETH_HELPER_CONTRACT_ADDRESS
+            )),
+            erc20_helper_contract_address: Some(format_ethereum_address_to_eip_55(
+                ERC20_HELPER_CONTRACT_ADDRESS
+            )),
+            ..info_at_start.clone()
+        }
+    );
+
+    let ckerc20 = ckerc20.add_support_for_subaccount();
+
+    assert_eq!(
+        ckerc20.get_minter_info(),
+        MinterInfo {
+            deposit_with_subaccount_helper_contract_address: Some(
+                format_ethereum_address_to_eip_55(DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS)
+            ),
+            last_deposit_with_subaccount_scraped_block_number: Some(
+                LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()
+            ),
+            ..info_at_start
+        }
+    )
 }
 
 #[test]
