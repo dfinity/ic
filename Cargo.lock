@@ -6065,6 +6065,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-management-canister-types",
  "ic-protobuf",
+ "ic-read-state-response-parser",
  "ic-test-utilities",
  "ic-test-utilities-types",
  "ic-types",
@@ -8465,6 +8466,7 @@ dependencies = [
  "ic-metrics",
  "ic-pprof",
  "ic-protobuf",
+ "ic-read-state-response-parser",
  "ic-registry-client-helpers",
  "ic-registry-keys",
  "ic-registry-provisional-whitelist",
@@ -10908,6 +10910,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-read-state-response-parser"
+version = "0.9.0"
+dependencies = [
+ "ic-canonical-state",
+ "ic-certification 0.9.0",
+ "ic-certification-test-utils",
+ "ic-crypto-tree-hash",
+ "ic-types",
+ "serde",
+ "serde_cbor",
+ "tree-deserializer",
+]
+
+[[package]]
 name = "ic-recovery"
 version = "0.1.0"
 dependencies = [
@@ -11587,7 +11603,6 @@ dependencies = [
  "hex",
  "ic-agent",
  "ic-base-types",
- "ic-canister-client",
  "ic-crypto-ed25519",
  "ic-crypto-sha2",
  "ic-crypto-tree-hash",
@@ -11611,6 +11626,7 @@ dependencies = [
  "ic-nns-governance-init",
  "ic-nns-handler-root",
  "ic-nns-test-utils",
+ "ic-read-state-response-parser",
  "ic-rosetta-test-utils",
  "ic-types",
  "icp-ledger",
