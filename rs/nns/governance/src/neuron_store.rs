@@ -873,7 +873,7 @@ impl NeuronStore {
 
         possible_results
             .into_iter()
-            .filter_map(|neuron_id: Option<NeuronId>| neuron_id)
+            .flatten()
             .min_by_key(|neuron_id| neuron_id.id)
     }
 
