@@ -516,8 +516,52 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
 
 /// Benchmark list_neurons
 #[bench(raw)]
-fn list_neurons() -> BenchResult {
+fn list_neurons_stable() -> BenchResult {
     let _f = temporarily_enable_active_neurons_in_stable_memory();
+    let neurons = (0..100)
+        .map(|id| {
+            (id, {
+                let mut neuron: NeuronProto = make_neuron(
+                    id,
+                    PrincipalId::new_user_test_id(id),
+                    1_000_000_000,
+                    hashmap! {}, // get the default followees
+                )
+                .into();
+                neuron.hot_keys = vec![PrincipalId::new_user_test_id(1)];
+                neuron
+            })
+        })
+        .collect::<BTreeMap<u64, NeuronProto>>();
+
+    let governance_proto = GovernanceProto {
+        neurons,
+        ..GovernanceProto::default()
+    };
+
+    let mut governance = Governance::new(
+        governance_proto,
+        Box::new(MockEnvironment::new(Default::default(), 0)),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+
+    let request = ListNeurons {
+        neuron_ids: vec![],
+        include_neurons_readable_by_caller: true,
+        include_empty_neurons_readable_by_caller: Some(true),
+        include_public_neurons_in_full_neurons: None,
+    };
+
+    bench_fn(|| {
+        governance.list_neurons(&request, PrincipalId::new_user_test_id(1));
+    })
+}
+
+/// Benchmark list_neurons
+#[bench(raw)]
+fn list_neurons_heap() -> BenchResult {
+    let _f = temporarily_disable_active_neurons_in_stable_memory();
     let neurons = (0..100)
         .map(|id| {
             (id, {
