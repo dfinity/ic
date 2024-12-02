@@ -4,7 +4,7 @@ use std::process::Command;
 
 use anyhow::{bail, Result};
 
-/// Systemd requires ip addresses to be specified with the prefix length
+/// Systemd requires IP addresses to be specified with the prefix length
 pub fn to_cidr(ipv6_address: Ipv6Addr, prefix_length: u8) -> String {
     format!("{}/{}", ipv6_address, prefix_length)
 }
@@ -14,20 +14,14 @@ pub fn get_command_stdout<'a, StringIter: IntoIterator<Item = &'a str>>(
     command: &str,
     args: StringIter,
 ) -> Result<String> {
-    let mut cmd = Command::new(command);
-    let mut arg_string: String = String::new();
-    // TODO - replace loop with single chain call pipeline.
-    for arg in args {
-        cmd.arg(arg);
-        arg_string.push_str(arg);
-        arg_string.push(' ');
-    }
-    let output = cmd.output()?;
+    let args_vec: Vec<&str> = args.into_iter().collect();
+
+    let output = Command::new(command).args(&args_vec).output()?;
     if !output.status.success() {
         bail!(
             "Error running command: '{} {}': {:?}",
             command,
-            arg_string,
+            args_vec.join(" "),
             output.stderr
         );
     }
@@ -52,32 +46,31 @@ pub fn intersperse(source: &str, to_inject: char, spacing: usize) -> String {
     result
 }
 
-// Retry the given function `f` until either:
-// * f has been called `attempts` times
-// * `stop_pred` returns true when passed the result of `f()`
-// `wait_func` is called before each attempt.
-// The result returned is either the one held after `stop_pred` returns true or the one held after `attempts` has been breached.
+/// Retry the given function `f` until either:
+/// * f has been called `attempts` times
+/// * `stop_pred` returns true when passed the result of `f()`
+///
+/// The result returned is either the one held after `stop_pred` returns true or the one held after `attempts` has been breached.
 pub fn retry_pred<F, P, T, W>(attempts: usize, f: F, stop_pred: P, wait_func: W) -> Result<T>
 where
-    F: Fn() -> Result<T, anyhow::Error>,
+    F: Fn() -> Result<T>,
     P: Fn(&Result<T>) -> bool,
     W: Fn(usize),
 {
-    for attempt in 1..attempts - 1 {
-        // Final attempt is last line of function
-        wait_func(attempt);
+    for attempt in 1..attempts {
         let result = f();
         if stop_pred(&result) {
             return result;
         }
+        wait_func(attempt);
     }
     f()
 }
 
-// Retry until `f` returns ok() or has been called `attempts` times
+/// Retry until `f` returns ok() or has been called `attempts` times
 pub fn retry<F, T>(attempts: usize, f: F, wait: std::time::Duration) -> Result<T>
 where
-    F: Fn() -> Result<T, anyhow::Error>,
+    F: Fn() -> Result<T>,
 {
     retry_pred(
         attempts,
@@ -88,7 +81,7 @@ where
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::*;
     #[test]
     fn test_intersperse() {
