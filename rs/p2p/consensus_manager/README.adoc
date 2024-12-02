@@ -5,7 +5,6 @@
 == Overview ==
 
 
-
 == Requirements ==
 
 [cols="3,3,3"]
@@ -14,20 +13,20 @@
 | **Purpose**
 | **Implementation Requirement**
 
-| Abortable Broadcast Interface (i.e. similar to PubSub interface but with abort capabilities)
-| Simplifies application development by abstracting communication between sets of nodes, allowing developers to focus on application logic instead of low-level networking.
-| Eventual abortable delivery 
+| PubSub-like library
+| Simplifies application development by abstracting one-to-all communication within a set of nodes. By providing non IO-bound interface ....
+| https://en.wikipedia.org/wiki/Eventual_consistency[Eventual consistency]
 
 | Multitenancy of applications
 | Enables multiple applications to safely use the library, ensuring isolation and uninterrupted operation across applications.
-| Isolation, Fair scheduling when at capacity
+| Fair scheduling across peers when at capacity
 
-| Operates in P2P networks with Byzantine peers
+| Operates in P2P networks with Byzantine peers i.e. bad network or peers don't affect the rate of publishing/creating messages.
 | Supports deployment in real-world environments, including networks with faulty or malicious nodes.
-| Bounded memory
+| non IO-bound and bounded memory.
 
 | Scalable and resource-efficient
-| Optimizes usage of shared resources (e.g., CPU, file descriptors) to maintain performance under high demand and prevent resource exhaustion.
+| Optimizes usage of shared resources (e.g., CPU, memory) to maintain performance under high demand and prevent resource exhaustion.
 | ?!
 
 |===
