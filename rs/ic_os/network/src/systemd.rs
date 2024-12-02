@@ -124,29 +124,39 @@ pub fn generate_systemd_config_files(
     eprintln!("Interfaces sorted by speed: {:?}", interfaces);
 
     let ping_target = network_info.ipv6_gateway.to_string();
-    // Old nodes are still configured with a local IPv4 interface connection
-    // Local IPv4 interfaces must be filtered out
-    let ipv6_interfaces: Vec<&Interface> = interfaces
-        .iter()
-        .filter(|i| {
-            match has_ipv6_connectivity(i, ipv6_address, network_info.ipv6_subnet, &ping_target) {
-                Ok(result) => result,
-                Err(e) => {
-                    eprintln!("Error testing connectivity on {}: {}", &i.name, e);
-                    false
-                }
-            }
-        })
-        .collect();
+    let mut fastest_interface = None;
 
-    // Only assign the fastest interface to ipv6.
-    let fastest_interface = ipv6_interfaces
-        .first()
-        .context("Could not find any network interfaces")?;
+    for interface in interfaces.iter() {
+        // Old nodes are still configured with a local IPv4 interface connection
+        // Local IPv4 interfaces must be filtered out
+        match has_ipv6_connectivity(
+            interface,
+            ipv6_address,
+            network_info.ipv6_subnet,
+            &ping_target,
+        ) {
+            Ok(true) => {
+                fastest_interface = Some(interface);
+                break;
+            }
+            Ok(false) => {
+                eprintln!(
+                    "Interface {} does not have IPv6 connectivity.",
+                    interface.name
+                );
+            }
+            Err(e) => {
+                eprintln!("Error testing connectivity on {}: {}", interface.name, e);
+            }
+        }
+    }
+
+    let fastest_interface = fastest_interface
+        .context("Could not find any network interfaces with IPv6 connectivity")?;
 
     eprintln!("Using fastest interface: {:?}", fastest_interface);
 
-    // Format the ip address to include the subnet length. See `man systemd.network`.
+    // Format the IP address to include the subnet length. See `man systemd.network`.
     let ipv6_address = format!("{}/{}", &ipv6_address.to_string(), network_info.ipv6_subnet);
     generate_and_write_systemd_files(
         output_directory,
