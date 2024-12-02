@@ -7,27 +7,20 @@
 
 == Requirements ==
 
-[cols="3,3,3"]
+[cols="3,3,3", options="header"]
 |===
-| **Capability**
-| **Purpose**
-| **Implementation Requirement**
+| **Capability** | **Purpose** | **Implementation Requirements**
 
-| PubSub-like library
-| Simplifies application development by abstracting one-to-all communication within a set of nodes. By providing non IO-bound interface ....
-| https://en.wikipedia.org/wiki/Eventual_consistency[Eventual consistency]
+| PubSub-like library 
+| Simplifies application development by abstracting one-to-many communication within a set of nodes.
+| The library must implement https://en.wikipedia.org/wiki/Eventual_consistency[eventual consistency].
 
 | Multitenancy of applications
-| Enables multiple applications to safely use the library, ensuring isolation and uninterrupted operation across applications.
-| Fair scheduling across peers when at capacity
+| Allows multiple applications to safely use the library, ensuring isolation and uninterrupted operation across all applications.
+| Must implement fair scheduling across peers to ensure resource allocation and isolation.
 
-| Operates in P2P networks with Byzantine peers i.e. bad network or peers don't affect the rate of publishing/creating messages.
-| Supports deployment in real-world environments, including networks with faulty or malicious nodes.
-| non IO-bound and bounded memory.
-
-| Scalable and resource-efficient
-| Optimizes usage of shared resources (e.g., CPU, memory) to maintain performance under high demand and prevent resource exhaustion.
-| ?!
+| Operation in P2P networks with Byzantine peers
+| Ensures reliable message publishing and creation rates, even in networks with faulty or malicious nodes.
+| The implementation must provide a non-IO-bound API and be memory-bounded.
 
 |===
-
