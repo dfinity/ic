@@ -2570,7 +2570,8 @@ pub mod update_canister_settings {
         pub log_visibility: Option<i32>,
         #[prost(uint64, optional, tag = "6")]
         pub wasm_memory_limit: Option<u64>,
-        /// XXX HOW TO RUN PROTOBUF GENERATOR TO UPDATE THIS STRUCT?
+        #[prost(uint64, optional, tag = "7")]
+        pub wasm_memory_threshold: ::core::option::Option<u64>,
     }
     /// Log visibility of a canister.
     #[derive(
