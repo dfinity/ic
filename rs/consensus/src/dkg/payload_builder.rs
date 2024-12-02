@@ -171,7 +171,7 @@ fn create_data_payload(
     ))
 }
 
-fn create_early_remote_transcripts(
+pub(crate) fn create_early_remote_transcripts(
     pool_reader: &PoolReader<'_>,
     crypto: &dyn ConsensusCrypto,
     parent: &Block,
@@ -181,21 +181,23 @@ fn create_early_remote_transcripts(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)> {
-    // If we cannot access the state manage, we don't return an error.
-    // This is because the early remote transcripts is an optimization.
+    // If we cannot access the state manager, we don't return an error.
+    // This is because the early remote transcripts are an optimization.
     // If we don't return any transcripts here, the protocol will continue anyway
-    // and return the transcripts in the summary block
+    // and return the transcripts (or their errors) in the summary block
     let Ok(state) = state_manager.get_state_at(validation_context.certified_height) else {
         return vec![];
     };
 
-    // TODO: Since this function is relatively expensive, we should only do this if there are any outstanding
-    // Remote DKG contexts
+    //  Since this function is relatively expensive, we simply return, if there are no outstanding DKG constexts
+    if number_of_contexts(state.get_ref()) == 0 {
+        return vec![];
+    }
 
     // Get all dealings that have not been used in a transcript already
     let all_dealings = utils::get_dkg_dealings(pool_reader, parent, true);
 
-    // Collect map of remote target_ids to ni_dkg_ids
+    // Collect map of the dealings remote target_ids to the dkg_ids
     let mut remote_contexts: BTreeMap<NiDkgTargetId, Vec<NiDkgId>> = BTreeMap::new();
     for (target_id, dkg_id) in
         all_dealings
@@ -211,7 +213,7 @@ fn create_early_remote_transcripts(
 
     let mut selected_transcripts = vec![];
     for (_, dkg_ids) in remote_contexts {
-        // For each target_id, try to build the necessary transcripts
+        // For each target_id, try to build the necessary (dkg_id, callback_id transcript) triple
         let mut transcripts = dkg_ids
             .iter()
             // Lookup the config from the summary
@@ -226,7 +228,7 @@ fn create_early_remote_transcripts(
                 get_callback_id_from_id(state.get_ref(), dkg_id)
                     .map(|callback_id| (dkg_id, callback_id, config))
             })
-            // Generate the transcripts, not that we just skip errors, they will
+            // Generate the transcripts. We just skip errors, they will
             // be handled in the summary block, if we fail to create an early transcript
             .filter_map(|(dkg_id, callback_id, config)| {
                 match create_transcript(crypto, config, &all_dealings, &logger) {
@@ -839,6 +841,14 @@ fn get_callback_id_from_id(state: &ReplicatedState, id: &NiDkgId) -> Option<Call
             }
         })
         .last()
+}
+
+fn number_of_contexts(state: &ReplicatedState) -> usize {
+    state
+        .metadata
+        .subnet_call_context_manager
+        .setup_initial_dkg_contexts
+        .len()
 }
 
 /// This function is called for each entry on the SubnetCallContext. It returns

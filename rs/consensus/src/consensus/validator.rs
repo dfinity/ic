@@ -1312,6 +1312,7 @@ impl Validator {
             proposal.payload.as_ref(),
             self.state_manager.as_ref(),
             &proposal.context,
+            self.log.clone(),
             &self.metrics.dkg_validator,
         )
         .map_err(|err| {
