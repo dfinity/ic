@@ -3675,7 +3675,16 @@ pub struct UpgradeJournal {
     PartialEq,
     ::prost::Message,
 )]
-pub struct GetUpgradeJournalRequest {}
+pub struct GetUpgradeJournalRequest {
+    /// Maximum number of journal entries to return, from newest to oldest.
+    /// If not specified, defaults to 100. Values larger than 100 will be capped at 100.
+    #[prost(uint64, optional, tag = "1")]
+    pub max_entries: ::core::option::Option<u64>,
+    /// The starting index from which to return entries, counting from the oldest entry (0).
+    /// If not specified, return the most recent entries.
+    #[prost(uint64, optional, tag = "2")]
+    pub start_index: ::core::option::Option<u64>,
+}
 #[derive(
     candid::CandidType,
     candid::Deserialize,

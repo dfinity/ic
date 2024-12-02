@@ -806,7 +806,10 @@ type UpgradeJournal = record {
   entries : vec UpgradeJournalEntry;
 };
 
-type GetUpgradeJournalRequest = record {};
+type GetUpgradeJournalRequest = record {
+  max_entries : opt nat64;
+  start_index : opt nat64;
+};
 
 type GetUpgradeJournalResponse = record {
   upgrade_steps : opt Versions;

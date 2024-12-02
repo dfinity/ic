@@ -3420,13 +3420,27 @@ impl From<pb_api::UpgradeJournal> for pb::UpgradeJournal {
 }
 
 impl From<pb::GetUpgradeJournalRequest> for pb_api::GetUpgradeJournalRequest {
-    fn from(_: pb::GetUpgradeJournalRequest) -> Self {
-        Self {}
+    fn from(request: pb::GetUpgradeJournalRequest) -> Self {
+        let pb::GetUpgradeJournalRequest {
+            max_entries,
+            start_index,
+        } = request;
+        Self {
+            max_entries,
+            start_index,
+        }
     }
 }
 impl From<pb_api::GetUpgradeJournalRequest> for pb::GetUpgradeJournalRequest {
-    fn from(_: pb_api::GetUpgradeJournalRequest) -> Self {
-        Self {}
+    fn from(request: pb_api::GetUpgradeJournalRequest) -> Self {
+        let pb_api::GetUpgradeJournalRequest {
+            max_entries,
+            start_index,
+        } = request;
+        Self {
+            max_entries,
+            start_index,
+        }
     }
 }
 
