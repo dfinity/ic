@@ -126,18 +126,16 @@ fn validate_required_field<'a, Inner>(
         .ok_or_else(|| format!("The {} field must be populated.", field_name))
 }
 
-/// Return an Err whose inner value describes (in detail) what is wrong with a field value (should
-/// be bounded), and where within some (Protocol Buffers message) struct.
+/// Return an Err whose inner value describes (in detail) what is wrong with `field_value`,
+/// and where within some (Protocol Buffers message) struct.
 ///
 /// Only up to the first `MAX_SCALAR_FIELD_LEN_BYTES` bytes will be taken from `field_value`.
 fn field_err(field_name: &str, field_value: String, defect: &str) -> Result<(), String> {
     let mut bounded_field_value = String::new();
-    // Searching for the longest byte prefix that is a valid string is expensive in the worst case.
-    // This is because unicode characters are unbounded. Instead, concatenate characters one-by-one,
-    // until we either run out of characters or exceed the limit (in which case we pop the last
-    // character to still comply with the limits). Note that a `char` is always 4 bytes, but
-    // pushing it to a string does not always increase a string's byte size by 4 bytes.
-    // For example:
+    // Concatenate characters one-by-one, until we either run out of characters or exceed
+    // the limit (in which case we pop the last character to still comply with the limits).
+    // Note that a `char` is always 4 bytes, but pushing it to a string does not always increase
+    // a string's byte size by 4 bytes. For example:
     // ```
     // println!("bytes = {}", std::mem::size_of_val(&'\u{200D}')); // bytes = 4
     // println!("bytes = {}", std::mem::size_of_val("\u{200D}"));  // bytes = 3
@@ -310,25 +308,26 @@ mod tests {
 
     #[test]
     fn test_giant_field_err() {
-        let expected_upper_bound = 12_500;
+        let barely_not_too_large_len = 12_500;
 
         let run_test_for_value_of_size = |value_size| {
             let input_value: String = (0..value_size).map(|_| '🤝').collect();
             // Sanity check: We construct a string in which each character is encoded as 4 bytes.
             assert_eq!(input_value.len(), 4 * input_value.chars().count());
-            let observer_err = field_err("foo", input_value.clone(), "bar").unwrap_err();
+            let observer_err = field_err("field_name", input_value.clone(), "defect").unwrap_err();
             (input_value, observer_err)
         };
 
-        // Scenario A: maximum size that still fits.
+        // Value is (barely) not too large to be fully included in the defect description.
         {
-            let (input_value, observer_err) = run_test_for_value_of_size(expected_upper_bound);
+            let (input_value, observer_err) = run_test_for_value_of_size(barely_not_too_large_len);
             assert!(observer_err.contains(&input_value));
         }
 
-        // Scenario B: minimum size that no longer fits.
+        // Value is too large to be fully included in the defect description.
         {
-            let (input_value, observer_err) = run_test_for_value_of_size(expected_upper_bound + 1);
+            let (input_value, observer_err) =
+                run_test_for_value_of_size(barely_not_too_large_len + 1);
             assert!(
                 !observer_err.contains(&input_value),
                 "Expected ```{}``` not to contain ```{}```.",

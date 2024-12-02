@@ -1086,7 +1086,7 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     {
         defects.push(format!(
             "the maximum canister WASM and argument size \
-                 for UpgradeSnsControlledCanister is {} bytes.",
+             for UpgradeSnsControlledCanister is {} bytes.",
             MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
         ));
     }
