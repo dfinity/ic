@@ -76,7 +76,7 @@ impl UpdateCanisterSettings {
         let memory_allocation = settings.memory_allocation.map(Nat::from);
         let freezing_threshold = settings.freezing_threshold.map(Nat::from);
         let wasm_memory_limit = settings.wasm_memory_limit.map(Nat::from);
-        let _wasm_memory_threshold = settings.wasm_memory_threshold.map(Nat::from);
+        let wasm_memory_threshold = settings.wasm_memory_threshold.map(Nat::from);
         let log_visibility = match settings.log_visibility {
             Some(log_visibility) => Some(Self::valid_log_visibility(log_visibility)?),
             None => None,
@@ -91,6 +91,7 @@ impl UpdateCanisterSettings {
             wasm_memory_limit,
             log_visibility,
             reserved_cycles_limit,
+            wasm_memory_threshold,
         })
     }
 
@@ -260,6 +261,7 @@ mod tests {
                     freezing_threshold: Some(Nat::from(100u64)),
                     log_visibility: Some(RootLogVisibility::Public),
                     reserved_cycles_limit: None,
+                    wasm_memory_threshold: Some(Nat::from(1000u64)),
                 }
             }
         );
@@ -309,6 +311,7 @@ mod tests {
                 freezing_threshold: Some(Nat::from(100u64)),
                 log_visibility: Some(RootLogVisibility::Public),
                 reserved_cycles_limit: None,
+                wasm_memory_threshold: Some(Nat::from(1000u64)),
             }
         );
     }

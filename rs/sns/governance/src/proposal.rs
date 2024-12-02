@@ -3232,6 +3232,7 @@ mod tests {
             0,
             0,
             0,
+            0,
         )
     }
 
@@ -4542,6 +4543,7 @@ Version {
             reserved_cycles_limit: Some(1_000_000_000_000),
             log_visibility: Some(LogVisibility::Public as i32),
             wasm_memory_limit: Some(1_000_000_000),
+            wasm_memory_threshold: Some(1_000_000),
         })
         .unwrap();
     }
@@ -4668,6 +4670,7 @@ Payload rendering here"#
                 reserved_cycles_limit: Some(1_000_000_000_000),
                 log_visibility: Some(LogVisibility::Public as i32),
                 wasm_memory_limit: Some(1_000_000_000),
+                wasm_memory_threshold: Some(1_000_000),
             })
             .unwrap();
         assert_eq!(

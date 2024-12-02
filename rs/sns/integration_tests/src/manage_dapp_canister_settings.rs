@@ -106,6 +106,7 @@ fn test_manage_dapp_canister_settings_successful() {
             Some(1 << 30),
             100_000,
             Some(1_000_000_000),
+            0,
         ),
     );
 
@@ -121,6 +122,7 @@ fn test_manage_dapp_canister_settings_successful() {
                 reserved_cycles_limit: Some(0),
                 log_visibility: Some(LogVisibility::Controllers as i32),
                 wasm_memory_limit: Some(2_000_000_000),
+                wasm_memory_threshold: Some(0),
             },
         )),
         ..Default::default()
@@ -157,6 +159,7 @@ fn test_manage_dapp_canister_settings_successful() {
             Some(0),
             0,
             Some(2_000_000_000),
+            0,
         ),
     );
 }
@@ -232,6 +235,7 @@ fn test_manage_dapp_canister_settings_failure() {
             Some(1 << 30),
             100_000,
             Some(1_000_000_000),
+            0,
         ),
     );
 
@@ -303,6 +307,7 @@ fn test_manage_dapp_canister_settings_failure() {
             Some(1 << 30),
             100_000,
             Some(1_000_000_000),
+            0,
         ),
     );
 
