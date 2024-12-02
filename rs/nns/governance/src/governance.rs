@@ -141,6 +141,7 @@ pub mod tla_macros;
 #[cfg(feature = "tla")]
 pub mod tla;
 
+use crate::storage::with_voting_state_machines_mut;
 #[cfg(feature = "tla")]
 use std::collections::BTreeSet;
 #[cfg(feature = "tla")]
@@ -1187,6 +1188,9 @@ impl ProposalData {
             0 => {
                 if self.accepts_vote(now_seconds, voting_period_seconds) {
                     ProposalRewardStatus::AcceptVotes
+                    // voting_is_finished means !accepts_vote && some votes are still being processed
+                } else if !self.voting_is_finished(now_seconds, voting_period_seconds) {
+                    ProposalRewardStatus::VotesProcessing
                 } else {
                     ProposalRewardStatus::ReadyToSettle
                 }
@@ -1225,6 +1229,19 @@ impl ProposalData {
         // If the wait for quit threshold is unset (0), then proposals can
         // accept votes forever.
         now_seconds < self.get_deadline_timestamp_seconds(voting_period_seconds)
+    }
+
+    /// Returns if voting is closed along with whether or not any outstanding votes still
+    /// need to be cast (when processing following spans multiple messages).
+    pub fn voting_is_finished(&self, now_seconds: u64, voting_period_seconds: u64) -> bool {
+        let voting_closed = !self.accepts_vote(now_seconds, voting_period_seconds);
+        let votes_processed = with_voting_state_machines_mut(|vsm| {
+            vsm.with_machine(self.id.unwrap(), self.topic(), |machine| {
+                machine.is_voting_finished()
+            })
+        });
+
+        voting_closed && votes_processed
     }
 
     pub fn evaluate_wait_for_quiet(
@@ -1393,7 +1410,7 @@ impl ProposalData {
             // equivalent to (2 * yes > total) || (2 * no >= total).
             let majority =
                 (tally.yes > tally.total - tally.yes) || (tally.no >= tally.total - tally.no);
-            let expired = !self.accepts_vote(now_seconds, voting_period_seconds);
+            let expired = self.voting_is_finished(now_seconds, voting_period_seconds);
             let decision_reason = match (majority, expired) {
                 (true, true) => Some("majority and expiration"),
                 (true, false) => Some("majority"),
