@@ -643,8 +643,9 @@ pub async fn metrics_middleware(
             .observe(response_size as f64);
 
         // Anonymization
+        let s = anonymization_salt.load();
+
         let hash_fn = |v: &str| -> String {
-            let s = anonymization_salt.load();
             if s.is_none() {
                 return "N/A".to_string();
             }
