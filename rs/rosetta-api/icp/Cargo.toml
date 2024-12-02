@@ -26,10 +26,10 @@ ic-ledger-canister-blocks-synchronizer = { path = "ledger_canister_blocks_synchr
 ic-ledger-canister-core = { path = "../../ledger_suite/common/ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
-ic-read-state-response-parser = { path = "../../canister_client/read_state_response_parser" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
+ic-read-state-response-parser = { path = "../../canister_client/read_state_response_parser" }
 ic-types = { path = "../../types/types" }
 icp-ledger = { path = "../../ledger_suite/icp" }
 lazy_static = { workspace = true }
