@@ -3034,9 +3034,6 @@ impl Governance {
         &mut self,
         new_target: Version,
     ) -> Result<(), GovernanceError> {
-        // TODO[NNS1-3365]: Enable the AdvanceSnsTargetVersionFeature.
-        self.check_test_features_enabled();
-
         let (_, target_version) = self
             .proto
             .validate_new_target_version(Some(new_target))

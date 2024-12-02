@@ -52,6 +52,7 @@ use std::{
     convert::TryFrom,
     fmt::Write,
 };
+use time;
 
 /// The maximum number of bytes in an SNS proposal's title.
 pub const PROPOSAL_TITLE_BYTES_MAX: usize = 256;
@@ -1716,6 +1717,21 @@ fn validate_and_render_manage_dapp_canister_settings(
     }
 }
 
+/// Attempts to format `` as a human-readable string.
+///
+/// For example:
+/// ```
+/// assert_eq!(format_timestamp(1732896850), Some("2024-11-29 16:14:10 UTC".to_string()));
+/// ```
+fn format_timestamp(timestamp_seconds: u64) -> Option<String> {
+    let timestamp_seconds = i64::try_from(timestamp_seconds).ok()?;
+    let dt_offset = time::OffsetDateTime::from_unix_timestamp(timestamp_seconds).ok()?;
+    let format =
+        time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second] UTC")
+            .ok()?;
+    dt_offset.format(&format).ok()
+}
+
 /// Attempts to validate an `AdvanceSnsTargetVersion` action and render its human-readable text.
 /// Invalidates the action in the following cases:
 /// - There are no pending upgrades.
@@ -1737,7 +1753,14 @@ fn validate_and_render_advance_sns_target_version_proposal(
     let (upgrade_steps, target_version) = governance_proto
         .validate_new_target_version(advance_sns_target_version.new_target.clone())?;
 
-    let valid_timestamp_seconds = upgrade_steps.approximate_time_of_validity_timestamp_seconds();
+    let time_of_validity = {
+        let timestamp_seconds = upgrade_steps.approximate_time_of_validity_timestamp_seconds();
+        // This fallback should not occur unless `timestamp_seconds` is outside of the range
+        // from +1970-01-01 00:00:00 UTC (0)
+        // till +9999-12-31 23:59:59 UTC (253402300799).
+        format_timestamp(timestamp_seconds)
+            .unwrap_or_else(|| format!("timestamp {} seconds", timestamp_seconds))
+    };
 
     let current_target_versions_render =
         render_two_versions_as_markdown_table(upgrade_steps.current(), &target_version);
@@ -1753,9 +1776,8 @@ fn validate_and_render_advance_sns_target_version_proposal(
          ### Upgrade steps\n\n\
          {upgrade_steps}\n\n\
          ### Monitoring the upgrade process\n\n\
-         Please note: the upgrade steps above (valid around timestamp {valid_timestamp_seconds} \
-         seconds) might change during this proposal's voting period. Such changes are unlikely and \
-         are subject to NNS community's approval.\n\n\
+         Please note: the upgrade steps mentioned above (valid around {time_of_validity}) \
+         might change during this proposal's voting period.\n\n\
          The **upgrade journal** provides up-to-date information on this SNS's upgrade process:\n\n\
          {upgrade_journal_url_render}"
     );
