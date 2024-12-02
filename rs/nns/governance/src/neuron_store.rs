@@ -873,6 +873,8 @@ impl NeuronStore {
 
         possible_results
             .into_iter()
+            // Throw away None, by treating them like empty collection, and
+            // unwrap Some (by treating them as 1 element collection).
             .flatten()
             .min_by_key(|neuron_id| neuron_id.id)
     }
