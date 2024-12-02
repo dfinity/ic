@@ -19,6 +19,7 @@ use crate::crypto::canister_threshold_sig::idkg::{
     IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
     InitialIDkgDealings, SignedIDkgDealing,
 };
+use crate::crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId;
 use crate::crypto::threshold_sig::ni_dkg::{
     config::{tests::valid_dkg_config_data, NiDkgConfig},
     NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
@@ -51,7 +52,7 @@ use phantom_newtype::{AmountOf, Id};
 use prost::Message;
 use rand::{CryptoRng, RngCore};
 use std::collections::{BTreeMap, BTreeSet};
-use strum::IntoEnumIterator;
+use strum::{EnumCount, IntoEnumIterator};
 
 /// A trait for creating an exhaustive set of fake values for a type, which we
 /// use to test serialization correctness.
@@ -396,6 +397,7 @@ impl ExhaustiveSet for VetKdKeyId {
 
 impl ExhaustiveSet for MasterPublicKeyId {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        assert_eq!(MasterPublicKeyId::COUNT, 3);
         let ecdsa_key_ids = EcdsaKeyId::exhaustive_set(rng);
         let schnorr_key_ids = SchnorrKeyId::exhaustive_set(rng);
         let vetkd_key_ids = VetKdKeyId::exhaustive_set(rng);
@@ -663,20 +665,40 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, MultiSignature<T>> {
 }
 
 impl ExhaustiveSet for NiDkgConfig {
-    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
-        vec![NiDkgConfig::new(valid_dkg_config_data()).unwrap()]
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        let nidkg_ids = NiDkgId::exhaustive_set(rng);
+        nidkg_ids
+            .into_iter()
+            .map(|id| {
+                let mut config_data = valid_dkg_config_data();
+                config_data.dkg_id = id.clone();
+                config_data.resharing_transcript.as_mut().unwrap().dkg_id = id;
+                NiDkgConfig::new(config_data).unwrap()
+            })
+            .collect()
     }
 }
 
 impl ExhaustiveSet for NiDkgTranscript {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         let nodes = NodeId::exhaustive_set(rng);
-        vec![NiDkgTranscript::dummy_transcript_for_tests_with_params(
-            nodes,
-            NiDkgTag::HighThreshold,
-            1,
-            rng.next_u32() as u64,
-        )]
+        assert_eq!(NiDkgTag::COUNT, 3);
+        let mut tags = vec![NiDkgTag::HighThreshold, NiDkgTag::LowThreshold];
+        tags.extend(
+            NiDkgMasterPublicKeyId::exhaustive_set(rng)
+                .into_iter()
+                .map(|key_id| NiDkgTag::HighThresholdForKey(key_id)),
+        );
+        tags.into_iter()
+            .map(|tag| {
+                NiDkgTranscript::dummy_transcript_for_tests_with_params(
+                    nodes.clone(),
+                    tag,
+                    1,
+                    rng.next_u32() as u64,
+                )
+            })
+            .collect()
     }
 }
 
