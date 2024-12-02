@@ -81,7 +81,7 @@ pub fn get_interface_name(interface_path: &PathBuf) -> Result<String> {
 
 fn qualify_and_generate_interface(interface_name: &str) -> Result<Option<Interface>> {
     let ethtool_output = get_command_stdout("ethtool", [interface_name])?;
-    let link_is_up = is_link_up_from_ethool_output(&ethtool_output)?;
+    let link_is_up = is_link_up_from_ethtool_output(&ethtool_output)?;
 
     if !link_is_up {
         return Ok(None);
@@ -229,7 +229,7 @@ fn get_speed_from_ethtool_output(output: &str) -> Option<u64> {
     speed
 }
 
-fn is_link_up_from_ethool_output(output: &str) -> Result<bool> {
+fn is_link_up_from_ethtool_output(output: &str) -> Result<bool> {
     output
         .lines()
         .map(|s| s.trim())
@@ -360,21 +360,21 @@ Cannot get wake-on-lan settings: Operation not permitted
 
     #[test]
     fn test_is_link_up_from_ethtool_output() {
-        assert!(is_link_up_from_ethool_output(ETHTOOL_OUTPUT).unwrap());
+        assert!(is_link_up_from_ethtool_output(ETHTOOL_OUTPUT).unwrap());
 
         let negative_output = "
 Cannot get wake-on-lan settings: Operation not permitted
 Current message level: 0x00000007 (7)
 drv probe link
 Link detected: no";
-        assert!(!is_link_up_from_ethool_output(negative_output).unwrap());
+        assert!(!is_link_up_from_ethtool_output(negative_output).unwrap());
 
         let invalid_output = "
 Cannot get wake-on-lan settings: Operation not permitted
 Current message level: 0x00000007 (7)
 drv probe link
 Blink 182 detected";
-        assert!(is_link_up_from_ethool_output(invalid_output).is_err());
+        assert!(is_link_up_from_ethtool_output(invalid_output).is_err());
     }
 
     #[test]
