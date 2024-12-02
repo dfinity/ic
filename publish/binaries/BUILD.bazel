@@ -50,7 +50,6 @@ TESTONLY_BINARIES = [
     "ic-backup",
     "ic-boundary",
     "ic-boundary-tls",
-    "ic-https-outcalls-adapter",
     "ic-nns-init",
     "ic-prep",
     "ic-recovery",
