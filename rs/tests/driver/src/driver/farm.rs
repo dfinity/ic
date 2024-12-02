@@ -455,15 +455,17 @@ impl GroupSpec {
         };
 
         // Acquire bazel's volatile status containing key value pairs like USER and CI_JOB_NAME:
-        let volatile_status_file_path = std::env::var("FARM_METADATA_PATH")
+        let farm_metadata_path = std::env::var("FARM_METADATA_PATH")
             .expect("Expected the environment variable FARM_METADATA_PATH to be defined!");
-        let volatile_status = read_dependency_to_string(&volatile_status_file_path)
+        let farm_metadata = read_dependency_to_string(&farm_metadata_path)
             .unwrap_or_else(|e| {
-                panic!("Couldn't read content of the volatile status file {volatile_status_file_path}: {e:?}")
+                panic!(
+                    "Couldn't read content of the volatile status file {farm_metadata_path}: {e:?}"
+                )
             })
             .trim_end()
             .to_string();
-        let runtime_args_map = parse_volatile_status_file(volatile_status);
+        let runtime_args_map = parse_farm_metadata_file(farm_metadata);
 
         if let Some(user) = runtime_args_map.get("USER") {
             metadata.user = Some(String::from(user));
@@ -491,7 +493,7 @@ pub struct GroupMetadata {
     pub test_name: Option<String>,
 }
 
-fn parse_volatile_status_file(input: String) -> HashMap<String, String> {
+fn parse_farm_metadata_file(input: String) -> HashMap<String, String> {
     let mut map = HashMap::new();
     let lines = input.split('\n');
     for line in lines {
