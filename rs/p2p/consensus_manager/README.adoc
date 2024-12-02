@@ -1,0 +1,34 @@
+
+= Abortable Broadcast = 
+:toc:
+
+== Overview ==
+
+
+
+== Requirements ==
+
+[cols="3,3,3"]
+|===
+| **Capability**
+| **Purpose**
+| **Implementation Requirement**
+
+| Abortable Broadcast Interface (i.e. similar to PubSub interface but with abort capabilities)
+| Simplifies application development by abstracting communication between sets of nodes, allowing developers to focus on application logic instead of low-level networking.
+| Eventual abortable delivery 
+
+| Multitenancy of applications
+| Enables multiple applications to safely use the library, ensuring isolation and uninterrupted operation across applications.
+| Isolation, Fair scheduling when at capacity
+
+| Operates in P2P networks with Byzantine peers
+| Supports deployment in real-world environments, including networks with faulty or malicious nodes.
+| Bounded memory
+
+| Scalable and resource-efficient
+| Optimizes usage of shared resources (e.g., CPU, file descriptors) to maintain performance under high demand and prevent resource exhaustion.
+| ?!
+
+|===
+
