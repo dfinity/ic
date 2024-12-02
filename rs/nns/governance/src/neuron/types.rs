@@ -919,7 +919,7 @@ impl Neuron {
         }
 
         let visibility = self.visibility().map(|visibility| visibility as i32);
-
+        let deciding_voting_power = self.deciding_voting_power(now_seconds);
         let potential_voting_power = self.potential_voting_power(now_seconds);
 
         NeuronInfo {
@@ -928,7 +928,6 @@ impl Neuron {
             age_seconds: self.age_seconds(now_seconds),
             dissolve_delay_seconds: self.dissolve_delay_seconds(now_seconds),
             recent_ballots,
-            voting_power: potential_voting_power,
             created_timestamp_seconds: self.created_timestamp_seconds,
             stake_e8s: self.minted_stake_e8s(),
             joined_community_fund_timestamp_seconds,
@@ -938,6 +937,9 @@ impl Neuron {
             voting_power_refreshed_timestamp_seconds: Some(
                 self.voting_power_refreshed_timestamp_seconds,
             ),
+            deciding_voting_power: Some(deciding_voting_power),
+            potential_voting_power: Some(potential_voting_power),
+            voting_power: potential_voting_power,
         }
     }
 
@@ -1134,9 +1136,12 @@ impl Neuron {
     }
 }
 
-impl From<Neuron> for NeuronProto {
-    fn from(neuron: Neuron) -> Self {
-        let visibility = neuron.visibility().map(|visibility| visibility as i32);
+impl Neuron {
+    pub fn into_proto(self, now_seconds: u64) -> NeuronProto {
+        let visibility = self.visibility().map(|visibility| visibility as i32);
+        let deciding_voting_power = Some(self.deciding_voting_power(now_seconds));
+        let potential_voting_power = Some(self.potential_voting_power(now_seconds));
+
         let Neuron {
             id,
             subaccount,
@@ -1161,7 +1166,7 @@ impl From<Neuron> for NeuronProto {
             visibility: _,
             voting_power_refreshed_timestamp_seconds,
             recent_ballots_next_entry_index,
-        } = neuron;
+        } = self;
 
         let id = Some(id);
         let controller = Some(controller);
@@ -1172,6 +1177,7 @@ impl From<Neuron> for NeuronProto {
         } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
         let voting_power_refreshed_timestamp_seconds =
             Some(voting_power_refreshed_timestamp_seconds);
+        let recent_ballots_next_entry_index = recent_ballots_next_entry_index.map(|x| x as u32);
 
         NeuronProto {
             id,
@@ -1197,7 +1203,9 @@ impl From<Neuron> for NeuronProto {
             neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds,
-            recent_ballots_next_entry_index: recent_ballots_next_entry_index.map(|x| x as u32),
+            recent_ballots_next_entry_index,
+            deciding_voting_power,
+            potential_voting_power,
         }
     }
 }
@@ -1231,6 +1239,11 @@ impl TryFrom<NeuronProto> for Neuron {
             visibility,
             voting_power_refreshed_timestamp_seconds,
             recent_ballots_next_entry_index,
+
+            // Derived Fields (and therefore, no need to transcribe).
+            // --------------
+            deciding_voting_power: _,
+            potential_voting_power: _,
         } = proto;
 
         let id = id.ok_or("Neuron ID is missing")?;

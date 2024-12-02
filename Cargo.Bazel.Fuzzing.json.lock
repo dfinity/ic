@@ -18681,6 +18681,10 @@
               "target": "ed25519_dalek"
             },
             {
+              "id": "env-file-reader 0.3.0",
+              "target": "env_file_reader"
+            },
+            {
               "id": "erased-serde 0.3.31",
               "target": "erased_serde"
             },
@@ -21360,6 +21364,90 @@
         },
         "edition": "2021",
         "version": "3.1.15"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "env-file-reader 0.3.0": {
+      "name": "env-file-reader",
+      "version": "0.3.0",
+      "package_url": "https://github.com/jofas/env_file_reader",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/env-file-reader/0.3.0/download",
+          "sha256": "a0a86dcbc0fd1a07f5c318a2215338f0c870336851e8b566ebef1576eddb3728"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "env_file_reader",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "env_file_reader",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "env-file-reader 0.3.0",
+              "target": "build_script_build"
+            },
+            {
+              "id": "lalrpop-util 0.19.12",
+              "target": "lalrpop_util"
+            },
+            {
+              "id": "logos 0.12.1",
+              "target": "logos"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.3.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "lalrpop 0.19.12",
+              "target": "lalrpop"
+            }
+          ],
+          "selects": {}
+        }
       },
       "license": "MIT",
       "license_ids": [
@@ -37526,6 +37614,113 @@
       ],
       "license_file": null
     },
+    "lalrpop 0.19.12": {
+      "name": "lalrpop",
+      "version": "0.19.12",
+      "package_url": "https://github.com/lalrpop/lalrpop",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/lalrpop/0.19.12/download",
+          "sha256": "0a1cbf952127589f2851ab2046af368fd20645491bb4b376f04b7f94d7a9837b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "lalrpop",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "lalrpop",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "lexer"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "ascii-canvas 3.0.0",
+              "target": "ascii_canvas"
+            },
+            {
+              "id": "bit-set 0.5.3",
+              "target": "bit_set"
+            },
+            {
+              "id": "diff 0.1.13",
+              "target": "diff"
+            },
+            {
+              "id": "ena 0.14.2",
+              "target": "ena"
+            },
+            {
+              "id": "is-terminal 0.4.9",
+              "target": "is_terminal"
+            },
+            {
+              "id": "itertools 0.10.5",
+              "target": "itertools"
+            },
+            {
+              "id": "lalrpop-util 0.19.12",
+              "target": "lalrpop_util"
+            },
+            {
+              "id": "petgraph 0.6.4",
+              "target": "petgraph"
+            },
+            {
+              "id": "regex 1.11.0",
+              "target": "regex"
+            },
+            {
+              "id": "regex-syntax 0.6.29",
+              "target": "regex_syntax"
+            },
+            {
+              "id": "string_cache 0.8.7",
+              "target": "string_cache"
+            },
+            {
+              "id": "term 0.7.0",
+              "target": "term"
+            },
+            {
+              "id": "tiny-keccak 2.0.2",
+              "target": "tiny_keccak"
+            },
+            {
+              "id": "unicode-xid 0.2.4",
+              "target": "unicode_xid"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.19.12"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "lalrpop 0.20.0": {
       "name": "lalrpop",
       "version": "0.20.0",
@@ -37631,6 +37826,198 @@
         },
         "edition": "2021",
         "version": "0.20.0"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "lalrpop-util 0.19.12": {
+      "name": "lalrpop-util",
+      "version": "0.19.12",
+      "package_url": "https://github.com/lalrpop/lalrpop",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/lalrpop-util/0.19.12/download",
+          "sha256": "d3c48237b9604c5a4702de6b824e02006c3214327564636aef27c1028a8fa0ed"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "lalrpop_util",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "lalrpop_util",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {
+            "aarch64-apple-darwin": [
+              "lexer",
+              "regex"
+            ],
+            "aarch64-pc-windows-msvc": [
+              "lexer",
+              "regex"
+            ],
+            "aarch64-unknown-linux-gnu": [
+              "lexer",
+              "regex"
+            ],
+            "aarch64-unknown-nixos-gnu": [
+              "lexer",
+              "regex"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "lexer",
+              "regex"
+            ],
+            "i686-pc-windows-msvc": [
+              "lexer",
+              "regex"
+            ],
+            "i686-unknown-linux-gnu": [
+              "lexer",
+              "regex"
+            ],
+            "powerpc-unknown-linux-gnu": [
+              "lexer",
+              "regex"
+            ],
+            "s390x-unknown-linux-gnu": [
+              "lexer",
+              "regex"
+            ],
+            "x86_64-apple-darwin": [
+              "lexer",
+              "regex"
+            ],
+            "x86_64-pc-windows-msvc": [
+              "lexer",
+              "regex"
+            ],
+            "x86_64-unknown-freebsd": [
+              "lexer",
+              "regex"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "lexer",
+              "regex"
+            ],
+            "x86_64-unknown-nixos-gnu": [
+              "lexer",
+              "regex"
+            ]
+          }
+        },
+        "deps": {
+          "common": [],
+          "selects": {
+            "aarch64-apple-darwin": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "aarch64-pc-windows-msvc": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "aarch64-unknown-nixos-gnu": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "arm-unknown-linux-gnueabi": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "i686-pc-windows-msvc": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "i686-unknown-linux-gnu": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "powerpc-unknown-linux-gnu": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "s390x-unknown-linux-gnu": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "x86_64-apple-darwin": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "x86_64-pc-windows-msvc": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "x86_64-unknown-freebsd": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "x86_64-unknown-nixos-gnu": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ]
+          }
+        },
+        "edition": "2018",
+        "version": "0.19.12"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -40082,6 +40469,63 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "logos 0.12.1": {
+      "name": "logos",
+      "version": "0.12.1",
+      "package_url": "https://github.com/maciejhirsz/logos",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/logos/0.12.1/download",
+          "sha256": "bf8b031682c67a8e3d5446840f9573eb7fe26efe7ec8d195c9ac4c0647c502f1"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "logos",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "logos",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "export_derive",
+            "logos-derive",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "logos-derive 0.12.1",
+              "target": "logos_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.12.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "logos 0.13.0": {
       "name": "logos",
       "version": "0.13.0",
@@ -40199,6 +40643,74 @@
         },
         "edition": "2018",
         "version": "0.13.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "logos-derive 0.12.1": {
+      "name": "logos-derive",
+      "version": "0.12.1",
+      "package_url": "https://github.com/maciejhirsz/logos",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/logos-derive/0.12.1/download",
+          "sha256": "a1d849148dbaf9661a6151d1ca82b13bb4c4c128146a88d05253b38d4e2f496c"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "logos_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "logos_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "beef 0.5.2",
+              "target": "beef"
+            },
+            {
+              "id": "fnv 1.0.7",
+              "target": "fnv"
+            },
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "regex-syntax 0.6.29",
+              "target": "regex_syntax"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.12.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -87203,6 +87715,7 @@
     "dyn-clone 1.0.14",
     "ed25519-dalek 2.1.1",
     "educe 0.4.23",
+    "env-file-reader 0.3.0",
     "erased-serde 0.3.31",
     "escargot 0.5.8",
     "ethers-core 2.0.10",

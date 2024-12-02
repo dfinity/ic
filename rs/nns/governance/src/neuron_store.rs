@@ -394,10 +394,12 @@ impl NeuronStore {
 
     /// Takes the neuron store state which should be persisted through upgrades.
     pub fn take(self) -> NeuronStoreState {
+        let now_seconds = self.now();
+
         (
             self.heap_neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into()))
+                .map(|(id, neuron)| (id, neuron.into_proto(now_seconds)))
                 .collect(),
             heap_topic_followee_index_to_proto(self.topic_followee_index),
         )
@@ -441,16 +443,18 @@ impl NeuronStore {
     /// Clones all the neurons. This is only used for testing.
     /// TODO(NNS-2474) clean it up after NNSState stop using GovernanceProto.
     pub fn __get_neurons_for_tests(&self) -> BTreeMap<u64, NeuronProto> {
+        let now_seconds = self.now();
+
         let mut stable_neurons = with_stable_neuron_store(|stable_store| {
             stable_store
                 .range_neurons(..)
-                .map(|neuron| (neuron.id().id, neuron.into()))
+                .map(|neuron| (neuron.id().id, neuron.into_proto(now_seconds)))
                 .collect::<BTreeMap<u64, NeuronProto>>()
         });
         let heap_neurons = self
             .heap_neurons
             .iter()
-            .map(|(id, neuron)| (*id, neuron.clone().into()))
+            .map(|(id, neuron)| (*id, neuron.clone().into_proto(now_seconds)))
             .collect::<BTreeMap<u64, NeuronProto>>();
 
         stable_neurons.extend(heap_neurons);
@@ -901,8 +905,14 @@ impl NeuronStore {
 
     /// List all neuron ids whose neurons have staked maturity greater than 0.
     pub fn list_neurons_ready_to_unstake_maturity(&self, now_seconds: u64) -> Vec<NeuronId> {
-        let filter = |neuron: &Neuron| neuron.ready_to_unstake_maturity(now_seconds);
-        self.filter_map_active_neurons(filter, |neuron| neuron.id())
+        self.with_active_neurons_iter_sections(
+            |iter| {
+                iter.filter(|neuron| neuron.ready_to_unstake_maturity(now_seconds))
+                    .map(|neuron| neuron.id())
+                    .collect()
+            },
+            NeuronSections::NONE,
+        )
     }
 
     /// List all neuron ids of known neurons
@@ -912,7 +922,14 @@ impl NeuronStore {
 
     /// List all neurons that are spawning
     pub fn list_ready_to_spawn_neuron_ids(&self, now_seconds: u64) -> Vec<NeuronId> {
-        self.filter_map_active_neurons(|neuron| neuron.ready_to_spawn(now_seconds), |n| n.id())
+        self.with_active_neurons_iter_sections(
+            |iter| {
+                iter.filter(|neuron| neuron.ready_to_spawn(now_seconds))
+                    .map(|neuron| neuron.id())
+                    .collect()
+            },
+            NeuronSections::NONE,
+        )
     }
 
     pub fn create_ballots_for_standard_proposal(
