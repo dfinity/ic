@@ -4794,6 +4794,9 @@ impl From<pb::ProposalRewardStatus> for pb_api::ProposalRewardStatus {
             pb::ProposalRewardStatus::ReadyToSettle => pb_api::ProposalRewardStatus::ReadyToSettle,
             pb::ProposalRewardStatus::Settled => pb_api::ProposalRewardStatus::Settled,
             pb::ProposalRewardStatus::Ineligible => pb_api::ProposalRewardStatus::Ineligible,
+            pb::ProposalRewardStatus::VotesProcessing => {
+                pb_api::ProposalRewardStatus::VotesProcessing
+            }
         }
     }
 }
@@ -4805,6 +4808,9 @@ impl From<pb_api::ProposalRewardStatus> for pb::ProposalRewardStatus {
             pb_api::ProposalRewardStatus::ReadyToSettle => pb::ProposalRewardStatus::ReadyToSettle,
             pb_api::ProposalRewardStatus::Settled => pb::ProposalRewardStatus::Settled,
             pb_api::ProposalRewardStatus::Ineligible => pb::ProposalRewardStatus::Ineligible,
+            pb_api::ProposalRewardStatus::VotesProcessing => {
+                pb::ProposalRewardStatus::VotesProcessing
+            }
         }
     }
 }
