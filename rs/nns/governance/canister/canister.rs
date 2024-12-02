@@ -173,6 +173,11 @@ const SEEDING_INTERVAL: Duration = Duration::from_secs(3600);
 const RETRY_SEEDING_INTERVAL: Duration = Duration::from_secs(30);
 const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(60);
 
+// Once this amount of instructions is used by the
+// Governance::prune_some_following, it stops, saves where it is, schedules more
+// pruning later, and returns.
+const MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS: u64 = 500_000_000;
+
 fn schedule_seeding(delay: Duration) {
     ic_cdk_timers::set_timer(delay, || {
         spawn(async {
@@ -213,7 +218,8 @@ fn schedule_prune_following(delay: Duration) {
     ic_cdk_timers::set_timer(delay, || {
         let original_checkpoint = PRUNE_FOLLOWING_CHECKPOINT.with(|p| *p.borrow());
 
-        let carry_on = || call_context_instruction_counter() < 500_000_000;
+        let carry_on =
+            || call_context_instruction_counter() < MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS;
         let new_checkpoint = governance_mut().prune_some_following(original_checkpoint, carry_on);
 
         PRUNE_FOLLOWING_CHECKPOINT.with(|p| {
