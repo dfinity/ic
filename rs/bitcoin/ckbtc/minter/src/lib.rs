@@ -1338,3 +1338,18 @@ impl CanisterRuntime for IcCanisterRuntime {
         updates::update_balance::mint(amount, to, memo).await
     }
 }
+
+/// Time in nanoseconds since the epoch (1970-01-01).
+pub struct Timestamp(u64);
+
+impl Timestamp {
+    pub const fn new(ns_since_epoch: u64) -> Self {
+        Self(ns_since_epoch)
+    }
+}
+
+impl From<u64> for Timestamp {
+    fn from(timestamp: u64) -> Self {
+        Self(timestamp)
+    }
+}

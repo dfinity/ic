@@ -19,7 +19,8 @@ use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::logs::P0;
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
-use crate::{address::BitcoinAddress, ECDSAPublicKey};
+use crate::updates::update_balance::SuspendedUtxo;
+use crate::{address::BitcoinAddress, ECDSAPublicKey, Timestamp};
 use candid::{CandidType, Deserialize, Principal};
 use ic_base_types::CanisterId;
 pub use ic_btc_interface::Network;
@@ -943,7 +944,8 @@ impl CkBtcMinterState {
         &self,
         all_utxos_for_account: I,
         account: &Account,
-    ) -> ProcessableUtxos {
+        now: &Timestamp,
+    ) -> (ProcessableUtxos, Vec<SuspendedUtxo>) {
         let is_known = |utxo: &Utxo| {
             self.utxos_state_addresses
                 .get(account)
@@ -991,11 +993,17 @@ impl CkBtcMinterState {
             None
         );
 
-        ProcessableUtxos {
-            new_utxos,
-            previously_ignored_utxos,
-            previously_quarantined_utxos,
-        }
+        //TODO XC-230: add utxos that cannot be retried yet
+        let suspended_utxos = vec![];
+
+        (
+            ProcessableUtxos {
+                new_utxos,
+                previously_ignored_utxos,
+                previously_quarantined_utxos,
+            },
+            suspended_utxos,
+        )
     }
 
     /// Adds given UTXO to the set of suspended UTXOs.

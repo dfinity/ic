@@ -2,22 +2,29 @@ mod processable_utxos_for_account {
     use crate::state::invariants::CheckInvariantsImpl;
     use crate::state::{CkBtcMinterState, ProcessableUtxos, SuspendedReason};
     use crate::test_fixtures::{ignored_utxo, init_args, ledger_account, quarantined_utxo, utxo};
+    use crate::Timestamp;
     use candid::Principal;
     use ic_btc_interface::{OutPoint, Utxo};
     use icrc_ledger_types::icrc1::account::Account;
     use maplit::btreeset;
 
+    const NOW: Timestamp = Timestamp::new(1733145560 * 1_000_000_000);
+
     #[test]
     fn should_be_all_new_utxos_when_state_empty() {
         let state = CkBtcMinterState::from(init_args());
         let all_utxos = btreeset! {utxo()};
-        let result = state.processable_utxos_for_account(all_utxos.clone(), &ledger_account());
+        let result =
+            state.processable_utxos_for_account(all_utxos.clone(), &ledger_account(), &NOW);
         assert_eq!(
             result,
-            ProcessableUtxos {
-                new_utxos: all_utxos.clone(),
-                ..Default::default()
-            }
+            (
+                ProcessableUtxos {
+                    new_utxos: all_utxos.clone(),
+                    ..Default::default()
+                },
+                vec![]
+            )
         );
     }
 
@@ -89,15 +96,19 @@ mod processable_utxos_for_account {
         let result = state.processable_utxos_for_account(
             btreeset! {utxo(), new_utxo.clone(), ignored_utxo(), quarantined_utxo()},
             &account,
+            &NOW,
         );
 
         assert_eq!(
             result,
-            ProcessableUtxos {
-                new_utxos: btreeset! {new_utxo},
-                previously_ignored_utxos: btreeset! {ignored_utxo()},
-                previously_quarantined_utxos: btreeset! {quarantined_utxo()},
-            }
+            (
+                ProcessableUtxos {
+                    new_utxos: btreeset! {new_utxo},
+                    previously_ignored_utxos: btreeset! {ignored_utxo()},
+                    previously_quarantined_utxos: btreeset! {quarantined_utxo()},
+                },
+                vec![]
+            )
         );
     }
 }
