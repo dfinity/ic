@@ -105,7 +105,6 @@ VERSION = "0.1.0"
 
 rust_binary(
     name = "ic-boundary",
-    testonly = True,
     srcs = glob(
         ["src/**"],
         exclude = ["src/lib.rs"],
@@ -118,7 +117,6 @@ rust_binary(
 
 rust_binary(
     name = "ic-boundary-tls",
-    testonly = True,
     srcs = glob(
         ["src/**"],
         exclude = ["src/lib.rs"],
@@ -141,7 +139,6 @@ rust_test(
 
 rust_library(
     name = "ic_boundary",
-    testonly = True,
     srcs = glob(
         ["src/**"],
         exclude = ["src/main.rs"],
