@@ -94,6 +94,10 @@ rust_ic_test(
         "tests/state_manager.rs",
     ],
     crate_root = "tests/state_manager.rs",
+    # The P90 duration of this test is above 8 minutes which is longer than our maximum of 5 minutes.
+    # See: https://superset.idx.dfinity.network/explore/?slice_id=82
+    # So we tag it as a long_test to only run this on pushes to master and not on PRs anymore.
+    tags = ["long_test"],
     deps = [
         # Keep sorted.
         ":state_manager",
