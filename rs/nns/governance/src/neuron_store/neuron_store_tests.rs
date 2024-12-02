@@ -660,7 +660,7 @@ fn test_prune_some_following() {
 
     // Similar to fresh_neuron, except voting power was refrshed a "long" time
     // ago.
-    let mut stale_neuron = simple_neuron_builder(2)
+    let mut stale_neuron = simple_neuron_builder(3)
         .with_followees(followees.clone())
         .build();
     stale_neuron.refresh_voting_power(CREATED_TIMESTAMP_SECONDS - 7 * ONE_MONTH_SECONDS - 1);
@@ -670,16 +670,57 @@ fn test_prune_some_following() {
         stale_neuron.id().id => stale_neuron.clone(),
     });
 
+    // Control the perception of time by neuron_store.
+    #[derive(Debug, Clone)]
+    struct DummyClock {}
+    impl Clock for DummyClock {
+        fn now(&self) -> u64 {
+            CREATED_TIMESTAMP_SECONDS
+        }
+
+        fn set_time_warp(&mut self, _: TimeWarp) {
+            unimplemented!();
+        }
+    }
+    impl PracticalClock for DummyClock {}
+    let clock = DummyClock {};
+    neuron_store.clock = Box::new(clock);
+
     // Step 2: Call code under test.
+
+    // Stop after the second neuron is processed.
+    let mut neuron_count = 0;
+    let carry_on = || {
+        neuron_count += 1;
+        neuron_count < 2
+    };
+
     assert_eq!(
         prune_some_following(
             &mut neuron_store,
-            NeuronId { id: 0 },
-            CREATED_TIMESTAMP_SECONDS,
-            || true,
+            Bound::Unbounded,
+            carry_on,
         ),
-        NeuronId { id: 2 },
+        Bound::Excluded(stale_neuron.id()),
     );
+    assert_eq!(neuron_count, 2);
+
+    let mut call_count = 0;
+    let carry_on = || {
+        call_count += 1;
+        true
+    };
+    assert_eq!(
+        prune_some_following(
+            &mut neuron_store,
+            Bound::Excluded(stale_neuron.id()),
+            carry_on,
+        ),
+        Bound::Unbounded,
+    );
+    // Because after teh stale neuron, there are no more neurons. In that case
+    // prune_some_following tells us to loop back around.
+    assert_eq!(call_count, 0);
 
     // Step 3: Inspect results.
 
