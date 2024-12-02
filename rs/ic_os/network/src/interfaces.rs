@@ -206,10 +206,14 @@ fn parse_speed_mbps_from_ethtool_output(output: &str) -> Option<u64> {
 }
 
 /// Returns speed of the fastest link mode detected from the given ethtool `output`
+/// Most similar to the previous bash scrpit version - which just grepped for 1000/10000
 fn parse_fastest_link_mode_from_ethtool_output(output: &str) -> Option<u64> {
     let lines = output.lines();
     if lines.clone().any(|s| s.contains("10000")) {
         return Some(10000);
+    }
+    if lines.clone().any(|s| s.contains("1000")) {
+        return Some(1000);
     }
     eprintln!("Could not parse speed from valid link mode lines in output");
     None
@@ -382,6 +386,10 @@ Blink 182 detected";
         assert_eq!(
             get_speed_from_ethtool_output("        Speed: 10Mb/s").unwrap(),
             10
+        );
+        assert_eq!(
+            get_speed_from_ethtool_output("        1000baseT/Full").unwrap(),
+            1000
         );
         assert_eq!(
             get_speed_from_ethtool_output("        Speed: 300Mb/s").unwrap(),
