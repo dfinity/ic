@@ -36,7 +36,6 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use anyhow::anyhow;
 use async_trait::async_trait;
 use axum::{
     http::{Request, Response},
@@ -49,7 +48,11 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use phantom_newtype::AmountOf;
-use quinn::{AsyncUdpSocket, SendStream, VarInt};
+use quinn::{
+    AsyncUdpSocket, ConnectionError, ReadError, ReadToEndError, SendStream, StoppedError, VarInt,
+    WriteError,
+};
+use thiserror::Error;
 use tokio::sync::watch;
 use tokio::task::{JoinError, JoinHandle};
 use tokio_util::{sync::CancellationToken, task::task_tracker::TaskTracker};
@@ -209,6 +212,78 @@ impl Drop for ResetStreamOnDrop {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum TransportError {
+    #[error("data store disconnected")]
+    StreamCancelled(String),
+    #[error("data store disconnected")]
+    ConnectionClosed(String),
+    #[error("data store disconnected")]
+    TimedOut,
+    #[error("data store disconnected")]
+    PeerNotFound,
+    #[error("data store disconnected")]
+    Internal(String),
+}
+
+impl From<ConnectionError> for TransportError {
+    fn from(err: ConnectionError) -> TransportError {
+        match err {
+            // This can occur during a topology change or when the connection manager attempts to replace an old, broken connection with a new one.
+            ConnectionError::LocallyClosed | ConnectionError::ApplicationClosed(_) => {
+                TransportError::ConnectionClosed(format!("{:?}", err))
+            }
+            // This can occur if the peer crashes or experiences connectivity issues.
+            ConnectionError::TimedOut => TransportError::TimedOut,
+            _ => TransportError::Internal(format!("{:?}", err)),
+        }
+    }
+}
+
+impl From<WriteError> for TransportError {
+    fn from(err: WriteError) -> TransportError {
+        match err {
+            // Occurs when the peer cancels the `RecvStream` future, similar to `ERROR_RESET_STREAM` semantics,
+            // e.g., when the RPC method is part of a `select` branch.
+            WriteError::Stopped(_) => TransportError::StreamCancelled(format!("{:?}", err)),
+            WriteError::ConnectionLost(conn_err) => conn_err.into(),
+            _ => TransportError::Internal(format!("{:?}", err)),
+        }
+    }
+}
+
+impl From<ReadError> for TransportError {
+    fn from(err: ReadError) -> TransportError {
+        match err {
+            // Occurs when the peer cancels the `SendStream` future, similar to `ERROR_STOPPED_STREAM` semantics,
+            // e.g., when the RPC method is part of a `select` branch.
+            ReadError::Reset(_) => TransportError::StreamCancelled(format!("{:?}", err)),
+            ReadError::ConnectionLost(conn_err) => conn_err.into(),
+            // If any of the following errors occur it means that we have a bug in the protocol implementation or
+            // there is malicious peer on the other side.
+            _ => TransportError::Internal(format!("{:?}", err)),
+        }
+    }
+}
+
+impl From<StoppedError> for TransportError {
+    fn from(err: StoppedError) -> TransportError {
+        match err {
+            StoppedError::ConnectionLost(conn_err) => conn_err.into(),
+            StoppedError::ZeroRttRejected => TransportError::Internal(format!("{:?}", err)),
+        }
+    }
+}
+
+impl From<ReadToEndError> for TransportError {
+    fn from(err: ReadToEndError) -> TransportError {
+        match err {
+            ReadToEndError::Read(read_err) => read_err.into(),
+            ReadToEndError::TooLong => TransportError::Internal(format!("{:?}", err)),
+        }
+    }
+}
+
 #[async_trait]
 impl Transport for QuicTransport {
     #[instrument(skip(self, request))]
@@ -216,13 +291,13 @@ impl Transport for QuicTransport {
         &self,
         peer_id: &NodeId,
         request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, anyhow::Error> {
+    ) -> Result<Response<Bytes>, TransportError> {
         let peer = self
             .conn_handles
             .read()
             .unwrap()
             .get(peer_id)
-            .ok_or(anyhow!("Currently not connected to this peer"))?
+            .ok_or(TransportError::PeerNotFound)?
             .clone();
         peer.rpc(request).await.inspect_err(|err| {
             info!(self.log, "{:?}", err);
@@ -249,7 +324,7 @@ pub trait Transport: Send + Sync {
         &self,
         peer_id: &NodeId,
         request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, anyhow::Error>;
+    ) -> Result<Response<Bytes>, TransportError>;
 
     fn peers(&self) -> Vec<(NodeId, ConnId)>;
 }

@@ -13,7 +13,7 @@ use crate::{
         observe_conn_error, observe_read_to_end_error, observe_stopped_error, observe_write_error,
         QuicTransportMetrics, INFALIBBLE,
     },
-    ConnId, MessagePriority, ResetStreamOnDrop, MAX_MESSAGE_SIZE_BYTES,
+    ConnId, MessagePriority, ResetStreamOnDrop, TransportError, MAX_MESSAGE_SIZE_BYTES,
 };
 
 static CONN_ID_SEQ: AtomicU64 = AtomicU64::new(1);
@@ -53,7 +53,7 @@ impl ConnectionHandle {
     /// where connections can be managed directly by the caller.
     ///
     /// Note: The method is cancel-safe.
-    pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>, anyhow::Error> {
+    pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>, TransportError> {
         let _timer = self
             .metrics
             .connection_handle_duration_seconds
@@ -97,11 +97,12 @@ impl ConnectionHandle {
                 );
             })?;
 
-        send_stream.finish().inspect_err(|_| {
+        send_stream.finish().map_err(|err| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&["finish", INFALIBBLE])
                 .inc();
+            TransportError::Internal(format!("{:?}", err))
         })?;
 
         send_stream.stopped().await.inspect_err(|err| {
@@ -131,9 +132,13 @@ impl ConnectionHandle {
 }
 
 // The function returns infallible error.
-fn to_response(response_bytes: Vec<u8>) -> Result<Response<Bytes>, anyhow::Error> {
-    let response_proto = pb::HttpResponse::decode(response_bytes.as_slice())?;
-    let status: u16 = response_proto.status_code.try_into()?;
+fn to_response(response_bytes: Vec<u8>) -> Result<Response<Bytes>, TransportError> {
+    let response_proto = pb::HttpResponse::decode(response_bytes.as_slice())
+        .map_err(|err| TransportError::Internal(format!("{:?}", err)))?;
+    let status: u16 = response_proto
+        .status_code
+        .try_into()
+        .map_err(|err| TransportError::Internal(format!("{:?}", err)))?;
 
     let mut response = Response::builder().status(status).version(Version::HTTP_3);
     for h in response_proto.headers {
@@ -142,7 +147,9 @@ fn to_response(response_bytes: Vec<u8>) -> Result<Response<Bytes>, anyhow::Error
     }
     // This consumes the body without requiring allocation or cloning the whole content.
     let body_bytes = Bytes::from(response_proto.body);
-    Ok(response.body(body_bytes)?)
+    response
+        .body(body_bytes)
+        .map_err(|err| TransportError::Internal(format!("{:?}", err)))
 }
 
 fn into_request_bytes(request: Request<Bytes>) -> Vec<u8> {
