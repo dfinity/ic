@@ -66,6 +66,7 @@ pub struct DefiniteCanisterSettings {
     pub reserved_cycles_limit: Option<candid::Nat>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub log_visibility: Option<LogVisibility>,
+    pub wasm_memory_threshold: Option<candid::Nat>,
 }
 
 /// Partial copy-paste of ic-types::ic_00::CanisterStatusResult.
@@ -111,6 +112,7 @@ pub struct DefiniteCanisterSettingsFromManagementCanister {
     pub reserved_cycles_limit: candid::Nat,
     pub wasm_memory_limit: candid::Nat,
     pub log_visibility: LogVisibility,
+    pub wasm_memory_threshold: candid::Nat,
 }
 
 impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResult {
@@ -152,6 +154,7 @@ impl From<DefiniteCanisterSettingsFromManagementCanister> for DefiniteCanisterSe
             reserved_cycles_limit,
             wasm_memory_limit,
             log_visibility,
+            wasm_memory_threshold,
         } = value;
 
         let compute_allocation = Some(compute_allocation);
@@ -160,6 +163,7 @@ impl From<DefiniteCanisterSettingsFromManagementCanister> for DefiniteCanisterSe
         let reserved_cycles_limit = Some(reserved_cycles_limit);
         let wasm_memory_limit = Some(wasm_memory_limit);
         let log_visibility = Some(log_visibility);
+        let wasm_memory_threshold = Some(wasm_memory_threshold);
 
         DefiniteCanisterSettings {
             controllers,
@@ -169,6 +173,7 @@ impl From<DefiniteCanisterSettingsFromManagementCanister> for DefiniteCanisterSe
             reserved_cycles_limit,
             wasm_memory_limit,
             log_visibility,
+            wasm_memory_threshold,
         }
     }
 }
@@ -193,6 +198,7 @@ impl CanisterStatusResultFromManagementCanister {
                 reserved_cycles_limit: candid::Nat::from(47_u32),
                 wasm_memory_limit: candid::Nat::from(48_u32),
                 log_visibility: LogVisibility::Controllers,
+                wasm_memory_threshold: candid::Nat::from(49_u32),
             },
             cycles: candid::Nat::from(47_u32),
             idle_cycles_burned_per_day: candid::Nat::from(48_u32),
@@ -417,6 +423,7 @@ mod tests {
                 reserved_cycles_limit: candid::Nat::from(96_u32),
                 wasm_memory_limit: candid::Nat::from(95_u32),
                 log_visibility: LogVisibility::Controllers,
+                wasm_memory_threshold: candid::Nat::from(94_u32),
             },
             cycles: candid::Nat::from(999_u32),
             idle_cycles_burned_per_day: candid::Nat::from(998_u32),
@@ -435,6 +442,7 @@ mod tests {
                 reserved_cycles_limit: Some(candid::Nat::from(96_u32)),
                 wasm_memory_limit: Some(candid::Nat::from(95_u32)),
                 log_visibility: Some(LogVisibility::Controllers),
+                wasm_memory_threshold: Some(candid::Nat::from(94_u32)),
             },
             cycles: candid::Nat::from(999_u32),
             idle_cycles_burned_per_day: Some(candid::Nat::from(998_u32)),
