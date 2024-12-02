@@ -129,6 +129,10 @@ RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu && \
     # CI before script requires sudo \
     echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
+# Enable GRANT_AUX_GROUP_SUBIDS. Required by newuidmap because the bash process runs under a different group (1002)
+# as the main user (1000).
+RUN sed -i 's/#GRANT_AUX_GROUP_SUBIDS yes/GRANT_AUX_GROUP_SUBIDS yes/' /etc/login.defs
+
 # Add gitconfig
 COPY ./ci/container/files/gitconfig /etc/gitconfig
 
