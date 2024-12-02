@@ -95,3 +95,13 @@ git checkout 2190613d3b5bcd9b74c382b22d151580b8ac271a
 "./ci/container/build-ic.sh" "--canisters"
 sha256sum ./artifacts/canisters/ic-ledger-suite-orchestrator-canister.wasm.gz
 ```
+Verify that the hash of the gzipped WASM for the ledger, index and archive match the proposed hash.
+
+```
+git fetch
+git checkout e54d3fa34ded227c885d04e64505fa4b5d564743
+"./ci/container/build-ic.sh" "--canisters"
+sha256sum ./artifacts/canisters/ic-icrc1-ledger-u256.wasm.gz
+sha256sum ./artifacts/canisters/ic-icrc1-index-ng-u256.wasm.gz
+sha256sum ./artifacts/canisters/ic-icrc1-archive-u256.wasm.gz
+```
