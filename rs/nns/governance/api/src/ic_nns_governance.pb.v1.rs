@@ -2571,7 +2571,7 @@ pub mod update_canister_settings {
         #[prost(uint64, optional, tag = "6")]
         pub wasm_memory_limit: Option<u64>,
         #[prost(uint64, optional, tag = "7")]
-        pub wasm_memory_threshold: ::core::option::Option<u64>,
+        pub wasm_memory_threshold: Option<u64>,
     }
     /// Log visibility of a canister.
     #[derive(
