@@ -31,7 +31,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const SANITY_CHECK_ARTIFACTS_COUNT: usize = 32;
+const SANITY_CHECK_ARTIFACTS_COUNT: usize = 46;
 
 #[derive(PartialEq)]
 enum Action {
