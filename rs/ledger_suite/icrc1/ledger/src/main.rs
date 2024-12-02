@@ -16,12 +16,12 @@ use ic_icrc1::{
     Operation, Transaction,
 };
 use ic_icrc1_ledger::{
-    clear_stable_allowance_data, is_ready, ledger_state, panic_if_not_ready, set_ledger_state,
-    LEDGER_VERSION, UPGRADES_MEMORY,
+    clear_stable_allowance_data, clear_stable_balances_data, is_ready, ledger_state,
+    panic_if_not_ready, set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_ledger_canister_core::ledger::{
-    apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
+    apply_transaction_no_prunning, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
     TransferError as CoreTransferError,
 };
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -241,6 +241,9 @@ fn post_upgrade(args: Option<LedgerArgument>) {
         set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
         log_message("Upgrading from version {upgrade_from_version} which does store balances in stable structures, clearing stable balances data.");
         clear_stable_balances_data();
+        Access::with_ledger_mut(|ledger| {
+            ledger.copy_token_pool();
+        });
     }
     if upgrade_from_version == 0 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
@@ -291,9 +294,7 @@ fn migrate_next_part(instruction_limit: u64) {
                     if ledger.migrate_one_expiration() {
                         migrated_expirations += 1;
                     } else {
-                        set_ledger_state(LedgerState::Migrating(
-                            LedgerField::Balances,
-                        ));
+                        set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
                     }
                 }
                 LedgerField::Balances => {
@@ -418,7 +419,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             )?;
             w.encode_gauge(
                 "ledger_balance_store_entries",
-                ledger.balances().store.len() as f64,
+                ledger.balances_len() as f64,
                 "Total number of accounts in the balance store.",
             )?;
         }
@@ -668,7 +669,7 @@ fn execute_transfer_not_async(
             )
         };
 
-        let (block_idx, _) = apply_transaction(ledger, tx, now, effective_fee)?;
+        let (block_idx, _) = apply_transaction_no_prunning(ledger, tx, now, effective_fee)?;
         Ok(block_idx)
     })
 }
@@ -867,7 +868,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
             memo: arg.memo,
         };
 
-        let (block_idx, _) = apply_transaction(ledger, tx, now, expected_fee_tokens)
+        let (block_idx, _) = apply_transaction_no_prunning(ledger, tx, now, expected_fee_tokens)
             .map_err(convert_transfer_error)
             .map_err(|err| {
                 let err: ApproveError = match err.try_into() {

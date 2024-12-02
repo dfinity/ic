@@ -22,7 +22,9 @@ use ic_ledger_canister_core::runtime::Runtime;
 use ic_ledger_canister_core::{
     archive::ArchiveCanisterWasm,
     blockchain::Blockchain,
-    ledger::{apply_transaction, block_locations, LedgerContext, LedgerData, TransactionInfo},
+    ledger::{
+        apply_transaction_no_prunning, block_locations, LedgerContext, LedgerData, TransactionInfo,
+    },
     range_utils,
 };
 use ic_ledger_core::balances::BalancesStore;
@@ -697,12 +699,14 @@ impl Ledger {
                 )
             });
             let mint = Transaction::mint(account, amount, Some(now), None);
-            apply_transaction(&mut ledger, mint, now, Tokens::ZERO).unwrap_or_else(|err| {
-                panic!(
-                    "failed to mint {} tokens to {}: {:?}",
-                    balance, account, err
-                )
-            });
+            apply_transaction_no_prunning(&mut ledger, mint, now, Tokens::ZERO).unwrap_or_else(
+                |err| {
+                    panic!(
+                        "failed to mint {} tokens to {}: {:?}",
+                        balance, account, err
+                    )
+                },
+            );
         }
 
         ledger
@@ -744,6 +748,14 @@ impl Ledger {
 
     pub fn clear_arrivals(&mut self) {
         self.approvals.allowances_data.clear_arrivals();
+    }
+
+    pub fn copy_token_pool(&mut self) {
+        self.stable_balances.token_pool = self.balances.token_pool;
+    }
+
+    pub fn balances_len(&self) -> u64 {
+        BALANCES_MEMORY.with_borrow(|balances| balances.len())
     }
 }
 
