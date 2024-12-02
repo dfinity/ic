@@ -27,24 +27,20 @@ pub fn has_ipv6_connectivity(
 ) -> Result<bool> {
     // Format with the prefix length
     let ip = format!("{}/{}", generated_ipv6, ipv6_prefix_length);
-    let interface_down_func = || {
-        eprintln!("Removing ip address and bringing interface down");
-        get_command_stdout("ip", ["addr", "del", &ip, "dev", &interface.name])?;
-        deactivate_link(&interface.name)
-    };
 
     eprintln!(
         "Bringing {} up with ip address {}",
         &interface.name,
         &ip.to_string()
     );
+
     get_command_stdout("ip", ["addr", "add", &ip, "dev", &interface.name])?;
     activate_link(&interface.name)?;
 
     let wait_time = Duration::from_secs(2);
     let ping_target = ping_target.parse::<IpAddr>()?;
     let ping_timeout = Duration::from_secs(3);
-    let result = retry(
+    let ping_success = retry(
         40,
         || {
             eprintln!(
@@ -58,13 +54,19 @@ pub fn has_ipv6_connectivity(
         wait_time,
     );
 
-    if result.is_err() {
+    let interface_cleanup = || {
+        eprintln!("Removing ip address and bringing interface down");
+        get_command_stdout("ip", ["addr", "del", &ip, "dev", &interface.name])?;
+        deactivate_link(&interface.name)
+    };
+
+    if ping_success.is_err() {
         eprintln!("Failed to ping from configured interface.");
-        interface_down_func()?;
+        interface_cleanup()?;
         Ok(false)
     } else {
         eprintln!("Successful ipv6 connectivity");
-        interface_down_func()?;
+        interface_cleanup()?;
         Ok(true)
     }
 }
