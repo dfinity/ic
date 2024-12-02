@@ -4,6 +4,12 @@
 
 == Overview ==
 
+This library implements the Abortable Broadcast primitive.
+
+Currently, the implementation is not fully generalized. The two primary limitations are as follows:
+
+The ArtifactAssembler is tightly coupled with the implementation, reducing modularity.
+Deletions in the slot table are not propagated, which could lead to inconsistencies.
 
 == Requirements ==
 
