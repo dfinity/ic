@@ -1,15 +1,13 @@
 use std::{
     collections::HashMap,
     fs::{self, File},
-    io::Write,
     net::Ipv6Addr,
     path::{Path, PathBuf},
-    process::Command,
+    str::FromStr,
     time::Duration,
 };
 
 use anyhow::Result;
-use itertools::Itertools;
 use maplit::hashmap;
 use reqwest::Url;
 use serde::Serialize;
@@ -147,76 +145,8 @@ impl PrometheusVm {
     }
 
     fn sync_k8s_repo_dashboards(logger: Logger) -> Result<()> {
-        match std::env::var("SSH_AUTH_SOCK") {
-            Ok(_) => {}
-            Err(e) => warn!(
-                logger,
-                "SSH_AUTH_SOCK not found! It is possible that dashboards sync won't work because of this. Error: {:?}", e
-            ),
-        }
-
-        let output = Command::new("ssh")
-            .arg("-T")
-            .arg("git@github.com")
-            .output()?;
-        info!(
-            logger,
-            "Connection to github ssh socket response: {:?}", output
-        );
-
         let destination = get_dependency_path("rs/tests/dashboards");
-        let k8s_repo = get_dependency_path("rs/tests/k8s-dashboards");
-        if k8s_repo.exists() {
-            std::fs::remove_dir_all(&k8s_repo)?;
-        }
-
-        std::fs::create_dir_all(&k8s_repo)?;
-        info!(
-            logger,
-            "Created k8s repo folder on path: {}",
-            k8s_repo.display()
-        );
-        Command::new("git")
-            .arg("init")
-            .arg("-b")
-            .arg("main")
-            .current_dir(&k8s_repo)
-            .output()?;
-
-        Command::new("git")
-            .arg("remote")
-            .arg("add")
-            .arg("origin")
-            .arg("git@github.com:dfinity-ops/k8s.git")
-            .current_dir(&k8s_repo)
-            .output()?;
-
-        Command::new("git")
-            .arg("config")
-            .arg("core.sparseCheckout")
-            .arg("true")
-            .current_dir(&k8s_repo)
-            .output()?;
-
-        let mut file = std::fs::File::create(k8s_repo.join(".git/info/sparse-checkout"))?;
-        let paths_to_sparse_checkout = &["bases/apps/ic-dashboards"];
-        write!(file, "{}", paths_to_sparse_checkout.iter().join("\n"))?;
-
-        // This command is the only one likely to fail due to misconfigured ssh
-        let output = Command::new("git")
-            .arg("pull")
-            .arg("origin")
-            .arg("main")
-            .arg("--depth=1")
-            .current_dir(&k8s_repo)
-            .output()?;
-
-        info!(
-            logger,
-            "Pulled dashboards from dfinity-ops/k8s repo with output: {:?}", output
-        );
-
-        let dashboards_root = k8s_repo.join("bases").join("apps").join("ic-dashboards");
+        let dashboards_root = PathBuf::from_str(&std::env::var("IC_DASHBOARDS_DIR")?)?;
 
         for directory in dashboards_root.read_dir()? {
             let entry = directory?;

@@ -183,11 +183,12 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 		}
 		command := []string{"bazel", "test", target, "--config=systest"}
 		command = append(command, "--cache_test_results=no")
-		sshAuthSock := os.Getenv("SSH_AUTH_SOCK")
-		if sshAuthSock != "" {
-			command = append(command, "--test_env=SSH_AUTH_SOCK="+sshAuthSock)
+		icDashboardsDir, err := sparse_checkout("git@github.com:dfinity-ops/k8s.git", "", []string{"bases/apps/ic-dashboards"})
+		if err != nil {
+			cmd.PrintErrln(YELLOW + "Failed to sync k8s dashboards. Received the following error: " + err.Error())
 		} else {
-			cmd.PrintErrln(YELLOW + "Environment variable SSH_AUTH_SOCK is not found. If in devenv it is possible that grafana dashboards won't be able to sync because of this.")
+			cmd.PrintErrln(GREEN + "Successfully synced dashboards to path " + icDashboardsDir)
+			command = append(command, fmt.Sprintf("--test_env=IC_DASHBOARDS_DIR=%s", icDashboardsDir))
 		}
 		command = append(command, fmt.Sprintf("--test_timeout=%s", strconv.Itoa(TESTNET_DEPLOYMENT_TIMEOUT_SEC)))
 		// We let the test-driver (and Bazel command) finish without deleting Farm group.
