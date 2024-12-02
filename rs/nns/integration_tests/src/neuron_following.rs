@@ -399,7 +399,7 @@ fn vote_propagation_with_following() {
 ///    1. Recently - No prune.
 ///    2. Long Ago - Needs pruning.
 #[tokio::test]
-async fn vote_prune_some_following() {
+async fn test_prune_some_following() {
     // Step 1: Prepare the world. (This mainly consists of initializing NNS
     // governance canister with some neurons.)
 
