@@ -67,7 +67,7 @@ pub struct StorageMetrics {
 impl StorageMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         let write_bytes = metrics_registry.int_counter_vec(
-            "storage_layer_write_bytes",
+            "torage_layer_write_bytes", // DO NOT SUBMIT
             "Number of bytes written to disk, broken down by data vs index and merge vs flush.",
             &[LABEL_OP, LABEL_TYPE],
         );
