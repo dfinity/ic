@@ -132,16 +132,13 @@ pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
     //own_subnet_type: SubnetType,
     mut thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> Result<(), CheckpointError> {
-    if 1 == 2 + 3 {
-        // DO NOT SUBMIT
-        maybe_parallel_map(
-            &mut thread_pool,
-            checkpoint_layout.all_existing_pagemaps()?.into_iter(),
-            |pm| verify(pm),
-        )
-        .into_iter()
-        .try_for_each(identity)?;
-    }
+    maybe_parallel_map(
+        &mut thread_pool,
+        checkpoint_layout.all_existing_pagemaps()?.into_iter(),
+        |pm| verify(pm),
+    )
+    .into_iter()
+    .try_for_each(identity)?;
     checkpoint_layout
         .remove_unverified_checkpoint_marker()
         .map_err(CheckpointError::from)?;
