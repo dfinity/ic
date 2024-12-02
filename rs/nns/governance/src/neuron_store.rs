@@ -859,20 +859,17 @@ impl NeuronStore {
         let mut possible_results = vec![];
 
         possible_results.push(
-            self
-                .heap_neurons_range(range)
+            self.heap_neurons_range(range)
                 .next()
-                .map(|neuron| neuron.id())
+                .map(|neuron| neuron.id()),
         );
 
-        possible_results.push(
-            with_stable_neuron_store(|stable_store| {
-                stable_store
-                    .range_neurons_sections(range, NeuronSections::NONE)
-                    .next()
-                    .map(|neuron| neuron.id())
-            }),
-        );
+        possible_results.push(with_stable_neuron_store(|stable_store| {
+            stable_store
+                .range_neurons_sections(range, NeuronSections::NONE)
+                .next()
+                .map(|neuron| neuron.id())
+        }));
 
         possible_results
             .into_iter()
