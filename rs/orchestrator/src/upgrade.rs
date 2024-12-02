@@ -28,7 +28,7 @@ use ic_types::{
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     path::PathBuf,
     sync::{Arc, Mutex},
     time::Instant,
@@ -57,6 +57,10 @@ impl Process for ReplicaProcess {
 
     fn get_args(&self) -> &[String] {
         &self.args
+    }
+
+    fn get_env(&self) -> HashMap<String, String> {
+        HashMap::new()
     }
 }
 
