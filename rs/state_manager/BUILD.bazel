@@ -94,6 +94,7 @@ rust_ic_test(
         "tests/state_manager.rs",
     ],
     crate_root = "tests/state_manager.rs",
+    tags = ["exclusive"],
     deps = [
         # Keep sorted.
         ":state_manager",
