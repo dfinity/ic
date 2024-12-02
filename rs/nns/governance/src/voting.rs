@@ -11,7 +11,6 @@ use ic_nervous_system_long_message::noop_self_call_if_over_instructions;
 use ic_nervous_system_temporary::Temporary;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_stable_structures::{storable::Bound, StableBTreeMap, Storable};
-use maplit::btreeset;
 use prost::Message;
 use std::{
     borrow::Cow,
@@ -139,7 +138,7 @@ impl Governance {
     pub fn process_voting_state_machines(&mut self) {
         with_voting_state_machines_mut(|voting_state_machines| loop {
             if voting_state_machines
-                .with_next_machine(|(proposal_id, machine)| {
+                .with_next_machine(|(_proposal_id, machine)| {
                     // We need to keep track of which proposals we processed
                     self.process_machine_until_soft_limit(machine, over_soft_message_limit);
                 })
