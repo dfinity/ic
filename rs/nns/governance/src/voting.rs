@@ -195,7 +195,7 @@ impl<Memory: ic_stable_structures::Memory> VotingStateMachines<Memory> {
 
     /// Perform a callback with a given voting machine.  If the machine is finished, it is removed
     /// after the callback.
-    fn with_machine<R>(
+    pub(crate) fn with_machine<R>(
         &mut self,
         proposal_id: ProposalId,
         topic: Topic,
@@ -209,7 +209,7 @@ impl<Memory: ic_stable_structures::Memory> VotingStateMachines<Memory> {
             .remove(&proposal_id)
             // This unwrap should be safe because we only write valid machines below.
             .map(|proto| ProposalVotingStateMachine::try_from(proto).unwrap())
-            .unwrap_or(ProposalVotingStateMachine::try_new(proposal_id, topic).unwrap());
+            .unwrap_or(ProposalVotingStateMachine::new(proposal_id, topic));
 
         let result = callback(&mut machine);
 
@@ -225,7 +225,7 @@ impl<Memory: ic_stable_structures::Memory> VotingStateMachines<Memory> {
 }
 
 #[derive(Debug, PartialEq, Default)]
-struct ProposalVotingStateMachine {
+pub(crate) struct ProposalVotingStateMachine {
     // The proposal ID that is being voted on.
     proposal_id: ProposalId,
     // The topic of the proposal.
@@ -292,16 +292,12 @@ impl Storable for crate::pb::v1::ProposalVotingStateMachine {
 }
 
 impl ProposalVotingStateMachine {
-    fn try_new(proposal_id: ProposalId, topic: Topic) -> Result<Self, String> {
-        if topic == Topic::Unspecified {
-            return Err("Topic must be specified".to_string());
-        }
-
-        Ok(Self {
+    fn new(proposal_id: ProposalId, topic: Topic) -> Self {
+        Self {
             proposal_id,
             topic,
             ..Default::default()
-        })
+        }
     }
 
     /// Returns true if this machine has no more work to do.
@@ -312,7 +308,7 @@ impl ProposalVotingStateMachine {
     }
 
     /// If only recording votes is left, this function returns true.
-    fn is_voting_finished(&self) -> bool {
+    pub(crate) fn is_voting_finished(&self) -> bool {
         self.neurons_to_check_followers.is_empty() && self.followers_to_check.is_empty()
     }
 
@@ -575,7 +571,7 @@ mod test {
         let governance_proto = crate::pb::v1::Governance {
             neurons: heap_neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into()))
+                .map(|(id, neuron)| (id, neuron.into_proto(now)))
                 .collect(),
             proposals: btreemap! {
                 1 => ProposalData {
@@ -671,7 +667,7 @@ mod test {
         let governance_proto = crate::pb::v1::Governance {
             neurons: neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into()))
+                .map(|(id, neuron)| (id, neuron.into_proto(now)))
                 .collect(),
             proposals: btreemap! {
                 1 => ProposalData {
@@ -736,14 +732,6 @@ mod test {
     }
 
     #[test]
-    fn test_invalid_topic() {
-        let err = ProposalVotingStateMachine::try_new(ProposalId { id: 0 }, Topic::Unspecified)
-            .unwrap_err();
-
-        assert_eq!(err, "Topic must be specified");
-    }
-
-    #[test]
     fn test_is_completely_finished() {
         let mut state_machine = ProposalVotingStateMachine {
             proposal_id: ProposalId { id: 0 },
@@ -775,8 +763,7 @@ mod test {
     #[test]
     fn test_continue_processsing() {
         let mut state_machine =
-            ProposalVotingStateMachine::try_new(ProposalId { id: 0 }, Topic::NetworkEconomics)
-                .unwrap();
+            ProposalVotingStateMachine::new(ProposalId { id: 0 }, Topic::NetworkEconomics);
 
         let mut ballots = HashMap::new();
         let mut neurons = BTreeMap::new();
@@ -861,8 +848,7 @@ mod test {
     #[test]
     fn test_cyclic_following_will_terminate() {
         let mut state_machine =
-            ProposalVotingStateMachine::try_new(ProposalId { id: 0 }, Topic::NetworkEconomics)
-                .unwrap();
+            ProposalVotingStateMachine::new(ProposalId { id: 0 }, Topic::NetworkEconomics);
 
         let mut ballots = HashMap::new();
         let mut neurons = BTreeMap::new();
@@ -933,7 +919,10 @@ mod test {
                     ..Default::default()
                 }
             },
-            neurons: neurons.into_iter().map(|(id, n)| (id, n.into())).collect(),
+            neurons: neurons
+                .into_iter()
+                .map(|(id, n)| (id, n.into_proto(u64::MAX)))
+                .collect(),
             ..Default::default()
         };
         let mut governance = Governance::new(
@@ -1008,7 +997,10 @@ mod test {
                     ..Default::default()
                 }
             },
-            neurons: neurons.into_iter().map(|(id, n)| (id, n.into())).collect(),
+            neurons: neurons
+                .into_iter()
+                .map(|(id, n)| (id, n.into_proto(u64::MAX)))
+                .collect(),
             ..Default::default()
         };
         let mut governance = Governance::new(
@@ -1059,7 +1051,10 @@ mod test {
                     ..Default::default()
                 }
             },
-            neurons: neurons.into_iter().map(|(id, n)| (id, n.into())).collect(),
+            neurons: neurons
+                .into_iter()
+                .map(|(id, n)| (id, n.into_proto(u64::MAX)))
+                .collect(),
             ..Default::default()
         };
         let mut governance = Governance::new(

@@ -1418,6 +1418,9 @@ enum ProposalRewardStatus {
 
   // The proposal is not eligible to be taken into account in a reward event.
   PROPOSAL_REWARD_STATUS_INELIGIBLE = 4;
+
+  // The proposal is not accepting votes, but some voting is still being processed
+  PROPOSAL_REWARD_STATUS_VOTES_PROCESSING = 5;
 }
 
 // A tally of votes.

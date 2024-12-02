@@ -844,6 +844,7 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
 
 mod metrics_tests {
 
+    use ic_nns_common::pb::v1::ProposalId;
     use maplit::btreemap;
 
     use crate::{
@@ -858,6 +859,7 @@ mod metrics_tests {
     #[test]
     fn test_metrics_total_voting_power() {
         let proposal_1 = ProposalData {
+            id: Some(ProposalId { id: 1 }),
             proposal: Some(Proposal {
                 title: Some("Foo Foo Bar".to_string()),
                 action: Some(proposal::Action::Motion(Motion {
@@ -875,6 +877,7 @@ mod metrics_tests {
         };
 
         let proposal_2 = ProposalData {
+            id: Some(ProposalId { id: 2 }),
             proposal: Some(Proposal {
                 title: Some("Foo Foo Bar".to_string()),
                 action: Some(proposal::Action::ManageNeuron(Box::default())),
@@ -923,6 +926,7 @@ mod metrics_tests {
         });
 
         let open_proposal = ProposalData {
+            id: Some(ProposalId { id: 1 }),
             proposal: Some(Proposal {
                 title: Some("open_proposal".to_string()),
                 action: Some(manage_neuron_action.clone()),
@@ -932,6 +936,7 @@ mod metrics_tests {
         };
 
         let rejected_proposal = ProposalData {
+            id: Some(ProposalId { id: 2 }),
             proposal: Some(Proposal {
                 title: Some("rejected_proposal".to_string()),
                 action: Some(manage_neuron_action.clone()),
@@ -942,6 +947,7 @@ mod metrics_tests {
         };
 
         let motion_proposal = ProposalData {
+            id: Some(ProposalId { id: 3 }),
             proposal: Some(Proposal {
                 title: Some("Foo Foo Bar".to_string()),
                 action: Some(motion_action.clone()),

@@ -4727,6 +4727,8 @@ pub enum ProposalRewardStatus {
     Settled = 3,
     /// The proposal is not eligible to be taken into account in a reward event.
     Ineligible = 4,
+    /// The proposal is not accepting votes, but some voting is still being processed
+    VotesProcessing = 5,
 }
 impl ProposalRewardStatus {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4735,21 +4737,23 @@ impl ProposalRewardStatus {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            ProposalRewardStatus::Unspecified => "PROPOSAL_REWARD_STATUS_UNSPECIFIED",
-            ProposalRewardStatus::AcceptVotes => "PROPOSAL_REWARD_STATUS_ACCEPT_VOTES",
-            ProposalRewardStatus::ReadyToSettle => "PROPOSAL_REWARD_STATUS_READY_TO_SETTLE",
-            ProposalRewardStatus::Settled => "PROPOSAL_REWARD_STATUS_SETTLED",
-            ProposalRewardStatus::Ineligible => "PROPOSAL_REWARD_STATUS_INELIGIBLE",
+            Self::Unspecified => "PROPOSAL_REWARD_STATUS_UNSPECIFIED",
+            Self::AcceptVotes => "PROPOSAL_REWARD_STATUS_ACCEPT_VOTES",
+            Self::ReadyToSettle => "PROPOSAL_REWARD_STATUS_READY_TO_SETTLE",
+            Self::Settled => "PROPOSAL_REWARD_STATUS_SETTLED",
+            Self::Ineligible => "PROPOSAL_REWARD_STATUS_INELIGIBLE",
+            Self::VotesProcessing => "PROPOSAL_REWARD_STATUS_VOTES_PROCESSING",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> Option<Self> {
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
             "PROPOSAL_REWARD_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
             "PROPOSAL_REWARD_STATUS_ACCEPT_VOTES" => Some(Self::AcceptVotes),
             "PROPOSAL_REWARD_STATUS_READY_TO_SETTLE" => Some(Self::ReadyToSettle),
             "PROPOSAL_REWARD_STATUS_SETTLED" => Some(Self::Settled),
             "PROPOSAL_REWARD_STATUS_INELIGIBLE" => Some(Self::Ineligible),
+            "PROPOSAL_REWARD_STATUS_VOTES_PROCESSING" => Some(Self::VotesProcessing),
             _ => None,
         }
     }
