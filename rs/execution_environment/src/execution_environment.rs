@@ -1212,7 +1212,7 @@ impl ExecutionEnvironment {
                                     ThresholdArguments::Schnorr(SchnorrArguments {
                                         key_id: args.key_id,
                                         message: Arc::new(args.message),
-                                        taproot_tree_root: args.taproot_tree_root,
+                                        taproot_tree_root: args.taproot_tree_root.map(|v| Arc::new(v.into_vec())),
                                     }),
                                     args.derivation_path.into_inner(),
                                     registry_settings

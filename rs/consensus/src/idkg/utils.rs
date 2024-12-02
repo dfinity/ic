@@ -288,7 +288,7 @@ pub(super) fn build_signature_inputs(
                 args.message.clone(),
                 nonce,
                 pre_sig,
-                args.taproot_tree_root.clone().map(Arc::new),
+                args.taproot_tree_root.clone(),
             ))
         }
         (PreSignatureRef::Ecdsa(_), _) => {
