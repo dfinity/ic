@@ -356,6 +356,11 @@ pub(super) fn create_summary_payload(
             state_manager,
             validation_context,
             transcripts_for_remote_subnets,
+            &last_summary
+                .transcripts_for_remote_subnets
+                .iter()
+                .map(|(id, _, result)| (id.clone(), result.clone()))
+                .collect(),
             &last_summary.initial_dkg_attempts,
             &logger,
         )?;
@@ -430,6 +435,7 @@ fn compute_remote_dkg_data(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     validation_context: &ValidationContext,
     mut new_transcripts: BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
+    previous_transcripts: &BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
     previous_attempts: &BTreeMap<NiDkgTargetId, u32>,
     logger: &ReplicaLogger,
 ) -> Result<
@@ -462,6 +468,15 @@ fn compute_remote_dkg_data(
         let mut expected_configs = Vec::new();
         for config in low_high_threshold_configs {
             let dkg_id = config.dkg_id();
+
+            // Check if we have a transcript in the previous summary for this config, and
+            // if we do, move it to the new summary.
+            if let Some((id, transcript)) = previous_transcripts
+                .iter()
+                .find(|(id, _)| eq_sans_height(id, dkg_id))
+            {
+                new_transcripts.insert(id.clone(), transcript.clone());
+            }
 
             // We check if we computed a transcript for this config in the last round. And
             // if not, we move the config into the new summary so that we try again in
@@ -1114,6 +1129,7 @@ mod tests {
                     &validation_context,
                     BTreeMap::new(),
                     &BTreeMap::new(),
+                    &BTreeMap::new(),
                     &logger,
                 )
                 .unwrap();
@@ -1146,6 +1162,7 @@ mod tests {
                         state_manager.as_ref(),
                         &validation_context,
                         BTreeMap::new(),
+                        &BTreeMap::new(),
                         &initial_dkg_attempts,
                         &logger,
                     )
@@ -1188,6 +1205,7 @@ mod tests {
                         state_manager.as_ref(),
                         &validation_context,
                         BTreeMap::new(),
+                        &BTreeMap::new(),
                         &initial_dkg_attempts,
                         &logger,
                     )
