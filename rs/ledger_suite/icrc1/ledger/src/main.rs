@@ -307,7 +307,7 @@ fn migrate_next_part(instruction_limit: u64) {
             }
         }
         let instructions_migration = instruction_counter() - instructions_migration_start;
-        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances {migrated_balances}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
+        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
             instruction_counter());
         if !is_ready() {
             log_message(
