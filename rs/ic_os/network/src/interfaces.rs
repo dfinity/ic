@@ -105,11 +105,10 @@ fn qualify_and_generate_interfaces(interface_names: &[&str]) -> Result<Vec<Inter
     // On some hardware ethtool needs time before link status settles.
     // Takes 2.3 seconds for recent NP.
     // Wait a maximum of 20 seconds for link status to settle.
-    let mut result_vec: Vec<Interface> = Vec::new();
     let wait_time = Duration::from_secs(2);
     let interface_results: Vec<Result<Option<Interface>>> = interface_names
         .par_iter()
-        .map(|i| {
+        .map(|&i| {
             retry_pred(
                 10,
                 || qualify_and_generate_interface(i),
@@ -119,16 +118,16 @@ fn qualify_and_generate_interfaces(interface_names: &[&str]) -> Result<Vec<Inter
         })
         .collect();
 
+    let mut result_vec = Vec::new();
     for (name, result) in std::iter::zip(interface_names, interface_results) {
         eprintln!("Interface name: {name}");
         match result {
             Ok(Some(interface)) => {
                 eprintln!(
                     "Cable is ATTACHED. Speed (mbps) detected: {}",
-                    match &interface.speed_mbps {
-                        Some(s) => s.to_string(),
-                        None => "None".to_string(),
-                    }
+                    interface
+                        .speed_mbps
+                        .map_or("None".to_string(), |s| s.to_string())
                 );
                 result_vec.push(interface);
             }
@@ -139,7 +138,7 @@ fn qualify_and_generate_interfaces(interface_names: &[&str]) -> Result<Vec<Inter
     Ok(result_vec)
 }
 
-/// Return vec of Interface's which:
+/// Return vec of Interfaces which:
 ///   Have physical links attached
 ///   Do not contain the string 'virtual'
 pub fn get_interfaces() -> Result<Vec<Interface>> {
