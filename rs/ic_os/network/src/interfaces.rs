@@ -242,13 +242,13 @@ fn is_link_up_from_ethtool_output(output: &str) -> Result<bool> {
 }
 
 fn activate_link(interface_name: &str) -> Result<()> {
-    let _ = get_command_stdout("ip", ["link", "set", interface_name, "up"])
+    get_command_stdout("ip", ["link", "set", interface_name, "up"])
         .context("Error bringing interface online")?;
     Ok(())
 }
 
 fn deactivate_link(interface_name: &str) -> Result<()> {
-    let _ = get_command_stdout("ip", ["link", "set", interface_name, "down"])
+    get_command_stdout("ip", ["link", "set", interface_name, "down"])
         .context("Error bringing interface offline")?;
     Ok(())
 }
