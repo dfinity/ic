@@ -2,10 +2,11 @@ use ic_canister_sandbox_backend_lib::replica_controller::sandboxed_execution_con
 use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_embedders::wasm_executor::{WasmExecutionResult, WasmExecutor};
-use ic_embedders::wasm_utils::decoding::decoded_wasm_size;
-use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, WasmtimeEmbedder};
-use ic_embedders::{CompilationCache, CompilationResult};
+use ic_embedders::{
+    wasm_executor::{WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
+    wasm_utils::decoding::decoded_wasm_size,
+    CompilationCache, CompilationResult, WasmExecutionInput, WasmtimeEmbedder,
+};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
@@ -526,5 +527,18 @@ impl Hypervisor {
     #[doc(hidden)]
     pub fn clear_compilation_cache_for_testing(&self) {
         self.compilation_cache.clear_for_testing()
+    }
+
+    /// Insert a compiled module in the compilation cache speed up tests by
+    /// skipping the Wasmtime compilation step.
+    #[doc(hidden)]
+    pub fn compilation_cache_insert_for_testing(
+        &self,
+        bytes: Vec<u8>,
+        compiled_module: ic_embedders::SerializedModule,
+    ) {
+        let canister_module = CanisterModule::new(bytes);
+        self.compilation_cache
+            .insert_ok(&canister_module, compiled_module);
     }
 }

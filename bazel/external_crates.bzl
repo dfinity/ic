@@ -220,10 +220,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.83",
             ),
             "axum": crate.spec(
-                version = "^0.7.7",
+                version = "^0.7.9",
             ),
             "axum-extra": crate.spec(
-                version = "^0.9.0",
+                version = "^0.9.6",
                 features = ["typed-header"],
             ),
             "axum-server": crate.spec(
@@ -438,6 +438,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "educe": crate.spec(
                 version = "^0.4",
             ),
+            "env-file-reader": crate.spec(
+                version = "^0.3",
+            ),
             "erased-serde": crate.spec(
                 version = "^0.3.11",
             ),
@@ -532,7 +535,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.1",
             ),
             "hyper": crate.spec(
-                version = "^1.5.0",
+                version = "^1.5.1",
                 features = ["full"],
             ),
             "hyper-socks2": crate.spec(
@@ -1081,7 +1084,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.0",
             ),
             "rustls": crate.spec(
-                version = "^0.23.17",
+                version = "^0.23.18",
                 default_features = False,
                 features = [
                     "ring",

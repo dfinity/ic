@@ -39,10 +39,7 @@ pub fn stream_header(certification_version: CertificationVersion) -> StreamHeade
 }
 
 pub fn request(certification_version: CertificationVersion) -> RequestOrResponse {
-    let metadata = Some(RequestMetadata::new(
-        1,
-        Time::from_nanos_since_unix_epoch(100_000),
-    ));
+    let metadata = RequestMetadata::new(1, Time::from_nanos_since_unix_epoch(100_000));
     let deadline = if certification_version >= CertificationVersion::V18 {
         CoarseTime::from_secs_since_unix_epoch(8)
     } else {

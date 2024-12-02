@@ -1343,7 +1343,9 @@ pub mod sns {
 
     pub mod governance {
         use super::*;
+        use assert_matches::assert_matches;
         use ic_crypto_sha2::Sha256;
+        use ic_nervous_system_agent::sns::governance::GovernanceCanister;
         use ic_sns_governance::pb::v1::get_neuron_response;
         use pocket_ic::ErrorCode;
 
@@ -1553,29 +1555,15 @@ pub mod sns {
                 })
         }
 
+        /// This function is a wrapper around `GovernanceCanister::get_nervous_system_parameters`, kept here for convenience.
         pub async fn get_nervous_system_parameters(
             pocket_ic: &PocketIc,
             canister_id: PrincipalId,
         ) -> sns_pb::NervousSystemParameters {
-            let result = pocket_ic
-                .query_call(
-                    canister_id.into(),
-                    Principal::from(PrincipalId::new_anonymous()),
-                    "get_nervous_system_parameters",
-                    Encode!().unwrap(),
-                )
+            GovernanceCanister { canister_id }
+                .get_nervous_system_parameters(pocket_ic)
                 .await
-                .unwrap();
-            let result = match result {
-                WasmResult::Reply(reply) => reply,
-                WasmResult::Reject(reject) => {
-                    panic!(
-                        "get_nervous_system_parameters rejected by SNS governance: {:#?}",
-                        reject
-                    )
-                }
-            };
-            Decode!(&result, sns_pb::NervousSystemParameters).unwrap()
+                .unwrap()
         }
 
         pub async fn propose_to_advance_sns_target_version(
@@ -1732,13 +1720,21 @@ pub mod sns {
             sns_governance_canister_id: PrincipalId,
             expected_entries: &[sns_pb::upgrade_journal_entry::Event],
         ) {
-            let sns_pb::GetUpgradeJournalResponse {
-                upgrade_journal, ..
-            } = sns::governance::get_upgrade_journal(pocket_ic, sns_governance_canister_id).await;
+            let response =
+                sns::governance::get_upgrade_journal(pocket_ic, sns_governance_canister_id).await;
 
-            let upgrade_journal = upgrade_journal.unwrap().entries;
+            let journal_entries = assert_matches!(
+                response,
+                sns_pb::GetUpgradeJournalResponse {
+                    upgrade_journal: Some(sns_pb::UpgradeJournal {
+                        entries,
+                        ..
+                    }),
+                    ..
+                } => entries
+            );
 
-            for (index, either_or_both) in upgrade_journal
+            for (index, either_or_both) in journal_entries
                 .iter()
                 .zip_longest(expected_entries.iter())
                 .enumerate()

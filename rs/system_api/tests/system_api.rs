@@ -28,7 +28,7 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    messages::{CallbackId, RejectContext, RequestMetadata, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE},
+    messages::{CallbackId, RejectContext, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE},
     methods::{Callback, WasmClosure},
     time,
     time::UNIX_EPOCH,
@@ -992,7 +992,7 @@ fn test_canister_balance() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
 
@@ -1020,7 +1020,7 @@ fn test_canister_cycle_balance() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
 
@@ -1055,7 +1055,7 @@ fn test_msg_cycles_available_traps() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             available_cycles,
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
 
@@ -1220,7 +1220,7 @@ fn msg_cycles_accept_all_cycles_in_call_context() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::from(amount),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
     let mut api = get_system_api(
@@ -1243,7 +1243,7 @@ fn msg_cycles_accept_all_cycles_in_call_context_when_more_asked() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
     let mut api = get_system_api(
@@ -1275,7 +1275,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
     let mut api = get_system_api(
@@ -1330,7 +1330,7 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters(execution_mode.clone()).compute_allocation,
         execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
     );
@@ -1408,7 +1408,7 @@ fn helper_test_on_low_wasm_memory(
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
     );
@@ -1629,7 +1629,7 @@ fn push_output_request_respects_memory_limits() {
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters(execution_mode.clone()).compute_allocation,
         execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
     );
@@ -1743,7 +1743,7 @@ fn push_output_request_oversized_request_memory_limits() {
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters(execution_mode.clone()).compute_allocation,
         execution_parameters(execution_mode.clone()).canister_guaranteed_callback_quota,
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
     );

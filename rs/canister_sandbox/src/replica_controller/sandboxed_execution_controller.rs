@@ -2049,6 +2049,10 @@ mod tests {
             Arc::new(FakeStateManager::new()),
         )
         .unwrap();
+        // Stop the background monitoring thread to avoid race conditions with the tests.
+        while controller.stop_monitoring_thread.send(true).is_ok() {
+            thread::sleep(Duration::from_millis(10));
+        }
         (controller, tempdir, log_path)
     }
 
