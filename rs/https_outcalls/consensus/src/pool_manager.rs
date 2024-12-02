@@ -178,7 +178,8 @@ impl CanisterHttpPoolManagerImpl {
                             None
                         })
                     })
-                    .map(|http_info| http_info.ip_addr)
+                    //TODO(mihailjianu): This should be replaced with a more robust way of
+                    .map(|http_info| format!("socks5://[{0}]:1080", http_info.ip_addr))
             })
             .collect::<Vec<String>>()
     }

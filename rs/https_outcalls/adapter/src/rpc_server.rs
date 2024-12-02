@@ -110,12 +110,6 @@ impl CanisterHttp {
         http_connector
             .set_connect_timeout(Some(Duration::from_secs(self.http_connect_timeout_secs)));
 
-        let mut ip = ip.to_string();
-
-        if !ip.starts_with("socks5") {
-            ip = format!("socks5://[{}]:1080", ip);
-        }
-
         match ip.parse() {
             Ok(proxy_addr) => {
                 let proxy_connector = SocksConnector {
@@ -250,7 +244,7 @@ impl HttpsOutcallsService for CanisterHttp {
                     api_bn_ips.shuffle(&mut thread_rng());
 
                     //TODO(mihailjianu): we should not try with the proxy from the config. 
-                    //api_bn_ips.push(self.proxy_url.clone());
+                    api_bn_ips.push(self.proxy_url.clone());
 
                     let request_ips: HashSet<&String> = api_bn_ips.iter().collect();
 
@@ -311,22 +305,27 @@ impl HttpsOutcallsService for CanisterHttp {
                             Ok(resp) => {
                                 response = Some(resp);
                                 self.metrics.succesful_socks_connections.with_label_values(&[&tries.to_string()]).inc();
-                                break;
+                                errors += format!("c{}", next_socks_proxy_ip).as_str();
+                                //TODO(mihailjianu): we should break if it worked.
+                                //break;
                             }
                             Err(socks_err) => {
-                                errors += &socks_err;
+                                errors += format!("f{}", next_socks_proxy_ip).as_str();
                                 debug!(self.logger, "Failed to connect through SOCKS with IP {}: {}", next_socks_proxy_ip, socks_err);
                                 // Retry with a different socks client
                                 // TODO: only retry if the error couldn've been caused by the proxy itself
                             }
                         }
                     }
-                    self.metrics.socks_cache_size.set(self.cache.read().len() as i64);
+                    self.metrics.socks_cache_size.set(self.cache.read().len() as i64);               
+
+                    response = None;                     
+
                     response.ok_or_else(|| {
                         if api_bn_ips.is_empty() {
                             "No IPs to connect through SOCKS in the request".to_string()
                         } else {
-                            format!("all IPS: {}, real ip: {}, with error {}", api_bn_ips.join(", "), self.proxy_url, errors)
+                            format!("e{}", errors)
                         }
                     })
                 }

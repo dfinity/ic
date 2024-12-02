@@ -61,6 +61,8 @@ system_test_nns(
         # TODO(NET-1710): enable on CI again when the problematic firewall rule in the IC node has been removed.
         #"system_test_hourly",
         #"system_test_nightly",
+        #TODO(mihailjianu): remove this.
+        "dynamic_testnet",
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS

@@ -66,7 +66,7 @@ pub fn setup(env: TestEnv) {
         .start(&env)
         .expect("failed to set up universal VM");
 
-    canister_http::start_httpbin_on_uvm(&env);
+    start_httpbin_on_uvm(&env);
     info!(&logger, "Started Universal VM!");
 
     // Create raw BN vm to get ipv6 address with which we configure IC.
@@ -106,7 +106,6 @@ pub fn setup(env: TestEnv) {
     );
 
     await_nodes_healthy(&env);
-    //install_nns_canisters(&env);
 
     // Start BN.
     bn_vm

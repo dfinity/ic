@@ -163,11 +163,14 @@ system_test_nns(
     ],
     deps = [
         # Keep sorted.
+        "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/networking/canister_http",
         "//rs/tests/nns/nns_dapp",
         "@crate_index//:anyhow",
+        "@crate_index//:slog",
     ],
 )
 
