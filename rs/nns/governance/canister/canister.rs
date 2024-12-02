@@ -59,6 +59,7 @@ use rand_chacha::ChaCha20Rng;
 use std::{
     boxed::Box,
     cell::RefCell,
+    ops::Bound,
     str::FromStr,
     time::{Duration, SystemTime},
 };
@@ -200,7 +201,8 @@ fn schedule_seeding(delay: Duration) {
 thread_local! {
     // The last neuron whose following was pruned (possibly, trivially, i.e. did
     // not try to remove anything, because it refreshed recently enough).
-    static PRUNE_FOLLOWING_CHECKPOINT: RefCell<NeuronIdProto> = Default::default();
+    static PRUNE_FOLLOWING_CHECKPOINT: RefCell<Bound<NeuronIdProto>> =
+        const { RefCell::new(Bound::Unbounded) };
 }
 
 fn schedule_prune_following(delay: Duration) {
@@ -209,10 +211,10 @@ fn schedule_prune_following(delay: Duration) {
     }
 
     ic_cdk_timers::set_timer(delay, || {
-        let start_checkpoint = PRUNE_FOLLOWING_CHECKPOINT.with(|p| *p.borrow());
+        let original_checkpoint = PRUNE_FOLLOWING_CHECKPOINT.with(|p| *p.borrow());
 
         let carry_on = || call_context_instruction_counter() < 500_000_000;
-        let new_checkpoint = governance_mut().prune_some_following(&start_checkpoint, carry_on);
+        let new_checkpoint = governance_mut().prune_some_following(original_checkpoint, carry_on);
 
         PRUNE_FOLLOWING_CHECKPOINT.with(|p| {
             let mut borrow = p.borrow_mut();

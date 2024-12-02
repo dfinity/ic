@@ -6019,10 +6019,10 @@ impl Governance {
 
     pub fn prune_some_following(
         &mut self,
-        begin: &NeuronId,
+        begin: std::ops::Bound<NeuronId>,
         carry_on: impl FnMut() -> bool,
-    ) -> NeuronId {
-        prune_some_following(&mut self.neuron_store, *begin, self.env.now(), carry_on)
+    ) -> std::ops::Bound<NeuronId> {
+        prune_some_following(&mut self.neuron_store, begin, carry_on)
     }
 
     /// Creates a new neuron or refreshes the stake of an existing
