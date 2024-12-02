@@ -94,7 +94,6 @@ rust_ic_test(
         "tests/state_manager.rs",
     ],
     crate_root = "tests/state_manager.rs",
-    tags = ["cpu:16"],
     deps = [
         # Keep sorted.
         ":state_manager",
