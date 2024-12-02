@@ -1079,7 +1079,7 @@ pub fn build_unsigned_transaction(
     ))
 }
 
-fn evaluate_minter_fee(num_inputs: u64, num_outputs: u64) -> Satoshi {
+pub fn evaluate_minter_fee(num_inputs: u64, num_outputs: u64) -> Satoshi {
     max(
         MINTER_FEE_PER_INPUT * num_inputs
             + MINTER_FEE_PER_OUTPUT * num_outputs
