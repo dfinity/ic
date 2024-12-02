@@ -507,7 +507,7 @@ pub async fn metrics_middleware(
     let remote_addr = request
         .extensions()
         .get::<Arc<ConnInfo>>()
-        .map(|x| x.remote_addr.ip().to_string())
+        .map(|x| x.remote_addr.ip().to_canonical().to_string())
         .unwrap_or_default();
 
     let request_type = &request
