@@ -687,7 +687,7 @@ impl ExhaustiveSet for NiDkgTranscript {
         tags.extend(
             NiDkgMasterPublicKeyId::exhaustive_set(rng)
                 .into_iter()
-                .map(|key_id| NiDkgTag::HighThresholdForKey(key_id)),
+                .map(NiDkgTag::HighThresholdForKey),
         );
         tags.into_iter()
             .map(|tag| {
