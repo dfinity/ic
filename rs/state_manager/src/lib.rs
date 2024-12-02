@@ -191,7 +191,7 @@ pub struct CheckpointMetrics {
     load_checkpoint_step_duration: HistogramVec,
     load_canister_step_duration: HistogramVec,
     load_checkpoint_soft_invariant_broken: IntCounter,
-    _replicated_state_altered_after_checkpoint: IntCounter,
+    replicated_state_altered_after_checkpoint: IntCounter,
     tip_handler_request_duration: HistogramVec,
     page_map_flushes: IntCounter,
     page_map_flush_skips: IntCounter,
@@ -227,7 +227,7 @@ impl CheckpointMetrics {
         let load_checkpoint_soft_invariant_broken =
             metrics_registry.error_counter(CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN);
 
-        let _replicated_state_altered_after_checkpoint = metrics_registry
+        let replicated_state_altered_after_checkpoint = metrics_registry
             .error_counter(CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT);
 
         let tip_handler_request_duration = metrics_registry.histogram_vec(
@@ -257,7 +257,7 @@ impl CheckpointMetrics {
             load_checkpoint_step_duration,
             load_canister_step_duration,
             load_checkpoint_soft_invariant_broken,
-            _replicated_state_altered_after_checkpoint,
+            replicated_state_altered_after_checkpoint,
             tip_handler_request_duration,
             page_map_flushes,
             page_map_flush_skips,
@@ -2668,39 +2668,20 @@ impl StateManagerImpl {
                 .metrics
                 .checkpoint_metrics
                 .make_checkpoint_step_duration
-                .with_label_values(&["validate_eq"])
-                .start_timer();
-            if let Err(err) = checkpointed_state.validate_eq(&state) {
-                error!(
-                    self.log,
-                    "{}: Replicated state altered: {}",
-                    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT,
-                    err
-                );
-                self.metrics
-                    .checkpoint_metrics
-                    .replicated_state_altered_after_checkpoint
-                    .inc();
-            }
-        }
-        {
-            let _timer = self
-                .metrics
-                .checkpoint_metrics
-                .make_checkpoint_step_duration
                 .with_label_values(&["switch_to_checkpoint"])
                 .start_timer();
-            switch_to_checkpoint(&mut state, &checkpointed_state);
-            self.tip_channel
-                .send(TipRequest::ValidateReplicatedState {
-                    checkpoint_layout: cp_layout.clone(),
-                    replicated_state: state.clone(),
-                    own_subnet_type: self.own_subnet_type,
-                    fd_factory: self.fd_factory.clone(),
-                })
-                .expect("Failed to send Validate request");
-            switch_to_checkpoint(state, &cp_layout, &self.get_fd_factory());
+            switch_to_checkpoint(&mut state, &cp_layout, &self.get_fd_factory());
         }
+        let state = Arc::new(state);
+        self.tip_channel
+            .send(TipRequest::ValidateReplicatedState {
+                checkpoint_layout: cp_layout.clone(),
+                replicated_state: state.clone(),
+                own_subnet_type: self.own_subnet_type,
+                fd_factory: self.fd_factory.clone(),
+                metrics: self.metrics.clone(),
+            })
+            .expect("Failed to send Validate request");
 
         // On the NNS subnet we never allow incremental manifest computation
         let is_nns = self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
@@ -2756,7 +2737,7 @@ impl StateManagerImpl {
 
             CreateCheckpointResult {
                 tip_requests,
-                state: Arc::new(state),
+                state,
                 state_metadata: StateMetadata {
                     checkpoint_layout: Some(cp_layout.clone()),
                     bundled_manifest: None,

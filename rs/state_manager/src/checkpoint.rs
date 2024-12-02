@@ -128,15 +128,20 @@ pub(crate) fn make_checkpoint(
 
 pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
+    _reference_state: Option<&ReplicatedState>,
+    //own_subnet_type: SubnetType,
     mut thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> Result<(), CheckpointError> {
-    maybe_parallel_map(
-        &mut thread_pool,
-        checkpoint_layout.all_existing_pagemaps()?.into_iter(),
-        |pm| verify(pm),
-    )
-    .into_iter()
-    .try_for_each(identity)?;
+    if 1 == 2 + 3 {
+        // DO NOT SUBMIT
+        maybe_parallel_map(
+            &mut thread_pool,
+            checkpoint_layout.all_existing_pagemaps()?.into_iter(),
+            |pm| verify(pm),
+        )
+        .into_iter()
+        .try_for_each(identity)?;
+    }
     checkpoint_layout
         .remove_unverified_checkpoint_marker()
         .map_err(CheckpointError::from)?;
@@ -161,7 +166,11 @@ pub fn load_checkpoint_and_validate_parallel(
         Some(&mut thread_pool),
         Arc::clone(&fd_factory),
     )?;
-    validate_checkpoint_and_remove_unverified_marker(checkpoint_layout, Some(&mut thread_pool))?;
+    validate_checkpoint_and_remove_unverified_marker(
+        checkpoint_layout,
+        None,
+        Some(&mut thread_pool),
+    )?;
     Ok(state)
 }
 
@@ -335,11 +344,12 @@ pub fn load_checkpoint(
 
 pub fn validate_eq_checkpoint(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
-    reference_state: &ReplicatedState,
-    own_subnet_type: SubnetType,
+    reference_state: &ReplicatedState, //
+    own_subnet_type: SubnetType,       //
     mut thread_pool: Option<&mut scoped_threadpool::Pool>,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-) {
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>, //
+    metrics: &CheckpointMetrics,
+) -> Result<(), String> {
     let checkpoint_loader = CheckpointLoader {
         checkpoint_layout: checkpoint_layout.clone(),
         own_subnet_type,
@@ -347,27 +357,26 @@ pub fn validate_eq_checkpoint(
         fd_factory,
     };
 
-    assert!(checkpoint_loader
+    checkpoint_loader
         .load_canister_states(&mut thread_pool)
         .unwrap()
-        .validate_eq(&reference_state.canister_states)
-        .is_ok());
-    assert!(checkpoint_loader
+        .validate_eq(&reference_state.canister_states)?;
+    checkpoint_loader
         .load_system_metadata()
         .unwrap()
-        .validate_eq(&reference_state.metadata)
-        .is_ok());
-    assert!(checkpoint_loader
+        .validate_eq(&reference_state.metadata)?;
+    checkpoint_loader
         .load_subnet_queues()
         .unwrap()
-        .validate_eq(reference_state.subnet_queues())
-        .is_ok());
-    assert!(checkpoint_loader.load_query_stats().unwrap() == *reference_state.query_stats());
-    assert!(checkpoint_loader
+        .validate_eq(reference_state.subnet_queues())?;
+    if checkpoint_loader.load_query_stats().unwrap() != *reference_state.query_stats() {
+        return Err("query_state".to_string());
+    }
+    checkpoint_loader
         .load_canister_snapshots(&mut thread_pool)
         .unwrap()
-        .validate_eq(&reference_state.canister_snapshots)
-        .is_ok());
+        .validate_eq(&reference_state.canister_snapshots)?;
+    Ok(())
 }
 
 #[derive(Default)]

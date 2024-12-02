@@ -5,7 +5,8 @@ use crate::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
     },
     CheckpointError, PageMapType, SharedState, StateManagerMetrics,
-    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, NUMBER_OF_CHECKPOINT_THREADS,
+    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
+    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::subnet_id_into_protobuf;
@@ -40,6 +41,7 @@ use rand::prelude::SliceRandom;
 use rand::{seq::IteratorRandom, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::BTreeSet;
+use std::ops::Deref;
 use std::os::unix::prelude::MetadataExt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -130,6 +132,7 @@ pub(crate) enum TipRequest {
         replicated_state: Arc<ReplicatedState>,
         own_subnet_type: SubnetType,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        metrics: StateManagerMetrics,
     },
     /// Wait for the message to be executed and notify back via sender.
     /// State: *
@@ -458,9 +461,11 @@ pub(crate) fn spawn_tip_thread(
                             replicated_state,
                             own_subnet_type,
                             fd_factory,
+                            metrics,
                         } => {
                             if let Err(err) = validate_checkpoint_and_remove_unverified_marker(
                                 &checkpoint_layout,
+                                Some(replicated_state.deref()),
                                 Some(&mut thread_pool),
                             ) {
                                 fatal!(
@@ -470,14 +475,25 @@ pub(crate) fn spawn_tip_thread(
                                     err
                                 )
                             }
-                            validate_eq_checkpoint(
-                                checkpoint_layout,
+                            if let Err(err) = validate_eq_checkpoint(
+                                &checkpoint_layout,
                                 &replicated_state,
                                 own_subnet_type,
                                 Some(&mut thread_pool),
                                 fd_factory,
-                            )
-                            .unwrap();
+                                &metrics.checkpoint_metrics,
+                            ) {
+                                error!(
+                                    log,
+                                    "{}: Replicated state altered: {}",
+                                    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT,
+                                    err
+                                );
+                                metrics
+                                    .checkpoint_metrics
+                                    .replicated_state_altered_after_checkpoint
+                                    .inc();
+                            }
                         }
 
                         TipRequest::Noop => {}

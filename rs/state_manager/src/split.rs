@@ -220,7 +220,7 @@ fn write_checkpoint(
         config.lsmt_config.lsmt_status,
     )
     .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
-    validate_checkpoint_and_remove_unverified_marker(&cp_layout, Some(thread_pool))
+    validate_checkpoint_and_remove_unverified_marker(&cp_layout, None, Some(thread_pool))
         .map_err(|e| format!("Failed to validate checkpoint: {}", e))?;
 
     Ok(())
