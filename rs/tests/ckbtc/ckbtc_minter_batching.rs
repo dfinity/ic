@@ -300,7 +300,6 @@ pub fn test_batching(env: TestEnv) {
         let minters_fee: u64 =
             ic_ckbtc_minter::evaluate_minter_fee(1, RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64 + 1);
 
-
         // We can check that the destination address has received all the bitcoin
         assert_eq!(
             destination_balance,
