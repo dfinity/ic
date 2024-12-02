@@ -188,7 +188,15 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 			cmd.PrintErrln(YELLOW + "Failed to sync k8s dashboards. Received the following error: " + err.Error())
 		} else {
 			cmd.PrintErrln(GREEN + "Successfully synced dashboards to path " + icDashboardsDir)
+			icDashboardsDir = filepath.Join(icDashboardsDir, "bases", "apps", "ic-dashboards")
+			cmd.Println(GREEN + "Will use " + icDashboardsDir + " as a root for dashboards")
+
+			if err := replace_in_directory(icDashboardsDir, "${datasource}", "000000001"); err != nil {
+				cmd.PrintErrln(YELLOW+"Failed to update datasources in dashboards dir. Some dashboards could be broken. Error: %v", err)
+			}
+
 			command = append(command, fmt.Sprintf("--test_env=IC_DASHBOARDS_DIR=%s", icDashboardsDir))
+			command = append(command, fmt.Sprintf("--sandbox_add_mount_pair=%s", icDashboardsDir))
 		}
 		command = append(command, fmt.Sprintf("--test_timeout=%s", strconv.Itoa(TESTNET_DEPLOYMENT_TIMEOUT_SEC)))
 		// We let the test-driver (and Bazel command) finish without deleting Farm group.

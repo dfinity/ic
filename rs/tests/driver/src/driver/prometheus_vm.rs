@@ -148,7 +148,13 @@ impl PrometheusVm {
         let destination = get_dependency_path("rs/tests/dashboards");
         let dashboards_root = PathBuf::from_str(&std::env::var("IC_DASHBOARDS_DIR")?)?;
 
-        for directory in dashboards_root.read_dir()? {
+        for directory in dashboards_root.read_dir().map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to read contents of `{}`: {:?}",
+                dashboards_root.display(),
+                e
+            )
+        })? {
             let entry = directory?;
             if !entry.path().is_dir() {
                 continue;

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/schollz/closestmatch"
@@ -158,7 +159,11 @@ func sparse_checkout(repoUrl, repoDir string, sparseCheckoutPaths []string) (str
 	}
 
 	if repoDir == "" {
-		repoDir = "/tmp/k8s_repo"
+		homedir, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("Failed to get home dir: %v", err)
+		}
+		repoDir = filepath.Join(homedir, ".cache", "k8s_repo")
 	}
 
 	if err := os.RemoveAll(repoDir); err != nil {
@@ -218,4 +223,29 @@ func return_to_starting_point(startingPoint string, error error) (string, error)
 	}
 
 	return "", error
+}
+
+func replace_in_file(file, old, new string) error {
+	content, err := os.ReadFile(file)
+	if err != nil {
+		return fmt.Errorf("Could not read file %s: %v", file, err)
+	}
+
+	updatedContent := strings.ReplaceAll(string(content), old, new)
+
+	return os.WriteFile(file, []byte(updatedContent), 0644)
+}
+
+func replace_in_directory(directory, old, new string) error {
+	return filepath.Walk(directory, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !info.IsDir() {
+			replace_in_file(path, old, new)
+		}
+
+		return nil
+	})
 }
