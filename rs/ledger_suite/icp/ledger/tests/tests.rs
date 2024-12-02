@@ -1246,6 +1246,7 @@ fn test_upgrade_serialization() {
         upgrade_args,
         minter,
         false,
+        false,
     );
 }
 
@@ -1334,6 +1335,7 @@ fn test_downgrade_from_incompatible_version() {
         ledger_wasm_next_version(),
         ledger_wasm(),
         encode_init_args,
+        true,
     );
 }
 
@@ -1507,7 +1509,11 @@ fn test_balances_overflow() {
 
 #[test]
 fn test_approval_trimming() {
-    ic_ledger_suite_state_machine_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approval_trimming(
+        ledger_wasm(),
+        encode_init_args,
+        true,
+    );
 }
 
 #[test]

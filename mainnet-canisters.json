@@ -79,6 +79,10 @@
     "rev": "e54d3fa34ded227c885d04e64505fa4b5d564743",
     "sha256": "3d808fa63a3d8ebd4510c0400aa078e99a31afaa0515f0b68778f929ce4b2a46"
   },
+  "sns_ledger_v2": {
+    "rev": "e54d3fa34ded227c885d04e64505fa4b5d564743",
+    "sha256": "3d808fa63a3d8ebd4510c0400aa078e99a31afaa0515f0b68778f929ce4b2a46"
+  },
   "sns_root": {
     "rev": "aa91ecacdf3824e193e21b70e0127e8d3edab51a",
     "sha256": "431cb333feb3f762f742b0dea58745633a2a2ca41075e9933183d850b4ddb259"

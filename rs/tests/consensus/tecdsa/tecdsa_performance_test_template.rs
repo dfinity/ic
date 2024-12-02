@@ -106,14 +106,46 @@ const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
 // The signature schemes and key names to be used during the test.
 // Requests will be sent to each key in round robin order.
 fn make_key_ids() -> Vec<MasterPublicKeyId> {
-    vec![
-        ic_consensus_threshold_sig_system_test_utils::make_ecdsa_key_id(),
-        // ic_consensus_threshold_sig_system_test_utils::make_bip340_key_id(),
-        // ic_consensus_threshold_sig_system_test_utils::make_eddsa_key_id(),
-    ]
+    // `TECDSA_PERFORMANCE_TEST_KEY_IDS` is a comma-separated string without
+    // spaces. It is used to select the key ids to be used during the test.
+    let key_ids_string = std::env::var("TECDSA_PERFORMANCE_TEST_KEY_IDS").expect(
+        "Failed to fetch key ids from the TECDSA_PERFORMANCE_TEST_KEY_IDS environment variable.",
+    );
+
+    let key_ids_split: std::collections::HashSet<&str> = key_ids_string.split(',').collect();
+
+    if key_ids_split.is_empty() {
+        panic!("No keys defined in TECDSA_PERFORMANCE_TEST_KEY_IDS");
+    }
+
+    let mut result = vec![];
+
+    for key_id in key_ids_split {
+        match key_id {
+            "schnorr_bip340" => {
+                result.push(ic_consensus_threshold_sig_system_test_utils::make_bip340_key_id());
+            }
+            "schnorr_ed25519" => {
+                result.push(ic_consensus_threshold_sig_system_test_utils::make_eddsa_key_id());
+            }
+            "ecdsa_secp256k1" => {
+                result.push(ic_consensus_threshold_sig_system_test_utils::make_ecdsa_key_id());
+            }
+            _ => panic!(
+                "Unknown key id {key_id} in the environment variable TECDSA_PERFORMANCE_TEST_KEY_IDS={key_ids_string}. \
+                Allowed are schnorr_bip340, schnorr_ed25519, and ecdsa_secp256k1. Also note that the key ids should be \
+                comma-separated without spaces.",
+            ),
+        }
+    }
+
+    result
 }
 
 pub fn setup(env: TestEnv) {
+    let key_ids = make_key_ids();
+    info!(env.logger(), "Running the test with key ids: {:?}", key_ids);
+
     PrometheusVm::default()
         .with_required_host_features(vec![HostFeature::Performance])
         .start(&env)
@@ -137,7 +169,7 @@ pub fn setup(env: TestEnv) {
                 .with_default_vm_resources(vm_resources)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .with_chain_key_config(ChainKeyConfig {
-                    key_configs: make_key_ids()
+                    key_configs: key_ids
                         .into_iter()
                         .map(|key_id| KeyConfig {
                             max_queue_size: MAX_QUEUE_SIZE,
@@ -281,9 +313,17 @@ pub fn tecdsa_performance_test(
         let timestamp =
             chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).to_rfc3339();
 
+        let benchmark_name = std::env::var("BENCHMARK_NAME").unwrap_or_else(|e| {
+            error!(
+                log,
+                "failed to fetch BENCHMARK_NAME environment variable: {e:?}"
+            );
+            "unknown_benchmark_name".to_string()
+        });
+
         let json_report = serde_json::json!(
             {
-                "benchmark_name": "tecdsa_performance_test",
+                "benchmark_name": benchmark_name.as_str(),
                 "timestamp": timestamp,
                 "package": "replica-benchmarks",
                 "benchmark_results": {
@@ -316,7 +356,7 @@ pub fn tecdsa_performance_test(
         if cfg!(feature = "upload_perf_systest_results") {
             // elastic search url
             const ES_URL: &str =
-                "https://elasticsearch.testnet.dfinity.network/ci-performance-test/_doc";
+                "https://elasticsearch.ch1-obsdev1.dfinity.network/ci-performance-test/_doc";
             const NUM_UPLOAD_ATTEMPS: usize = 3;
             info!(
                 log,

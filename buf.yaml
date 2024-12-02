@@ -21,7 +21,6 @@ lint:
     - DEFAULT
 breaking:
   ignore:
-    - state/queues/v1/queues.proto
   use:
     - WIRE
   except:

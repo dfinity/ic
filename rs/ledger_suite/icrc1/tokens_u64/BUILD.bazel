@@ -12,6 +12,7 @@ rust_library(
         "//rs/ledger_suite/common/ledger_core",
         "@crate_index//:candid",
         "@crate_index//:ic-stable-structures",
+        "@crate_index//:minicbor",
         "@crate_index//:num-traits",
         "@crate_index//:serde",
     ],
