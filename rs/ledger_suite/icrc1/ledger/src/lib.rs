@@ -753,10 +753,6 @@ impl Ledger {
     pub fn copy_token_pool(&mut self) {
         self.stable_balances.token_pool = self.balances.token_pool;
     }
-
-    pub fn balances_len(&self) -> u64 {
-        BALANCES_MEMORY.with_borrow(|balances| balances.len())
-    }
 }
 
 impl LedgerContext for Ledger {
@@ -1188,6 +1184,10 @@ pub fn clear_stable_balances_data() {
     BALANCES_MEMORY.with_borrow_mut(|balances| {
         balances.clear_new();
     });
+}
+
+pub fn balances_len() -> u64 {
+    BALANCES_MEMORY.with_borrow(|balances| balances.len())
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
