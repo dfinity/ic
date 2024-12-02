@@ -6,7 +6,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = [
     "//rs/registry/admin:__pkg__",
     "//rs/registry/regedit:__pkg__",
-    "//rs/scenario_tests:__pkg__",
 ])
 
 DEPENDENCIES = [
