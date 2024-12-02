@@ -18,25 +18,24 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::protocol::id::{ExecId, MemoryId, WasmId};
-use crate::protocol::sbxsvc::{
-    CreateExecutionStateSerializedSuccessReply, CreateExecutionStateSuccessReply, OpenMemoryRequest,
-};
+use crate::protocol::sbxsvc::{CreateExecutionStateSerializedSuccessReply, OpenMemoryRequest};
 use crate::protocol::structs::{
     MemoryModifications, SandboxExecInput, SandboxExecOutput, StateModifications,
 };
 use crate::{controller_service::ControllerService, protocol};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
-    wasm_executor::WasmStateChanges,
-    wasm_utils::{compile, decoding::decode_wasm, Segments},
-    CompilationResult, SerializedModule, SerializedModuleBytes, WasmtimeEmbedder,
+    wasm_executor::WasmStateChanges, wasm_utils::Segments, SerializedModule, SerializedModuleBytes,
+    WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
 use ic_logger::ReplicaLogger;
-use ic_replicated_state::page_map::{PageAllocatorRegistry, PageMapSerialization};
-use ic_replicated_state::{EmbedderCache, Global, Memory, PageMap};
+use ic_replicated_state::{
+    page_map::{PageAllocatorRegistry, PageMapSerialization},
+    EmbedderCache, Global, Memory, PageMap,
+};
 use ic_types::CanisterId;
 
 use crate::dts::{DeterministicTimeSlicingHandler, PausedExecution};
@@ -295,35 +294,6 @@ impl SandboxManager {
         }
     }
 
-    /// Compiles the given Wasm binary and registers it under the given id.
-    /// The function may fail if the Wasm binary is invalid.
-    pub fn open_wasm(
-        &self,
-        wasm_id: WasmId,
-        wasm_src: Vec<u8>,
-    ) -> HypervisorResult<(Arc<EmbedderCache>, CompilationResult, SerializedModule)> {
-        let mut guard = self.repr.lock().unwrap();
-        assert!(
-            !guard.caches.contains_key(&wasm_id),
-            "Failed to open wasm session {}: id is already in use",
-            wasm_id,
-        );
-        let wasm = decode_wasm(self.embedder.config().wasm_max_size, Arc::new(wasm_src))?;
-        let (cache, result) = compile(&self.embedder, &wasm);
-        let embedder_cache = Arc::new(cache);
-        guard.caches.insert(wasm_id, Arc::clone(&embedder_cache));
-        // Return as much memory as possible because compiling seems to use up
-        // some extra memory that can be returned.
-        //
-        // SAFETY: 0 is always a valid argument to `malloc_trim`.
-        #[cfg(target_os = "linux")]
-        unsafe {
-            libc::malloc_trim(0);
-        }
-        let (compilation_result, serialized_module) = result?;
-        Ok((embedder_cache, compilation_result, serialized_module))
-    }
-
     pub fn open_wasm_serialized(
         &self,
         wasm_id: WasmId,
@@ -465,37 +435,6 @@ impl SandboxManager {
                 .unwrap_or_else(|| unreachable!("Failed to get paused execution {}", exec_id))
         };
         paused_execution.abort();
-    }
-
-    pub fn create_execution_state(
-        &self,
-        wasm_id: WasmId,
-        wasm_source: Vec<u8>,
-        wasm_page_map: PageMapSerialization,
-        next_wasm_memory_id: MemoryId,
-        canister_id: CanisterId,
-        stable_memory_page_map: PageMapSerialization,
-    ) -> HypervisorResult<CreateExecutionStateSuccessReply> {
-        // Validate, instrument, and compile the binary.
-        let (embedder_cache, compilation_result, serialized_module) =
-            self.open_wasm(wasm_id, wasm_source)?;
-
-        let (wasm_memory_modifications, exported_globals) = self
-            .create_initial_memory_and_globals(
-                &embedder_cache,
-                &serialized_module.data_segments,
-                wasm_page_map,
-                next_wasm_memory_id,
-                canister_id,
-                stable_memory_page_map,
-            )?;
-
-        Ok(CreateExecutionStateSuccessReply {
-            wasm_memory_modifications,
-            exported_globals,
-            compilation_result,
-            serialized_module,
-        })
     }
 
     pub fn create_execution_state_serialized(
