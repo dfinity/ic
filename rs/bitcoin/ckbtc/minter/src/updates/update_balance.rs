@@ -245,7 +245,7 @@ pub async fn update_balance<R: CanisterRuntime>(
     let mut utxo_statuses: Vec<UtxoStatus> = vec![];
     for utxo in processable_utxos {
         if utxo.value <= kyt_fee {
-            mutate_state(|s| state::audit::ignore_utxo(s, utxo.clone(), caller_account));
+            mutate_state(|s| state::audit::ignore_utxo(s, utxo.clone(), caller_account, now));
             log!(
                 P1,
                 "Ignored UTXO {} for account {caller_account} because UTXO value {} is lower than the KYT fee {}",
@@ -262,7 +262,7 @@ pub async fn update_balance<R: CanisterRuntime>(
                 state::audit::mark_utxo_checked(s, utxo.clone(), caller_account);
             }
             UtxoCheckStatus::Tainted => {
-                state::audit::quarantine_utxo(s, utxo.clone(), caller_account);
+                state::audit::quarantine_utxo(s, utxo.clone(), caller_account, now);
             }
         });
         match status {

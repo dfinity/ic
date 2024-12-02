@@ -1,14 +1,20 @@
+use crate::Timestamp;
+use std::time::Duration;
+
+const NOW: Timestamp = Timestamp::new(1733145560 * 1_000_000_000);
+const DAY: Duration = Duration::from_secs(24 * 60 * 60);
+
 mod processable_utxos_for_account {
+    use super::{DAY, NOW};
     use crate::state::invariants::CheckInvariantsImpl;
     use crate::state::{CkBtcMinterState, ProcessableUtxos, SuspendedReason};
     use crate::test_fixtures::{ignored_utxo, init_args, ledger_account, quarantined_utxo, utxo};
-    use crate::Timestamp;
+    use crate::updates::update_balance::SuspendedUtxo;
     use candid::Principal;
     use ic_btc_interface::{OutPoint, Utxo};
     use icrc_ledger_types::icrc1::account::Account;
     use maplit::btreeset;
-
-    const NOW: Timestamp = Timestamp::new(1733145560 * 1_000_000_000);
+    use std::ops::Mul;
 
     #[test]
     fn should_be_all_new_utxos_when_state_empty() {
@@ -29,6 +35,42 @@ mod processable_utxos_for_account {
     }
 
     #[test]
+    fn should_not_reevaluate_suspended_utxo_yet() {
+        let mut state = CkBtcMinterState::from(init_args());
+        let account = ledger_account();
+        let ignored_utxo = ignored_utxo();
+        state.suspend_utxo(
+            ignored_utxo.clone(),
+            account,
+            SuspendedReason::ValueTooSmall,
+            NOW.checked_sub(DAY).unwrap(),
+        );
+
+        let new_utxo = utxo();
+        let (processable_utxos, suspended_utxos) = state.processable_utxos_for_account(
+            btreeset! {new_utxo.clone(), ignored_utxo.clone()},
+            &account,
+            &NOW,
+        );
+
+        assert_eq!(
+            processable_utxos,
+            ProcessableUtxos {
+                new_utxos: btreeset! {new_utxo},
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            suspended_utxos,
+            vec![SuspendedUtxo {
+                utxo: ignored_utxo,
+                reason: SuspendedReason::ValueTooSmall,
+                earliest_retry: 0,
+            }]
+        )
+    }
+
+    #[test]
     fn should_retrieve_correct_utxos() {
         let account = ledger_account();
         let other_account = Account {
@@ -37,7 +79,12 @@ mod processable_utxos_for_account {
         };
         assert_ne!(account, other_account);
         let mut state = CkBtcMinterState::from(init_args());
-        state.suspend_utxo(ignored_utxo(), account, SuspendedReason::ValueTooSmall);
+        state.suspend_utxo(
+            ignored_utxo(),
+            account,
+            SuspendedReason::ValueTooSmall,
+            NOW.checked_sub(2 * DAY).unwrap(),
+        );
         state.suspend_utxo(
             Utxo {
                 outpoint: OutPoint {
@@ -50,10 +97,16 @@ mod processable_utxos_for_account {
             },
             other_account,
             SuspendedReason::ValueTooSmall,
+            NOW.checked_sub(2 * DAY).unwrap(),
         );
         assert_eq!(state.suspended_utxos.num_utxos(), 2);
 
-        state.suspend_utxo(quarantined_utxo(), account, SuspendedReason::Quarantined);
+        state.suspend_utxo(
+            quarantined_utxo(),
+            account,
+            SuspendedReason::Quarantined,
+            NOW.checked_sub(DAY).unwrap(),
+        );
         state.suspend_utxo(
             Utxo {
                 outpoint: OutPoint {
@@ -66,6 +119,7 @@ mod processable_utxos_for_account {
             },
             other_account,
             SuspendedReason::Quarantined,
+            NOW.checked_sub(DAY).unwrap(),
         );
         assert_eq!(state.suspended_utxos.num_utxos(), 4);
 
@@ -114,19 +168,30 @@ mod processable_utxos_for_account {
 }
 
 mod suspended_utxos {
+    use super::{DAY, NOW};
     use crate::state::{SuspendedReason, SuspendedUtxos};
     use crate::test_fixtures::{ledger_account, utxo};
+    use maplit::btreemap;
+    use std::collections::BTreeMap;
 
     #[test]
-    fn should_be_nop_when_already_suspended_for_some_reason() {
+    fn should_be_nop_when_already_suspended_for_same_reason() {
         for reason in all_suspended_reasons() {
             let mut suspended_utxos = SuspendedUtxos::default();
 
-            assert!(suspended_utxos.insert(ledger_account(), utxo(), reason));
+            assert!(suspended_utxos.insert(ledger_account(), utxo(), reason, NOW.checked_sub(DAY)));
             assert_eq!(suspended_utxos.num_utxos(), 1);
+            assert_eq!(
+                suspended_utxos.last_time_checked_cache,
+                btreemap! {utxo() => NOW.checked_sub(DAY).unwrap()}
+            );
 
-            assert!(!suspended_utxos.insert(ledger_account(), utxo(), reason));
+            assert!(!suspended_utxos.insert(ledger_account(), utxo(), reason, Some(NOW)));
             assert_eq!(suspended_utxos.num_utxos(), 1);
+            assert_eq!(
+                suspended_utxos.last_time_checked_cache,
+                btreemap! {utxo() => NOW}
+            );
         }
     }
 
@@ -140,9 +205,19 @@ mod suspended_utxos {
 
                 suspended_utxos.insert_without_account(utxo.clone(), first_reason);
                 assert_eq!(suspended_utxos.num_utxos(), 1);
+                assert_eq!(suspended_utxos.last_time_checked_cache, BTreeMap::default());
 
-                assert!(suspended_utxos.insert(ledger_account(), utxo, second_reason));
+                assert!(suspended_utxos.insert(
+                    ledger_account(),
+                    utxo.clone(),
+                    second_reason,
+                    Some(NOW)
+                ));
                 assert_eq!(suspended_utxos.num_utxos(), 1);
+                assert_eq!(
+                    suspended_utxos.last_time_checked_cache,
+                    btreemap! {utxo => NOW}
+                );
             }
         }
     }
@@ -152,15 +227,29 @@ mod suspended_utxos {
         for reason in all_suspended_reasons() {
             let mut suspended_utxos = SuspendedUtxos::default();
             let utxo = utxo();
-            assert!(suspended_utxos.insert(ledger_account(), utxo.clone(), reason));
+            assert!(suspended_utxos.insert(
+                ledger_account(),
+                utxo.clone(),
+                reason,
+                NOW.checked_sub(DAY)
+            ));
             assert_eq!(suspended_utxos.num_utxos(), 1);
 
             let other_reason = match reason {
                 SuspendedReason::ValueTooSmall => SuspendedReason::Quarantined,
                 SuspendedReason::Quarantined => SuspendedReason::ValueTooSmall,
             };
-            assert!(suspended_utxos.insert(ledger_account(), utxo.clone(), other_reason));
+            assert!(suspended_utxos.insert(
+                ledger_account(),
+                utxo.clone(),
+                other_reason,
+                Some(NOW)
+            ));
             assert_eq!(suspended_utxos.num_utxos(), 1);
+            assert_eq!(
+                suspended_utxos.last_time_checked_cache,
+                btreemap! {utxo => NOW}
+            );
         }
     }
 
@@ -175,21 +264,25 @@ mod suspended_utxos {
             assert_eq!(suspended_utxos.num_utxos(), 1);
             suspended_utxos.remove_without_account(&utxo);
             assert_eq!(suspended_utxos.num_utxos(), 0);
+            assert_eq!(suspended_utxos.last_time_checked_cache, BTreeMap::default());
 
             suspended_utxos.insert_without_account(utxo.clone(), reason);
             assert_eq!(suspended_utxos.num_utxos(), 1);
             suspended_utxos.remove(&ledger_account(), &utxo);
             assert_eq!(suspended_utxos.num_utxos(), 0);
+            assert_eq!(suspended_utxos.last_time_checked_cache, BTreeMap::default());
 
-            suspended_utxos.insert(ledger_account(), utxo.clone(), reason);
+            suspended_utxos.insert(ledger_account(), utxo.clone(), reason, Some(NOW));
             assert_eq!(suspended_utxos.num_utxos(), 1);
             suspended_utxos.remove_without_account(&utxo);
             assert_eq!(suspended_utxos.num_utxos(), 0);
+            assert_eq!(suspended_utxos.last_time_checked_cache, BTreeMap::default());
 
-            suspended_utxos.insert(ledger_account(), utxo.clone(), reason);
+            suspended_utxos.insert(ledger_account(), utxo.clone(), reason, Some(NOW));
             assert_eq!(suspended_utxos.num_utxos(), 1);
             suspended_utxos.remove(&ledger_account(), &utxo);
             assert_eq!(suspended_utxos.num_utxos(), 0);
+            assert_eq!(suspended_utxos.last_time_checked_cache, BTreeMap::default());
         }
     }
 

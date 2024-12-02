@@ -944,7 +944,7 @@ impl CkBtcMinterState {
         &self,
         all_utxos_for_account: I,
         account: &Account,
-        now: &Timestamp,
+        _now: &Timestamp,
     ) -> (ProcessableUtxos, Vec<SuspendedUtxo>) {
         let is_known = |utxo: &Utxo| {
             self.utxos_state_addresses
@@ -1007,9 +1007,16 @@ impl CkBtcMinterState {
     }
 
     /// Adds given UTXO to the set of suspended UTXOs.
-    pub fn suspend_utxo(&mut self, utxo: Utxo, account: Account, reason: SuspendedReason) -> bool {
+    pub fn suspend_utxo(
+        &mut self,
+        utxo: Utxo,
+        account: Account,
+        reason: SuspendedReason,
+        now: Timestamp,
+    ) -> bool {
         self.ensure_reason_consistent_with_state(&utxo, reason);
-        self.suspended_utxos.insert(account, utxo, reason)
+        self.suspended_utxos
+            .insert(account, utxo, reason, Some(now))
     }
 
     #[deprecated(note = "Use discard_utxo() instead")]
@@ -1301,6 +1308,7 @@ pub struct SuspendedUtxos {
     /// or move it to the other field containing this time the `Account` information.
     utxos_without_account: BTreeMap<Utxo, SuspendedReason>,
     utxos: BTreeMap<Account, BTreeMap<Utxo, SuspendedReason>>,
+    last_time_checked_cache: BTreeMap<Utxo, Timestamp>,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Serialize, Deserialize)]
@@ -1312,7 +1320,16 @@ pub enum SuspendedReason {
 }
 
 impl SuspendedUtxos {
-    pub fn insert(&mut self, account: Account, utxo: Utxo, reason: SuspendedReason) -> bool {
+    pub fn insert(
+        &mut self,
+        account: Account,
+        utxo: Utxo,
+        reason: SuspendedReason,
+        now: Option<Timestamp>,
+    ) -> bool {
+        if let Some(timestamp) = now {
+            self.last_time_checked_cache.insert(utxo.clone(), timestamp);
+        }
         if self.utxos.get(&account).and_then(|u| u.get(&utxo)) == Some(&reason) {
             return false;
         }
@@ -1346,6 +1363,7 @@ impl SuspendedUtxos {
         if let Some(utxos) = self.utxos.get_mut(account) {
             utxos.remove(utxo);
         }
+        self.last_time_checked_cache.remove(utxo);
     }
 
     #[deprecated(note = "Use remove() instead")]

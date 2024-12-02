@@ -1340,11 +1340,20 @@ impl CanisterRuntime for IcCanisterRuntime {
 }
 
 /// Time in nanoseconds since the epoch (1970-01-01).
+#[derive(Eq, Clone, Copy, PartialEq, Debug, Default)]
 pub struct Timestamp(u64);
 
 impl Timestamp {
     pub const fn new(ns_since_epoch: u64) -> Self {
         Self(ns_since_epoch)
+    }
+
+    pub fn checked_sub(self, rhs: Duration) -> Option<Timestamp> {
+        if let Ok(rhs_nanos) = u64::try_from(rhs.as_nanos()) {
+            Some(Timestamp(self.0.checked_sub(rhs_nanos)?))
+        } else {
+            None
+        }
     }
 }
 
