@@ -47,6 +47,7 @@ rust_library(
         "@crate_index//:backoff",
         "@crate_index//:candid",
         "@crate_index//:clap",
+        "@crate_index//:env-file-reader",
         "@crate_index//:exec",
         "@crate_index//:get_if_addrs",
         "@crate_index//:hex",

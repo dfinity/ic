@@ -86,7 +86,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for tag in "v${ROSETTA_RELEASE_VERSION}" latest; do
+          for tag in "v${ICRC_ROSETTA_RELEASE_VERSION}" latest; do
             bazel run --stamp --embed_label="$tag" //rs/rosetta-api/icrc1:push_ic_icrc_rosetta_image
           done
           git tag "icrc-rosetta-release-$ICRC_ROSETTA_RELEASE_VERSION" "${{ github.sha }}"
