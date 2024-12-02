@@ -37,7 +37,6 @@ DEV_DEPENDENCIES = [
 
 rust_library(
     name = "ic-icp-rosetta-client",
-    testonly = True,
     srcs = ["src/lib.rs"],
     crate_name = "ic_icp_rosetta_client",
     deps = DEPENDENCIES,
