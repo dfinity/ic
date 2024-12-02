@@ -6,7 +6,7 @@ use anonymization_interface::{
     SubmitResponse,
 };
 use candid::Principal;
-use ic_cdk::{id, spawn, trap};
+use ic_cdk::{api::call::accept_message, caller, id, spawn, trap};
 use ic_cdk_timers::set_timer_interval;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_stable_structures::{
@@ -224,9 +224,11 @@ thread_local! {
 
 // Timers
 
+const SECOND: Duration = Duration::from_secs(1);
+
 fn timers() {
     // ACLs
-    set_timer_interval(Duration::from_secs(10), || {
+    set_timer_interval(10 * SECOND, || {
         // Switch to async
         spawn(async {
             // List registry entries
@@ -298,7 +300,7 @@ fn timers() {
     });
 
     // Leader
-    set_timer_interval(Duration::from_secs(30), || {
+    set_timer_interval(30 * SECOND, || {
         // Collect candidates that have registered a public-key
         let ps: Vec<Principal> =
             PUBLIC_KEYS.with(|ks| ks.borrow().iter().map(|(p, _)| p).collect());
@@ -347,6 +349,16 @@ fn init(_arg: InitArg) {
 fn post_upgrade() {
     // Start timers
     timers();
+}
+
+#[ic_cdk::inspect_message]
+fn inspect_message() {
+    (&AUTHORIZER)
+        .authorize(&caller())
+        .err()
+        .inspect(|err| trap(&err.to_string()));
+
+    accept_message();
 }
 
 #[ic_cdk::update]
