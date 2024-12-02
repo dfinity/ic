@@ -212,6 +212,7 @@ fn parse_fastest_link_mode_from_ethtool_output(output: &str) -> Option<u64> {
     if lines.clone().any(|s| s.contains("10000")) {
         return Some(10000);
     }
+    // TODO: remove use of 1GB link after deprecating gen1 machines
     if lines.clone().any(|s| s.contains("1000")) {
         return Some(1000);
     }
