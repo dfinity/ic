@@ -328,58 +328,87 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     let persister = Persister::new(Arc::clone(&routing_table));
 
+    if cli.registry.registry_local_store_path.is_none() {
+        // Prepare a stub routing table and snapshot
+        let subnet = generate_stub_subnet(cli.registry.registry_stub_replica.clone());
+        let snapshot = generate_stub_snapshot(vec![subnet.clone()]);
+        let _ = persister.persist(vec![subnet]);
+        registry_snapshot.store(Some(Arc::new(snapshot)));
+    }
+
     // Registry Client
-    let local_store = Arc::new(LocalStoreImpl::new(
-        cli.registry.registry_local_store_path.clone().unwrap(),
-    ));
+    let (
+        registry_client,      //
+        registry_replicator,  //
+        nns_pub_key,          //
+        mut registry_runners, //
+    ) = cli
+        .registry
+        .registry_local_store_path
+        .clone()
+        .map(|p| {
+            // Store
+            let local_store = Arc::new(LocalStoreImpl::new(p));
 
-    let registry_client = Arc::new(RegistryClientImpl::new(
-        local_store.clone(), // data_provider
-        None,                // metrics_registry
-    ));
+            // Client
+            let registry_client = Arc::new(RegistryClientImpl::new(
+                local_store.clone(), // data_provider
+                None,                // metrics_registry
+            ));
 
-    registry_client
-        .fetch_and_start_polling()
-        .context("failed to start registry client")?;
+            registry_client
+                .fetch_and_start_polling()
+                .context("failed to start registry client")?;
 
-    let (registry_replicator, nns_pub_key, mut registry_runners) =
-        // Set up registry-related stuff if local store was specified
-        if cli.registry.registry_local_store_path.is_some() {
-            let RegistrySetupResult(registry_replicator, nns_pub_key, registry_runners) =
-                setup_registry(
-                    &cli,
-                    local_store.clone(),
-                    registry_client.clone(),
-                    registry_snapshot.clone(),
-                    WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry)),
-                    http_client_check,
-                    &metrics_registry,
-                )?;
+            // Snapshotting
+            let r = setup_registry(
+                &cli,
+                local_store.clone(),
+                registry_client.clone(),
+                registry_snapshot.clone(),
+                WithMetricsPersist(
+                    persister,                                   // T
+                    MetricParamsPersist::new(&metrics_registry), // Params
+                ),
+                http_client_check,
+                &metrics_registry,
+            )?;
 
-            (registry_replicator, nns_pub_key, registry_runners)
-        } else {
-            // Otherwise load a stub routing table and snapshot
-            let subnet = generate_stub_subnet(cli.registry.registry_stub_replica.clone());
-            let snapshot = generate_stub_snapshot(vec![subnet.clone()]);
-            let _ = persister.persist(vec![subnet]);
-            registry_snapshot.store(Some(Arc::new(snapshot)));
+            let RegistrySetupResult(
+                registry_replicator, //
+                nns_pub_key,         //
+                registry_runners,    //
+            ) = r;
 
-            (None, None, vec![])
-        };
+            Ok::<_, Error>((
+                registry_client,
+                registry_replicator,
+                nns_pub_key,
+                registry_runners,
+            ))
+        })
+        .transpose()?
+        .map_or((None, None, None, vec![]), |(a, b, c, d)| {
+            (Some(a), b, c, d)
+        });
 
     let generic_limiter_runner = WithThrottle(generic_limiter, ThrottleParams::new(10 * SECOND));
 
     // Runners
-    let mut runners: Vec<Box<dyn Run>> =
-        vec![Box::new(metrics_runner), Box::new(generic_limiter_runner)];
+    let mut runners: Vec<Box<dyn Run>> = vec![
+        Box::new(metrics_runner),         //
+        Box::new(generic_limiter_runner), //
+    ];
+
     runners.append(&mut registry_runners);
 
     // HTTP Logs Anonymization
     let tracker = match (
+        registry_client,
         cli.misc.crypto_config,
         cli.obs.obs_log_anonymization_canister_id,
     ) {
-        (Some(crypto_config), Some(log_anonymization_cid)) => {
+        (Some(registry_client), Some(crypto_config), Some(log_anonymization_cid)) => {
             let c = tokio::task::spawn_blocking({
                 let registry_client = Arc::clone(&registry_client);
 
