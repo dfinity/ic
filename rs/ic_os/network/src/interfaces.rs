@@ -255,20 +255,18 @@ fn deactivate_link(interface_name: &str) -> Result<()> {
 
 /// Get paths of all available network interfaces. E.g. /sys/class/net/enp0s31f6
 pub fn get_interface_paths() -> Vec<PathBuf> {
-    let interfaces = match fs::read_dir(SYSFS_NETWORK_DIR) {
-        Ok(itr) => itr,
+    match fs::read_dir(SYSFS_NETWORK_DIR) {
+        Ok(itr) => itr
+            // Keep only the items that are symlinks
+            .filter_map(Result::ok)
+            .map(|dir_entry| dir_entry.path())
+            .filter(|path_buf| path_buf.is_symlink())
+            .collect(),
         Err(e) => {
             eprintln!("Failed to read directory {SYSFS_NETWORK_DIR}: {e}");
-            return Vec::new();
+            Vec::new()
         }
-    };
-
-    // Keep only the items that are symlinks
-    interfaces
-        .filter_map(Result::ok)
-        .map(|dir_entry| dir_entry.path())
-        .filter(|path_buf| path_buf.is_symlink())
-        .collect()
+    }
 }
 
 fn is_valid_network_interface(path: &&PathBuf) -> bool {
