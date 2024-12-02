@@ -17,7 +17,7 @@ jobs:
         with:
           repository: ${{ github.repository }}
           ref: ${{ github.ref }}
-          token: ${{ secrets.IDX_PUSH_TO_PR }}
+          token: ${{ secrets.PUSH_TO_IC }}
       - name: Cut Release Candidate
         shell: bash
         run: |

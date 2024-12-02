@@ -1234,7 +1234,7 @@ mod cast_vote_and_cascade_follow {
         let governance_proto = crate::pb::v1::Governance {
             neurons: heap_neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into()))
+                .map(|(id, neuron)| (id, neuron.into_proto(now)))
                 .collect(),
             proposals: btreemap! {
                 1 => ProposalData {
@@ -1324,7 +1324,7 @@ mod cast_vote_and_cascade_follow {
         let governance_proto = crate::pb::v1::Governance {
             neurons: neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into()))
+                .map(|(id, neuron)| (id, neuron.into_proto(now)))
                 .collect(),
             proposals: btreemap! {
                 1 => ProposalData {
@@ -1775,7 +1775,7 @@ fn test_compute_ballots_for_new_proposal() {
         )
         .with_cached_neuron_stake_e8s(i * E8)
         .build()
-        .into()
+        .into_proto(CREATED_TIMESTAMP_SECONDS + 999)
     }
 
     let mut neuron_10 = new_neuron(10);
