@@ -17,6 +17,8 @@ use crate::management_canister::{
 };
 pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
+use backoff::backoff::Backoff;
+use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
@@ -78,7 +80,7 @@ pub struct PocketIc {
     http_gateway: Option<HttpGatewayInfo>,
     server_url: Url,
     reqwest_client: reqwest::Client,
-    // do not delete the instance when dropping this handle if this handle was created for an existing instance
+    // the instance should only be deleted when dropping this handle if this handle owns the instance
     owns_instance: bool,
     _log_guard: Option<WorkerGuard>,
 }
@@ -114,7 +116,7 @@ impl PocketIc {
             http_gateway: None,
             server_url,
             reqwest_client,
-            owns_instance: true,
+            owns_instance: false,
             _log_guard: log_guard,
         }
     }
@@ -167,7 +169,7 @@ impl PocketIc {
             http_gateway: None,
             server_url,
             reqwest_client,
-            owns_instance: false,
+            owns_instance: true,
             _log_guard: log_guard,
         }
     }
@@ -579,7 +581,7 @@ impl PocketIc {
         }
     }
 
-    /// Await an update call submitted previously by `submit_call_with_effective_principal`.
+    /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     pub async fn await_call(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
         let endpoint = "update/await_ingress_message";
         let result: RawCanisterResult = self.post(endpoint, message_id).await;
@@ -589,6 +591,44 @@ impl PocketIc {
                 RawWasmResult::Reject(text) => Ok(WasmResult::Reject(text)),
             },
             RawCanisterResult::Err(user_error) => Err(user_error),
+        }
+    }
+
+    /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call.
+    pub async fn ingress_status(
+        &self,
+        message_id: RawMessageId,
+    ) -> Option<Result<WasmResult, UserError>> {
+        let endpoint = "read/ingress_status";
+        let result: Option<RawCanisterResult> = self.post(endpoint, message_id).await;
+        result.map(|result| match result {
+            RawCanisterResult::Ok(raw_wasm_result) => match raw_wasm_result {
+                RawWasmResult::Reply(data) => Ok(WasmResult::Reply(data)),
+                RawWasmResult::Reject(text) => Ok(WasmResult::Reject(text)),
+            },
+            RawCanisterResult::Err(user_error) => Err(user_error),
+        })
+    }
+
+    /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
+    /// This function does not execute rounds and thus should only be called on a "live" PocketIC instance
+    /// or if rounds are executed due to separate PocketIC library calls.
+    pub async fn await_call_no_ticks(
+        &self,
+        message_id: RawMessageId,
+    ) -> Result<WasmResult, UserError> {
+        let mut retry_policy: ExponentialBackoff = ExponentialBackoffBuilder::new()
+            .with_initial_interval(Duration::from_millis(10))
+            .with_max_interval(Duration::from_secs(1))
+            .with_multiplier(2.0)
+            .build();
+        loop {
+            if let Some(ingress_status) = self.ingress_status(message_id.clone()).await {
+                break ingress_status;
+            }
+            tokio::time::sleep(retry_policy.next_backoff().unwrap()).await;
         }
     }
 
@@ -631,8 +671,8 @@ impl PocketIc {
     }
 
     /// Execute a query call on a canister explicitly specifying an effective principal to route the request:
-    /// this API is useful for making generic calls (including management canister calls) without using dedicated functions from this library
-    /// (e.g., making generic calls in dfx to a PocketIC instance).
+    /// this API is useful for making generic query calls (including management canister query calls) without using dedicated functions from this library
+    /// (e.g., making generic query calls in dfx to a PocketIC instance).
     #[instrument(skip(self, payload), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), effective_principal = %effective_principal.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
     pub async fn query_call_with_effective_principal(
         &self,
@@ -1304,7 +1344,7 @@ impl PocketIc {
 
     pub(crate) async fn do_drop(&mut self) {
         self.stop_http_gateway().await;
-        if !self.owns_instance {
+        if self.owns_instance {
             self.reqwest_client
                 .delete(self.instance_url())
                 .send()
@@ -1429,11 +1469,7 @@ impl PocketIc {
         }
     }
 
-    /// Execute an update call on a canister explicitly specifying an effective principal to route the request:
-    /// this API is useful for making generic calls (including management canister calls) without using dedicated functions from this library
-    /// (e.g., making generic calls in dfx to a PocketIC instance).
-    #[instrument(skip(self, payload), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), effective_principal = %effective_principal.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
-    pub async fn update_call_with_effective_principal(
+    pub(crate) async fn update_call_with_effective_principal(
         &self,
         canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,
