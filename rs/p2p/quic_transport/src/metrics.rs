@@ -16,13 +16,14 @@ const REQUEST_TYPE_LABEL: &str = "request";
 pub(crate) const CONNECTION_RESULT_SUCCESS_LABEL: &str = "success";
 pub(crate) const CONNECTION_RESULT_FAILED_LABEL: &str = "failed";
 pub(crate) const ERROR_TYPE_APP: &str = "app";
+// A serious internal invariant is broken (i.e. worthy of a bug or outage report)
 pub(crate) const INFALIBBLE: &str = "infallible";
 const ERROR_RESET_STREAM: &str = "reset_stream";
 const ERROR_STOPPED_STREAM: &str = "stopped_stream";
 const ERROR_APP_CLOSED_CONN: &str = "app_closed_conn";
 const ERROR_TIMED_OUT_CONN: &str = "timed_out_conn";
+const ERROR_TRANSPORT_ERROR: &str = "transport_error_conn";
 const ERROR_LOCALLY_CLOSED_CONN: &str = "locally_closed_conn";
-const ERROR_QUIC_CLOSED_CONN: &str = "quic_closed_conn";
 
 pub(crate) const STREAM_TYPE_BIDI: &str = "bidi";
 
@@ -214,10 +215,12 @@ pub fn observe_conn_error(err: &ConnectionError, op: &str, counter: &IntCounterV
             .inc(),
         // This can occur if the peer crashes or experiences connectivity issues.
         ConnectionError::TimedOut => counter.with_label_values(&[op, ERROR_TIMED_OUT_CONN]).inc(),
-        // A connection was closed by the QUIC protocol. Overall should be infallible.
-        _ => counter
-            .with_label_values(&[op, ERROR_QUIC_CLOSED_CONN])
+        // This should be made infallible.
+        ConnectionError::TransportError(_) => counter
+            .with_label_values(&[op, ERROR_TRANSPORT_ERROR])
             .inc(),
+        // A connection was closed by the QUIC protocol. Overall should be infallible.
+        _ => counter.with_label_values(&[op, INFALIBBLE]).inc(),
     }
 }
 
