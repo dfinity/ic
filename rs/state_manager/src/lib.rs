@@ -767,7 +767,7 @@ struct SharedState {
     snapshots: VecDeque<Snapshot>,
     /// The last checkpoint that was advertised.
     last_advertised: Height,
-    /// The state we are are trying to fetch.
+    /// The state we are trying to fetch.
     fetch_state: Option<(Height, CryptoHashOfState, Height)>,
     /// State representing the on disk mutable state
     tip: Option<(Height, ReplicatedState)>,

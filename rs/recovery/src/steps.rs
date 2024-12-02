@@ -205,7 +205,7 @@ impl Step for MergeCertificationPoolsStep {
             .map(|range| range.min.get())
             .min();
 
-        // Find the min and max height of certification shares higher than than the highest full certification
+        // Find the min and max height of certification shares higher than the highest full certification
         let (min, max) = match (max_full_cert, max_cert_share) {
             (None, None) => {
                 return Err(RecoveryError::UnexpectedError(

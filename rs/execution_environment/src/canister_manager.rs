@@ -1365,7 +1365,7 @@ impl CanisterManager {
 
     /// Validates specified ID is available for use.
     ///
-    /// It must be used in in the context of provisional create canister flow when a specified ID is provided.
+    /// It must be used in the context of provisional create canister flow when a specified ID is provided.
     ///
     /// Returns `Err` iff the `specified_id` is not valid.
     fn validate_specified_id(
