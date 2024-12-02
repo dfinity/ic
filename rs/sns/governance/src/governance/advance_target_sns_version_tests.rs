@@ -13,7 +13,9 @@ use crate::sns_upgrade::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryRe
 use crate::{
     pb::v1::{
         governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
-        ProposalData, Tally, UpgradeSnsToNextVersion,
+        upgrade_journal_entry::Event,
+        GetUpgradeJournalRequest, ProposalData, Tally, UpgradeJournal, UpgradeJournalEntry,
+        UpgradeSnsToNextVersion,
     },
     sns_upgrade::{ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsVersion},
     types::test_helpers::NativeEnvironment,
@@ -1172,5 +1174,140 @@ fn add_environment_mock_list_upgrade_steps_call(
                 .collect(),
         })
         .unwrap()),
+    );
+}
+
+#[test]
+fn test_get_upgrade_journal_pagination() {
+    let mut governance = Governance::new(
+        GovernanceProto {
+            upgrade_journal: Some(UpgradeJournal {
+                entries: vec![
+                    UpgradeJournalEntry {
+                        event: Some(Event::UpgradeStarted(
+                            upgrade_journal_entry::UpgradeStarted {
+                                current_version: None,
+                                expected_version: None,
+                                reason: None,
+                            },
+                        )),
+                        timestamp_seconds: Some(1),
+                    },
+                    UpgradeJournalEntry {
+                        event: Some(Event::UpgradeOutcome(
+                            upgrade_journal_entry::UpgradeOutcome {
+                                human_readable: Some("success".to_string()),
+                                status: None,
+                            },
+                        )),
+                        timestamp_seconds: Some(2),
+                    },
+                    UpgradeJournalEntry {
+                        event: Some(Event::UpgradeStarted(
+                            upgrade_journal_entry::UpgradeStarted {
+                                current_version: None,
+                                expected_version: None,
+                                reason: None,
+                            },
+                        )),
+                        timestamp_seconds: Some(3),
+                    },
+                ],
+            }),
+            ..basic_governance_proto()
+        }
+        .try_into()
+        .unwrap(),
+        Box::new(NativeEnvironment::new(None)),
+        Box::new(DoNothingLedger {}),
+        Box::new(DoNothingLedger {}),
+        Box::new(FakeCmc::new()),
+    );
+
+    // Scenario 1: Default behavior shows most recent entries
+    let response = governance.get_upgrade_journal(GetUpgradeJournalRequest {
+        start_index: None,
+        max_entries: Some(2),
+    });
+    assert_eq!(response.clone().upgrade_journal.unwrap().entries.len(), 2);
+    assert_eq!(
+        response
+            .clone()
+            .upgrade_journal
+            .unwrap()
+            .entries
+            .first()
+            .unwrap()
+            .timestamp_seconds,
+        Some(2)
+    );
+    assert_eq!(
+        response
+            .clone()
+            .upgrade_journal
+            .unwrap()
+            .entries
+            .last()
+            .unwrap()
+            .timestamp_seconds,
+        Some(3)
+    );
+
+    // Scenario 2: Explicit start index
+    let response = governance.get_upgrade_journal(GetUpgradeJournalRequest {
+        start_index: Some(0),
+        max_entries: Some(2),
+    });
+    assert_eq!(response.clone().upgrade_journal.unwrap().entries.len(), 2);
+    assert_eq!(
+        response
+            .clone()
+            .upgrade_journal
+            .unwrap()
+            .entries
+            .first()
+            .unwrap()
+            .timestamp_seconds,
+        Some(1)
+    );
+    assert_eq!(
+        response
+            .upgrade_journal
+            .unwrap()
+            .entries
+            .last()
+            .unwrap()
+            .timestamp_seconds,
+        Some(2)
+    );
+
+    // Scenario 3: Max entries respects the global limit
+    let response = governance.get_upgrade_journal(GetUpgradeJournalRequest {
+        start_index: None,
+        max_entries: Some(MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST + 1),
+    });
+    assert_eq!(response.upgrade_journal.unwrap().entries.len(), 3);
+
+    // Scenario 4: Start index beyond bounds returns empty list
+    let response = governance.get_upgrade_journal(GetUpgradeJournalRequest {
+        start_index: Some(10),
+        max_entries: Some(2),
+    });
+    assert_eq!(response.upgrade_journal.unwrap().entries.len(), 0);
+
+    // Scenario 5: tons of entries
+    governance.proto.upgrade_journal = Some(UpgradeJournal {
+        entries: vec![
+            UpgradeJournalEntry::default();
+            MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST as usize + 1
+        ],
+    });
+    let response = governance.get_upgrade_journal(GetUpgradeJournalRequest {
+        start_index: None,
+        max_entries: Some(MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST + 1),
+    });
+    assert_eq!(
+        response.upgrade_journal.unwrap().entries.len(),
+        MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST as usize
     );
 }
