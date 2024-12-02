@@ -225,6 +225,7 @@ thread_local! {
 // Timers
 
 const SECOND: Duration = Duration::from_secs(1);
+const HOUR: Duration = Duration::from_secs(60 * 60);
 
 fn timers() {
     // ACLs
@@ -292,6 +293,31 @@ fn timers() {
                     q.remove(&p);
                 }
             });
+        });
+    });
+
+    // TTLs
+    set_timer_interval(30 * DAY, || {
+        // Remove all encrypted values
+        let ids = ENCRYPTED_VALUES.with(|vs| {
+            let mut vs = vs.borrow_mut();
+
+            let ids: Vec<_> = vs.iter().map(|(k, _)| k).collect();
+            vs.clear_new();
+
+            ids
+        });
+
+        // Re-queue
+        QUEUE.with(|q| {
+            let mut q = q.borrow_mut();
+
+            for id in ids {
+                q.insert(
+                    id, // principal
+                    (), // unit
+                );
+            }
         });
     });
 
