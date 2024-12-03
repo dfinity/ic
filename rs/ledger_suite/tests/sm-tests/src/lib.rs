@@ -3106,7 +3106,7 @@ pub fn test_metrics_while_migrating<T>(
         !metrics
             .iter()
             .any(|line| line.contains("ledger_num_approvals")),
-        "ledger_total_supply should not be in metrics"
+        "ledger_num_approvals should not be in metrics"
     );
 
     let is_ledger_ready = Decode!(
@@ -3131,7 +3131,7 @@ pub fn test_metrics_while_migrating<T>(
         metrics
             .iter()
             .any(|line| line.contains("ledger_num_approvals")),
-        "Did not find ledger_total_supply metric"
+        "Did not find ledger_num_approvals metric"
     );
 }
 
