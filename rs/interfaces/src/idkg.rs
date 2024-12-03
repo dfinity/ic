@@ -100,10 +100,10 @@ pub trait IDkgPoolSection: Send + Sync {
         unimplemented!()
     }
 
-    /// Iterator for signature share objects.
+    /// Iterator for VetKd share objects.
     fn vetkd_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdShare)> + '_>;
 
-    /// Iterator for signature share objects matching the prefix.
+    /// Iterator for VetKd share objects matching the prefix.
     fn vetkd_shares_by_prefix(
         &self,
         _prefix: IDkgPrefixOf<VetKdShare>,

@@ -264,11 +264,11 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
     }
 
     fn signature_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SigShare)> + '_> {
-        let idkg_pool = self.get_pool(IDkgMessageType::EcdsaSigShare);
+        let ecdsa_pool = self.get_pool(IDkgMessageType::EcdsaSigShare);
         let schnorr_pool = self.get_pool(IDkgMessageType::SchnorrSigShare);
         let vetkd_pool = self.get_pool(IDkgMessageType::VetKdShare);
         Box::new(
-            idkg_pool
+            ecdsa_pool
                 .iter()
                 .map(|(id, share)| (id, SigShare::Ecdsa(share)))
                 .chain(

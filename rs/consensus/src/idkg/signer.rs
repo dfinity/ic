@@ -367,7 +367,7 @@ impl ThresholdSignerImpl {
                 inputs.presig_transcript().blinder_unmasked(),
                 inputs.key_transcript(),
             ],
-            // No dependencies for Vet KD
+            // No dependencies for VetKd
             ThresholdSigInputs::VetKd(_) => vec![],
         };
         load_transcripts(idkg_pool, transcript_loader, &transcripts)
