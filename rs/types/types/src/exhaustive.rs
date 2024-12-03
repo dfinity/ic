@@ -217,6 +217,12 @@ impl ExhaustiveSet for () {
     }
 }
 
+impl ExhaustiveSet for bool {
+    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+        vec![true, false]
+    }
+}
+
 impl ExhaustiveSet for String {
     fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
         vec!["0123abcd!@#$.,;()[]<>".to_string(), "".to_string()]
@@ -666,13 +672,14 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, MultiSignature<T>> {
 
 impl ExhaustiveSet for NiDkgConfig {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        let nidkg_ids = NiDkgId::exhaustive_set(rng);
+        let nidkg_ids = <(NiDkgId, bool)>::exhaustive_set(rng);
         nidkg_ids
             .into_iter()
-            .map(|id| {
+            .map(|(id, resharing)| {
                 let mut config_data = valid_dkg_config_data();
-                config_data.dkg_id = id.clone();
-                config_data.resharing_transcript.as_mut().unwrap().dkg_id = id;
+                config_data.dkg_id = id;
+                config_data.resharing_transcript =
+                    resharing.then_some(config_data.resharing_transcript.unwrap().clone());
                 NiDkgConfig::new(config_data).unwrap()
             })
             .collect()
@@ -682,14 +689,8 @@ impl ExhaustiveSet for NiDkgConfig {
 impl ExhaustiveSet for NiDkgTranscript {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         let nodes = NodeId::exhaustive_set(rng);
-        assert_eq!(NiDkgTag::COUNT, 3);
-        let mut tags = vec![NiDkgTag::HighThreshold, NiDkgTag::LowThreshold];
-        tags.extend(
-            NiDkgMasterPublicKeyId::exhaustive_set(rng)
-                .into_iter()
-                .map(NiDkgTag::HighThresholdForKey),
-        );
-        tags.into_iter()
+        NiDkgTag::exhaustive_set(rng)
+            .into_iter()
             .map(|tag| {
                 NiDkgTranscript::dummy_transcript_for_tests_with_params(
                     nodes.clone(),
