@@ -1,20 +1,14 @@
-use crate::Timestamp;
-use std::time::Duration;
-
-const NOW: Timestamp = Timestamp::new(1733145560 * 1_000_000_000);
-const DAY: Duration = Duration::from_secs(24 * 60 * 60);
-
 mod processable_utxos_for_account {
-    use super::{DAY, NOW};
     use crate::state::invariants::CheckInvariantsImpl;
     use crate::state::{CkBtcMinterState, ProcessableUtxos, SuspendedReason};
-    use crate::test_fixtures::{ignored_utxo, init_args, ledger_account, quarantined_utxo, utxo};
+    use crate::test_fixtures::{
+        ignored_utxo, init_args, ledger_account, quarantined_utxo, utxo, DAY, NOW,
+    };
     use crate::updates::update_balance::SuspendedUtxo;
     use candid::Principal;
     use ic_btc_interface::{OutPoint, Utxo};
     use icrc_ledger_types::icrc1::account::Account;
     use maplit::btreeset;
-    use std::ops::Mul;
 
     #[test]
     fn should_be_all_new_utxos_when_state_empty() {
@@ -168,9 +162,8 @@ mod processable_utxos_for_account {
 }
 
 mod suspended_utxos {
-    use super::{DAY, NOW};
     use crate::state::{SuspendedReason, SuspendedUtxos};
-    use crate::test_fixtures::{ledger_account, utxo};
+    use crate::test_fixtures::{ledger_account, utxo, DAY, NOW};
     use maplit::btreemap;
     use std::collections::BTreeMap;
 

@@ -3,7 +3,7 @@ mod update_balance {
     use crate::storage;
     use crate::test_fixtures::{
         ecdsa_public_key, get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
-        mock::MockCanisterRuntime, quarantined_utxo, KYT_CANISTER_ID, MINTER_CANISTER_ID,
+        mock::MockCanisterRuntime, quarantined_utxo, KYT_CANISTER_ID, MINTER_CANISTER_ID, NOW,
     };
     use crate::updates::update_balance;
     use crate::updates::update_balance::{UpdateBalanceArgs, UtxoStatus};
@@ -16,7 +16,7 @@ mod update_balance {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
         let ignored_utxo = ignored_utxo();
-        mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone(), account));
+        mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone(), account, NOW));
         let events_before: Vec<_> = storage::events().collect();
 
         let mut runtime = MockCanisterRuntime::new();
@@ -41,7 +41,7 @@ mod update_balance {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
         let ignored_utxo = ignored_utxo();
-        mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone(), account));
+        mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone(), account, NOW));
         mutate_state(|s| s.kyt_fee = ignored_utxo.value - 1);
         let events_before: Vec<_> = storage::events().collect();
 
@@ -83,7 +83,7 @@ mod update_balance {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
         let ignored_utxo = ignored_utxo();
-        mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone(), account));
+        mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone(), account, NOW));
         mutate_state(|s| s.kyt_fee = ignored_utxo.value - 1);
         let events_before: Vec<_> = storage::events().collect();
 
@@ -228,7 +228,7 @@ mod update_balance {
 
     fn quarantine_utxo(utxo: Utxo, account: Account) {
         mutate_state(|s| {
-            audit::quarantine_utxo(s, utxo, account);
+            audit::quarantine_utxo(s, utxo, account, NOW);
         });
     }
 
