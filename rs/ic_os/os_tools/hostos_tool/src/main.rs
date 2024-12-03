@@ -105,7 +105,7 @@ pub fn main() -> Result<()> {
                 ))?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
-            let node_type = node_type.parse::<NodeType>()?;
+            let node_type = node_type.parse()?;
             let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
             let deployment_environment = deployment_settings
                 .deployment
@@ -139,7 +139,7 @@ pub fn main() -> Result<()> {
                 ))?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
-            let node_type = node_type.parse::<NodeType>()?;
+            let node_type = node_type.parse()?;
             let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
             let deployment_environment = deployment_settings
                 .deployment
