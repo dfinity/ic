@@ -192,7 +192,7 @@ fn should_fail_but_write_metrics_if_command_fails() {
                 .path()
                 .to_str()
                 .expect("tmp_dir path should be valid")
-                .to_string(),            
+                .to_string(),
         ),
         Err(err)
         if err.to_string().contains("Failed to run command")
@@ -224,7 +224,7 @@ fn should_fail_if_command_cannot_be_run() {
                 .path()
                 .to_str()
                 .expect("tmp_dir path should be valid")
-                .to_string(),              
+                .to_string(),
         ),
         Err(err)
         if err.to_string().contains("Failed to run command")
@@ -249,10 +249,10 @@ fn should_not_run_command_but_initialize_metrics_if_flag_set() {
             .to_string(),
         true,
         tmp_dir2
-        .path()
-        .to_str()
-        .expect("tmp_dir path should be valid")
-        .to_string(),        
+            .path()
+            .to_str()
+            .expect("tmp_dir path should be valid")
+            .to_string(),
     )
     .is_ok());
 
@@ -278,10 +278,10 @@ fn should_not_overwrite_existing_metrics_if_metrics_init_flag_set() {
             .to_string(),
         false,
         tmp_dir2
-        .path()
-        .to_str()
-        .expect("tmp_dir path should be valid")
-        .to_string(),         
+            .path()
+            .to_str()
+            .expect("tmp_dir path should be valid")
+            .to_string(),
     )
     .is_ok());
 
@@ -298,10 +298,10 @@ fn should_not_overwrite_existing_metrics_if_metrics_init_flag_set() {
             .to_string(),
         true,
         tmp_dir2
-        .path()
-        .to_str()
-        .expect("tmp_dir path should be valid")
-        .to_string(),         
+            .path()
+            .to_str()
+            .expect("tmp_dir path should be valid")
+            .to_string(),
     )
     .is_ok());
 
@@ -330,7 +330,7 @@ fn should_fail_if_metrics_file_cannot_be_written_to() {
             .path()
             .to_str()
             .expect("tmp_dir path should be valid")
-            .to_string(),             
+            .to_string(),
         ),
         Err(err)
         if err.to_string().contains("Failed to write metrics to file")

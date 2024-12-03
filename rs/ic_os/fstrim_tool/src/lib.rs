@@ -104,7 +104,7 @@ pub fn fstrim_tool(
             update_metrics(elapsed_target, res_target.is_ok(), &metrics_filename)?;
 
             if !datadir_target.is_empty() && !is_node_assigned() {
-                // TODO observability changes needed, expand the metrics logic    
+                // TODO observability changes needed, expand the metrics logic
                 // let start_datadir = std::time::Instant::now();
                 let res_datadir = run_command(command, &datadir_target);
                 // let elapsed_datadir = start_datadir.elapsed();
