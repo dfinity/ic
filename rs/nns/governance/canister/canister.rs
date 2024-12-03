@@ -171,7 +171,7 @@ fn schedule_timers() {
 // avoiding the overhead of frequent reseeding.
 const SEEDING_INTERVAL: Duration = Duration::from_secs(3600);
 const RETRY_SEEDING_INTERVAL: Duration = Duration::from_secs(30);
-const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(1);
+const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(10);
 
 // Once this amount of instructions is used by the
 // Governance::prune_some_following, it stops, saves where it is, schedules more
@@ -190,7 +190,7 @@ const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(1);
 // gigainstructions, then we use 2.16 terainstructions per day doing
 // prune_some_following. If we assume 1 terainstruction costs 1 XDR,
 // prune_some_following uses a couple of bucks worth of instructions each day.
-const MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS: u64 = 25_000_000;
+const MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS: u64 = 50_000_000;
 
 fn schedule_seeding(delay: Duration) {
     ic_cdk_timers::set_timer(delay, || {
