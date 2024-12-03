@@ -3,7 +3,7 @@ use crate::state::{
     FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError,
     TransactionKytData,
 };
-use crate::{blocklist_contains, providers, state, Config};
+use crate::{is_blocked, providers, state, Config};
 use bitcoin::Transaction;
 use futures::future::try_join_all;
 use ic_btc_interface::Txid;
@@ -187,7 +187,7 @@ pub trait FetchEnv {
             if fetched.input_addresses.iter().all(|x| x.is_some()) {
                 // We have obtained all input addresses.
                 for address in fetched.input_addresses.iter().flatten() {
-                    if blocklist_contains(address) {
+                    if is_blocked(address) {
                         return Some(CheckTransactionResponse::Failed(vec![address.to_string()]));
                     }
                 }

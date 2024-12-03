@@ -1,7 +1,7 @@
 use bitcoin::{consensus::Decodable, Address, Transaction};
 use ic_btc_interface::Txid;
 use ic_btc_kyt::{
-    blocklist_contains, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
+    get_tx_cycle_cost, is_blocked, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
     CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionResponse,
     CheckTransactionRetriable, CheckTransactionStatus, KytArg, KytMode,
     CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
@@ -61,7 +61,7 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
         KytMode::AcceptAll => CheckAddressResponse::Passed,
         KytMode::RejectAll => CheckAddressResponse::Failed,
         KytMode::Normal => {
-            if blocklist_contains(&address) {
+            if is_blocked(&address) {
                 return CheckAddressResponse::Failed;
             }
             CheckAddressResponse::Passed
