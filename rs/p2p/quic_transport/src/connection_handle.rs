@@ -61,14 +61,11 @@ impl ConnectionHandle {
         let request_bytes = into_request_bytes(request);
 
         send_stream.write_all(&request_bytes).await?;
-
         send_stream
             .finish()
             .map_err(|err| TransportError::Internal(Box::new(err)))?;
-
         send_stream.stopped().await?;
         let response_bytes = recv_stream.read_to_end(MAX_MESSAGE_SIZE_BYTES).await?;
-
         let response = to_response(response_bytes)?;
 
         Ok(response)

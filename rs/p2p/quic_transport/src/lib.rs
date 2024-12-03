@@ -60,7 +60,7 @@ use tracing::instrument;
 
 use crate::connection_handle::ConnectionHandle;
 use crate::connection_manager::start_connection_manager;
-use crate::metrics::QuicTransportMetrics;
+use crate::metrics::{observe_transport_error, QuicTransportMetrics};
 
 mod connection_handle;
 mod connection_manager;
@@ -327,23 +327,9 @@ impl Transport for QuicTransport {
             }
             Err(err) => {
                 let counter = &self.metrics.connection_handle_errors_total;
-                match &err {
-                    TransportError::StreamCancelled => {
-                        counter.with_label_values(&["stream_cancelled"]).inc()
-                    }
-                    TransportError::ConnectionClosed => {
-                        counter.with_label_values(&["connection_closed"]).inc()
-                    }
-                    TransportError::TimedOut => {
-                        counter.with_label_values(&["connection_timed_out"]).inc()
-                    }
-                    TransportError::ConnectionNotFound => {
-                        counter.with_label_values(&["connection_not_found"]).inc()
-                    }
-                    TransportError::Internal(internal_err) => {
-                        warn!(self.log, "{:?}", internal_err);
-                        counter.with_label_values(&["internal"]).inc();
-                    }
+                observe_transport_error(&err, counter);
+                if let TransportError::Internal(internal_err) = &err {
+                    warn!(self.log, "{:?}", internal_err);
                 }
                 Err(err)
             }
