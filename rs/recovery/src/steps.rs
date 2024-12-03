@@ -8,8 +8,9 @@ use crate::{
     replay_helper,
     ssh_helper::SshHelper,
     util::{block_on, parse_hex_str},
-    Recovery, ADMIN, CHECKPOINTS, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_DATA_PATH,
-    IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES, NEW_IC_STATE, READONLY,
+    Recovery, UploadMethod, ADMIN, CHECKPOINTS, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH,
+    IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES,
+    NEW_IC_STATE, READONLY,
 };
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
 use ic_base_types::{CanisterId, NodeId, PrincipalId};
@@ -509,7 +510,7 @@ impl Step for ValidateReplayStep {
 
 pub struct UploadAndRestartStep {
     pub logger: Logger,
-    pub node_ip: Option<IpAddr>,
+    pub upload_method: UploadMethod,
     pub work_dir: PathBuf,
     pub data_src: PathBuf,
     pub require_confirmation: bool,
@@ -550,10 +551,9 @@ impl UploadAndRestartStep {
 }
 impl Step for UploadAndRestartStep {
     fn descr(&self) -> String {
-        let replica = if let Some(ip) = self.node_ip {
-            &format!("replica {ip}")
-        } else {
-            "local replica"
+        let replica = match self.upload_method {
+            UploadMethod::Remote(ip) => &format!("replica {ip}"),
+            UploadMethod::Local => "local replica",
         };
         format!(
             "Stopping {replica}, uploading and replacing state from {}, set access \
@@ -594,7 +594,7 @@ impl Step for UploadAndRestartStep {
         let src = format!("{}/", self.data_src.display());
 
         // Decide: remote or local recovery
-        if let Some(node_ip) = self.node_ip {
+        if let UploadMethod::Remote(node_ip) = self.upload_method {
             // For remote recoveries, we copy the source directory via rsync.
             // To improve rsync times, we copy the latest checkpoint to the
             // upload directory.
@@ -651,7 +651,6 @@ impl Step for UploadAndRestartStep {
             info!(self.logger, "Restarting replica...");
             exec_cmd(&mut Command::new("bash").arg("-c").arg(cmd_replace_state))?;
         }
-
         Ok(())
     }
 }

@@ -10,9 +10,9 @@ use crate::{
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryHelper,
     steps::Step,
-    util,
+    upload_method_from_str, util,
     util::subnet_id_from_str,
-    NeuronArgs, RecoveryArgs,
+    NeuronArgs, RecoveryArgs, UploadMethod,
 };
 use core::fmt::Debug;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
@@ -284,6 +284,10 @@ pub fn read_optional_version(logger: &Logger, prompt: &str) -> Option<ReplicaVer
 
 pub fn read_optional_subnet_id(logger: &Logger, prompt: &str) -> Option<SubnetId> {
     read_optional_type(logger, prompt, subnet_id_from_str)
+}
+
+pub fn read_optional_upload_method(logger: &Logger, prompt: &str) -> Option<UploadMethod> {
+    read_optional_type(logger, prompt, upload_method_from_str)
 }
 
 /// Optionally read an input of the generic type by applying the given deserialization function.

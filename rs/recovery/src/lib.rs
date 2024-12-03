@@ -28,6 +28,7 @@ use ssh_helper::SshHelper;
 use std::io::ErrorKind;
 use std::{
     net::IpAddr,
+    net::Ipv6Addr,
     path::{Path, PathBuf},
     process::Command,
     str::FromStr,
@@ -485,20 +486,23 @@ impl Recovery {
 
     /// Return an [UploadAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
-    pub fn get_upload_and_restart_step(&self, node_ip: Option<IpAddr>) -> impl Step {
-        self.get_upload_and_restart_step_with_data_src(node_ip, self.work_dir.join(IC_STATE_DIR))
+    pub fn get_upload_and_restart_step(&self, upload_method: UploadMethod) -> impl Step {
+        self.get_upload_and_restart_step_with_data_src(
+            upload_method,
+            self.work_dir.join(IC_STATE_DIR),
+        )
     }
 
     /// Return an [UploadAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
     pub fn get_upload_and_restart_step_with_data_src(
         &self,
-        node_ip: Option<IpAddr>,
+        upload_method: UploadMethod,
         data_src: PathBuf,
     ) -> impl Step {
         UploadAndRestartStep {
             logger: self.logger.clone(),
-            node_ip,
+            upload_method,
             work_dir: self.work_dir.clone(),
             data_src,
             require_confirmation: self.ssh_confirmation,
@@ -883,6 +887,23 @@ impl Recovery {
             key_file: self.key_file.clone(),
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum UploadMethod {
+    Local,
+    Remote(IpAddr),
+}
+
+pub fn upload_method_from_str(s: &str) -> RecoveryResult<UploadMethod> {
+    if s == "local" {
+        return Ok(UploadMethod::Local);
+    }
+    Ok(UploadMethod::Remote(IpAddr::V6(
+        Ipv6Addr::from_str(s).map_err(|e| {
+            RecoveryError::UnexpectedError(format!("Unable to parse ipv6 address {:?}", e))
+        })?,
+    )))
 }
 
 pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetrics> {

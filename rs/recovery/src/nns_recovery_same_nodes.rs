@@ -1,17 +1,20 @@
 use crate::{
-    cli::{print_height_info, read_optional, read_optional_version},
+    cli::{
+        consent_given_optional, print_height_info, read_optional, read_optional_upload_method,
+        read_optional_version,
+    },
     error::{GracefulExpect, RecoveryError},
     file_sync_helper::create_dir,
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
-    RecoveryArgs, RecoveryResult, CUPS_DIR,
+    RecoveryArgs, RecoveryResult, UploadMethod, CUPS_DIR,
 };
 use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_types::ReplicaVersion;
 use serde::{Deserialize, Serialize};
 use slog::Logger;
-use std::{iter::Peekable, net::IpAddr, path::PathBuf};
+use std::{iter::Peekable, net::IpAddr, net::Ipv6Addr, path::PathBuf};
 use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, EnumMessage, EnumString};
 use url::Url;
@@ -65,16 +68,11 @@ pub struct NNSRecoverySameNodesArgs {
     #[clap(long)]
     pub download_node: Option<IpAddr>,
 
-    /// If we're performing a local recovery. That means we're running the recovery
-    /// tool directly on a node of the targeted subnet. This allows us to skip a few
-    /// potentially expensive data transfers.
-    #[clap(long)]
-    pub local_upload: Option<bool>,
-
-    /// IP address of the node to upload the new subnet state to. Must be `None`
-    /// if `local_upload` is set to true.
-    #[clap(long)]
-    pub upload_node: Option<IpAddr>,
+    /// The method of uploading state. Possible values are either `local` (for a
+    /// local recovery on the admin node) or the ipv6 address of the target node.
+    /// Local recoveries allow us to skip a potentially expensive data transfer.
+    #[clap(long, value_parser=crate::upload_method_from_str)]
+    pub upload_method: Option<UploadMethod>,
 
     /// If present the tool will start execution for the provided step, skipping the initial ones
     #[clap(long = "resume")]
@@ -165,15 +163,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
 
             StepType::WaitForCUP => {
-                if self.params.local_upload.is_none() {
-                    self.params.local_upload = consent_given_optional(
+                if self.params.upload_method.is_none() {
+                    self.params.upload_method = read_optional_upload_method(
                         &self.logger,
-                        "Are you currently performing a local recovery directly on the node?",
+                        "Are you performing a local recovery directly on the node, or a remote recovery? [local/<ipv6>]",
                     );
-                }
-                if self.params.upload_node.is_none() && self.params.local_upload == Some(false) {
-                    self.params.upload_node =
-                        read_optional(&self.logger, "Enter IP of node with admin access: ");
                 }
             }
 
@@ -271,11 +265,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             )),
 
             StepType::WaitForCUP => {
-                if self.params.local_upload.is_some() {
-                    let node_ip = if let Some(ip) = self.params.upload_node {
-                        ip
-                    } else {
-                        IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1))
+                if let Some(method) = self.params.upload_method {
+                    let node_ip = match method {
+                        UploadMethod::Remote(ip) => ip,
+                        UploadMethod::Local => IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
                     };
                     Ok(Box::new(self.recovery.get_wait_for_cup_step(node_ip)))
                 } else {
@@ -284,10 +277,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
 
             StepType::UploadState => {
-                if self.params.local_upload.is_some() {
+                if let Some(method) = self.params.upload_method {
                     Ok(Box::new(
                         self.recovery.get_upload_and_restart_step_with_data_src(
-                            self.params.upload_node,
+                            method,
                             self.new_state_dir.clone(),
                         ),
                     ))
