@@ -44,6 +44,7 @@ use ic_sns_governance::{
     },
     types::{Environment, HeapGrowthPotential},
 };
+use ic_sns_governance_api::pb::v1 as api;
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -604,13 +605,15 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/journal/json" => {
-            let journal_entries = &governance()
+            let journal = governance()
                 .proto
                 .upgrade_journal
-                .as_ref()
-                .expect("The upgrade journal is not initialized for this SNS.")
-                .entries;
-            serve_journal(journal_entries)
+                .clone()
+                .expect("The upgrade journal is not initialized for this SNS.");
+
+            let journal = api::UpgradeJournal::from(journal);
+
+            serve_journal(&journal.entries)
         }
         "/metrics" => serve_metrics(encode_metrics),
         "/logs" => serve_logs_v2(request, &INFO, &ERROR),
@@ -693,7 +696,13 @@ fn advance_target_version(request: AdvanceTargetVersionRequest) -> AdvanceTarget
 async fn refresh_cached_upgrade_steps(
     _: RefreshCachedUpgradeStepsRequest,
 ) -> RefreshCachedUpgradeStepsResponse {
-    governance_mut().refresh_cached_upgrade_steps().await;
+    let goverance = governance_mut();
+    let deployed_version = goverance
+        .try_temporarily_lock_refresh_cached_upgrade_steps()
+        .unwrap();
+    goverance
+        .refresh_cached_upgrade_steps(deployed_version)
+        .await;
     RefreshCachedUpgradeStepsResponse {}
 }
 

@@ -140,6 +140,7 @@ impl PocketIcBuilder {
         .await
     }
 
+    /// Use an already running PocketIC server.
     pub fn with_server_url(mut self, server_url: Url) -> Self {
         self.server_url = Some(server_url);
         self

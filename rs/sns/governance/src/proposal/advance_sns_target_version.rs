@@ -5,6 +5,7 @@ use crate::pb::v1::Governance as GovernancePb;
 use crate::types::test_helpers::NativeEnvironment;
 use futures::FutureExt;
 use ic_test_utilities_types::ids::canister_test_id;
+use pretty_assertions::assert_eq;
 
 fn sns_version_for_tests() -> Version {
     Version {
@@ -62,6 +63,28 @@ fn standard_governance_proto_for_tests(deployed_version: Option<Version>) -> Gov
         timers: None,
         upgrade_journal: None,
         cached_upgrade_steps: None,
+    }
+}
+
+#[test]
+fn test_format_timestamp() {
+    for (expected, timestamp_seconds) in [
+        (Some("1970-01-01 00:00:00 UTC"), 0),
+        (Some("2024-11-29 16:14:10 UTC"), 1732896850),
+        (Some("2038-01-19 03:14:07 UTC"), i32::MAX as u64),
+        (Some("4571-09-24 08:52:47 UTC"), 82102668767),
+        (Some("9999-12-31 23:59:59 UTC"), 253402300799),
+        (None, 253402300800),
+        (None, i64::MAX as u64),
+        (None, u64::MAX),
+    ] {
+        let observed = format_timestamp(timestamp_seconds);
+        assert_eq!(
+            observed,
+            expected.map(|s| s.to_string()),
+            "unexpected result from format_timestamp({})",
+            timestamp_seconds,
+        );
     }
 }
 
@@ -176,7 +199,7 @@ fn test_validate_and_render_advance_target_version_action() {
 
 ### Monitoring the upgrade process
 
-Please note: the upgrade steps above (valid around timestamp 0 seconds) might change during this proposal's voting period. Such changes are unlikely and are subject to NNS community's approval.
+Please note: the upgrade steps mentioned above (valid around 1970-01-01 00:00:00 UTC) might change during this proposal's voting period.
 
 The **upgrade journal** provides up-to-date information on this SNS's upgrade process:
 
@@ -239,7 +262,68 @@ fn test_no_pending_upgrades() {
         // Inspect the observed results.
         assert_eq!(
             err,
-            "Cannot advance SNS target version: there are no pending upgrades."
+            "Currently, the SNS does not have pending upgrades. You may need to wait for \
+             the upgrade steps to be refreshed. This shouldn't take more than 3600 seconds.",
+        );
+    }
+}
+
+#[test]
+fn test_deployed_version_not_in_cached_upgrade_steps() {
+    // Prepare the world.
+    let pre_deployed_version = sns_version_for_tests();
+    let deployed_version = Version {
+        root_wasm_hash: vec![
+            67, 28, 179, 51, 254, 179, 247, 98, 247, 66, 176, 222, 165, 135, 69, 99, 58, 42, 44,
+            164, 16, 117, 233, 147, 49, 131, 216, 80, 180, 221, 178, 89,
+        ],
+        ..pre_deployed_version.clone()
+    };
+    let non_existent_version = Version {
+        root_wasm_hash: vec![
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+            25, 26, 27, 28, 29, 30,
+        ],
+        ..deployed_version.clone()
+    };
+
+    // Smoke check: Make sure all versions are different
+    let versions = vec![pre_deployed_version.clone(), non_existent_version.clone()];
+    assert!(
+        versions.iter().collect::<HashSet::<_>>().len() == versions.len(),
+        "Duplicates!"
+    );
+
+    let mut governance_proto = standard_governance_proto_for_tests(Some(deployed_version.clone()));
+    governance_proto.cached_upgrade_steps = Some(CachedUpgradeStepsPb {
+        upgrade_steps: Some(Versions { versions }),
+        ..Default::default()
+    });
+    let env = NativeEnvironment::new(Some(canister_test_id(501)));
+
+    // Run code under test.
+    for action in [
+        Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion { new_target: None }),
+        Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
+            new_target: Some(SnsVersion::from(deployed_version)),
+        }),
+        Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
+            new_target: Some(SnsVersion::from(pre_deployed_version)),
+        }),
+        Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
+            new_target: Some(SnsVersion::from(non_existent_version)),
+        }),
+    ] {
+        let err = validate_and_render_action(&Some(action), &env, &governance_proto, vec![])
+            .now_or_never()
+            .unwrap()
+            .unwrap_err();
+
+        // Inspect the observed results.
+        assert_eq!(
+            err,
+            "Currently, the SNS does not have pending upgrades. You may need to wait for \
+             the upgrade steps to be refreshed. This shouldn't take more than 3600 seconds.",
         );
     }
 }

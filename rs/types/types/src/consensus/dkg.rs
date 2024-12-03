@@ -355,8 +355,12 @@ impl From<&Summary> for pb::Summary {
                 .values()
                 .map(pb::NiDkgConfig::from)
                 .collect(),
-            current_transcripts: build_tagged_transcripts_vec(&summary.current_transcripts),
-            next_transcripts: build_tagged_transcripts_vec(&summary.next_transcripts),
+            current_transcripts_deprecated: build_tagged_transcripts_vec(
+                &summary.current_transcripts,
+            ),
+            current_transcripts_new: Vec::new(),
+            next_transcripts_deprecated: build_tagged_transcripts_vec(&summary.next_transcripts),
+            next_transcripts_new: Vec::new(),
             interval_length: summary.interval_length.get(),
             next_interval_length: summary.next_interval_length.get(),
             height: summary.height.get(),
@@ -369,9 +373,10 @@ impl From<&Summary> for pb::Summary {
 }
 
 fn build_tagged_transcripts_map(
-    transcripts: &[pb::TaggedNiDkgTranscript],
+    transcripts_deprecated: &[pb::TaggedNiDkgTranscript],
+    transcripts_new: &[pb::NiDkgTranscript],
 ) -> Result<BTreeMap<NiDkgTag, NiDkgTranscript>, ProxyDecodeError> {
-    transcripts
+    transcripts_deprecated
         .iter()
         .map(|tagged_transcript| {
             tagged_transcript
@@ -432,6 +437,11 @@ fn build_tagged_transcripts_map(
                     ))
                 })
         })
+        .chain(transcripts_new.iter().map(|transcript_pb| {
+            let transcript =
+                NiDkgTranscript::try_from(transcript_pb).map_err(ProxyDecodeError::Other)?;
+            Ok((transcript.dkg_id.dkg_tag.clone(), transcript))
+        }))
         .collect::<Result<BTreeMap<_, _>, _>>()
 }
 
@@ -505,8 +515,14 @@ impl TryFrom<pb::Summary> for Summary {
                 .map(|config| NiDkgConfig::try_from(config).map(|c| (c.dkg_id.clone(), c)))
                 .collect::<Result<BTreeMap<_, _>, _>>()
                 .map_err(ProxyDecodeError::Other)?,
-            current_transcripts: build_tagged_transcripts_map(&summary.current_transcripts)?,
-            next_transcripts: build_tagged_transcripts_map(&summary.next_transcripts)?,
+            current_transcripts: build_tagged_transcripts_map(
+                &summary.current_transcripts_deprecated,
+                &summary.current_transcripts_new,
+            )?,
+            next_transcripts: build_tagged_transcripts_map(
+                &summary.next_transcripts_deprecated,
+                &summary.next_transcripts_new,
+            )?,
             interval_length: Height::from(summary.interval_length),
             next_interval_length: Height::from(summary.next_interval_length),
             height: Height::from(summary.height),

@@ -168,6 +168,7 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
             message: vec![],
             derivation_path: DerivationPath::new(vec![]),
             key_id: into_inner_schnorr(key_id),
+            taproot_tree_root: None,
         }
         .encode(),
         Method::VetKdDeriveEncryptedKey => ic00::VetKdDeriveEncryptedKeyArgs {
