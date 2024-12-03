@@ -9,8 +9,7 @@ concurrency:
   # only triggered on PR, so head_ref will always be set
   group: ${{ github.workflow }}-${{ github.head_ref }}
   cancel-in-progress: true
-env:
-  CI_PIPELINE_SOURCE: ${{ github.event_name }}
+env: 
   CI_PROJECT_DIR: ${{ github.workspace }}
   MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
   ORG: ${{ github.repository_owner }}
