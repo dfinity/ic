@@ -226,7 +226,7 @@ mod tests {
                 }),
                 memory_allocation: Some(1 << 32),
                 wasm_memory_limit: Some(1 << 31),
-                wasm_memory_threshold: Some(1 << 33),
+                wasm_memory_threshold: Some(1 << 30),
                 compute_allocation: Some(10),
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
@@ -261,7 +261,7 @@ mod tests {
                     freezing_threshold: Some(Nat::from(100u64)),
                     log_visibility: Some(RootLogVisibility::Public),
                     reserved_cycles_limit: None,
-                    wasm_memory_threshold: Some(Nat::from(1u64 << 33)),
+                    wasm_memory_threshold: Some(Nat::from(1u64 << 30)),
                 }
             }
         );
@@ -278,7 +278,7 @@ mod tests {
                 }),
                 memory_allocation: Some(1 << 32),
                 wasm_memory_limit: Some(1 << 31),
-                wasm_memory_threshold: Some(1 << 33),
+                wasm_memory_threshold: Some(1 << 30),
                 compute_allocation: Some(10),
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
@@ -311,7 +311,7 @@ mod tests {
                 freezing_threshold: Some(Nat::from(100u64)),
                 log_visibility: Some(RootLogVisibility::Public),
                 reserved_cycles_limit: None,
-                wasm_memory_threshold: Some(Nat::from(1u64 << 33)),
+                wasm_memory_threshold: Some(Nat::from(1u64 << 30)),
             }
         );
     }
