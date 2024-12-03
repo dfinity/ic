@@ -19,6 +19,7 @@ impl HwAddr {
             .try_into()
             .expect("MAC address should always be 6 bytes")
     }
+
     /// Generates the SLAAC IPv6 address for the given prefix.
     pub fn calculate_slaac(&self, prefix: &str) -> Result<Ipv6Addr> {
         let mac_octets = self.octets();
@@ -136,6 +137,7 @@ pub fn calculate_deterministic_mac<T: AsRef<HwAddr>, D: fmt::Display>(
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::net::Ipv6Addr;
 
     #[test]
     fn mac() {
@@ -183,6 +185,72 @@ mod test {
         let mac =
             calculate_deterministic_mac(mgmt_mac, "mainnet", IpVariant::V6, NodeType::GuestOS);
         let slaac = mac.calculate_slaac(prefix).unwrap();
+        assert_eq!(slaac, expected_ip);
+    }
+
+    #[test]
+    fn test_prefix_without_suffix() {
+        let mac = "6a:01:e5:96:2d:49".parse::<HwAddr>().unwrap();
+        let prefix = "2001:db8";
+
+        let expected_ip = "2001:db8::6801:e5ff:fe96:2d49".parse::<Ipv6Addr>().unwrap();
+
+        let slaac = mac.calculate_slaac(prefix).unwrap();
+
+        assert_eq!(slaac, expected_ip);
+    }
+
+    #[test]
+    fn test_prefix_with_double_colon() {
+        let mac = "6a:01:e5:96:2d:49".parse::<HwAddr>().unwrap();
+        let prefix = "2a04:9dc0:0:108::";
+
+        let expected_ip = "2a04:9dc0:0:108:6801:e5ff:fe96:2d49"
+            .parse::<Ipv6Addr>()
+            .unwrap();
+
+        let slaac = mac.calculate_slaac(prefix).unwrap();
+
+        assert_eq!(slaac, expected_ip);
+    }
+
+    #[test]
+    fn test_invalid_prefix() {
+        let mac = "6a:01:e5:96:2d:49".parse::<HwAddr>().unwrap();
+        let invalid_prefixes = vec![
+            "invalid_prefix",
+            "gggg::",
+            "2a04:9dc0:0:108:zzzz",
+            "1234:::",
+        ];
+
+        for prefix in invalid_prefixes {
+            let result = mac.calculate_slaac(prefix);
+            assert!(result.is_err(), "Prefix '{}' should be invalid", prefix);
+        }
+    }
+
+    #[test]
+    fn test_all_zero_mac() {
+        let mac = "00:00:00:00:00:00".parse::<HwAddr>().unwrap();
+        let prefix = "2001:db8::";
+
+        let expected_ip = "2001:db8::0200:ff:fe00:0".parse::<Ipv6Addr>().unwrap();
+
+        let slaac = mac.calculate_slaac(prefix).unwrap();
+
+        assert_eq!(slaac, expected_ip);
+    }
+
+    #[test]
+    fn test_all_one_mac() {
+        let mac = "ff:ff:ff:ff:ff:ff".parse::<HwAddr>().unwrap();
+        let prefix = "2001:db8::";
+
+        let expected_ip = "2001:db8::fdff:ffff:feff:ffff".parse::<Ipv6Addr>().unwrap();
+
+        let slaac = mac.calculate_slaac(prefix).unwrap();
+
         assert_eq!(slaac, expected_ip);
     }
 }
