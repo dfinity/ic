@@ -45,7 +45,7 @@ use bytes::Bytes;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use phantom_newtype::AmountOf;
 use quinn::{
@@ -60,6 +60,7 @@ use tracing::instrument;
 
 use crate::connection_handle::ConnectionHandle;
 use crate::connection_manager::start_connection_manager;
+use crate::metrics::QuicTransportMetrics;
 
 mod connection_handle;
 mod connection_manager;
@@ -119,6 +120,7 @@ impl Shutdown {
 #[derive(Clone)]
 pub struct QuicTransport {
     log: ReplicaLogger,
+    metrics: QuicTransportMetrics,
     conn_handles: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
     shutdown: Arc<RwLock<Option<Shutdown>>>,
 }
@@ -155,10 +157,11 @@ impl QuicTransport {
         info!(log, "Starting Quic transport.");
 
         let conn_handles = Arc::new(RwLock::new(HashMap::new()));
+        let metrics = QuicTransportMetrics::new(metrics_registry);
 
         let shutdown = start_connection_manager(
             log,
-            metrics_registry,
+            metrics.clone(),
             rt,
             tls_config.clone(),
             registry_client,
@@ -171,6 +174,7 @@ impl QuicTransport {
 
         QuicTransport {
             log: log.clone(),
+            metrics,
             conn_handles,
             shutdown: Arc::new(RwLock::new(Some(shutdown))),
         }
@@ -289,6 +293,23 @@ impl Transport for QuicTransport {
         peer_id: &NodeId,
         request: Request<Bytes>,
     ) -> Result<Response<Bytes>, TransportError> {
+        let _timer = self
+            .metrics
+            .connection_handle_duration_seconds
+            .with_label_values(&[request.uri().path()])
+            .start_timer();
+
+        let bytes_sent_counter = self
+            .metrics
+            .connection_handle_bytes_sent_total
+            .with_label_values(&[request.uri().path()]);
+        bytes_sent_counter.inc_by(request.body().len() as u64);
+
+        let bytes_received_counter = self
+            .metrics
+            .connection_handle_bytes_received_total
+            .with_label_values(&[request.uri().path()]);
+
         let peer = self
             .conn_handles
             .read()
@@ -296,9 +317,35 @@ impl Transport for QuicTransport {
             .get(peer_id)
             .ok_or(TransportError::PeerNotFound)?
             .clone();
-        peer.rpc(request).await.inspect_err(|err| {
-            info!(self.log, "{:?}", err);
-        })
+        let response_result = peer.rpc(request).await;
+        match response_result {
+            Ok(response) => {
+                bytes_received_counter.inc_by(response.body().len() as u64);
+                Ok(response)
+            }
+            Err(err) => {
+                let counter = &self.metrics.connection_handle_errors_total;
+                match &err {
+                    TransportError::StreamCancelled(_) => {
+                        counter.with_label_values(&["stream_cancelled"]).inc()
+                    }
+                    TransportError::ConnectionClosed(_) => {
+                        counter.with_label_values(&["connection_closed"]).inc()
+                    }
+                    TransportError::TimedOut => {
+                        counter.with_label_values(&["connection_timed_out"]).inc()
+                    }
+                    TransportError::PeerNotFound => {
+                        counter.with_label_values(&["peer_not_found"]).inc()
+                    }
+                    TransportError::Internal(internal_err) => {
+                        warn!(self.log, "{:?}", internal_err);
+                        counter.with_label_values(&["internal"]).inc();
+                    }
+                }
+                Err(err)
+            }
+        }
     }
 
     fn peers(&self) -> Vec<(NodeId, ConnId)> {

@@ -40,7 +40,6 @@ use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig};
 use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
-use ic_metrics::MetricsRegistry;
 use quinn::{
     crypto::rustls::{QuicClientConfig, QuicServerConfig},
     AsyncUdpSocket, ConnectError, Connection, ConnectionError, Endpoint, EndpointConfig, Incoming,
@@ -172,7 +171,7 @@ pub fn create_udp_socket(rt: &Handle, addr: SocketAddr) -> Arc<dyn AsyncUdpSocke
 
 pub(crate) fn start_connection_manager(
     log: &ReplicaLogger,
-    metrics_registry: &MetricsRegistry,
+    metrics: QuicTransportMetrics,
     rt: &Handle,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
@@ -183,8 +182,6 @@ pub(crate) fn start_connection_manager(
     router: Router,
 ) -> Shutdown {
     let topology = watcher.borrow().clone();
-
-    let metrics = QuicTransportMetrics::new(metrics_registry);
 
     let router = router.route_layer(from_fn_with_state(metrics.clone(), collect_metrics));
 
@@ -508,7 +505,7 @@ impl ConnectionManager {
                 // This should be done while holding a write lock to the peer map
                 // such that the next read call sees the new id.
 
-                let connection_handle = ConnectionHandle::new(connection, self.metrics.clone());
+                let connection_handle = ConnectionHandle::new(connection);
 
                 // dropping the old connection will result in closing it
                 if let Some(old_conn) = peer_map_mut.insert(peer_id, connection_handle.clone()) {
