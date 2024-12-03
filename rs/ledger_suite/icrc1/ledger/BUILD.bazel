@@ -281,9 +281,9 @@ rust_test(
             "@mainnet_ckbtc_ic-icrc1-ledger-v1//file",
             "@mainnet_ckbtc_ic-icrc1-ledger-v2//file",
             "@mainnet_ckbtc_ic-icrc1-ledger//file",
-            "@mainnet_cketh_ic-icrc1-ledger-u256//file",
             "@mainnet_cketh_ic-icrc1-ledger-u256-v1//file",
             "@mainnet_cketh_ic-icrc1-ledger-u256-v2//file",
+            "@mainnet_cketh_ic-icrc1-ledger-u256//file",
             "@mainnet_ic-icrc1-ledger//file",
         ],
         env = {
