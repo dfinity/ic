@@ -8,7 +8,7 @@ This library implements the https://arxiv.org/abs/2410.22080[_Abortable Broadcas
 Currently, the implementation has some limitations that restrict its generalization:  
 
 - **ArtifactAssembler coupling**: The implementation is tightly coupled with the `ArtifactAssembler`, reducing modularity.  
-- **Slot table deletions**: Deletions in the slot table are not propagated, which could lead to inconsistencies.  
+- **Slot table deletions**: Deletions in the slot table are not propagated, which lead to inconsistencies.  
 
 == Requirements  
 
