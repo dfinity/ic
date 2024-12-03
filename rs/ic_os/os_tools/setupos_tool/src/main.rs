@@ -22,7 +22,7 @@ pub enum Commands {
         output_directory: String,
     },
     GenerateIpv6Address {
-        #[arg(short, long, default_value = "SetupOS")]
+        #[arg(short, long, default_value_t = NodeType::SetupOS)]
         node_type: NodeType,
     },
 }

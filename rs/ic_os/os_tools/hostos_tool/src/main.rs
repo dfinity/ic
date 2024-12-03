@@ -22,11 +22,11 @@ pub enum Commands {
         output_directory: String,
     },
     GenerateIpv6Address {
-        #[arg(short, long, default_value = "HostOS")]
+        #[arg(short, long, default_value_t = NodeType::HostOS)]
         node_type: NodeType,
     },
     GenerateMacAddress {
-        #[arg(short, long, default_value = "HostOS")]
+        #[arg(short, long, default_value_t = NodeType::HostOS)]
         node_type: NodeType,
     },
     FetchMacAddress {},
