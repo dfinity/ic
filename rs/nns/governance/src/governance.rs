@@ -4204,6 +4204,17 @@ impl Governance {
             .map(|(k, _)| ProposalId { id: *k })
     }
 
+    fn ready_to_settle_with_no_outstanding_votes_proposal_ids(
+        &self,
+        as_of_timestamp_seconds: u64,
+    ) -> impl Iterator<Item = ProposalId> + '_ {
+        self.ready_to_be_settled_proposal_ids(as_of_timestamp_seconds)
+            .filter(|pid| {
+                // TODO
+                true
+            })
+    }
+
     /// Rounds now downwards to nearest multiple of REWARD_DISTRIBUTION_PERIOD_SECONDS after genesis
     fn most_recent_fully_elapsed_reward_round_end_timestamp_seconds(&self) -> u64 {
         let now = self.env.now();

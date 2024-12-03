@@ -151,9 +151,13 @@ impl Governance {
     /// Process all voting state machines.  This function is called in the timer job.
     /// It processes voting state machines until the soft limit is reached or there is no work to do.
     pub fn process_voting_state_machines(&mut self) {
+        let mut proposals_with_new_votes_cast = vec![];
         with_voting_state_machines_mut(|voting_state_machines| loop {
             if voting_state_machines
-                .with_next_machine(|(_proposal_id, machine)| {
+                .with_next_machine(|(proposal_id, machine)| {
+                    if !machine.is_voting_finished() {
+                        proposals_with_new_votes_cast.push(proposal_id);
+                    }
                     // We need to keep track of which proposals we processed
                     self.process_machine_until_soft_limit(machine, over_soft_message_limit);
                 })
@@ -166,6 +170,25 @@ impl Governance {
                 break;
             }
         });
+
+        // TODO DO NOT MERGE - do we need other logic here as well?
+        // I don't see how we deal with the edge case of casting votes after polls close...
+        // Seems like the only solution is to always recompute_tally any time a vote is cast
+        // or maybe never recompute tally, and just process the tally as the votes come in...
+
+        // Most of the time, we are not going to see new votes cast in this function, but this
+        // is here to make sure the normal proposal processing still applies
+        for proposal_id in proposals_with_new_votes_cast {
+            let proposal_data = self.heap_data.proposals.get(&proposal_id.id).unwrap();
+            let topic = proposal_data.topic();
+            let voting_period_seconds = self.voting_period_seconds()(topic);
+            self.heap_data
+                .proposals
+                .get_mut(&proposal_id.id)
+                .unwrap()
+                .recompute_tally(self.env.now(), voting_period_seconds);
+            self.process_proposal(proposal_id.id);
+        }
     }
 
     /// Recompute the tally for a proposal, using the time provided as the current time.
@@ -256,9 +279,20 @@ impl<Memory: ic_stable_structures::Memory> VotingStateMachines<Memory> {
         }
         result
     }
+
+    /// Returns true if the machine has votes to process.
+    pub(crate) fn machine_has_votes_to_process(&self, proposal_id: ProposalId) -> bool {
+        if let Some(proto) = self.machines.get(&proposal_id) {
+            !ProposalVotingStateMachine::try_from(proto)
+                .unwrap()
+                .is_voting_finished()
+        } else {
+            false
+        }
+    }
 }
 
-#[derive(Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub(crate) struct ProposalVotingStateMachine {
     // The proposal ID that is being voted on.
     proposal_id: ProposalId,
@@ -502,12 +536,16 @@ mod test {
         },
         storage::with_voting_state_machines_mut,
         test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
-        voting::{temporarily_set_over_soft_message_limit, ProposalVotingStateMachine},
+        voting::{
+            temporarily_set_over_soft_message_limit, ProposalVotingStateMachine,
+            VotingStateMachines,
+        },
     };
     use futures::FutureExt;
     use ic_base_types::PrincipalId;
     use ic_nervous_system_long_message::in_test_temporarily_set_call_context_over_threshold;
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+    use ic_stable_structures::DefaultMemoryImpl;
     use icp_ledger::Subaccount;
     use maplit::{btreemap, hashmap};
     use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -903,6 +941,32 @@ mod test {
                 .unwrap(),
             Vote::Yes as i32
         );
+    }
+
+    #[test]
+    fn test_machine_has_votes_to_process() {
+        let mut voting_state_machines: VotingStateMachines<DefaultMemoryImpl> =
+            VotingStateMachines::new(Default::default());
+        let proposal_id = ProposalId { id: 0 };
+        let topic = Topic::NetworkEconomics;
+        let mut state_machine = ProposalVotingStateMachine::new(proposal_id, topic);
+
+        assert!(!voting_state_machines.machine_has_votes_to_process(proposal_id));
+
+        voting_state_machines.machines.insert(
+            proposal_id,
+            crate::pb::v1::ProposalVotingStateMachine::from(state_machine.clone()),
+        );
+        assert!(!voting_state_machines.machine_has_votes_to_process(proposal_id));
+
+        state_machine
+            .neurons_to_check_followers
+            .insert(NeuronId { id: 0 });
+        voting_state_machines.machines.insert(
+            proposal_id,
+            crate::pb::v1::ProposalVotingStateMachine::from(state_machine),
+        );
+        assert!(voting_state_machines.machine_has_votes_to_process(proposal_id));
     }
 
     #[test]
