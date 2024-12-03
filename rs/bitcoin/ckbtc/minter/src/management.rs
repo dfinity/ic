@@ -3,7 +3,6 @@ use crate::logs::P0;
 use crate::ECDSAPublicKey;
 use crate::{tx, CanisterRuntime};
 use candid::{CandidType, Principal};
-use ic_btc_interface::NetworkInRequest::{mainnet, regtest, testnet, Mainnet, Regtest, Testnet};
 use ic_btc_interface::{
     Address, GetUtxosRequest, GetUtxosResponse, MillisatoshiPerByte, Network, OutPoint, Txid, Utxo,
     UtxosFilterInRequest,
@@ -339,6 +338,9 @@ fn cdk_network(network: Network) -> BitcoinNetwork {
 fn cdk_get_utxos_request(
     request: GetUtxosRequest,
 ) -> ic_cdk::api::management_canister::bitcoin::GetUtxosRequest {
+    use ic_btc_interface::NetworkInRequest::{
+        mainnet, regtest, testnet, Mainnet, Regtest, Testnet,
+    };
     ic_cdk::api::management_canister::bitcoin::GetUtxosRequest {
         address: request.address,
         network: match request.network {
@@ -346,15 +348,17 @@ fn cdk_get_utxos_request(
             Testnet | testnet => BitcoinNetwork::Testnet,
             Regtest | regtest => BitcoinNetwork::Regtest,
         },
-        filter: request.filter.map(|filter| match filter {
-            UtxosFilterInRequest::MinConfirmations(confirmations)
-            | UtxosFilterInRequest::min_confirmations(confirmations) => {
-                UtxoFilter::MinConfirmations(confirmations)
-            }
-            UtxosFilterInRequest::Page(bytes) | UtxosFilterInRequest::page(bytes) => {
-                UtxoFilter::Page(bytes.into_vec())
-            }
-        }),
+        filter: request.filter.map(cdk_utxo_filter),
+    }
+}
+
+fn cdk_utxo_filter(filter: UtxosFilterInRequest) -> UtxoFilter {
+    use UtxosFilterInRequest::{min_confirmations, page, MinConfirmations, Page};
+    match filter {
+        MinConfirmations(confirmations) | min_confirmations(confirmations) => {
+            UtxoFilter::MinConfirmations(confirmations)
+        }
+        Page(bytes) | page(bytes) => UtxoFilter::Page(bytes.into_vec()),
     }
 }
 
