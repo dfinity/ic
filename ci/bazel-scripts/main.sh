@@ -98,6 +98,7 @@ buildevents cmd "${CI_RUN_ID}" "${CI_JOB_NAME}" "${CI_JOB_NAME}-bazel-cmd" -- ba
     --color=yes \
     ${BAZEL_CI_CONFIG} \
     --build_metadata=BUILDBUDDY_LINKS="[CI Job](${CI_JOB_URL})" \
+    --build_metadata=BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD) \
     --ic_version="${CI_COMMIT_SHA}" \
     --ic_version_rc_only="${ic_version_rc_only}" \
     --release_build="${release_build}" \
