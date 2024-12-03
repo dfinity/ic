@@ -12741,6 +12741,7 @@ dependencies = [
  "lazy_static",
  "leb128",
  "lifeline",
+ "macaddr",
  "maplit",
  "nix 0.24.3",
  "num_cpus",

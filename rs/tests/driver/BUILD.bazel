@@ -140,6 +140,7 @@ rust_library(
         "@crate_index//:kube",
         "@crate_index//:lazy_static",
         "@crate_index//:leb128",
+        "@crate_index//:macaddr",
         "@crate_index//:maplit",
         "@crate_index//:nix",
         "@crate_index//:num_cpus",

@@ -106,6 +106,7 @@ kube = { workspace = true }
 lazy_static = { workspace = true }
 leb128 = "0.2.5"
 lifeline = { path = "../../nns/handlers/lifeline/impl" }
+macaddr = { workspace = true }
 maplit = "1.0.2"
 nix = { workspace = true }
 num_cpus = "1.13.1"
