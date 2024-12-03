@@ -259,7 +259,7 @@ async fn install_many_canisters(
                     .bytes(Vec::new())
                     .await
                     .map_err(|_| {
-                        info!("Installation of the canister_idx={} failed.", id);
+                        info!(new_logger, "Installation of the canister_idx={} failed.", id);
                     });
                 info!(
                     new_logger,
