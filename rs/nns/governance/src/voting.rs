@@ -318,7 +318,7 @@ impl Storable for crate::pb::v1::ProposalVotingStateMachine {
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         Self::decode(&bytes[..])
             // Convert from Result to Self. (Unfortunately, it seems that
-            // panic is unavoid able in the case of Err.)
+            // panic is unavoidable in the case of Err.)
             .expect("Unable to deserialize ProposalVotingStateMachine.")
     }
 
@@ -330,7 +330,9 @@ impl ProposalVotingStateMachine {
         Self {
             proposal_id,
             topic,
-            ..Default::default()
+            neurons_to_check_followers: Default::default(),
+            followers_to_check: Default::default(),
+            recent_neuron_ballots_to_record: Default::default(),
         }
     }
 
@@ -341,7 +343,8 @@ impl ProposalVotingStateMachine {
             && self.recent_neuron_ballots_to_record.is_empty()
     }
 
-    /// If only recording votes is left, this function returns true.
+    /// Returns true if all following is processed and all votes are cast on the proposal.
+    /// Recent neuron ballots could still be left, however.
     pub(crate) fn is_voting_finished(&self) -> bool {
         self.neurons_to_check_followers.is_empty() && self.followers_to_check.is_empty()
     }
