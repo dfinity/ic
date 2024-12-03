@@ -21,7 +21,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:3cc80d1a2d5789b69f6a7f170280bb3763a54acce299430903f59718f904f273
+      image: ghcr.io/dfinity/ic-build@sha256:aa25f80a259246429420be01d03294be6d58a5853d75261631c1379a57ef39e8
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
@@ -62,7 +62,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:3cc80d1a2d5789b69f6a7f170280bb3763a54acce299430903f59718f904f273
+      image: ghcr.io/dfinity/ic-build@sha256:aa25f80a259246429420be01d03294be6d58a5853d75261631c1379a57ef39e8
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
@@ -101,7 +101,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:3cc80d1a2d5789b69f6a7f170280bb3763a54acce299430903f59718f904f273
+      image: ghcr.io/dfinity/ic-build@sha256:aa25f80a259246429420be01d03294be6d58a5853d75261631c1379a57ef39e8
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
@@ -149,7 +149,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:3cc80d1a2d5789b69f6a7f170280bb3763a54acce299430903f59718f904f273
+      image: ghcr.io/dfinity/ic-build@sha256:aa25f80a259246429420be01d03294be6d58a5853d75261631c1379a57ef39e8
       options: >-
         -e NODE_NAME
     if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
