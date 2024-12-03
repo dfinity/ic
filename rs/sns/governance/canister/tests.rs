@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use super::*;
 use assert_matches::assert_matches;
 use candid_parser::utils::{service_equal, CandidSource};
@@ -8,7 +6,10 @@ use ic_sns_governance::pb::v1::{
     upgrade_journal_entry::{Event, UpgradeStepsRefreshed},
     DisburseMaturityInProgress, Neuron, UpgradeJournal, UpgradeJournalEntry,
 };
+use ic_sns_governance_api::pb::v1 as api;
 use maplit::btreemap;
+use pretty_assertions::assert_eq;
+use std::collections::HashSet;
 
 /// This is NOT affected by
 ///
@@ -124,21 +125,23 @@ fn test_upgrade_journal() {
                         root_wasm_hash: vec![0, 0, 0, 0],
                         governance_wasm_hash: vec![0, 0, 0, 1],
                         swap_wasm_hash: vec![0, 0, 0, 2],
-                        index_wasm_hash: vec![0, 0, 0, 4],
-                        ledger_wasm_hash: vec![0, 0, 0, 5],
-                        archive_wasm_hash: vec![0, 0, 0, 6],
+                        index_wasm_hash: vec![0, 0, 0, 3],
+                        ledger_wasm_hash: vec![0, 0, 0, 4],
+                        archive_wasm_hash: vec![0, 0, 0, 5],
                     }],
                 }),
             })),
         }],
     };
 
+    let journal = api::UpgradeJournal::from(journal);
+
     // Currently, the `/journal` Http endpoint serves the entries directly, rather than the whole
     // journal object.
     let http_response = serve_journal(&journal.entries);
     let expected_headers: HashSet<(_, _)> = HashSet::from_iter([
         ("Content-Type".to_string(), "application/json".to_string()),
-        ("Content-Length".to_string(), "271".to_string()),
+        ("Content-Length".to_string(), "277".to_string()),
     ]);
     let (observed_headers, observed_body) = assert_matches!(
         http_response,
@@ -170,12 +173,12 @@ fn test_upgrade_journal() {
                         "upgrade_steps": {
                             "versions": [
                                 {
-                                    "root_wasm_hash":       [0,0,0,0],
-                                    "governance_wasm_hash": [0,0,0,1],
-                                    "ledger_wasm_hash":     [0,0,0,5],
-                                    "swap_wasm_hash":       [0,0,0,2],
-                                    "archive_wasm_hash":    [0,0,0,6],
-                                    "index_wasm_hash":      [0,0,0,4]
+                                    "root_wasm_hash":       "00000000",
+                                    "governance_wasm_hash": "00000001",
+                                    "swap_wasm_hash":       "00000002",
+                                    "index_wasm_hash":      "00000003",
+                                    "ledger_wasm_hash":     "00000004",
+                                    "archive_wasm_hash":    "00000005"
                                 }
                             ]
                         }
