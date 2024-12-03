@@ -126,7 +126,7 @@ fn test_update_canister_settings_proposal(
         Some(Nat::from(target_wasm_memory_limit))
     );
     assert_eq!(
-        original_settings.wasm_memory_threshold,
+        updated_settings.wasm_memory_threshold,
         Some(Nat::from(target_wasm_memory_threshold))
     );
     assert_eq!(updated_settings.log_visibility, target_log_visibility);
