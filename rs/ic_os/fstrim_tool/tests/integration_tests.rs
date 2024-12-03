@@ -106,6 +106,33 @@ fn should_fail_but_write_metrics_if_target_is_not_a_directory() {
 }
 
 #[test]
+fn should_fail_but_write_metrics_if_data_target_is_not_a_directory() {
+    let tmp_dir = tempdir().expect("temp dir creation should succeed");
+    let metrics_file = tmp_dir.path().join("fstrim.prom");
+    new_fstrim_tool_command()
+        .args([
+            "--metrics",
+            metrics_file
+                .to_str()
+                .expect("metrics file path should be valid"),
+            "--target",
+            tmp_dir
+                .path()
+                .to_str()
+                .expect("tmp_dir path should be valid"),
+            "--datadir_target",
+            "/not/a/directory",
+        ])
+        .assert()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::contains("not a directory"))
+        .failure();
+
+    // As metrics now only target the main target, success will be reported
+    assert_metrics_file_content(&metrics_file, true, 1);
+}
+
+#[test]
 fn should_fail_but_write_metrics_with_discard_not_supported_with_correct_parameters() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
