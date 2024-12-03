@@ -172,6 +172,11 @@ impl LedgerState {
                 num_transactions_per_type: NUM_TRANSACTIONS_PER_TYPE,
             },
         );
+        // FIXME: Wait for index to sync here?
+        // let start = Instant::now();
+        // wait_until_sync_is_completed(state_machine, INDEX_CANISTER_ID, LEDGER_CANISTER_ID);
+        // println!("Time taken for index to sync: {:?}", start.elapsed());
+
         // Fetch all blocks into the new `ledger_state`. This call only retrieves blocks that were
         // not fetched in the previous call to `fetch_next_blocks`.
         let _ledger_and_archive_blocks = ledger_state
@@ -203,8 +208,6 @@ fn should_create_state_machine_with_golden_nns_state() {
     // Verify ledger, archives, and index block parity
     setup.verify_ledger_archive_index_block_parity();
 
-    setup.perform_transactions();
-
     // Verify ledger balance and allowance state
     // FIXME: This should be true, but currently the InMemoryLedger is not updated with the
     //  transactions generated in the previous step.
@@ -217,8 +220,6 @@ fn should_create_state_machine_with_golden_nns_state() {
     setup.perform_upgrade_downgrade_testing(false);
     // Verify ledger, archives, and index block parity
     setup.verify_ledger_archive_index_block_parity();
-
-    setup.perform_transactions();
 
     // Verify ledger balance and allowance state
     setup.perform_upgrade_downgrade_testing(false);
@@ -275,24 +276,6 @@ impl Setup {
         self.upgrade_index(&self.mainnet_wasms.index);
         self.upgrade_ledger(&self.mainnet_wasms.ledger);
         self.upgrade_archive_canisters(&self.mainnet_wasms.archive);
-    }
-
-    pub fn perform_transactions(&self) {
-        generate_transactions(
-            &self.state_machine,
-            LEDGER_CANISTER_ID,
-            TransactionGenerationParameters {
-                mint_multiplier: MINT_MULTIPLIER,
-                transfer_multiplier: TRANSFER_MULTIPLIER,
-                approve_multiplier: APPROVE_MULTIPLIER,
-                transfer_from_multiplier: TRANSFER_FROM_MULTIPLIER,
-                burn_multiplier: BURN_MULTIPLIER,
-                num_transactions_per_type: NUM_TRANSACTIONS_PER_TYPE,
-            },
-        );
-        let start = Instant::now();
-        wait_until_sync_is_completed(&self.state_machine, INDEX_CANISTER_ID, LEDGER_CANISTER_ID);
-        println!("Time taken for index to sync: {:?}", start.elapsed());
     }
 
     pub fn perform_upgrade_downgrade_testing(
