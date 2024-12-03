@@ -144,7 +144,22 @@ impl PrometheusVm {
         self
     }
 
-    fn sync_k8s_repo_dashboards(logger: Logger) -> Result<()> {
+    /// Expects the layout of directory to be like:
+    /// ```
+    /// root
+    /// ├── folder1
+    /// │   ├── kustomization.yaml
+    /// │   ├── dashboard1.json
+    /// │   └── dashboard2.json
+    /// ├── folder2
+    /// │   ├── dashboard3.json
+    /// │   ├── dashboard4.json
+    /// │   ├── kustomization.yaml
+    /// ...
+    /// ```
+    ///
+    /// This process automatically discovers all `*.json` files, which are interpreted as Grafana dashboards. It then copies these files to a destination, where they will be sent to the Prometheus VM for use with the testnets. The expected name of the dashboards directory is determined by reading the `commonAnnotations.k8s-sidecar-target-directory` path from the `kustomize.yaml` file. This value specifies the location where the dashboards should be placed so that the links don't get broken.
+    fn transform_dashboards_root_dir(logger: Logger) -> Result<()> {
         let destination = get_dependency_path("rs/tests/dashboards");
         let dashboards_root = PathBuf::from_str(&std::env::var("IC_DASHBOARDS_DIR")?)?;
 
@@ -255,7 +270,7 @@ fi
             )
             .unwrap();
 
-        if let Err(e) = Self::sync_k8s_repo_dashboards(log.clone()) {
+        if let Err(e) = Self::transform_dashboards_root_dir(log.clone()) {
             warn!(
                 log,
                 "Failed to sync k8s dashboards to grafana. Error: {}",
