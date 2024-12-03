@@ -23,11 +23,11 @@ pub enum Commands {
     },
     GenerateIpv6Address {
         #[arg(short, long, default_value = "HostOS")]
-        node_type: String,
+        node_type: NodeType,
     },
     GenerateMacAddress {
         #[arg(short, long, default_value = "HostOS")]
-        node_type: String,
+        node_type: NodeType,
     },
     FetchMacAddress {},
 }
@@ -100,7 +100,6 @@ pub fn main() -> Result<()> {
                 ))?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
-            let node_type = node_type.parse()?;
             let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
             let deployment_environment = deployment_settings.deployment.name.parse()?;
             let generated_mac = calculate_deterministic_mac(
@@ -130,7 +129,6 @@ pub fn main() -> Result<()> {
                 ))?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
-            let node_type = node_type.parse()?;
             let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
             let deployment_environment = deployment_settings.deployment.name.parse()?;
             let generated_mac = calculate_deterministic_mac(
