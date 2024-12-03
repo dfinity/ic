@@ -879,7 +879,7 @@ impl From<IDkgMessage> for pb::IDkgMessage {
             IDkgMessage::DealingSupport(x) => Msg::DealingSupport(x.into()),
             IDkgMessage::EcdsaSigShare(x) => Msg::EcdsaSigShare(x.into()),
             IDkgMessage::SchnorrSigShare(x) => Msg::SchnorrSigShare(x.into()),
-            IDkgMessage::VetKdShare(x) => Msg::VetKdShare(x.into()),
+            IDkgMessage::VetKdShare(x) => Msg::VetkdShare(x.into()),
             IDkgMessage::Complaint(x) => Msg::Complaint(x.into()),
             IDkgMessage::Opening(x) => Msg::Opening(x.into()),
         };
@@ -900,7 +900,7 @@ impl TryFrom<pb::IDkgMessage> for IDkgMessage {
             Msg::DealingSupport(x) => IDkgMessage::DealingSupport(x.try_into()?),
             Msg::EcdsaSigShare(x) => IDkgMessage::EcdsaSigShare(x.try_into()?),
             Msg::SchnorrSigShare(x) => IDkgMessage::SchnorrSigShare(x.try_into()?),
-            Msg::VetKdShare(x) => IDkgMessage::VetKdShare(x.try_into()?),
+            Msg::VetkdShare(x) => IDkgMessage::VetKdShare(x.try_into()?),
             Msg::Complaint(x) => IDkgMessage::Complaint(x.try_into()?),
             Msg::Opening(x) => IDkgMessage::Opening(x.try_into()?),
         })
@@ -1245,7 +1245,7 @@ impl From<IDkgArtifactId> for pb::IDkgArtifactId {
                     id_data: Some(pb::SigShareIdData::from(d.get())),
                 })
             }
-            IDkgArtifactId::VetKdShare(p, d) => Kind::VetKdShare(pb::PrefixPairSigShare {
+            IDkgArtifactId::VetKdShare(p, d) => Kind::VetkdShare(pb::PrefixPairSigShare {
                 prefix: Some((&p.get()).into()),
                 id_data: Some(pb::SigShareIdData::from(d.get())),
             }),
@@ -1303,7 +1303,7 @@ impl TryFrom<pb::IDkgArtifactId> for IDkgArtifactId {
                     "SchnorrSigShare::id_data",
                 )?),
             ),
-            Kind::VetKdShare(p) => Self::VetKdShare(
+            Kind::VetkdShare(p) => Self::VetKdShare(
                 IDkgPrefixOf::new(try_from_option_field(
                     p.prefix.as_ref(),
                     "VetKdShare::prefix",
