@@ -305,7 +305,7 @@ impl CanisterStatusResultV2 {
             45,                // freezing_threshold
             46,                // idle_cycles_burned_per_day
             47,                // wasm_memory_limit
-            48,                // wasm_memory_threshold
+            41,                // wasm_memory_threshold
         )
     }
 
