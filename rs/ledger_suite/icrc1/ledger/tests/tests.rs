@@ -577,9 +577,18 @@ fn icrc1_test_incomplete_migration_from_v2() {
 }
 
 #[test]
-fn icrc1_test_incomplete_migration_to_current() {
+fn icrc1_test_incomplete_migration_to_current_from_mainnet() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
         ledger_mainnet_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn icrc1_test_incomplete_migration_to_current_from_v2() {
+    ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
+        ledger_mainnet_v2_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
     );

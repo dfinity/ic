@@ -2942,8 +2942,10 @@ pub fn test_incomplete_migration_to_current<T>(
     );
 
     const APPROVE_AMOUNT: u64 = 150_000;
+    const TRANSFER_AMOUNT: u64 = 100;
 
     const NUM_APPROVALS: u64 = 20;
+    const NUM_TRANSFERS: u64 = 30;
 
     let send_approvals = || {
         for i in 2..2 + NUM_APPROVALS {
@@ -2956,7 +2958,13 @@ pub fn test_incomplete_migration_to_current<T>(
 
     send_approvals();
 
-    let check_approvals = |non_zero_from: u64| {
+    for i in 2..2 + NUM_TRANSFERS {
+        let to = Account::from(PrincipalId::new_user_test_id(i).0);
+        transfer(&env, canister_id, account, to, TRANSFER_AMOUNT)
+            .expect("failed to transfer funds");
+    }
+
+    let check_approvals = || {
         for i in 2..2 + NUM_APPROVALS {
             let allowance = Account::get_allowance(
                 &env,
@@ -2964,16 +2972,22 @@ pub fn test_incomplete_migration_to_current<T>(
                 account,
                 Account::from(PrincipalId::new_user_test_id(i).0),
             );
-            let expected_allowance = if i < non_zero_from {
-                Nat::from(0u64)
-            } else {
-                Nat::from(APPROVE_AMOUNT)
-            };
-            assert_eq!(allowance.allowance, expected_allowance);
+            assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+        }
+    };
+    let check_balances = || {
+        for i in 2..2 + NUM_TRANSFERS {
+            let balance = balance_of(
+                &env,
+                canister_id,
+                Account::from(PrincipalId::new_user_test_id(i).0),
+            );
+            assert_eq!(balance, Nat::from(TRANSFER_AMOUNT));
         }
     };
 
-    check_approvals(2);
+    check_approvals();
+    check_balances();
 
     env.upgrade_canister(
         canister_id,
@@ -3000,7 +3014,8 @@ pub fn test_incomplete_migration_to_current<T>(
     .unwrap();
 
     wait_ledger_ready(&env, canister_id, 20);
-    check_approvals(2);
+    check_approvals();
+    check_balances();
 }
 
 pub fn test_migration_resumes_from_frozen<T>(
