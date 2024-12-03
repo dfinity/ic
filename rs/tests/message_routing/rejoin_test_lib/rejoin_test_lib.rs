@@ -137,115 +137,7 @@ pub async fn rejoin_test_large_state(
         agent_node.get_public_url(),
         agent_node.effective_canister_id(),
     );
-    let canisters = install_statesync_test_canisters(env, &endpoint_runtime, num_canisters).await;
-
-    info!(
-        logger,
-        "Start expanding the canister heap. The total size of all canisters will be {} MiB.",
-        size_level * num_canisters * 128
-    );
-    modify_canister_heap(
-        logger.clone(),
-        canisters.clone(),
-        size_level,
-        num_canisters,
-        false,
-        0,
-    )
-    .await;
-
-    // Kill the rejoin node after it has a checkpoint so that we can test both `copy_chunks` and `fetch_chunks` in the state sync.
-    info!(logger, "Waiting for the rejoin_node to have a checkpoint");
-    wait_for_manifest(&logger, dkg_interval + 1, rejoin_node.clone()).await;
-
-    let res = fetch_metrics::<u64>(
-        &logger,
-        rejoin_node.clone(),
-        vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT],
-    )
-    .await;
-    let base_count = res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0];
-
-    info!(
-        logger,
-        "Killing a node: {} ...",
-        rejoin_node.get_public_url()
-    );
-    rejoin_node.vm().kill();
-    rejoin_node
-        .await_status_is_unavailable()
-        .expect("Node still healthy");
-
-    // Note that how the canister heap is modified is decided by the random seed.
-    // Make sure to provide a different seed than the one used in the previous `modify_canister_heap` call.
-    // In the following call, we skip odd-indexed canisters so that some canisters remain the same while others change.
-    info!(
-        logger,
-        "Start modifying the canister heap but skip odd-indexed canisters"
-    );
-    modify_canister_heap(
-        logger.clone(),
-        canisters.clone(),
-        size_level,
-        num_canisters,
-        true,
-        1,
-    )
-    .await;
-
-    info!(logger, "Get the latest certified height of an active node");
-    let message = b"Are you actively making progress?";
-    store_and_read_stable(&logger, message, &universal_canister).await;
-    let res =
-        fetch_metrics::<u64>(&logger, agent_node.clone(), vec![LATEST_CERTIFIED_HEIGHT]).await;
-    let latest_certified_height = res[LATEST_CERTIFIED_HEIGHT][0];
-
-    // Wait for the next CUP to make sure the second round of state modification is persisted to a new checkpoint.
-    info!(logger, "Waiting for the next CUP");
-    wait_for_cup(&logger, latest_certified_height, agent_node.clone()).await;
-
-    info!(logger, "Killing {} nodes ...", allowed_failures);
-    for node_to_kill in nodes_to_kill {
-        info!(logger, "Killing node {} ...", node_to_kill.get_public_url());
-        node_to_kill.vm().kill();
-        node_to_kill
-            .await_status_is_unavailable()
-            .expect("Node still healthy");
-    }
-
-    info!(logger, "Start the first killed node again...");
-    rejoin_node.vm().start();
-    rejoin_node
-        .await_status_is_healthy()
-        .expect("Started node did not report healthy status");
-
-    info!(logger, "Checking for subnet progress...");
-    let message = b"This beautiful prose should be persisted for future generations";
-    store_and_read_stable(&logger, message, &universal_canister).await;
-
-    info!(
-        logger,
-        "Checking for the state sync count metrics indicating that a successful state sync has happened"
-    );
-    let res = fetch_metrics::<u64>(
-        &logger,
-        rejoin_node.clone(),
-        vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT],
-    )
-    .await;
-    assert!(res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0] > base_count);
-
-    let res = fetch_metrics::<f64>(
-        &logger,
-        rejoin_node.clone(),
-        vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM],
-    )
-    .await;
-    info!(
-        logger,
-        "State sync finishes successfully in {} seconds",
-        res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM][0],
-    );
+    install_many_canisters(env, &endpoint_runtime, num_canisters).await;
 }
 
 pub async fn fetch_metrics<T>(
@@ -342,6 +234,42 @@ async fn install_statesync_test_canisters(
         });
     }
     join_all(futures).await
+}
+
+async fn install_many_canisters(
+    env: TestEnv,
+    endpoint_runtime: &Runtime,
+    num_canisters: usize,
+) {
+    let logger = env.logger();
+    let wasm = Wasm::from_file(get_dependency_path(
+        env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
+            .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
+    ));
+    for i in 0..100 {
+        let mut futures: Vec<_> = Vec::new();
+        for canister_idx in 0..250 {
+            let new_wasm = wasm.clone();
+            let new_logger = logger.clone();
+            futures.push(async move {
+                let canister = new_wasm
+                    .clone()
+                    .install(endpoint_runtime)
+                    .bytes(Vec::new())
+                    .await
+                    .unwrap_or_else(|_| {
+                        panic!("Installation of the canister_idx={} failed.", canister_idx)
+                    });
+                info!(
+                    new_logger,
+                    "Installed canister {}",
+                    i * 100 + canister_idx,
+                );
+            });
+        }
+        join_all(futures).await;
+    }
+
 }
 
 async fn modify_canister_heap(
