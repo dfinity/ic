@@ -1,43 +1,25 @@
-use clap::{
-    builder::{EnumValueParser, TypedValueParser},
-    Parser, ValueEnum,
-};
+use clap::Parser;
 use config_types::DeploymentEnvironment;
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use macaddr::MacAddr6;
 use std::net::Ipv6Addr;
 
-/// Map `DeploymentEnvironment` from `DeploymentEnvironmentArg` to avoid a dependency on `clap` in
-/// the lib.
-#[derive(Copy, Clone, ValueEnum)]
-enum DeploymentEnvironmentArg {
-    Mainnet,
-    Testnet,
-}
-
-impl From<DeploymentEnvironmentArg> for DeploymentEnvironment {
-    fn from(item: DeploymentEnvironmentArg) -> Self {
-        match item {
-            DeploymentEnvironmentArg::Mainnet => DeploymentEnvironment::Mainnet,
-            DeploymentEnvironmentArg::Testnet => DeploymentEnvironment::Testnet,
-        }
-    }
-}
-
-#[derive(Parser)]
 /// A small tool to generate the deterministic IP addresses used by IC-OS.
+#[derive(Parser)]
 struct Args {
     #[arg(long)]
     /// MAC address of the onboard IPMI.
     mac: MacAddr6,
+
     #[arg(long)]
     /// IPv6 prefix for this DC.
     prefix: String,
+
     #[arg(long, default_value_t = DeploymentEnvironment::Mainnet)]
-    #[arg(value_parser = EnumValueParser::new().map(|v: DeploymentEnvironmentArg| DeploymentEnvironment::from(v)))]
     /// Deployment type for this node.
     deployment_environment: DeploymentEnvironment,
+
     #[arg(short, long)]
     node_type: Option<String>,
 }
