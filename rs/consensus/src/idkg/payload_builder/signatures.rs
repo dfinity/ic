@@ -140,7 +140,7 @@ pub(crate) fn update_signature_agreements(
             .encode(),
             Some(CombinedSignature::VetKd(_)) => {
                 if let Some(metrics) = idkg_payload_metrics {
-                    metrics.payload_errors_inc("vet_kd_in_idkg_payload");
+                    metrics.payload_errors_inc("vetkd_in_idkg_payload");
                 }
                 continue;
             }

@@ -56,7 +56,7 @@ use super::vetkd::VetKdEncryptedKeyShare;
 pub mod common;
 pub mod ecdsa;
 pub mod schnorr;
-pub mod vet_kd;
+pub mod vetkd;
 
 /// For completed signature requests, we differentiate between those
 /// that have already been reported and those that have not. This is
@@ -1045,13 +1045,13 @@ pub fn schnorr_sig_share_prefix(
     ))
 }
 
-pub fn vet_kd_share_prefix(
+pub fn vetkd_share_prefix(
     request_id: &RequestId,
-    vet_kd_share_node_id: &NodeId,
+    vetkd_share_node_id: &NodeId,
 ) -> IDkgPrefixOf<VetKdShare> {
     // Group_tag: callback Id, Meta info: <sig share sender>
     let mut hasher = Sha256::new();
-    vet_kd_share_node_id.hash(&mut hasher);
+    vetkd_share_node_id.hash(&mut hasher);
 
     IDkgPrefixOf::new(IDkgPrefix::new(
         request_id.callback_id.get(),
@@ -1374,7 +1374,7 @@ impl IDkgMessageType {
             Self::DealingSupport => "dealing_support",
             Self::EcdsaSigShare => "ecdsa_sig_share",
             Self::SchnorrSigShare => "schnorr_sig_share",
-            Self::VetKdShare => "vet_kd_share",
+            Self::VetKdShare => "vetkd_share",
             Self::Complaint => "complaint",
             Self::Opening => "opening",
         }
@@ -2146,7 +2146,7 @@ impl IDkgObject for SchnorrSigShare {
 
 impl IDkgObject for VetKdShare {
     fn message_prefix(&self) -> IDkgPrefixOf<Self> {
-        vet_kd_share_prefix(&self.request_id, &self.signer_id)
+        vetkd_share_prefix(&self.request_id, &self.signer_id)
     }
 
     fn message_id(&self) -> IDkgArtifactId {

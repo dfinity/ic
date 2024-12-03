@@ -23,7 +23,7 @@ use ic_types::consensus::idkg::common::{
     CombinedSignature, SignatureScheme, ThresholdSigInputs, ThresholdSigInputsRef,
 };
 use ic_types::consensus::idkg::{
-    ecdsa_sig_share_prefix, vet_kd_share_prefix, EcdsaSigShare, IDkgBlockReader, IDkgMessage,
+    ecdsa_sig_share_prefix, vetkd_share_prefix, EcdsaSigShare, IDkgBlockReader, IDkgMessage,
     IDkgStats, RequestId,
 };
 use ic_types::consensus::idkg::{schnorr_sig_share_prefix, SchnorrSigShare, SigShare};
@@ -507,8 +507,8 @@ impl ThresholdSignerImpl {
                     })
             }
             SignatureScheme::VetKd => {
-                let prefix = vet_kd_share_prefix(request_id, signer_id);
-                validated.vet_kd_shares_by_prefix(prefix).any(|(_, share)| {
+                let prefix = vetkd_share_prefix(request_id, signer_id);
+                validated.vetkd_shares_by_prefix(prefix).any(|(_, share)| {
                     share.request_id == *request_id && share.signer_id == *signer_id
                 })
             }
@@ -707,7 +707,7 @@ impl<'a> ThresholdSignatureBuilderImpl<'a> {
             ThresholdSigInputs::VetKd(_inputs) => {
                 // Collect the signature shares for the request.
                 let mut sig_shares = BTreeMap::new();
-                for (_, share) in self.idkg_pool.validated().vet_kd_shares() {
+                for (_, share) in self.idkg_pool.validated().vetkd_shares() {
                     if share.request_id == *request_id {
                         sig_shares.insert(share.signer_id, share.share.clone());
                     }

@@ -250,12 +250,12 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         object_pool.iter_by_prefix(prefix)
     }
 
-    fn vet_kd_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdShare)> + '_> {
+    fn vetkd_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdShare)> + '_> {
         let object_pool = self.get_pool(IDkgMessageType::VetKdShare);
         object_pool.iter()
     }
 
-    fn vet_kd_shares_by_prefix(
+    fn vetkd_shares_by_prefix(
         &self,
         prefix: IDkgPrefixOf<VetKdShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdShare)> + '_> {
@@ -266,7 +266,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
     fn signature_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SigShare)> + '_> {
         let idkg_pool = self.get_pool(IDkgMessageType::EcdsaSigShare);
         let schnorr_pool = self.get_pool(IDkgMessageType::SchnorrSigShare);
-        let vet_kd_pool = self.get_pool(IDkgMessageType::VetKdShare);
+        let vetkd_pool = self.get_pool(IDkgMessageType::VetKdShare);
         Box::new(
             idkg_pool
                 .iter()
@@ -277,7 +277,7 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
                         .map(|(id, share)| (id, SigShare::Schnorr(share))),
                 )
                 .chain(
-                    vet_kd_pool
+                    vetkd_pool
                         .iter()
                         .map(|(id, share)| (id, SigShare::VetKd(share))),
                 ),

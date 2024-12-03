@@ -218,7 +218,7 @@ message IDkgMessage {
     SignedIDkgComplaint complaint = 4;
     SignedIDkgOpening opening = 5;
     SchnorrSigShare schnorr_sig_share = 6;
-    VetKdShare vet_kd_share = 7;
+    VetKdShare vetkd_share = 7;
   }
 }
 
@@ -300,6 +300,6 @@ message IDkgArtifactId {
     PrefixPairIDkg complaint = 4;
     PrefixPairIDkg opening = 5;
     PrefixPairSigShare schnorr_sig_share = 6;
-    PrefixPairSigShare vet_kd_share = 7;
+    PrefixPairSigShare vetkd_share = 7;
   }
 }
