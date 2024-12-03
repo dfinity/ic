@@ -19,7 +19,6 @@ use crate::crypto::canister_threshold_sig::idkg::{
     IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
     InitialIDkgDealings, SignedIDkgDealing,
 };
-use crate::crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId;
 use crate::crypto::threshold_sig::ni_dkg::{
     config::{tests::valid_dkg_config_data, NiDkgConfig},
     NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
