@@ -210,8 +210,6 @@ function query_nns_nodes() {
     if $success; then
         echo "  success"
     else
-        echo "ERROR!!!!!"
-        sleep 10000
         log_and_halt_installation_on_error "1" "Unable to query enough healthy NNS nodes."
     fi
 }
