@@ -20,8 +20,8 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_ledger,
-    install_minter, install_new_kyt, setup, subnet_sys, upgrade_new_kyt,
+    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
+    install_ledger, install_minter, setup, subnet_sys, upgrade_kyt,
     utils::{
         assert_account_balance, assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
         ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
@@ -65,14 +65,13 @@ pub fn test_kyt(env: TestEnv) {
 
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
-        let mut new_kyt_canister = create_canister(&runtime).await;
+        let mut kyt_canister = create_canister(&runtime).await;
 
         let minting_user = minter_canister.canister_id().get();
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let new_kyt_id = install_new_kyt(&mut new_kyt_canister, &env).await;
+        let kyt_id = install_kyt(&mut kyt_canister, &env).await;
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
-        let minter_id =
-            install_minter(&mut minter_canister, ledger_id, &logger, 0, new_kyt_id).await;
+        let minter_id = install_minter(&mut minter_canister, ledger_id, &logger, 0, kyt_id).await;
         let minter = Principal::from(minter_id.get());
 
         let ledger = Principal::from(ledger_id.get());
@@ -119,7 +118,7 @@ pub fn test_kyt(env: TestEnv) {
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
 
         // Put the kyt canister into reject all utxos mode.
-        upgrade_new_kyt(&mut new_kyt_canister, NewKytMode::RejectAll).await;
+        upgrade_kyt(&mut kyt_canister, NewKytMode::RejectAll).await;
 
         wait_for_bitcoin_balance(
             &universal_canister,
@@ -156,7 +155,7 @@ pub fn test_kyt(env: TestEnv) {
         )
         .await;
 
-        stop_canister(&new_kyt_canister).await;
+        stop_canister(&kyt_canister).await;
         let update_balance_kyt_unavailable = minter_agent
             .update_balance(UpdateBalanceArgs {
                 owner: None,
@@ -173,9 +172,9 @@ pub fn test_kyt(env: TestEnv) {
                 );
             }
         }
-        start_canister(&new_kyt_canister).await;
+        start_canister(&kyt_canister).await;
 
-        upgrade_new_kyt(&mut new_kyt_canister, NewKytMode::Normal).await;
+        upgrade_kyt(&mut kyt_canister, NewKytMode::Normal).await;
         // Now that the kyt canister is available and accept all utxos
         // we should be able to mint new utxos.
         let update_balance_new_utxos = minter_agent
@@ -186,19 +185,29 @@ pub fn test_kyt(env: TestEnv) {
             .await
             .expect("Error while calling update_balance")
             .expect("Expected to have at least one utxo result.");
-        assert_eq!(update_balance_new_utxos.len(), 1);
+        assert_eq!(
+            update_balance_new_utxos.len(),
+            2,
+            "BUG: should re-evaluate all UTXOs {:?}",
+            update_balance_new_utxos
+        );
 
-        if let UtxoStatus::Minted { block_index, .. } = &update_balance_new_utxos[0] {
-            assert_mint_transaction(
-                &ledger_agent,
-                &logger,
-                *block_index,
-                &account1,
-                first_transfer_amount - KYT_FEE - BITCOIN_NETWORK_TRANSFER_FEE,
-            )
-            .await;
-        } else {
-            panic!("expected the minter to see one not tainted utxo");
+        for utxo_status in update_balance_new_utxos {
+            match utxo_status {
+                UtxoStatus::Minted { block_index, .. } => {
+                    assert_mint_transaction(
+                        &ledger_agent,
+                        &logger,
+                        block_index,
+                        &account1,
+                        first_transfer_amount - KYT_FEE - BITCOIN_NETWORK_TRANSFER_FEE,
+                    )
+                    .await;
+                }
+                _ => {
+                    panic!("expected the minter to see one not tainted utxo");
+                }
+            }
         }
 
         stop_canister(&ledger_canister).await;
@@ -281,7 +290,7 @@ pub fn test_kyt(env: TestEnv) {
         let retrieve_amount: u64 = 35_000_000;
 
         // Put the new kyt canister into reject all utxos mode.
-        upgrade_new_kyt(&mut new_kyt_canister, NewKytMode::RejectAll).await;
+        upgrade_kyt(&mut kyt_canister, NewKytMode::RejectAll).await;
 
         let retrieve_result = minter_agent
             .retrieve_btc(RetrieveBtcArgs {
@@ -311,7 +320,7 @@ pub fn test_kyt(env: TestEnv) {
             panic!("Expected to see a tainted destination address.")
         }
 
-        upgrade_new_kyt(&mut new_kyt_canister, NewKytMode::Normal).await;
+        upgrade_kyt(&mut kyt_canister, NewKytMode::Normal).await;
 
         let retrieve_result = minter_agent
             .retrieve_btc(RetrieveBtcArgs {
@@ -321,13 +330,11 @@ pub fn test_kyt(env: TestEnv) {
             .await
             .expect("Error while calling retrieve_btc")
             .expect("Error in retrieve_btc");
-        assert_eq!(3, retrieve_result.block_index);
+        assert_eq!(4, retrieve_result.block_index);
         let _mempool_txids = wait_for_mempool_change(&btc_rpc, &logger).await;
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
         // We can compute the minter's fee
-        let minters_fee: u64 = ic_ckbtc_minter::MINTER_FEE_PER_INPUT
-            + ic_ckbtc_minter::MINTER_FEE_PER_OUTPUT * 2
-            + ic_ckbtc_minter::MINTER_FEE_CONSTANT;
+        let minters_fee: u64 = ic_ckbtc_minter::evaluate_minter_fee(1, 2);
         // Use the following estimator : https://btc.network/estimate
         // 1 input and 2 outputs => 141 vbyte
         // The regtest network fee defined in ckbtc/minter/src/lib.rs is 5 sat/vbyte.

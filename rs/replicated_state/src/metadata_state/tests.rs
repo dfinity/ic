@@ -1730,10 +1730,7 @@ fn stream_roundtrip_encoding() {
             payment: Cycles::from(123_456_789_u128),
             method_name: "method_1".into(),
             method_payload: [2_u8, 17_u8, 29_u8, 113_u8].into(),
-            metadata: Some(RequestMetadata::new(
-                17,
-                Time::from_nanos_since_unix_epoch(123),
-            )),
+            metadata: RequestMetadata::new(17, Time::from_nanos_since_unix_epoch(123)),
             deadline: CoarseTime::from_secs_since_unix_epoch(456),
         }
         .into(),
@@ -2298,7 +2295,7 @@ fn compatibility_for_cycles_use_case() {
         CyclesUseCase::iter()
             .map(|x| x as i32)
             .collect::<Vec<i32>>(),
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
     );
 }
 

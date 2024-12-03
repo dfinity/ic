@@ -7,6 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+bincode = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-config = { path = "../../config" }
 ic-limits = { path = "../../limits" }

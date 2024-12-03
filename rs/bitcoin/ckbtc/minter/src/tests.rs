@@ -1,9 +1,9 @@
 use crate::state::invariants::CheckInvariantsImpl;
-use crate::MINTER_FEE_CONSTANT;
 use crate::{
     address::BitcoinAddress, build_unsigned_transaction, estimate_retrieve_btc_fee, fake_sign,
     greedy, signature::EncodedSignature, tx, BuildTxError,
 };
+use crate::{evaluate_minter_fee, MINTER_ADDRESS_DUST_LIMIT};
 use crate::{
     lifecycle::init::InitArgs,
     state::{
@@ -17,6 +17,7 @@ use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_btc_interface::{Network, OutPoint, Satoshi, Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
+use maplit::btreeset;
 use proptest::proptest;
 use proptest::{
     array::uniform20,
@@ -41,7 +42,6 @@ fn default_init_args() -> InitArgs {
         mode: Mode::GeneralAvailability,
         kyt_fee: None,
         kyt_principal: None,
-        new_kyt_principal: None,
     }
 }
 
@@ -259,9 +259,7 @@ fn should_have_same_input_and_output_count() {
     )
     .expect("failed to build a transaction");
 
-    let minter_fee = crate::MINTER_FEE_PER_INPUT * tx.inputs.len() as u64
-        + crate::MINTER_FEE_PER_OUTPUT * tx.outputs.len() as u64
-        + crate::MINTER_FEE_CONSTANT;
+    let minter_fee = evaluate_minter_fee(tx.inputs.len() as u64, tx.outputs.len() as u64);
 
     assert_eq!(tx.outputs.len(), tx.inputs.len());
     assert_eq!(
@@ -275,24 +273,22 @@ fn should_have_same_input_and_output_count() {
 
 #[test]
 fn test_min_change_amount() {
-    let mut available_utxos = BTreeSet::new();
-    available_utxos.insert(Utxo {
+    let utxo_1 = Utxo {
         outpoint: OutPoint {
             txid: [0; 32].into(),
             vout: 0,
         },
         value: 100_000,
         height: 10,
-    });
-
-    available_utxos.insert(Utxo {
+    };
+    let utxo_2 = Utxo {
         outpoint: OutPoint {
             txid: [1; 32].into(),
             vout: 1,
         },
-        value: 100_000,
-        height: 10,
-    });
+        ..utxo_1.clone()
+    };
+    let mut available_utxos = btreeset! {utxo_1.clone(), utxo_2.clone()};
 
     let minter_addr = BitcoinAddress::P2wpkhV0([0; 20]);
     let out1_addr = BitcoinAddress::P2wpkhV0([1; 20]);
@@ -301,34 +297,43 @@ fn test_min_change_amount() {
 
     let (tx, change_output, _) = build_unsigned_transaction(
         &mut available_utxos,
-        vec![(out1_addr.clone(), 100_000), (out2_addr.clone(), 99_999)],
+        vec![
+            (out1_addr.clone(), utxo_1.value),
+            (out2_addr.clone(), utxo_2.value - 1),
+        ],
         minter_addr.clone(),
         fee_per_vbyte,
     )
     .expect("failed to build a transaction");
+    let change_value = 1;
 
     let fee = fake_sign(&tx).vsize() as u64 * fee_per_vbyte / 1000;
-    let minter_fee = crate::MINTER_FEE_PER_INPUT * tx.inputs.len() as u64
-        + crate::MINTER_FEE_PER_OUTPUT * tx.outputs.len() as u64
-        + crate::MINTER_FEE_CONSTANT;
+    let minter_fee = evaluate_minter_fee(tx.inputs.len() as u64, tx.outputs.len() as u64);
 
     assert_eq!(tx.outputs.len(), 3);
-    let fee_share = (fee + minter_fee - 1) / 2;
+    let fee_shares = {
+        let total_fee = fee + minter_fee;
+        let avg_fee_per_share = total_fee / 2;
+        let share_1 = avg_fee_per_share + (total_fee % 2);
+        let share_2 = avg_fee_per_share;
+        assert_eq!(share_1 + share_2, total_fee);
+        [share_1, share_2]
+    };
 
     assert_eq!(
         &tx.outputs,
         &[
             tx::TxOut {
                 address: out1_addr,
-                value: 100_000 - fee_share - 1, // Subtract the remainder
+                value: 100_000 - fee_shares[0],
             },
             tx::TxOut {
                 address: out2_addr,
-                value: 99_999 - fee_share,
+                value: 99_999 - fee_shares[1],
             },
             tx::TxOut {
                 address: minter_addr,
-                value: minter_fee + 1, // Add the remainder
+                value: minter_fee + change_value,
             }
         ]
     );
@@ -336,57 +341,104 @@ fn test_min_change_amount() {
         change_output,
         ChangeOutput {
             vout: 2,
-            value: 1 + minter_fee
+            value: change_value + minter_fee
         }
     );
 }
 
 #[test]
 fn test_no_dust_outputs() {
-    let mut available_utxos = BTreeSet::new();
-    available_utxos.insert(Utxo {
+    const P2PKH_DUST_THRESHOLD: u64 = 546;
+
+    let mut available_utxos = btreeset! {Utxo {
         outpoint: OutPoint {
             txid: [0; 32].into(),
             vout: 0,
         },
         value: 100_000,
         height: 10,
-    });
+    }};
+    assert_eq!(available_utxos.len(), 1);
+    let initial_available_utxos = available_utxos.clone();
 
     let minter_addr = BitcoinAddress::P2wpkhV0([0; 20]);
     let out1_addr = BitcoinAddress::P2wpkhV0([1; 20]);
     let out2_addr = BitcoinAddress::P2wpkhV0([2; 20]);
-    let fee_per_vbyte = 10000;
 
-    assert_eq!(
-        build_unsigned_transaction(
+    for dust in 0..=P2PKH_DUST_THRESHOLD {
+        let fee_per_vbyte = 10000;
+        assert_eq!(
+            build_unsigned_transaction(
+                &mut available_utxos,
+                vec![(out1_addr.clone(), 99_000), (out2_addr.clone(), dust)],
+                minter_addr.clone(),
+                fee_per_vbyte,
+            ),
+            Err(BuildTxError::DustOutput {
+                address: out2_addr.clone(),
+                amount: dust
+            })
+        );
+        assert_eq!(available_utxos, initial_available_utxos);
+
+        let fee_per_vbyte = 4000;
+        assert_eq!(
+            build_unsigned_transaction(
+                &mut available_utxos,
+                vec![(out1_addr.clone(), 99_000), (out2_addr.clone(), dust)],
+                minter_addr.clone(),
+                fee_per_vbyte,
+            ),
+            Err(BuildTxError::DustOutput {
+                address: out2_addr.clone(),
+                amount: dust
+            })
+        );
+        assert_eq!(available_utxos, initial_available_utxos);
+    }
+}
+
+#[test]
+fn test_no_dust_in_change_output() {
+    let utxo = Utxo {
+        outpoint: OutPoint {
+            txid: [0; 32].into(),
+            vout: 0,
+        },
+        value: 100_000,
+        height: 10,
+    };
+
+    let minter_addr = BitcoinAddress::P2wpkhV0([0; 20]);
+    let out1_addr = BitcoinAddress::P2wpkhV0([1; 20]);
+    let fee_per_vbyte = 1;
+
+    for change in 1..=100 {
+        let mut available_utxos = btreeset! {utxo.clone()};
+        let (tx, change_output, _utxos) = build_unsigned_transaction(
             &mut available_utxos,
-            vec![(out1_addr.clone(), 99_900), (out2_addr.clone(), 100)],
+            vec![(out1_addr.clone(), utxo.value - change)],
             minter_addr.clone(),
             fee_per_vbyte,
-        ),
-        Err(BuildTxError::DustOutput {
-            address: out2_addr.clone(),
-            amount: 100
-        })
-    );
+        )
+        .expect("failed to build a transaction");
+        let fee = evaluate_minter_fee(tx.inputs.len() as u64, tx.outputs.len() as u64);
 
-    let fee_per_vbyte = 4000;
-
-    assert_eq!(
-        build_unsigned_transaction(
-            &mut available_utxos,
-            vec![(out1_addr, 99_000), (out2_addr.clone(), 1000)],
-            minter_addr,
-            fee_per_vbyte,
-        ),
-        Err(BuildTxError::DustOutput {
-            address: out2_addr,
-            amount: 1000
-        })
-    );
-
-    assert_eq!(available_utxos.len(), 1);
+        assert_eq!(
+            &tx.outputs,
+            &[
+                tx::TxOut {
+                    value: utxo.value - change - fee,
+                    address: out1_addr.clone()
+                },
+                tx::TxOut {
+                    value: change_output.value,
+                    address: minter_addr.clone(),
+                }
+            ]
+        );
+        assert!(change_output.value >= change + MINTER_ADDRESS_DUST_LIMIT);
+    }
 }
 
 fn arb_amount() -> impl Strategy<Value = Satoshi> {
@@ -664,13 +716,14 @@ proptest! {
 
         let target = total_value / 2;
 
+        let minter_address= BitcoinAddress::P2wpkhV0(main_pkhash);
         let fee_estimate = estimate_retrieve_btc_fee(&utxos, Some(target), fee_per_vbyte);
         let fee_estimate = fee_estimate.minter_fee + fee_estimate.bitcoin_fee;
 
         let (unsigned_tx, _, _) = build_unsigned_transaction(
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
-            BitcoinAddress::P2wpkhV0(main_pkhash),
+            minter_address,
             fee_per_vbyte
         )
         .expect("failed to build transaction");
@@ -732,20 +785,17 @@ proptest! {
             .iter()
             .map(|utxo| (utxo.outpoint.clone(), utxo.value))
             .collect();
-
+        let minter_address = BitcoinAddress::P2wpkhV0(main_pkhash);
         let (unsigned_tx, change_output, _) = build_unsigned_transaction(
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
-            BitcoinAddress::P2wpkhV0(main_pkhash),
+            minter_address.clone(),
             fee_per_vbyte
         )
         .expect("failed to build transaction");
 
         let fee = fake_sign(&unsigned_tx).vsize() as u64 * fee_per_vbyte / 1000;
-        let minter_fee =
-            crate::MINTER_FEE_PER_INPUT * unsigned_tx.inputs.len() as u64 +
-            crate::MINTER_FEE_PER_OUTPUT * unsigned_tx.outputs.len() as u64 +
-            MINTER_FEE_CONSTANT;
+        let minter_fee = evaluate_minter_fee(unsigned_tx.inputs.len() as u64, unsigned_tx.outputs.len() as u64);
 
         let inputs_value = unsigned_tx.inputs
             .iter()
@@ -761,7 +811,7 @@ proptest! {
                 },
                 tx::TxOut {
                     value: inputs_value - target + minter_fee,
-                    address: BitcoinAddress::P2wpkhV0(main_pkhash),
+                    address: minter_address,
                 },
             ]
         );

@@ -7,7 +7,7 @@ use crate::{
         metrics::{BatchStats, BlockStats},
         status::{self, Status},
     },
-    idkg::utils::{get_chain_key_subnet_public_keys, get_pre_signature_ids_to_deliver},
+    idkg::utils::{get_idkg_subnet_public_keys, get_pre_signature_ids_to_deliver},
 };
 use ic_consensus_utils::{
     crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
@@ -135,8 +135,8 @@ pub fn deliver_batches(
 
         let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
 
-        let chain_key_subnet_public_keys = match get_chain_key_subnet_public_keys(&block, pool, log)
-        {
+        // TODO(CON-1419): Add vetKD keys to this map as well
+        let chain_key_subnet_public_keys = match get_idkg_subnet_public_keys(&block, pool, log) {
             Ok(keys) => keys,
             Err(e) => {
                 // Do not deliver batch if we can't find a previous summary block,

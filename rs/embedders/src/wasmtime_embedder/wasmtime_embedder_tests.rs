@@ -22,8 +22,7 @@ use ic_system_api::{
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
-    messages::RequestMetadata, time::UNIX_EPOCH, ComputeAllocation, Cycles, MemoryAllocation,
-    NumBytes, NumInstructions,
+    time::UNIX_EPOCH, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 
@@ -63,7 +62,7 @@ fn test_wasmtime_system_api() {
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
         HypervisorConfig::default().subnet_callback_soft_limit as u64,
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
     );
@@ -171,16 +170,10 @@ fn test_wasmtime_system_api() {
 
 #[test]
 fn test_initial_wasmtime_config() {
-    // The following proposals should be disabled: tail_call, simd, relaxed_simd,
+    // The following proposals should be disabled: simd, relaxed_simd,
     // threads, multi_memory, exceptions, extended_const, component_model,
     // function_references, memory_control, gc
     for (proposal, _url, wat, expected_err_msg) in [
-        (
-            "tail_call",
-            "https://github.com/WebAssembly/tail-call/",
-            "(module (func $f1 return_call $f2) (func $f2))",
-            "tail calls support is not enabled",
-        ),
         (
             "relaxed_simd",
             "https://github.com/WebAssembly/relaxed-simd/",

@@ -1,14 +1,3 @@
-// Note on `candid_method`: each canister method should have a function
-// annotated with `#[candid_method]` that has the arguments and return type
-// expected by the canister method, to be able to generate `governance.did`
-// automatically.
-//
-// This often means we need a function with `#[export_name = "canister_query
-// my_method"]` that doesn't take arguments and doesn't return anything (per IC
-// spec), then another function with the actual method arguments and return
-// type, annotated with `#[candid_method(query/update)]` to be able to generate
-// the did definition of the method.
-
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
@@ -33,6 +22,7 @@ use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_sns_governance::pb::v1::{
     AddMaturityRequest, AddMaturityResponse, AdvanceTargetVersionRequest,
     AdvanceTargetVersionResponse, GovernanceError, MintTokensRequest, MintTokensResponse, Neuron,
+    RefreshCachedUpgradeStepsRequest, RefreshCachedUpgradeStepsResponse,
 };
 use ic_sns_governance::{
     governance::{
@@ -54,6 +44,7 @@ use ic_sns_governance::{
     },
     types::{Environment, HeapGrowthPotential},
 };
+use ic_sns_governance_api::pb::v1 as api;
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -614,13 +605,15 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/journal/json" => {
-            let journal_entries = &governance()
+            let journal = governance()
                 .proto
                 .upgrade_journal
-                .as_ref()
-                .expect("The upgrade journal is not initialized for this SNS.")
-                .entries;
-            serve_journal(journal_entries)
+                .clone()
+                .expect("The upgrade journal is not initialized for this SNS.");
+
+            let journal = api::UpgradeJournal::from(journal);
+
+            serve_journal(&journal.entries)
         }
         "/metrics" => serve_metrics(encode_metrics),
         "/logs" => serve_logs_v2(request, &INFO, &ERROR),
@@ -695,6 +688,22 @@ async fn mint_tokens(request: MintTokensRequest) -> MintTokensResponse {
 #[update]
 fn advance_target_version(request: AdvanceTargetVersionRequest) -> AdvanceTargetVersionResponse {
     governance_mut().advance_target_version(request)
+}
+
+/// Test only feature. Immediately refreshes the cached upgrade steps.
+#[cfg(feature = "test")]
+#[update]
+async fn refresh_cached_upgrade_steps(
+    _: RefreshCachedUpgradeStepsRequest,
+) -> RefreshCachedUpgradeStepsResponse {
+    let goverance = governance_mut();
+    let deployed_version = goverance
+        .try_temporarily_lock_refresh_cached_upgrade_steps()
+        .unwrap();
+    goverance
+        .refresh_cached_upgrade_steps(deployed_version)
+        .await;
+    RefreshCachedUpgradeStepsResponse {}
 }
 
 fn main() {

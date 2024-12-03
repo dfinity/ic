@@ -1710,6 +1710,33 @@ impl Operation for ExecuteIngressMessage {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct IngressMessageStatus(pub MessageId);
+
+impl Operation for IngressMessageStatus {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let subnet = route(pic, self.0.effective_principal.clone(), false);
+        match subnet {
+            Ok(subnet) => match subnet.ingress_status(&self.0.msg_id) {
+                IngressStatus::Known {
+                    state: IngressState::Completed(result),
+                    ..
+                } => Ok(result).into(),
+                IngressStatus::Known {
+                    state: IngressState::Failed(error),
+                    ..
+                } => Err(error).into(),
+                _ => OpOut::NoOutput,
+            },
+            Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
+        }
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!("ingress_status_{}", self.0.msg_id))
+    }
+}
+
 pub struct Query(pub CanisterCall);
 
 impl Operation for Query {

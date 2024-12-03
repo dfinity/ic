@@ -1449,8 +1449,7 @@ pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtim
     config.wasm_reference_types(true);
     // The relaxed SIMD instructions are disable for determinism.
     config.wasm_relaxed_simd(false);
-    // Tail calls may be enabled in the future.
-    config.wasm_tail_call(false);
+    config.wasm_tail_call(true);
     // WebAssembly extended-const proposal is disabled.
     config.wasm_extended_const(false);
 

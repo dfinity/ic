@@ -25,5 +25,5 @@ while IFS= read -r bench_dir; do
     .revCount = 1' \
         >report.json
     curl --fail --retry 2 -sS -o /dev/null -X POST -H 'Content-Type: application/json' --data @report.json \
-        "https://elasticsearch.testnet.dfinity.network/ci-performance-test/_doc"
+        "https://elasticsearch.ch1-obsdev1.dfinity.network/ci-performance-test/_doc"
 done < <(find -L ./bazel-out -type d -path '*/new')
