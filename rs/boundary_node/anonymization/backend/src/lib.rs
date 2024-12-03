@@ -6,7 +6,10 @@ use anonymization_interface::{
     SubmitResponse,
 };
 use candid::Principal;
-use ic_cdk::{api::call::accept_message, caller, id, spawn, trap};
+use ic_cdk::{
+    api::{call::accept_message, stable::WASM_PAGE_SIZE_IN_BYTES, time},
+    caller, id, spawn, trap,
+};
 use ic_cdk_timers::set_timer_interval;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_stable_structures::{
@@ -97,6 +100,20 @@ thread_local! {
         ).unwrap()
     });
 
+    static GAUGE_CANISTER_STABLE_BYTES_TOTAL: RefCell<Gauge> = RefCell::new({
+        Gauge::new(
+            format!("{SERVICE_NAME}_canister_stable_bytes_total"), // name
+            "stable memory byte size", // help
+        ).unwrap()
+    });
+
+    static GAUGE_CANISTER_LAST_UPDATE_SECS: RefCell<Gauge> = RefCell::new({
+        Gauge::new(
+            format!("{SERVICE_NAME}_last_update_secs"), // name
+            "timestamp in seconds of the last canister update", // help
+        ).unwrap()
+    });
+
     static METRICS_REGISTRY: RefCell<Registry> = RefCell::new({
         let r = Registry::new();
 
@@ -131,6 +148,16 @@ thread_local! {
         });
 
         GAUGE_CANISTER_CYCLES_BALANCE.with(|g| {
+            let g = Box::new(g.borrow().to_owned());
+            r.register(g).unwrap();
+        });
+
+        GAUGE_CANISTER_STABLE_BYTES_TOTAL.with(|g| {
+            let g = Box::new(g.borrow().to_owned());
+            r.register(g).unwrap();
+        });
+
+        GAUGE_CANISTER_LAST_UPDATE_SECS.with(|g| {
             let g = Box::new(g.borrow().to_owned());
             r.register(g).unwrap();
         });
@@ -373,12 +400,18 @@ fn init(_arg: InitArg) {
 
     // Start timers
     timers();
+
+    // Set update time
+    GAUGE_CANISTER_LAST_UPDATE_SECS.with(|g| g.borrow_mut().set((time() as f64 / 1e9).trunc()));
 }
 
 #[ic_cdk::post_upgrade]
 fn post_upgrade() {
     // Start timers
     timers();
+
+    // Set update time
+    GAUGE_CANISTER_LAST_UPDATE_SECS.with(|g| g.borrow_mut().set((time() as f64 / 1e9).trunc()));
 }
 
 #[ic_cdk::inspect_message]
@@ -465,6 +498,11 @@ fn http_request(request: HttpRequest) -> HttpResponse {
 
     GAUGE_CANISTER_CYCLES_BALANCE
         .with(|g| g.borrow_mut().set(ic_cdk::api::canister_balance() as f64));
+
+    GAUGE_CANISTER_STABLE_BYTES_TOTAL.with(|g| {
+        g.borrow_mut()
+            .set((ic_cdk::api::stable::stable_size() * WASM_PAGE_SIZE_IN_BYTES) as f64)
+    });
 
     // Export metrics
     let bs = METRICS_REGISTRY.with(|r| {

@@ -15,7 +15,7 @@ The IC Transport layer enables message delivery between nodes within a subnet.
 | **Implementation Requirement**
 
 | RPC-like library
-| Simplifies application development by abstracting communication between nodes, allowing developers to focus on application logic instead of low-level networking.
+| Abstracting one-to-one communication between nodes, allowing developers to focus on application logic instead of low-level networking.
 | Ensure https://en.wikipedia.org/wiki/Reliability_(computer_networking)[reliable data delivery] so the sender can confirm successful message delivery to the recipient.
 
 | Multitenancy of applications
