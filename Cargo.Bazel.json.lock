@@ -1,5 +1,5 @@
 {
-  "checksum": "6281be83b42019f5f8d9ecbc35e4787855198f6bbb7f8ce54ce953bf52bfe201",
+  "checksum": "4096d5d405db9ca6279818b7093039a7c9ee0571354bc184745a2a6c9e085447",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -39907,7 +39907,13 @@
           "commitish": {
             "Rev": "4d952c8f1dca79de855af892b444d7112567b58d"
           },
-          "strip_prefix": "lmdb-sys"
+          "strip_prefix": "lmdb-sys",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:lmdb_rkv_sys.patch"
+          ]
         }
       },
       "targets": [
@@ -39960,12 +39966,6 @@
           ],
           "selects": {}
         },
-        "extra_deps": {
-          "common": [
-            "@lmdb//:lmdb"
-          ],
-          "selects": {}
-        },
         "edition": "2015",
         "version": "0.11.99"
       },
@@ -39975,6 +39975,7 @@
         ],
         "data": {
           "common": [
+            "@lmdb//:liblmdb",
             "@lmdb//:lmdb.h"
           ],
           "selects": {}
@@ -39998,7 +39999,7 @@
         "build_script_env": {
           "common": {
             "LMDB_H_PATH": "$(location @lmdb//:lmdb.h)",
-            "LMDB_NO_BUILD": "1"
+            "LMDB_OVERRIDE": "$(location @lmdb//:liblmdb)"
           },
           "selects": {}
         }

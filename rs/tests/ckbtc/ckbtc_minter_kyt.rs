@@ -334,9 +334,7 @@ pub fn test_kyt(env: TestEnv) {
         let _mempool_txids = wait_for_mempool_change(&btc_rpc, &logger).await;
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
         // We can compute the minter's fee
-        let minters_fee: u64 = ic_ckbtc_minter::MINTER_FEE_PER_INPUT
-            + ic_ckbtc_minter::MINTER_FEE_PER_OUTPUT * 2
-            + ic_ckbtc_minter::MINTER_FEE_CONSTANT;
+        let minters_fee: u64 = ic_ckbtc_minter::evaluate_minter_fee(1, 2);
         // Use the following estimator : https://btc.network/estimate
         // 1 input and 2 outputs => 141 vbyte
         // The regtest network fee defined in ckbtc/minter/src/lib.rs is 5 sat/vbyte.
