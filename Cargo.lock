@@ -3375,6 +3375,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap 4.5.20",
+ "config_types",
  "ic-crypto-sha2",
  "macaddr",
  "thiserror 2.0.3",

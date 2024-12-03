@@ -16,6 +16,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/crypto/sha2",
+        "//rs/ic_os/config_types",
         "@crate_index//:anyhow",
         "@crate_index//:macaddr",
         "@crate_index//:thiserror",

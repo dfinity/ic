@@ -1,9 +1,9 @@
+use std::net::Ipv6Addr;
+
 use anyhow::{anyhow, Result};
+use config_types::DeploymentEnvironment;
 use ic_crypto_sha2::Sha256;
 use macaddr::MacAddr6;
-
-use std::fmt;
-use std::net::Ipv6Addr;
 
 pub mod node_type;
 use node_type::NodeType;
@@ -67,9 +67,9 @@ fn format_mac_address(mac: &MacAddr6) -> String {
     )
 }
 
-pub fn calculate_deterministic_mac<D: fmt::Display>(
+pub fn calculate_deterministic_mac(
     mgmt_mac: &MacAddr6,
-    deployment: D,
+    deployment: DeploymentEnvironment,
     ip_version: IpVariant,
     node_type: NodeType,
 ) -> MacAddr6 {
@@ -98,8 +98,12 @@ mod test {
     fn mac() {
         let mgmt_mac: MacAddr6 = "70:B5:E8:E8:25:DE".parse().unwrap();
         let expected_mac: MacAddr6 = "4a:00:f8:87:a4:8a".parse().unwrap();
-        let mac =
-            calculate_deterministic_mac(&mgmt_mac, "testnet", IpVariant::V4, NodeType::HostOS);
+        let mac = calculate_deterministic_mac(
+            &mgmt_mac,
+            DeploymentEnvironment::Testnet,
+            IpVariant::V4,
+            NodeType::HostOS,
+        );
         assert_eq!(mac, expected_mac);
     }
 
@@ -124,8 +128,12 @@ mod test {
         let expected_ip = "2602:FFE4:801:17:6801:ff:feec:bd51"
             .parse::<Ipv6Addr>()
             .unwrap();
-        let mac =
-            calculate_deterministic_mac(&mgmt_mac, "mainnet", IpVariant::V6, NodeType::GuestOS);
+        let mac = calculate_deterministic_mac(
+            &mgmt_mac,
+            DeploymentEnvironment::Mainnet,
+            IpVariant::V6,
+            NodeType::GuestOS,
+        );
         let slaac = mac.calculate_slaac(prefix).unwrap();
         assert_eq!(slaac, expected_ip);
     }
