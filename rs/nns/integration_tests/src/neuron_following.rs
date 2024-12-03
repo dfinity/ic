@@ -442,8 +442,8 @@ async fn test_prune_some_following() {
 
     let seven_months_ago_timestamp_seconds = now_seconds - 7 * ONE_MONTH_SECONDS;
     let voting_power_refreshed_timestamp_seconds_neuron_values = vec![
-        seven_months_ago_timestamp_seconds - 99, // Long ago -> needs pruning.
-        seven_months_ago_timestamp_seconds + 99, // Recent -> no prune (but almost).
+        seven_months_ago_timestamp_seconds - 600, // Long ago -> needs pruning.
+        seven_months_ago_timestamp_seconds + 600, // Recent -> no prune (but almost).
     ];
 
     let cached_neuron_stake_e8s_neuron_values = vec![
