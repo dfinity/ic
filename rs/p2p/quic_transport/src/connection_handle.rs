@@ -64,7 +64,7 @@ impl ConnectionHandle {
 
         send_stream
             .finish()
-            .map_err(|err| TransportError::Internal(format!("{:?}", err)))?;
+            .map_err(|err| TransportError::Internal(Box::new(err)))?;
 
         send_stream.stopped().await?;
         let response_bytes = recv_stream.read_to_end(MAX_MESSAGE_SIZE_BYTES).await?;
@@ -78,11 +78,11 @@ impl ConnectionHandle {
 // The function returns infallible error.
 fn to_response(response_bytes: Vec<u8>) -> Result<Response<Bytes>, TransportError> {
     let response_proto = pb::HttpResponse::decode(response_bytes.as_slice())
-        .map_err(|err| TransportError::Internal(format!("{:?}", err)))?;
+        .map_err(|err| TransportError::Internal(Box::new(err)))?;
     let status: u16 = response_proto
         .status_code
         .try_into()
-        .map_err(|err| TransportError::Internal(format!("{:?}", err)))?;
+        .map_err(|err| TransportError::Internal(Box::new(err)))?;
 
     let mut response = Response::builder().status(status).version(Version::HTTP_3);
     for h in response_proto.headers {
@@ -93,7 +93,7 @@ fn to_response(response_bytes: Vec<u8>) -> Result<Response<Bytes>, TransportErro
     let body_bytes = Bytes::from(response_proto.body);
     response
         .body(body_bytes)
-        .map_err(|err| TransportError::Internal(format!("{:?}", err)))
+        .map_err(|err| TransportError::Internal(Box::new(err)))
 }
 
 fn into_request_bytes(request: Request<Bytes>) -> Vec<u8> {

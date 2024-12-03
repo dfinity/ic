@@ -219,30 +219,32 @@ impl Drop for ResetStreamOnDrop {
 #[derive(Error, Debug)]
 pub enum TransportError {
     // Occurs when the peer cancels the `RecvStream` or drops the `SendStream` future e.g., when the RPC method is part of a `select` branch.
-    #[error("{0}")]
-    StreamCancelled(String),
+    #[error("Stream was cancelled.")]
+    StreamCancelled,
     /// This can occur during a topology change or when the connection manager attempts to replace an old, broken connection with a new one.
-    #[error("Connection was closed")]
-    ConnectionClosed(String),
+    #[error("Connection was closed.")]
+    ConnectionClosed,
     /// This can occur if the peer crashes or experiences connectivity issues.
     #[error("Connection timed out.")]
     TimedOut,
-    #[error("Peer")]
-    PeerNotFound,
-    // If any of the following errors occur it means that we have a bug in the protocol implementation or
-    // there is malicious peer on the other side.
+    /// The requested connection is not present at the moment.
+    /// Most likely the connection is being established or the peer was not added to the topology yet.
+    #[error("Connection not found.")]
+    ConnectionNotFound,
+    // A serious internal invariant is broken (i.e. worthy of a bug or outage report).
+    // E.g. we have a bug in the protocol implementation or there is malicious peer on the other side.
     #[error("{0}")]
-    Internal(String),
+    Internal(Box<dyn std::error::Error + Send>),
 }
 
 impl From<ConnectionError> for TransportError {
     fn from(err: ConnectionError) -> TransportError {
         match err {
             ConnectionError::LocallyClosed | ConnectionError::ApplicationClosed(_) => {
-                TransportError::ConnectionClosed(format!("{:?}", err))
+                TransportError::ConnectionClosed
             }
             ConnectionError::TimedOut => TransportError::TimedOut,
-            _ => TransportError::Internal(format!("{:?}", err)),
+            _ => TransportError::Internal(Box::new(err)),
         }
     }
 }
@@ -250,9 +252,9 @@ impl From<ConnectionError> for TransportError {
 impl From<WriteError> for TransportError {
     fn from(err: WriteError) -> TransportError {
         match err {
-            WriteError::Stopped(_) => TransportError::StreamCancelled(format!("{:?}", err)),
+            WriteError::Stopped(_) => TransportError::StreamCancelled,
             WriteError::ConnectionLost(conn_err) => conn_err.into(),
-            _ => TransportError::Internal(format!("{:?}", err)),
+            _ => TransportError::Internal(Box::new(err)),
         }
     }
 }
@@ -260,9 +262,9 @@ impl From<WriteError> for TransportError {
 impl From<ReadError> for TransportError {
     fn from(err: ReadError) -> TransportError {
         match err {
-            ReadError::Reset(_) => TransportError::StreamCancelled(format!("{:?}", err)),
+            ReadError::Reset(_) => TransportError::StreamCancelled,
             ReadError::ConnectionLost(conn_err) => conn_err.into(),
-            _ => TransportError::Internal(format!("{:?}", err)),
+            _ => TransportError::Internal(Box::new(err)),
         }
     }
 }
@@ -271,7 +273,7 @@ impl From<StoppedError> for TransportError {
     fn from(err: StoppedError) -> TransportError {
         match err {
             StoppedError::ConnectionLost(conn_err) => conn_err.into(),
-            StoppedError::ZeroRttRejected => TransportError::Internal(format!("{:?}", err)),
+            StoppedError::ZeroRttRejected => TransportError::Internal(Box::new(err)),
         }
     }
 }
@@ -280,7 +282,7 @@ impl From<ReadToEndError> for TransportError {
     fn from(err: ReadToEndError) -> TransportError {
         match err {
             ReadToEndError::Read(read_err) => read_err.into(),
-            ReadToEndError::TooLong => TransportError::Internal(format!("{:?}", err)),
+            ReadToEndError::TooLong => TransportError::Internal(Box::new(err)),
         }
     }
 }
@@ -315,7 +317,7 @@ impl Transport for QuicTransport {
             .read()
             .unwrap()
             .get(peer_id)
-            .ok_or(TransportError::PeerNotFound)?
+            .ok_or(TransportError::ConnectionNotFound)?
             .clone();
         let response_result = peer.rpc(request).await;
         match response_result {
@@ -326,17 +328,17 @@ impl Transport for QuicTransport {
             Err(err) => {
                 let counter = &self.metrics.connection_handle_errors_total;
                 match &err {
-                    TransportError::StreamCancelled(_) => {
+                    TransportError::StreamCancelled => {
                         counter.with_label_values(&["stream_cancelled"]).inc()
                     }
-                    TransportError::ConnectionClosed(_) => {
+                    TransportError::ConnectionClosed => {
                         counter.with_label_values(&["connection_closed"]).inc()
                     }
                     TransportError::TimedOut => {
                         counter.with_label_values(&["connection_timed_out"]).inc()
                     }
-                    TransportError::PeerNotFound => {
-                        counter.with_label_values(&["peer_not_found"]).inc()
+                    TransportError::ConnectionNotFound => {
+                        counter.with_label_values(&["connection_not_found"]).inc()
                     }
                     TransportError::Internal(internal_err) => {
                         warn!(self.log, "{:?}", internal_err);
