@@ -3215,6 +3215,32 @@ pub fn test_metrics_while_migrating<T>(
     );
 }
 
+pub fn test_upgrade_from_v1_not_possible<T>(
+    ledger_wasm_mainnet_v1: Vec<u8>,
+    ledger_wasm_current: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    // Setup ledger with v1 state that does not use UPGRADES_MEMORY.
+    let (env, canister_id) = setup(ledger_wasm_mainnet_v1, encode_init_args, vec![]);
+
+    match env.upgrade_canister(
+        canister_id,
+        ledger_wasm_current,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    ) {
+        Ok(_) => {
+            panic!("Upgrade from V1 should fail!")
+        }
+        Err(e) => {
+            assert!(e
+                .description()
+                .contains("Cannot upgrade from scratch stable memory, please upgrade to memory manager first."));
+        }
+    };
+}
+
 pub fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {
     ApproveArgs {
         from_subaccount: None,

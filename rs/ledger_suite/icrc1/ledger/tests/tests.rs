@@ -98,10 +98,12 @@ fn ledger_mainnet_u64_wasm() -> Vec<u8> {
         .unwrap()
 }
 
+#[cfg(not(feature = "u256-tokens"))]
 fn ledger_mainnet_v2_u64_wasm() -> Vec<u8> {
     std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_V2_VERSION_WASM_PATH").unwrap()).unwrap()
 }
 
+#[cfg(not(feature = "u256-tokens"))]
 fn ledger_mainnet_v1_u64_wasm() -> Vec<u8> {
     std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_V1_VERSION_WASM_PATH").unwrap()).unwrap()
 }
@@ -111,10 +113,12 @@ fn ledger_mainnet_u256_wasm() -> Vec<u8> {
         .unwrap()
 }
 
+#[cfg(feature = "u256-tokens")]
 fn ledger_mainnet_v2_u256_wasm() -> Vec<u8> {
     std::fs::read(std::env::var("CKETH_IC_ICRC1_LEDGER_V2_VERSION_WASM_PATH").unwrap()).unwrap()
 }
 
+#[cfg(feature = "u256-tokens")]
 fn ledger_mainnet_v1_u256_wasm() -> Vec<u8> {
     std::fs::read(std::env::var("CKETH_IC_ICRC1_LEDGER_V1_VERSION_WASM_PATH").unwrap()).unwrap()
 }
@@ -626,6 +630,15 @@ fn icrc1_test_metrics_while_migrating_from_v2() {
     ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
         ledger_mainnet_v2_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn icrc1_test_upgrade_from_v1_not_possible() {
+    ic_ledger_suite_state_machine_tests::test_upgrade_from_v1_not_possible(
+        ledger_mainnet_v1_wasm(),
+        ledger_wasm(),
         encode_init_args,
     );
 }
