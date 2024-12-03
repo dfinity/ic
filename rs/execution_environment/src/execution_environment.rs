@@ -1212,9 +1212,9 @@ impl ExecutionEnvironment {
                                     ThresholdArguments::Schnorr(SchnorrArguments {
                                         key_id: args.key_id,
                                         message: Arc::new(args.message),
-                                        taproot_tree_root: args.aux.map(|v| {
-                                            match v {
-                                                SignWithSchnorrAux::Bip341(v) => Arc::new(v.merkle_root_hash.into_vec()),
+                                        taproot_tree_root: args.aux.map(|v| match v {
+                                            SignWithSchnorrAux::Bip341(v) => {
+                                                Arc::new(v.merkle_root_hash.into_vec())
                                             }
                                         }),
                                     }),
