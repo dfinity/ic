@@ -52,15 +52,18 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ],
         )],
         "lmdb-rkv-sys": [crate.annotation(
+            # patch our fork of the lmdb-rkv-sys to allow specifying the path
+            # to the built static archive
+            patch_args = ["-p1"],
+            patches = ["@@//bazel:lmdb_rkv_sys.patch"],
             build_script_data = [
+                "@lmdb//:liblmdb",
                 "@lmdb//:lmdb.h",
             ],
             build_script_env = {
-                "LMDB_NO_BUILD": "1",
+                "LMDB_OVERRIDE": "$(location @lmdb//:liblmdb)",
                 "LMDB_H_PATH": "$(location @lmdb//:lmdb.h)",
             },
-            # ensure LMDB lib is available at runtime
-            deps = ["@lmdb"],
         )],
         "p256": [crate.annotation(
             rustc_flags = [
@@ -437,6 +440,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "educe": crate.spec(
                 version = "^0.4",
+            ),
+            "env-file-reader": crate.spec(
+                version = "^0.3",
             ),
             "erased-serde": crate.spec(
                 version = "^0.3.11",

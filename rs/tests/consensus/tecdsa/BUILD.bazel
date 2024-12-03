@@ -364,6 +364,7 @@ system_test_nns(
         "manual",
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
+    test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
 )
 
@@ -387,6 +388,7 @@ system_test_nns(
         "manual",
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
+    test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
 )
 
@@ -410,5 +412,6 @@ system_test_nns(
         "manual",
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
+    test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
 )

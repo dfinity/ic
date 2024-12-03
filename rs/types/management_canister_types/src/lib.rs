@@ -2725,6 +2725,7 @@ pub struct SignWithSchnorrArgs {
     pub message: Vec<u8>,
     pub derivation_path: DerivationPath,
     pub key_id: SchnorrKeyId,
+    pub taproot_tree_root: Option<ByteBuf>,
 }
 
 impl Payload<'_> for SignWithSchnorrArgs {}
