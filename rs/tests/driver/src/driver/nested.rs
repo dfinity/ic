@@ -16,7 +16,7 @@ use anyhow::{bail, Result};
 use async_trait::async_trait;
 use config_types::DeploymentEnvironment;
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{calculate_deterministic_mac, HwAddr, IpVariant};
+use deterministic_ips::{calculate_deterministic_mac, HwAddr, IpVariant, MacAddr6Ext};
 use serde::{Deserialize, Serialize};
 use slog::info;
 use ssh2::Session;
