@@ -1,7 +1,5 @@
 use lazy_static::lazy_static;
-use tla_instrumentation::{
-    Label, ResolvedStatePair, TlaConstantAssignment, Update, VarAssignment,
-};
+use tla_instrumentation::{Label, ResolvedStatePair, TlaConstantAssignment, Update, VarAssignment};
 
 use super::common::governance_account_id;
 use super::{extract_common_constants, post_process_trace};
