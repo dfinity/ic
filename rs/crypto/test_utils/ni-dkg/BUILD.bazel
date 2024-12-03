@@ -37,7 +37,7 @@ ALIASES = {}
 
 rust_library(
     name = "ni-dkg",
-    testonly = True,
+    testonly = False,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_test_utils_ni_dkg",
