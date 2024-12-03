@@ -82,7 +82,7 @@ pub fn calculate_deterministic_mac(
         IpVariant::V6 => 0x6a,
     };
 
-    MacAddr6::from([version, index, hash[0], hash[1], hash[2], hash[3]])
+    [version, index, hash[0], hash[1], hash[2], hash[3]].into()
 }
 
 #[cfg(test)]
