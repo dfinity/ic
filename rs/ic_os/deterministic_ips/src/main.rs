@@ -21,6 +21,7 @@ struct Args {
     deployment_environment: DeploymentEnvironment,
 
     #[arg(short, long)]
+    /// Node type used for MAC generation. If not specified, display IPs for GuestOS and HostOS.
     node_type: Option<NodeType>,
 }
 
