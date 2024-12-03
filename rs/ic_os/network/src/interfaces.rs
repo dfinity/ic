@@ -41,7 +41,7 @@ pub fn has_ipv6_connectivity(
     let ping_target = ping_target.parse::<IpAddr>()?;
     let ping_timeout = Duration::from_secs(3);
     let ping_success = retry(
-        40,
+        10,
         || {
             eprintln!(
                 "Attempting to ping {}, after {} seconds",
