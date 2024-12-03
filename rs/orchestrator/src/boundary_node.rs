@@ -13,8 +13,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-const LOG_ANONYMIZATION_CID: &str = "uz2z3-qyaaa-aaaaq-qaacq-cai";
-
 struct BoundaryNodeProcess {
     version: ReplicaVersion,
     binary: String,
@@ -172,7 +170,6 @@ impl BoundaryNodeManager {
 
         let args = vec![
             format!("--tls-hostname={}", domain_name),
-            format!("--obs-log-anonymization-canister-id={LOG_ANONYMIZATION_CID}"),
             format!(
                 "--crypto-config={}",
                 serde_json::to_string(&self.crypto_config)
