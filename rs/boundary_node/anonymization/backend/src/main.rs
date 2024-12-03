@@ -273,6 +273,10 @@ fn timers() {
                 // Clear allowed principals
                 ps.clear_new();
 
+                // Self authorize
+                ps.insert(id(), ());
+
+                // Authorize API Boundary Nodes
                 ids.iter().for_each(|p| {
                     ps.insert(p.to_owned(), ());
                 });
@@ -364,14 +368,6 @@ fn main() {}
 
 #[ic_cdk::init]
 fn init(_arg: InitArg) {
-    // Self-authorize
-    ALLOWED_PRINCIPALS.with(|m| {
-        m.borrow_mut().insert(
-            id(), // canister id
-            (),   // unit
-        )
-    });
-
     // Start timers
     timers();
 
