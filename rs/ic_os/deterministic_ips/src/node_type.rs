@@ -25,7 +25,7 @@ impl FromStr for NodeType {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<NodeType, Self::Err> {
-        match s.to_ascii_lowercase().as_str() {
+        match s.to_lowercase().as_str() {
             "setupos" => Ok(NodeType::SetupOS),
             "hostos" => Ok(NodeType::HostOS),
             "guestos" => Ok(NodeType::GuestOS),

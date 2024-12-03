@@ -35,7 +35,7 @@ pub fn generate_network_config(
 pub fn resolve_mgmt_mac(config_mac: Option<String>) -> Result<MacAddr6> {
     if let Some(config_mac) = config_mac {
         // Take MAC address override from config
-        let mgmt_mac: MacAddr6 = config_mac.parse()?;
+        let mgmt_mac = config_mac.parse()?;
         eprintln!("Using mgmt_mac address found in deployment.json: {mgmt_mac}");
 
         Ok(mgmt_mac)
