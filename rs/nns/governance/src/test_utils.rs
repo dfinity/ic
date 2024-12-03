@@ -228,6 +228,13 @@ impl Environment for MockEnvironment {
         method_name: &str,
         request: Vec<u8>,
     ) -> Result<Vec<u8>, (Option<i32>, String)> {
+        if [SNS_WASM_CANISTER_ID].contains(&target) {
+            // TODO: replace with a vec of all NNS canister IDs
+            assert!(request.len() < 1000 * 1000 * 10, "request too large");
+        } else {
+            assert!(request.len() < 1000 * 1000 * 2, "request too large");
+        }
+
         let (expected_arguments, result) = self
             .expected_call_canister_method_calls
             .lock()
