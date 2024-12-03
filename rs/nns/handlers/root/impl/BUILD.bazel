@@ -37,6 +37,7 @@ BASE_DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "@crate_index//:build-info",
     "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
