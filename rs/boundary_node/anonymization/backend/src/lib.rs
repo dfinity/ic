@@ -252,7 +252,7 @@ thread_local! {
 // Timers
 
 const SECOND: Duration = Duration::from_secs(1);
-const HOUR: Duration = Duration::from_secs(60 * 60);
+const DAY: Duration = Duration::from_secs(24 * 60 * 60);
 
 fn timers() {
     // ACLs
@@ -324,7 +324,7 @@ fn timers() {
     });
 
     // TTLs
-    set_timer_interval(30 * DAY, || {
+    set_timer_interval(7 * DAY, || {
         // Remove all encrypted values
         let ids = ENCRYPTED_VALUES.with(|vs| {
             let mut vs = vs.borrow_mut();
