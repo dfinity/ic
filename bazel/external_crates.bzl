@@ -429,7 +429,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^5.3.4",
             ),
             "dfx-core": crate.spec(
-                version = "^0.1.0",
+                git = "https://github.com/dfinity/sdk",
+                rev = "2ec6162d94dd312e1343c7bff5d88bb8fdd19c60",
             ),
             "dyn-clone": crate.spec(
                 version = "^1.0.14",

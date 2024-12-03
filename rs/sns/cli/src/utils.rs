@@ -1,21 +1,42 @@
-use anyhow::{anyhow, Result};
+use anyhow::Context;
+use anyhow::Result;
+use dfx_core::interface::{builder::IdentityPicker, dfx::DfxInterface};
 use futures::{stream, StreamExt};
 use ic_agent::Agent;
 use ic_nervous_system_agent::sns::Sns;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-fn get_agent(ic_url: &str) -> Result<Agent> {
-    Agent::builder()
-        .with_url(ic_url)
-        .with_verify_query_signatures(false)
-        .build()
-        .map_err(|e| anyhow!(e))
+/// Gets the dfx_core interface
+pub(crate) async fn dfx_interface(
+    network_name: &str,
+    identity: Option<String>,
+) -> anyhow::Result<DfxInterface> {
+    let interface_builder = {
+        let identity = identity
+            .clone()
+            .map(IdentityPicker::Named)
+            .unwrap_or(IdentityPicker::Selected);
+        DfxInterface::builder()
+            .with_identity(identity)
+            .with_network_named(network_name)
+    };
+    let interface = interface_builder.build().await.context(format!(
+        "Failed to build dfx interface with network `{network_name}` and identity `{identity:?}`"
+    ))?;
+    if !interface.network_descriptor().is_ic {
+        interface.agent().fetch_root_key().await.context(format!(
+            "Failed to fetch root key from network `{network_name}`."
+        ))?;
+    }
+    Ok(interface)
 }
 
-pub fn get_mainnet_agent() -> Result<Agent> {
-    let ic_url = "https://ic0.app/";
-    get_agent(ic_url)
+pub(crate) async fn get_agent(network_name: &str, identity: Option<String>) -> Result<Agent> {
+    let interface = dfx_interface(network_name, identity)
+        .await
+        .context("Failed to get dfx interface")?;
+    Ok(interface.agent().clone())
 }
 
 #[derive(Debug, Serialize, Deserialize)]
