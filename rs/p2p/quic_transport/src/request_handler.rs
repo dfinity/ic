@@ -114,7 +114,7 @@ async fn handle_bi_stream(
     let request_bytes = recv_stream.read_to_end(MAX_MESSAGE_SIZE_BYTES).await?;
     // The destructor stops the stream.
     std::mem::drop(recv_stream);
-    let mut request = read_request(request_bytes).map_err(|err| TransportError::Internal(err))?;
+    let mut request = read_request(request_bytes).map_err(TransportError::Internal)?;
     request.extensions_mut().insert::<NodeId>(peer_id);
     request.extensions_mut().insert::<ConnId>(conn_id);
 
@@ -133,7 +133,7 @@ async fn handle_bi_stream(
     // loop will close this connection.
     let response_bytes = to_response_bytes(response)
         .await
-        .map_err(|err| TransportError::Internal(err))?;
+        .map_err(TransportError::Internal)?;
     send_stream.write_all(&response_bytes).await?;
     send_stream
         .finish()
@@ -175,9 +175,9 @@ fn read_request(
     }
     // This consumes the body without requiring allocation or cloning the whole content.
     let body_bytes = Bytes::from(request_proto.body);
-    Ok(request_builder
+    request_builder
         .body(Body::from(body_bytes))
-        .map_err(|err| Box::new(err) as Box<_>)?)
+        .map_err(|err| Box::new(err) as Box<_>)
 }
 
 async fn to_response_bytes(
