@@ -1144,6 +1144,7 @@ impl ThresholdSigInputsRef {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum ThresholdSigInputs {
     Ecdsa(ThresholdEcdsaSigInputs),
     Schnorr(ThresholdSchnorrSigInputs),
