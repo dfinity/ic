@@ -126,11 +126,6 @@ run:sandbox_fuzzing --run_under="ASAN_OPTIONS=detect_leaks=0:allow_user_segv_han
 query --ui_event_filters=-info,-debug --noshow_progress
 cquery --ui_event_filters=-info,-debug --noshow_progress
 
-# The default value makes rules_rust pick a dummy toolchain that breaks
-# our canister that depend on C deps
-#   https://github.com/bazelbuild/rules_rust/issues/2764
-common --noincompatible_enable_cc_toolchain_resolution
-
 # This is disabled by default on bazel 7+ some of our targets choke
 # on this (not yet clear why)
 common --remote_download_all
