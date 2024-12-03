@@ -3046,7 +3046,10 @@ pub fn test_migration_resumes_from_frozen<T>(
         .unwrap();
 
     const APPROVE_AMOUNT: u64 = 150_000;
+    const TRANSFER_AMOUNT: u64 = 100;
+
     const NUM_APPROVALS: u64 = 20;
+    const NUM_TRANSFERS: u64 = 30;
 
     let send_approvals = || {
         for i in 2..2 + NUM_APPROVALS {
@@ -3059,6 +3062,12 @@ pub fn test_migration_resumes_from_frozen<T>(
 
     send_approvals();
 
+    for i in 2..2 + NUM_TRANSFERS {
+        let to = Account::from(PrincipalId::new_user_test_id(i).0);
+        transfer(&env, canister_id, account, to, TRANSFER_AMOUNT)
+            .expect("failed to transfer funds");
+    }
+
     let check_approvals = || {
         for i in 2..2 + NUM_APPROVALS {
             let allowance = Account::get_allowance(
@@ -3070,8 +3079,19 @@ pub fn test_migration_resumes_from_frozen<T>(
             assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
         }
     };
+    let check_balances = || {
+        for i in 2..2 + NUM_TRANSFERS {
+            let balance = balance_of(
+                &env,
+                canister_id,
+                Account::from(PrincipalId::new_user_test_id(i).0),
+            );
+            assert_eq!(balance, Nat::from(TRANSFER_AMOUNT));
+        }
+    };
 
     check_approvals();
+    check_balances();
 
     env.upgrade_canister(
         canister_id,
@@ -3117,6 +3137,7 @@ pub fn test_migration_resumes_from_frozen<T>(
     assert!(!is_ledger_ready());
     wait_ledger_ready(&env, canister_id, 20);
     check_approvals();
+    check_balances();
 }
 
 pub fn test_metrics_while_migrating<T>(
