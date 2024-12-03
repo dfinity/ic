@@ -8,7 +8,7 @@ use crate::{
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
         governance_error::ErrorType,
-        GovernanceError, Neuron as NeuronProto, NeuronState, Topic, VotingPowerEconomics,
+        GovernanceError, Neuron as NeuronProto, Topic, VotingPowerEconomics,
     },
     storage::{
         neuron_indexes::{CorruptedNeuronIndexes, NeuronIndex},
@@ -411,7 +411,7 @@ impl NeuronStore {
         (
             self.heap_neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into_proto(now_seconds)))
+                .map(|(id, neuron)| (id, neuron.into_proto(&VotingPowerEconomics::DEFAULT, now_seconds)))
                 .collect(),
             heap_topic_followee_index_to_proto(self.topic_followee_index),
         )
@@ -460,13 +460,13 @@ impl NeuronStore {
         let mut stable_neurons = with_stable_neuron_store(|stable_store| {
             stable_store
                 .range_neurons(..)
-                .map(|neuron| (neuron.id().id, neuron.into_proto(now_seconds)))
+                .map(|neuron| (neuron.id().id, neuron.into_proto(&VotingPowerEconomics::DEFAULT, now_seconds)))
                 .collect::<BTreeMap<u64, NeuronProto>>()
         });
         let heap_neurons = self
             .heap_neurons
             .iter()
-            .map(|(id, neuron)| (*id, neuron.clone().into_proto(now_seconds)))
+            .map(|(id, neuron)| (*id, neuron.clone().into_proto(&VotingPowerEconomics::DEFAULT, now_seconds)))
             .collect::<BTreeMap<u64, NeuronProto>>();
 
         stable_neurons.extend(heap_neurons);

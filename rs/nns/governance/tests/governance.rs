@@ -4559,7 +4559,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             .expect("Neuron not found");
         assert_eq!(
             neuron
-                .get_neuron_info(driver.now(), *RANDOM_PRINCIPAL_ID)
+                .get_neuron_info(gov.voting_power_economics(), driver.now(), *RANDOM_PRINCIPAL_ID)
                 .state(),
             NeuronState::Dissolved
         );
@@ -5454,7 +5454,7 @@ fn test_neuron_split_fails() {
 
     assert_eq!(
         neuron
-            .get_neuron_info(driver.now(), *RANDOM_PRINCIPAL_ID)
+            .get_neuron_info(gov.voting_power_economics(), driver.now(), *RANDOM_PRINCIPAL_ID)
             .state(),
         NeuronState::NotDissolving
     );
@@ -5564,18 +5564,21 @@ fn test_neuron_split() {
 
     driver.advance_time_by(1234);
 
-    let neuron_state = governance
-        .neuron_store
-        .with_neuron_mut(&id, |neuron| {
-            // Make sure the parent neuron also has maturity and staked maturity.
-            neuron.maturity_e8s_equivalent = maturity_e8s;
-            neuron.staked_maturity_e8s_equivalent = Some(staked_maturity_e8s);
+    let neuron_state = {
+        let neuron = governance
+            .neuron_store
+            .with_neuron_mut(&id, |neuron| {
+                // Make sure the parent neuron also has maturity and staked maturity.
+                neuron.maturity_e8s_equivalent = maturity_e8s;
+                neuron.staked_maturity_e8s_equivalent = Some(staked_maturity_e8s);
 
-            neuron
-                .get_neuron_info(driver.now(), *RANDOM_PRINCIPAL_ID)
-                .state()
-        })
-        .expect("Neuron not found");
+                neuron.clone()
+            })
+            .expect("Neuron not found");
+        neuron
+            .get_neuron_info(governance.voting_power_economics(), driver.now(), *RANDOM_PRINCIPAL_ID)
+            .state()
+    };
 
     assert_eq!(neuron_state, NeuronState::NotDissolving);
 
@@ -5698,7 +5701,7 @@ fn test_seed_neuron_split() {
 
     assert_eq!(
         neuron
-            .get_neuron_info(driver.now(), *RANDOM_PRINCIPAL_ID)
+            .get_neuron_info(gov.voting_power_economics(), driver.now(), *RANDOM_PRINCIPAL_ID)
             .state(),
         NeuronState::NotDissolving
     );
@@ -5772,9 +5775,10 @@ fn test_neuron_spawn() {
     run_periodic_tasks_often_enough_to_update_maturity_modulation(&mut gov);
 
     let now = driver.now();
+    let voting_power_economics = gov.voting_power_economics();
     assert_eq!(
         gov.with_neuron(&id, |neuron| neuron
-            .get_neuron_info(now, *RANDOM_PRINCIPAL_ID)
+            .get_neuron_info(voting_power_economics, now, *RANDOM_PRINCIPAL_ID)
             .state())
             .unwrap(),
         NeuronState::NotDissolving
@@ -5963,7 +5967,7 @@ fn test_neuron_spawn_with_subaccount() {
     let now = driver.now();
     assert_eq!(
         gov.with_neuron(&id, |neuron| neuron
-            .get_neuron_info(now, *RANDOM_PRINCIPAL_ID)
+            .get_neuron_info(gov.voting_power_economics(), now, *RANDOM_PRINCIPAL_ID)
             .state())
             .unwrap(),
         NeuronState::NotDissolving
@@ -6145,7 +6149,7 @@ fn assert_neuron_spawn_partial(
         .expect("Neuron did not exist");
     assert_eq!(
         neuron
-            .get_neuron_info(driver.now(), *RANDOM_PRINCIPAL_ID)
+            .get_neuron_info(gov.voting_power_economics(), driver.now(), *RANDOM_PRINCIPAL_ID)
             .state(),
         NeuronState::NotDissolving
     );
@@ -6517,7 +6521,7 @@ fn test_disburse_to_neuron() {
     // now disburse the neuron.
     assert_eq!(
         parent_neuron
-            .get_neuron_info(driver.now(), *RANDOM_PRINCIPAL_ID)
+            .get_neuron_info(gov.voting_power_economics(), driver.now(), *RANDOM_PRINCIPAL_ID)
             .state(),
         NeuronState::Dissolved
     );

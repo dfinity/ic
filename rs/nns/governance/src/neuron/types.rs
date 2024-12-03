@@ -19,7 +19,7 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
-use ic_nervous_system_common::ONE_DAY_SECONDS;
+use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
 use rust_decimal::Decimal;
@@ -928,7 +928,7 @@ impl Neuron {
     }
 
     /// Get the 'public' information associated with this neuron.
-    pub fn get_neuron_info(&self, now_seconds: u64, requester: PrincipalId) -> NeuronInfo {
+    pub fn get_neuron_info(&self, voting_power_economics: &VotingPowerEconomics, now_seconds: u64, requester: PrincipalId) -> NeuronInfo {
         let mut recent_ballots = vec![];
         let mut joined_community_fund_timestamp_seconds = None;
 
@@ -941,7 +941,7 @@ impl Neuron {
         }
 
         let visibility = self.visibility().map(|visibility| visibility as i32);
-        let deciding_voting_power = self.deciding_voting_power(now_seconds);
+        let deciding_voting_power = self.deciding_voting_power(voting_power_economics, now_seconds);
         let potential_voting_power = self.potential_voting_power(now_seconds);
 
         NeuronInfo {
@@ -1159,9 +1159,9 @@ impl Neuron {
 }
 
 impl Neuron {
-    pub fn into_proto(self, now_seconds: u64) -> NeuronProto {
+    pub fn into_proto(self, voting_power_economics: &VotingPowerEconomics, now_seconds: u64) -> NeuronProto {
         let visibility = self.visibility().map(|visibility| visibility as i32);
-        let deciding_voting_power = Some(self.deciding_voting_power(now_seconds));
+        let deciding_voting_power = Some(self.deciding_voting_power(voting_power_economics, now_seconds));
         let potential_voting_power = Some(self.potential_voting_power(now_seconds));
 
         let Neuron {

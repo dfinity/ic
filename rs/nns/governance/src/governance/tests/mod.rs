@@ -1574,7 +1574,7 @@ fn test_compute_ballots_for_new_proposal() {
         )
         .with_cached_neuron_stake_e8s(i * E8)
         .build()
-        .into_proto(CREATED_TIMESTAMP_SECONDS + 999)
+        .into_proto(&VotingPowerEconomics::DEFAULT, CREATED_TIMESTAMP_SECONDS + 999)
     }
 
     let mut neuron_10 = new_neuron(10);

@@ -315,12 +315,12 @@ impl VotingPowerEconomics {
         LinearMap::new(from_range, to_range)
     }
 
-    fn get_start_reducing_voting_power_after_seconds(&self) -> u64 {
+    pub fn get_start_reducing_voting_power_after_seconds(&self) -> u64 {
         self.start_reducing_voting_power_after_seconds
             .unwrap_or(Self::DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS)
     }
 
-    fn get_clear_following_after_seconds(&self) -> u64 {
+    pub fn get_clear_following_after_seconds(&self) -> u64 {
         self.clear_following_after_seconds
             .unwrap_or(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS)
     }
@@ -1976,19 +1976,6 @@ impl Governance {
         )
     }
 
-    fn get_voting_power_economics(&self) -> VotingPowerEconomics {
-        let economics = match &self.heap_data.economics {
-            Some(ok) => ok,
-            None => {
-                return VotingPowerEconomics::DEFAULT;
-            }
-        };
-
-        economics
-            .voting_power_economics
-            .unwrap_or(VotingPowerEconomics::DEFAULT)
-    }
-
     pub fn __get_state_for_test(&self) -> GovernanceProto {
         let neurons = self.neuron_store.__get_neurons_for_tests();
         let heap_topic_followee_index = self.neuron_store.clone_topic_followee_index();
@@ -2378,7 +2365,7 @@ impl Governance {
             // requested_neuron_ids are supplied by the caller.
             let _ignore_when_neuron_not_found = self.with_neuron(&neuron_id, |neuron| {
                 // Populate neuron_infos.
-                neuron_infos.insert(neuron_id.id, neuron.get_neuron_info(now, caller));
+                neuron_infos.insert(neuron_id.id, neuron.get_neuron_info(self.voting_power_economics(), now, caller));
 
                 // Populate full_neurons.
                 let let_caller_read_full_neuron =
@@ -2391,7 +2378,7 @@ impl Governance {
                             && neuron.visibility() == Some(Visibility::Public)
                         );
                 if let_caller_read_full_neuron {
-                    let mut proto = neuron.clone().into_proto(now);
+                    let mut proto = neuron.clone().into_proto(self.voting_power_economics(), now);
                     // We get the recent_ballots from the neuron itself, because
                     // we are using a circular buffer to store them.  This solution is not ideal, but
                     // we need to do a larger refactoring to use the correct API types instead of the internal
@@ -3082,7 +3069,7 @@ impl Governance {
 
         // Step 7: builds the response.
         Ok(ManageNeuronResponse::merge_response(
-            build_merge_neurons_response(&source_neuron, &target_neuron, now, *caller),
+            build_merge_neurons_response(&source_neuron, &target_neuron, self.voting_power_economics(), now, *caller),
         ))
     }
 
@@ -3150,7 +3137,7 @@ impl Governance {
 
         // Step 4: builds the response.
         Ok(ManageNeuronResponse::merge_response(
-            build_merge_neurons_response(&source_neuron, &target_neuron, now, *caller),
+            build_merge_neurons_response(&source_neuron, &target_neuron, self.voting_power_economics(), now, *caller),
         ))
     }
 
@@ -3694,7 +3681,7 @@ impl Governance {
         requester: PrincipalId,
     ) -> Result<NeuronInfo, GovernanceError> {
         let now = self.env.now();
-        self.with_neuron(id, |neuron| neuron.get_neuron_info(now, requester))
+        self.with_neuron(id, |neuron| neuron.get_neuron_info(self.voting_power_economics(), now, requester))
     }
 
     /// Returns the neuron info for a neuron identified by id or subaccount.
@@ -3706,7 +3693,7 @@ impl Governance {
         requester: PrincipalId,
     ) -> Result<NeuronInfo, GovernanceError> {
         self.with_neuron_by_neuron_id_or_subaccount(find_by, |neuron| {
-            neuron.get_neuron_info(self.env.now(), requester)
+            neuron.get_neuron_info(self.voting_power_economics(), self.env.now(), requester)
         })
     }
 
@@ -3738,7 +3725,7 @@ impl Governance {
 
         self.neuron_store
             .get_full_neuron(*id, *caller)
-            .map(|neuron| neuron.into_proto(now_seconds))
+            .map(|neuron| neuron.into_proto(self.voting_power_economics(), now_seconds))
             .map_err(GovernanceError::from)
     }
 
@@ -5167,6 +5154,21 @@ impl Governance {
             .expect("NetworkEconomics not present")
     }
 
+    pub fn voting_power_economics(&self) -> &VotingPowerEconomics {
+        let result = self.heap_data
+            .economics
+            .as_ref()
+            .and_then(|economics| economics.voting_power_economics.as_ref());
+
+        match result {
+            Some(ok) => ok,
+            None => {
+                println!("{}ERROR: Falling back to default VotingPowerEconomics.", LOG_PREFIX);
+                &VotingPowerEconomics::DEFAULT
+            }
+        }
+    }
+
     /// The proposal id of the next proposal.
     fn next_proposal_id(&self) -> u64 {
         // Correctness is based on the following observations:
@@ -5785,7 +5787,7 @@ impl Governance {
             _ => {
                 let (ballots, total_deciding_power, potential_voting_power) =
                     self.neuron_store.create_ballots_for_standard_proposal(
-                        &self.get_voting_power_economics(),
+                        self.voting_power_economics(),
                         now_seconds,
                     );
 
