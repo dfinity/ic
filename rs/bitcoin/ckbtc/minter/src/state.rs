@@ -1303,11 +1303,11 @@ impl ProcessableUtxos {
     fn assert_utxo_is_fresh(&self, utxo: &Utxo) {
         assert!(!self.new_utxos.contains(utxo), "BUG: UTXO is already known");
         assert!(
-            !self.previously_quarantined_utxos.contains(&utxo),
+            !self.previously_quarantined_utxos.contains(utxo),
             "BUG: UTXO is already known"
         );
         assert!(
-            !self.previously_ignored_utxos.contains(&utxo),
+            !self.previously_ignored_utxos.contains(utxo),
             "BUG: UTXO is already known"
         );
     }
@@ -1362,17 +1362,6 @@ impl SuspendedUtxos {
         self.utxos_without_account
             .iter()
             .chain(self.utxos.values().flat_map(|v| v.iter()))
-    }
-
-    pub fn iter_for_account(
-        &self,
-        account: &Account,
-    ) -> impl Iterator<Item = (&Utxo, &SuspendedReason)> {
-        let iter_without_account = self.utxos_without_account.iter();
-        match self.utxos.get(account) {
-            Some(utxos_with_account) => iter_without_account.chain(utxos_with_account),
-            None => iter_without_account,
-        }
     }
 
     pub fn contains_utxo(

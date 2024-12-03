@@ -1362,11 +1362,7 @@ impl Timestamp {
     }
 
     pub fn checked_duration_since(self, rhs: Timestamp) -> Option<Duration> {
-        if let Some(result) = self.0.checked_sub(rhs.0) {
-            Some(Duration::from_nanos(result))
-        } else {
-            None
-        }
+        self.0.checked_sub(rhs.0).map(Duration::from_nanos)
     }
 
     pub fn checked_add(self, rhs: Duration) -> Option<Timestamp> {
