@@ -2750,7 +2750,7 @@ impl ExecutionEnvironment {
 
         let threshold_key = args.key_id();
 
-        // Check if signing is enabled.
+        // Check if the key is enabled.
         if !topology
             .chain_key_enabled_subnets(&threshold_key)
             .contains(&state.metadata.own_subnet_id)
