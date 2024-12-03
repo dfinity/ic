@@ -39,7 +39,6 @@ pub struct CanisterSettings {
     pub wasm_memory_limit: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
     pub compute_allocation: Option<candid::Nat>,
-    pub wasm_memory_threshold: Option<candid::Nat>,
 }
 
 #[derive(CandidType, Deserialize, Debug, Clone)]
