@@ -30,7 +30,7 @@ if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]] || [[ "${CI_PULL_REQUEST_TARGET_BR
     RUN_ON_DIFF_ONLY="false"
 fi
 
-if [[ "${CI_PIPELINE_SOURCE:-}" == "merge_group" ]]; then
+if [[ "${CI_EVENT_NAME:-}" == "merge_group" ]]; then
     s3_upload="False"
     RUN_ON_DIFF_ONLY="false"
 fi
