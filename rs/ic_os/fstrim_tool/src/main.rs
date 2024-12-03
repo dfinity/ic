@@ -21,7 +21,7 @@ struct FsTrimArgs {
     init_only: bool,
     #[arg(short = 'd', long = "datadir_target", default_value = "")]
     /// Second target directory to run `fstrim` on, but only if the node is unassigned.
-    /// If the node is assigned to a subnet, this directory will be ignored
+    /// If the node is assigned to a subnet, this directory will be ignored.
     /// Intended to be used with /var/lib/ic/data only, but can be used with any directory.
     datadir_target: String,
 }
