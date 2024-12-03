@@ -85,19 +85,34 @@ fn write_initialized_metrics_if_not_exist(metrics_filename: &str) -> Result<()> 
     write_metrics_using_tmp_file(&metrics, metrics_filename)
 }
 
+fn is_node_assigned() -> bool {
+    Path::new("/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb").exists()
+}
+
 pub fn fstrim_tool(
     command: &str,
     metrics_filename: String,
     target: String,
     init_only: bool,
+    datadir_target: String,
 ) -> Result<()> {
     let res = match init_only {
         false => {
             let start = std::time::Instant::now();
-            let res = run_command(command, &target);
-            let elapsed = start.elapsed();
-            update_metrics(elapsed, res.is_ok(), &metrics_filename)?;
-            res
+            let res_target = run_command(command, &target);
+            let elapsed_target = start.elapsed();
+            update_metrics(elapsed_target, res_target.is_ok(), &metrics_filename)?;
+
+            if !datadir_target.is_empty() && !is_node_assigned() {
+                // TODO observability changes needed, expand the metrics logic    
+                // let start_datadir = std::time::Instant::now();
+                let res_datadir = run_command(command, &datadir_target);
+                // let elapsed_datadir = start_datadir.elapsed();
+                // update_metrics(elapsed_datadir, res_datadir.is_ok(), &metrics_filename)?;
+                res_target.and(res_datadir)
+            } else {
+                res_target
+            }
         }
         true => write_initialized_metrics_if_not_exist(&metrics_filename),
     };
