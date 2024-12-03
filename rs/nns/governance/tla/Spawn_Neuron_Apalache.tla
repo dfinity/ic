@@ -1,5 +1,7 @@
 ---- MODULE Spawn_Neuron_Apalache ----
 
+EXTENDS TLC, Variants
+
 (*
 @typeAlias: proc = Str;
 @typeAlias: account = Str;
@@ -12,6 +14,7 @@ _type_alias_dummy == TRUE
 \* This marker is necessary for the code link tooling to insert the constants
 \* CODE_LINK_INSERT_CONSTANTS
 
+(*
 CONSTANTS
     \* @type: Set($account);
     Governance_Account_Ids,
@@ -31,6 +34,7 @@ CONSTANTS
     \* The transfer fee charged by the ledger canister
     \* @type: Int;
     TRANSACTION_FEE
+*)
 
 VARIABLES
     \* @type: $neuronId -> {cached_stake: Int, account : $account, maturity: Int, fees: Int};
@@ -44,7 +48,11 @@ VARIABLES
     \* @type: Set({caller: $proc, response: $methodResponse });
     ledger_to_governance,
     \* @type: $proc -> Str;
-    pc
+    pc,
+    \* Not used by this model, but it's a global variable used by spawn_neurons, so
+    \* it's the easiest to just add it to all the other models
+    \* @type: Bool;
+    spawning_neurons
 
 \* @type: Set($neuronId) => $neuronId;
 FRESH_NEURON_ID(existing_neurons) == CHOOSE nid \in (Neuron_Ids \ existing_neurons): TRUE

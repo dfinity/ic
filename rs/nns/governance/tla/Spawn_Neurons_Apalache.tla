@@ -1,5 +1,7 @@
 ---- MODULE Spawn_Neurons_Apalache ----
 
+EXTENDS TLC, Variants
+
 (*
 @typeAlias: proc = Str;
 @typeAlias: account = Str;
@@ -12,6 +14,7 @@ _type_alias_dummy == TRUE
 \* This marker is necessary for the code link tooling to insert the constants
 \* CODE_LINK_INSERT_CONSTANTS
 
+(*
 CONSTANTS
     \* @type: Set($account);
     Governance_Account_Ids,
@@ -31,6 +34,7 @@ CONSTANTS
     \* The transfer fee charged by the ledger canister
     \* @type: Int;
     TRANSACTION_FEE
+*)
 
 VARIABLES
     \* @type: $neuronId -> {cached_stake: Int, account : $account, maturity: Int, fees: Int};
@@ -50,7 +54,7 @@ VARIABLES
     \* @type: $proc -> $neuronId;
     neuron_id,
     \* @type: $proc -> Set($neuronId);
-    ready_to_spawn_neuron_ids
+    ready_to_spawn_ids
 
 MOD == INSTANCE Spawn_Neurons
 
