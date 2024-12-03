@@ -21,7 +21,7 @@ struct Args {
     deployment_environment: DeploymentEnvironment,
 
     #[arg(short, long)]
-    node_type: Option<String>,
+    node_type: Option<NodeType>,
 }
 
 fn calculate_ip(
@@ -47,7 +47,6 @@ fn main() -> anyhow::Result<()> {
 
     // When given, only calculate one index
     if let Some(node_type) = node_type {
-        let node_type = node_type.parse()?;
         let ip = calculate_ip(mac, &prefix, deployment_environment, node_type)?;
 
         println!("IP: {}", ip);
