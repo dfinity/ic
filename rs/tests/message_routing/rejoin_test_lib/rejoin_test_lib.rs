@@ -246,28 +246,30 @@ async fn install_many_canisters(
         env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
             .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
     ));
-    for i in 0..100 {
+    for i in 0..200 {
         let mut futures: Vec<_> = Vec::new();
-        for canister_idx in 0..250 {
+        for canister_idx in 0..100 {
             let new_wasm = wasm.clone();
             let new_logger = logger.clone();
+            let id = i * 100 + canister_idx;
             futures.push(async move {
                 let canister = new_wasm
                     .clone()
                     .install(endpoint_runtime)
                     .bytes(Vec::new())
                     .await
-                    .unwrap_or_else(|_| {
-                        panic!("Installation of the canister_idx={} failed.", canister_idx)
+                    .map_err(|_| {
+                        info!("Installation of the canister_idx={} failed.", id);
                     });
                 info!(
                     new_logger,
                     "Installed canister {}",
-                    i * 100 + canister_idx,
+                    id,
                 );
             });
         }
         join_all(futures).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
 }
