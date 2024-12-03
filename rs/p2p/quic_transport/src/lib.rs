@@ -214,26 +214,29 @@ impl Drop for ResetStreamOnDrop {
 
 #[derive(Error, Debug)]
 pub enum TransportError {
-    #[error("data store disconnected")]
+    // Occurs when the peer cancels the `RecvStream` or drops the `SendStream` future e.g., when the RPC method is part of a `select` branch.
+    #[error("{0}")]
     StreamCancelled(String),
-    #[error("data store disconnected")]
+    /// This can occur during a topology change or when the connection manager attempts to replace an old, broken connection with a new one.
+    #[error("Connection was closed")]
     ConnectionClosed(String),
-    #[error("data store disconnected")]
+    /// This can occur if the peer crashes or experiences connectivity issues.
+    #[error("Connection timed out.")]
     TimedOut,
-    #[error("data store disconnected")]
+    #[error("Peer")]
     PeerNotFound,
-    #[error("data store disconnected")]
+    // If any of the following errors occur it means that we have a bug in the protocol implementation or
+    // there is malicious peer on the other side.
+    #[error("{0}")]
     Internal(String),
 }
 
 impl From<ConnectionError> for TransportError {
     fn from(err: ConnectionError) -> TransportError {
         match err {
-            // This can occur during a topology change or when the connection manager attempts to replace an old, broken connection with a new one.
             ConnectionError::LocallyClosed | ConnectionError::ApplicationClosed(_) => {
                 TransportError::ConnectionClosed(format!("{:?}", err))
             }
-            // This can occur if the peer crashes or experiences connectivity issues.
             ConnectionError::TimedOut => TransportError::TimedOut,
             _ => TransportError::Internal(format!("{:?}", err)),
         }
@@ -243,8 +246,6 @@ impl From<ConnectionError> for TransportError {
 impl From<WriteError> for TransportError {
     fn from(err: WriteError) -> TransportError {
         match err {
-            // Occurs when the peer cancels the `RecvStream` future, similar to `ERROR_RESET_STREAM` semantics,
-            // e.g., when the RPC method is part of a `select` branch.
             WriteError::Stopped(_) => TransportError::StreamCancelled(format!("{:?}", err)),
             WriteError::ConnectionLost(conn_err) => conn_err.into(),
             _ => TransportError::Internal(format!("{:?}", err)),
@@ -255,12 +256,8 @@ impl From<WriteError> for TransportError {
 impl From<ReadError> for TransportError {
     fn from(err: ReadError) -> TransportError {
         match err {
-            // Occurs when the peer cancels the `SendStream` future, similar to `ERROR_STOPPED_STREAM` semantics,
-            // e.g., when the RPC method is part of a `select` branch.
             ReadError::Reset(_) => TransportError::StreamCancelled(format!("{:?}", err)),
             ReadError::ConnectionLost(conn_err) => conn_err.into(),
-            // If any of the following errors occur it means that we have a bug in the protocol implementation or
-            // there is malicious peer on the other side.
             _ => TransportError::Internal(format!("{:?}", err)),
         }
     }
