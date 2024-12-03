@@ -4,25 +4,18 @@ use macaddr::MacAddr6;
 
 use std::fmt;
 use std::net::Ipv6Addr;
-use std::str::FromStr;
 
 pub mod node_type;
 use node_type::NodeType;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub struct HwAddr(MacAddr6);
+pub trait MacAddr6Ext {
+    fn calculate_slaac(&self, prefix: &str) -> Result<Ipv6Addr>;
+}
 
-impl HwAddr {
-    pub fn octets(&self) -> [u8; 6] {
-        self.0
-            .as_bytes()
-            .try_into()
-            .expect("MAC address should always be 6 bytes")
-    }
-
+impl MacAddr6Ext for MacAddr6 {
     /// Generates the SLAAC IPv6 address for the given prefix.
-    pub fn calculate_slaac(&self, prefix: &str) -> Result<Ipv6Addr> {
-        let mac_octets = self.octets();
+    fn calculate_slaac(&self, prefix: &str) -> Result<Ipv6Addr> {
+        let mac_octets = self.into_array();
 
         // Create the EUI-64 interface identifier
         let mut interface_id = [0u8; 8];
@@ -60,69 +53,31 @@ impl HwAddr {
     }
 }
 
-impl AsRef<HwAddr> for HwAddr {
-    fn as_ref(&self) -> &HwAddr {
-        self
-    }
-}
-
-impl fmt::Display for HwAddr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let octets = self.octets();
-        write!(
-            f,
-            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-            octets[0], octets[1], octets[2], octets[3], octets[4], octets[5]
-        )
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum HwAddrParseError {
-    #[error("invalid MAC address")]
-    InvalidAddress,
-    #[error("invalid MAC address length")]
-    InvalidLength,
-}
-
-impl From<[u8; 6]> for HwAddr {
-    fn from(octets: [u8; 6]) -> HwAddr {
-        HwAddr(MacAddr6::new(
-            octets[0], octets[1], octets[2], octets[3], octets[4], octets[5],
-        ))
-    }
-}
-
-impl FromStr for HwAddr {
-    type Err = HwAddrParseError;
-    fn from_str(s: &str) -> Result<HwAddr, HwAddrParseError> {
-        s.parse::<MacAddr6>().map(HwAddr).map_err(|_| {
-            if s.len() != 17 && s.len() != 12 {
-                HwAddrParseError::InvalidLength
-            } else {
-                HwAddrParseError::InvalidAddress
-            }
-        })
-    }
-}
-
 #[derive(Copy, Clone)]
 pub enum IpVariant {
     V4,
     V6,
 }
 
-pub fn calculate_deterministic_mac<T: AsRef<HwAddr>, D: fmt::Display>(
-    mgmt_mac: T,
+fn format_mac_address(mac: &MacAddr6) -> String {
+    let bytes = mac.into_array();
+    format!(
+        "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
+    )
+}
+
+pub fn calculate_deterministic_mac<D: fmt::Display>(
+    mgmt_mac: &MacAddr6,
     deployment: D,
     ip_version: IpVariant,
     node_type: NodeType,
-) -> HwAddr {
+) -> MacAddr6 {
     let index = node_type.to_index();
 
     // NOTE: In order to be backwards compatible with existing scripts, this
     // **MUST** have a newline.
-    let seed = format!("{}{}\n", mgmt_mac.as_ref(), deployment);
+    let seed = format!("{}{}\n", format_mac_address(mgmt_mac), deployment);
 
     let hash = Sha256::hash(seed.as_bytes());
 
@@ -131,7 +86,7 @@ pub fn calculate_deterministic_mac<T: AsRef<HwAddr>, D: fmt::Display>(
         IpVariant::V6 => 0x6a,
     };
 
-    [version, index, hash[0], hash[1], hash[2], hash[3]].into()
+    MacAddr6::from([version, index, hash[0], hash[1], hash[2], hash[3]])
 }
 
 #[cfg(test)]
@@ -141,29 +96,16 @@ mod test {
 
     #[test]
     fn mac() {
-        let mgmt_mac: HwAddr = "70:B5:E8:E8:25:DE".parse().unwrap();
-        let expected_mac: HwAddr = "4a:00:f8:87:a4:8a".parse().unwrap();
-        let mac = calculate_deterministic_mac(mgmt_mac, "testnet", IpVariant::V4, NodeType::HostOS);
+        let mgmt_mac: MacAddr6 = "70:B5:E8:E8:25:DE".parse().unwrap();
+        let expected_mac: MacAddr6 = "4a:00:f8:87:a4:8a".parse().unwrap();
+        let mac =
+            calculate_deterministic_mac(&mgmt_mac, "testnet", IpVariant::V4, NodeType::HostOS);
         assert_eq!(mac, expected_mac);
     }
 
     #[test]
-    fn invalid_mac_length() {
-        let error: Result<HwAddr, _> = "11:22:33:44:55".parse();
-
-        assert!(matches!(error, Err(HwAddrParseError::InvalidLength)));
-    }
-
-    #[test]
-    fn invalid_mac_contents() {
-        let error: Result<HwAddr, _> = "::::::::::::".parse();
-
-        assert!(matches!(error, Err(HwAddrParseError::InvalidAddress)));
-    }
-
-    #[test]
     fn test_calculate_slaac() {
-        let mac = "6a01e5962d49".parse::<HwAddr>().unwrap();
+        let mac = "6a01e5962d49".parse::<MacAddr6>().unwrap();
         let prefix = "2a04:9dc0:0:108";
 
         let expected_ip = "2a04:9dc0:0:108:6801:e5ff:fe96:2d49"
@@ -177,20 +119,20 @@ mod test {
 
     #[test]
     fn mac_to_slaac() {
-        let mgmt_mac = "b0:7b:25:c8:f6:c0".parse::<HwAddr>().unwrap();
+        let mgmt_mac = "b0:7b:25:c8:f6:c0".parse::<MacAddr6>().unwrap();
         let prefix = "2602:FFE4:801:17";
         let expected_ip = "2602:FFE4:801:17:6801:ff:feec:bd51"
             .parse::<Ipv6Addr>()
             .unwrap();
         let mac =
-            calculate_deterministic_mac(mgmt_mac, "mainnet", IpVariant::V6, NodeType::GuestOS);
+            calculate_deterministic_mac(&mgmt_mac, "mainnet", IpVariant::V6, NodeType::GuestOS);
         let slaac = mac.calculate_slaac(prefix).unwrap();
         assert_eq!(slaac, expected_ip);
     }
 
     #[test]
     fn test_prefix_without_suffix() {
-        let mac = "6a:01:e5:96:2d:49".parse::<HwAddr>().unwrap();
+        let mac = "6a:01:e5:96:2d:49".parse::<MacAddr6>().unwrap();
         let prefix = "2001:db8";
 
         let expected_ip = "2001:db8::6801:e5ff:fe96:2d49".parse::<Ipv6Addr>().unwrap();
@@ -202,7 +144,7 @@ mod test {
 
     #[test]
     fn test_prefix_with_double_colon() {
-        let mac = "6a:01:e5:96:2d:49".parse::<HwAddr>().unwrap();
+        let mac = "6a:01:e5:96:2d:49".parse::<MacAddr6>().unwrap();
         let prefix = "2a04:9dc0:0:108::";
 
         let expected_ip = "2a04:9dc0:0:108:6801:e5ff:fe96:2d49"
@@ -216,7 +158,7 @@ mod test {
 
     #[test]
     fn test_invalid_prefix() {
-        let mac = "6a:01:e5:96:2d:49".parse::<HwAddr>().unwrap();
+        let mac = "6a:01:e5:96:2d:49".parse::<MacAddr6>().unwrap();
         let invalid_prefixes = vec![
             "invalid_prefix",
             "gggg::",
@@ -232,7 +174,7 @@ mod test {
 
     #[test]
     fn test_all_zero_mac() {
-        let mac = "00:00:00:00:00:00".parse::<HwAddr>().unwrap();
+        let mac = "00:00:00:00:00:00".parse::<MacAddr6>().unwrap();
         let prefix = "2001:db8::";
 
         let expected_ip = "2001:db8::0200:ff:fe00:0".parse::<Ipv6Addr>().unwrap();
@@ -244,7 +186,7 @@ mod test {
 
     #[test]
     fn test_all_one_mac() {
-        let mac = "ff:ff:ff:ff:ff:ff".parse::<HwAddr>().unwrap();
+        let mac = "ff:ff:ff:ff:ff:ff".parse::<MacAddr6>().unwrap();
         let prefix = "2001:db8::";
 
         let expected_ip = "2001:db8::fdff:ffff:feff:ffff".parse::<Ipv6Addr>().unwrap();

@@ -2354,8 +2354,8 @@ dependencies = [
  "anyhow",
  "clap 4.5.20",
  "config_types",
- "deterministic_ips",
  "ic-types",
+ "macaddr",
  "network",
  "once_cell",
  "regex",
@@ -2372,8 +2372,8 @@ name = "config_types"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "deterministic_ips",
  "ic-types",
+ "macaddr",
  "once_cell",
  "serde",
  "serde_json",
@@ -15808,6 +15808,7 @@ dependencies = [
  "anyhow",
  "config_types",
  "deterministic_ips",
+ "macaddr",
  "ping",
  "rayon",
  "regex",
