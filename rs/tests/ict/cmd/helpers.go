@@ -159,7 +159,10 @@ func sparse_checkout(repoUrl, repoDir string, sparseCheckoutPaths []string) (str
 	}
 
 	if repoDir == "" {
-		tempDir := os.TempDir()
+		tempDir, err := os.UserCacheDir()
+		if err != nil {
+			return "", fmt.Errorf("Could not get user cache dir: %v", err)
+		}
 		repoDir = filepath.Join(tempDir, "k8s_repo")
 	}
 
