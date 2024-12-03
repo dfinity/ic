@@ -1379,15 +1379,16 @@ impl SuspendedUtxos {
     }
 
     pub fn remove(&mut self, account: &Account, utxo: &Utxo) {
+        self.last_time_checked_cache.remove(utxo);
         self.utxos_without_account.remove(utxo);
         if let Some(utxos) = self.utxos.get_mut(account) {
             utxos.remove(utxo);
         }
-        self.last_time_checked_cache.remove(utxo);
     }
 
     #[deprecated(note = "Use remove() instead")]
     pub fn remove_without_account(&mut self, utxo: &Utxo) {
+        self.last_time_checked_cache.remove(utxo);
         self.utxos_without_account.remove(utxo);
         for utxos in self.utxos.values_mut() {
             if utxos.remove(utxo).is_some() {

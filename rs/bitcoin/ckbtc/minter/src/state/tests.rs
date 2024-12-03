@@ -59,7 +59,7 @@ mod processable_utxos_for_account {
             vec![SuspendedUtxo {
                 utxo: ignored_utxo,
                 reason: SuspendedReason::ValueTooSmall,
-                earliest_retry: 0,
+                earliest_retry: NOW.as_nanos_since_unix_epoch(),
             }]
         )
     }
