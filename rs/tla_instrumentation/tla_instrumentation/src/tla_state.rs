@@ -194,9 +194,8 @@ impl ResolvedStatePair {
         let end = &self.end.0;
         for (key, value) in start.0.iter() {
             if let Some(end_value) = end.0.get(key) {
-                match value.diff(end_value) {
-                    Some(d) => diff.push((key.clone(), d)),
-                    None => {}
+                if let Some(d) = value.diff(end_value) {
+                    diff.push((key.clone(), d));
                 }
             } else {
                 diff.push((key.clone(), Diff::Other(Some(value.clone()), None)));

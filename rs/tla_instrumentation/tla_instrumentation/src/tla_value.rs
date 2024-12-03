@@ -94,9 +94,8 @@ impl TlaValue {
                 for (k, v1) in map1 {
                     if let Some(v2) = map2.get(k) {
                         let sub_diff = v1.diff(v2);
-                        match sub_diff {
-                            Some(d) => diff.push((k.clone(), Box::new(d))),
-                            None => {}
+                        if let Some(d) = sub_diff {
+                            diff.push((k.clone(), Box::new(d)));
                         }
                     } else {
                         diff.push((k.clone(), Box::new(Diff::Other(Some(v1.clone()), None))));
