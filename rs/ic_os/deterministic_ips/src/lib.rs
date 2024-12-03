@@ -161,8 +161,8 @@ mod test {
 
     #[test]
     fn test_calculate_slaac() {
-        let mac = "6a:01:e5:96:2d:49".parse::<HwAddr>().unwrap();
-        let prefix = "2a04:9dc0:0:108::";
+        let mac = "6a01e5962d49".parse::<HwAddr>().unwrap();
+        let prefix = "2a04:9dc0:0:108";
 
         let expected_ip = "2a04:9dc0:0:108:6801:e5ff:fe96:2d49"
             .parse::<Ipv6Addr>()
