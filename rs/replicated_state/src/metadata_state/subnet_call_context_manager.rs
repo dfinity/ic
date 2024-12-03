@@ -784,6 +784,7 @@ impl TryFrom<pb_metadata::EcdsaArguments> for EcdsaArguments {
 pub struct SchnorrArguments {
     pub key_id: SchnorrKeyId,
     pub message: Arc<Vec<u8>>,
+    pub taproot_tree_root: Option<Arc<Vec<u8>>>,
 }
 
 impl From<&SchnorrArguments> for pb_metadata::SchnorrArguments {
@@ -791,6 +792,7 @@ impl From<&SchnorrArguments> for pb_metadata::SchnorrArguments {
         Self {
             key_id: Some((&args.key_id).into()),
             message: args.message.to_vec(),
+            taproot_tree_root: args.taproot_tree_root.as_ref().map(|v| v.to_vec()),
         }
     }
 }
@@ -801,6 +803,7 @@ impl TryFrom<pb_metadata::SchnorrArguments> for SchnorrArguments {
         Ok(SchnorrArguments {
             key_id: try_from_option_field(context.key_id, "SchnorrArguments::key_id")?,
             message: Arc::new(context.message),
+            taproot_tree_root: context.taproot_tree_root.map(Arc::new),
         })
     }
 }

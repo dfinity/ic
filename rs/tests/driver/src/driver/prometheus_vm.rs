@@ -42,9 +42,9 @@ const PROMETHEUS_VM_NAME: &str = "prometheus";
 
 /// The SHA-256 hash of the Prometheus VM disk image.
 /// The latest hash can be retrieved by downloading the SHA256SUMS file from:
-/// https://hydra.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img-prometheus.x86_64-linux/latest
+/// https://hydra-int.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img-prometheus.x86_64-linux/latest
 const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
-    "1462da1e3584fa36f6d956e9f741b530bcc4ba20cddc2ce95d40fabda5881101";
+    "147ad092d7310fadbde63538de6a434b8b37f2c9fce8faa2a70556c49d54349d";
 
 fn get_default_prometheus_vm_img_url() -> String {
     format!("http://download.proxy-global.dfinity.network:8080/farm/prometheus-vm/{DEFAULT_PROMETHEUS_VM_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst")
