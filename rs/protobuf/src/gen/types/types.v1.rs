@@ -946,7 +946,7 @@ pub mod i_dkg_message {
         #[prost(message, tag = "6")]
         SchnorrSigShare(super::SchnorrSigShare),
         #[prost(message, tag = "7")]
-        VetKdShare(super::VetKdShare),
+        VetkdShare(super::VetKdShare),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1072,7 +1072,7 @@ pub mod i_dkg_artifact_id {
         #[prost(message, tag = "6")]
         SchnorrSigShare(super::PrefixPairSigShare),
         #[prost(message, tag = "7")]
-        VetKdShare(super::PrefixPairSigShare),
+        VetkdShare(super::PrefixPairSigShare),
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
