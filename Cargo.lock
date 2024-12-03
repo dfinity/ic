@@ -1822,7 +1822,11 @@ name = "canister_client"
 version = "0.9.0"
 dependencies = [
  "candid",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "k256",
  "rate-limits-api",
  "regex",
@@ -1929,7 +1933,11 @@ dependencies = [
  "flate2",
  "futures",
  "http 1.1.0",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-http-certification",
  "ic-response-verification",
  "ic-utils 0.37.0",
@@ -2409,7 +2417,11 @@ dependencies = [
  "anyhow",
  "canister-test",
  "canister_http",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-interfaces-registry",
  "ic-nns-common",
@@ -2441,7 +2453,11 @@ dependencies = [
  "candid",
  "canister-test",
  "canister_http",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-canister-client",
  "ic-management-canister-types",
@@ -2469,7 +2485,11 @@ dependencies = [
  "canister-test",
  "chrono",
  "futures",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-config",
  "ic-limits",
@@ -2502,7 +2522,11 @@ dependencies = [
  "anyhow",
  "candid",
  "futures",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-canister-client",
  "ic-management-canister-types",
  "ic-nervous-system-common-test-keys",
@@ -4088,7 +4112,11 @@ dependencies = [
  "bitcoincore-rpc",
  "candid",
  "futures",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-cdk 0.16.0",
  "ic-config",
@@ -4995,17 +5023,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "http-body-to-bytes"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17a08236c6f51c2ee95d840f45acf8fa9e339390e00b4ef640857b2f2a534d70"
-dependencies = [
- "bytes",
- "http-body 1.0.1",
- "http-body-util",
-]
-
-[[package]]
 name = "http-body-util"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5383,11 +5400,6 @@ dependencies = [
  "hex",
  "http 1.1.0",
  "http-body 1.0.1",
- "http-body-to-bytes",
- "http-body-util",
- "hyper 1.5.1",
- "hyper-rustls 0.27.3",
- "hyper-util",
  "ic-certification 2.6.0",
  "ic-transport-types 0.37.1",
  "ic-verify-bls-signature 0.5.0",
@@ -5411,7 +5423,50 @@ dependencies = [
  "thiserror 1.0.68",
  "time",
  "tokio",
- "tower 0.4.13",
+ "url",
+]
+
+[[package]]
+name = "ic-agent"
+version = "0.39.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "158138fcb769fe6288e63d5db221c904e472cfb7d376aba13a38c060f2984e63"
+dependencies = [
+ "async-lock",
+ "async-trait",
+ "backoff",
+ "cached 0.52.0",
+ "candid",
+ "der",
+ "ecdsa",
+ "ed25519-consensus",
+ "elliptic-curve",
+ "futures-util",
+ "hex",
+ "http 1.1.0",
+ "http-body 1.0.1",
+ "ic-certification 2.6.0",
+ "ic-transport-types 0.39.1",
+ "ic-verify-bls-signature 0.5.0",
+ "k256",
+ "leb128",
+ "p256",
+ "pem 3.0.4",
+ "pkcs8",
+ "rand 0.8.5",
+ "rangemap",
+ "reqwest 0.12.9",
+ "sec1",
+ "serde",
+ "serde_bytes",
+ "serde_cbor",
+ "serde_repr",
+ "sha2 0.10.8",
+ "simple_asn1",
+ "thiserror 1.0.68",
+ "time",
+ "tokio",
+ "tower-service",
  "url",
 ]
 
@@ -5824,7 +5879,11 @@ dependencies = [
  "candid",
  "certificate_orchestrator_interface",
  "chacha20poly1305",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-interfaces-registry",
  "ic-protobuf",
  "ic-registry-keys",
@@ -5849,7 +5908,11 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "futures",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-boundary-nodes-system-test-utils",
  "ic-crypto-tree-hash",
  "ic-system-test-driver",
@@ -5868,7 +5931,11 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-boundary-nodes-system-test-utils",
  "ic-protobuf",
  "ic-registry-keys",
@@ -5889,7 +5956,11 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "futures",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-interfaces-registry",
  "ic-protobuf",
@@ -6577,7 +6648,11 @@ name = "ic-ckbtc-agent"
 version = "0.9.0"
 dependencies = [
  "candid",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-canisters-http-types",
  "ic-ckbtc-minter",
  "ic-icrc1",
@@ -6625,7 +6700,11 @@ dependencies = [
  "ciborium",
  "flate2",
  "hex",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-bitcoin-canister-mock",
  "ic-btc-interface",
@@ -6682,7 +6761,11 @@ dependencies = [
  "futures",
  "hex",
  "hex-literal",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-canisters-http-types",
@@ -8837,7 +8920,11 @@ dependencies = [
  "clap 4.5.20",
  "futures",
  "hex",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-icrc-rosetta-client",
  "ic-icrc-rosetta-runner",
@@ -8893,7 +8980,11 @@ dependencies = [
  "candid",
  "clap 4.5.20",
  "hex",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-crypto-ed25519",
  "ic-crypto-secp256k1",
  "ic-icrc-rosetta",
@@ -9077,7 +9168,11 @@ dependencies = [
  "candid",
  "candid_parser",
  "ciborium",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-canister-profiler",
@@ -9123,7 +9218,11 @@ dependencies = [
  "cddl",
  "ciborium",
  "hex",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
@@ -9159,7 +9258,11 @@ name = "ic-icrc1-test-utils"
 version = "0.9.0"
 dependencies = [
  "candid",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-crypto-ed25519",
  "ic-crypto-secp256k1",
  "ic-crypto-test-utils-reproducible-rng",
@@ -9371,7 +9474,11 @@ dependencies = [
  "chrono",
  "ciborium",
  "dfn_protobuf",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-certification 0.9.0",
  "ic-crypto-sha2",
  "ic-ledger-canister-blocks-synchronizer-test-utils",
@@ -9517,7 +9624,11 @@ dependencies = [
  "cddl",
  "futures",
  "hex",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-canisters-http-types",
  "ic-config",
@@ -9784,7 +9895,11 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "candid",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-nervous-system-clients",
  "ic-nns-common",
@@ -10163,7 +10278,11 @@ name = "ic-networking-subnet-update-workload"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-interfaces-registry",
  "ic-protobuf",
  "ic-registry-canister-api",
@@ -10202,7 +10321,11 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "colored",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-neurons-fund",
  "ic-sns-governance",
  "ic-sns-swap",
@@ -11657,7 +11780,11 @@ dependencies = [
  "dfn_protobuf",
  "futures",
  "hex",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-crypto-ed25519",
  "ic-crypto-sha2",
@@ -11799,7 +11926,11 @@ dependencies = [
  "candid",
  "colored",
  "csv",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-nervous-system-agent",
  "ic-nervous-system-common-test-keys",
@@ -11827,7 +11958,11 @@ dependencies = [
  "clap 4.5.20",
  "futures",
  "hex",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-nervous-system-agent",
@@ -12604,7 +12739,11 @@ version = "0.1.0"
 dependencies = [
  "clap 4.5.20",
  "hex",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-crypto-utils-threshold-sig",
  "ic-crypto-utils-threshold-sig-der",
@@ -12711,7 +12850,11 @@ dependencies = [
  "humantime",
  "humantime-serde",
  "hyper 1.5.1",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-artifact-pool",
  "ic-base-types",
  "ic-btc-interface",
@@ -13142,7 +13285,11 @@ dependencies = [
  "candid",
  "canister-test",
  "dfn_candid",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-btc-interface",
  "ic-btc-kyt",
@@ -13759,7 +13906,11 @@ dependencies = [
  "anyhow",
  "candid",
  "certificate_orchestrator_interface",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-boundary-nodes-integration-test-common",
  "ic-boundary-nodes-performance-test-common",
@@ -13803,7 +13954,11 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "futures",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-system-test-driver",
  "ic-types",
@@ -13822,7 +13977,11 @@ dependencies = [
  "canister-test",
  "chrono",
  "futures",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-canister-client",
  "ic-config",
@@ -13862,7 +14021,11 @@ dependencies = [
  "candid",
  "canister-test",
  "futures",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-management-canister-types",
@@ -13900,7 +14063,11 @@ dependencies = [
  "candid",
  "canister-test",
  "ed25519-dalek",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-canister-client",
  "ic-config",
@@ -13931,7 +14098,11 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-crypto-test-utils-reproducible-rng",
  "ic-fstrim-tool",
  "ic-registry-subnet-type",
@@ -14028,7 +14199,11 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-icrc-rosetta",
  "ic-icrc-rosetta-client",
  "ic-ledger-test-utils",
@@ -14066,7 +14241,11 @@ dependencies = [
  "candid",
  "ciborium",
  "hex",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-cbor",
  "ic-certification 2.6.0",
  "icrc-ledger-types",
@@ -14982,7 +15161,11 @@ dependencies = [
  "dfn_http_metrics",
  "dfn_protobuf",
  "hex",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-cdk 0.16.0",
@@ -15601,7 +15784,11 @@ dependencies = [
  "candid",
  "canister-test",
  "dfn_candid",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -15888,7 +16075,11 @@ dependencies = [
  "canister_http",
  "cloner-canister-types",
  "dfn_candid",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-cdk 0.16.0",
  "ic-limits",
@@ -16004,7 +16195,11 @@ dependencies = [
  "cycles_minting",
  "dfn_candid",
  "futures",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-btc-interface",
  "ic-canister-client",
@@ -16077,7 +16272,11 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-nns-constants",
  "ic-registry-canister-api",
@@ -17232,7 +17431,11 @@ dependencies = [
  "http-body-util",
  "hyper 1.5.1",
  "hyper-util",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-boundary",
  "ic-btc-adapter",
  "ic-btc-interface",
@@ -18729,7 +18932,11 @@ dependencies = [
  "anyhow",
  "candid",
  "hex",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-crypto-ed25519",
  "ic-crypto-secp256k1",
  "ic-types",
@@ -19965,7 +20172,11 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-canister-client",
  "ic-canister-client-sender",
@@ -20355,7 +20566,11 @@ dependencies = [
  "candid",
  "colored",
  "futures",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-base-types",
  "ic-nervous-system-agent",
  "ic-nervous-system-clients",
@@ -20682,7 +20897,11 @@ dependencies = [
  "futures",
  "hex",
  "humantime",
+<<<<<<< HEAD
  "ic-agent 0.37.1",
+=======
+ "ic-agent 0.39.1",
+>>>>>>> 982995cd20b (Update ic-agent version)
  "ic-async-utils",
  "ic-base-types",
  "ic-btc-interface",
