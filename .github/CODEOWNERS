@@ -94,7 +94,7 @@ go_deps.bzl               @dfinity/idx
 /rs/bitcoin/                                            @dfinity/ic-interface-owners
 /rs/bitcoin/adapter/                                    @dfinity/networking
 /rs/bitcoin/ckbtc/                                      @dfinity/cross-chain-team
-/rs/bitcoin/mock/                                       @dfinity/finint
+/rs/bitcoin/mock/                                       @dfinity/cross-chain-team
 /rs/bitcoin/client/                                     @dfinity/networking
 /rs/bitcoin/consensus/                                  @dfinity/execution @dfinity/consensus
 /rs/bitcoin/kyt/                                        @dfinity/cross-chain-team
