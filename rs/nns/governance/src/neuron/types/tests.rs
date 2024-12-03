@@ -448,7 +448,11 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
 
             assert_eq!(neuron.visibility(), Some(visibility),);
 
-            let neuron_info = neuron.get_neuron_info(&VotingPowerEconomics::DEFAULT, timestamp_seconds, principal_id);
+            let neuron_info = neuron.get_neuron_info(
+                &VotingPowerEconomics::DEFAULT,
+                timestamp_seconds,
+                principal_id,
+            );
             assert_eq!(neuron_info.visibility, Some(visibility as i32),);
 
             let neuron_proto = neuron.into_proto(&VotingPowerEconomics::DEFAULT, timestamp_seconds);
@@ -463,10 +467,16 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
 
         assert_eq!(neuron.visibility(), None,);
 
-        let neuron_info = neuron.get_neuron_info(&VotingPowerEconomics::DEFAULT, timestamp_seconds, principal_id);
+        let neuron_info = neuron.get_neuron_info(
+            &VotingPowerEconomics::DEFAULT,
+            timestamp_seconds,
+            principal_id,
+        );
         assert_eq!(neuron_info.visibility, None,);
 
-        let neuron_proto = neuron.clone().into_proto(&VotingPowerEconomics::DEFAULT, timestamp_seconds);
+        let neuron_proto = neuron
+            .clone()
+            .into_proto(&VotingPowerEconomics::DEFAULT, timestamp_seconds);
         assert_eq!(neuron_proto.visibility, None,);
     }
     {
@@ -474,7 +484,11 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
 
         assert_eq!(neuron.visibility(), Some(Visibility::Private),);
 
-        let neuron_info = neuron.get_neuron_info(&VotingPowerEconomics::DEFAULT, timestamp_seconds, principal_id);
+        let neuron_info = neuron.get_neuron_info(
+            &VotingPowerEconomics::DEFAULT,
+            timestamp_seconds,
+            principal_id,
+        );
         assert_eq!(neuron_info.visibility, Some(Visibility::Private as i32),);
 
         let neuron_proto = neuron.into_proto(&VotingPowerEconomics::DEFAULT, timestamp_seconds);
@@ -496,10 +510,16 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
 
         assert_eq!(neuron.visibility(), Some(Visibility::Public),);
 
-        let neuron_info = neuron.get_neuron_info(&VotingPowerEconomics::DEFAULT, timestamp_seconds, principal_id);
+        let neuron_info = neuron.get_neuron_info(
+            &VotingPowerEconomics::DEFAULT,
+            timestamp_seconds,
+            principal_id,
+        );
         assert_eq!(neuron_info.visibility, Some(Visibility::Public as i32),);
 
-        let neuron_proto = neuron.clone().into_proto(&VotingPowerEconomics::DEFAULT, timestamp_seconds);
+        let neuron_proto = neuron
+            .clone()
+            .into_proto(&VotingPowerEconomics::DEFAULT, timestamp_seconds);
         assert_eq!(neuron_proto.visibility, Some(Visibility::Public as i32),);
     }
 }

@@ -349,10 +349,20 @@ pub fn build_merge_neurons_response(
     now_seconds: u64,
     requester: PrincipalId,
 ) -> MergeResponse {
-    let source_neuron = Some(source.clone().into_proto(voting_power_economics, now_seconds));
-    let target_neuron = Some(target.clone().into_proto(voting_power_economics, now_seconds));
-    let source_neuron_info = Some(source.get_neuron_info(voting_power_economics, now_seconds, requester));
-    let target_neuron_info = Some(target.get_neuron_info(voting_power_economics, now_seconds, requester));
+    let source_neuron = Some(
+        source
+            .clone()
+            .into_proto(voting_power_economics, now_seconds),
+    );
+    let target_neuron = Some(
+        target
+            .clone()
+            .into_proto(voting_power_economics, now_seconds),
+    );
+    let source_neuron_info =
+        Some(source.get_neuron_info(voting_power_economics, now_seconds, requester));
+    let target_neuron_info =
+        Some(target.get_neuron_info(voting_power_economics, now_seconds, requester));
     MergeResponse {
         source_neuron,
         target_neuron,

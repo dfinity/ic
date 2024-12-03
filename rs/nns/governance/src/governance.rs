@@ -3069,7 +3069,13 @@ impl Governance {
 
         // Step 7: builds the response.
         Ok(ManageNeuronResponse::merge_response(
-            build_merge_neurons_response(&source_neuron, &target_neuron, self.voting_power_economics(), now, *caller),
+            build_merge_neurons_response(
+                &source_neuron,
+                &target_neuron,
+                self.voting_power_economics(),
+                now,
+                *caller,
+            ),
         ))
     }
 
@@ -3137,7 +3143,13 @@ impl Governance {
 
         // Step 4: builds the response.
         Ok(ManageNeuronResponse::merge_response(
-            build_merge_neurons_response(&source_neuron, &target_neuron, self.voting_power_economics(), now, *caller),
+            build_merge_neurons_response(
+                &source_neuron,
+                &target_neuron,
+                self.voting_power_economics(),
+                now,
+                *caller,
+            ),
         ))
     }
 
@@ -3681,7 +3693,9 @@ impl Governance {
         requester: PrincipalId,
     ) -> Result<NeuronInfo, GovernanceError> {
         let now = self.env.now();
-        self.with_neuron(id, |neuron| neuron.get_neuron_info(self.voting_power_economics(), now, requester))
+        self.with_neuron(id, |neuron| {
+            neuron.get_neuron_info(self.voting_power_economics(), now, requester)
+        })
     }
 
     /// Returns the neuron info for a neuron identified by id or subaccount.
@@ -5155,7 +5169,8 @@ impl Governance {
     }
 
     pub fn voting_power_economics(&self) -> &VotingPowerEconomics {
-        let result = self.heap_data
+        let result = self
+            .heap_data
             .economics
             .as_ref()
             .and_then(|economics| economics.voting_power_economics.as_ref());
@@ -5163,7 +5178,10 @@ impl Governance {
         match result {
             Some(ok) => ok,
             None => {
-                println!("{}ERROR: Falling back to default VotingPowerEconomics.", LOG_PREFIX);
+                println!(
+                    "{}ERROR: Falling back to default VotingPowerEconomics.",
+                    LOG_PREFIX
+                );
                 &VotingPowerEconomics::DEFAULT
             }
         }

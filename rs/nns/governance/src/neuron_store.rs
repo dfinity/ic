@@ -411,7 +411,12 @@ impl NeuronStore {
         (
             self.heap_neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into_proto(&VotingPowerEconomics::DEFAULT, now_seconds)))
+                .map(|(id, neuron)| {
+                    (
+                        id,
+                        neuron.into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
+                    )
+                })
                 .collect(),
             heap_topic_followee_index_to_proto(self.topic_followee_index),
         )
@@ -460,13 +465,25 @@ impl NeuronStore {
         let mut stable_neurons = with_stable_neuron_store(|stable_store| {
             stable_store
                 .range_neurons(..)
-                .map(|neuron| (neuron.id().id, neuron.into_proto(&VotingPowerEconomics::DEFAULT, now_seconds)))
+                .map(|neuron| {
+                    (
+                        neuron.id().id,
+                        neuron.into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
+                    )
+                })
                 .collect::<BTreeMap<u64, NeuronProto>>()
         });
         let heap_neurons = self
             .heap_neurons
             .iter()
-            .map(|(id, neuron)| (*id, neuron.clone().into_proto(&VotingPowerEconomics::DEFAULT, now_seconds)))
+            .map(|(id, neuron)| {
+                (
+                    *id,
+                    neuron
+                        .clone()
+                        .into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
+                )
+            })
             .collect::<BTreeMap<u64, NeuronProto>>();
 
         stable_neurons.extend(heap_neurons);

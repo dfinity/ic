@@ -325,7 +325,8 @@ mod test {
                                       followees: Vec<u64>,
                                       vote: Vote| {
             let neuron = make_neuron(id, followees);
-            let deciding_voting_power = neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now);
+            let deciding_voting_power =
+                neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now);
             neuron_map.insert(id, neuron);
             ballots.insert(id, make_ballot(deciding_voting_power, vote));
         };
@@ -396,7 +397,9 @@ mod test {
         let deciding_voting_power = |neuron_id| {
             governance
                 .neuron_store
-                .with_neuron(&neuron_id, |n| n.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now))
+                .with_neuron(&neuron_id, |n| {
+                    n.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now)
+                })
                 .unwrap()
         };
         assert_eq!(
@@ -433,7 +436,8 @@ mod test {
                                       followees: Vec<u64>,
                                       vote: Vote| {
             let neuron = make_neuron(id, followees);
-            let deciding_voting_power = neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now);
+            let deciding_voting_power =
+                neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now);
             neuron_map.insert(id, neuron);
             ballots.insert(id, make_ballot(deciding_voting_power, vote));
         };
@@ -492,7 +496,9 @@ mod test {
         let deciding_voting_power = |neuron_id| {
             governance
                 .neuron_store
-                .with_neuron(&neuron_id, |n| n.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now))
+                .with_neuron(&neuron_id, |n| {
+                    n.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now)
+                })
                 .unwrap()
         };
         assert_eq!(
