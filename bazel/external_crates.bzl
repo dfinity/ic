@@ -428,6 +428,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "dashmap": crate.spec(
                 version = "^5.3.4",
             ),
+            "dfx-core": crate.spec(
+                version = "^0.1.0",
+            ),
             "dyn-clone": crate.spec(
                 version = "^1.0.14",
             ),
@@ -561,11 +564,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.18.11",
             ),
             "ic-agent": crate.spec(
-                version = "^0.37.1",
+                version = "^0.39",
                 features = [
-                    "experimental_sync_call",
-                    "hyper",
-                    "reqwest",
                     "pem",
                 ],
             ),
@@ -611,7 +611,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-http-gateway": crate.spec(
                 git = "https://github.com/dfinity/http-gateway",
-                tag = "0.1.0-b0",
+                tag = "0.1.0-b2",
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
