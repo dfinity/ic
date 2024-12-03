@@ -176,6 +176,20 @@ const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(1);
 // Once this amount of instructions is used by the
 // Governance::prune_some_following, it stops, saves where it is, schedules more
 // pruning later, and returns.
+//
+// Why this value seems to make sense:
+//
+// I think we can conservatively estimate that it takes 2 megainstructions to
+// pull a neuron from stable memory. If we assume 200 kiloneurons are in stable
+// memory, then 400 gigainstructions are needed to read all neurons in stable
+// memory. 400e9 instructions / 25e6 instructions per batch = 16e3 batches. If
+// we process 1 batch / s (see PRUNE_FOLLOWING_INTERVAL), then it would take
+// less than 4.5 hours to complete a full pass.
+//
+// This comes to 5.4 full passes per day. If each full pass uses 400
+// gigainstructions, then we use 2.16 terainstructions per day doing
+// prune_some_following. If we assume 1 terainstruction costs 1 XDR,
+// prune_some_following uses a couple of bucks worth of instructions each day.
 const MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS: u64 = 25_000_000;
 
 fn schedule_seeding(delay: Duration) {
