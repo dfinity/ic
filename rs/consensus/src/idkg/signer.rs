@@ -47,11 +47,10 @@ use super::utils::{build_signature_inputs, update_purge_height};
 
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
-#[allow(clippy::large_enum_variant)]
 enum CreateSigShareError {
     Ecdsa(ThresholdEcdsaCreateSigShareError),
     Schnorr(ThresholdSchnorrCreateSigShareError),
-    VetKd(VetKdKeyShareCreationError),
+    VetKd(Box<VetKdKeyShareCreationError>),
 }
 
 #[derive(Clone, Debug)]
