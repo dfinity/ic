@@ -69,7 +69,7 @@ fn format_mac_address(mac: &MacAddr6) -> String {
 
 pub fn calculate_deterministic_mac(
     mgmt_mac: &MacAddr6,
-    deployment: DeploymentEnvironment,
+    deployment_environment: DeploymentEnvironment,
     ip_version: IpVariant,
     node_type: NodeType,
 ) -> MacAddr6 {
@@ -77,7 +77,11 @@ pub fn calculate_deterministic_mac(
 
     // NOTE: In order to be backwards compatible with existing scripts, this
     // **MUST** have a newline.
-    let seed = format!("{}{}\n", format_mac_address(mgmt_mac), deployment);
+    let seed = format!(
+        "{}{}\n",
+        format_mac_address(mgmt_mac),
+        deployment_environment
+    );
 
     let hash = Sha256::hash(seed.as_bytes());
 
