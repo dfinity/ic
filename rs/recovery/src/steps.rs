@@ -649,7 +649,7 @@ impl Step for UploadAndRestartStep {
             mv_to_target.arg(upload_dir);
             exec_cmd(&mut mv_to_target)?;
             info!(self.logger, "Restarting replica...");
-            exec_cmd(&mut Command::new("bash").arg("-c").arg(cmd_replace_state))?;
+            exec_cmd(Command::new("bash").arg("-c").arg(cmd_replace_state))?;
         }
         Ok(())
     }
