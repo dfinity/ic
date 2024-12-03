@@ -21,7 +21,7 @@ Currently, the implementation has some limitations that restrict its generalizat
 | The library must implement https://en.wikipedia.org/wiki/Eventual_consistency[_eventual consistency_].  
 
 | **Multitenancy of applications**  
-| Allows multiple applications to safely use the library, ensuring isolation and uninterrupted operation for all.  
+| Allows multiple applications to safely use the library, ensuring isolation and uninterrupted operation between all applications.  
 | Must implement fair scheduling across peers to ensure resource allocation and isolation.  
 
 | **Operation in P2P networks with Byzantine peers**  
