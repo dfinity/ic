@@ -71,7 +71,7 @@ pub fn main() -> Result<()> {
                 mgmt_mac,
                 deployment_settings.deployment.name,
                 IpVariant::V6,
-                NodeType::SetupOS, /* 0xf corresponds to SetupOS */
+                NodeType::SetupOS,
             );
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
 

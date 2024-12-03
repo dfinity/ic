@@ -77,7 +77,7 @@ pub fn main() -> Result<()> {
                 mgmt_mac,
                 deployment_settings.deployment.name,
                 IpVariant::V6,
-                NodeType::HostOS, /* 0x0 corresponds to HostOS */
+                NodeType::HostOS,
             );
 
             generate_network_config(&network_info, &generated_mac, Path::new(&output_directory))
