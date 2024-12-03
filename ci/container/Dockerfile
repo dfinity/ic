@@ -51,8 +51,8 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
 # Install an older libtinfo for rules_haskell
 RUN mkdir libtinfo && \
     cd libtinfo && \
-    wget "http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb" && \
-    apt -yqq install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
+    wget "http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.4-2ubuntu0.1_amd64.deb" && \
+    apt -yqq install ./libtinfo5_6.4-2ubuntu0.1_amd64.deb && \
     cd .. && \
     rm -rf libtinfo
 
