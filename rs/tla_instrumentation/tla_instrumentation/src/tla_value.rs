@@ -254,6 +254,12 @@ impl ToTla for i32 {
     }
 }
 
+impl ToTla for CInt {
+    fn to_tla_value(&self) -> TlaValue {
+        TlaValue::Int(self.clone())
+    }
+}
+
 impl ToTla for Nat {
     fn to_tla_value(&self) -> TlaValue {
         TlaValue::Int(self.clone().into())
