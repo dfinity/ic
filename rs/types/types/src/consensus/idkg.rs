@@ -56,7 +56,6 @@ use super::vetkd::VetKdEncryptedKeyShare;
 pub mod common;
 pub mod ecdsa;
 pub mod schnorr;
-pub mod vetkd;
 
 /// For completed signature requests, we differentiate between those
 /// that have already been reported and those that have not. This is
