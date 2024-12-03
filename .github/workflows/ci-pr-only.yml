@@ -9,7 +9,7 @@ concurrency:
   # only triggered on PR, so head_ref will always be set
   group: ${{ github.workflow }}-${{ github.head_ref }}
   cancel-in-progress: true
-env: 
+env:
   CI_PROJECT_DIR: ${{ github.workspace }}
   MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
   ORG: ${{ github.repository_owner }}
@@ -65,6 +65,8 @@ jobs:
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
+    env:
+      CI_EVENT_NAME: ${{ github.event_name }}
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
