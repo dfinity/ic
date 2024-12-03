@@ -32,12 +32,13 @@ impl CallCanisters for Agent {
                 .with_arg(request_bytes)
                 .call()
                 .await?;
-            match request {
+            let (response, _cert) = match request {
                 ic_agent::agent::CallResponse::Response(response) => response,
                 ic_agent::agent::CallResponse::Poll(request_id) => {
                     self.wait(&request_id, canister_id).await?
                 }
-            }
+            };
+            response
         } else {
             self.query(&canister_id, request.method())
                 .with_arg(request_bytes)
