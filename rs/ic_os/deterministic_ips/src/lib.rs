@@ -59,14 +59,6 @@ pub enum IpVariant {
     V6,
 }
 
-fn format_mac_address(mac: &MacAddr6) -> String {
-    let bytes = mac.into_array();
-    format!(
-        "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
-    )
-}
-
 pub fn calculate_deterministic_mac(
     mgmt_mac: &MacAddr6,
     deployment_environment: DeploymentEnvironment,
@@ -79,7 +71,7 @@ pub fn calculate_deterministic_mac(
     // **MUST** have a newline.
     let seed = format!(
         "{}{}\n",
-        format_mac_address(mgmt_mac),
+        mgmt_mac.to_string().to_lowercase(),
         deployment_environment
     );
 
