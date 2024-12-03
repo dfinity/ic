@@ -189,7 +189,7 @@ fn should_create_state_machine_with_golden_nns_state() {
     let mut setup = Setup::new();
 
     // Verify ledger balance and allowance state
-    setup.verify_state(false);
+    setup.perform_upgrade_downgrade_testing(false);
     // Verify ledger, archives, and index block parity
     setup.verify_ledger_archive_index_block_parity();
 
@@ -199,7 +199,7 @@ fn should_create_state_machine_with_golden_nns_state() {
     setup.upgrade_to_master();
 
     // Verify ledger balance and allowance state
-    setup.verify_state(true);
+    setup.perform_upgrade_downgrade_testing(true);
     // Verify ledger, archives, and index block parity
     setup.verify_ledger_archive_index_block_parity();
 
@@ -208,20 +208,20 @@ fn should_create_state_machine_with_golden_nns_state() {
     // Verify ledger balance and allowance state
     // FIXME: This should be true, but currently the InMemoryLedger is not updated with the
     //  transactions generated in the previous step.
-    setup.verify_state(false);
+    setup.perform_upgrade_downgrade_testing(false);
 
     // Downgrade all the canisters to the mainnet version
     setup.downgrade_to_mainnet();
 
     // Verify ledger balance and allowance state
-    setup.verify_state(false);
+    setup.perform_upgrade_downgrade_testing(false);
     // Verify ledger, archives, and index block parity
     setup.verify_ledger_archive_index_block_parity();
 
     setup.perform_transactions();
 
     // Verify ledger balance and allowance state
-    setup.verify_state(false);
+    setup.perform_upgrade_downgrade_testing(false);
     // Verify ledger, archives, and index block parity
     setup.verify_ledger_archive_index_block_parity();
 }
@@ -295,7 +295,10 @@ impl Setup {
         println!("Time taken for index to sync: {:?}", start.elapsed());
     }
 
-    pub fn verify_state(&mut self, should_verify_balances_and_allowances: bool) {
+    pub fn perform_upgrade_downgrade_testing(
+        &mut self,
+        should_verify_balances_and_allowances: bool,
+    ) {
         self.previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
             &self.state_machine,
             LEDGER_CANISTER_ID,
