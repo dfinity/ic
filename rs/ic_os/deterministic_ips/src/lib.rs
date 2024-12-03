@@ -30,27 +30,34 @@ impl MacAddr6Ext for MacAddr6 {
         interface_id[6] = mac_octets[4];
         interface_id[7] = mac_octets[5];
 
-        // Prepare the prefix by appending '::' if necessary
-        let full_prefix = if prefix.ends_with("::") {
-            prefix.to_string()
-        } else {
-            format!("{}::", prefix)
-        };
-
-        // Parse the prefix into an Ipv6Addr
-        let prefix_addr = full_prefix
-            .parse::<Ipv6Addr>()
-            .map_err(|_| anyhow!("Invalid IPv6 prefix: {}", prefix))?;
-
-        // Extract the network prefix (first 64 bits)
-        let mut addr_octets = prefix_addr.octets();
+        let prefix_octets = prefix_octets(prefix)?;
 
         // Combine the prefix with the interface identifier
+        let mut addr_octets = [0; 16];
+        addr_octets[..8].copy_from_slice(&prefix_octets);
         addr_octets[8..].copy_from_slice(&interface_id);
 
         // Construct the full IPv6 address
         Ok(Ipv6Addr::from(addr_octets))
     }
+}
+
+// parse the octets by going through Ipv6Addr
+fn prefix_octets(prefix: &str) -> Result<[u8; 8]> {
+    // Prepare the prefix by appending '::' if necessary
+    let full_prefix = if prefix.contains("::") {
+        prefix.to_string()
+    } else {
+        format!("{}::", prefix)
+    };
+
+    // Parse the prefix into an Ipv6Addr
+    let prefix_addr = full_prefix
+        .parse::<Ipv6Addr>()
+        .map_err(|_| anyhow!("Invalid IPv6 prefix: {}", prefix))?;
+
+    // Extract the network prefix (first 64 bits)
+    Ok(prefix_addr.octets()[..8].try_into()?)
 }
 
 #[derive(Copy, Clone)]
