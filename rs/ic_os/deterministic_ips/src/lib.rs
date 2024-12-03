@@ -38,7 +38,7 @@ impl HwAddr {
         interface_id[7] = mac_octets[5];
 
         // Prepare the prefix by appending '::' if necessary
-        let full_prefix = if prefix.contains("::") || prefix.ends_with(':') {
+        let full_prefix = if prefix.ends_with("::") {
             prefix.to_string()
         } else {
             format!("{}::", prefix)
