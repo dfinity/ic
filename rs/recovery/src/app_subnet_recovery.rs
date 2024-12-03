@@ -1,8 +1,8 @@
 use crate::{
     cli::{
-        consent_given, consent_given_optional, print_height_info, read_optional,
-        read_optional_node_ids, read_optional_subnet_id, read_optional_upload_method,
-        read_optional_version, wait_for_confirmation,
+        consent_given, print_height_info, read_optional, read_optional_node_ids,
+        read_optional_subnet_id, read_optional_upload_method, read_optional_version,
+        wait_for_confirmation,
     },
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,

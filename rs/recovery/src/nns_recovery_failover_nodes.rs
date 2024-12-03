@@ -1,8 +1,8 @@
 use crate::{
     admin_helper::RegistryParams,
     cli::{
-        consent_given_optional, print_height_info, read_optional, read_optional_node_ids,
-        read_optional_upload_method, read_optional_version,
+        print_height_info, read_optional, read_optional_node_ids, read_optional_upload_method,
+        read_optional_version,
     },
     command_helper::pipe_all,
     error::{GracefulExpect, RecoveryError},

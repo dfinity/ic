@@ -1,8 +1,5 @@
 use crate::{
-    cli::{
-        consent_given_optional, print_height_info, read_optional, read_optional_upload_method,
-        read_optional_version,
-    },
+    cli::{print_height_info, read_optional, read_optional_upload_method, read_optional_version},
     error::{GracefulExpect, RecoveryError},
     file_sync_helper::create_dir,
     recovery_iterator::RecoveryIterator,

@@ -219,23 +219,6 @@ pub fn consent_given(logger: &Logger, question: &str) -> bool {
     }
 }
 
-/// Same as [`consent_given`], except it returns an optional bool. None is returned
-/// if the user passed an empty input.
-pub fn consent_given_optional(logger: &Logger, question: &str) -> Option<bool> {
-    info!(logger, "(Optional) {} [y/n] ", question);
-    loop {
-        let _ = stdout().flush();
-        let mut s = String::new();
-        stdin().read_line(&mut s).expect("Couldn't read user input");
-        match s.as_str() {
-            "y\n" | "Y\n" => return Some(true),
-            "n\n" | "N\n" => return Some(false),
-            "\n" => return None,
-            _ => continue,
-        }
-    }
-}
-
 /// Prints a question to the user and returns `true`
 /// if the user replied with a yes.
 pub fn wait_for_confirmation(logger: &Logger) {
