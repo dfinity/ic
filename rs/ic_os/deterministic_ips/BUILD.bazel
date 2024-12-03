@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_binary")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -9,8 +9,10 @@ rust_binary(
     deps = [
         # Keep sorted.
         ":deterministic_ips",
+        "//rs/ic_os/config_types",
         "@crate_index//:anyhow",
         "@crate_index//:clap",
+        "@crate_index//:macaddr",
     ],
 )
 
