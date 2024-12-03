@@ -114,7 +114,7 @@ impl DomainSeparator {
             DomainSeparator::IDkgTranscript => "ic-idkg-transcript-domain",
             DomainSeparator::EcdsaSigShare => "ic-threshold-ecdsa-sig-share-domain",
             DomainSeparator::SchnorrSigShare => "ic-threshold-schnorr-sig-share-domain",
-            DomainSeparator::VetKdShare => "ic-vet-kd-share-domain",
+            DomainSeparator::VetKdShare => "ic-vetkd-share-domain",
             DomainSeparator::IDkgComplaintContent => "ic-threshold-ecdsa-complaint-content-domain",
             DomainSeparator::SignedIDkgComplaint => "ic-threshold-ecdsa-complaint-domain",
             DomainSeparator::IDkgOpeningContent => "ic-threshold-ecdsa-opening-content-domain",

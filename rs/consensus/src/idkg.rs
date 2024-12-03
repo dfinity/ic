@@ -535,12 +535,9 @@ fn compute_bouncer(
                 BouncerValue::MaybeWantsLater
             }
         }
-        IDkgMessageId::VetKdShare(_, data) => {
-            if data.get_ref().height <= args.certified_height + Height::from(LOOK_AHEAD) {
-                BouncerValue::Wants
-            } else {
-                BouncerValue::MaybeWantsLater
-            }
+        IDkgMessageId::VetKdShare(_, _) => {
+            // TODO(CON-1424): Accept VetKd shares
+            BouncerValue::Unwanted
         }
         IDkgMessageId::Complaint(_, data) => {
             if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {

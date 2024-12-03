@@ -34,7 +34,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdSchnorrVerifySigShareError,
 };
 use ic_types::crypto::vetkd::{
-    VedKdKeyShareCreationError, VetKdKeyShareCombinationError, VetKdKeyShareVerificationError,
+    VetKdKeyShareCombinationError, VetKdKeyShareCreationError, VetKdKeyShareVerificationError,
 };
 use ic_types::messages::CallbackId;
 use ic_types::{Height, NodeId};
@@ -50,10 +50,12 @@ use super::utils::{build_signature_inputs, update_purge_height};
 enum CreateSigShareError {
     Ecdsa(ThresholdEcdsaCreateSigShareError),
     Schnorr(ThresholdSchnorrCreateSigShareError),
-    VetKd(VedKdKeyShareCreationError),
+    VetKd(VetKdKeyShareCreationError),
 }
 
 #[derive(Clone, Debug)]
+// TODO(CON-1421): Remove once all errors are in use
+#[allow(dead_code)]
 enum VerifySigShareError {
     Ecdsa(ThresholdEcdsaVerifySigShareError),
     Schnorr(ThresholdSchnorrVerifySigShareError),
@@ -73,6 +75,8 @@ impl VerifySigShareError {
 }
 
 #[derive(Clone, Debug)]
+// TODO(CON-1421): Remove once all errors are in use
+#[allow(dead_code)]
 enum CombineSigSharesError {
     Ecdsa(ThresholdEcdsaCombineSigSharesError),
     Schnorr(ThresholdSchnorrCombineSigSharesError),
@@ -430,7 +434,7 @@ impl ThresholdSignerImpl {
                 )
             }
             ThresholdSigInputs::VetKd(_inputs) => {
-                todo!("Call crypto endpoint to create a vet KD share");
+                todo!("CON-1421: Call crypto endpoint to create a VetKd share");
             }
         }
     }
@@ -470,7 +474,7 @@ impl ThresholdSignerImpl {
                 )
             }
             (ThresholdSigInputs::VetKd(_inputs), SigShare::VetKd(_share)) => {
-                todo!("Call crypto endpoint to verify a vet KD share")
+                todo!("CON-1421: Call crypto endpoint to verify VetKd share")
             }
             _ => Err(VerifySigShareError::ThresholdSchemeMismatch),
         };
@@ -705,14 +709,14 @@ impl<'a> ThresholdSignatureBuilderImpl<'a> {
                     )
             }
             ThresholdSigInputs::VetKd(_inputs) => {
-                // Collect the signature shares for the request.
+                // Collect the VetKd shares for the request.
                 let mut sig_shares = BTreeMap::new();
                 for (_, share) in self.idkg_pool.validated().vetkd_shares() {
                     if share.request_id == *request_id {
                         sig_shares.insert(share.signer_id, share.share.clone());
                     }
                 }
-                todo!("Call crypto endpoint to combine vet KD shares");
+                todo!("CON-1421: Call crypto endpoint to combine VetKd shares");
             }
         };
         stats.record_sig_share_aggregation(request_id, start.elapsed());

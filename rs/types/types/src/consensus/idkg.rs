@@ -1020,7 +1020,7 @@ pub fn ecdsa_sig_share_prefix(
     request_id: &RequestId,
     sig_share_node_id: &NodeId,
 ) -> IDkgPrefixOf<EcdsaSigShare> {
-    // Group_tag: callback, Meta info: <sig share sender>
+    // Group_tag: callback Id, Meta info: <sig share sender>
     let mut hasher = Sha256::new();
     sig_share_node_id.hash(&mut hasher);
 
@@ -1478,16 +1478,16 @@ impl Display for SchnorrSigShare {
     }
 }
 
-/// The VetKd signature share
+/// The VetKd share
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct VetKdShare {
-    /// The node that signed the share
+    /// The node that created the share
     pub signer_id: NodeId,
 
-    /// The request this signature share belongs to
+    /// The request this share belongs to
     pub request_id: RequestId,
 
-    /// The signature share
+    /// The encrypted key share
     pub share: VetKdEncryptedKeyShare,
 }
 

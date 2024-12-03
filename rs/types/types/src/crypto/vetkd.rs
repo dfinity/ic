@@ -73,13 +73,13 @@ impl std::fmt::Debug for VetKdEncryptedKey {
 impl_display_using_debug!(VetKdEncryptedKey);
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub enum VedKdKeyShareCreationError {
+pub enum VetKdKeyShareCreationError {
     ThresholdSigDataNotFound(ThresholdSigDataNotFoundError),
     SecretKeyNotFound { dkg_id: NiDkgId, key_id: String },
     KeyIdInstantiationError(String),
     TransientInternalError(String),
 }
-impl_display_using_debug!(VedKdKeyShareCreationError);
+impl_display_using_debug!(VetKdKeyShareCreationError);
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum VetKdKeyShareVerificationError {

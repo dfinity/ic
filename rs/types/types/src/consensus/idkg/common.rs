@@ -1114,20 +1114,6 @@ pub enum ThresholdSigInputsRef {
 }
 
 impl ThresholdSigInputsRef {
-    pub fn pre_signature(&self) -> PreSignatureRef {
-        match self {
-            ThresholdSigInputsRef::Ecdsa(inputs) => {
-                PreSignatureRef::Ecdsa(inputs.presig_quadruple_ref.clone())
-            }
-            ThresholdSigInputsRef::Schnorr(inputs) => {
-                PreSignatureRef::Schnorr(inputs.presig_transcript_ref.clone())
-            }
-            // TODO: this function is actually only used by tests, so move it into
-            // test-only scope. Then panicking should be fine.
-            _ => panic!(),
-        }
-    }
-
     pub fn caller(&self) -> PrincipalId {
         match self {
             ThresholdSigInputsRef::Ecdsa(inputs) => inputs.derivation_path.caller,
