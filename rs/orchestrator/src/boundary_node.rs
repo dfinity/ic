@@ -4,6 +4,7 @@ use crate::{
     process_manager::{Process, ProcessManager},
     registry_helper::RegistryHelper,
 };
+use ic_config::crypto::CryptoConfig;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{NodeId, ReplicaVersion};
 use std::{
@@ -46,6 +47,7 @@ pub(crate) struct BoundaryNodeManager {
     _metrics: Arc<OrchestratorMetrics>,
     process: Arc<Mutex<ProcessManager<BoundaryNodeProcess>>>,
     ic_binary_dir: PathBuf,
+    crypto_config: CryptoConfig,
     version: ReplicaVersion,
     logger: ReplicaLogger,
     node_id: NodeId,
@@ -59,6 +61,7 @@ impl BoundaryNodeManager {
         version: ReplicaVersion,
         node_id: NodeId,
         ic_binary_dir: PathBuf,
+        crypto_config: CryptoConfig,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
@@ -68,6 +71,7 @@ impl BoundaryNodeManager {
                 logger.clone().inner_logger.root,
             ))),
             ic_binary_dir,
+            crypto_config,
             version,
             logger,
             node_id,
@@ -164,7 +168,14 @@ impl BoundaryNodeManager {
             OrchestratorError::IoError("unable to read ic-boundary environment variables".into(), e)
         })?;
 
-        let args = vec![format!("--tls-hostname={}", domain_name)];
+        let args = vec![
+            format!("--tls-hostname={}", domain_name),
+            format!(
+                "--crypto-config={}",
+                serde_json::to_string(&self.crypto_config)
+                    .map_err(OrchestratorError::SerializeCryptoConfigError)?
+            ),
+        ];
 
         process
             .start(BoundaryNodeProcess {

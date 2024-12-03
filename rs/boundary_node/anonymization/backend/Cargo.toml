@@ -1,11 +1,11 @@
 [package]
-name = "anonymization-backend"
+name = "anonymization_backend"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "anonymization-backend"
-path = "src/lib.rs"
+name = "anonymization_backend"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
