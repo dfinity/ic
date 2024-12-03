@@ -35,6 +35,8 @@ rust_library(
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
+        "//rs/test_utilities",
+        "//rs/test_utilities/types",
         "//rs/types/base_types",
         "//rs/types/error_types",
         "//rs/types/management_canister_types",

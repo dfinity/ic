@@ -16,6 +16,9 @@ use ic_types::batch::Batch;
 use ic_types::{ExecutionRound, NumBytes};
 use std::time::Instant;
 
+use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
+use ic_types::ingress::IngressStatus;
+
 #[cfg(test)]
 mod tests;
 
@@ -176,7 +179,7 @@ impl StateMachine for StateMachineImpl {
             next_checkpoint_round: ExecutionRound::from(b.next_checkpoint_height.get()),
             current_interval_length: ExecutionRound::from(b.current_interval_length.get()),
         });
-        let state_after_execution = self.scheduler.execute_round(
+        let mut state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
             batch.chain_key_subnet_public_keys,
@@ -187,6 +190,23 @@ impl StateMachine for StateMachineImpl {
             execution_round_type,
             registry_settings,
         );
+
+        if batch.batch_number.get() < 6000 {
+            for i in 0..400 {
+                state_after_execution.set_ingress_status(
+                    message_test_id(batch.batch_number.get() * 400 + i),
+                    IngressStatus::Known {
+                        receiver: canister_test_id(i).get(),
+                        user_id: user_test_id(i),
+                        time: batch.time,
+                        state: ic_types::ingress::IngressState::Completed(
+                            ic_types::ingress::WasmResult::Reply(vec![1_u8; 2 * 1024 * 1024]),
+                        ),
+                    },
+                    NumBytes::from(4 * 1024 * 1024 * 1024),
+                );
+            }
+        }
 
         if !state_after_execution.consensus_queue.is_empty() {
             fatal!(
