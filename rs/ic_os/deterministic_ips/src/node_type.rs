@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Error};
 use std::str::FromStr;
 
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub enum NodeType {
     SetupOS,
