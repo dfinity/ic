@@ -318,6 +318,7 @@ pub fn call_raw(
     on_cleanup: Option<fn(ptr: *mut ())>,
     env: *mut (),
     funds: Funds,
+    timeout_seconds: u32,
 ) -> i32 {
     unsafe {
         ic0::call_new(
@@ -337,6 +338,7 @@ pub fn call_raw(
         if let Some(on_cleanup) = on_cleanup {
             ic0::call_on_cleanup(on_cleanup as usize, env as u32);
         }
+        ic0::call_with_best_effort_response(timeout_seconds);
         ic0::call_perform()
     }
 }
@@ -370,6 +372,7 @@ pub fn call_with_callbacks(
         None,
         env as *mut (),
         Funds::zero(),
+        0,
     );
 
     if err_code != 0 {
@@ -422,6 +425,7 @@ pub fn call_bytes(
         None,
         future_ptr as *mut (),
         funds,
+        0,
     );
     // 0 is a special error code, meaning call_perform call succeeded
     if err_code != 0 {
@@ -488,6 +492,7 @@ pub fn call_bytes_with_cleanup(
         Some(cleanup),
         future_ptr as *mut (),
         funds,
+        0,
     );
     // 0 is a special error code, meaning call_perform call succeeded
     if err_code != 0 {
@@ -556,7 +561,7 @@ where
         no_op,
         None,
         std::ptr::null_mut(),
-        funds,
+        funds,0
     ) {
         0 => Ok(()),
         err_code =>

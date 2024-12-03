@@ -65,6 +65,7 @@ pub struct Config {
     subnet_to_subnet_rate: usize,
     canisters_per_subnet: usize,
     canister_to_subnet_rate: usize,
+    timeout_seconds: u32,
     with_prometheus: bool,
 }
 
@@ -113,6 +114,7 @@ impl Config {
             subnet_to_subnet_rate,
             canisters_per_subnet,
             canister_to_subnet_rate,
+            timeout_seconds: 0,
             with_prometheus: false,
         }
     }
@@ -120,6 +122,12 @@ impl Config {
     pub fn with_prometheus(self) -> Self {
         let mut config = self.clone();
         config.with_prometheus = true;
+        config
+    }
+
+    pub fn with_best_effort_response(self, timeout_seconds: u32) -> Self {
+        let mut config = self.clone();
+        config.timeout_seconds = timeout_seconds;
         config
     }
 
@@ -228,6 +236,7 @@ pub async fn deploy_and_start<'a, 'b>(
         &canisters,
         config.payload_size_bytes,
         config.canister_to_subnet_rate as u64,
+        config.timeout_seconds,
     )
     .await;
     let msgs_per_round =

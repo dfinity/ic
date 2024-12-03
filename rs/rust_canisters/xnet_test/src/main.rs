@@ -33,6 +33,9 @@ thread_local! {
     /// Pad requests AND responses to this size (in bytes) if smaller.
     static PAYLOAD_SIZE: RefCell<u64> = const { RefCell::new(1024) };
 
+    /// Timeout to set on requests. Zero for guaranteed response.
+    static TIMEOUT_SECONDS: RefCell<u32> = const { RefCell::new(0) };
+
     /// State of the messaging that we use to check invariants (e.g., sequence
     /// numbers).
     static STATE: RefCell<MessagingState> = RefCell::new(Default::default());
@@ -126,6 +129,12 @@ fn on_reply(_env: *mut ()) {
 
 /// Callback for handling reject responses from "handle_request".
 fn on_reject(_env: *mut ()) {
+    log(&format!(
+        "{} call rejected with {}: {}",
+        time_nanos() / 1_000_000,
+        api::reject_code(),
+        api::reject_message()
+    ));
     METRICS.with(|m| m.borrow_mut().reject_responses += 1);
 }
 
@@ -165,8 +174,8 @@ fn log(message: &str) {
 #[export_name = "canister_update start"]
 fn start() {
     dfn_core::printer::hook();
-    let (network_topology, rate, payload_size) =
-        candid::Decode!(&api::arg_data()[..], NetworkTopology, u64, u64)
+    let (network_topology, rate, payload_size, timeout_seconds) =
+        candid::Decode!(&api::arg_data()[..], NetworkTopology, u64, u64, u32)
             .expect("failed to decode subnet canister ids");
 
     NETWORK_TOPOLOGY.with(move |canisters| {
@@ -175,6 +184,7 @@ fn start() {
 
     PER_SUBNET_RATE.with(|r| *r.borrow_mut() = rate);
     PAYLOAD_SIZE.with(|r| *r.borrow_mut() = payload_size);
+    TIMEOUT_SECONDS.with(|r| *r.borrow_mut() = timeout_seconds);
 
     RUNNING.with(|r| *r.borrow_mut() = true);
 
@@ -196,6 +206,7 @@ fn fanout() {
 
     let network_topology =
         NETWORK_TOPOLOGY.with(|network_topology| network_topology.borrow().clone());
+    let timeout_seconds = TIMEOUT_SECONDS.with(|p| *p.borrow());
 
     for canisters in network_topology {
         if canisters.is_empty() {
@@ -227,6 +238,7 @@ fn fanout() {
                 None,
                 std::ptr::null_mut(),
                 api::Funds::zero(),
+                timeout_seconds,
             );
 
             if err_code != 0 {
@@ -278,6 +290,7 @@ fn return_cycles() {
         api::Funds {
             cycles: cycle_refund,
         },
+        0,
     );
 
     candid_reply(&"ok");

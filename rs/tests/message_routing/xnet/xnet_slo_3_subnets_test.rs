@@ -6,14 +6,16 @@ use xnet_slo_test_lib::Config;
 
 const SUBNETS: usize = 3;
 const NODES_PER_SUBNET: usize = 4;
-const RUNTIME: Duration = Duration::from_secs(600);
+const RUNTIME: Duration = Duration::from_secs(60);
 const REQUEST_RATE: usize = 10;
+const TIMEOUT_SECONDS: u32 = 3;
 
 const PER_TASK_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
 
 fn main() -> Result<()> {
-    let config = Config::new(SUBNETS, NODES_PER_SUBNET, RUNTIME, REQUEST_RATE);
+    let config = Config::new(SUBNETS, NODES_PER_SUBNET, RUNTIME, REQUEST_RATE)
+        .with_best_effort_response(TIMEOUT_SECONDS);
     let test = config.clone().test();
     SystemTestGroup::new()
         .with_setup(config.build())
