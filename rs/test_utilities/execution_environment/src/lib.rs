@@ -2230,7 +2230,7 @@ impl ExecutionTestBuilder {
                 state
                     .metadata
                     .network_topology
-                    .chain_key_signing_subnets
+                    .chain_key_enabled_subnets
                     .insert(key_id.clone(), vec![self.own_subnet_id]);
             }
             state

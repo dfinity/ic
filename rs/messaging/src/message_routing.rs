@@ -950,7 +950,7 @@ impl BatchProcessorImpl {
             .map_err(|err| registry_error("NNS subnet ID", None, err))?
             .ok_or_else(|| not_found_error("NNS subnet ID", None))?;
 
-        let chain_key_signing_subnets = self
+        let chain_key_enabled_subnets = self
             .registry
             .get_chain_key_signing_subnets(registry_version)
             .map_err(|err| registry_error("chain key signing subnets", None, err))?
@@ -961,7 +961,7 @@ impl BatchProcessorImpl {
             routing_table: Arc::new(routing_table),
             nns_subnet_id,
             canister_migrations: Arc::new(canister_migrations),
-            chain_key_signing_subnets,
+            chain_key_enabled_subnets,
             bitcoin_testnet_canister_id: self.bitcoin_config.testnet_canister_id,
             bitcoin_mainnet_canister_id: self.bitcoin_config.mainnet_canister_id,
         })

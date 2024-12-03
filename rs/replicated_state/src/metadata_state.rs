@@ -193,7 +193,7 @@ pub struct NetworkTopology {
 
     /// Mapping from master public key_id to a list of subnets which can sign with the
     /// given key. Keys without any signing subnets are not included in the map.
-    pub chain_key_signing_subnets: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
+    pub chain_key_enabled_subnets: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
 
     /// The ID of the canister to forward bitcoin testnet requests to.
     pub bitcoin_testnet_canister_id: Option<CanisterId>,
@@ -224,7 +224,7 @@ impl Default for NetworkTopology {
             routing_table: Default::default(),
             canister_migrations: Default::default(),
             nns_subnet_id: SubnetId::new(PrincipalId::new_anonymous()),
-            chain_key_signing_subnets: Default::default(),
+            chain_key_enabled_subnets: Default::default(),
             bitcoin_testnet_canister_id: None,
             bitcoin_mainnet_canister_id: None,
         }
@@ -233,8 +233,8 @@ impl Default for NetworkTopology {
 
 impl NetworkTopology {
     /// Returns a list of subnets where the chain key feature is enabled.
-    pub fn chain_key_signing_subnets(&self, key_id: &MasterPublicKeyId) -> &[SubnetId] {
-        self.chain_key_signing_subnets
+    pub fn chain_key_enabled_subnets(&self, key_id: &MasterPublicKeyId) -> &[SubnetId] {
+        self.chain_key_enabled_subnets
             .get(key_id)
             .map_or(&[], |ids| &ids[..])
     }
@@ -269,8 +269,8 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                 Some(c) => vec![pb_types::CanisterId::from(c)],
                 None => vec![],
             },
-            chain_key_signing_subnets: item
-                .chain_key_signing_subnets
+            chain_key_enabled_subnets: item
+                .chain_key_enabled_subnets
                 .iter()
                 .map(|(key_id, subnet_ids)| {
                     let subnet_ids = subnet_ids
@@ -306,13 +306,13 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             "NetworkTopology::nns_subnet_id",
         )?)?;
 
-        let mut chain_key_signing_subnets = BTreeMap::new();
-        for entry in item.chain_key_signing_subnets {
+        let mut chain_key_enabled_subnets = BTreeMap::new();
+        for entry in item.chain_key_enabled_subnets {
             let mut subnet_ids = vec![];
             for subnet_id in entry.subnet_ids {
                 subnet_ids.push(subnet_id_try_from_protobuf(subnet_id)?);
             }
-            chain_key_signing_subnets.insert(
+            chain_key_enabled_subnets.insert(
                 try_from_option_field(entry.key_id, "ChainKeySubnetEntry::key_id")?,
                 subnet_ids,
             );
@@ -343,7 +343,7 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
                 .unwrap_or_default()
                 .into(),
             nns_subnet_id,
-            chain_key_signing_subnets,
+            chain_key_enabled_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
         })

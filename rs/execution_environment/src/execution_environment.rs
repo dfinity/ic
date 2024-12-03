@@ -2752,7 +2752,7 @@ impl ExecutionEnvironment {
 
         // Check if signing is enabled.
         if !topology
-            .chain_key_signing_subnets(&threshold_key)
+            .chain_key_enabled_subnets(&threshold_key)
             .contains(&state.metadata.own_subnet_id)
         {
             return Err(UserError::new(

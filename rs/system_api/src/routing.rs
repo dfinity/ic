@@ -337,7 +337,7 @@ fn route_chain_key_message(
                     match chain_key_subnet_kind {
                         ChainKeySubnetKind::HoldsEnabledKey => {
                             if network_topology
-                                .chain_key_signing_subnets(key_id)
+                                .chain_key_enabled_subnets(key_id)
                                 .contains(subnet_id)
                             {
                                 Ok((*subnet_id).get())
@@ -362,14 +362,14 @@ fn route_chain_key_message(
         },
         None => {
             // If some subnet is enabled to sign for the key we can immediately return it.
-            if let Some(subnet_id) = network_topology.chain_key_signing_subnets(key_id).first() {
+            if let Some(subnet_id) = network_topology.chain_key_enabled_subnets(key_id).first() {
                 return Ok((*subnet_id).get());
             }
             // Otherwise either return an error, or look through all subnets to
             // find one with the key if signing isn't required.
             match chain_key_subnet_kind {
                 ChainKeySubnetKind::HoldsEnabledKey => {
-                    let keys = format_keys(network_topology.chain_key_signing_subnets.keys());
+                    let keys = format_keys(network_topology.chain_key_enabled_subnets.keys());
                     Err(ResolveDestinationError::ChainKeyError(format!(
                         "Requested unknown or signing disabled threshold key: {}, existing keys with signing enabled: {}",
                         key_id, keys
@@ -475,7 +475,7 @@ mod tests {
         let subnet_id0 = subnet_test_id(0);
         NetworkTopology {
             // Only subnet 0 can sign with the first key.
-            chain_key_signing_subnets: btreemap! {
+            chain_key_enabled_subnets: btreemap! {
                 key_id1.clone() => vec![subnet_id0],
             },
             subnets: btreemap! {
@@ -846,7 +846,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_chain_key_sign() {
+    fn resolve_chain_key_request() {
         for (network_topology, method, payload) in [
             (
                 network_with_ecdsa_subnets(),
@@ -878,7 +878,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_chain_key_sign_error() {
+    fn resolve_chain_key_request_error() {
         for (method, payload, master_key_id) in [
             (
                 Ic00Method::SignWithECDSA,

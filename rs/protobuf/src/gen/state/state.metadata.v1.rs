@@ -63,7 +63,7 @@ pub struct NetworkTopology {
     pub bitcoin_mainnet_canister_ids:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(message, repeated, tag = "8")]
-    pub chain_key_signing_subnets: ::prost::alloc::vec::Vec<ChainKeySubnetEntry>,
+    pub chain_key_enabled_subnets: ::prost::alloc::vec::Vec<ChainKeySubnetEntry>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetupInitialDkgContext {
