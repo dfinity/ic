@@ -1107,6 +1107,7 @@ fn err_schnorr(err: ThresholdSchnorrSigInputsError) -> ThresholdSigInputsResult 
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum ThresholdSigInputsRef {
     Ecdsa(ThresholdEcdsaSigInputsRef),
     Schnorr(ThresholdSchnorrSigInputsRef),
