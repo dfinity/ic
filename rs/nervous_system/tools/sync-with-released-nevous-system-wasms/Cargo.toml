@@ -24,5 +24,6 @@ ic-nns-common = { path = "../../../nns/common" }
 ic-nns-constants = { path = "../../../nns/constants" }
 rgb = "0.8.37"
 serde = { workspace = true }
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

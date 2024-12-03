@@ -50,4 +50,66 @@ pub struct NodeRecord {
     /// If a Node is to be converted into the ApiBoundaryNode, the domain field should be set.
     #[prost(string, optional, tag = "19")]
     pub domain: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(enumeration = "NodeRewardType", optional, tag = "20")]
+    pub node_reward_type: ::core::option::Option<i32>,
+}
+/// The type of the node.
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum NodeRewardType {
+    Unspecified = 0,
+    /// type0
+    Type0 = 1,
+    /// type1
+    Type1 = 2,
+    /// type2
+    Type2 = 3,
+    /// type3
+    Type3 = 4,
+    /// type3.1
+    Type3dot1 = 5,
+    /// type1.1
+    Type1dot1 = 6,
+}
+impl NodeRewardType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "NODE_REWARD_TYPE_UNSPECIFIED",
+            Self::Type0 => "NODE_REWARD_TYPE_TYPE0",
+            Self::Type1 => "NODE_REWARD_TYPE_TYPE1",
+            Self::Type2 => "NODE_REWARD_TYPE_TYPE2",
+            Self::Type3 => "NODE_REWARD_TYPE_TYPE3",
+            Self::Type3dot1 => "NODE_REWARD_TYPE_TYPE3DOT1",
+            Self::Type1dot1 => "NODE_REWARD_TYPE_TYPE1DOT1",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "NODE_REWARD_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "NODE_REWARD_TYPE_TYPE0" => Some(Self::Type0),
+            "NODE_REWARD_TYPE_TYPE1" => Some(Self::Type1),
+            "NODE_REWARD_TYPE_TYPE2" => Some(Self::Type2),
+            "NODE_REWARD_TYPE_TYPE3" => Some(Self::Type3),
+            "NODE_REWARD_TYPE_TYPE3DOT1" => Some(Self::Type3dot1),
+            "NODE_REWARD_TYPE_TYPE1DOT1" => Some(Self::Type1dot1),
+            _ => None,
+        }
+    }
 }

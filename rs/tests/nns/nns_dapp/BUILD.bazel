@@ -1,0 +1,23 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "nns_dapp",
+    testonly = True,
+    srcs = ["nns_dapp.rs"],
+    crate_name = "nns_dapp",
+    deps = [
+        # Keep sorted.
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/ledger_suite/icrc1/ledger",
+        "//rs/nns/constants",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+    ],
+)

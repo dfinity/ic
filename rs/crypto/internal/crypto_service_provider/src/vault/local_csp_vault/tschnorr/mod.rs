@@ -6,13 +6,13 @@ use crate::vault::api::{
 };
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     create_bip340_signature_share, create_ed25519_signature_share, DerivationPath,
     IDkgTranscriptInternal, ThresholdBip340GenerateSigShareInternalError,
     ThresholdEd25519GenerateSigShareInternalError,
 };
-use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::Randomness;
 use rand::{CryptoRng, Rng};
 
@@ -26,6 +26,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         &self,
         extended_derivation_path: ExtendedDerivationPath,
         message: Vec<u8>,
+        taproot_tree_root: Option<Vec<u8>>,
         nonce: Randomness,
         key_raw: IDkgTranscriptInternalBytes,
         presig_raw: IDkgTranscriptInternalBytes,
@@ -54,6 +55,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 let sig_share = create_bip340_signature_share(
                     &derivation_path,
                     &message[..],
+                    taproot_tree_root.as_deref(),
                     nonce,
                     &key_transcript,
                     &presig_transcript,

@@ -27,6 +27,13 @@ type DefiniteCanisterSettings = record {
   memory_allocation : nat;
   compute_allocation : nat;
   reserved_cycles_limit : nat;
+  log_visibility: LogVisibility;
+  wasm_memory_limit : nat;
+};
+
+type LogVisibility = variant {
+    controllers;
+    public;
 };
 
 type RetrieveBtcArgs = record {
@@ -92,11 +99,9 @@ type RetrieveBtcOk = record {
 // The result of an [update_balance] call.
 type UtxoStatus = variant {
     // The minter ignored this UTXO because UTXO's value is too small to pay
-    // the KYT fees. This state is final, retrying [update_balance] call will
-    // have no effect on this UTXO.
+    // the KYT fees.
     ValueTooSmall : Utxo;
-    // The KYT provider considered this UTXO to be tainted. This UTXO state is
-    // final, retrying [update_balance] call will have no effect on this UTXO.
+    // The KYT provider considered this UTXO to be tainted.
     Tainted : Utxo;
     // The UTXO passed the KYT check, but the minter failed to mint ckBTC
     // because the Ledger was unavailable. Retrying the [update_balance] call
@@ -300,6 +305,8 @@ type BitcoinAddress = variant {
 
 type MinterInfo = record {
     min_confirmations : nat32;
+    // This fee is based on the `retrieve_btc_min_amount` setting during canister
+    // initialization or upgrades, but may vary according to current network fees.
     retrieve_btc_min_amount : nat64;
     kyt_fee : nat64;
 };
@@ -310,6 +317,14 @@ type ReimbursementReason = variant {
         kyt_fee : nat64;
         kyt_provider: principal;
     };
+};
+
+type SuspendedReason = variant {
+    // The minter ignored this UTXO because UTXO's value is too small to pay
+    // the KYT fees.
+    ValueTooSmall;
+    // The KYT provider considered this UTXO to be tainted.
+    Quarantined;
 };
 
 type Event = variant {
@@ -352,7 +367,12 @@ type Event = variant {
         clean : bool;
         kyt_provider : opt principal;
     };
+    checked_utxo_v2 : record {
+        utxo : Utxo;
+        account : Account;
+    };
     ignored_utxo : record { utxo: Utxo; };
+    suspended_utxo : record { utxo: Utxo; account: Account; reason: SuspendedReason };
     retrieve_btc_kyt_failed : record {
         address : text;
         amount : nat64;
@@ -453,7 +473,7 @@ service : (minter_arg : MinterArg) -> {
 
     /// Returns the status of a withdrawal request request using the RetrieveBtcStatusV2 type.
     retrieve_btc_status_v2 : (record { block_index : nat64 }) -> (RetrieveBtcStatusV2) query;
-    
+
     // Returns the withdrawal statues by account.
     //
     // # Note

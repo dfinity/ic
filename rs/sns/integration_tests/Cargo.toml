@@ -38,6 +38,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-sns-governance = { path = "../governance" }
 ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }
+ic-nns-test-utils-golden-nns-state = { path = "../../nns/test_utils/golden_nns_state" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 maplit = "1.0.2"
@@ -77,7 +78,7 @@ lazy_static = { workspace = true }
 num-traits = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 pretty_assertions = { workspace = true }
-rust_decimal = "1.25"
-rust_decimal_macros = "1.25"
+rust_decimal = "1.36.0"
+rust_decimal_macros = "1.36.0"
 tokio = { workspace = true }
 wat = { workspace = true }

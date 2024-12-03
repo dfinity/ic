@@ -2,8 +2,9 @@
 
 use super::{
     eventlog::Event, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, RetrieveBtcRequest,
-    SubmittedBtcTransaction, UtxoCheckStatus,
+    SubmittedBtcTransaction, SuspendedReason,
 };
+use crate::state::invariants::CheckInvariantsImpl;
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit};
 use crate::storage::record_event;
 use crate::ReimbursementReason;
@@ -38,7 +39,7 @@ pub fn add_utxos(
         utxos: utxos.clone(),
     });
 
-    state.add_utxos(account, utxos);
+    state.add_utxos::<CheckInvariantsImpl>(account, utxos);
 }
 
 pub fn remove_retrieve_btc_request(state: &mut CkBtcMinterState, request: RetrieveBtcRequest) {
@@ -70,25 +71,37 @@ pub fn confirm_transaction(state: &mut CkBtcMinterState, txid: &Txid) {
     state.finalize_transaction(txid);
 }
 
-pub fn mark_utxo_checked(
-    state: &mut CkBtcMinterState,
-    utxo: &Utxo,
-    uuid: String,
-    status: UtxoCheckStatus,
-    kyt_provider: Principal,
-) {
-    record_event(&Event::CheckedUtxo {
+pub fn mark_utxo_checked(state: &mut CkBtcMinterState, utxo: Utxo, account: Account) {
+    record_event(&Event::CheckedUtxoV2 {
         utxo: utxo.clone(),
-        uuid: uuid.clone(),
-        clean: status.is_clean(),
-        kyt_provider: Some(kyt_provider),
+        account,
     });
-    state.mark_utxo_checked(utxo.clone(), uuid, status, kyt_provider);
+    state.mark_utxo_checked_v2(utxo, &account);
 }
 
-pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo) {
-    record_event(&Event::IgnoredUtxo { utxo: utxo.clone() });
-    state.ignore_utxo(utxo);
+pub fn quarantine_utxo(state: &mut CkBtcMinterState, utxo: Utxo, account: Account) {
+    discard_utxo(state, utxo, account, SuspendedReason::Quarantined);
+}
+
+pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo, account: Account) {
+    discard_utxo(state, utxo, account, SuspendedReason::ValueTooSmall);
+}
+
+fn discard_utxo(
+    state: &mut CkBtcMinterState,
+    utxo: Utxo,
+    account: Account,
+    reason: SuspendedReason,
+) {
+    // ignored UTXOs are periodically re-evaluated and should not trigger
+    // an event if they are still ignored.
+    if state.suspend_utxo(utxo.clone(), account, reason) {
+        record_event(&Event::SuspendedUtxo {
+            utxo,
+            account,
+            reason,
+        })
+    }
 }
 
 pub fn replace_transaction(
@@ -123,26 +136,6 @@ pub fn distributed_kyt_fee(
         block_index,
     });
     state.distribute_kyt_fee(kyt_provider, amount)
-}
-
-pub fn retrieve_btc_kyt_failed(
-    state: &mut CkBtcMinterState,
-    owner: Principal,
-    address: String,
-    amount: u64,
-    kyt_provider: Principal,
-    uuid: String,
-    block_index: u64,
-) {
-    record_event(&Event::RetrieveBtcKytFailed {
-        owner,
-        address,
-        amount,
-        kyt_provider,
-        uuid,
-        block_index,
-    });
-    *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;
 }
 
 pub fn schedule_deposit_reimbursement(

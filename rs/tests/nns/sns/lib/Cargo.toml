@@ -1,0 +1,42 @@
+[package]
+name = "sns_system_test_lib"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../../../types/base_types" }
+ic-canister-client = { path = "../../../../canister_client" }
+ic-icrc1-test-utils = { path = "../../../../ledger_suite/icrc1/test_utils" }
+ic-nns-common = { path = "../../../../nns/common" }
+ic-nns-governance-api = { path = "../../../../nns/governance/api" }
+ic-system-test-driver = { path = "../../../driver" }
+icp-ledger = { path = "../../../../ledger_suite/icp" }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+rosetta-core = { path = "../../../../rosetta-api/common/rosetta_core" }
+anyhow = { workspace = true }
+ic-registry-subnet-type = { path = "../../../../registry/subnet_type" }
+ic-sns-swap = { path = "../../../../sns/swap" }
+ic-utils = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
+ic-nervous-system-common-test-keys = { path = "../../../../nervous_system/common/test_keys" }
+ic-nervous-system-proto = { path = "../../../../nervous_system/proto" }
+tokio = { workspace = true }
+ic-nns-constants = { path = "../../../../nns/constants" }
+ic-sns-governance = { path = "../../../../sns/governance" }
+ic-canister-client-sender = { path = "../../../../canister_client/sender" }
+ic-rosetta-test-utils = { path = "../../../../rosetta-api/icp/test_utils" }
+ic-ledger-core = { path = "../../../../ledger_suite/common/ledger_core" }
+ic-nervous-system-common = { path = "../../../../nervous_system/common" }
+ic-types = { path = "../../../../types/types" }
+ic-universal-canister = { path = "../../../../universal_canister/lib" }
+icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
+ic_consensus_system_test_utils = { path = "../../../consensus/utils" }
+icrc-ledger-agent = { path = "../../../../../packages/icrc-ledger-agent" }

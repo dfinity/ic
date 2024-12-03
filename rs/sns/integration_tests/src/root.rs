@@ -1,6 +1,6 @@
 use candid::{Decode, Encode};
 use canister_test::Project;
-use dfn_candid::{candid, candid_one};
+use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_management_canister_types::CanisterInstallMode;
@@ -43,6 +43,7 @@ fn test_get_status() {
                 archive_canister_ids: vec![],
                 index_canister_id: Some(PrincipalId::new_user_test_id(45)),
                 testflight: false,
+                timers: None,
             },
         )
         .await;
@@ -285,7 +286,6 @@ fn test_root_restarts_governance_on_stop_canister_timeout() {
         &state_machine,
         CanisterId::ic_00(),
         "uninstall_code",
-        candid_one,
         CanisterIdRecord::from(scenario.governance_canister_id),
         scenario.root_canister_id.get(),
     )
@@ -323,7 +323,6 @@ fn test_root_restarts_governance_on_stop_canister_timeout() {
         &state_machine,
         scenario.root_canister_id,
         "change_canister",
-        candid_one,
         proposal,
         scenario.governance_canister_id.get(),
     )

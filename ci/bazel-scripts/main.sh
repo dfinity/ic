@@ -106,7 +106,10 @@ buildevents cmd "${CI_RUN_ID}" "${CI_JOB_NAME}" "${CI_JOB_NAME}-bazel-cmd" -- ba
     ${BAZEL_TARGETS} \
     2>&1 | awk -v url_out="$url_out" "$stream_awk_program"
 
-# Write the bes link & GitHub notice
+# Write the bes link & summary
 echo "Build results uploaded to $(<"$url_out")"
-echo "::notice title=Build Events for $CI_JOB_NAME::$(<"$url_out")"
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    invocation=$(sed <"$url_out" 's;.*/;;') # grab invocation ID (last url part)
+    echo "BuildBuddy [$invocation]($(<"$url_out"))" >>$GITHUB_STEP_SUMMARY
+fi
 rm "$url_out"

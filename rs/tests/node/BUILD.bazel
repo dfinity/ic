@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -9,5 +9,18 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/nns/constants",
+        "//rs/registry/canister",
+        "//rs/registry/canister/api",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:k256",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
 )

@@ -30,8 +30,7 @@ use ic_types::{
     consensus::certification::Certification, crypto::KeyPurpose, Height, NodeId, PrincipalId,
     RegistryVersion, SubnetId,
 };
-use std::net::SocketAddr;
-use std::os::unix::fs::PermissionsExt;
+use std::{net::SocketAddr, os::unix::fs::PermissionsExt};
 
 const CRYPTO_DIR: &str = "crypto";
 const STATE_DIR: &str = "state";
@@ -303,6 +302,10 @@ pub struct NodeConfiguration {
     /// directory chosen by ic-prep.
     #[serde(skip_serializing, skip_deserializing)]
     pub secret_key_store: Option<NodeSecretKeyStore>,
+
+    /// The domain name of the node
+    #[serde(skip_serializing, skip_deserializing)]
+    pub domain: Option<String>,
 }
 
 impl From<NodeConfiguration> for pbNodeRecord {
@@ -320,6 +323,7 @@ impl From<NodeConfiguration> for pbNodeRecord {
                 .node_operator_principal_id
                 .map(|id| id.to_vec())
                 .unwrap_or_default(),
+            domain: node_configuration.domain,
             ..Default::default()
         }
     }
@@ -426,8 +430,7 @@ impl NodeSecretKeyStore {
 mod node_configuration {
     use super::*;
     use pretty_assertions::assert_eq;
-    use std::net::SocketAddr;
-    use std::str::FromStr;
+    use std::{net::SocketAddr, str::FromStr};
 
     #[test]
     fn into_proto_http() {
@@ -436,6 +439,7 @@ mod node_configuration {
             public_api: SocketAddr::from_str("1.2.3.4:8081").unwrap(),
             node_operator_principal_id: None,
             secret_key_store: None,
+            domain: None,
         };
 
         let got = pbNodeRecord::from(node_configuration);
@@ -454,6 +458,7 @@ mod node_configuration {
             chip_id: None,
             public_ipv4_config: None,
             domain: None,
+            node_reward_type: None,
         };
 
         assert_eq!(got, want);

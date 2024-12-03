@@ -27,14 +27,13 @@ use std::{
 )]
 struct CliArgs {
     /// Path to stable the `canister_states` directory
-    #[clap(parse(from_os_str))]
     input: PathBuf,
 
-    #[clap(parse(from_os_str), default_value = ".")]
+    #[clap(default_value = ".")]
     output: PathBuf,
 
     /// The location of the "rs" directory. Used to find .proto files.
-    #[clap(long, parse(from_os_str), default_value = ".")]
+    #[clap(long, default_value = ".")]
     rs: PathBuf,
 }
 

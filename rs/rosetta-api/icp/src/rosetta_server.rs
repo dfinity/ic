@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 use crate::{
     errors::{self, ApiError},
     ledger_client::LedgerAccess,

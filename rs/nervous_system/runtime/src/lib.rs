@@ -44,6 +44,9 @@ pub trait Runtime: Send + Sync {
 
     // Spawns a future.
     fn spawn_future<F: 'static + Future<Output = ()>>(future: F);
+
+    /// Get the canister version
+    fn canister_version() -> u64;
 }
 
 pub struct DfnRuntime;
@@ -94,6 +97,10 @@ impl Runtime for DfnRuntime {
     fn spawn_future<F: 'static + Future<Output = ()>>(future: F) {
         dfn_core::api::futures::spawn(future);
     }
+
+    fn canister_version() -> u64 {
+        dfn_core::api::canister_version()
+    }
 }
 
 pub struct CdkRuntime;
@@ -141,5 +148,9 @@ impl Runtime for CdkRuntime {
 
     fn spawn_future<F: 'static + Future<Output = ()>>(future: F) {
         ic_cdk::spawn(future);
+    }
+
+    fn canister_version() -> u64 {
+        ic_cdk::api::canister_version()
     }
 }

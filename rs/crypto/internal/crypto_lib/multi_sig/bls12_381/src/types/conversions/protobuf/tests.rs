@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 use super::*;
 
 mod pubkey_proto_to_pubkey_bytes {

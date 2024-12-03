@@ -259,7 +259,7 @@ fn test(env: TestEnv) {
                     published_binary: "replicated-state-test".to_string(),
                     mainnet_version: v.clone(),
                 },
-                "ic/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
+                "_main/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
                 "canister_state::queues::tests::mainnet_compatibility_tests::basic_test",
             ),
             TestCase::new(
@@ -267,7 +267,7 @@ fn test(env: TestEnv) {
                     published_binary: "replicated-state-test".to_string(),
                     mainnet_version: v.clone(),
                 },
-                "ic/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
+                "_main/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
                 "canister_state::queues::tests::mainnet_compatibility_tests::input_order_test",
             ),
         ]

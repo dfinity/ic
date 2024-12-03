@@ -47,7 +47,7 @@ use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{await_boundary_node_healthy, HasTopologySnapshot},
 };
-use ic_tests::nns_dapp::{
+use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
 };
 

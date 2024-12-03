@@ -14,11 +14,11 @@ ic_bls12_381 = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 pairing = { workspace = true }
-paste = "1.0.7"
+paste = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 sha2 = { workspace = true }
-subtle = "2.4"
+subtle = { workspace = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]

@@ -30,7 +30,6 @@ ic-types = { path = "../../../../types/types" }
 ic-types-test-utils = { path = "../../../../types/types_test_utils" }
 k256 = { workspace = true }
 registry-canister = { path = "../../../../registry/canister" }
-schnorr_fun = "0.10"
 serde = { workspace = true }
 sha2 = { workspace = true }
 slog = { workspace = true }

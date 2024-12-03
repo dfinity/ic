@@ -35,7 +35,7 @@ submit_insert_upgrade_path_proposal_mainnet() {
     PROPOSAL_FILE=$1
     NEURON_ID=$2
 
-    TARGET_SNS_GOVERNANCE_CANISTER=$(proposal_header_field_value $PROPOSAL_FILE "Target SNS Governance Canister(s):")
+    TARGET_SNS_GOVERNANCE_CANISTER=$(old_proposal_header_field_value $PROPOSAL_FILE "Target SNS Governance Canister(s):")
 
     validate_no_todos "$PROPOSAL_FILE"
 

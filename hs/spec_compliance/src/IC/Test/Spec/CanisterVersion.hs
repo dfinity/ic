@@ -89,15 +89,6 @@ canister_version_tests ecid =
                               ctr1 @?= 1
                               ctr2 @?= 2
                               ctr3 @?= 2,
-                            testCase "in heartbeat" $ do
-                              cid <-
-                                install ecid $
-                                  onHeartbeat (callback $ trapIfNeq canister_version (i64tob $ int64 1) "" >>> setGlobal canister_version)
-                              wait_for_global cid (1 :: Int)
-                              ctr1 <- query cid (replyData getGlobal) >>= asWord64
-                              ctr2 <- query cid (replyData canister_version) >>= asWord64
-                              ctr1 @?= 1
-                              ctr2 @?= 2,
                             testCase "in global timer" $ do
                               cid <-
                                 install ecid $

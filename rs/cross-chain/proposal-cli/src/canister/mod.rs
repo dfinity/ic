@@ -3,10 +3,11 @@ mod tests;
 
 use std::fmt::Display;
 use std::path::PathBuf;
+use std::process::Command;
 use std::str::FromStr;
 use strum_macros::EnumIter;
 
-#[derive(Clone, Eq, PartialEq, Debug, EnumIter)]
+#[derive(Clone, Eq, PartialEq, Debug, Ord, PartialOrd, EnumIter)]
 #[allow(clippy::enum_variant_names)]
 pub enum TargetCanister {
     CkBtcArchive,
@@ -24,6 +25,9 @@ pub enum TargetCanister {
     IcpIndex,
     IcpLedger,
     LedgerSuiteOrchestrator,
+    EvmRpc,
+    CyclesLedger,
+    ExchangeRateCanister,
 }
 
 impl TargetCanister {
@@ -40,6 +44,36 @@ impl TargetCanister {
             TargetCanister::IcpIndex => "icp-index",
             TargetCanister::IcpLedger => "icp-ledger",
             TargetCanister::LedgerSuiteOrchestrator => "orchestrator",
+            TargetCanister::EvmRpc => "evm_rpc",
+            TargetCanister::CyclesLedger => "cycles-ledger",
+            TargetCanister::ExchangeRateCanister => "xrc",
+        }
+    }
+
+    pub fn git_repository_url(&self) -> &str {
+        match &self {
+            TargetCanister::CkBtcArchive
+            | TargetCanister::CkBtcIndex
+            | TargetCanister::CkBtcKyt
+            | TargetCanister::CkBtcLedger
+            | TargetCanister::CkBtcMinter
+            | TargetCanister::CkEthArchive
+            | TargetCanister::CkEthIndex
+            | TargetCanister::CkEthLedger
+            | TargetCanister::CkEthMinter
+            | TargetCanister::IcpArchive1
+            | TargetCanister::IcpArchive2
+            | TargetCanister::IcpArchive3
+            | TargetCanister::IcpIndex
+            | TargetCanister::IcpLedger
+            | TargetCanister::LedgerSuiteOrchestrator => "https://github.com/dfinity/ic.git",
+            TargetCanister::EvmRpc => {
+                "https://github.com/internet-computer-protocol/evm-rpc-canister.git"
+            }
+            TargetCanister::CyclesLedger => "https://github.com/dfinity/cycles-ledger.git",
+            TargetCanister::ExchangeRateCanister => {
+                "https://github.com/dfinity/exchange-rate-canister.git"
+            }
         }
     }
 
@@ -71,11 +105,35 @@ impl TargetCanister {
             TargetCanister::LedgerSuiteOrchestrator => {
                 PathBuf::from("rs/ethereum/ledger-suite-orchestrator/ledger_suite_orchestrator.did")
             }
+            TargetCanister::EvmRpc => PathBuf::from("candid/evm_rpc.did"),
+            TargetCanister::CyclesLedger => PathBuf::from("cycles-ledger/cycles-ledger.did"),
+            TargetCanister::ExchangeRateCanister => PathBuf::from("src/xrc/xrc.did"),
         }
     }
 
-    pub fn repo_dir(&self) -> PathBuf {
-        self.candid_file().parent().unwrap().to_path_buf()
+    pub fn repo_dir(&self) -> Option<PathBuf> {
+        match &self {
+            TargetCanister::CkBtcArchive
+            | TargetCanister::CkBtcIndex
+            | TargetCanister::CkBtcKyt
+            | TargetCanister::CkBtcLedger
+            | TargetCanister::CkBtcMinter
+            | TargetCanister::CkEthArchive
+            | TargetCanister::CkEthIndex
+            | TargetCanister::CkEthLedger
+            | TargetCanister::CkEthMinter
+            | TargetCanister::IcpArchive1
+            | TargetCanister::IcpArchive2
+            | TargetCanister::IcpArchive3
+            | TargetCanister::IcpIndex
+            | TargetCanister::IcpLedger
+            | TargetCanister::LedgerSuiteOrchestrator => {
+                Some(self.candid_file().parent().unwrap().to_path_buf())
+            }
+            TargetCanister::EvmRpc
+            | TargetCanister::CyclesLedger
+            | TargetCanister::ExchangeRateCanister => None,
+        }
     }
 
     pub fn git_log_dirs(&self) -> Vec<PathBuf> {
@@ -111,14 +169,45 @@ impl TargetCanister {
                     PathBuf::from("rs/ledger_suite/common/ledger_core/src"),
                 ]
             }
-            _ => {
-                vec![self.repo_dir()]
-            }
+            TargetCanister::CkBtcArchive
+            | TargetCanister::CkBtcIndex
+            | TargetCanister::CkBtcKyt
+            | TargetCanister::CkBtcLedger
+            | TargetCanister::CkBtcMinter
+            | TargetCanister::CkEthArchive
+            | TargetCanister::CkEthIndex
+            | TargetCanister::CkEthLedger
+            | TargetCanister::CkEthMinter
+            | TargetCanister::LedgerSuiteOrchestrator
+            | TargetCanister::EvmRpc
+            | TargetCanister::CyclesLedger
+            | TargetCanister::ExchangeRateCanister => self.repo_dir().into_iter().collect(),
         }
     }
 
     pub fn artifact(&self) -> PathBuf {
-        PathBuf::from("artifacts/canisters").join(self.artifact_file_name())
+        match &self {
+            TargetCanister::CkBtcArchive
+            | TargetCanister::CkBtcIndex
+            | TargetCanister::CkBtcKyt
+            | TargetCanister::CkBtcLedger
+            | TargetCanister::CkBtcMinter
+            | TargetCanister::CkEthArchive
+            | TargetCanister::CkEthIndex
+            | TargetCanister::CkEthLedger
+            | TargetCanister::CkEthMinter
+            | TargetCanister::IcpArchive1
+            | TargetCanister::IcpArchive2
+            | TargetCanister::IcpArchive3
+            | TargetCanister::IcpIndex
+            | TargetCanister::IcpLedger
+            | TargetCanister::LedgerSuiteOrchestrator => {
+                PathBuf::from("artifacts/canisters").join(self.artifact_file_name())
+            }
+            TargetCanister::EvmRpc
+            | TargetCanister::CyclesLedger
+            | TargetCanister::ExchangeRateCanister => PathBuf::from(self.artifact_file_name()),
+        }
     }
 
     pub fn artifact_file_name(&self) -> &str {
@@ -140,7 +229,46 @@ impl TargetCanister {
             TargetCanister::LedgerSuiteOrchestrator => {
                 "ic-ledger-suite-orchestrator-canister.wasm.gz"
             }
+            TargetCanister::EvmRpc => "evm_rpc.wasm.gz",
+            TargetCanister::CyclesLedger => "cycles-ledger.wasm.gz",
+            TargetCanister::ExchangeRateCanister => "xrc.wasm.gz",
         }
+    }
+
+    pub fn build_artifact(&self) -> Command {
+        match &self {
+            TargetCanister::CkBtcArchive
+            | TargetCanister::CkBtcIndex
+            | TargetCanister::CkBtcKyt
+            | TargetCanister::CkBtcLedger
+            | TargetCanister::CkBtcMinter
+            | TargetCanister::CkEthArchive
+            | TargetCanister::CkEthIndex
+            | TargetCanister::CkEthLedger
+            | TargetCanister::CkEthMinter
+            | TargetCanister::IcpArchive1
+            | TargetCanister::IcpArchive2
+            | TargetCanister::IcpArchive3
+            | TargetCanister::IcpIndex
+            | TargetCanister::IcpLedger
+            | TargetCanister::LedgerSuiteOrchestrator => {
+                let mut cmd = Command::new("./ci/container/build-ic.sh");
+                cmd.arg("--canisters");
+                cmd
+            }
+            TargetCanister::EvmRpc | TargetCanister::CyclesLedger => {
+                Command::new("./scripts/docker-build")
+            }
+            TargetCanister::ExchangeRateCanister => {
+                let mut cmd = Command::new("./scripts/docker-build");
+                cmd.env("IP_SUPPORT", "ipv4");
+                cmd
+            }
+        }
+    }
+
+    pub fn build_artifact_as_str(&self) -> String {
+        format!("{:?}", self.build_artifact())
     }
 
     pub fn canister_ids_json_file(&self) -> PathBuf {
@@ -164,6 +292,9 @@ impl TargetCanister {
             | TargetCanister::IcpArchive3
             | TargetCanister::IcpIndex
             | TargetCanister::IcpLedger => PathBuf::from("rs/ledger_suite/icp/canister_ids.json"),
+            TargetCanister::EvmRpc
+            | TargetCanister::CyclesLedger
+            | TargetCanister::ExchangeRateCanister => PathBuf::from("canister_ids.json"),
         }
     }
 
@@ -195,6 +326,9 @@ impl FromStr for TargetCanister {
             ["icp", "archive3"] => Ok(TargetCanister::IcpArchive3),
             ["icp", "index"] => Ok(TargetCanister::IcpIndex),
             ["icp", "ledger"] => Ok(TargetCanister::IcpLedger),
+            ["evm", "rpc"] => Ok(TargetCanister::EvmRpc),
+            ["cycles", "ledger"] => Ok(TargetCanister::CyclesLedger),
+            ["exchange", "rate"] => Ok(TargetCanister::ExchangeRateCanister),
             _ => Err(format!("Unknown canister name: {}", canister)),
         }
     }
@@ -218,6 +352,9 @@ impl Display for TargetCanister {
             TargetCanister::IcpIndex => write!(f, "ICP index"),
             TargetCanister::IcpLedger => write!(f, "ICP ledger"),
             TargetCanister::LedgerSuiteOrchestrator => write!(f, "ledger suite orchestrator"),
+            TargetCanister::EvmRpc => write!(f, "EVM RPC"),
+            TargetCanister::CyclesLedger => write!(f, "cycles ledger"),
+            TargetCanister::ExchangeRateCanister => write!(f, "exchange rate canister"),
         }
     }
 }
