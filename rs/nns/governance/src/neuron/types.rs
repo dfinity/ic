@@ -19,7 +19,7 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
-use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
 use rust_decimal::Decimal;
@@ -556,9 +556,15 @@ impl Neuron {
     ///
     /// If the neuron refreshed recently, no followee neuron IDs are removed
     /// (and returns 0).
-    pub(crate) fn prune_following(&mut self, now_seconds: u64) -> u64 {
-        let is_fresh =
-            self.voting_power_refreshed_timestamp_seconds >= now_seconds - 7 * ONE_MONTH_SECONDS;
+    pub(crate) fn prune_following(
+        &mut self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+    ) -> u64 {
+        let is_fresh = self.voting_power_refreshed_timestamp_seconds
+            >= now_seconds
+                - voting_power_economics.get_start_reducing_voting_power_after_seconds()
+                - voting_power_economics.get_clear_following_after_seconds();
         if is_fresh {
             return 0;
         }

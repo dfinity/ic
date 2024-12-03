@@ -6103,7 +6103,25 @@ impl Governance {
         begin: std::ops::Bound<NeuronId>,
         carry_on: impl FnMut() -> bool,
     ) -> std::ops::Bound<NeuronId> {
-        prune_some_following(&mut self.neuron_store, begin, carry_on)
+        // Hack: Here, we would prefer to use the voting_power_economics method
+        // instead, but if we simply passed self.voting_power_economics() to
+        // prune_some_following, we wouldn't be able to also pass &mut
+        // self.neuron_store. Hence, we essentially inline the method here.
+        let voting_power_economics = self
+            .heap_data
+            .economics
+            .as_ref()
+            .and_then(|economics| economics.voting_power_economics.as_ref())
+            .unwrap_or_else(|| {
+                println!(
+                    "{}ERROR: VotingPowerEconomics not found while pruning_some_following. \
+                     Falling back to default. (This is actually ok in tests.)",
+                    LOG_PREFIX,
+                );
+                &VotingPowerEconomics::DEFAULT
+            });
+
+        prune_some_following(voting_power_economics, &mut self.neuron_store, begin, carry_on)
     }
 
     /// Creates a new neuron or refreshes the stake of an existing

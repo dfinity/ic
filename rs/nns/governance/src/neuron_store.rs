@@ -1387,8 +1387,9 @@ impl NeuronStore {
 ///
 /// Returns where the scan should pick up from next time. I.e. the return value
 /// should be passed via start next time.
-#[allow(unused)] // This line will be removed soon...
+#[allow(unused)]
 pub fn prune_some_following(
+    voting_power_economics: &VotingPowerEconomics,
     neuron_store: &mut NeuronStore,
     mut next: Bound<NeuronId>,
     mut carry_on: impl FnMut() -> bool,
@@ -1415,7 +1416,7 @@ pub fn prune_some_following(
         let result = neuron_store.with_neuron_mut(&current_neuron_id, |neuron| {
             // This is where the "real work" takes place. Everything else is to
             // keep the scan going.
-            neuron.prune_following(now_seconds);
+            neuron.prune_following(voting_power_economics, now_seconds);
         });
 
         // Log if somehow with_neuron_mut returns Err. This should not be
