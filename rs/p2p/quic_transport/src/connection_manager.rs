@@ -15,10 +15,6 @@
 //!     - The endpoints tls configuration gets updated (periodically) to match
 //!       the subnet topology. -> Only accept connections from peers in topology.
 //!     - When dialing a peer TLS is configured to only accept a specific peer.
-//!     - Since currently the attestation handshake is a noop we also do a small "gruezi"
-//!       handshake to verify that the connection is active from both sides. This adds
-//!       latency during the setup but we are not worried about this since connections are
-//!       long lived in our case.
 //!     - Only if all these steps successfully complete do we add the connection to the active set.
 //!
 //! Connection reconciliation:
@@ -40,7 +36,7 @@ use axum::{
 use futures::StreamExt;
 use ic_async_utils::JoinMap;
 use ic_base_types::NodeId;
-use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
+use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig};
 use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
@@ -84,13 +80,6 @@ const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(1);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(5);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_RETRY_BACKOFF: Duration = Duration::from_secs(3);
-const GRUEZI_HANDSHAKE: &str = "gruezi";
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-enum Direction {
-    Inbound,
-    Outbound,
-}
 
 /// Connection manager is responsible for making sure that
 /// there always exists a healthy connection to each peer
@@ -133,31 +122,28 @@ struct ConnectionManager {
 
 #[derive(Debug, Error)]
 enum ConnectionEstablishError {
-    #[error("Timeout during connection establishment")]
+    #[error(
+        "Timeout during connection establishment. Took longer than {:?} to establish a connection",
+        CONNECT_TIMEOUT
+    )]
     Timeout,
-    #[error("Gruezi handshake failed. {0}")]
-    Gruezi(String),
-    #[error("Failed to get rustls client config for peer {peer_id:?}. {cause:?}")]
-    TlsClientConfigError {
-        peer_id: NodeId,
-        cause: TlsConfigError,
-    },
-    #[error("Failed to connect to peer {peer_id:?}. {cause:?}")]
-    ConnectError {
-        peer_id: NodeId,
-        cause: ConnectError,
-    },
     #[error("Incoming connection failed. {cause:?}")]
     ConnectionError {
         peer_id: Option<NodeId>,
         cause: ConnectionError,
     },
+    // The following errors should be infallible.
+    #[error("Failed to establish outbound connection to peer {peer_id:?} due to errors in the parameters being used. {cause:?}")]
+    BadConnectParameters {
+        peer_id: NodeId,
+        cause: ConnectError,
+    },
     #[error("No peer identity available.")]
     MissingPeerIdentity,
     #[error("Malformed peer identity. {0}")]
     MalformedPeerIdentity(String),
-    #[error("Received peer ids didn't match {client:?} and {server:?}.")]
-    PeerIdMismatch { client: NodeId, server: NodeId },
+    #[error("Incoming connection from {client:?}, which is > than {server:?}")]
+    InvalidIncomingPeerId { client: NodeId, server: NodeId },
 }
 
 struct ConnectionWithPeerId {
@@ -216,7 +202,9 @@ pub(crate) fn start_connection_manager(
             SomeOrAllNodes::Some(BTreeSet::new()),
             registry_client.get_latest_version(),
         )
-        .expect("Failed to get rustls server config, so transport can't start.");
+        .expect(
+            "The rustls server config must be locally available, otherwise transport can't start.",
+        );
 
     let mut transport_config = quinn::TransportConfig::default();
 
@@ -459,28 +447,30 @@ impl ConnectionManager {
         let rustls_client_config = self
             .tls_config
             .client_config(peer_id, self.topology.latest_registry_version())
-            .map_err(|cause| ConnectionEstablishError::TlsClientConfigError { peer_id, cause })
-            .unwrap();
+            .expect("The rustls client config must be locally available, otherwise transport can't start.");
         let transport_config = self.transport_config.clone();
+        let quinn_client_config = QuicClientConfig::try_from(rustls_client_config).unwrap();
+        let mut client_config = quinn::ClientConfig::new(Arc::new(quinn_client_config));
+        client_config.transport_config(transport_config);
         let conn_fut = async move {
-            let quinn_client_config = QuicClientConfig::try_from(rustls_client_config).unwrap();
-            let mut client_config = quinn::ClientConfig::new(Arc::new(quinn_client_config));
-            client_config.transport_config(transport_config);
-            let connecting = endpoint.connect_with(client_config, addr, "irrelevant");
-            let established = connecting
-                .map_err(|cause| ConnectionEstablishError::ConnectError { peer_id, cause })?
-                .await
-                .map_err(|cause| ConnectionEstablishError::ConnectionError {
-                    peer_id: Some(peer_id),
+            // 'connect_with' is placed inside the async block so the event loop retries on failure.
+            let connecting = endpoint
+                .connect_with(client_config, addr, "irrelevant")
+                .map_err(|cause| ConnectionEstablishError::BadConnectParameters {
+                    peer_id,
                     cause,
                 })?;
-
-            // Authentication handshakes
-            let connection = Self::gruezi(established, Direction::Outbound).await?;
+            let established =
+                connecting
+                    .await
+                    .map_err(|cause| ConnectionEstablishError::ConnectionError {
+                        peer_id: Some(peer_id),
+                        cause,
+                    })?;
 
             Ok::<_, ConnectionEstablishError>(ConnectionWithPeerId {
                 peer_id,
-                connection,
+                connection: established,
             })
         };
 
@@ -563,6 +553,7 @@ impl ConnectionManager {
         };
     }
 
+    /// Inserts a task into 'inbound_connecting' that handles an inbound connection attempt.
     fn handle_inbound(&mut self, incoming: Incoming) {
         self.metrics.inbound_connection_total.inc();
         let node_id = self.node_id;
@@ -591,17 +582,15 @@ impl ConnectionManager {
 
             // Lower ID is dialer. So we reject if this nodes id is higher.
             if peer_id > node_id {
-                return Err(ConnectionEstablishError::PeerIdMismatch {
+                return Err(ConnectionEstablishError::InvalidIncomingPeerId {
                     client: peer_id,
                     server: node_id,
                 });
             }
 
-            let connection = Self::gruezi(established, Direction::Inbound).await?;
-
             Ok::<_, ConnectionEstablishError>(ConnectionWithPeerId {
                 peer_id,
-                connection,
+                connection: established,
             })
         };
 
@@ -613,67 +602,6 @@ impl ConnectionManager {
         };
 
         self.inbound_connecting.spawn(timeout_conn_fut);
-    }
-
-    // To authenticate peers we do mutual TLS. Both peers therefore know the identity
-    // of the other peer. It can can happen that one side assumes that the connection
-    // is fully established when the other peer may still reject the connection. This
-    // handshake makes sure that connection is fully functional.
-    async fn gruezi(
-        conn: Connection,
-        direction: Direction,
-    ) -> Result<Connection, ConnectionEstablishError> {
-        match direction {
-            Direction::Inbound => {
-                let (mut send, mut recv) = conn
-                    .open_bi()
-                    .await
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                send.write_all(GRUEZI_HANDSHAKE.as_bytes())
-                    .await
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                send.finish()
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                send.stopped()
-                    .await
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                let data = recv
-                    .read_to_end(GRUEZI_HANDSHAKE.len())
-                    .await
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                if data != GRUEZI_HANDSHAKE.as_bytes() {
-                    return Err(ConnectionEstablishError::Gruezi(format!(
-                        "Handshake failed unexpected response: {:?}",
-                        String::from_utf8_lossy(&data)
-                    )));
-                }
-            }
-            Direction::Outbound => {
-                let (mut send, mut recv) = conn
-                    .accept_bi()
-                    .await
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                let data = recv
-                    .read_to_end(GRUEZI_HANDSHAKE.len())
-                    .await
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                if data != GRUEZI_HANDSHAKE.as_bytes() {
-                    return Err(ConnectionEstablishError::Gruezi(format!(
-                        "Handshake failed unexpected response: {:?}",
-                        String::from_utf8_lossy(&data)
-                    )));
-                }
-                send.write_all(GRUEZI_HANDSHAKE.as_bytes())
-                    .await
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                send.finish()
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-                send.stopped()
-                    .await
-                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
-            }
-        };
-        Ok(conn)
     }
 }
 

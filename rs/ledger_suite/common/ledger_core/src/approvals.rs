@@ -1,13 +1,7 @@
 use crate::timestamp::TimeStamp;
 use crate::tokens::{CheckedSub, TokensType, Zero};
-use candid::Nat;
-use ic_stable_structures::{storable::Bound, Storable};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::{
-    borrow::Cow,
-    io::{Cursor, Read},
-};
 
 #[cfg(test)]
 mod tests;
@@ -74,6 +68,11 @@ pub trait AllowancesData {
     #[allow(clippy::type_complexity)]
     fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
 
+    #[allow(clippy::type_complexity)]
+    fn pop_first_allowance(
+        &mut self,
+    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)>;
+
     fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)>;
 
     fn len_allowances(&self) -> usize;
@@ -81,6 +80,8 @@ pub trait AllowancesData {
     fn len_expirations(&self) -> usize;
 
     fn len_arrivals(&self) -> usize;
+
+    fn clear_arrivals(&mut self);
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -173,6 +174,12 @@ where
         self.expiration_queue.pop_first()
     }
 
+    fn pop_first_allowance(
+        &mut self,
+    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)> {
+        self.allowances.pop_first()
+    }
+
     fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
         let mut result = vec![];
         for (_t, key) in &self.arrival_queue {
@@ -194,6 +201,10 @@ where
 
     fn len_arrivals(&self) -> usize {
         self.arrival_queue.len()
+    }
+
+    fn clear_arrivals(&mut self) {
+        self.arrival_queue.clear();
     }
 }
 
@@ -217,7 +228,7 @@ impl<Tokens: Zero> Default for Allowance<Tokens> {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct AllowanceTable<AD: AllowancesData> {
-    allowances_data: AD,
+    pub allowances_data: AD,
 }
 
 impl<AD> Default for AllowanceTable<AD>
@@ -248,12 +259,6 @@ where
             self.allowances_data.len_expirations() <= self.allowances_data.len_allowances(),
             "expiration queue length ({}) larger than allowances length ({})",
             self.allowances_data.len_expirations(),
-            self.allowances_data.len_allowances()
-        );
-        debug_assert!(
-            self.allowances_data.len_arrivals() == self.allowances_data.len_allowances(),
-            "arrival_queue length ({}) should be equal to allowances length ({})",
-            self.allowances_data.len_arrivals(),
             self.allowances_data.len_allowances()
         );
     }
@@ -479,41 +484,4 @@ where
 
 fn remote_future() -> TimeStamp {
     TimeStamp::from_nanos_since_unix_epoch(u64::MAX)
-}
-
-impl<Tokens: Clone + Into<Nat> + TryFrom<Nat, Error = String>> Storable for Allowance<Tokens> {
-    fn to_bytes(&self) -> Cow<[u8]> {
-        let mut buffer = vec![];
-        let amount: Nat = self.amount.clone().into();
-        amount
-            .encode(&mut buffer)
-            .expect("Unable to serialize amount");
-        if let Some(expires_at) = self.expires_at {
-            buffer.extend(expires_at.as_nanos_since_unix_epoch().to_le_bytes());
-        }
-        // We don't serialize arrived_at - it is not used after stable structures migration.
-        Cow::Owned(buffer)
-    }
-
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        let mut cursor = Cursor::new(bytes.into_owned());
-        let amount = Nat::decode(&mut cursor).expect("Unable to deserialize amount");
-        let amount = Tokens::try_from(amount).expect("Unable to convert Nat to Tokens");
-        // arrived_at was not serialized, use a default value.
-        let arrived_at = TimeStamp::from_nanos_since_unix_epoch(0);
-        let mut expires_at_bytes = [0u8; 8];
-        let expires_at = match cursor.read_exact(&mut expires_at_bytes) {
-            Ok(()) => Some(TimeStamp::from_nanos_since_unix_epoch(u64::from_le_bytes(
-                expires_at_bytes,
-            ))),
-            _ => None,
-        };
-        Self {
-            amount,
-            arrived_at,
-            expires_at,
-        }
-    }
-
-    const BOUND: Bound = Bound::Unbounded;
 }

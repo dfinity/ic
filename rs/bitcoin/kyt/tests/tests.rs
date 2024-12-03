@@ -649,3 +649,48 @@ fn tick_until_next_request(env: &PocketIc) -> Vec<CanisterHttpRequest> {
     );
     canister_http_requests
 }
+
+#[test]
+fn should_query_logs_and_metrics() {
+    use candid::Decode;
+
+    let setup = Setup::new(BtcNetwork::Mainnet);
+    test_http_query(&setup, "/metrics");
+    test_http_query(&setup, "/logs");
+
+    fn test_http_query<U: Into<String>>(setup: &Setup, url: U) {
+        let request = ic_canisters_http_types::HttpRequest {
+            method: "GET".to_string(),
+            url: url.into(),
+            headers: Default::default(),
+            body: Default::default(),
+        };
+
+        let response = Decode!(
+            &assert_reply(
+                setup
+                    .env
+                    .query_call(
+                        setup.kyt_canister,
+                        Principal::anonymous(),
+                        "http_request",
+                        Encode!(&request).expect("failed to encode HTTP request"),
+                    )
+                    .expect("failed to query get_transactions on the ledger")
+            ),
+            ic_canisters_http_types::HttpResponse
+        )
+        .unwrap();
+
+        assert_eq!(response.status_code, 200_u16);
+    }
+}
+
+fn assert_reply(result: WasmResult) -> Vec<u8> {
+    match result {
+        WasmResult::Reply(bytes) => bytes,
+        WasmResult::Reject(reject) => {
+            panic!("Expected a successful reply, got a reject: {}", reject)
+        }
+    }
+}
