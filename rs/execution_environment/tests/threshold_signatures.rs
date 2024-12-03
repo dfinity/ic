@@ -487,7 +487,7 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
         assert_eq!(
             result,
             Ok(WasmResult::Reject(format!(
-                "Unable to route management canister request {}: ChainKeyError(\"Requested unknown or signing disabled threshold key: {}, existing keys with signing enabled: {}\")",
+                "Unable to route management canister request {}: ChainKeyError(\"Requested unknown or disabled threshold key: {}, existing enabled keys: {}\")",
                 method,
                 wrong_key,
                 format_keys(vec![correct_key]),
@@ -554,7 +554,7 @@ fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
                 sign_with_method,
                 signing_disabled_key.clone(),
             )),
-            "Requested unknown or signing disabled threshold key"
+            "Requested unknown or disabled threshold key"
         );
 
         // Requesting non-existent public key (should fail).
@@ -576,7 +576,7 @@ fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
                 sign_with_method,
                 unknown_key.clone(),
             )),
-            "Requested unknown or signing disabled threshold key"
+            "Requested unknown or disabled threshold key"
         );
     }
 }
