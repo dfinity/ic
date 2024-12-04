@@ -12,8 +12,8 @@ use ic_sys::PAGE_SIZE;
 use ic_types::MAX_STABLE_MEMORY_IN_BYTES;
 use libc::c_void;
 use libc::MAP_FAILED;
-use libc::{mmap, munmap};
-use libc::{MAP_ANON, MAP_PRIVATE, PROT_NONE};
+use libc::{madvise, mmap, munmap};
+use libc::{MADV_HUGEPAGE, MAP_ANON, MAP_PRIVATE, PROT_NONE};
 use wasmtime::{LinearMemory, MemoryType};
 use wasmtime_environ::WASM32_MAX_SIZE;
 
@@ -177,6 +177,10 @@ impl MmapMemory {
         let wasm_memory =
             unsafe { (start as *mut u8).add(prologue_guard_size_in_bytes) as *mut c_void };
 
+        unsafe {
+            madvise(start, size_in_bytes, MADV_HUGEPAGE);
+        }
+        //println!("we madvised {} bytes", size_in_bytes);
         Self {
             start,
             size_in_bytes,

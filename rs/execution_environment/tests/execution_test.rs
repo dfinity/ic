@@ -2772,3 +2772,92 @@ fn do_not_initialize_wasm_memory_limit_if_it_is_not_empty() {
     let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
     assert_eq!(wasm_memory_limit, NumBytes::new(10_000_000_000));
 }
+
+#[test]
+fn large_canister_test() {
+    fn wat2wasm(wat: &str) -> Result<Vec<u8>, wat::Error> {
+        wat::parse_str(wat).map(Vec::<u8>::into)
+    }
+
+    // test that calls the canister written by Martin.
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    // Load wasm benchmark binary from a file.
+    // Declare the wat code.
+    let wat = r#"
+            (module
+                (import "ic0" "msg_reply" (func $msg_reply))
+                (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param i32 i32)))
+                (func (export "canister_update test")
+                    (local $i i32)
+                    (local $j i32)
+                    (loop $my_loop
+                        ;; add one to $i
+                        local.get $i
+                        i32.const 1
+                        i32.add
+                        local.set $i
+                        ;; add one Linux page to $j
+                        local.get $j
+                        i32.const 4096
+                        i32.add
+                        local.set $j
+                        ;; store $i to heap[$j]
+                        (i32.store (local.get $j) (local.get $i))
+                        ;; loop if $i is less than number of OS pages within WASM heap
+                        local.get $i
+                        i32.const 1048576
+                        i32.lt_s
+                        br_if $my_loop
+                    )
+                    (call $msg_reply_data_append (i32.const 0) (i32.const 1))
+                    (call $msg_reply)
+                )
+                (memory $memory 65536)
+            )
+            "#;
+
+    let wasm_benchmark_binary = wat2wasm(wat).unwrap();
+
+    for _i in 0..2 {
+        let initial_cycles = 10_000_000_000_000_u128;
+        let benchmark_canister_id = env
+            .install_canister_with_cycles(
+                wasm_benchmark_binary.clone(),
+                vec![],
+                None,
+                Cycles::from(initial_cycles),
+            )
+            .unwrap();
+
+        // get and print cycles before balance
+        //let cycle_balance_before = env.cycle_balance(benchmark_canister_id);
+        //println!("cycle balance before: {}", cycle_balance_before);
+
+        //let t0 = std::time::Instant::now();
+
+        // call the write_mem method on the benchmark canister.
+        let payload = r#"null"#.as_bytes().to_vec();
+        let _result = env.execute_ingress(benchmark_canister_id, "test", payload.clone());
+
+        // let t1 = std::time::Instant::now();
+        // println!(
+        //     "canister execution time = {}",
+        //     t1.duration_since(t0).as_millis()
+        // );
+
+        // // get and print cycles after balance
+        // let cycle_balance_after = env.cycle_balance(benchmark_canister_id);
+        // println!("cycle balance after: {}", cycle_balance_after);
+
+        // // difference in cycles is
+        // println!(
+        //     "cycle balance difference: {}",
+        //     cycle_balance_before - cycle_balance_after
+        // );
+    }
+
+    std::thread::sleep(std::time::Duration::from_secs(3));
+}
