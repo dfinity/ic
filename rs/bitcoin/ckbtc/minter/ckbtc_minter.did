@@ -29,7 +29,6 @@ type DefiniteCanisterSettings = record {
   reserved_cycles_limit : nat;
   log_visibility: LogVisibility;
   wasm_memory_limit : nat;
-  wasm_memory_threshold : nat;
 };
 
 type LogVisibility = variant {
