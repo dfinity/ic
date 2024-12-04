@@ -965,8 +965,8 @@ impl CkBtcMinterState {
         for utxo in all_utxos_for_account.into_iter() {
             match self.suspended_utxos.contains_utxo(&utxo, account) {
                 (Some(last_time_checked), Some(reason)) => {
-                    match last_time_checked.checked_duration_since(*now) {
-                        Some(elapsed) if elapsed > DAY => {
+                    match now.checked_duration_since(*last_time_checked) {
+                        Some(elapsed) if elapsed >= DAY => {
                             processable_utxos.insert_once_suspended_utxo(utxo, reason);
                         }
                         _ => suspended_utxos.push(SuspendedUtxo {

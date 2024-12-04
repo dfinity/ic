@@ -9,6 +9,8 @@ mod processable_utxos_for_account {
     use ic_btc_interface::{OutPoint, Utxo};
     use icrc_ledger_types::icrc1::account::Account;
     use maplit::btreeset;
+    use proptest::proptest;
+    use std::time::Duration;
 
     #[test]
     fn should_be_all_new_utxos_when_state_empty() {
@@ -28,40 +30,58 @@ mod processable_utxos_for_account {
         );
     }
 
-    #[test]
-    fn should_not_reevaluate_suspended_utxo_yet() {
-        let mut state = CkBtcMinterState::from(init_args());
-        let account = ledger_account();
-        let ignored_utxo = ignored_utxo();
-        state.suspend_utxo(
-            ignored_utxo.clone(),
-            account,
-            SuspendedReason::ValueTooSmall,
-            NOW.checked_sub(DAY).unwrap(),
-        );
+    proptest! {
+        #[test]
+        fn should_not_reevaluate_suspended_utxo_yet(before_now_ns in 1..=3600_u64, after_now_ns in 0..=u64::MAX) {
+            let mut state = CkBtcMinterState::from(init_args());
+            let before_now = Duration::from_nanos(before_now_ns);
+            let after_now = Duration::from_nanos(after_now_ns);
+            let account = ledger_account();
+            let ignored_utxo = ignored_utxo();
+            state.suspend_utxo(
+                ignored_utxo.clone(),
+                account,
+                SuspendedReason::ValueTooSmall,
+                NOW.checked_sub(DAY).unwrap(),
+            );
+            let new_utxo = utxo();
+            let (processable_utxos, suspended_utxos) = state.processable_utxos_for_account(
+                btreeset! {new_utxo.clone(), ignored_utxo.clone()},
+                &account,
+                &NOW.checked_sub(before_now).unwrap(),
+            );
 
-        let new_utxo = utxo();
-        let (processable_utxos, suspended_utxos) = state.processable_utxos_for_account(
-            btreeset! {new_utxo.clone(), ignored_utxo.clone()},
-            &account,
-            &NOW,
-        );
+            assert_eq!(
+                processable_utxos,
+                ProcessableUtxos {
+                    new_utxos: btreeset! {new_utxo.clone()},
+                    ..Default::default()
+                },
+            );
+            assert_eq!(
+                suspended_utxos,
+                vec![SuspendedUtxo {
+                    utxo: ignored_utxo.clone(),
+                    reason: SuspendedReason::ValueTooSmall,
+                    earliest_retry: NOW.as_nanos_since_unix_epoch(),
+                }]
+            );
 
-        assert_eq!(
-            processable_utxos,
-            ProcessableUtxos {
-                new_utxos: btreeset! {new_utxo},
-                ..Default::default()
-            },
-        );
-        assert_eq!(
-            suspended_utxos,
-            vec![SuspendedUtxo {
-                utxo: ignored_utxo,
-                reason: SuspendedReason::ValueTooSmall,
-                earliest_retry: NOW.as_nanos_since_unix_epoch(),
-            }]
-        )
+            let (processable_utxos, suspended_utxos) = state.processable_utxos_for_account(
+                btreeset! {new_utxo.clone(), ignored_utxo.clone()},
+                &account,
+                &NOW.saturating_add(after_now),
+            );
+            assert_eq!(
+                processable_utxos,
+                ProcessableUtxos {
+                    new_utxos: btreeset! {new_utxo},
+                    previously_ignored_utxos: btreeset! {ignored_utxo},
+                    ..Default::default()
+                },
+            );
+            assert_eq!(suspended_utxos, vec![]);
+        }
     }
 
     #[test]

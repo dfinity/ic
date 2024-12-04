@@ -1,26 +1,40 @@
 mod update_balance {
     use crate::state::{audit, eventlog::Event, mutate_state, read_state, SuspendedReason};
-    use crate::storage;
     use crate::test_fixtures::{
         ecdsa_public_key, get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
-        mock::MockCanisterRuntime, quarantined_utxo, KYT_CANISTER_ID, MINTER_CANISTER_ID, NOW,
+        mock::MockCanisterRuntime, quarantined_utxo, DAY, KYT_CANISTER_ID, MINTER_CANISTER_ID, NOW,
     };
     use crate::updates::update_balance;
     use crate::updates::update_balance::{UpdateBalanceArgs, UtxoStatus};
+    use crate::{storage, Timestamp};
     use ic_btc_interface::{GetUtxosResponse, Utxo};
     use ic_btc_kyt::CheckTransactionResponse;
     use icrc_ledger_types::icrc1::account::Account;
+    use std::time::Duration;
 
     #[tokio::test]
     async fn should_not_add_event_when_reevaluated_utxo_still_ignored() {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
         let ignored_utxo = ignored_utxo();
-        mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone(), account, NOW));
+        mutate_state(|s| {
+            audit::ignore_utxo(
+                s,
+                ignored_utxo.clone(),
+                account,
+                NOW.checked_sub(DAY).unwrap(),
+            )
+        });
         let events_before: Vec<_> = storage::events().collect();
 
         let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
+        let num_time_called = 0_usize;
+        mock_time(
+            &mut runtime,
+            vec![NOW, NOW.saturating_add(Duration::from_secs(1))],
+            num_time_called,
+        );
         mock_schedule_now_process_logic(&mut runtime);
 
         let result = update_balance(
@@ -41,12 +55,25 @@ mod update_balance {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
         let ignored_utxo = ignored_utxo();
-        mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone(), account, NOW));
+        mutate_state(|s| {
+            audit::ignore_utxo(
+                s,
+                ignored_utxo.clone(),
+                account,
+                NOW.checked_sub(DAY).unwrap(),
+            )
+        });
         mutate_state(|s| s.kyt_fee = ignored_utxo.value - 1);
         let events_before: Vec<_> = storage::events().collect();
 
         let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
+        let num_time_called = 0_usize;
+        mock_time(
+            &mut runtime,
+            vec![NOW, NOW.saturating_add(Duration::from_secs(1))],
+            num_time_called,
+        );
         expect_check_transaction_returning(
             &mut runtime,
             ignored_utxo.clone(),
@@ -83,12 +110,25 @@ mod update_balance {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
         let ignored_utxo = ignored_utxo();
-        mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone(), account, NOW));
+        mutate_state(|s| {
+            audit::ignore_utxo(
+                s,
+                ignored_utxo.clone(),
+                account,
+                NOW.checked_sub(DAY).unwrap(),
+            )
+        });
         mutate_state(|s| s.kyt_fee = ignored_utxo.value - 1);
         let events_before: Vec<_> = storage::events().collect();
 
         let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
+        let num_time_called = 0_usize;
+        mock_time(
+            &mut runtime,
+            vec![NOW, NOW.saturating_add(Duration::from_secs(1))],
+            num_time_called,
+        );
         expect_check_transaction_returning(
             &mut runtime,
             ignored_utxo.clone(),
@@ -137,11 +177,20 @@ mod update_balance {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
         let quarantined_utxo = quarantined_utxo();
-        quarantine_utxo(quarantined_utxo.clone(), account);
+        let utxo = quarantined_utxo.clone();
+        mutate_state(|s| {
+            audit::quarantine_utxo(s, utxo, account, NOW.checked_sub(DAY).unwrap());
+        });
         let events_before: Vec<_> = storage::events().collect();
 
         let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![quarantined_utxo.clone()]);
+        let num_time_called = 0_usize;
+        mock_time(
+            &mut runtime,
+            vec![NOW, NOW.saturating_add(Duration::from_secs(1))],
+            num_time_called,
+        );
         expect_check_transaction_returning(
             &mut runtime,
             quarantined_utxo.clone(),
@@ -167,13 +216,22 @@ mod update_balance {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
         let quarantined_utxo = quarantined_utxo();
-        quarantine_utxo(quarantined_utxo.clone(), account);
+        let utxo = quarantined_utxo.clone();
+        mutate_state(|s| {
+            audit::quarantine_utxo(s, utxo, account, NOW.checked_sub(DAY).unwrap());
+        });
         let kyt_fee = read_state(|s| s.kyt_fee);
         let minted_amount = quarantined_utxo.value - kyt_fee;
         let events_before: Vec<_> = storage::events().collect();
 
         let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![quarantined_utxo.clone()]);
+        let num_time_called = 0_usize;
+        mock_time(
+            &mut runtime,
+            vec![NOW, NOW.saturating_add(Duration::from_secs(1))],
+            num_time_called,
+        );
         expect_check_transaction_returning(
             &mut runtime,
             quarantined_utxo.clone(),
@@ -226,12 +284,6 @@ mod update_balance {
         mutate_state(|s| s.ecdsa_public_key = Some(ecdsa_public_key()))
     }
 
-    fn quarantine_utxo(utxo: Utxo, account: Account) {
-        mutate_state(|s| {
-            audit::quarantine_utxo(s, utxo, account, NOW);
-        });
-    }
-
     fn expect_bitcoin_get_utxos_returning(runtime: &mut MockCanisterRuntime, utxos: Vec<Utxo>) {
         runtime
             .expect_bitcoin_get_utxos()
@@ -257,8 +309,24 @@ mod update_balance {
     }
 
     fn mock_schedule_now_process_logic(runtime: &mut MockCanisterRuntime) {
-        runtime.expect_time().return_const(0_u64);
         runtime.expect_global_timer_set().return_const(());
+    }
+
+    fn mock_time(
+        runtime: &mut MockCanisterRuntime,
+        timestamps: Vec<Timestamp>,
+        mut time_counter: usize,
+    ) {
+        runtime.expect_time().returning(move || {
+            assert!(
+                time_counter < timestamps.len(),
+                "BUG: unexpected call to CanisterRuntime::time. Expected at most {} calls.",
+                timestamps.len()
+            );
+            let result = timestamps[time_counter];
+            time_counter += 1;
+            result.as_nanos_since_unix_epoch()
+        });
     }
 
     fn mock_get_utxos_for_account(
