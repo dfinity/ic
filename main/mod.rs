@@ -239,3 +239,10 @@ pub async fn delete_canister_snapshot(arg: DeleteCanisterSnapshotArgs) -> CallRe
     )
     .await
 }
+
+/// Get subnet metadata.
+///
+/// See [IC method `subnet_info`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-subnet-info).
+pub async fn subnet_info(arg: SubnetInfoArgs) -> CallResult<(SubnetInfoResult,)> {
+    call(Principal::management_canister(), "subnet_info", (arg,)).await
+}
