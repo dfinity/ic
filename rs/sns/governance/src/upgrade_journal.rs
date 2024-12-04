@@ -135,24 +135,28 @@ impl Governance {
         request: GetUpgradeJournalRequest,
     ) -> GetUpgradeJournalResponse {
         let upgrade_journal = self.proto.upgrade_journal.as_ref().map(|journal| {
-            let max_entries = request
-                .max_entries
-                .map(|n| n.min(MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST))
+            let limit = request
+                .limit
                 .unwrap_or(MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST)
-                as usize;
-            let start_index = request
-                .start_index
-                .map(|start_index| start_index as usize)
-                .unwrap_or_else(|| journal.entries.len().saturating_sub(max_entries));
+                .min(MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST) as usize;
+            let offset = request
+                .offset
+                .map(|offset| offset as usize)
+                .unwrap_or_else(|| journal.entries.len().saturating_sub(limit));
             let entries = journal
                 .entries
                 .iter()
-                .skip(start_index)
-                .take(max_entries)
+                .skip(offset)
+                .take(limit)
                 .cloned()
                 .collect();
             UpgradeJournal { entries }
         });
+        let upgrade_journal_entry_count = self
+            .proto
+            .upgrade_journal
+            .as_ref()
+            .map(|journal| journal.entries.len() as u64);
 
         let upgrade_steps = self.proto.cached_upgrade_steps.clone();
         match upgrade_steps {
@@ -162,6 +166,7 @@ impl Governance {
                 target_version: self.proto.target_version.clone(),
                 deployed_version: self.proto.deployed_version.clone(),
                 upgrade_journal,
+                upgrade_journal_entry_count,
             },
             None => GetUpgradeJournalResponse {
                 upgrade_steps: None,
@@ -169,6 +174,7 @@ impl Governance {
                 target_version: None,
                 deployed_version: self.proto.deployed_version.clone(),
                 upgrade_journal,
+                upgrade_journal_entry_count,
             },
         }
     }

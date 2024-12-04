@@ -3690,14 +3690,14 @@ pub struct UpgradeJournal {
     ::prost::Message,
 )]
 pub struct GetUpgradeJournalRequest {
-    /// Maximum number of journal entries to return, from newest to oldest.
+    /// Maximum number of journal entries to return.
     /// If not specified, defaults to 100. Values larger than 100 will be capped at 100.
     #[prost(uint64, optional, tag = "1")]
-    pub max_entries: ::core::option::Option<u64>,
+    pub limit: ::core::option::Option<u64>,
     /// The starting index from which to return entries, counting from the oldest entry (0).
     /// If not specified, return the most recent entries.
     #[prost(uint64, optional, tag = "2")]
-    pub start_index: ::core::option::Option<u64>,
+    pub offset: ::core::option::Option<u64>,
 }
 #[derive(
     candid::CandidType,
@@ -3721,6 +3721,8 @@ pub struct GetUpgradeJournalResponse {
     pub deployed_version: ::core::option::Option<governance::Version>,
     #[prost(message, optional, tag = "4")]
     pub upgrade_journal: ::core::option::Option<UpgradeJournal>,
+    #[prost(uint64, optional, tag = "6")]
+    pub upgrade_journal_entry_count: ::core::option::Option<u64>,
 }
 /// A request to mint tokens for a particular principal. The associated endpoint
 /// is only available on SNS governance, and only then when SNS governance is

@@ -807,8 +807,8 @@ type UpgradeJournal = record {
 };
 
 type GetUpgradeJournalRequest = record {
-  max_entries : opt nat64;
-  start_index : opt nat64;
+  limit : opt nat64;
+  offset : opt nat64;
 };
 
 type GetUpgradeJournalResponse = record {
@@ -817,6 +817,7 @@ type GetUpgradeJournalResponse = record {
   target_version : opt Version;
   deployed_version : opt Version;
   upgrade_journal : opt UpgradeJournal;
+  upgrade_journal_entry_count: opt nat64;
 };
 
 service : (Governance) -> {
