@@ -227,11 +227,9 @@ async fn install_many_canisters(
     num_canisters: usize,
 ) {
     let logger = env.logger();
-    let wasm = Wasm::from_file(get_dependency_path(""));
     for i in 0..1000 {
         let mut futures: Vec<_> = Vec::new();
         for canister_idx in 0..20 {
-            let new_wasm = wasm.clone();
             let new_logger = logger.clone();
             let id = i * 20 + canister_idx;
             futures.push(async move {
