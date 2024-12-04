@@ -25,6 +25,7 @@ ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
 ic-crypto-utils-ni-dkg = { path = "../../crypto/utils/ni_dkg" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
@@ -60,7 +61,6 @@ ic-config = { path = "../../config" }
 ic-crypto-node-key-generation = { path = "../../crypto/node_key_generation" }
 ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
-ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-client-fake = { path = "../fake" }
 ic-registry-nns-data-provider = { path = "../nns_data_provider" }
 ic-registry-proto-data-provider = { path = "../proto_data_provider" }

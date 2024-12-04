@@ -3,20 +3,19 @@ use std::{default::Default, str::FromStr};
 use crate::{common::LOG_PREFIX, registry::Registry};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_interfaces_registry::RegistryVersionedRecord;
 use ic_protobuf::registry::{
-    node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord,
+    dc::v1::DataCenterRecord, node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord
 };
 use ic_registry_keys::{
-    make_crypto_node_key, make_crypto_tls_cert_key, make_firewall_rules_record_key,
-    make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
-    FirewallRulesScope, NODE_RECORD_KEY_PREFIX,
+    make_crypto_node_key, make_crypto_tls_cert_key, make_data_center_record_key, make_firewall_rules_record_key, make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key, FirewallRulesScope, NODE_RECORD_KEY_PREFIX
 };
 use ic_registry_transport::{
     delete, insert,
     pb::v1::{RegistryMutation, RegistryValue},
     update,
 };
-use ic_types::crypto::KeyPurpose;
+use ic_types::{crypto::KeyPurpose, RegistryVersion};
 use prost::Message;
 use std::convert::TryFrom;
 
@@ -94,6 +93,25 @@ pub fn get_node_operator_record(
             )),
             |result| {
                 let decoded = NodeOperatorRecord::decode(result.value.as_slice()).unwrap();
+                Ok(decoded)
+            },
+        )
+}
+
+pub fn get_data_center_record(
+    registry: &Registry,
+    data_center_id: &str,
+) -> Result<DataCenterRecord, String> {
+    let data_center_key = make_data_center_record_key(data_center_id);
+    registry
+        .get(data_center_key.as_bytes(), registry.latest_version())
+        .map_or(
+            Err(format!(
+                "Data Center Id {:} not found in the registry.",
+                data_center_key
+            )),
+            |result| {
+                let decoded = DataCenterRecord::decode(result.value.as_slice()).unwrap();
                 Ok(decoded)
             },
         )
@@ -253,5 +271,36 @@ pub(crate) fn get_key_family_iter<'a, T: prost::Message + Default>(
             let value = T::decode(v.value.as_slice()).unwrap();
 
             (id, value)
+        })
+}
+
+pub(crate) fn get_key_family_versioned_iter<'a, T: prost::Message + Default>(
+    registry: &'a Registry,
+    prefix: &'a str,
+) -> impl Iterator<Item = (String, RegistryVersionedRecord<T>)> + 'a {
+    let prefix_bytes = prefix.as_bytes();
+
+    registry
+        .store
+        .range(prefix_bytes.to_vec()..)
+        .take_while(|(k, _)| k.starts_with(prefix_bytes))
+        .filter_map(move |(k, v)| {
+            let v_last = v.back()?;
+            let k_str = std::str::from_utf8(k).ok()?;
+
+            let id = k_str[prefix.len()..].to_string();
+            let maybe_value = if !v_last.deletion_marker {
+                Some(T::decode(v_last.value.as_slice()).ok()?)
+            } else {
+                None
+            };
+
+            let record = RegistryVersionedRecord {
+                key: k_str.to_string(),
+                version: RegistryVersion::from(v_last.version),
+                value: maybe_value,
+            };
+
+            Some((id, record))
         })
 }
