@@ -442,17 +442,7 @@ pub fn main() -> Result<()> {
                 elasticsearch_tags: None,
             };
 
-            let mgmt_mac = match deployment_json_settings.deployment.mgmt_mac {
-                Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
-                    println!(
-                        "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac
-                    );
-                    mgmt_mac
-                }
-                None => get_ipmi_mac()?,
-            };
+            let mgmt_mac = resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac)?;
 
             let use_nns_public_key = Path::new("/boot/config/nns_public_key.pem").exists();
             let use_node_operator_private_key =
@@ -462,7 +452,7 @@ pub fn main() -> Result<()> {
             let icos_settings = ICOSSettings {
                 node_reward_type,
                 mgmt_mac,
-                deployment_environment: deployment_json_settings.deployment.name,
+                deployment_environment: deployment_json_settings.deployment.name.parse()?,
                 logging,
                 use_nns_public_key,
                 nns_urls: deployment_json_settings.nns.url.clone(),

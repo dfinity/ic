@@ -1,6 +1,6 @@
 use crate::serialize_and_write_config;
-use anyhow::{Context, Result};
-use mac_address::mac_address::FormattedMacAddress;
+use anyhow::{anyhow, Context, Result};
+use macaddr::MacAddr6;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
@@ -8,7 +8,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::Path;
 use url::Url;
 
-use crate::types::*;
+use config_types::*;
 
 pub static CONFIG_ROOT: &str = "/boot/config";
 pub static STATE_ROOT: &str = "/var/lib/ic/data";
@@ -41,7 +41,7 @@ pub fn update_guestos_config() -> Result<()> {
         let use_ssh_authorized_keys = config_dir.join("accounts_ssh_authorized_keys").is_dir();
 
         let mgmt_mac = derive_mgmt_mac_from_hostname(hostname.as_deref())?;
-        let deployment_environment = "mainnet".to_string();
+        let deployment_environment = DeploymentEnvironment::Mainnet;
 
         let icos_settings = ICOSSettings {
             node_reward_type: None,
@@ -203,26 +203,12 @@ fn read_nns_conf(config_dir: &Path) -> Result<Vec<Url>> {
     Ok(nns_urls)
 }
 
-fn derive_mgmt_mac_from_hostname(hostname: Option<&str>) -> Result<FormattedMacAddress> {
+fn derive_mgmt_mac_from_hostname(hostname: Option<&str>) -> Result<MacAddr6> {
     if let Some(hostname) = hostname {
         if let Some(unformatted_mac) = hostname.strip_prefix("guest-") {
-            // Insert colons into mac_str to format it as a MAC address
-            if unformatted_mac.len() != 12 {
-                return Err(anyhow::anyhow!(
-                    "Invalid MAC address length in hostname: {}",
-                    hostname
-                ));
-            }
-            let formatted_mac = unformatted_mac
-                .chars()
-                .collect::<Vec<_>>()
-                .chunks(2)
-                .map(|chunk| chunk.iter().collect::<String>())
-                .collect::<Vec<_>>()
-                .join(":");
-            let formatted_mac = FormattedMacAddress::try_from(formatted_mac.as_str())
-                .with_context(|| format!("Failed to parse mgmt_mac from hostname: {}", hostname))?;
-            Ok(formatted_mac)
+            unformatted_mac
+                .parse()
+                .map_err(|_| anyhow!("Unable to parse mac address: {}", unformatted_mac))
         } else {
             Err(anyhow::anyhow!(
                 "Hostname does not start with 'guest-': {}",
@@ -290,9 +276,9 @@ mod tests {
     fn test_derive_mgmt_mac_from_hostname() -> Result<()> {
         // Test with a valid hostname
         let hostname = Some("guest-001122334455");
-        let expected_mac = "00:11:22:33:44:55";
+        let expected_mac: MacAddr6 = "00:11:22:33:44:55".parse().unwrap();
         let mac = derive_mgmt_mac_from_hostname(hostname)?;
-        assert_eq!(mac.get(), expected_mac);
+        assert_eq!(mac, expected_mac);
 
         // Test with invalid hostname (wrong prefix)
         let invalid_hostname = Some("host-001122334455");
