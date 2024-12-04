@@ -33,17 +33,24 @@ To interact with the testnet bitcoin minter please move to rs/bitcoin/ckbtc/test
 1. Obtain the deposit address:
 +
 ----
-dfx canister --network ic call minter get_btc_address "(record {subaccount=null;})"
+dfx canister --network ic call minter get_btc_address "(record {})"
 ----
 +
-2. Send bitcoin to the BTC address the minter gave you.
+2. Send bitcoin to the BTC address the minter gave you, which by default is identified by the principal id of your dfx identity.
 3. Wait until your Bitcoin transaction got enough confirmations.
-   Mainnet ckBTC can require up to 72 confirmations, corresponding to a 12-hour waiting period on average.
+   Mainnet ckBTC can require up to 6 confirmations (which depends on the minter's latest setting), corresponding to a 1-hour waiting period on average.
 4. Notify the minter about the transfer.
 +
 ----
-dfx canister --network ic call minter update_balance "(record {subaccount=null;})"
+dfx canister --network ic call minter update_balance "(record {})"
 ----
++
+
+If you want to get the deposit address of a different account than your dfx identity, you may specify full account details including both owner principal and subaccount like this:
++
+---
+dfx canister --network ic call minter get_btc_address '(record { owner = opt principal ".."; subaccount = opt blob ".." })'
+---
 +
 
 You now have some ckBTC, you can enjoy the Internet Computer speed and low fees!
