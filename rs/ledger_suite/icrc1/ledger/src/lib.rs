@@ -183,8 +183,6 @@ impl InitArgsBuilder {
             },
             max_memo_length: None,
             feature_flags: None,
-            maximum_number_of_accounts: None,
-            accounts_overflow_trim_quantity: None,
         })
     }
 
@@ -267,8 +265,6 @@ pub struct InitArgs {
     pub archive_options: ArchiveOptions,
     pub max_memo_length: Option<u16>,
     pub feature_flags: Option<FeatureFlags>,
-    pub maximum_number_of_accounts: Option<u64>,
-    pub accounts_overflow_trim_quantity: Option<u64>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -343,8 +339,6 @@ pub struct UpgradeArgs {
     pub max_memo_length: Option<u16>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feature_flags: Option<FeatureFlags>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub accounts_overflow_trim_quantity: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub change_archive_options: Option<ChangeArchiveOptions>,
 }
@@ -644,8 +638,6 @@ impl Ledger {
             fee_collector_account,
             max_memo_length,
             feature_flags,
-            maximum_number_of_accounts,
-            accounts_overflow_trim_quantity,
         }: InitArgs,
         now: TimeStamp,
     ) -> Self {
@@ -680,14 +672,8 @@ impl Ledger {
                 .collect(),
             max_memo_length: max_memo_length.unwrap_or(DEFAULT_MAX_MEMO_LENGTH),
             feature_flags: feature_flags.unwrap_or_default(),
-            maximum_number_of_accounts: maximum_number_of_accounts
-                .unwrap_or_else(|| MAX_ACCOUNTS.try_into().unwrap())
-                .try_into()
-                .unwrap(),
-            accounts_overflow_trim_quantity: accounts_overflow_trim_quantity
-                .unwrap_or_else(|| ACCOUNTS_OVERFLOW_TRIM_QUANTITY.try_into().unwrap())
-                .try_into()
-                .unwrap(),
+            maximum_number_of_accounts: MAX_ACCOUNTS.try_into().unwrap(),
+            accounts_overflow_trim_quantity: ACCOUNTS_OVERFLOW_TRIM_QUANTITY.try_into().unwrap(),
             ledger_version: LEDGER_VERSION,
         };
 
@@ -934,10 +920,6 @@ impl Ledger {
                 );
             }
             self.feature_flags = feature_flags;
-        }
-        if let Some(accounts_overflow_trim_quantity) = args.accounts_overflow_trim_quantity {
-            self.accounts_overflow_trim_quantity =
-                accounts_overflow_trim_quantity.try_into().unwrap();
         }
         if let Some(change_archive_options) = args.change_archive_options {
             let mut maybe_archive = self.blockchain.archive.write().expect(
