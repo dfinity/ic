@@ -15615,6 +15615,7 @@ dependencies = [
  "dfn_candid",
  "ic-agent 0.37.1",
  "ic-base-types",
+ "ic-cdk 0.16.0",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
@@ -20464,9 +20465,11 @@ dependencies = [
 name = "systest-message-routing-common"
 version = "0.9.0"
 dependencies = [
+ "candid",
  "canister-test",
  "dfn_candid",
  "futures",
+ "ic-cdk 0.16.0",
  "ic-system-test-driver",
  "slog",
  "xnet-test",
@@ -22913,7 +22916,9 @@ name = "xnet-test"
 version = "0.9.0"
 dependencies = [
  "candid",
- "dfn_core",
+ "futures",
+ "ic-cdk 0.16.0",
+ "ic-cdk-macros 0.9.0",
  "rand 0.8.5",
  "rand_pcg 0.3.1",
  "serde",
