@@ -383,20 +383,14 @@ pub fn main() -> Result<()> {
         }
         // TODO(NODE-1519): delete UpdateGuestosConfig and UpdateHostosConfig after moved to new config format
         Some(Commands::UpdateGuestosConfig) => update_guestos_config(),
+        // Regenerate config.json on *every boot* in case the config structure changes between
+        // when we roll out the update-config service and when we roll out the 'config integration'
         Some(Commands::UpdateHostosConfig {
             config_ini_path,
             deployment_json_path,
             hostos_config_json_path,
         }) => {
             let hostos_config_json_path = Path::new(&hostos_config_json_path);
-
-            if hostos_config_json_path.exists() {
-                println!(
-                    "The hostos_config.json file already exists at {}",
-                    hostos_config_json_path.display()
-                );
-                return Ok(());
-            }
 
             let ConfigIniSettings {
                 ipv6_prefix,
