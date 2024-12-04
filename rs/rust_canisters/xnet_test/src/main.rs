@@ -33,6 +33,9 @@ thread_local! {
     /// Pad requests AND responses to this size (in bytes) if smaller.
     static PAYLOAD_SIZE: RefCell<u64> = const { RefCell::new(1024) };
 
+    /// Response size in bytes. Overrides `PAYLOAD_SIZE` if non-zero.
+    static RESPONSE_PAYLOAD_SIZE: RefCell<u64> = const { RefCell::new(0) };
+
     /// Timeout to set on requests. Zero for guaranteed response.
     static TIMEOUT_SECONDS: RefCell<u32> = const { RefCell::new(0) };
 
@@ -105,7 +108,12 @@ fn candid_reply<T: CandidType>(t: &T) {
 fn candid_encode_padded<T: CandidType>(t: &T) -> Vec<u8> {
     let msg = candid::Encode!(t, &vec![13u8; 1]).expect("failed to encode message");
 
-    let payload_size = PAYLOAD_SIZE.with(|p| *p.borrow()) as usize;
+    let response_payload_size = RESPONSE_PAYLOAD_SIZE.with(|p| *p.borrow()) as usize;
+    let payload_size = if response_payload_size > 0 {
+        response_payload_size
+    } else {
+        PAYLOAD_SIZE.with(|p| *p.borrow()) as usize
+    };
     if msg.len() < payload_size {
         candid::Encode!(t, &vec![13u8; payload_size - msg.len() + 1])
             .expect("failed to encode message")
@@ -174,8 +182,8 @@ fn log(message: &str) {
 #[export_name = "canister_update start"]
 fn start() {
     dfn_core::printer::hook();
-    let (network_topology, rate, payload_size, timeout_seconds) =
-        candid::Decode!(&api::arg_data()[..], NetworkTopology, u64, u64, u32)
+    let (network_topology, rate, payload_size, response_payload_size, timeout_seconds) =
+        candid::Decode!(&api::arg_data()[..], NetworkTopology, u64, u64, u64, u32)
             .expect("failed to decode subnet canister ids");
 
     NETWORK_TOPOLOGY.with(move |canisters| {
@@ -184,6 +192,7 @@ fn start() {
 
     PER_SUBNET_RATE.with(|r| *r.borrow_mut() = rate);
     PAYLOAD_SIZE.with(|r| *r.borrow_mut() = payload_size);
+    RESPONSE_PAYLOAD_SIZE.with(|r| *r.borrow_mut() = response_payload_size);
     TIMEOUT_SECONDS.with(|r| *r.borrow_mut() = timeout_seconds);
 
     RUNNING.with(|r| *r.borrow_mut() = true);

@@ -48,7 +48,7 @@ const PAYLOAD_SIZE_BYTES: u64 = 1024;
 /// filling up its output queue). This should be estimated as:
 ///
 /// `queue_capacity / 10 /* max_rounds roundtrip */`
-const MAX_CANISTER_TO_CANISTER_RATE: usize = 30;
+const MAX_CANISTER_TO_CANISTER_RATE: usize = 10;
 const SEND_RATE_THRESHOLD: f64 = 0.3;
 const ERROR_PERCENTAGE_THRESHOLD: f64 = 5.0;
 const TARGETED_LATENCY_SECONDS: u64 = 20;
@@ -59,6 +59,7 @@ pub struct Config {
     nodes_per_subnet: usize,
     runtime: Duration,
     payload_size_bytes: u64,
+    response_payload_size_bytes: u64,
     send_rate_threshold: f64,
     error_percentage_threshold: f64,
     targeted_latency_seconds: u64,
@@ -108,6 +109,7 @@ impl Config {
             nodes_per_subnet,
             runtime,
             payload_size_bytes: PAYLOAD_SIZE_BYTES,
+            response_payload_size_bytes: 0,
             send_rate_threshold,
             error_percentage_threshold,
             targeted_latency_seconds,
@@ -128,6 +130,12 @@ impl Config {
     pub fn with_best_effort_response(self, timeout_seconds: u32) -> Self {
         let mut config = self.clone();
         config.timeout_seconds = timeout_seconds;
+        config
+    }
+
+    pub fn with_response_payload_size_bytes(self, response_payload_size_bytes: u64) -> Self {
+        let mut config = self.clone();
+        config.response_payload_size_bytes = response_payload_size_bytes;
         config
     }
 
@@ -235,18 +243,25 @@ pub async fn deploy_and_start<'a, 'b>(
     start_all_canisters(
         &canisters,
         config.payload_size_bytes,
+        config.response_payload_size_bytes,
         config.canister_to_subnet_rate as u64,
         config.timeout_seconds,
     )
     .await;
+    let response_payload_size_bytes = if config.response_payload_size_bytes == 0 {
+        config.payload_size_bytes
+    } else {
+        config.response_payload_size_bytes
+    };
     let msgs_per_round =
         config.canister_to_subnet_rate * config.canisters_per_subnet * (config.subnets - 1);
     info!(
         logger,
-        "Starting chatter: {} messages/round * {} bytes = {} bytes/round",
+        "Starting chatter: {} messages/round * {}/{} bytes = {} bytes/round",
         msgs_per_round,
         config.payload_size_bytes,
-        msgs_per_round * config.payload_size_bytes as usize
+        response_payload_size_bytes,
+        msgs_per_round * (config.payload_size_bytes + response_payload_size_bytes) as usize
     );
 
     canisters
