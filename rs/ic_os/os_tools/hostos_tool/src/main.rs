@@ -59,7 +59,7 @@ pub fn main() -> Result<()> {
                 &hostos_config.icos_settings.mgmt_mac,
                 hostos_config.icos_settings.deployment_environment,
                 IpVariant::V6,
-                0x0, /* 0x0 corresponds to HostOS */
+                NodeType::HostOS,
             );
 
             generate_network_config(
@@ -83,8 +83,22 @@ pub fn main() -> Result<()> {
                 IpVariant::V6,
                 node_type,
             );
-            let ipv6_address = generated_mac.calculate_slaac(&network_info.ipv6_prefix)?;
-            println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
+
+            eprintln!("Using generated mac address {}", generated_mac);
+
+            let ipv6_config = if let Ipv6Config::Deterministic(ipv6_config) =
+                &hostos_config.network_settings.ipv6_config
+            {
+                ipv6_config
+            } else {
+                return Err(anyhow!(
+                    "Ipv6Config is not of type Deterministic. Cannot generate IPv6 address."
+                ));
+            };
+
+            let ipv6_address = generated_mac.calculate_slaac(&ipv6_config.prefix)?;
+            println!("{}", to_cidr(ipv6_address, ipv6_config.prefix_length));
+
             Ok(())
         }
         Some(Commands::GenerateMacAddress { node_type }) => {
