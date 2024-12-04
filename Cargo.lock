@@ -2408,7 +2408,6 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "canister-test",
- "canister_http",
  "ic-agent",
  "ic-base-types",
  "ic-interfaces-registry",
