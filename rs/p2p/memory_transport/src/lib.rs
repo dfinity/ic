@@ -41,7 +41,7 @@ use axum::{
     Router,
 };
 use bytes::Bytes;
-use ic_quic_transport::{ConnId, Transport};
+use ic_quic_transport::{ConnId, Transport, TransportError};
 use ic_types::NodeId;
 use std::{
     collections::HashMap,
@@ -280,9 +280,11 @@ impl Transport for PeerTransport {
         &self,
         peer_id: &NodeId,
         mut request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, anyhow::Error> {
+    ) -> Result<Response<Bytes>, TransportError> {
         if peer_id == &self.node_id {
-            return Err(anyhow!("Can't connect to self"));
+            return Err(TransportError::Internal(
+                anyhow!("Can't connect to self").into(),
+            ));
         }
 
         let (oneshot_tx, oneshot_rx) = oneshot::channel();
@@ -292,11 +294,13 @@ impl Transport for PeerTransport {
             .send((request, *peer_id, oneshot_tx))
             .is_err()
         {
-            return Err(anyhow!("router channel closed"));
+            return Err(TransportError::Internal(
+                anyhow!("router channel closed").into(),
+            ));
         }
         match oneshot_rx.await {
             Ok(r) => Ok(r),
-            Err(_) => Err(anyhow!("channel closed")),
+            Err(_) => Err(TransportError::Internal(anyhow!("channel closed").into())),
         }
     }
 

@@ -8,30 +8,22 @@ use ic_protobuf::transport::v1 as pb;
 use prost::Message;
 use quinn::Connection;
 
-use crate::{
-    metrics::{
-        observe_conn_error, observe_read_to_end_error, observe_stopped_error, observe_write_error,
-        QuicTransportMetrics, INFALIBBLE,
-    },
-    ConnId, MessagePriority, ResetStreamOnDrop, MAX_MESSAGE_SIZE_BYTES,
-};
+use crate::{ConnId, MessagePriority, ResetStreamOnDrop, TransportError, MAX_MESSAGE_SIZE_BYTES};
 
 static CONN_ID_SEQ: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug)]
 pub struct ConnectionHandle {
     conn: Connection,
-    metrics: QuicTransportMetrics,
     conn_id: ConnId,
 }
 
 impl ConnectionHandle {
-    pub fn new(conn: Connection, metrics: QuicTransportMetrics) -> Self {
+    pub fn new(conn: Connection) -> Self {
         let conn_id = CONN_ID_SEQ.fetch_add(1, Ordering::SeqCst);
         Self {
             conn,
             conn_id: conn_id.into(),
-            metrics,
         }
     }
 
@@ -53,25 +45,8 @@ impl ConnectionHandle {
     /// where connections can be managed directly by the caller.
     ///
     /// Note: The method is cancel-safe.
-    pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>, anyhow::Error> {
-        let _timer = self
-            .metrics
-            .connection_handle_duration_seconds
-            .with_label_values(&[request.uri().path()])
-            .start_timer();
-
-        let bytes_sent_counter = self
-            .metrics
-            .connection_handle_bytes_sent_total
-            .with_label_values(&[request.uri().path()]);
-        let bytes_received_counter = self
-            .metrics
-            .connection_handle_bytes_received_total
-            .with_label_values(&[request.uri().path()]);
-
-        let (send_stream, mut recv_stream) = self.conn.open_bi().await.inspect_err(|err| {
-            observe_conn_error(err, "open_bi", &self.metrics.connection_handle_errors_total);
-        })?;
+    pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>, TransportError> {
+        let (send_stream, mut recv_stream) = self.conn.open_bi().await?;
 
         let mut send_stream_guard = ResetStreamOnDrop::new(send_stream);
         let send_stream = &mut send_stream_guard.send_stream;
@@ -83,57 +58,28 @@ impl ConnectionHandle {
             .unwrap_or_default();
         let _ = send_stream.set_priority(priority.into());
 
-        bytes_sent_counter.inc_by(request.body().len() as u64);
         let request_bytes = into_request_bytes(request);
 
+        send_stream.write_all(&request_bytes).await?;
         send_stream
-            .write_all(&request_bytes)
-            .await
-            .inspect_err(|err| {
-                observe_write_error(
-                    err,
-                    "write_all",
-                    &self.metrics.connection_handle_errors_total,
-                );
-            })?;
+            .finish()
+            .map_err(|err| TransportError::Internal(Box::new(err)))?;
+        send_stream.stopped().await?;
+        let response_bytes = recv_stream.read_to_end(MAX_MESSAGE_SIZE_BYTES).await?;
+        let response = to_response(response_bytes)?;
 
-        send_stream.finish().inspect_err(|_| {
-            self.metrics
-                .connection_handle_errors_total
-                .with_label_values(&["finish", INFALIBBLE])
-                .inc();
-        })?;
-
-        send_stream.stopped().await.inspect_err(|err| {
-            observe_stopped_error(err, "stopped", &self.metrics.connection_handle_errors_total)
-        })?;
-        let response_bytes = recv_stream
-            .read_to_end(MAX_MESSAGE_SIZE_BYTES)
-            .await
-            .inspect_err(|err| {
-                observe_read_to_end_error(
-                    err,
-                    "read_to_end",
-                    &self.metrics.connection_handle_errors_total,
-                )
-            })?;
-
-        let response = to_response(response_bytes).inspect_err(|_| {
-            self.metrics
-                .connection_handle_errors_total
-                .with_label_values(&["decode", INFALIBBLE])
-                .inc();
-        })?;
-
-        bytes_received_counter.inc_by(response.body().len() as u64);
         Ok(response)
     }
 }
 
 // The function returns infallible error.
-fn to_response(response_bytes: Vec<u8>) -> Result<Response<Bytes>, anyhow::Error> {
-    let response_proto = pb::HttpResponse::decode(response_bytes.as_slice())?;
-    let status: u16 = response_proto.status_code.try_into()?;
+fn to_response(response_bytes: Vec<u8>) -> Result<Response<Bytes>, TransportError> {
+    let response_proto = pb::HttpResponse::decode(response_bytes.as_slice())
+        .map_err(|err| TransportError::Internal(Box::new(err)))?;
+    let status: u16 = response_proto
+        .status_code
+        .try_into()
+        .map_err(|err| TransportError::Internal(Box::new(err)))?;
 
     let mut response = Response::builder().status(status).version(Version::HTTP_3);
     for h in response_proto.headers {
@@ -142,7 +88,9 @@ fn to_response(response_bytes: Vec<u8>) -> Result<Response<Bytes>, anyhow::Error
     }
     // This consumes the body without requiring allocation or cloning the whole content.
     let body_bytes = Bytes::from(response_proto.body);
-    Ok(response.body(body_bytes)?)
+    response
+        .body(body_bytes)
+        .map_err(|err| TransportError::Internal(Box::new(err)))
 }
 
 fn into_request_bytes(request: Request<Bytes>) -> Vec<u8> {

@@ -5,7 +5,7 @@ use ic_interfaces::p2p::{
     consensus::{Aborted, ArtifactAssembler, Bouncer, BouncerFactory, Peers, ValidatedPoolReader},
     state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient},
 };
-use ic_quic_transport::{ConnId, Transport};
+use ic_quic_transport::{ConnId, Transport, TransportError};
 use ic_types::artifact::IdentifiableArtifact;
 use ic_types::NodeId;
 use mockall::mock;
@@ -40,7 +40,7 @@ mock! {
             &self,
             peer_id: &NodeId,
             request: Request<Bytes>,
-        ) -> Result<Response<Bytes>, anyhow::Error>;
+        ) -> Result<Response<Bytes>, TransportError>;
 
         fn peers(&self) -> Vec<(NodeId, ConnId)>;
     }
