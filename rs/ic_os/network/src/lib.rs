@@ -22,7 +22,7 @@ pub fn generate_network_config(
 ) -> Result<()> {
     eprintln!("Generating IPv6 address");
     let ipv6_address = generated_mac.calculate_slaac(&network_info.ipv6_prefix)?;
-    eprintln!("Using IPv6 address: {}", ipv6_address);
+    eprintln!("Using IPv6 address: {ipv6_address}");
 
     generate_systemd_config_files(
         output_directory,

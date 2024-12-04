@@ -125,9 +125,10 @@ fn qualify_and_generate_interfaces(interface_names: &[&str]) -> Result<Vec<Inter
             Ok(Some(interface)) => {
                 eprintln!(
                     "Cable is ATTACHED. Speed (mbps) detected: {}",
-                    interface
-                        .speed_mbps
-                        .map_or("None".to_string(), |s| s.to_string())
+                    match &interface.speed_mbps {
+                        Some(s) => s.to_string(),
+                        None => "None".to_string(),
+                    }
                 );
                 result_vec.push(interface);
             }
