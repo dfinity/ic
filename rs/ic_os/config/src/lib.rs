@@ -45,7 +45,6 @@ pub fn deserialize_config<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(file_pat
 #[cfg(test)]
 mod tests {
     use config_types::*;
-    use deterministic_ips::Deployment;
 
     #[test]
     fn test_serialize_and_deserialize() {
@@ -73,7 +72,7 @@ mod tests {
         let icos_settings = ICOSSettings {
             node_reward_type: Some("type3.1".to_string()),
             mgmt_mac: "ec:2a:72:31:a2:0c".parse().unwrap(),
-            deployment_environment: Deployment::Mainnet,
+            deployment_environment: DeploymentEnvironment::Mainnet,
             logging,
             use_nns_public_key: true,
             nns_urls: vec!["http://localhost".parse().unwrap()],
@@ -159,7 +158,7 @@ mod tests {
         },
         "icos_settings": {
             "node_reward_type": "type3.1",
-            "mgmt_mac": "ec:2a:72:31:a2:0c",
+            "mgmt_mac": "EC:2A:72:31:A2:0C",
             "deployment_environment": "Mainnet",
             "logging": {
                 "elasticsearch_hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443",
@@ -219,7 +218,7 @@ mod tests {
         },
         "icos_settings": {
             "node_reward_type": "type3.1",
-            "mgmt_mac": "ec:2a:72:31:a2:0c",
+            "mgmt_mac": "EC:2A:72:31:A2:0C",
             "deployment_environment": "Mainnet",
             "logging": {
                 "elasticsearch_hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443",
@@ -267,7 +266,7 @@ mod tests {
         assert_eq!(config.config_version, "1.0.0");
         assert_eq!(
             config.icos_settings.mgmt_mac.to_string(),
-            "ec:2a:72:31:a2:0c"
+            "EC:2A:72:31:A2:0C"
         );
     }
 }
