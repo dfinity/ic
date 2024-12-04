@@ -2724,7 +2724,7 @@ pub struct SignWithBip341Aux {
 
 /// Represents the aux argument of the sign_with_schnorr API.
 /// ```text
-/// (record {
+/// (variant {
 ///    bip341: record {
 ///      merkle_root_hash: blob;
 ///   }
