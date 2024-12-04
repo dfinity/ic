@@ -1,5 +1,5 @@
 {
-  "checksum": "bef27a5bfc14b21bb169b205f08e83399d71e3eacacd01a9417acce17d18131a",
+  "checksum": "3fbe6f0bc1150dc7e649e3be6d14ab3560751213130f5f2404d9e38092e2d002",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1622,7 +1622,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.7",
+              "id": "axum 0.7.9",
               "target": "axum"
             },
             {
@@ -4441,14 +4441,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "axum 0.7.7": {
+    "axum 0.7.9": {
       "name": "axum",
-      "version": "0.7.7",
+      "version": "0.7.9",
       "package_url": "https://github.com/tokio-rs/axum",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/axum/0.7.7/download",
-          "sha256": "504e3947307ac8326a5437504c517c4b56716c9d98fac0028c2acc7ca47d70ae"
+          "url": "https://static.crates.io/crates/axum/0.7.9/download",
+          "sha256": "edca88bc138befd0323b20752846e6587272d3b03b0343c8ea28a6f819e6e71f"
         }
       },
       "targets": [
@@ -4513,7 +4513,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.5.0",
+              "id": "hyper 1.5.1",
               "target": "hyper"
             },
             {
@@ -4605,7 +4605,7 @@
           ],
           "selects": {}
         },
-        "version": "0.7.7"
+        "version": "0.7.9"
       },
       "license": "MIT",
       "license_ids": [
@@ -4719,14 +4719,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "axum-extra 0.9.1": {
+    "axum-extra 0.9.6": {
       "name": "axum-extra",
-      "version": "0.9.1",
+      "version": "0.9.6",
       "package_url": "https://github.com/tokio-rs/axum",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/axum-extra/0.9.1/download",
-          "sha256": "881348a37b079994894b6e5e46edcc4b8a60e1c0333669a65b810abeed780598"
+          "url": "https://static.crates.io/crates/axum-extra/0.9.6/download",
+          "sha256": "c794b30c904f0a1c2fb7740f7df7f7972dfaa14ef6f57cb6178dc63e5dca2f04"
         }
       },
       "targets": [
@@ -4751,6 +4751,8 @@
         "crate_features": {
           "common": [
             "default",
+            "multipart",
+            "tracing",
             "typed-header"
           ],
           "selects": {}
@@ -4758,7 +4760,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.7",
+              "id": "axum 0.7.9",
               "target": "axum"
             },
             {
@@ -4768,6 +4770,10 @@
             {
               "id": "bytes 1.8.0",
               "target": "bytes"
+            },
+            {
+              "id": "fastrand 2.2.0",
+              "target": "fastrand"
             },
             {
               "id": "futures-util 0.3.31",
@@ -4794,6 +4800,10 @@
               "target": "mime"
             },
             {
+              "id": "multer 3.1.0",
+              "target": "multer"
+            },
+            {
               "id": "pin-project-lite 0.2.13",
               "target": "pin_project_lite"
             },
@@ -4802,7 +4812,7 @@
               "target": "serde"
             },
             {
-              "id": "tower 0.4.13",
+              "id": "tower 0.5.1",
               "target": "tower"
             },
             {
@@ -4817,7 +4827,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.9.1"
+        "version": "0.9.6"
       },
       "license": "MIT",
       "license_ids": [
@@ -4920,7 +4930,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.7",
+              "id": "axum 0.7.9",
               "target": "axum"
             },
             {
@@ -5042,7 +5052,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.5.0",
+              "id": "hyper 1.5.1",
               "target": "hyper"
             },
             {
@@ -18454,11 +18464,11 @@
               "target": "async_stream"
             },
             {
-              "id": "axum 0.7.7",
+              "id": "axum 0.7.9",
               "target": "axum"
             },
             {
-              "id": "axum-extra 0.9.1",
+              "id": "axum-extra 0.9.6",
               "target": "axum_extra"
             },
             {
@@ -18671,6 +18681,10 @@
               "target": "ed25519_dalek"
             },
             {
+              "id": "env-file-reader 0.3.0",
+              "target": "env_file_reader"
+            },
+            {
               "id": "erased-serde 0.3.31",
               "target": "erased_serde"
             },
@@ -18779,7 +18793,7 @@
               "target": "humantime_serde"
             },
             {
-              "id": "hyper 1.5.0",
+              "id": "hyper 1.5.1",
               "target": "hyper"
             },
             {
@@ -19013,6 +19027,10 @@
             {
               "id": "lru 0.7.8",
               "target": "lru"
+            },
+            {
+              "id": "macaddr 1.0.1",
+              "target": "macaddr"
             },
             {
               "id": "mach2 0.4.2",
@@ -19309,7 +19327,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.17",
+              "id": "rustls 0.23.18",
               "target": "rustls"
             },
             {
@@ -21346,6 +21364,90 @@
         },
         "edition": "2021",
         "version": "3.1.15"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "env-file-reader 0.3.0": {
+      "name": "env-file-reader",
+      "version": "0.3.0",
+      "package_url": "https://github.com/jofas/env_file_reader",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/env-file-reader/0.3.0/download",
+          "sha256": "a0a86dcbc0fd1a07f5c318a2215338f0c870336851e8b566ebef1576eddb3728"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "env_file_reader",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "env_file_reader",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "env-file-reader 0.3.0",
+              "target": "build_script_build"
+            },
+            {
+              "id": "lalrpop-util 0.19.12",
+              "target": "lalrpop_util"
+            },
+            {
+              "id": "logos 0.12.1",
+              "target": "logos"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.3.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "lalrpop 0.19.12",
+              "target": "lalrpop"
+            }
+          ],
+          "selects": {}
+        }
       },
       "license": "MIT",
       "license_ids": [
@@ -23524,14 +23626,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "fastrand 2.0.1": {
+    "fastrand 2.2.0": {
       "name": "fastrand",
-      "version": "2.0.1",
+      "version": "2.2.0",
       "package_url": "https://github.com/smol-rs/fastrand",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/fastrand/2.0.1/download",
-          "sha256": "25cbce373ec4653f1a01a31e8a5e5ec0c622dc27ff9c4e6606eefef5cbbed4a5"
+          "url": "https://static.crates.io/crates/fastrand/2.2.0/download",
+          "sha256": "486f806e73c5707928240ddc295403b1b93c96a02038563881c4a2fd84b81ac4"
         }
       },
       "targets": [
@@ -23562,7 +23664,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "2.0.1"
+        "version": "2.2.0"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -24943,7 +25045,7 @@
         "deps": {
           "common": [
             {
-              "id": "fastrand 2.0.1",
+              "id": "fastrand 2.2.0",
               "target": "fastrand"
             },
             {
@@ -25082,7 +25184,7 @@
               "target": "futures_io"
             },
             {
-              "id": "rustls 0.23.17",
+              "id": "rustls 0.23.18",
               "target": "rustls"
             },
             {
@@ -28679,14 +28781,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "hyper 1.5.0": {
+    "hyper 1.5.1": {
       "name": "hyper",
-      "version": "1.5.0",
+      "version": "1.5.1",
       "package_url": "https://github.com/hyperium/hyper",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hyper/1.5.0/download",
-          "sha256": "bbbff0a806a4728c99295b254c8838933b5b082d75e3cb70c8dab21fdfbcfa9a"
+          "url": "https://static.crates.io/crates/hyper/1.5.1/download",
+          "sha256": "97818827ef4f364230e16705d4706e2897df2bb60617d6ca15d598025a3c481f"
         }
       },
       "targets": [
@@ -28777,7 +28879,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.5.0"
+        "version": "1.5.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -28833,7 +28935,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 1.5.0",
+              "id": "hyper 1.5.1",
               "target": "hyper"
             },
             {
@@ -29137,7 +29239,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 1.5.0",
+              "id": "hyper 1.5.1",
               "target": "hyper"
             },
             {
@@ -29149,7 +29251,7 @@
               "target": "log"
             },
             {
-              "id": "rustls 0.23.17",
+              "id": "rustls 0.23.18",
               "target": "rustls"
             },
             {
@@ -29420,7 +29522,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 1.5.0",
+              "id": "hyper 1.5.1",
               "target": "hyper"
             },
             {
@@ -29484,7 +29586,7 @@
         "deps": {
           "common": [
             {
-              "id": "hyper 1.5.0",
+              "id": "hyper 1.5.1",
               "target": "hyper"
             },
             {
@@ -29584,7 +29686,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 1.5.0",
+              "id": "hyper 1.5.1",
               "target": "hyper"
             },
             {
@@ -29858,7 +29960,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 1.5.0",
+              "id": "hyper 1.5.1",
               "target": "hyper"
             },
             {
@@ -30727,7 +30829,7 @@
               "target": "arc_swap"
             },
             {
-              "id": "axum 0.7.7",
+              "id": "axum 0.7.9",
               "target": "axum"
             },
             {
@@ -30791,7 +30893,7 @@
               "target": "humantime"
             },
             {
-              "id": "hyper 1.5.0",
+              "id": "hyper 1.5.1",
               "target": "hyper"
             },
             {
@@ -30839,7 +30941,7 @@
               "target": "reqwest"
             },
             {
-              "id": "rustls 0.23.17",
+              "id": "rustls 0.23.18",
               "target": "rustls"
             },
             {
@@ -35719,7 +35821,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.5.0",
+              "id": "hyper 1.5.1",
               "target": "hyper"
             },
             {
@@ -37350,7 +37452,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.5.0",
+              "id": "hyper 1.5.1",
               "target": "hyper"
             },
             {
@@ -37382,7 +37484,7 @@
               "target": "pem"
             },
             {
-              "id": "rustls 0.23.17",
+              "id": "rustls 0.23.18",
               "target": "rustls"
             },
             {
@@ -37512,6 +37614,113 @@
       ],
       "license_file": null
     },
+    "lalrpop 0.19.12": {
+      "name": "lalrpop",
+      "version": "0.19.12",
+      "package_url": "https://github.com/lalrpop/lalrpop",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/lalrpop/0.19.12/download",
+          "sha256": "0a1cbf952127589f2851ab2046af368fd20645491bb4b376f04b7f94d7a9837b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "lalrpop",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "lalrpop",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "lexer"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "ascii-canvas 3.0.0",
+              "target": "ascii_canvas"
+            },
+            {
+              "id": "bit-set 0.5.3",
+              "target": "bit_set"
+            },
+            {
+              "id": "diff 0.1.13",
+              "target": "diff"
+            },
+            {
+              "id": "ena 0.14.2",
+              "target": "ena"
+            },
+            {
+              "id": "is-terminal 0.4.9",
+              "target": "is_terminal"
+            },
+            {
+              "id": "itertools 0.10.5",
+              "target": "itertools"
+            },
+            {
+              "id": "lalrpop-util 0.19.12",
+              "target": "lalrpop_util"
+            },
+            {
+              "id": "petgraph 0.6.4",
+              "target": "petgraph"
+            },
+            {
+              "id": "regex 1.11.0",
+              "target": "regex"
+            },
+            {
+              "id": "regex-syntax 0.6.29",
+              "target": "regex_syntax"
+            },
+            {
+              "id": "string_cache 0.8.7",
+              "target": "string_cache"
+            },
+            {
+              "id": "term 0.7.0",
+              "target": "term"
+            },
+            {
+              "id": "tiny-keccak 2.0.2",
+              "target": "tiny_keccak"
+            },
+            {
+              "id": "unicode-xid 0.2.4",
+              "target": "unicode_xid"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.19.12"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "lalrpop 0.20.0": {
       "name": "lalrpop",
       "version": "0.20.0",
@@ -37617,6 +37826,198 @@
         },
         "edition": "2021",
         "version": "0.20.0"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "lalrpop-util 0.19.12": {
+      "name": "lalrpop-util",
+      "version": "0.19.12",
+      "package_url": "https://github.com/lalrpop/lalrpop",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/lalrpop-util/0.19.12/download",
+          "sha256": "d3c48237b9604c5a4702de6b824e02006c3214327564636aef27c1028a8fa0ed"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "lalrpop_util",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "lalrpop_util",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {
+            "aarch64-apple-darwin": [
+              "lexer",
+              "regex"
+            ],
+            "aarch64-pc-windows-msvc": [
+              "lexer",
+              "regex"
+            ],
+            "aarch64-unknown-linux-gnu": [
+              "lexer",
+              "regex"
+            ],
+            "aarch64-unknown-nixos-gnu": [
+              "lexer",
+              "regex"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "lexer",
+              "regex"
+            ],
+            "i686-pc-windows-msvc": [
+              "lexer",
+              "regex"
+            ],
+            "i686-unknown-linux-gnu": [
+              "lexer",
+              "regex"
+            ],
+            "powerpc-unknown-linux-gnu": [
+              "lexer",
+              "regex"
+            ],
+            "s390x-unknown-linux-gnu": [
+              "lexer",
+              "regex"
+            ],
+            "x86_64-apple-darwin": [
+              "lexer",
+              "regex"
+            ],
+            "x86_64-pc-windows-msvc": [
+              "lexer",
+              "regex"
+            ],
+            "x86_64-unknown-freebsd": [
+              "lexer",
+              "regex"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "lexer",
+              "regex"
+            ],
+            "x86_64-unknown-nixos-gnu": [
+              "lexer",
+              "regex"
+            ]
+          }
+        },
+        "deps": {
+          "common": [],
+          "selects": {
+            "aarch64-apple-darwin": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "aarch64-pc-windows-msvc": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "aarch64-unknown-nixos-gnu": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "arm-unknown-linux-gnueabi": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "i686-pc-windows-msvc": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "i686-unknown-linux-gnu": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "powerpc-unknown-linux-gnu": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "s390x-unknown-linux-gnu": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "x86_64-apple-darwin": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "x86_64-pc-windows-msvc": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "x86_64-unknown-freebsd": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ],
+            "x86_64-unknown-nixos-gnu": [
+              {
+                "id": "regex 1.11.0",
+                "target": "regex"
+              }
+            ]
+          }
+        },
+        "edition": "2018",
+        "version": "0.19.12"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -39669,7 +40070,13 @@
           "commitish": {
             "Rev": "4d952c8f1dca79de855af892b444d7112567b58d"
           },
-          "strip_prefix": "lmdb-sys"
+          "strip_prefix": "lmdb-sys",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:lmdb_rkv_sys.patch"
+          ]
         }
       },
       "targets": [
@@ -39722,12 +40129,6 @@
           ],
           "selects": {}
         },
-        "extra_deps": {
-          "common": [
-            "@lmdb//:lmdb"
-          ],
-          "selects": {}
-        },
         "edition": "2015",
         "version": "0.11.99"
       },
@@ -39737,6 +40138,7 @@
         ],
         "data": {
           "common": [
+            "@lmdb//:liblmdb",
             "@lmdb//:lmdb.h"
           ],
           "selects": {}
@@ -39760,7 +40162,7 @@
         "build_script_env": {
           "common": {
             "LMDB_H_PATH": "$(location @lmdb//:lmdb.h)",
-            "LMDB_NO_BUILD": "1"
+            "LMDB_OVERRIDE": "$(location @lmdb//:liblmdb)"
           },
           "selects": {}
         }
@@ -40068,6 +40470,63 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "logos 0.12.1": {
+      "name": "logos",
+      "version": "0.12.1",
+      "package_url": "https://github.com/maciejhirsz/logos",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/logos/0.12.1/download",
+          "sha256": "bf8b031682c67a8e3d5446840f9573eb7fe26efe7ec8d195c9ac4c0647c502f1"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "logos",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "logos",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "export_derive",
+            "logos-derive",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "logos-derive 0.12.1",
+              "target": "logos_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.12.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "logos 0.13.0": {
       "name": "logos",
       "version": "0.13.0",
@@ -40185,6 +40644,74 @@
         },
         "edition": "2018",
         "version": "0.13.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "logos-derive 0.12.1": {
+      "name": "logos-derive",
+      "version": "0.12.1",
+      "package_url": "https://github.com/maciejhirsz/logos",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/logos-derive/0.12.1/download",
+          "sha256": "a1d849148dbaf9661a6151d1ca82b13bb4c4c128146a88d05253b38d4e2f496c"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "logos_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "logos_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "beef 0.5.2",
+              "target": "beef"
+            },
+            {
+              "id": "fnv 1.0.7",
+              "target": "fnv"
+            },
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "regex-syntax 0.6.29",
+              "target": "regex_syntax"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.12.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -40451,6 +40978,52 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "macaddr 1.0.1": {
+      "name": "macaddr",
+      "version": "1.0.1",
+      "package_url": "https://github.com/svartalf/rust-macaddr",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/macaddr/1.0.1/download",
+          "sha256": "baee0bbc17ce759db233beb01648088061bf678383130602a298e6998eedb2d8"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "macaddr",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "macaddr",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.0.1"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "mach2 0.4.2": {
       "name": "mach2",
@@ -41407,7 +41980,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.7",
+              "id": "axum 0.7.9",
               "target": "axum"
             },
             {
@@ -41443,7 +42016,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.5.0",
+              "id": "hyper 1.5.1",
               "target": "hyper"
             },
             {
@@ -42745,6 +43318,120 @@
         },
         "edition": "2018",
         "version": "2.1.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "version_check 0.9.4",
+              "target": "version_check"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "multer 3.1.0": {
+      "name": "multer",
+      "version": "3.1.0",
+      "package_url": "https://github.com/rwf2/multer",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/multer/3.1.0/download",
+          "sha256": "83e87776546dc87511aa5ee218730c92b666d7264ab6ed41f9d215af9cd5224b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "multer",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "multer",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.8.0",
+              "target": "bytes"
+            },
+            {
+              "id": "encoding_rs 0.8.33",
+              "target": "encoding_rs"
+            },
+            {
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
+            },
+            {
+              "id": "http 1.1.0",
+              "target": "http"
+            },
+            {
+              "id": "httparse 1.8.0",
+              "target": "httparse"
+            },
+            {
+              "id": "memchr 2.6.4",
+              "target": "memchr"
+            },
+            {
+              "id": "mime 0.3.17",
+              "target": "mime"
+            },
+            {
+              "id": "multer 3.1.0",
+              "target": "build_script_build"
+            },
+            {
+              "id": "spin 0.9.8",
+              "target": "spin"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "3.1.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -49107,7 +49794,7 @@
               "target": "atomic_waker"
             },
             {
-              "id": "fastrand 2.0.1",
+              "id": "fastrand 2.2.0",
               "target": "fastrand"
             },
             {
@@ -53290,7 +53977,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.17",
+              "id": "rustls 0.23.18",
               "target": "rustls"
             },
             {
@@ -53378,7 +54065,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.17",
+              "id": "rustls 0.23.18",
               "target": "rustls"
             },
             {
@@ -57236,7 +57923,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -57286,7 +57973,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -57336,7 +58023,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -57386,7 +58073,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -57436,7 +58123,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -57486,7 +58173,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -57536,7 +58223,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -57586,7 +58273,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -57636,7 +58323,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -57686,7 +58373,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -57736,7 +58423,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -57786,7 +58473,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -57828,7 +58515,7 @@
                 "target": "http_body_util"
               },
               {
-                "id": "hyper 1.5.0",
+                "id": "hyper 1.5.1",
                 "target": "hyper"
               },
               {
@@ -57906,7 +58593,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -57956,7 +58643,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58006,7 +58693,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58056,7 +58743,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58106,7 +58793,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58156,7 +58843,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58206,7 +58893,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58256,7 +58943,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58306,7 +58993,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58356,7 +59043,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58406,7 +59093,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58468,7 +59155,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58518,7 +59205,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58568,7 +59255,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58618,7 +59305,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58668,7 +59355,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58718,7 +59405,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58768,7 +59455,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58818,7 +59505,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -58868,7 +59555,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.17",
+                "id": "rustls 0.23.18",
                 "target": "rustls"
               },
               {
@@ -61654,14 +62341,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rustls 0.23.17": {
+    "rustls 0.23.18": {
       "name": "rustls",
-      "version": "0.23.17",
+      "version": "0.23.18",
       "package_url": "https://github.com/rustls/rustls",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls/0.23.17/download",
-          "sha256": "7f1a745511c54ba6d4465e8d5dfbd81b45791756de28d4981af70d6dca128f1e"
+          "url": "https://static.crates.io/crates/rustls/0.23.18/download",
+          "sha256": "9c9cc1d47e243d655ace55ed38201c19ae02c148ae56412ab8750e8f0166ab7f"
         }
       },
       "targets": [
@@ -61729,7 +62416,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls 0.23.17",
+              "id": "rustls 0.23.18",
               "target": "build_script_build"
             },
             {
@@ -61753,7 +62440,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.23.17"
+        "version": "0.23.18"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -62315,7 +63002,7 @@
               "target": "once_cell"
             },
             {
-              "id": "rustls 0.23.17",
+              "id": "rustls 0.23.18",
               "target": "rustls"
             }
           ],
@@ -70637,7 +71324,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "fastrand 2.0.1",
+              "id": "fastrand 2.2.0",
               "target": "fastrand"
             },
             {
@@ -73605,7 +74292,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls 0.23.17",
+              "id": "rustls 0.23.18",
               "target": "rustls"
             },
             {
@@ -74343,7 +75030,7 @@
               "target": "async_stream"
             },
             {
-              "id": "axum 0.7.7",
+              "id": "axum 0.7.9",
               "target": "axum"
             },
             {
@@ -74371,7 +75058,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.5.0",
+              "id": "hyper 1.5.1",
               "target": "hyper"
             },
             {
@@ -75236,7 +75923,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.7",
+              "id": "axum 0.7.9",
               "target": "axum"
             },
             {
@@ -86974,8 +87661,8 @@
     "async-scoped 0.8.0",
     "async-stream 0.3.6",
     "async-trait 0.1.83",
-    "axum 0.7.7",
-    "axum-extra 0.9.1",
+    "axum 0.7.9",
+    "axum-extra 0.9.6",
     "axum-server 0.6.0",
     "backoff 0.4.0",
     "backon 0.4.1",
@@ -87029,6 +87716,7 @@
     "dyn-clone 1.0.14",
     "ed25519-dalek 2.1.1",
     "educe 0.4.23",
+    "env-file-reader 0.3.0",
     "erased-serde 0.3.31",
     "escargot 0.5.8",
     "ethers-core 2.0.10",
@@ -87056,7 +87744,7 @@
     "http-body-util 0.1.2",
     "humantime 2.1.0",
     "humantime-serde 1.1.1",
-    "hyper 1.5.0",
+    "hyper 1.5.1",
     "hyper-rustls 0.27.3",
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.10",
@@ -87117,6 +87805,7 @@
     "lmdb-rkv-sys 0.11.99",
     "local-ip-address 0.5.6",
     "lru 0.7.8",
+    "macaddr 1.0.1",
     "mach2 0.4.2",
     "maplit 1.0.2",
     "maxminddb 0.24.0",
@@ -87194,7 +87883,7 @@
     "rust_decimal_macros 1.36.0",
     "rustc-demangle 0.1.23",
     "rustc-hash 1.1.0",
-    "rustls 0.23.17",
+    "rustls 0.23.18",
     "rustls-pemfile 2.2.0",
     "rustversion 1.0.14",
     "rusty-fork 0.3.0",

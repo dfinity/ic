@@ -22,7 +22,9 @@ ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
+ic-cdk-timers = { workspace = true }
 ic-certification = { workspace = true }
+ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
 ic-icrc1 = { path = ".." }
 ic-icrc1-tokens-u256 = { path = "../tokens_u256", optional = true }
 ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
@@ -32,6 +34,7 @@ ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
 ic-metrics-encoder = "1.1.1"
 ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+minicbor = { workspace = true }
 num-traits = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
@@ -56,5 +59,6 @@ default = []
 get-blocks-disabled = []
 u256-tokens = ["dep:ic-icrc1-tokens-u256"]
 canbench-rs = ["dep:canbench-rs", "dep:assert_matches"]
+low-upgrade-instruction-limits = []
 next-ledger-version = []
 icrc3-compatible-data-certificate = []

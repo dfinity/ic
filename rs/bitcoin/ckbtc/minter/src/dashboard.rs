@@ -441,7 +441,7 @@ pub fn build_finalized_requests(s: &CkBtcMinterState) -> String {
 
 pub fn build_quarantined_utxos(s: &CkBtcMinterState) -> String {
     with_utf8_buffer(|buf| {
-        for utxo in &s.quarantined_utxos {
+        for utxo in s.quarantined_utxos() {
             writeln!(
                 buf,
                 "<tr>
@@ -462,7 +462,7 @@ pub fn build_quarantined_utxos(s: &CkBtcMinterState) -> String {
 
 pub fn build_ignored_utxos(s: &CkBtcMinterState) -> String {
     with_utf8_buffer(|buf| {
-        for utxo in &s.ignored_utxos {
+        for utxo in s.ignored_utxos() {
             writeln!(
                 buf,
                 "<tr>

@@ -57,6 +57,14 @@ impl Provider {
         &self.btc_network
     }
 
+    pub fn name(&self) -> String {
+        match self.btc_network {
+            BtcNetwork::Mainnet => self.provider_id.to_string(),
+            BtcNetwork::Testnet => "Testnet".to_string(),
+            BtcNetwork::Regtest { .. } => "Regtest".to_string(),
+        }
+    }
+
     // Return the next provider by cycling through all available providers.
     pub fn next(&self) -> Self {
         let btc_network = &self.btc_network;
