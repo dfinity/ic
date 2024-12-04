@@ -5,6 +5,7 @@ use crate::pb::v1::Governance as GovernancePb;
 use crate::types::test_helpers::NativeEnvironment;
 use futures::FutureExt;
 use ic_test_utilities_types::ids::canister_test_id;
+use pretty_assertions::assert_eq;
 
 fn sns_version_for_tests() -> Version {
     Version {
@@ -62,6 +63,28 @@ fn standard_governance_proto_for_tests(deployed_version: Option<Version>) -> Gov
         timers: None,
         upgrade_journal: None,
         cached_upgrade_steps: None,
+    }
+}
+
+#[test]
+fn test_format_timestamp() {
+    for (expected, timestamp_seconds) in [
+        (Some("1970-01-01 00:00:00 UTC"), 0),
+        (Some("2024-11-29 16:14:10 UTC"), 1732896850),
+        (Some("2038-01-19 03:14:07 UTC"), i32::MAX as u64),
+        (Some("4571-09-24 08:52:47 UTC"), 82102668767),
+        (Some("9999-12-31 23:59:59 UTC"), 253402300799),
+        (None, 253402300800),
+        (None, i64::MAX as u64),
+        (None, u64::MAX),
+    ] {
+        let observed = format_timestamp(timestamp_seconds);
+        assert_eq!(
+            observed,
+            expected.map(|s| s.to_string()),
+            "unexpected result from format_timestamp({})",
+            timestamp_seconds,
+        );
     }
 }
 
@@ -176,7 +199,7 @@ fn test_validate_and_render_advance_target_version_action() {
 
 ### Monitoring the upgrade process
 
-Please note: the upgrade steps above (valid around timestamp 0 seconds) might change during this proposal's voting period. Such changes are unlikely and are subject to NNS community's approval.
+Please note: the upgrade steps mentioned above (valid around 1970-01-01 00:00:00 UTC) might change during this proposal's voting period.
 
 The **upgrade journal** provides up-to-date information on this SNS's upgrade process:
 

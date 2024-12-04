@@ -3493,6 +3493,16 @@ impl StateManager for StateManagerImpl {
             Self::compute_certification_metadata(&self.metrics, &self.log, &state)
                 .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
 
+        // This step is expensive, so we do it before the write lock for `states`.
+        let next_tip = {
+            let _timer = self
+                .metrics
+                .checkpoint_op_duration
+                .with_label_values(&["copy_state"])
+                .start_timer();
+            Some((height, state.deref().clone()))
+        };
+
         let mut states = self.states.write();
         #[cfg(debug_assertions)]
         check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
@@ -3573,14 +3583,7 @@ impl StateManager for StateManagerImpl {
 
         // The next call to take_tip() will take care of updating the
         // tip if needed.
-        {
-            let _timer = self
-                .metrics
-                .checkpoint_op_duration
-                .with_label_values(&["copy_state"])
-                .start_timer();
-            states.tip = Some((height, state.deref().clone()));
-        }
+        states.tip = next_tip;
 
         if scope == CertificationScope::Full {
             self.release_lock_and_persist_metadata(states);

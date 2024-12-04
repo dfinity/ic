@@ -3,7 +3,7 @@ use clap::{Args, Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
-use deterministic_ips::{Deployment, HwAddr};
+use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
 use regex::Regex;
 use std::fs::File;
@@ -91,9 +91,9 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub node_reward_type: Option<String>,
     #[arg(long)]
-    pub mgmt_mac: Option<HwAddr>,
+    pub mgmt_mac: Option<MacAddr6>,
     #[arg(long)]
-    pub deployment_environment: Option<Deployment>,
+    pub deployment_environment: Option<DeploymentEnvironment>,
     #[arg(long)]
     pub elasticsearch_hosts: Option<String>,
     #[arg(long)]
