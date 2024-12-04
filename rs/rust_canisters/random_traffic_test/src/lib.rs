@@ -175,3 +175,6 @@ pub fn extract_metrics(records: &BTreeMap<u32, Record>) -> Metrics {
     }
     metrics
 }
+
+// Enable Candid export
+ic_cdk::export_candid!();
