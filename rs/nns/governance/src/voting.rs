@@ -1,7 +1,7 @@
 use crate::{
     governance::Governance,
     neuron_store::NeuronStore,
-    pb::v1::{Ballot, Topic, Topic::NeuronManagement, Vote},
+    pb::v1::{Ballot, ProposalData, Topic, Topic::NeuronManagement, Vote},
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use std::{
@@ -21,7 +21,6 @@ impl Governance {
         topic: Topic,
     ) {
         let voting_started = self.env.now();
-        let voting_period_seconds_fn = self.voting_period_seconds();
 
         let neuron_store = &mut self.neuron_store;
         let ballots = match self.heap_data.proposals.get_mut(&proposal_id.id) {
@@ -51,17 +50,29 @@ impl Governance {
 
             voting_state_machines.remove_if_done(&proposal_id);
         });
+        // We use the time from the beginning of the function to retain the behaviors needed
+        // for wait for quiet even when votes can be processed asynchronously.
+        self.recompute_proposal_tally(proposal_id, voting_started);
+    }
 
-        // This unwrap is safe because we alredy check above to make sure the proposal exists.
-        let proposal = self.heap_data.proposals.get_mut(&proposal_id.id).unwrap();
+    /// Recompute the tally for a proposal, using the time provided as the current time.
+    fn recompute_proposal_tally(&mut self, proposal_id: ProposalId, now: u64) {
+        let voting_period_seconds_fn = self.voting_period_seconds();
 
-        // Now we update the tally of votes for the proposal.  We use the time
-        // from the beginning of the function, so that the calculations are consistent with
-        // votes being cast somewhat atomically.  This preserves behaviors relating to
-        // the time of the vote being cast, even in cases where the subnet is under load, such as
-        // wait for quiet.
+        let proposal = match self.heap_data.proposals.get_mut(&proposal_id.id) {
+            None => {
+                // This is a critical error, but there is nothing that can be done about it
+                // at this place.  We somehow have a vote for a proposal that doesn't exist.
+                eprintln!(
+                    "error in recompute_proposal_tally: Proposal not found: {}",
+                    proposal_id.id
+                );
+                return;
+            }
+            Some(proposal) => &mut *proposal,
+        };
         let topic = proposal.topic();
-        proposal.recompute_tally(voting_started, voting_period_seconds_fn(topic));
+        proposal.recompute_tally(now, voting_period_seconds_fn(topic));
     }
 }
 
