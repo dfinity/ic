@@ -3,7 +3,7 @@ use anyhow::Result;
 use bitcoincore_rpc::RpcApi;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_checker::KytMode as NewKytMode;
+use ic_btc_checker::CheckMode as NewCheckMode;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::updates::{
     get_withdrawal_account::compute_subaccount,
@@ -118,7 +118,7 @@ pub fn test_kyt(env: TestEnv) {
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
 
         // Put the kyt canister into reject all utxos mode.
-        upgrade_kyt(&mut kyt_canister, NewKytMode::RejectAll).await;
+        upgrade_kyt(&mut kyt_canister, NewCheckMode::RejectAll).await;
 
         wait_for_bitcoin_balance(
             &universal_canister,
@@ -174,7 +174,7 @@ pub fn test_kyt(env: TestEnv) {
         }
         start_canister(&kyt_canister).await;
 
-        upgrade_kyt(&mut kyt_canister, NewKytMode::Normal).await;
+        upgrade_kyt(&mut kyt_canister, NewCheckMode::Normal).await;
         // Now that the kyt canister is available and accept all utxos
         // we should be able to mint new utxos.
         let update_balance_new_utxos = minter_agent
@@ -290,7 +290,7 @@ pub fn test_kyt(env: TestEnv) {
         let retrieve_amount: u64 = 35_000_000;
 
         // Put the new kyt canister into reject all utxos mode.
-        upgrade_kyt(&mut kyt_canister, NewKytMode::RejectAll).await;
+        upgrade_kyt(&mut kyt_canister, NewCheckMode::RejectAll).await;
 
         let retrieve_result = minter_agent
             .retrieve_btc(RetrieveBtcArgs {
@@ -320,7 +320,7 @@ pub fn test_kyt(env: TestEnv) {
             panic!("Expected to see a tainted destination address.")
         }
 
-        upgrade_kyt(&mut kyt_canister, NewKytMode::Normal).await;
+        upgrade_kyt(&mut kyt_canister, NewCheckMode::Normal).await;
 
         let retrieve_result = minter_agent
             .retrieve_btc(RetrieveBtcArgs {

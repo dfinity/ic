@@ -1,7 +1,7 @@
 use crate::logs::WARN;
 use crate::state::{
     FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError,
-    TransactionKytData,
+    TransactionCheckData,
 };
 use crate::{blocklist_contains, providers, state, Config};
 use bitcoin::Transaction;
@@ -121,7 +121,7 @@ pub trait FetchEnv {
         match self.http_get_tx(&provider, txid, max_response_bytes).await {
             Ok(tx) => {
                 let input_addresses = tx.input.iter().map(|_| None).collect();
-                match TransactionKytData::from_transaction(provider.btc_network(), tx.clone()) {
+                match TransactionCheckData::from_transaction(provider.btc_network(), tx.clone()) {
                     Ok(tx) => {
                         let fetched = FetchedTx {
                             tx,

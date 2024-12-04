@@ -1,10 +1,10 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::{filters, DashboardTemplate, Fetched, Status, DEFAULT_TX_TABLE_PAGE_SIZE};
-use crate::state::{Config, Timestamp, TransactionKytData};
+use crate::state::{Config, Timestamp, TransactionCheckData};
 use crate::{dashboard, state};
 use bitcoin::Address;
 use bitcoin::{absolute::LockTime, transaction::Version, Transaction};
-use ic_btc_checker::{blocklist::BTC_ADDRESS_BLOCKLIST, BtcNetwork, KytMode};
+use ic_btc_checker::{blocklist::BTC_ADDRESS_BLOCKLIST, BtcNetwork, CheckMode};
 use ic_btc_interface::Txid;
 use std::str::FromStr;
 
@@ -17,7 +17,7 @@ fn mock_txid(v: usize) -> Txid {
 
 #[test]
 fn should_display_metadata() {
-    let config = Config::new_and_validate(BtcNetwork::Mainnet, KytMode::Normal).unwrap();
+    let config = Config::new_and_validate(BtcNetwork::Mainnet, CheckMode::Normal).unwrap();
     let outcall_capacity = 50;
     let cached_entries = 0;
     let oldest_entry_time = 0;
@@ -35,7 +35,7 @@ fn should_display_metadata() {
 
     DashboardAssert::assert_that(dashboard)
         .has_btc_network_in_title(config.btc_network())
-        .has_kyt_mode(config.kyt_mode())
+        .has_check_mode(config.check_mode())
         .has_outcall_capacity(outcall_capacity)
         .has_cached_entries(cached_entries)
         .has_oldest_entry_time(oldest_entry_time)
@@ -75,7 +75,7 @@ fn should_display_statuses() {
     });
 
     let dashboard = DashboardTemplate {
-        config: Config::new_and_validate(BtcNetwork::Mainnet, KytMode::Normal).unwrap(),
+        config: Config::new_and_validate(BtcNetwork::Mainnet, CheckMode::Normal).unwrap(),
         outcall_capacity: 50,
         cached_entries: 6,
         tx_table_page_size: 10,
@@ -116,9 +116,9 @@ fn test_pagination() {
     use scraper::{Html, Selector};
 
     state::set_config(
-        state::Config::new_and_validate(BtcNetwork::Mainnet, KytMode::Normal).unwrap(),
+        state::Config::new_and_validate(BtcNetwork::Mainnet, CheckMode::Normal).unwrap(),
     );
-    let mock_transaction = TransactionKytData::from_transaction(
+    let mock_transaction = TransactionCheckData::from_transaction(
         &BtcNetwork::Mainnet,
         Transaction {
             version: Version::ONE,
@@ -190,18 +190,15 @@ mod assertions {
         pub fn has_btc_network_in_title(&self, btc_network: BtcNetwork) -> &Self {
             self.has_string_value(
                 "title",
-                &format!(
-                    "Bitcoin Checker Canister Dashboard for Bitcoin ({})",
-                    btc_network
-                ),
+                &format!("Bitcoin Checker Canister Dashboard for ({})", btc_network),
                 "wrong btc_network",
             )
         }
 
-        pub fn has_kyt_mode(&self, kyt_mode: KytMode) -> &Self {
+        pub fn has_check_mode(&self, check_mode: CheckMode) -> &Self {
             self.has_string_value(
-                "#kyt-mode > td > code",
-                &format!("{}", kyt_mode),
+                "#check-mode > td > code",
+                &format!("{}", check_mode),
                 "wrong check mode",
             )
         }

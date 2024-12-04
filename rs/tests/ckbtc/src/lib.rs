@@ -3,8 +3,7 @@ use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_checker::{
-    BtcNetwork, InitArg as NewKytInitArg, KytArg as NewKytArg, KytMode as NewKytMode,
-    UpgradeArg as NewKytUpgradeArg,
+    BtcNetwork, CheckArg, CheckMode, InitArg as CheckerInitArg, UpgradeArg as NewKytUpgradeArg,
 };
 use ic_btc_interface::{Config, Fees, Flag, Network};
 use ic_canister_client::Sender;
@@ -428,9 +427,9 @@ pub async fn install_kyt(kyt_canister: &mut Canister<'_>, env: &TestEnv) -> Cani
         "https://{}:{}@[{}]:{}",
         BITCOIND_RPC_USER, BITCOIND_RPC_PASSWORD, btc_node_ipv6, HTTPS_PORT,
     );
-    let kyt_init_args = NewKytArg::InitArg(NewKytInitArg {
+    let kyt_init_args = CheckArg::InitArg(CheckerInitArg {
         btc_network: BtcNetwork::Regtest { json_rpc_url },
-        kyt_mode: NewKytMode::Normal,
+        check_mode: CheckMode::Normal,
     });
 
     install_rust_canister_from_path(
@@ -444,9 +443,9 @@ pub async fn install_kyt(kyt_canister: &mut Canister<'_>, env: &TestEnv) -> Cani
     kyt_canister.canister_id()
 }
 
-pub async fn upgrade_kyt(kyt_canister: &mut Canister<'_>, mode: NewKytMode) -> CanisterId {
-    let kyt_upgrade_arg = NewKytArg::UpgradeArg(Some(NewKytUpgradeArg {
-        kyt_mode: Some(mode),
+pub async fn upgrade_kyt(kyt_canister: &mut Canister<'_>, mode: CheckMode) -> CanisterId {
+    let kyt_upgrade_arg = CheckArg::UpgradeArg(Some(NewKytUpgradeArg {
+        check_mode: Some(mode),
     }));
 
     kyt_canister

@@ -5,8 +5,8 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_bitcoin_canister_mock::{OutPoint, PushUtxoToAddress, Utxo};
 use ic_btc_checker::{
-    BtcNetwork as NewKytBtcNetwork, InitArg as NewKytInitArg, KytArg as NewKytArg,
-    KytMode as NewKytMode, UpgradeArg as NewUpgradeArg,
+    BtcNetwork as CheckerBtcNetwork, CheckArg, CheckMode, InitArg as CheckerInitArg,
+    UpgradeArg as CheckerUpgradeArg,
 };
 use ic_btc_interface::{Network, Txid};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
@@ -650,9 +650,9 @@ impl CkBtcSetup {
         env.install_existing_canister(
             kyt_id,
             kyt_wasm(),
-            Encode!(&NewKytArg::InitArg(NewKytInitArg {
-                btc_network: NewKytBtcNetwork::Mainnet,
-                kyt_mode: NewKytMode::AcceptAll,
+            Encode!(&CheckArg::InitArg(CheckerInitArg {
+                btc_network: CheckerBtcNetwork::Mainnet,
+                check_mode: CheckMode::AcceptAll,
             }))
             .unwrap(),
         )
@@ -2038,8 +2038,8 @@ fn test_retrieve_btc_with_approval_fail() {
         .upgrade_canister(
             ckbtc.kyt_id,
             kyt_wasm(),
-            Encode!(&NewKytArg::UpgradeArg(Some(NewUpgradeArg {
-                kyt_mode: Some(NewKytMode::RejectAll),
+            Encode!(&CheckArg::UpgradeArg(Some(CheckerUpgradeArg {
+                check_mode: Some(CheckMode::RejectAll),
             })))
             .unwrap(),
         )

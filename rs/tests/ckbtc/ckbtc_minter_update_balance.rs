@@ -4,7 +4,7 @@ use bitcoincore_rpc::RpcApi;
 use candid::Principal;
 use ic_agent::identity::Secp256k1Identity;
 use ic_base_types::PrincipalId;
-use ic_btc_checker::KytMode as NewKytMode;
+use ic_btc_checker::CheckMode as NewCheckMode;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{
     lifecycle::upgrade::UpgradeArgs,
@@ -127,7 +127,7 @@ pub fn test_update_balance(env: TestEnv) {
         // Because bitcoind only allows to see one's own transaction, and we
         // are using multiple addresses in this test. We have to change check
         // mode to AcceptAll, otherwise bitcoind will return 500 error.
-        upgrade_kyt(&mut kyt_canister, NewKytMode::AcceptAll).await;
+        upgrade_kyt(&mut kyt_canister, NewCheckMode::AcceptAll).await;
 
         // Get the BTC address of the caller's sub-accounts.
         let btc_address0 = get_btc_address(&minter_agent, &logger, subaccount0).await;

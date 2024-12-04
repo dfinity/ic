@@ -50,14 +50,14 @@ type CheckTransactionIrrecoverableError = variant {
 
 type InitArg = record {
     btc_network : BtcNetwork;
-    kyt_mode: KytMode;
+    check_mode: CheckMode;
 };
 
 type UpgradeArg = record {
-    kyt_mode: opt KytMode;
+    check_mode: opt CheckMode;
 };
 
-type KytArg = variant {
+type CheckArg = variant {
     InitArg : InitArg;
     UpgradeArg: opt UpgradeArg;
 };
@@ -68,13 +68,13 @@ type BtcNetwork = variant {
     regtest: record { json_rpc_url: text };
 };
 
-type KytMode = variant {
+type CheckMode = variant {
     AcceptAll;
     RejectAll;
     Normal;
 };
 
-service : (KytArg) -> {
+service : (CheckArg) -> {
     // Check input addresses of a transaction matching the given transaction id.
     // See `CheckTransactionResponse` for more details on the return result.
     //
