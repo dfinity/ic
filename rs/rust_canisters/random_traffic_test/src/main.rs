@@ -29,7 +29,7 @@ thread_local! {
     static CONFIG: RefCell<Config> = RefCell::default();
     /// The maximum number of calls each heartbeat will attempt to make.
     static MAX_CALLS_PER_HEARTBEAT: Cell<u32> = Cell::default();
-    /// A hasher used to generate unique call IDs.
+    /// A hasher used to generate unique call tree IDs.
     static HASHER: RefCell<DefaultHasher> = RefCell::default();
     /// An index for each attempted call; starts at 0 and then increments with each call.
     static CALL_INDEX: Cell<u32> = Cell::default();
@@ -44,8 +44,8 @@ thread_local! {
 /// or `handle_call()` itself in case of a downstream call.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, CandidType)]
 struct Message {
-    /// A unique call ID to allow tracing of call trees in the records.
-    call_id: u32,
+    /// A unique ID to allow tracing of call trees in the records.
+    call_tree_id: u32,
     /// The depth of the call starting from 0 and incrementing by 1 for each downstream call.
     call_depth: u32,
     /// A payload of a certain size; it otherwise does not any contain information.
@@ -55,9 +55,9 @@ struct Message {
 impl Message {
     /// Creates a new `Message` of size `bytes_count`; may slightly exceed the target for
     /// very small numbers.
-    fn new(call_id: u32, call_depth: u32, bytes_count: usize) -> Self {
+    fn new(call_tree_id: u32, call_depth: u32, bytes_count: usize) -> Self {
         Self {
-            call_id,
+            call_tree_id,
             call_depth,
             payload: vec![0_u8; bytes_count.saturating_sub(std::mem::size_of::<Self>())],
         }
@@ -76,7 +76,7 @@ fn choose_receiver() -> Option<CanisterId> {
     })
 }
 
-/// Generates a random u32 contained in `range`.
+/// Generates a random `u32` contained in `range`.
 fn gen_range(range: RangeInclusive<u32>) -> u32 {
     RNG.with_borrow_mut(|rng| rng.gen_range(range))
 }
@@ -86,11 +86,11 @@ fn next_call_index() -> u32 {
     CALL_INDEX.replace(CALL_INDEX.get() + 1)
 }
 
-/// Returns the next call ID.
+/// Returns the next call tree ID.
 fn next_call_id() -> u32 {
     HASHER.with_borrow_mut(|hasher| {
         // Hash something to generate a new unique number.
-        hasher.write_u64(42_u64);
+        hasher.write_u64(42);
         // Using only the upper 32 bits should be more than enough
         // since all we need is some unique number.
         (hasher.finish() >> 32) as u32
@@ -153,20 +153,25 @@ fn records() -> BTreeMap<u32, Record> {
     RECORDS.with_borrow(|records| records.clone())
 }
 
+/// Returns the number of synchronous rejections.
 #[query]
 fn synchronous_rejections_count() -> u32 {
     SYNCHRONOUS_REJECTIONS_COUNT.get()
 }
 
 /// Generates a future for a randomized call that can be awaited; inserts a new record at `index`
-/// that must updated (or removed) after awaiting performing the call. For each call, the call
-/// index is incremented by 1, such that adjacent calls have adjacent indices.
+/// that must updated (or removed) after awaiting the call. For each call, the call index is
+/// incremented by 1, such that successive calls have adjacent indices.
 fn setup_call(
-    call_id: u32,
+    call_tree_id: u32,
     call_depth: u32,
 ) -> Option<(impl Future<Output = api::call::CallResult<Vec<u8>>>, u32)> {
     let receiver = choose_receiver()?;
-    let msg = Message::new(call_id, call_depth, gen_range(call_bytes_range()) as usize);
+    let msg = Message::new(
+        call_tree_id,
+        call_depth,
+        gen_range(call_bytes_range()) as usize,
+    );
 
     // Inserts a new call record at the next `index`.
     let index = next_call_index();
@@ -177,7 +182,7 @@ fn setup_call(
                 receiver,
                 caller: (call_depth > 0)
                     .then_some(CanisterId::unchecked_from_principal(PrincipalId(caller()))),
-                call_id,
+                call_tree_id,
                 call_depth,
                 sent_bytes: msg.count_bytes() as u32,
                 reply: None,
@@ -193,8 +198,9 @@ fn setup_call(
 /// Updates the record at `index` using the `response` to the corresponding call.
 ///
 /// Removes the record for a synchronous rejection since those can be quite numerous when the
-/// subnet is at its limits. Note that the `index` is part of the records; gaps in the numbers
-/// indicate synchronous rejections.
+/// subnet is at its limits. Note that since the call `index` is part of the records, removing
+/// the records for synchronous rejections will result in gaps in these numbers thus they are
+/// still included indirectly.
 fn update_record(response: &api::call::CallResult<Vec<u8>>, index: u32) {
     // Updates the `Reply` at `index` in `RECORDS`.
     let set_reply_in_call_record = move |reply: Reply| {
@@ -207,7 +213,7 @@ fn update_record(response: &api::call::CallResult<Vec<u8>>, index: u32) {
             RECORDS.with_borrow_mut(|records| records.remove(&index).unwrap());
         }
         Err((reject_code, msg)) => {
-            set_reply_in_call_record(Reply::Reject(*reject_code as u32, msg.clone()));
+            set_reply_in_call_record(Reply::Reject(*reject_code as u32, msg.to_string()));
         }
         Ok(result) => {
             set_reply_in_call_record(Reply::Bytes(result.len() as u32));
@@ -232,8 +238,7 @@ async fn heartbeat() {
         // Wait for any call to conclude.
         let (result, index, remaining_futures) = select_all(futures).await;
 
-        // Update stats, the heartbeat itself doesn't make a downstream call
-        // since it already spawns calls in a loop.
+        // Update records.
         update_record(&result, record_indices.remove(index));
 
         // Continue awaiting the remaining futures.
@@ -245,7 +250,7 @@ async fn heartbeat() {
 ///
 /// Replies if:
 /// - sampling the weighted binomial distribution tells us to do so.
-/// - if it tells us not to do so but the attempted downstream call fails synchronously.
+/// - if it tells us not to do so but the attempted downstream call fails for any reason.
 #[update]
 async fn handle_call(msg: Message) -> Vec<u8> {
     // Samples a weighted binomial distribution to decide whether to make a downstream call (true)
@@ -262,13 +267,15 @@ async fn handle_call(msg: Message) -> Vec<u8> {
     // - setting up a call fails.
     // - a downstream call is rejected for any reason.
     while should_make_downstream_call() {
-        let Some((future, record_index)) = setup_call(msg.call_id, msg.call_depth + 1) else {
+        let Some((future, record_index)) = setup_call(msg.call_tree_id, msg.call_depth + 1) else {
             break;
         };
 
         let result = future.await;
         update_record(&result, record_index);
 
+        // Stop making downstream calls if a call fails; this prevents getting stuck in this loop
+        // forever since at some point we must run out of memory if we just keep making calls.
         if result.is_err() {
             break;
         }

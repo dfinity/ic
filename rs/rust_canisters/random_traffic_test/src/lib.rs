@@ -36,6 +36,13 @@ impl Default for Config {
 
 impl Config {
     /// Convenience constructor that sanity checks input.
+    ///
+    /// Note:
+    /// - `reply_bytes` are checked since there is a hard cutoff after which we cannot
+    ///   generate a response; this will effectively trap the canister.
+    /// - `call_bytes` is not checked since for payloads outside the legal range, the system
+    ///   can just generate a reject response. And also there are oversized requests for calls
+    ///   on the same subnet so there isn't a universal upper limit.
     pub fn try_new(
         receivers: Vec<CanisterId>,
         call_bytes: RangeInclusive<u32>,
@@ -46,14 +53,14 @@ impl Config {
         if call_bytes.is_empty() {
             return Err("empty call_bytes range".to_string());
         }
-        if *call_bytes.end() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32 {
-            return Err(format!(
-                "call_bytes range max exceeds {}",
-                MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64
-            ));
-        }
         if reply_bytes.is_empty() {
             return Err("empty reply_bytes range".to_string());
+        }
+        if *reply_bytes.end() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32 {
+            return Err(format!(
+                "reply_bytes range max exceeds {}",
+                MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64
+            ));
         }
         if instructions_count.is_empty() {
             return Err("empty instructions_count range".to_string());
@@ -76,20 +83,24 @@ impl Config {
 pub enum Reply {
     /// A response including a data payload of a distinct size was received.
     Bytes(u32),
-    /// The call was rejected synchronoulsy or asynchronously with a reject
-    /// code and a reject message.
+    /// The call was rejected asynchronously with a reject code and a reject message.
     Reject(u32, String),
 }
 
-/// Record for one outgoing call. Records how many bytes were sent out; and what kind of
-/// reply was received (either data or a synchronous or asynchronous rejection).
+/// Record for an outgoing call.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, CandidType)]
 pub struct Record {
+    /// The `receiver` of the call.
     pub receiver: CanisterId,
+    /// The caller if any, i.e. if this is a downstream call to a call made by `caller`.
     pub caller: Option<CanisterId>,
-    pub call_id: u32,
+    /// A unique ID for the whole call tree; this is passed on to downstream calls.
+    pub call_tree_id: u32,
+    /// The call depth; starting with 0 for the first (non-downstream) call.
     pub call_depth: u32,
+    /// The number of bytes included in the payload.
     pub sent_bytes: u32,
+    /// The kind of reply received, i.e. a payload or a reject response.
     pub reply: Option<Reply>,
 }
 
@@ -100,13 +111,13 @@ impl std::fmt::Debug for Record {
             None => write!(
                 f,
                 "Call({:x}) to {} | ",
-                self.call_id,
+                self.call_tree_id,
                 &self.receiver.to_string()[..5]
             ),
             Some(caller) => write!(
                 f,
-                "DownstreamCall({:x}) (caller {} @ depth {}) to {} | ",
-                self.call_id,
+                "Call({:x}) (caller {} @ depth {}) to {} | ",
+                self.call_tree_id,
                 &caller.to_string()[..5],
                 self.call_depth,
                 &self.receiver.to_string()[..5],

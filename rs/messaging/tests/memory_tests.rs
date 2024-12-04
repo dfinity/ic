@@ -30,7 +30,7 @@ const MAX_PAYLOAD_BYTES: u32 = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32;
 #[test]
 fn playground() {
     let seeds = vec![0_u64; 3];
-    let max_payload_bytes = MAX_PAYLOAD_BYTES * 2;
+    let max_payload_bytes = MAX_PAYLOAD_BYTES / 2;
     let calls_per_round = 3;
     let reply_weight = 1;
     let call_weight = 1;
@@ -131,7 +131,6 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
     fixture.start_chatter(calls_per_round);
 
     // Build up backlog and keep up chatter for while.
-    //for _ in 0..CHATTER_PHASE_ROUND_COUNT {
     for _ in 0..CHATTER_PHASE_ROUND_COUNT {
         fixture.tick();
 
@@ -417,7 +416,6 @@ impl Fixture {
     /// setting it.
     ///
     /// Panics if `canister` is not installed in `Self`.
-    //fn set_canister_state<T>(&self, canister: CanisterId, method: &str, item: T) -> Result<T, ()>
     fn set_canister_state<T>(&self, canister: CanisterId, method: &str, item: T) -> T
     where
         T: candid::CandidType + for<'a> candid::Deserialize<'a>,
