@@ -70,14 +70,12 @@ pub const RETRIEVE_BTC_MIN_AMOUNT: u64 = 10000;
 
 pub const TIMEOUT_SHORT: Duration = Duration::from_secs(300);
 
-// const KYT_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
-
 /// Maximum time (in nanoseconds) spend in queue at 0 to make the minter treat requests right away
 pub const MAX_NANOS_IN_QUEUE: u64 = 0;
 
 pub const BTC_MIN_CONFIRMATIONS: u64 = 6;
 
-pub const KYT_FEE: u64 = 1001;
+pub const CHECK_FEE: u64 = 1001;
 
 const UNIVERSAL_VM_NAME: &str = "btc-node";
 
@@ -403,7 +401,7 @@ pub async fn install_minter(
         max_time_in_queue_nanos,
         min_confirmations: Some(BTC_MIN_CONFIRMATIONS as u32),
         mode: Mode::GeneralAvailability,
-        kyt_fee: Some(KYT_FEE),
+        kyt_fee: Some(CHECK_FEE),
         kyt_principal: Some(kyt_canister_id),
     };
 
@@ -438,7 +436,7 @@ pub async fn install_kyt(kyt_canister: &mut Canister<'_>, env: &TestEnv) -> Cani
     install_rust_canister_from_path(
         kyt_canister,
         get_dependency_path(
-            env::var("IC_BTC_KYT_WASM_PATH").expect("IC_BTC_KYT_WASM_PATH not set"),
+            env::var("IC_BTC_CHECKER_WASM_PATH").expect("IC_BTC_CHECKER_WASM_PATH not set"),
         ),
         Some(Encode!(&kyt_init_args).unwrap()),
     )

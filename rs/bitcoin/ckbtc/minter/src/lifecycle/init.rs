@@ -7,7 +7,7 @@ use ic_btc_interface::Network;
 use serde::Serialize;
 
 pub const DEFAULT_MIN_CONFIRMATIONS: u32 = 6;
-pub const DEFAULT_KYT_FEE: u64 = 1000;
+pub const DEFAULT_CHECK_FEE: u64 = 1000;
 
 #[derive(CandidType, serde::Deserialize)]
 pub enum MinterArg {
@@ -75,12 +75,12 @@ pub struct InitArgs {
     #[serde(default)]
     pub mode: Mode,
 
-    /// The fee that the minter will pay for each KYT check.
+    /// The fee that the minter will pay for each bitcoin check.
     /// NOTE: this field is optional for backward compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kyt_fee: Option<u64>,
 
-    /// The principal of the KYT canister.
+    /// The principal of the bitcoin checker canister.
     /// NOTE: this field is optional for backward compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kyt_principal: Option<CanisterId>,

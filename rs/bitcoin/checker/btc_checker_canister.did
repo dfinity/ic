@@ -11,9 +11,9 @@ type CheckTransactionArgs = record { txid : blob };
 
 // The result of a check_transaction call.
 type CheckTransactionResponse = variant {
-    // When check finishes and all input addresses passed KYT.
+    // When check finishes and all input addresses passed.
     Passed;
-    // When check finishes and one or more input addresses failed KYT.
+    // When check finishes and one or more input addresses failed.
     // The list of failed addresses are returned as a best effort, which may be non-exhaustive.
     Failed: vec BitcoinAddress;
     // Unknown case where it is unable to give a final answer of Passed or Failed.
@@ -84,7 +84,7 @@ service : (KytArg) -> {
     // of the return result.
     check_transaction: (CheckTransactionArgs) -> (CheckTransactionResponse);
 
-    // Return `Passed` if the given bitcoin address passes the KYT check, or `Failed` otherwise.
+    // Return `Passed` if the given bitcoin address passes the bitcoin checker, or `Failed` otherwise.
     // May throw error (trap) if the given address is malformed or not a mainnet address.
     check_address: (CheckAddressArgs) -> (CheckAddressResponse) query;
 }

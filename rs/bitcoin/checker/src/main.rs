@@ -43,7 +43,7 @@ pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
 }
 
 #[ic_cdk::query]
-/// Return `Passed` if the given bitcion address passed the KYT check, or
+/// Return `Passed` if the given bitcion address passed the check, or
 /// `Failed` otherwise.
 /// May throw error (trap) if the given address is malformed or not a mainnet address.
 fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
@@ -71,7 +71,7 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
 
 #[ic_cdk::update]
 /// Return `Passed` if all input addresses of the transaction of the given
-/// transaction id passed the KYT check, or `Failed` if any of them did not.
+/// transaction id passed the check, or `Failed` if any of them did not.
 ///
 /// Every call to check_transaction must attach at least `CHECK_TRANSACTION_CYCLES_REQUIRED`.
 /// Return `NotEnoughCycles` if not enough cycles are attached.
@@ -221,8 +221,8 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
             }
             writer
                 .counter_vec(
-                    "ckbtc_kyt_requests_total",
-                    "The number of KYT requests received since the last canister upgrade.",
+                    "btc_check_requests_total",
+                    "The number of check requests received since the last canister upgrade.",
                 )
                 .unwrap()
                 .value(

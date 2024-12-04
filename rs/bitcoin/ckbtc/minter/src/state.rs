@@ -241,10 +241,10 @@ impl Default for Mode {
     }
 }
 
-/// The outcome of a UTXO KYT check.
+/// The outcome of a UTXO check.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum UtxoCheckStatus {
-    /// The KYT check did not reveal any problems.
+    /// The bitcoin check did not reveal any problems.
     Clean,
     /// The UTXO in question is tainted.
     Tainted,
@@ -352,7 +352,7 @@ pub struct CkBtcMinterState {
     /// The CanisterId of the ckBTC Ledger.
     pub ledger_id: CanisterId,
 
-    /// The principal of the KYT canister.
+    /// The principal of the bitcoin checker canister.
     pub kyt_principal: Option<CanisterId>,
 
     /// The set of UTXOs unused in pending transactions.
@@ -385,20 +385,20 @@ pub struct CkBtcMinterState {
 
     pub last_fee_per_vbyte: Vec<u64>,
 
-    /// The fee for a single KYT request.
+    /// The fee for a single bitcoin check request.
     pub kyt_fee: u64,
 
     /// The total amount of fees we owe to the KYT provider.
     pub owed_kyt_amount: BTreeMap<Principal, u64>,
 
-    /// A cache of UTXO KYT check statuses.
+    /// A cache of UTXO check statuses.
     pub checked_utxos: BTreeMap<Utxo, CheckedUtxo>,
 
     /// UTXOs that cannot be yet processed.
     pub suspended_utxos: SuspendedUtxos,
 
     /// Map from burn block index to amount to reimburse because of
-    /// KYT fees.
+    /// check fees.
     pub pending_reimbursements: BTreeMap<u64, ReimburseDepositTask>,
 
     /// Map from burn block index to the the reimbursed request.
@@ -509,7 +509,7 @@ impl CkBtcMinterState {
             ic_cdk::trap("ecdsa_key_name is not set");
         }
         if self.kyt_principal.is_none() {
-            ic_cdk::trap("New KYT principal is not set");
+            ic_cdk::trap("bitcoin checker principal is not set");
         }
     }
 
@@ -1297,9 +1297,9 @@ pub struct SuspendedUtxos {
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Serialize, Deserialize)]
 pub enum SuspendedReason {
-    /// UTXO whose value is too small to pay the KYT check fee.
+    /// UTXO whose value is too small to pay the bitcoin check fee.
     ValueTooSmall,
-    /// UTXO that the KYT provider considered tainted.
+    /// UTXO that the bitcoin checker considered tainted.
     Quarantined,
 }
 
@@ -1404,7 +1404,7 @@ impl From<InitArgs> for CkBtcMinterState {
             last_fee_per_vbyte: vec![1; 100],
             kyt_fee: args
                 .kyt_fee
-                .unwrap_or(crate::lifecycle::init::DEFAULT_KYT_FEE),
+                .unwrap_or(crate::lifecycle::init::DEFAULT_CHECK_FEE),
             owed_kyt_amount: Default::default(),
             checked_utxos: Default::default(),
             suspended_utxos: Default::default(),

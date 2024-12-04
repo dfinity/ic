@@ -31,7 +31,7 @@ use ic_tests_ckbtc::{
         generate_blocks, get_btc_address, get_btc_client, update_balance,
         upgrade_canister_with_args, wait_for_bitcoin_balance, BTC_BLOCK_REWARD,
     },
-    BTC_MIN_CONFIRMATIONS, KYT_FEE, RETRIEVE_BTC_MIN_AMOUNT, TEST_KEY_LOCAL, TRANSFER_FEE,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, RETRIEVE_BTC_MIN_AMOUNT, TEST_KEY_LOCAL, TRANSFER_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
@@ -96,7 +96,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
         };
 
         // Because bitcoind only allows to see one's own transaction, and we
-        // are using multiple addresses in this test. We have to change KYT
+        // are using multiple addresses in this test. We have to change check 
         // mode to AcceptAll, otherwise bitcoind will return 500 error.
         upgrade_kyt(&mut kyt_canister, NewKytMode::AcceptAll).await;
 
@@ -130,7 +130,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
                     &logger,
                     *block_index,
                     &account1,
-                    BTC_BLOCK_REWARD - KYT_FEE,
+                    BTC_BLOCK_REWARD - CHECK_FEE,
                 )
                 .await;
             } else {
@@ -169,7 +169,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
         assert_account_balance(
             &ledger_agent,
             &account1,
-            3 * (BTC_BLOCK_REWARD - KYT_FEE) - transfer_amount - TRANSFER_FEE,
+            3 * (BTC_BLOCK_REWARD - CHECK_FEE) - transfer_amount - TRANSFER_FEE,
         )
         .await;
         info!(&logger, "Verify withdrawal_account balance on the ledger");

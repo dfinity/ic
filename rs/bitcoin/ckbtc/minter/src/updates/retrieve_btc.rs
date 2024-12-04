@@ -54,7 +54,7 @@ pub struct RetrieveBtcOk {
 }
 
 pub enum ErrorCode {
-    // The retrieval address didn't pass the KYT check.
+    // The retrieval address didn't pass the bitcoin check.
     TaintedAddress = 1,
     KytCallFailed = 2,
 }
@@ -188,7 +188,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
 
     let kyt_principal = read_state(|s| {
         s.kyt_principal
-            .expect("BUG: upgrade procedure must ensure that the KYT principal is set")
+            .expect("BUG: upgrade procedure must ensure that the bitcoin checker principal is set")
             .get()
             .into()
     });
@@ -197,7 +197,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         BtcAddressCheckStatus::Tainted => {
             log!(
                 P1,
-                "rejected an attempt to withdraw {} BTC to address {} due to failed KYT check",
+                "rejected an attempt to withdraw {} BTC to address {} due to failed bitcoin check",
                 crate::tx::DisplayAmount(args.amount),
                 args.address,
             );
@@ -288,7 +288,7 @@ pub async fn retrieve_btc_with_approval(
 
     let kyt_principal = read_state(|s| {
         s.kyt_principal
-            .expect("BUG: upgrade procedure must ensure that the KYT principal is set")
+            .expect("BUG: upgrade procedure must ensure that the bitcoin checker principal is set")
             .get()
             .into()
     });
@@ -296,7 +296,7 @@ pub async fn retrieve_btc_with_approval(
     match kyt_check_address(kyt_principal, parsed_address.display(btc_network)).await {
         Err(error) => {
             return Err(RetrieveBtcWithApprovalError::GenericError {
-                error_message: format!("Failed to call KYT canister with error: {:?}", error),
+                error_message: format!("Failed to call bitcoin checker canister with error: {:?}", error),
                 error_code: ErrorCode::KytCallFailed as u64,
             })
         }
@@ -511,12 +511,12 @@ async fn burn_ckbtcs_icrc2(
     }
 }
 
-/// The outcome of an address KYT check.
+/// The outcome of a bitcoin address check.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 pub enum BtcAddressCheckStatus {
-    /// The KYT check did not find any issues with the address.
+    /// The bitcoin check did not find any issues with the address.
     Clean,
-    /// The KYT check found issues with the address in question.
+    /// The bitcoin check found issues with the address in question.
     Tainted,
 }
 async fn kyt_check_address(
@@ -527,7 +527,7 @@ async fn kyt_check_address(
         .await
         .map_err(|call_err| {
             RetrieveBtcError::TemporarilyUnavailable(format!(
-                "Failed to call KYT canister: {}",
+                "Failed to call bitcoin checker canister: {}",
                 call_err
             ))
         })? {

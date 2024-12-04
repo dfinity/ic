@@ -21,9 +21,9 @@ pub struct CheckTransactionArgs {
 
 #[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
 pub enum CheckTransactionResponse {
-    /// When check finishes and all input addresses passed KYT.
+    /// When check finishes and all input addresses passed.
     Passed,
-    /// When check finishes and one or more input addresses failed KYT.
+    /// When check finishes and one or more input addresses failed.
     /// The list of failed addresses are returned as a best effort, which may be non-exhaustive.
     Failed(Vec<String>),
     /// Unknown case where it is unable to give a final answer of Passed or Failed.

@@ -88,7 +88,7 @@ rust_ic_test(
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/checker",
-        "IC_BTC_KYT_CANISTER_WASM_PATH": "$(rootpath :btc_checker_canister)",
+        "IC_BTC_CHECKER_CANISTER_WASM_PATH": "$(rootpath :btc_checker_canister)",
         "POCKET_IC_BIN": "$(rootpath //:pocket-ic-server)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },

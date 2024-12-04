@@ -190,7 +190,10 @@ mod assertions {
         pub fn has_btc_network_in_title(&self, btc_network: BtcNetwork) -> &Self {
             self.has_string_value(
                 "title",
-                &format!("KYT Canister Dashboard for Bitcoin ({})", btc_network),
+                &format!(
+                    "Bitcoin Checker Canister Dashboard for Bitcoin ({})",
+                    btc_network
+                ),
                 "wrong btc_network",
             )
         }
@@ -199,7 +202,7 @@ mod assertions {
             self.has_string_value(
                 "#kyt-mode > td > code",
                 &format!("{}", kyt_mode),
-                "wrong KYT mode",
+                "wrong check mode",
             )
         }
 

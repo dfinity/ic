@@ -99,15 +99,15 @@ type RetrieveBtcOk = record {
 // The result of an [update_balance] call.
 type UtxoStatus = variant {
     // The minter ignored this UTXO because UTXO's value is too small to pay
-    // the KYT fees.
+    // the check fees.
     ValueTooSmall : Utxo;
-    // The KYT provider considered this UTXO to be tainted.
+    // The bitcoin checker considered this UTXO to be tainted.
     Tainted : Utxo;
-    // The UTXO passed the KYT check, but the minter failed to mint ckBTC
+    // The UTXO passed the bitcoin check, but the minter failed to mint ckBTC
     // because the Ledger was unavailable. Retrying the [update_balance] call
     // should eventually advance the UTXO to the [Minted] state.
     Checked : Utxo;
-    // The UTXO passed the KYT check, and ckBTC has been minted.
+    // The UTXO passed the bitcoin check, and ckBTC has been minted.
     Minted : record {
         block_index : nat64;
         minted_amount : nat64;
@@ -186,10 +186,10 @@ type InitArgs = record {
     /// The minter's operation mode.
     mode : Mode;
 
-    /// The fee paid per check by the KYT canister.
+    /// The fee paid per check by the bitcoin checker canister.
     kyt_fee : opt nat64;
 
-    /// The canister id of the KYT canister.
+    /// The canister id of the bitcoin checker canister.
     kyt_principal: opt principal;
 };
 
@@ -209,10 +209,10 @@ type UpgradeArgs = record {
     /// If set, overrides the current minter's operation mode.
     mode : opt Mode;
 
-    /// The fee per check by the KYT canister.
+    /// The fee per check by the bitcion checker canister.
     kyt_fee : opt nat64;
 
-    /// The principal of the KYT canister.
+    /// The principal of the bitcoin checker canister.
     kyt_principal : opt principal;
 };
 
@@ -321,9 +321,9 @@ type ReimbursementReason = variant {
 
 type SuspendedReason = variant {
     // The minter ignored this UTXO because UTXO's value is too small to pay
-    // the KYT fees.
+    // the check fees.
     ValueTooSmall;
-    // The KYT provider considered this UTXO to be tainted.
+    // The bitcoin checker considered this UTXO to be tainted.
     Quarantined;
 };
 

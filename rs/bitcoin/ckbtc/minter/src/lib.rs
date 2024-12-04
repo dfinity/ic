@@ -189,13 +189,13 @@ fn compute_min_withdrawal_amount(
     const PER_REQUEST_RBF_BOUND: u64 = 22_100;
     const PER_REQUEST_VSIZE_BOUND: u64 = 221;
     const PER_REQUEST_MINTER_FEE_BOUND: u64 = 305;
-    const PER_REQUEST_KYT_FEE: u64 = 2_000;
+    const PER_REQUEST_CHECK_FEE: u64 = 2_000;
 
     let median_fee_rate = median_fee_rate_e3s / 1_000;
     ((PER_REQUEST_RBF_BOUND
         + PER_REQUEST_VSIZE_BOUND * median_fee_rate
         + PER_REQUEST_MINTER_FEE_BOUND
-        + PER_REQUEST_KYT_FEE)
+        + PER_REQUEST_CHECK_FEE)
         / 50_000)
         * 50_000
         + min_withdrawal_amount

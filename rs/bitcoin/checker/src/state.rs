@@ -127,7 +127,7 @@ const MAX_CONCURRENT: u32 = 50;
 // is about 400 bytes, the estimated memory usage of the cache is in the order of 10s of MBs.
 const MAX_FETCH_TX_ENTRIES: usize = 10_000;
 
-// The internal KYT state includes:
+// The internal state includes:
 // 1. Outcall capacity, a semaphore limiting max concurrent outcalls.
 // 2. fetch transaction status, indexed by transaction id.
 //

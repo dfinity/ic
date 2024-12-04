@@ -38,7 +38,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 
-const KYT_FEE: u64 = 2_000;
+const CHECK_FEE: u64 = 2_000;
 const TRANSFER_FEE: u64 = 10;
 const MIN_CONFIRMATIONS: u32 = 12;
 const MAX_TIME_IN_QUEUE: Duration = Duration::from_secs(10);
@@ -637,7 +637,7 @@ impl CkBtcSetup {
                 retrieve_btc_min_amount,
                 ledger_id,
                 max_time_in_queue_nanos: 100,
-                kyt_fee: Some(KYT_FEE),
+                kyt_fee: Some(CHECK_FEE),
                 kyt_principal: kyt_id.into(),
                 ..default_init_args()
             }))
@@ -656,7 +656,7 @@ impl CkBtcSetup {
             }))
             .unwrap(),
         )
-        .expect("failed to install the KYT canister");
+        .expect("failed to install the bitcoin checker canister");
 
         env.execute_ingress(
             bitcoin_id,
@@ -823,7 +823,7 @@ impl CkBtcSetup {
             utxo_status.unwrap(),
             vec![UtxoStatus::Minted {
                 block_index: 0,
-                minted_amount: utxo.value - KYT_FEE,
+                minted_amount: utxo.value - CHECK_FEE,
                 utxo,
             }]
         );
@@ -1230,7 +1230,7 @@ fn test_transaction_finalization() {
 
     ckbtc.deposit_utxo(user, utxo.clone());
 
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
 
     assert_eq!(ckbtc.get_known_utxos(user), vec![utxo]);
 
@@ -1382,7 +1382,7 @@ fn test_transaction_resubmission_finalize_new() {
 
     ckbtc.deposit_utxo(user, utxo);
 
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
 
     // Step 2: request a withdrawal
 
@@ -1457,7 +1457,7 @@ fn test_transaction_resubmission_finalize_old() {
 
     ckbtc.deposit_utxo(user, utxo);
 
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
 
     // Step 2: request a withdrawal
 
@@ -1525,7 +1525,7 @@ fn test_transaction_resubmission_finalize_middle() {
 
     ckbtc.deposit_utxo(user, utxo);
 
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
 
     // Step 2: request a withdrawal
 
@@ -1621,7 +1621,7 @@ fn test_taproot_transaction_finalization() {
 
     ckbtc.deposit_utxo(user, utxo);
 
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
 
     // Step 2: request a withdrawal
 
@@ -1678,7 +1678,7 @@ fn test_ledger_memo() {
 
     ckbtc.deposit_utxo(user, utxo);
 
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
 
     let get_transaction_request = GetTransactionsRequest {
         start: 0_u8.into(),
@@ -1694,7 +1694,7 @@ fn test_ledger_memo() {
         MintMemo::Convert {
             txid: Some(&(1..=32).collect::<Vec<u8>>()),
             vout: Some(1),
-            kyt_fee: Some(KYT_FEE),
+            kyt_fee: Some(CHECK_FEE),
         }
     );
 
@@ -1718,7 +1718,7 @@ fn test_ledger_memo() {
     use ic_ckbtc_minter::memo::{BurnMemo, Status};
 
     let decoded_data = minicbor::decode::<BurnMemo>(&memo.0).expect("failed to decode memo");
-    // `retrieve_btc` incurs no KYT fee
+    // `retrieve_btc` incurs no check fee
     assert_eq!(
         decoded_data,
         BurnMemo::Convert {
@@ -1817,7 +1817,7 @@ fn test_retrieve_btc_with_approval() {
     let user = Principal::from(ckbtc.caller);
 
     ckbtc.deposit_utxo(user, utxo);
-    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - CHECK_FEE));
 
     // Step 2: request a withdrawal
 
@@ -1901,7 +1901,7 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
     ckbtc.deposit_utxo(user_account, utxo);
     assert_eq!(
         ckbtc.balance_of(user_account),
-        Nat::from(deposit_value - KYT_FEE)
+        Nat::from(deposit_value - CHECK_FEE)
     );
 
     // Step 2: request a withdrawal
@@ -2005,7 +2005,7 @@ fn test_retrieve_btc_with_approval_fail() {
     ckbtc.deposit_utxo(user_account, utxo);
     assert_eq!(
         ckbtc.balance_of(user_account),
-        Nat::from(deposit_value - KYT_FEE)
+        Nat::from(deposit_value - CHECK_FEE)
     );
 
     // Step 2: request a withdrawal with ledger stopped
@@ -2028,10 +2028,10 @@ fn test_retrieve_btc_with_approval_fail() {
     let start_canister_result = ckbtc.env.start_canister(ckbtc.ledger_id);
     assert_matches!(start_canister_result, Ok(_));
 
-    let deposited_value = deposit_value - KYT_FEE - TRANSFER_FEE;
+    let deposited_value = deposit_value - CHECK_FEE - TRANSFER_FEE;
     assert_eq!(ckbtc.balance_of(user_account), Nat::from(deposited_value));
 
-    // Check that the correct error_code is returned if the KYT check of the address fails
+    // Check that the correct error_code is returned if the check of the address fails
 
     ckbtc
         .env
@@ -2043,7 +2043,7 @@ fn test_retrieve_btc_with_approval_fail() {
             })))
             .unwrap(),
         )
-        .expect("failed to upgrade the KYT canister");
+        .expect("failed to upgrade the bitcoin checker canister");
 
     let retrieve_btc_result = ckbtc.retrieve_btc_with_approval(
         WITHDRAWAL_ADDRESS.to_string(),
@@ -2058,7 +2058,7 @@ fn test_retrieve_btc_with_approval_fail() {
     ckbtc.env.tick();
     assert_eq!(ckbtc.balance_of(user_account), Nat::from(deposited_value));
 
-    // Check that the correct error_code is returned if the call to the KYT canister fails
+    // Check that the correct error_code is returned if the call to the bitcoin checker canister fails
 
     let stop_canister_result = ckbtc.env.stop_canister(ckbtc.kyt_id);
     assert_matches!(stop_canister_result, Ok(_));

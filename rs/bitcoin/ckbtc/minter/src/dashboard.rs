@@ -284,11 +284,11 @@ pub fn build_metadata(s: &CkBtcMinterState) -> String {
                         <td><code>{}</code></td>
                     </tr>
                     <tr>
-                        <th>KYT Principal</th>
+                        <th>Bitcoin Checker Principal</th>
                         <td><code>{}</code></td>
                     </tr>
                     <tr>
-                        <th>KYT Fee</th>
+                        <th>Check Fee</th>
                         <td>{}</td>
                     </tr>
                     <tr>

@@ -28,7 +28,7 @@ use ic_tests_ckbtc::{
         start_canister, stop_canister, upgrade_canister, wait_for_bitcoin_balance,
         wait_for_mempool_change, BTC_BLOCK_REWARD,
     },
-    BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, TEST_KEY_LOCAL,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
@@ -167,7 +167,7 @@ pub fn test_kyt(env: TestEnv) {
             Err(UpdateBalanceError::TemporarilyUnavailable(_)) => (),
             other => {
                 panic!(
-                    "Expected the KYT canister to be unavailable, got {:?}",
+                    "Expected the bitcoin checker canister to be unavailable, got {:?}",
                     other
                 );
             }
@@ -200,7 +200,7 @@ pub fn test_kyt(env: TestEnv) {
                         &logger,
                         block_index,
                         &account1,
-                        first_transfer_amount - KYT_FEE - BITCOIN_NETWORK_TRANSFER_FEE,
+                        first_transfer_amount - CHECK_FEE - BITCOIN_NETWORK_TRANSFER_FEE,
                     )
                     .await;
                 }
@@ -252,7 +252,7 @@ pub fn test_kyt(env: TestEnv) {
                 &logger,
                 *block_index,
                 &account1,
-                first_transfer_amount - KYT_FEE - BITCOIN_NETWORK_TRANSFER_FEE,
+                first_transfer_amount - CHECK_FEE - BITCOIN_NETWORK_TRANSFER_FEE,
             )
             .await;
         } else {

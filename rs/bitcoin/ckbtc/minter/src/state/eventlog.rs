@@ -136,7 +136,7 @@ mod event {
         #[serde(rename = "checked_utxo_v2")]
         CheckedUtxoV2 { utxo: Utxo, account: Account },
 
-        /// Indicates that the given UTXO's value is too small to pay for a KYT check.
+        /// Indicates that the given UTXO's value is too small to pay for a bitcoin check.
         #[serde(rename = "ignored_utxo")]
         #[deprecated(note = "Use SuspendedUtxo")]
         IgnoredUtxo { utxo: Utxo },
@@ -164,6 +164,7 @@ mod event {
 
         /// Indicates that the KYT check for the specified address failed.
         #[serde(rename = "retrieve_btc_kyt_failed")]
+        #[deprecated]
         RetrieveBtcKytFailed {
             /// The owner of the address.
             owner: Principal,
@@ -382,6 +383,7 @@ pub fn replay<I: CheckInvariants>(
                     }
                 }
             }
+            #[allow(deprecated)]
             Event::RetrieveBtcKytFailed { kyt_provider, .. } => {
                 *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;
             }

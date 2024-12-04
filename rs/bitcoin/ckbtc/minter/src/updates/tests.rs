@@ -3,7 +3,7 @@ mod update_balance {
     use crate::storage;
     use crate::test_fixtures::{
         ecdsa_public_key, get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
-        mock::MockCanisterRuntime, quarantined_utxo, KYT_CANISTER_ID, MINTER_CANISTER_ID,
+        mock::MockCanisterRuntime, quarantined_utxo, BTC_CHECKER_CANISTER_ID, MINTER_CANISTER_ID,
     };
     use crate::updates::update_balance;
     use crate::updates::update_balance::{UpdateBalanceArgs, UtxoStatus};
@@ -220,7 +220,9 @@ mod update_balance {
         use crate::lifecycle::init::InitArgs;
         use ic_base_types::CanisterId;
         init_state(InitArgs {
-            kyt_principal: Some(CanisterId::unchecked_from_principal(KYT_CANISTER_ID.into())),
+            kyt_principal: Some(CanisterId::unchecked_from_principal(
+                BTC_CHECKER_CANISTER_ID.into(),
+            )),
             ..init_args()
         });
         mutate_state(|s| s.ecdsa_public_key = Some(ecdsa_public_key()))
@@ -251,7 +253,7 @@ mod update_balance {
             .expect_check_transaction()
             .times(1)
             .withf(move |kyt_principal, utxo_, _cycles| {
-                kyt_principal == &KYT_CANISTER_ID && utxo_ == &utxo
+                kyt_principal == &BTC_CHECKER_CANISTER_ID && utxo_ == &utxo
             })
             .return_const(Ok(response));
     }
