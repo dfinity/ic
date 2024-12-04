@@ -170,16 +170,18 @@ impl CanisterHttp {
             (Err(_), Err(_)) => {
                 debug!(self.logger, "SOCKS_PROXY_DL: Both requests failed");
             }
-            (Ok(_), Err(_)) => {
+            (Ok(_), Err(err)) => {
                 debug!(
                     self.logger,
-                    "SOCKS_PROXY_DL: regular request succeeded, DL request failed"
+                    "SOCKS_PROXY_DL: regular request succeeded, DL request failed with error {}",
+                    err,
                 );
             }
-            (Err(_), Ok(_)) => {
+            (Err(err), Ok(_)) => {
                 debug!(
                     self.logger,
-                    "SOCKS_PROXY_DL: regular request failed, DL request succeeded"
+                    "SOCKS_PROXY_DL: DL request succeeded, regular request failed with error {}",
+                    err,
                 );
             }
         }
@@ -221,10 +223,6 @@ impl CanisterHttp {
                             client
                         }
                         None => {
-                            debug!(
-                                self.logger,
-                                "Failed to create SOCKS client for IP {}", next_socks_proxy_ip
-                            );
                             // there is something wrong with this IP, try another one.
                             continue;
                         }
@@ -481,8 +479,7 @@ fn should_dl_socks_proxy() -> bool {
     let random_number: u32 = rng.gen_range(0..100);
     // This is a dark launch feature. We want to test the SOCKS proxy with a small percentage of requests.
     // Currently this is set to 0%, hence always false.
-    random_number
-        < REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE
+    random_number < REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE
 }
 
 fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {
