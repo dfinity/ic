@@ -1,6 +1,8 @@
-use candid::{Decode, Encode};
-use dfn_core::api;
-use ic_base_types::CanisterId;
+use candid::{CandidType, Encode};
+use futures::future::select_all;
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_cdk::{api, caller, id};
+use ic_cdk_macros::{heartbeat, init, query, update};
 use rand::{
     distributions::{Distribution, WeightedIndex},
     rngs::StdRng,
@@ -8,7 +10,11 @@ use rand::{
     Rng, SeedableRng,
 };
 use random_traffic_test::*;
+use serde::{Deserialize, Serialize};
 use std::cell::{Cell, RefCell};
+use std::collections::BTreeMap;
+use std::future::Future;
+use std::hash::{DefaultHasher, Hasher};
 use std::ops::RangeInclusive;
 
 thread_local! {
@@ -23,68 +29,44 @@ thread_local! {
     static CONFIG: RefCell<Config> = RefCell::default();
     /// The maximum number of calls each heartbeat will attempt to make.
     static MAX_CALLS_PER_HEARTBEAT: Cell<u32> = Cell::default();
+    /// A hasher used to generate unique call IDs.
+    static HASHER: RefCell<DefaultHasher> = RefCell::default();
+    /// An index for each attempted call; starts at 0 and then increments with each call.
+    static CALL_INDEX: Cell<u32> = Cell::default();
     /// A collection of records; one record for each call. Keeps track of how each call went,
     /// whether it was rejected or not and how many bytes we received as a reply.
-    static RECORDS: RefCell<Vec<Record>> = RefCell::default();
+    static RECORDS: RefCell<BTreeMap<u32, Record>> = RefCell::default();
+    /// A counter for synchronous rejections.
+    static SYNCHRONOUS_REJECTIONS_COUNT: Cell<u32> = Cell::default();
 }
 
-/// Calls `f` on a candid type taken from `arg_data()`; replies the result of `f`.
-fn with_candid_encoding<T, F>(f: F)
-where
-    T: candid::CandidType + for<'a> serde::Deserialize<'a>,
-    F: FnOnce(T) -> T,
-{
-    let msg = match candid::Decode!(&api::arg_data()[..], T) {
-        Ok(item) => Ok(f(item)),
-        Err(_) => Err(()),
-    };
-
-    let msg = candid::Encode!(&msg).unwrap();
-    api::reply(&msg[..]);
+/// The intercanister message sent to `handle_call()` by the heartbeat of this canister
+/// or `handle_call()` itself in case of a downstream call.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, CandidType)]
+struct Message {
+    /// A unique call ID to allow tracing of call trees in the records.
+    call_id: u32,
+    /// The depth of the call starting from 0 and incrementing by 1 for each downstream call.
+    call_depth: u32,
+    /// A payload of a certain size; it otherwise does not any contain information.
+    payload: Vec<u8>,
 }
 
-/// Sets the test config; returns the current config.
-#[export_name = "canister_update set_config"]
-fn set_config() {
-    with_candid_encoding(|config: Config| CONFIG.replace(config));
-}
+impl Message {
+    /// Creates a new `Message` of size `bytes_count`; may slightly exceed the target for
+    /// very small numbers.
+    fn new(call_id: u32, call_depth: u32, bytes_count: usize) -> Self {
+        Self {
+            call_id,
+            call_depth,
+            payload: vec![0_u8; bytes_count.saturating_sub(std::mem::size_of::<Self>())],
+        }
+    }
 
-/// Sets the requests per round to be sent each heart beat; returns the current value.
-#[export_name = "canister_update set_max_calls_per_heartbeat"]
-fn set_max_calls_per_heartbeat() {
-    with_candid_encoding(|max_calls_per_heartbeat: u32| {
-        MAX_CALLS_PER_HEARTBEAT.replace(max_calls_per_heartbeat)
-    });
-}
-
-/// Sets the reply weight; returns the current weight.
-#[export_name = "canister_update set_reply_weight"]
-fn set_reply_weight() {
-    with_candid_encoding(|reply_weight: u32| REPLY_WEIGHT.replace(reply_weight));
-}
-
-/// Sets the call weight; returns the current weight.
-#[export_name = "canister_update set_call_weight"]
-fn set_call_weight() {
-    with_candid_encoding(|call_weight: u32| CALL_WEIGHT.replace(call_weight));
-}
-
-/// Seeds `RNG`.
-#[export_name = "canister_update seed_rng"]
-fn seed_rng() {
-    RNG.with_borrow_mut(|rng| {
-        let seed = candid::Decode!(&api::arg_data()[..], u64).unwrap();
-        *rng = StdRng::seed_from_u64(seed);
-    });
-    api::reply(&[]);
-}
-
-/// Returns the canister records.
-#[export_name = "canister_query records"]
-fn records() {
-    let records = RECORDS.with_borrow(|records| records.to_vec());
-    let msg = candid::Encode!(&records).unwrap();
-    api::reply(&msg[..]);
+    /// Returns the number of bytes the message consists of.
+    fn count_bytes(&self) -> usize {
+        std::mem::size_of::<Self>() + self.payload.len()
+    }
 }
 
 /// Returns a random receiver if any.
@@ -97,6 +79,27 @@ fn choose_receiver() -> Option<CanisterId> {
 /// Generates a random u32 contained in `range`.
 fn gen_range(range: RangeInclusive<u32>) -> u32 {
     RNG.with_borrow_mut(|rng| rng.gen_range(range))
+}
+
+/// Returns the next call index.
+fn next_call_index() -> u32 {
+    CALL_INDEX.replace(CALL_INDEX.get() + 1)
+}
+
+/// Returns the next call ID.
+fn next_call_id() -> u32 {
+    HASHER.with_borrow_mut(|hasher| {
+        // Hash something to generate a new unique number.
+        hasher.write_u64(42_u64);
+        // Using only the upper 32 bits should be more than enough
+        // since all we need is some unique number.
+        (hasher.finish() >> 32) as u32
+    })
+}
+
+/// Returns `true` if `error_msg` corresponds to a synchronous rejection.
+fn synchronous_rejection(error_msg: &String) -> bool {
+    error_msg.contains("Couldn't send message")
 }
 
 /// Returns the call bytes range as defined in `CONFIG`.
@@ -114,66 +117,128 @@ fn instructions_count_range() -> RangeInclusive<u32> {
     CONFIG.with_borrow(|config| config.instructions_count_min..=config.instructions_count_max)
 }
 
-/// Attemps to call a randomly chosen `receiver` with a random payload size. Records calls
-/// attempted in `RECORDS` in the order they were made. Once a reply is received, this record is
-/// updated in place.
-///
-/// `on_response` is executed upon awaiting the outcome of the call, both on reply and on reject.
-/// By contrast, it is important to report a synchronous rejection without calling `on_response`
-/// because we could otherwise get stuck attempting new calls indefinitely.
-fn try_call(on_response: impl FnOnce() + Copy + 'static) -> Result<(), ()> {
-    let receiver = choose_receiver().ok_or(())?;
-    let payload_bytes = gen_range(call_bytes_range());
+/// Sets the test config; returns the current config.
+#[update]
+fn set_config(config: Config) -> Config {
+    CONFIG.replace(config)
+}
 
-    // Insert a new call record at the back of `RECORDS`; returns the `index` of the new element at
-    // the back.
-    let index = RECORDS.with_borrow_mut(|records| {
-        records.push(Record {
-            receiver,
-            sent_bytes: payload_bytes,
-            reply: None,
-        });
-        records.len() - 1
+/// Sets the requests per round to be sent each heart beat; returns the current value.
+#[update]
+fn set_max_calls_per_heartbeat(max_calls_per_heartbeat: u32) -> u32 {
+    MAX_CALLS_PER_HEARTBEAT.replace(max_calls_per_heartbeat)
+}
+
+/// Sets the reply weight; returns the current weight.
+#[update]
+fn set_reply_weight(reply_weight: u32) -> u32 {
+    REPLY_WEIGHT.replace(reply_weight)
+}
+
+/// Sets the call weight; returns the current weight.
+#[update]
+fn set_call_weight(call_weight: u32) -> u32 {
+    CALL_WEIGHT.replace(call_weight)
+}
+
+/// Seeds `RNG`.
+#[update]
+fn seed_rng(seed: u64) {
+    RNG.with_borrow_mut(|rng| *rng = StdRng::seed_from_u64(seed));
+}
+
+/// Returns the canister records.
+#[query]
+fn records() -> BTreeMap<u32, Record> {
+    RECORDS.with_borrow(|records| records.clone())
+}
+
+#[query]
+fn synchronous_rejections_count() -> u32 {
+    SYNCHRONOUS_REJECTIONS_COUNT.get()
+}
+
+/// Generates a future for a randomized call that can be awaited; inserts a new record at `index`
+/// that must updated (or removed) after awaiting performing the call. For each call, the call
+/// index is incremented by 1, such that adjacent calls have adjacent indices.
+fn setup_call(
+    call_id: u32,
+    call_depth: u32,
+) -> Option<(impl Future<Output = api::call::CallResult<Vec<u8>>>, u32)> {
+    let receiver = choose_receiver()?;
+    let msg = Message::new(call_id, call_depth, gen_range(call_bytes_range()) as usize);
+
+    // Inserts a new call record at the next `index`.
+    let index = next_call_index();
+    RECORDS.with_borrow_mut(|records| {
+        records.insert(
+            index,
+            Record {
+                receiver,
+                caller: (call_depth > 0)
+                    .then_some(CanisterId::unchecked_from_principal(PrincipalId(caller()))),
+                call_id,
+                call_depth,
+                sent_bytes: msg.count_bytes() as u32,
+                reply: None,
+            },
+        );
     });
 
+    let future = api::call::call_raw(receiver.into(), "handle_call", Encode!(&msg).unwrap(), 0);
+
+    Some((future, index))
+}
+
+/// Updates the record at `index` using the `response` to the corresponding call.
+///
+/// Removes the record for a synchronous rejection since those can be quite numerous when the
+/// subnet is at its limits. Note that the `index` is part of the records; gaps in the numbers
+/// indicate synchronous rejections.
+fn update_record(response: &api::call::CallResult<Vec<u8>>, index: u32) {
     // Updates the `Reply` at `index` in `RECORDS`.
     let set_reply_in_call_record = move |reply: Reply| {
-        RECORDS.with_borrow_mut(|records| {
-            records[index].reply = Some(reply);
-        });
+        RECORDS.with_borrow_mut(|records| records.get_mut(&index).unwrap().reply = Some(reply));
     };
-
-    let error_code = api::call_with_callbacks(
-        receiver,
-        "handle_call",
-        &vec![0_u8; payload_bytes as usize][..],
-        move || {
-            set_reply_in_call_record(Reply::Bytes(api::arg_data().len() as u32));
-            on_response();
-        },
-        move || {
-            set_reply_in_call_record(Reply::AsynchronousRejection(
-                api::reject_code(),
-                api::reject_message(),
-            ));
-            on_response();
-        },
-    );
-    if error_code == 0 {
-        Ok(())
-    } else {
-        set_reply_in_call_record(Reply::SynchronousRejection(error_code));
-        Err(())
+    match response {
+        Err((_, msg)) if synchronous_rejection(msg) => {
+            // Remove the record for synchronous rejections.
+            SYNCHRONOUS_REJECTIONS_COUNT.set(SYNCHRONOUS_REJECTIONS_COUNT.get() + 1);
+            RECORDS.with_borrow_mut(|records| records.remove(&index).unwrap());
+        }
+        Err((reject_code, msg)) => {
+            set_reply_in_call_record(Reply::Reject(*reject_code as u32, msg.clone()));
+        }
+        Ok(result) => {
+            set_reply_in_call_record(Reply::Bytes(result.len() as u32));
+        }
     }
 }
 
-/// Samples a weighted binomial distribution to decide whether to make a reply (true) or a
-/// downstream call (false). Defaults to `true` for bad weights (e.g. both 0).
-fn should_reply_now() -> bool {
-    RNG.with_borrow_mut(|rng| {
-        WeightedIndex::new([REPLY_WEIGHT.get(), CALL_WEIGHT.get()])
-            .map_or(true, |dist| dist.sample(rng) == 0)
-    })
+/// Generates `MAX_CALLS_PER_HEARTBEAT` calls as futures. The futures are awaited one by one such
+/// that the records can be updated without awaiting all calls at once.
+#[heartbeat]
+async fn heartbeat() {
+    let (mut futures, mut record_indices) = (Vec::new(), Vec::new());
+    for _ in 0..MAX_CALLS_PER_HEARTBEAT.get() {
+        let Some((future, index)) = setup_call(next_call_id(), 0) else {
+            return;
+        };
+        futures.push(future);
+        record_indices.push(index);
+    }
+
+    while !futures.is_empty() {
+        // Wait for any call to conclude.
+        let (result, index, remaining_futures) = select_all(futures).await;
+
+        // Update stats, the heartbeat itself doesn't make a downstream call
+        // since it already spawns calls in a loop.
+        update_record(&result, record_indices.remove(index));
+
+        // Continue awaiting the remaining futures.
+        futures = remaining_futures;
+    }
 }
 
 /// Handles incoming calls; this method is called from the heartbeat method.
@@ -181,54 +246,46 @@ fn should_reply_now() -> bool {
 /// Replies if:
 /// - sampling the weighted binomial distribution tells us to do so.
 /// - if it tells us not to do so but the attempted downstream call fails synchronously.
-///
-/// Note that a reply to a successful downstream call is made from the callbacks provided for this
-/// call; this amounts to awaiting the outcome of the call asynchronously first.
-#[export_name = "canister_update handle_call"]
-fn handle_call() {
-    // Passing handle_call() as the `on_response` for `try_call()` leads to random call trees where
-    // it is recursively decided to make another call or reply on each node upon awaiting the
-    // outcome. The shape of the call tree is statistically determined by the values of `REPLY_WEIGHT`
-    // and `CALL_WEIGHT`.
-    //
-    // Note: Awaiting each call before possibly making another one also ensures there is only ever
-    // one response despite potentially multiple downstream calls, something that doesn't matter for
-    // the heartbeat where calls are not awaited because the heartbeat can't give a response anyway.
-    if should_reply_now() || try_call(handle_call).is_err() {
-        let payload_bytes = gen_range(reply_bytes_range());
-        let instructions_count = gen_range(instructions_count_range());
-
-        // Do some thinking.
-        let counts = api::performance_counter(0) + instructions_count as u64;
-        while counts > api::performance_counter(0) {}
-
-        let msg = vec![0_u8; payload_bytes as usize];
-        api::reply(&msg[..]);
+#[update]
+async fn handle_call(msg: Message) -> Vec<u8> {
+    // Samples a weighted binomial distribution to decide whether to make a downstream call (true)
+    // or reply (false). Defaults to `false` for bad weights (e.g. both 0).
+    fn should_make_downstream_call() -> bool {
+        RNG.with_borrow_mut(|rng| {
+            WeightedIndex::new([CALL_WEIGHT.get(), REPLY_WEIGHT.get()])
+                .map_or(false, |dist| dist.sample(rng) == 0)
+        })
     }
-}
 
-/// Sends out calls to `handle_call()` on random instances of this canister as provided by the
-/// `receivers` in `CONFIG`. This is done in quick succession without awaiting the outcome of these
-/// calls until either `MAX_CALLS_PER_HEARTBEAT` is reached or a synchronous rejection is observed.
-///
-/// This approach makes sense for the heartbeat because
-/// - it does not need to make a reply so it can freely make calls and then forget about them.
-/// - it allows for a quick generation of a lot of traffic.
-///
-/// Note that each such call may then spawn its own call tree with a random structure determined by
-/// the weights chosen, but unlike the heartbeat, the calls are awaited on each node in this call
-/// trees. In a sense the heartbeat may plant up to `MAX_CALLS_PER_HEARTBEAT` new call trees very
-/// quickly, but the trees then grow, wither and eventually die slowly.
-#[export_name = "canister_heartbeat"]
-fn heartbeat() {
-    for _ in 0..MAX_CALLS_PER_HEARTBEAT.get() {
-        // Passing a no-op to `try_call()` as the `on_response` reflects the' make calls and forget
-        // about them' approach described above.
-        if let Err(()) = try_call(|| {}) {
-            return;
+    // Make downstream calls until
+    // - sampling the distribution tells us to stop.
+    // - setting up a call fails.
+    // - a downstream call is rejected for any reason.
+    while should_make_downstream_call() {
+        let Some((future, record_index)) = setup_call(msg.call_id, msg.call_depth + 1) else {
+            break;
+        };
+
+        let result = future.await;
+        update_record(&result, record_index);
+
+        if result.is_err() {
+            break;
         }
     }
+
+    let payload_bytes = gen_range(reply_bytes_range());
+    let instructions_count = gen_range(instructions_count_range());
+
+    // Do some thinking.
+    let counts = api::performance_counter(0) + instructions_count as u64;
+    while counts > api::performance_counter(0) {}
+
+    vec![0_u8; payload_bytes as usize]
 }
 
-#[export_name = "canister_init"]
-fn main() {}
+/// Initializes the `HASHER` by hashing our own canister ID.
+#[init]
+fn main() {
+    HASHER.with_borrow_mut(|hasher| hasher.write(id().as_slice()));
+}
