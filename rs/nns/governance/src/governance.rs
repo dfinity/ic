@@ -6121,7 +6121,12 @@ impl Governance {
                 &VotingPowerEconomics::DEFAULT
             });
 
-        prune_some_following(voting_power_economics, &mut self.neuron_store, begin, carry_on)
+        prune_some_following(
+            voting_power_economics,
+            &mut self.neuron_store,
+            begin,
+            carry_on,
+        )
     }
 
     /// Creates a new neuron or refreshes the stake of an existing
