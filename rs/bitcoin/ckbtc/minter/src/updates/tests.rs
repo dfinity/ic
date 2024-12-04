@@ -5,7 +5,9 @@ mod update_balance {
         mock::MockCanisterRuntime, quarantined_utxo, DAY, KYT_CANISTER_ID, MINTER_CANISTER_ID, NOW,
     };
     use crate::updates::update_balance;
-    use crate::updates::update_balance::{UpdateBalanceArgs, UtxoStatus};
+    use crate::updates::update_balance::{
+        SuspendedUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
+    };
     use crate::{storage, Timestamp};
     use ic_btc_interface::{GetUtxosResponse, Utxo};
     use ic_btc_kyt::CheckTransactionResponse;
@@ -26,8 +28,39 @@ mod update_balance {
             )
         });
         let events_before: Vec<_> = storage::events().collect();
+        let update_balance_args = UpdateBalanceArgs {
+            owner: Some(account.owner),
+            subaccount: account.subaccount,
+        };
 
         let mut runtime = MockCanisterRuntime::new();
+        mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
+        let num_time_called = 0_usize;
+        mock_time(
+            &mut runtime,
+            vec![NOW.checked_sub(Duration::from_secs(1)).unwrap()],
+            num_time_called,
+        );
+
+        let result = update_balance(update_balance_args.clone(), &runtime).await;
+
+        assert_eq!(
+            result,
+            Err(UpdateBalanceError::NoNewUtxos {
+                current_confirmations: None,
+                required_confirmations: 6,
+                pending_utxos: Some(vec![]),
+                suspended_utxos: Some(vec![SuspendedUtxo {
+                    utxo: ignored_utxo.clone(),
+                    reason: SuspendedReason::ValueTooSmall,
+                    earliest_retry: NOW.as_nanos_since_unix_epoch(),
+                }]),
+            })
+        );
+        assert_has_no_new_events(&events_before);
+
+        runtime.checkpoint();
+
         mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
         let num_time_called = 0_usize;
         mock_time(
@@ -37,16 +70,39 @@ mod update_balance {
         );
         mock_schedule_now_process_logic(&mut runtime);
 
-        let result = update_balance(
-            UpdateBalanceArgs {
-                owner: Some(account.owner),
-                subaccount: account.subaccount,
-            },
-            &runtime,
-        )
-        .await;
+        let result = update_balance(update_balance_args.clone(), &runtime).await;
 
-        assert_eq!(result, Ok(vec![UtxoStatus::ValueTooSmall(ignored_utxo)]));
+        assert_eq!(
+            result,
+            Ok(vec![UtxoStatus::ValueTooSmall(ignored_utxo.clone())])
+        );
+        assert_has_no_new_events(&events_before);
+
+        runtime.checkpoint();
+
+        mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
+        let num_time_called = 0_usize;
+        mock_time(
+            &mut runtime,
+            vec![NOW.checked_add(Duration::from_secs(1)).unwrap()],
+            num_time_called,
+        );
+
+        let result = update_balance(update_balance_args, &runtime).await;
+
+        assert_eq!(
+            result,
+            Err(UpdateBalanceError::NoNewUtxos {
+                current_confirmations: None,
+                required_confirmations: 6,
+                pending_utxos: Some(vec![]),
+                suspended_utxos: Some(vec![SuspendedUtxo {
+                    utxo: ignored_utxo.clone(),
+                    reason: SuspendedReason::ValueTooSmall,
+                    earliest_retry: NOW.checked_add(DAY).unwrap().as_nanos_since_unix_epoch(),
+                }]),
+            })
+        );
         assert_has_no_new_events(&events_before);
     }
 
@@ -182,8 +238,40 @@ mod update_balance {
             audit::quarantine_utxo(s, utxo, account, NOW.checked_sub(DAY).unwrap());
         });
         let events_before: Vec<_> = storage::events().collect();
+        let update_balance_args = UpdateBalanceArgs {
+            owner: Some(account.owner),
+            subaccount: account.subaccount,
+        };
 
         let mut runtime = MockCanisterRuntime::new();
+
+        mock_get_utxos_for_account(&mut runtime, account, vec![quarantined_utxo.clone()]);
+        let num_time_called = 0_usize;
+        mock_time(
+            &mut runtime,
+            vec![NOW.checked_sub(Duration::from_secs(1)).unwrap()],
+            num_time_called,
+        );
+
+        let result = update_balance(update_balance_args.clone(), &runtime).await;
+
+        assert_eq!(
+            result,
+            Err(UpdateBalanceError::NoNewUtxos {
+                current_confirmations: None,
+                required_confirmations: 6,
+                pending_utxos: Some(vec![]),
+                suspended_utxos: Some(vec![SuspendedUtxo {
+                    utxo: quarantined_utxo.clone(),
+                    reason: SuspendedReason::Quarantined,
+                    earliest_retry: NOW.as_nanos_since_unix_epoch(),
+                }]),
+            })
+        );
+        assert_has_no_new_events(&events_before);
+
+        runtime.checkpoint();
+
         mock_get_utxos_for_account(&mut runtime, account, vec![quarantined_utxo.clone()]);
         let num_time_called = 0_usize;
         mock_time(
@@ -198,16 +286,39 @@ mod update_balance {
         );
         mock_schedule_now_process_logic(&mut runtime);
 
-        let result = update_balance(
-            UpdateBalanceArgs {
-                owner: Some(account.owner),
-                subaccount: account.subaccount,
-            },
-            &runtime,
-        )
-        .await;
+        let result = update_balance(update_balance_args.clone(), &runtime).await;
 
-        assert_eq!(result, Ok(vec![UtxoStatus::Tainted(quarantined_utxo)]));
+        assert_eq!(
+            result,
+            Ok(vec![UtxoStatus::Tainted(quarantined_utxo.clone())])
+        );
+        assert_has_no_new_events(&events_before);
+
+        runtime.checkpoint();
+
+        mock_get_utxos_for_account(&mut runtime, account, vec![quarantined_utxo.clone()]);
+        let num_time_called = 0_usize;
+        mock_time(
+            &mut runtime,
+            vec![NOW.checked_add(Duration::from_secs(1)).unwrap()],
+            num_time_called,
+        );
+
+        let result = update_balance(update_balance_args.clone(), &runtime).await;
+
+        assert_eq!(
+            result,
+            Err(UpdateBalanceError::NoNewUtxos {
+                current_confirmations: None,
+                required_confirmations: 6,
+                pending_utxos: Some(vec![]),
+                suspended_utxos: Some(vec![SuspendedUtxo {
+                    utxo: quarantined_utxo.clone(),
+                    reason: SuspendedReason::Quarantined,
+                    earliest_retry: NOW.checked_add(DAY).unwrap().as_nanos_since_unix_epoch(),
+                }]),
+            })
+        );
         assert_has_no_new_events(&events_before);
     }
 
@@ -287,7 +398,6 @@ mod update_balance {
     fn expect_bitcoin_get_utxos_returning(runtime: &mut MockCanisterRuntime, utxos: Vec<Utxo>) {
         runtime
             .expect_bitcoin_get_utxos()
-            .times(1)
             .return_const(Ok(GetUtxosResponse {
                 utxos,
                 ..get_uxos_response()
