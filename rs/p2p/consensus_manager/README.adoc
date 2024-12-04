@@ -1,0 +1,35 @@
+= Abortable Broadcast 
+:toc:  
+
+== Overview  
+
+This library implements the https://arxiv.org/abs/2410.22080[_Abortable Broadcast_] primitive.  
+
+Currently, the implementation has some limitations that restrict its generalization:  
+
+- **ArtifactAssembler coupling**: The implementation is tightly coupled with the `ArtifactAssembler`, reducing modularity.  
+- **Slot table deletions**: Deletions in the slot table are not propagated, which lead to inconsistencies.  
+
+== Requirements  
+
+[cols="3,3,3", options="header"]  
+|===  
+| **Capability** | **Purpose** | **Implementation Requirements**  
+
+| **PubSub-like library**  
+| Simplifies application development by abstracting one-to-many communication within a set of nodes.  
+| The library must implement https://en.wikipedia.org/wiki/Eventual_consistency[_eventual consistency_].  
+
+| **Multitenancy of applications**  
+| Allows multiple applications to safely use the library, ensuring isolation and uninterrupted operation between all applications.  
+| Must implement fair scheduling across peers to ensure resource allocation and isolation.  
+
+| **Operation in P2P networks with Byzantine peers**  
+| Ensures reliable message publishing and creation rates, even in networks with faulty or malicious nodes.  
+| The implementation must provide a non-IO-bound API and be memory-bounded.  
+
+| **Scalable and resource-efficient**  
+| Optimizes usage of shared resources (e.g., CPU, file descriptors) to maintain performance under high demand and prevent resource exhaustion.  
+| The library should expose a synchronous interface but implement asynchronous operations under the hood.  
+
+|===  

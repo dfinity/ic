@@ -18,12 +18,14 @@
 //! ## Logging Safety
 //!
 //! All configuration objects defined in this file are safe to log. They do not contain any secret material.
-use deterministic_ips::{Deployment, HwAddr};
 use ic_types::malicious_behaviour::MaliciousBehaviour;
+use macaddr::MacAddr6;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use std::collections::HashMap;
+use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::str::FromStr;
 use url::Url;
 
 pub const CONFIG_VERSION: &str = "1.0.0";
@@ -75,10 +77,9 @@ pub struct ICOSSettings {
     #[serde_as(as = "DisplayFromStr")]
     /// In nested testing, mgmt_mac is set in deployment.json.template,
     /// else found dynamically in call to config tool CreateSetuposConfig
-    pub mgmt_mac: HwAddr,
+    pub mgmt_mac: MacAddr6,
     #[serde_as(as = "DisplayFromStr")]
-    /// "mainnet" or "testnet"
-    pub deployment_environment: Deployment,
+    pub deployment_environment: DeploymentEnvironment,
     pub logging: Logging,
     pub use_nns_public_key: bool,
     /// The URL (HTTP) of the NNS node(s).
@@ -152,6 +153,39 @@ pub struct BackupSpoolSettings {
     pub backup_purging_interval_seconds: Option<u64>,
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[non_exhaustive]
+pub enum DeploymentEnvironment {
+    Mainnet,
+    Testnet,
+}
+
+impl fmt::Display for DeploymentEnvironment {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            DeploymentEnvironment::Mainnet => write!(f, "mainnet"),
+            DeploymentEnvironment::Testnet => write!(f, "testnet"),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum DeploymentParseError {
+    #[error("invalid deployment variant")]
+    InvalidVariant,
+}
+
+impl FromStr for DeploymentEnvironment {
+    type Err = DeploymentParseError;
+    fn from_str(s: &str) -> Result<DeploymentEnvironment, DeploymentParseError> {
+        match s.to_lowercase().as_str() {
+            "mainnet" => Ok(DeploymentEnvironment::Mainnet),
+            "testnet" => Ok(DeploymentEnvironment::Testnet),
+            _ => Err(DeploymentParseError::InvalidVariant),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct Logging {
     /// Space-separated lists of hosts to ship logs to.
@@ -215,7 +249,7 @@ mod tests {
             icos_settings: ICOSSettings {
                 node_reward_type: Some(String::new()),
                 mgmt_mac: "00:00:00:00:00:00".parse()?,
-                deployment_environment: Deployment::Testnet,
+                deployment_environment: DeploymentEnvironment::Testnet,
                 logging: Logging {
                     elasticsearch_hosts: String::new(),
                     elasticsearch_tags: None,
