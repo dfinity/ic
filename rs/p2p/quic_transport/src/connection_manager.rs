@@ -263,7 +263,7 @@ impl ConnectionManager {
     /// - peer is in the subnet
     /// - this node is not part of the subnet (can happen when a node is removed from the subnet)
     /// - there is no connect attemped
-    /// - there is no established connections
+    /// - there is no established connection
     fn can_i_dial_to(&self, dst: &NodeId) -> bool {
         let dialer = self.am_i_dialer(dst);
         let peer_in_subnet = self.topology.is_member(dst);
