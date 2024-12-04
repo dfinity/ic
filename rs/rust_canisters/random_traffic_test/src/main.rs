@@ -98,7 +98,7 @@ fn next_call_id() -> u32 {
 }
 
 /// Returns `true` if `error_msg` corresponds to a synchronous rejection.
-fn synchronous_rejection(error_msg: &String) -> bool {
+fn synchronous_rejection(error_msg: &str) -> bool {
     error_msg.contains("Couldn't send message")
 }
 
@@ -286,6 +286,8 @@ async fn handle_call(msg: Message) -> Vec<u8> {
 
 /// Initializes the `HASHER` by hashing our own canister ID.
 #[init]
-fn main() {
+fn initialize_hasher() {
     HASHER.with_borrow_mut(|hasher| hasher.write(id().as_slice()));
 }
+
+fn main() {}
