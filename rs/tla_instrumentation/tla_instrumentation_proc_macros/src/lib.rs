@@ -120,15 +120,49 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let asyncness = sig.asyncness;
 
-    let output = if asyncness.is_some() {
+    let invocation = if asyncness.is_some() {
+        quote! { {
+            let mut pinned = Box::pin(TLA_INSTRUMENTATION_STATE.scope(
+                tla_instrumentation::InstrumentationState::new(update.clone(), globals, snapshotter, start_location),
+                async move {
+                    let res = self.#mangled_name(#(#args),*).await;
+                    let globals = tla_get_globals!(self);
+                    let state: InstrumentationState = TLA_INSTRUMENTATION_STATE.get();
+                    let mut handler_state = state.handler_state.borrow_mut();
+                    let state_pair = tla_instrumentation::log_method_return(&mut handler_state, globals, end_location);
+                    let mut state_pairs = state.state_pairs.borrow_mut();
+                    state_pairs.push(state_pair);
+                    res
+                }
+            ));
+            let res = pinned.as_mut().await;
+            let trace = pinned.as_mut().take_value().expect("No TLA trace in the future!");
+            let pairs = trace.state_pairs.borrow_mut().clone();
+            (pairs, res)
+        } }
+    } else {
+        quote! {
+            TLA_INSTRUMENTATION_STATE.sync_scope(
+                tla_instrumentation::InstrumentationState::new(update.clone(), globals, snapshotter, start_location),
+                || {
+                    let res = self.#mangled_name(#(#args),*);
+                    let globals = tla_get_globals!(self);
+                    let state: InstrumentationState = TLA_INSTRUMENTATION_STATE.get();
+                    let mut handler_state = state.handler_state.borrow_mut();
+                    let state_pair = tla_instrumentation::log_method_return(&mut handler_state, globals, end_location);
+                    let mut state_pairs = state.state_pairs.borrow_mut();
+                    state_pairs.push(state_pair);
+                    (state_pairs.clone(), res)
+                }
+            )
+        }
+    };
+
+    let output = {
         quote! {
             #modified_fn
 
             #(#attrs)* #vis #sig {
-                // Fail the compilation if we're not in debug mode
-                // #[cfg(not(debug_assertions))]
-                // let i:u32 = "abc";
-
                 use std::cell::RefCell;
                 use std::rc::Rc;
 
@@ -138,24 +172,10 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let update = #attr2;
                 let start_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("Start of {}", #original_name) };
                 let end_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("End of {}", #original_name) };
-                let mut pinned = Box::pin(TLA_INSTRUMENTATION_STATE.scope(
-                    tla_instrumentation::InstrumentationState::new(update.clone(), globals, snapshotter, start_location),
-                    async move {
-                        let res = self.#mangled_name(#(#args),*).await;
-                        let globals = tla_get_globals!(self);
-                        let state: InstrumentationState = TLA_INSTRUMENTATION_STATE.get();
-                        let mut handler_state = state.handler_state.borrow_mut();
-                        let state_pair = tla_instrumentation::log_method_return(&mut handler_state, globals, end_location);
-                        let mut state_pairs = state.state_pairs.borrow_mut();
-                        state_pairs.push(state_pair);
-                        res
-                    }
-                ));
-                let res = pinned.as_mut().await;
-                let trace = pinned.as_mut().take_value().expect("No TLA trace in the future!");
-                let mut pairs = trace.state_pairs.borrow_mut().clone();
+                let (mut pairs, res) = #invocation;
+
                 let constants = (update.post_process)(&mut pairs);
-                // println!("State pairs in the expanded macro: {:?}", pairs);
+
                 let trace = tla_instrumentation::UpdateTrace {
                     update,
                     state_pairs: pairs,
@@ -171,58 +191,6 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
                         traces.push(trace);
                     },
                 }
-                res
-            }
-        }
-    } else {
-        quote! {
-            #modified_fn
-
-            #(#attrs)* #vis #sig {
-                // Fail the compilation if we're not in debug mode
-                // #[cfg(not(debug_assertions))]
-                // let i:u32 = "abc";
-
-                use std::cell::RefCell;
-                use std::rc::Rc;
-
-                let globals = tla_get_globals!(self);
-                let raw_ptr = self as *const _;
-                let snapshotter = Rc::new(move || { unsafe { tla_get_globals!(&*raw_ptr) } });
-                let update = #attr2;
-                let start_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("Start of {}", #original_name) };
-                let end_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("End of {}", #original_name) };
-
-                let (mut pairs, res) = TLA_INSTRUMENTATION_STATE.sync_scope(
-                    tla_instrumentation::InstrumentationState::new(update.clone(), globals, snapshotter, start_location),
-                    || {
-                        let res = self.#mangled_name(#(#args),*);
-                        let globals = tla_get_globals!(self);
-                        let state: InstrumentationState = TLA_INSTRUMENTATION_STATE.get();
-                        let mut handler_state = state.handler_state.borrow_mut();
-                        let state_pair = tla_instrumentation::log_method_return(&mut handler_state, globals, end_location);
-                        let mut state_pairs = state.state_pairs.borrow_mut();
-                        state_pairs.push(state_pair);
-                        (state_pairs.clone(), res)
-                    }
-                );
-                let constants = (update.post_process)(&mut pairs);
-                // println!("State pairs in the expanded macro: {:?}", pairs);
-                let trace = tla_instrumentation::UpdateTrace {
-                    update,
-                    state_pairs: pairs,
-                    constants,
-                };
-                match TLA_TRACES_LKEY.try_with(|t| {
-                    let mut traces = t.borrow_mut();
-                    traces.push(trace.clone());
-                }) {
-                    Ok(_) => (),
-                    Err(_) => {
-                        let mut traces = TLA_TRACES_MUTEX.write().unwrap();
-                        traces.push(trace);
-                    },
-                };
                 res
             }
         }

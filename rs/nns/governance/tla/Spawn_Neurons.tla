@@ -1,8 +1,6 @@
 ---- MODULE Spawn_Neurons ----
 EXTENDS TLC, Sequences, Naturals, FiniteSets, Variants
 
-\* IDs for processes. We'll use one process per governance call, to be able to control how many of each call we analyze.
-\* As we model ledger operations as atomic, we'll have just one ledger process.
 CONSTANTS
     \* @type: Set($proc);
     Spawn_Neurons_Process_Ids,
@@ -29,15 +27,10 @@ transfer(from, to, amount, fee) == Variant("Transfer", [from |-> from, to |-> to
 
 (*--algorithm Governance_Ledger_Spawn_Neurons {
 
-\* The neuron state kept by the governance canister. We're recording this as a global variable, and not a process
-\* since we use processes to model method calls on the governance canister
 variables
     neuron \in [{} -> {}];
-    \* Used to decide whether we should refresh or claim a neuron
     neuron_id_by_account \in [{} -> {}];
-    \* The set of currently locked neurons
     locks = {};
-    \* The queue of messages sent from the governance canister to the ledger canister
     governance_to_ledger = <<>>;
     ledger_to_governance = {};
     spawning_neurons = TRUE;
@@ -47,10 +40,12 @@ variables
 \* to code message handlers (a while loop would require some extra labels).
 \* A 1-1 mapping, as far as I can tell, requires some code duplication.
 \* We extract the duplicated part into a macro, and place the labels appropriately.
-\* In some cases we'll want to update the locks twice in the same message handler. To work around
-\* PlusCal not being able to do that, we'll pass the new value of locks as a parameter to the macro.
+\* In some cases we'll want to update the locks twice in the same message handler, once
+\* in the macro, and once before invoking the macro. To work around PlusCal not being
+\* able to do that, we'll pass the new value of locks as a parameter to the macro.
 macro loop_iteration(new_locks) {
         with(nid \in ready_to_spawn_ids \ locks;
+            \* We need to manually disambiguate the precedence between * and \div here
             neuron_stake = (neuron[nid].maturity * (BASIS_POINTS_PER_UNITY + MATURITY_BASIS_POINTS)) \div BASIS_POINTS_PER_UNITY;
             account = neuron[nid].account;
         ) {

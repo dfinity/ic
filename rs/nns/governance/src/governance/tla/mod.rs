@@ -362,7 +362,6 @@ pub fn check_traces() {
                     println!("Diff between states: {:#?}", diff);
                 }
                 println!("Apalache returned:\n{:#?}", e.apalache_error);
-                // panic!("Apalache check failed")
             });
             thread_freed_rx
                 .send(res.is_err())

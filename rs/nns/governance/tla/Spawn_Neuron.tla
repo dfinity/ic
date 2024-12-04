@@ -1,8 +1,6 @@
 ---- MODULE Spawn_Neuron ----
 EXTENDS TLC, Sequences, Naturals, FiniteSets, Variants
 
-\* IDs for processes. We'll use one process per governance call, to be able to control how many of each call we analyze.
-\* As we model ledger operations as atomic, we'll have just one ledger process.
 CONSTANTS
     \* @type: Set($proc);
     Spawn_Neuron_Process_Ids,
@@ -25,15 +23,10 @@ CONSTANT
 
 (* --algorithm Governance_Ledger_Spawn_Neuron {
 
-\* The neuron state kept by the governance canister. We're recording this as a global variable, and not a process
-\* since we use processes to model method calls on the governance canister
 variables
     neuron \in [{} -> {}];
-    \* Used to decide whether we should refresh or claim a neuron
     neuron_id_by_account \in [{} -> {}];
-    \* The set of currently locked neurons
     locks = {};
-    \* The queue of messages sent from the governance canister to the ledger canister
     governance_to_ledger = <<>>;
     ledger_to_governance = {};
 
@@ -41,7 +34,8 @@ variables
 \* to support multiple procesees (i.e., we could've had `Spasn_Neuron = Spawn_Neuron_Process_Id`
 \* here instead of choosing from the set of `Spawn_Neuron_Process_Ids`). But there's no significant
 \* upside to that over using a singleton Spawn_Neuron_Process_Ids set, and the TLA-code link tooling
-\* expects a process to take a `self` parameter, so let's just do the easier thing.
+\* expects a process to take a `self` parameter, which is only the case if we use a set of process ids.
+\* So we just do the easier thing here.
 process (Spawn_Neuron \in Spawn_Neuron_Process_Ids)
     {
         SpawnNeuronStart:
@@ -73,8 +67,6 @@ process (Spawn_Neuron \in Spawn_Neuron_Process_Ids)
             };
         }
     }
-
-
 
 } *)
 \* BEGIN TRANSLATION (chksum(pcal) = "8e28ba76" /\ chksum(tla) = "e2a72833")
