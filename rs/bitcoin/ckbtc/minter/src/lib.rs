@@ -7,10 +7,10 @@ use crate::state::ReimbursementReason;
 use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
+use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_interface::{
     GetUtxosRequest, GetUtxosResponse, MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo,
 };
-use ic_btc_kyt::CheckTransactionResponse;
 use ic_canister_log::log;
 use ic_management_canister_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;

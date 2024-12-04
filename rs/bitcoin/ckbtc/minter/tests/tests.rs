@@ -4,11 +4,11 @@ use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_bitcoin_canister_mock::{OutPoint, PushUtxoToAddress, Utxo};
-use ic_btc_interface::{Network, Txid};
-use ic_btc_kyt::{
+use ic_btc_checker::{
     BtcNetwork as NewKytBtcNetwork, InitArg as NewKytInitArg, KytArg as NewKytArg,
     KytMode as NewKytMode, UpgradeArg as NewUpgradeArg,
 };
+use ic_btc_interface::{Network, Txid};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;

@@ -4,7 +4,7 @@ use bitcoin::{
     absolute::LockTime, address::Address, hashes::Hash, transaction::Version, Amount, OutPoint,
     PubkeyHash, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
 };
-use ic_btc_kyt::{
+use ic_btc_checker::{
     blocklist, BtcNetwork, KytMode, CHECK_TRANSACTION_CYCLES_REQUIRED,
     CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
 };

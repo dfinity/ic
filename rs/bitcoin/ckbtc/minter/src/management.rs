@@ -4,12 +4,12 @@ use crate::logs::P0;
 use crate::ECDSAPublicKey;
 use crate::{tx, CanisterRuntime};
 use candid::{CandidType, Principal};
+use ic_btc_checker::{
+    CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
+};
 use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
     MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
-};
-use ic_btc_kyt::{
-    CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
 };
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;

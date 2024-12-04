@@ -3,8 +3,8 @@ use crate::memo::MintMemo;
 use crate::state::{mutate_state, read_state, UtxoCheckStatus};
 use crate::tasks::{schedule_now, TaskType};
 use candid::{CandidType, Deserialize, Nat, Principal};
+use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_interface::{GetUtxosError, GetUtxosResponse, OutPoint, Utxo};
-use ic_btc_kyt::CheckTransactionResponse;
 use ic_canister_log::log;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -314,7 +314,7 @@ async fn kyt_check_utxo<R: CanisterRuntime>(
     args: &UpdateBalanceArgs,
     runtime: &R,
 ) -> Result<UtxoCheckStatus, UpdateBalanceError> {
-    use ic_btc_kyt::{CheckTransactionStatus, CHECK_TRANSACTION_CYCLES_REQUIRED};
+    use ic_btc_checker::{CheckTransactionStatus, CHECK_TRANSACTION_CYCLES_REQUIRED};
 
     let kyt_principal = read_state(|s| {
         s.kyt_principal

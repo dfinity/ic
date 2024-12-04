@@ -1,11 +1,11 @@
 use bitcoin::{consensus::Decodable, Address, Transaction};
-use ic_btc_interface::Txid;
-use ic_btc_kyt::{
+use ic_btc_checker::{
     blocklist_contains, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
     CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionResponse,
     CheckTransactionRetriable, CheckTransactionStatus, KytArg, KytMode,
     CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
 };
+use ic_btc_interface::Txid;
 use ic_canister_log::{export as export_logs, log};
 use ic_canisters_http_types as http;
 use ic_cdk::api::call::RejectionCode;

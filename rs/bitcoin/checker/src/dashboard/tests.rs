@@ -4,8 +4,8 @@ use crate::state::{Config, Timestamp, TransactionKytData};
 use crate::{dashboard, state};
 use bitcoin::Address;
 use bitcoin::{absolute::LockTime, transaction::Version, Transaction};
+use ic_btc_checker::{blocklist::BTC_ADDRESS_BLOCKLIST, BtcNetwork, KytMode};
 use ic_btc_interface::Txid;
-use ic_btc_kyt::{blocklist::BTC_ADDRESS_BLOCKLIST, BtcNetwork, KytMode};
 use std::str::FromStr;
 
 fn mock_txid(v: usize) -> Txid {

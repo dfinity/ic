@@ -2,11 +2,11 @@ use candid::{Encode, Principal};
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_btc_interface::{Config, Fees, Flag, Network};
-use ic_btc_kyt::{
+use ic_btc_checker::{
     BtcNetwork, InitArg as NewKytInitArg, KytArg as NewKytArg, KytMode as NewKytMode,
     UpgradeArg as NewKytUpgradeArg,
 };
+use ic_btc_interface::{Config, Fees, Flag, Network};
 use ic_canister_client::Sender;
 use ic_ckbtc_minter::{
     lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg, Mode},

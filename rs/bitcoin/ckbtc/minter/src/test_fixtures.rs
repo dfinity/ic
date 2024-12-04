@@ -112,8 +112,8 @@ pub mod mock {
     use crate::CanisterRuntime;
     use async_trait::async_trait;
     use candid::Principal;
+    use ic_btc_checker::CheckTransactionResponse;
     use ic_btc_interface::{GetUtxosRequest, GetUtxosResponse, Utxo};
-    use ic_btc_kyt::CheckTransactionResponse;
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
     use mockall::mock;

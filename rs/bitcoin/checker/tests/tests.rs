@@ -1,13 +1,13 @@
 use candid::{decode_one, CandidType, Deserialize, Encode, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_interface::Txid;
-use ic_btc_kyt::{
+use ic_btc_checker::{
     blocklist, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
     CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionResponse,
     CheckTransactionRetriable, CheckTransactionStatus, InitArg, KytArg, KytMode, UpgradeArg,
     CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
     INITIAL_MAX_RESPONSE_BYTES,
 };
+use ic_btc_interface::Txid;
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};

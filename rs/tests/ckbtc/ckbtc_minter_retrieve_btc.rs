@@ -3,7 +3,7 @@ use anyhow::Result;
 use bitcoincore_rpc::RpcApi;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_kyt::KytMode as NewKytMode;
+use ic_btc_checker::KytMode as NewKytMode;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{
     lifecycle::upgrade::UpgradeArgs,

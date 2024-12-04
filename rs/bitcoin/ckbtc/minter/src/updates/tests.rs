@@ -7,8 +7,8 @@ mod update_balance {
     };
     use crate::updates::update_balance;
     use crate::updates::update_balance::{UpdateBalanceArgs, UtxoStatus};
+    use ic_btc_checker::CheckTransactionResponse;
     use ic_btc_interface::{GetUtxosResponse, Utxo};
-    use ic_btc_kyt::CheckTransactionResponse;
     use icrc_ledger_types::icrc1::account::Account;
 
     #[tokio::test]

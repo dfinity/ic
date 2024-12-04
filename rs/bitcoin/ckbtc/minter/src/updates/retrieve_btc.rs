@@ -12,7 +12,7 @@ use crate::{
 };
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_kyt::CheckAddressResponse;
+use ic_btc_checker::CheckAddressResponse;
 use ic_canister_log::log;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::Account;
