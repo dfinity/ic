@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use candid::{candid_method, Decode, Encode};
+use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{
@@ -333,7 +334,7 @@ const VOTE_PROCESSING_INTERVAL: Duration = Duration::from_secs(3);
 
 fn schedule_vote_processing() {
     ic_cdk_timers::set_timer_interval(VOTE_PROCESSING_INTERVAL, || {
-        governance_mut().process_voting_state_machines();
+        spawn(governance_mut().process_voting_state_machines());
     });
 }
 

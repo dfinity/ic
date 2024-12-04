@@ -136,7 +136,7 @@ impl Governance {
         topic: Topic,
     ) {
         with_voting_state_machines_mut(|voting_state_machines| {
-            let ballots = self
+            let ballots = &mut self
                 .heap_data
                 .proposals
                 .get_mut(&proposal_id.id)
@@ -175,7 +175,7 @@ impl Governance {
 
     /// Process all voting state machines.  This function is called in the timer job.
     /// It processes voting state machines until the soft limit is reached or there is no work to do.
-    pub fn process_voting_state_machines(&mut self) {
+    pub async fn process_voting_state_machines(&mut self) {
         let mut proposals_with_new_votes_cast = vec![];
         with_voting_state_machines_mut(|voting_state_machines| loop {
             if voting_state_machines
@@ -196,15 +196,24 @@ impl Governance {
             }
         });
 
-        // TODO DO NOT MERGE - do we need other logic here as well?
-        // I don't see how we deal with the edge case of casting votes after polls close...
-        // Seems like the only solution is to always recompute_tally any time a vote is cast
-        // or maybe never recompute tally, and just process the tally as the votes come in...
-
         // Most of the time, we are not going to see new votes cast in this function, but this
         // is here to make sure the normal proposal processing still applies
         for proposal_id in proposals_with_new_votes_cast {
+            self.recompute_proposal_tally(proposal_id, self.env.now());
             self.process_proposal(proposal_id.id);
+            if let Err(e) = noop_self_call_if_over_instructions(
+                SOFT_VOTING_INSTRUCTIONS_LIMIT,
+                Some(HARD_VOTING_INSTRUCTIONS_LIMIT),
+            )
+            .await
+            {
+                println!(
+                    "Used too many instructions in process_voting_state_machines, \
+                       exiting before finishing: {}",
+                    e
+                );
+                break;
+            }
         }
     }
 
@@ -1109,14 +1118,11 @@ mod test {
     }
 
     #[test]
-    #[should_panic(
-        expected = "Canister call exceeded the limit of 750000000000 instructions in the call context."
-    )]
-    fn test_cast_vote_and_cascade_follow_panics_if_over_hard_limit() {
+    fn test_cast_vote_and_cascade_breaks_if_over_hard_limit() {
         let topic = Topic::NetworkEconomics;
         let mut neurons = BTreeMap::new();
         let mut ballots = HashMap::new();
-        for i in 1..=1 {
+        for i in 1..=10 {
             let mut followees = HashMap::new();
             if i != 1 {
                 // cascading followees
@@ -1151,6 +1157,7 @@ mod test {
             Box::new(StubCMC {}),
         );
 
+        let _e = temporarily_set_over_soft_message_limit(true);
         let _f = in_test_temporarily_set_call_context_over_threshold();
         governance
             .cast_vote_and_cascade_follow(
@@ -1161,6 +1168,11 @@ mod test {
             )
             .now_or_never()
             .unwrap();
+
+        with_voting_state_machines_mut(|voting_state_machines| {
+            assert!(!voting_state_machines.machines.is_empty());
+            assert!(voting_state_machines.machine_has_votes_to_process(ProposalId { id: 1 }));
+        });
     }
 
     #[test]
@@ -1237,7 +1249,10 @@ mod test {
 
         // Now let's run the "timer job" to make sure it eventually drains everything.
         for _ in 1..20 {
-            governance.process_voting_state_machines();
+            governance
+                .process_voting_state_machines()
+                .now_or_never()
+                .unwrap();
         }
 
         with_voting_state_machines_mut(|voting_state_machines| {

@@ -1114,7 +1114,7 @@ async fn test_cascade_following_new() {
     );
     // Recent ballots are not immediately recorded in every case (such as when there are
     // many votes in the cascading, it is done later through timer tasks)
-    nns.governance.process_voting_state_machines();
+    nns.governance.process_voting_state_machines().await;
 
     assert_changes!(
         nns,
@@ -1171,7 +1171,7 @@ async fn test_cascade_following_new() {
 
     // Recent ballots are not immediately recorded in every case (such as when there are
     // many votes in the cascading, it is done later through timer tasks)
-    nns.governance.process_voting_state_machines();
+    nns.governance.process_voting_state_machines().await;
 
     // Check that the vote for neuron 2 is registered in the proposal
     assert_eq!(
@@ -1464,7 +1464,7 @@ async fn test_cascade_following() {
 
     // Recent ballots are not immediately recorded in every case (such as when there are
     // many votes in the cascading, it is done later through timer tasks)
-    gov.process_voting_state_machines();
+    gov.process_voting_state_machines().await;
 
     // Check that the vote for neuron 2 is registered in the proposal
     assert_eq!(

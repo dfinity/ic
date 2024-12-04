@@ -100,6 +100,12 @@ pub async fn noop_self_call_if_over_instructions(
     message_threshold: u64,
     call_context_threshold: Option<u64>,
 ) -> Result<(), OverCallContextError> {
+    // We may still need a new message context for whatever cleanupis needed, but also we will return
+    // an error if the call context is over the threshold.
+    if is_message_over_threshold(message_threshold) {
+        make_noop_call().await;
+    }
+
     // first we check the upper bound to see if we should panic.
     if let Some(upper_bound) = call_context_threshold {
         if is_call_context_over_threshold(upper_bound) {
@@ -107,8 +113,5 @@ pub async fn noop_self_call_if_over_instructions(
         }
     }
 
-    if is_message_over_threshold(message_threshold) {
-        make_noop_call().await;
-    }
     Ok(())
 }
