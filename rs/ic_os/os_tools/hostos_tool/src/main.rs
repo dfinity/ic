@@ -27,7 +27,6 @@ pub enum Commands {
         #[arg(short, long, default_value_t = NodeType::HostOS)]
         node_type: NodeType,
     },
-    FetchMacAddress {},
 }
 
 #[derive(Parser)]
@@ -117,13 +116,6 @@ pub fn main() -> Result<()> {
                 node_type,
             );
             println!("{}", generated_mac);
-            Ok(())
-        }
-        Some(Commands::FetchMacAddress {}) => {
-            let hostos_config: HostOSConfig =
-                deserialize_config(DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)?;
-
-            println!("{}", hostos_config.icos_settings.mgmt_mac);
             Ok(())
         }
         None => Err(anyhow!(
