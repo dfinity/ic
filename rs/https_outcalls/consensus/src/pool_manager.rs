@@ -147,6 +147,7 @@ impl CanisterHttpPoolManagerImpl {
     }
 
     fn generate_api_boundary_node_ips(&self) -> Vec<String> {
+        //TODO(mihailjianu): return vec![] if DL is disabled. 
         let latest_registry_version = self.registry_client.get_latest_version();
 
         self.registry_client
@@ -220,7 +221,7 @@ impl CanisterHttpPoolManagerImpl {
             .cloned()
             .collect();
 
-        let api_bn_ips = self.generate_api_boundary_node_ips();
+        let socks_proxy_addrs = self.generate_api_boundary_node_ips();
 
         for (id, context) in http_requests {
             if !request_ids_already_made.contains(&id) {
@@ -233,7 +234,7 @@ impl CanisterHttpPoolManagerImpl {
                         id,
                         timeout,
                         context,
-                        api_bn_ips: api_bn_ips.clone(),
+                        socks_proxy_addrs: socks_proxy_addrs.clone(),
                     })
                 {
                     warn!(
@@ -944,7 +945,7 @@ pub mod test {
                         timeout: ic_types::Time::from_nanos_since_unix_epoch(10)
                             + Duration::from_secs(60 * 5),
                         context: request.clone(),
-                        api_bn_ips: vec![],
+                        socks_proxy_addrs: vec![],
                     }))
                     .times(1)
                     .return_const(Ok(()));

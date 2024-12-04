@@ -31,7 +31,7 @@ pub fn start_server(
 ) {
     let log = log.clone();
     let metrics_registry = metrics_registry.clone();
-    let canister_http: CanisterHttp = CanisterHttp::new(config.clone(), log, &metrics_registry);
+    let canister_http = CanisterHttp::new(config.clone(), log, &metrics_registry);
 
     let server = Server::builder()
         .timeout(Duration::from_secs(config.http_request_timeout_secs))

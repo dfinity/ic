@@ -147,7 +147,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         transform: request_transform,
                         ..
                     },
-                api_bn_ips,
+                socks_proxy_addrs,
             } = canister_http_request;
 
             let adapter_req_timer = Instant::now();
@@ -171,7 +171,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     body: request_body.unwrap_or_default(),
                     // Socks proxy is only enabled on system subnets.
                     socks_proxy_allowed: matches!(subnet_type, SubnetType::System),
-                    api_bn_ips,
+                    socks_proxy_addrs,
                 })
                 .map_err(|grpc_status| {
                     (
@@ -450,7 +450,7 @@ mod tests {
                 }),
                 time: UNIX_EPOCH,
             },
-            api_bn_ips: vec![],
+            socks_proxy_addrs: vec![],
         }
     }
 

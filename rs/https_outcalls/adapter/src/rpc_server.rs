@@ -51,7 +51,7 @@ const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 /// The maximum number of times we will try to connect to a SOCKS proxy.
 const MAX_SOCKS_PROXY_RETRIES: usize = 3;
 
-/// The probability of using api boundary node IPs for SOCKS proxy dark launch.
+/// The probability of using api boundary node addresses for SOCKS proxy dark launch.
 const REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE: u32 = 0;
 
 type OutboundRequestBody = Full<Bytes>;
@@ -121,9 +121,9 @@ impl CanisterHttp {
         }
     }
 
-    fn create_socks_client_for_ip(
+    fn create_socks_client_for_address(
         &self,
-        ip: &str,
+        address: &str,
     ) -> Option<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>> {
         // Create a new HTTP connector
         let mut http_connector = HttpConnector::new();
@@ -131,7 +131,7 @@ impl CanisterHttp {
         http_connector
             .set_connect_timeout(Some(Duration::from_secs(self.http_connect_timeout_secs)));
 
-        match ip.parse() {
+        match address.parse() {
             Ok(proxy_addr) => {
                 let proxy_connector = SocksConnector {
                     proxy_addr,
@@ -152,7 +152,7 @@ impl CanisterHttp {
                 Some(socks_client)
             }
             Err(e) => {
-                debug!(self.logger, "Failed to parse SOCKS IP: {}", e);
+                debug!(self.logger, "Failed to parse SOCKS address: {}", e);
                 None
             }
         }
@@ -189,41 +189,41 @@ impl CanisterHttp {
 
     async fn https_outcall_dl_socks_proxy(
         &self,
-        api_bn_ips: &[String],
+        socks_proxy_addrs: &[String],
         request: http::Request<Full<Bytes>>,
     ) -> Result<http::Response<Incoming>, String> {
-        let mut api_bn_ips = api_bn_ips.to_owned();
+        let mut socks_proxy_addrs = socks_proxy_addrs.to_owned();
 
-        api_bn_ips.shuffle(&mut thread_rng());
+        socks_proxy_addrs.shuffle(&mut thread_rng());
 
         let mut last_error = None;
 
         let mut tries = 0;
 
-        for api_bn_ip in &api_bn_ips {
+        for socks_proxy_addr in &socks_proxy_addrs {
             tries += 1;
             if tries > MAX_SOCKS_PROXY_RETRIES {
                 break;
             }
-            let next_socks_proxy_ip = api_bn_ip.clone();
+            let next_socks_proxy_addr = socks_proxy_addr.clone();
 
             let socks_client = {
                 let cache_guard = self.cache.upgradable_read();
 
-                if let Some(client) = cache_guard.get(&next_socks_proxy_ip) {
+                if let Some(client) = cache_guard.get(&next_socks_proxy_addr) {
                     client.clone()
                 } else {
                     let mut cache_guard = RwLockUpgradableReadGuard::upgrade(cache_guard);
                     self.metrics.socks_cache_miss.inc();
 
-                    match self.create_socks_client_for_ip(&next_socks_proxy_ip) {
+                    match self.create_socks_client_for_ip(&next_socks_proxy_addr) {
                         Some(client) => {
-                            cache_guard.insert(next_socks_proxy_ip.clone(), client.clone());
+                            cache_guard.insert(next_socks_proxy_addr.clone(), client.clone());
                             self.metrics.socks_cache_size.set(cache_guard.len() as i64);
                             client
                         }
                         None => {
-                            // there is something wrong with this IP, try another one.
+                            // there is something wrong with this address, try another one.
                             continue;
                         }
                     }
@@ -243,8 +243,8 @@ impl CanisterHttp {
                 Err(socks_err) => {
                     debug!(
                         self.logger,
-                        "Failed to connect through SOCKS with IP {}: {}",
-                        next_socks_proxy_ip,
+                        "Failed to connect through SOCKS with address {}: {}",
+                        next_socks_proxy_addr,
                         socks_err
                     );
                     last_error = Some(socks_err);
@@ -255,7 +255,7 @@ impl CanisterHttp {
         if let Some(last_error) = last_error {
             Err(last_error.to_string())
         } else {
-            Err("No API BN IPs provided".to_string())
+            Err("No SOCKS proxy addresses provided".to_string())
         }
     }
 }
@@ -360,7 +360,7 @@ impl HttpsOutcallsService for CanisterHttp {
                     });
 
                     if should_dl_socks_proxy() {
-                        let dl_result= self.https_outcall_dl_socks_proxy(&req.api_bn_ips, http_req_clone).await;
+                        let dl_result= self.https_outcall_dl_socks_proxy(&req.socks_proxy_addrs, http_req_clone).await;
 
                         self.compare_results(&result, &dl_result);
                     }
