@@ -25,6 +25,7 @@ use anyhow::{bail, Result};
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
+use config_types::DeploymentEnvironment;
 use ic_base_types::NodeId;
 use ic_prep_lib::{
     internet_computer::{IcConfig, InitializedIc, TopologyConfig},
@@ -437,7 +438,7 @@ fn create_config_disk_image(
         domain_name: None,
         node_reward_type: None,
         mgmt_mac: None,
-        deployment_environment: Some("testnet".to_string()),
+        deployment_environment: Some(DeploymentEnvironment::Testnet),
         elasticsearch_hosts: None,
         elasticsearch_tags: Some(format!("system_test {}", group_name)),
         use_nns_public_key: Some(true),

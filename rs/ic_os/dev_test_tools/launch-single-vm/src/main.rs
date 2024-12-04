@@ -26,6 +26,7 @@ use url::Url;
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
+use config_types::DeploymentEnvironment;
 
 const FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 
@@ -211,7 +212,7 @@ fn main() {
             node_reward_type: None,
             domain_name: None,
             mgmt_mac: None,
-            deployment_environment: Some("testnet".to_string()),
+            deployment_environment: Some(DeploymentEnvironment::Testnet),
             elasticsearch_hosts: None,
             elasticsearch_tags: None,
             use_nns_public_key: Some(true),
