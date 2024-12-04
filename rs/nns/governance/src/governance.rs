@@ -6725,7 +6725,6 @@ impl Governance {
             }
         }
 
-        self.unstake_maturity_of_dissolved_neurons();
         self.maybe_gc();
         self.maybe_run_migrations();
         self.maybe_run_validations();
@@ -6810,7 +6809,7 @@ impl Governance {
 
     /// When a neuron is finally dissolved, if there is any staked maturity it is moved to regular maturity
     /// which can be spawned (and is modulated).
-    fn unstake_maturity_of_dissolved_neurons(&mut self) {
+    pub fn unstake_maturity_of_dissolved_neurons(&mut self) {
         let now_seconds = self.env.now();
         // Filter all the neurons that are currently in "dissolved" state and have some staked maturity.
         // No neuron in stable storage should have staked maturity.
