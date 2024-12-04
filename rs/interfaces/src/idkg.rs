@@ -3,7 +3,7 @@
 use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::idkg::{
     EcdsaSigShare, IDkgMessage, IDkgPrefixOf, IDkgStats, SchnorrSigShare, SigShare,
-    SignedIDkgComplaint, SignedIDkgOpening, VetKdShare,
+    SignedIDkgComplaint, SignedIDkgOpening, VetKdKeyShare,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
 
@@ -101,13 +101,13 @@ pub trait IDkgPoolSection: Send + Sync {
     }
 
     /// Iterator for VetKd share objects.
-    fn vetkd_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdShare)> + '_>;
+    fn vetkd_key_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_>;
 
     /// Iterator for VetKd share objects matching the prefix.
-    fn vetkd_shares_by_prefix(
+    fn vetkd_key_shares_by_prefix(
         &self,
-        _prefix: IDkgPrefixOf<VetKdShare>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdShare)> + '_> {
+        _prefix: IDkgPrefixOf<VetKdKeyShare>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
         unimplemented!()
     }
 

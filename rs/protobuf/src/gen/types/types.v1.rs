@@ -946,7 +946,7 @@ pub mod i_dkg_message {
         #[prost(message, tag = "6")]
         SchnorrSigShare(super::SchnorrSigShare),
         #[prost(message, tag = "7")]
-        VetkdShare(super::VetKdShare),
+        VetkdKeyShare(super::VetKdKeyShare),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -968,7 +968,7 @@ pub struct SchnorrSigShare {
     pub sig_share_raw: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct VetKdShare {
+pub struct VetKdKeyShare {
     #[prost(message, optional, tag = "1")]
     pub signer_id: ::core::option::Option<NodeId>,
     #[prost(message, optional, tag = "2")]
@@ -1072,7 +1072,7 @@ pub mod i_dkg_artifact_id {
         #[prost(message, tag = "6")]
         SchnorrSigShare(super::PrefixPairSigShare),
         #[prost(message, tag = "7")]
-        VetkdShare(super::PrefixPairSigShare),
+        VetkdKeyShare(super::PrefixPairSigShare),
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]

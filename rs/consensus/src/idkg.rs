@@ -535,7 +535,7 @@ fn compute_bouncer(
                 BouncerValue::MaybeWantsLater
             }
         }
-        IDkgMessageId::VetKdShare(_, _) => {
+        IDkgMessageId::VetKdKeyShare(_, _) => {
             // TODO(CON-1424): Accept VetKd shares
             BouncerValue::Unwanted
         }

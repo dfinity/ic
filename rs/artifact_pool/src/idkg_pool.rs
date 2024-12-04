@@ -33,7 +33,7 @@ use ic_types::consensus::{
     CatchUpPackage,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
-use ic_types::{artifact::IDkgMessageId, consensus::idkg::VetKdShare};
+use ic_types::{artifact::IDkgMessageId, consensus::idkg::VetKdKeyShare};
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -250,23 +250,23 @@ impl IDkgPoolSection for InMemoryIDkgPoolSection {
         object_pool.iter_by_prefix(prefix)
     }
 
-    fn vetkd_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdShare)> + '_> {
-        let object_pool = self.get_pool(IDkgMessageType::VetKdShare);
+    fn vetkd_key_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::VetKdKeyShare);
         object_pool.iter()
     }
 
-    fn vetkd_shares_by_prefix(
+    fn vetkd_key_shares_by_prefix(
         &self,
-        prefix: IDkgPrefixOf<VetKdShare>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdShare)> + '_> {
-        let object_pool = self.get_pool(IDkgMessageType::VetKdShare);
+        prefix: IDkgPrefixOf<VetKdKeyShare>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
+        let object_pool = self.get_pool(IDkgMessageType::VetKdKeyShare);
         object_pool.iter_by_prefix(prefix)
     }
 
     fn signature_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SigShare)> + '_> {
         let ecdsa_pool = self.get_pool(IDkgMessageType::EcdsaSigShare);
         let schnorr_pool = self.get_pool(IDkgMessageType::SchnorrSigShare);
-        let vetkd_pool = self.get_pool(IDkgMessageType::VetKdShare);
+        let vetkd_pool = self.get_pool(IDkgMessageType::VetKdKeyShare);
         Box::new(
             ecdsa_pool
                 .iter()

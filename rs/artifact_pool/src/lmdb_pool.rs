@@ -16,7 +16,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::certification::CertificationMessageHash;
 use ic_types::consensus::idkg::{
     IDkgArtifactIdData, IDkgArtifactIdDataOf, SigShare, SigShareIdData, SigShareIdDataOf,
-    VetKdShare,
+    VetKdKeyShare,
 };
 use ic_types::consensus::{DataPayload, HasHash, SummaryPayload};
 use ic_types::{
@@ -170,7 +170,7 @@ pub(crate) enum TypeKey {
     IDkgDealingSupport,
     EcdsaSigShare,
     SchnorrSigShare,
-    VetKdShare,
+    VetKdKeyShare,
     IDkgComplaint,
     IDkgOpening,
 }
@@ -1626,7 +1626,7 @@ impl From<IDkgMessageId> for IDkgIdKey {
             IDkgArtifactId::SchnorrSigShare(_, data) => {
                 pb::SigShareIdData::from(data.get()).encode_to_vec()
             }
-            IDkgArtifactId::VetKdShare(_, data) => {
+            IDkgArtifactId::VetKdKeyShare(_, data) => {
                 pb::SigShareIdData::from(data.get()).encode_to_vec()
             }
             IDkgArtifactId::Complaint(_, data) => {
@@ -1698,7 +1698,7 @@ fn deser_idkg_message_id(
             IDkgPrefixOf::new(prefix),
             SigShareIdDataOf::new(deser_sig_share_id_data(id_data_bytes)?),
         ),
-        IDkgMessageType::VetKdShare => IDkgArtifactId::VetKdShare(
+        IDkgMessageType::VetKdKeyShare => IDkgArtifactId::VetKdKeyShare(
             IDkgPrefixOf::new(prefix),
             SigShareIdDataOf::new(deser_sig_share_id_data(id_data_bytes)?),
         ),
@@ -1991,7 +1991,7 @@ impl PersistentIDkgPoolSection {
             IDkgMessageType::DealingSupport => TypeKey::IDkgDealingSupport,
             IDkgMessageType::EcdsaSigShare => TypeKey::EcdsaSigShare,
             IDkgMessageType::SchnorrSigShare => TypeKey::SchnorrSigShare,
-            IDkgMessageType::VetKdShare => TypeKey::VetKdShare,
+            IDkgMessageType::VetKdKeyShare => TypeKey::VetKdKeyShare,
             IDkgMessageType::Complaint => TypeKey::IDkgComplaint,
             IDkgMessageType::Opening => TypeKey::IDkgOpening,
         }
@@ -2068,23 +2068,23 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         message_db.iter(Some(prefix))
     }
 
-    fn vetkd_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdShare)> + '_> {
-        let message_db = self.get_message_db(IDkgMessageType::VetKdShare);
+    fn vetkd_key_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::VetKdKeyShare);
         message_db.iter(None)
     }
 
-    fn vetkd_shares_by_prefix(
+    fn vetkd_key_shares_by_prefix(
         &self,
-        prefix: IDkgPrefixOf<VetKdShare>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdShare)> + '_> {
-        let message_db = self.get_message_db(IDkgMessageType::VetKdShare);
+        prefix: IDkgPrefixOf<VetKdKeyShare>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::VetKdKeyShare);
         message_db.iter(Some(prefix))
     }
 
     fn signature_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SigShare)> + '_> {
         let ecdsa_db = self.get_message_db(IDkgMessageType::EcdsaSigShare);
         let schnorr_db = self.get_message_db(IDkgMessageType::SchnorrSigShare);
-        let vetkd_db = self.get_message_db(IDkgMessageType::VetKdShare);
+        let vetkd_db = self.get_message_db(IDkgMessageType::VetKdKeyShare);
         Box::new(
             ecdsa_db
                 .iter(None)
