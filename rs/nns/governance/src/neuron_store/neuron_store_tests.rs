@@ -756,6 +756,8 @@ fn test_prune_some_following_standard_voting_power_refresh_requirements() {
     assert_eq!(neuron_store.len(), 2);
 }
 
+/// This shows that VotingPowerEconomics is used when pruning following, not the
+/// old constant(s).
 #[test]
 fn test_prune_some_following_super_strict_voting_power_refresh() {
     // Step 1: Prepare the world. (This is exactly the same as the previous test.)
