@@ -33,6 +33,8 @@ use std::{
 pub type CanisterHttpAdapterClient =
     Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
 
+const SOCKS_PROXY_DL_ACTIVE: bool = false;
+
 /// [`CanisterHttpPoolManagerImpl`] implements the pool and state monitoring
 /// functionality that is necessary to ensure that http requests are made and
 /// responses can be inserted into consensus. Concretely, it has the following responsibilities:
@@ -147,7 +149,10 @@ impl CanisterHttpPoolManagerImpl {
     }
 
     fn generate_api_boundary_node_ips(&self) -> Vec<String> {
-        //TODO(mihailjianu): return vec![] if DL is disabled. 
+        if !SOCKS_PROXY_DL_ACTIVE {
+            return Vec::new();
+        }
+
         let latest_registry_version = self.registry_client.get_latest_version();
 
         self.registry_client
