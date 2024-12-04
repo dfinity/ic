@@ -4599,6 +4599,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.20",
  "config",
+ "config_types",
  "indoc",
  "itertools 0.12.1",
  "network",

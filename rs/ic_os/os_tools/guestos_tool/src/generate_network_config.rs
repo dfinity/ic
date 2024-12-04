@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
 
-use config::types::Ipv6Config;
+use config_types::Ipv6Config;
 use network::interfaces::{get_interface_name as get_valid_interface_name, get_interface_paths};
 use utils::get_command_stdout;
 
@@ -275,7 +275,7 @@ fn is_k8s_testnet() -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config::types::*;
+    use config_types::*;
 
     #[test]
     fn test_create_network_info_with_valid_ipv6_and_ipv4() {

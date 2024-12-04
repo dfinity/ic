@@ -13,7 +13,7 @@ mod generate_network_config;
 use generate_network_config::{generate_networkd_config, validate_and_construct_ipv4_address_info};
 
 use config::deserialize_config;
-use config::types::GuestOSConfig;
+use config_types::GuestOSConfig;
 use network::systemd::{restart_systemd_networkd, DEFAULT_SYSTEMD_NETWORK_DIR};
 
 #[derive(Subcommand)]
