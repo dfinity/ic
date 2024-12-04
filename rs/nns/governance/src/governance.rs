@@ -4107,16 +4107,6 @@ impl Governance {
         let topic = proposal.topic();
         let voting_period_seconds = voting_period_seconds_fn(topic);
 
-        // Recompute the tally here. It should correctly reflect all votes,
-        // even the ones after the proposal has been decided. It's possible
-        // to have Open status while it does not accept votes anymore, since
-        // the status change happens below this point.
-        if proposal.status() == ProposalStatus::Open
-            || proposal.accepts_vote(now_seconds, voting_period_seconds)
-        {
-            proposal.recompute_tally(now_seconds, voting_period_seconds);
-        }
-
         if proposal.status() != ProposalStatus::Open {
             return;
         }
