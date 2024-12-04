@@ -759,7 +759,7 @@ impl Player {
             messages: BatchMessages::default(),
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
-            idkg_subnet_public_keys: BTreeMap::new(),
+            chain_key_subnet_public_keys: BTreeMap::new(),
             idkg_pre_signature_ids: BTreeMap::new(),
             registry_version,
             time,

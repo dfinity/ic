@@ -8,7 +8,8 @@ use config::{
     DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH,
 };
 use config_types::{Ipv6Config, SetupOSConfig};
-use deterministic_ips::{calculate_deterministic_mac, IpVariant};
+use deterministic_ips::node_type::NodeType;
+use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use network::generate_network_config;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use utils::to_cidr;
@@ -22,9 +23,8 @@ pub enum Commands {
         output_directory: String,
     },
     GenerateIpv6Address {
-        // 0xf corresponds to SetupOS
-        #[arg(short, long, default_value = "0xf")]
-        node_type: u8,
+        #[arg(short, long, default_value_t = NodeType::SetupOS)]
+        node_type: NodeType,
     },
 }
 
@@ -60,11 +60,11 @@ pub fn main() -> Result<()> {
             );
 
             let generated_mac = calculate_deterministic_mac(
-                setupos_config.icos_settings.mgmt_mac,
+                &setupos_config.icos_settings.mgmt_mac,
                 setupos_config.icos_settings.deployment_environment,
                 IpVariant::V6,
-                0xf, /* 0xf corresponds to SetupOS */
-            )?;
+                NodeType::SetupOS,
+            );
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
 
             generate_network_config(
@@ -83,11 +83,11 @@ pub fn main() -> Result<()> {
             );
 
             let generated_mac = calculate_deterministic_mac(
-                setupos_config.icos_settings.mgmt_mac,
+                &setupos_config.icos_settings.mgmt_mac,
                 setupos_config.icos_settings.deployment_environment,
                 IpVariant::V6,
                 node_type,
-            )?;
+            );
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
 
             let ipv6_config = if let Ipv6Config::Deterministic(ipv6_config) =

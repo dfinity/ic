@@ -73,17 +73,9 @@ fn main() {
     let test_name = "test_single_vm";
 
     let metadata = GroupMetadata {
-        user: Some(if let Ok(user) = std::env::var("HOSTUSER") {
-            user
-        } else {
-            "unknown".to_string()
-        }),
-        job_schedule: Some(if let Ok(ci_job_name) = std::env::var("CI_JOB_NAME") {
-            ci_job_name.to_string()
-        } else {
-            "manual".to_string()
-        }),
-        test_name: Some(test_name.to_string()),
+        user: std::env::var("HOSTUSER").unwrap_or("unknown".to_string()),
+        job_schedule: std::env::var("CI_JOB_NAME").unwrap_or("manual".to_string()),
+        test_name: test_name.to_string(),
     };
 
     let timestamp = std::time::SystemTime::now()
