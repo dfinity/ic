@@ -816,7 +816,7 @@ fn test_prune_some_following_super_strict_voting_power_refresh() {
             },
             &mut neuron_store,
             Bound::Unbounded, // Start new cycle.
-            || true, // Do a full cycle.
+            || true,          // Do a full cycle.
         ),
         Bound::Unbounded,
     );
