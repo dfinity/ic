@@ -4113,9 +4113,7 @@ impl Governance {
         // the status change happens below this point.
         if proposal.status() == ProposalStatus::Open
             || proposal.accepts_vote(now_seconds, voting_period_seconds)
-        {
-            proposal.recompute_tally(now_seconds, voting_period_seconds);
-        }
+        {}
 
         if proposal.status() != ProposalStatus::Open {
             return;
