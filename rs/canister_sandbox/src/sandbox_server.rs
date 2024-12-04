@@ -32,14 +32,6 @@ impl SandboxService for SandboxServer {
         std::process::exit(0);
     }
 
-    fn open_wasm(&self, req: OpenWasmRequest) -> rpc::Call<OpenWasmReply> {
-        let result = self
-            .manager
-            .open_wasm(req.wasm_id, req.wasm_src)
-            .map(|(_cache, result, serialized_module)| (result, serialized_module));
-        rpc::Call::new_resolved(Ok(OpenWasmReply(result)))
-    }
-
     fn open_wasm_serialized(
         &self,
         req: OpenWasmSerializedRequest,
@@ -101,21 +93,6 @@ impl SandboxService for SandboxServer {
         })
     }
 
-    fn create_execution_state(
-        &self,
-        req: CreateExecutionStateRequest,
-    ) -> rpc::Call<CreateExecutionStateReply> {
-        let result = self.manager.create_execution_state(
-            req.wasm_id,
-            req.wasm_binary,
-            req.wasm_page_map,
-            req.next_wasm_memory_id,
-            req.canister_id,
-            req.stable_memory_page_map,
-        );
-        rpc::Call::new_resolved(Ok(CreateExecutionStateReply(result)))
-    }
-
     fn create_execution_state_serialized(
         &self,
         req: CreateExecutionStateSerializedRequest,
@@ -149,6 +126,7 @@ mod tests {
     use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
     use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
     use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+    use ic_embedders::{wasm_utils, SerializedModuleBytes, WasmtimeEmbedder};
     use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_logger::replica_logger::no_op_logger;
@@ -166,6 +144,7 @@ mod tests {
         time::Time,
         CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     };
+    use ic_wasm_types::BinaryEncodedWasm;
     use mockall::*;
     use std::collections::{BTreeMap, BTreeSet};
     use std::convert::TryFrom;
@@ -578,6 +557,15 @@ mod tests {
         assert!(rep.success);
     }
 
+    fn compile_module(wasm: Vec<u8>) -> Arc<SerializedModuleBytes> {
+        let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
+        wasm_utils::compile(&embedder, &BinaryEncodedWasm::new(wasm))
+            .1
+            .unwrap()
+            .1
+            .bytes
+    }
+
     /// Verifies that we can create a simple canister and run something on
     /// it.
     #[test]
@@ -592,10 +580,11 @@ mod tests {
         ));
 
         let wasm_id = WasmId::new();
+        let serialized_module = compile_module(make_counter_canister_wasm());
         let rep = srv
-            .open_wasm(OpenWasmRequest {
+            .open_wasm_serialized(OpenWasmSerializedRequest {
                 wasm_id,
-                wasm_src: make_counter_canister_wasm(),
+                serialized_module,
             })
             .sync()
             .unwrap();
@@ -673,10 +662,11 @@ mod tests {
         ));
 
         let wasm_id = WasmId::new();
+        let serialized_module = compile_module(make_memory_canister_wasm());
         let rep = srv
-            .open_wasm(OpenWasmRequest {
+            .open_wasm_serialized(OpenWasmSerializedRequest {
                 wasm_id,
-                wasm_src: make_memory_canister_wasm(),
+                serialized_module,
             })
             .sync()
             .unwrap();
@@ -733,10 +723,11 @@ mod tests {
         ));
 
         let wasm_id = WasmId::new();
+        let serialized_module = compile_module(make_memory_canister_wasm());
         let rep = srv
-            .open_wasm(OpenWasmRequest {
+            .open_wasm_serialized(OpenWasmSerializedRequest {
                 wasm_id,
-                wasm_src: make_memory_canister_wasm(),
+                serialized_module,
             })
             .sync()
             .unwrap();
@@ -822,10 +813,11 @@ mod tests {
         ));
 
         let wasm_id = WasmId::new();
+        let serialized_module = compile_module(make_counter_canister_wasm());
         let rep = srv
-            .open_wasm(OpenWasmRequest {
+            .open_wasm_serialized(OpenWasmSerializedRequest {
                 wasm_id,
-                wasm_src: make_counter_canister_wasm(),
+                serialized_module,
             })
             .sync()
             .unwrap();
@@ -942,10 +934,11 @@ mod tests {
         ));
 
         let wasm_id = WasmId::new();
+        let serialized_module = compile_module(make_memory_canister_wasm());
         let rep = srv
-            .open_wasm(OpenWasmRequest {
+            .open_wasm_serialized(OpenWasmSerializedRequest {
                 wasm_id,
-                wasm_src: make_memory_canister_wasm(),
+                serialized_module,
             })
             .sync()
             .unwrap();
@@ -1002,10 +995,11 @@ mod tests {
         ));
 
         let wasm_id = WasmId::new();
+        let serialized_module = compile_module(make_memory_canister_wasm());
         let rep = srv
-            .open_wasm(OpenWasmRequest {
+            .open_wasm_serialized(OpenWasmSerializedRequest {
                 wasm_id,
-                wasm_src: make_memory_canister_wasm(),
+                serialized_module,
             })
             .sync()
             .unwrap();
@@ -1075,10 +1069,11 @@ mod tests {
         ));
 
         let wasm_id = WasmId::new();
+        let serialized_module = compile_module(make_memory_canister_wasm());
         let rep = srv
-            .open_wasm(OpenWasmRequest {
+            .open_wasm_serialized(OpenWasmSerializedRequest {
                 wasm_id,
-                wasm_src: make_memory_canister_wasm(),
+                serialized_module,
             })
             .sync()
             .unwrap();
@@ -1176,10 +1171,11 @@ mod tests {
         ));
 
         let wasm_id = WasmId::new();
+        let serialized_module = compile_module(make_memory_canister_wasm());
         let rep = srv
-            .open_wasm(OpenWasmRequest {
+            .open_wasm_serialized(OpenWasmSerializedRequest {
                 wasm_id,
-                wasm_src: make_memory_canister_wasm(),
+                serialized_module,
             })
             .sync()
             .unwrap();
@@ -1302,10 +1298,11 @@ mod tests {
 
         // Compile the wasm code.
         let wasm_id = WasmId::new();
+        let serialized_module = compile_module(make_long_running_canister_wasm());
         let rep = srv
-            .open_wasm(OpenWasmRequest {
+            .open_wasm_serialized(OpenWasmSerializedRequest {
                 wasm_id,
-                wasm_src: make_long_running_canister_wasm(),
+                serialized_module,
             })
             .sync()
             .unwrap();
@@ -1422,10 +1419,11 @@ mod tests {
 
         // Compile the wasm code.
         let wasm_id = WasmId::new();
+        let serialized_module = compile_module(make_long_running_canister_wasm());
         let rep = srv
-            .open_wasm(OpenWasmRequest {
+            .open_wasm_serialized(OpenWasmSerializedRequest {
                 wasm_id,
-                wasm_src: make_long_running_canister_wasm(),
+                serialized_module,
             })
             .sync()
             .unwrap();

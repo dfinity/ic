@@ -24,7 +24,6 @@ env:
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_JOB_NAME: ${{ github.job }}
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-  CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_EVENT_NAME: ${{ github.event_name }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
@@ -34,7 +33,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:1d775e6d161dee883d10f082ab7fdde3e3d26061e1209255fb6514f8b62b206b
+    image: ghcr.io/dfinity/ic-build@sha256:6a548dd4cfee96260b6938fddaa74abc86fc0df5c407d4eef135694b64c288e3
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -252,7 +251,8 @@ jobs:
         run: |
           set -xeuo pipefail
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
-          pip3 install --ignore-installed -r requirements.txt
+          # Ignore externally-managed-environment pip error, install packages system-wide.
+          PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
           cd ci/src
           pytest -m "not fails_on_merge_train" -v -o junit_family=xunit1 \
             --junitxml=../../test_report.xml --cov=. --cov-report=term \

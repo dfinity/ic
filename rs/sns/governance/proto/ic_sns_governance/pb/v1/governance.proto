@@ -2199,6 +2199,12 @@ message AdvanceTargetVersionRequest {
 // The response to a request to advance the target version of the SNS.
 message AdvanceTargetVersionResponse {}
 
+// A test-only API that refreshes the cached upgrade steps.
+message RefreshCachedUpgradeStepsRequest {}
+
+// The response to a request to refresh the cached upgrade steps.
+message RefreshCachedUpgradeStepsResponse {}
+
 // Represents a single entry in the upgrade journal.
 message UpgradeJournalEntry {
   oneof event {

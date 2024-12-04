@@ -64,7 +64,7 @@ else
     dep_upload_url="$UPLOAD_URL/$dep_sha256"
     echo "Using upload URL: '$dep_upload_url'" >&2
     curl_out=$(mktemp)
-    curl --silent --fail "$dep_upload_url" --upload-file "$dep_filename" -w '%{size_upload} %{time_total} %{speed_upload}\n' | tee "$curl_out" >&2
+    curl --silent --show-error --fail --retry 3 "$dep_upload_url" --upload-file "$dep_filename" -w '%{size_upload} %{time_total} %{speed_upload}\n' | tee "$curl_out" >&2
     # read & pretty print 3 metrics: upload size, upload time & upload speed
     if read -ra metrics <"$curl_out"; then
         echo "Uploaded $(numfmt --to=iec-i --suffix=B "${metrics[0]}") in ${metrics[1]}s ($(numfmt --to=iec-i --suffix=B "${metrics[2]}")/s)" >&2
