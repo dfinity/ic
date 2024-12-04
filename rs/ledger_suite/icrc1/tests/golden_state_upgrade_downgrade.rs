@@ -73,6 +73,8 @@ lazy_static! {
         Wasm::from_bytes(archive_wasm()),
         None,
     );
+    pub static ref ALLOWANCES_MIGRATED_LEDGER_MODULE_HASH: Vec<u8> =
+        hex::decode("25071c2c55ad4571293e00d8e277f442aec7aed88109743ac52df3125209ff45").unwrap();
 }
 
 #[cfg(feature = "u256-tokens")]
@@ -95,6 +97,8 @@ lazy_static! {
         Wasm::from_bytes(archive_wasm()),
         None,
     );
+    pub static ref ALLOWANCES_MIGRATED_LEDGER_MODULE_HASH: Vec<u8> =
+        hex::decode("9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e").unwrap();
 }
 
 pub struct Wasms {
@@ -168,6 +172,29 @@ impl LedgerSuiteConfig {
         }
     }
 
+    /// Check if upgrading the ledger canister is expected to involve some migration to stable
+    /// structures, by checking the WASM module hash, and returing `ExpectMigration::No` in case
+    /// the ledger has already been migrated.
+    fn is_migration_expected(&self, state_machine: &StateMachine) -> ExpectMigration {
+        let canister_id =
+            CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
+        let controllers = state_machine
+            .get_controllers(canister_id)
+            .expect("canister should have controllers");
+        let canister_status = state_machine
+            .canister_status_as(controllers[0], canister_id)
+            .expect("should successfully request canister status")
+            .expect("should successfully retrieve canister status");
+        let deployed_module_hash = canister_status
+            .module_hash()
+            .expect("should have ledger canister module hash");
+        if deployed_module_hash.as_slice() == ALLOWANCES_MIGRATED_LEDGER_MODULE_HASH.as_slice() {
+            ExpectMigration::No
+        } else {
+            ExpectMigration::Yes
+        }
+    }
+
     fn perform_upgrade_downgrade_testing(&self, state_machine: &StateMachine) {
         println!(
             "Processing {}, ledger id: {}, index id: {}",
@@ -237,18 +264,21 @@ impl LedgerSuiteConfig {
                 "Migration steps ({}) should be greater than 0",
                 migration_steps
             );
+            let upgrade_instructions = parse_metric(
+                state_machine,
+                ledger_id,
+                "ledger_total_upgrade_instructions_consumed",
+            );
+            // For now, only check number of upgrade instructions for migration, since due to a
+            // bug some old ledgers may report wild numbers coming from parsing a `u64` from
+            // uninitialized memory.
+            assert!(
+                upgrade_instructions < CANISTER_UPGRADE_INSTRUCTION_LIMIT,
+                "Upgrade instructions ({}) should be less than the instruction limit ({})",
+                upgrade_instructions,
+                CANISTER_UPGRADE_INSTRUCTION_LIMIT
+            );
         }
-        let upgrade_instructions = parse_metric(
-            state_machine,
-            ledger_id,
-            "ledger_total_upgrade_instructions_consumed",
-        );
-        assert!(
-            upgrade_instructions < CANISTER_UPGRADE_INSTRUCTION_LIMIT,
-            "Upgrade instructions ({}) should be less than the instruction limit ({})",
-            upgrade_instructions,
-            CANISTER_UPGRADE_INSTRUCTION_LIMIT
-        );
     }
 
     fn upgrade_archives_or_panic(&self, state_machine: &StateMachine, wasm: &Wasm) {
@@ -342,7 +372,8 @@ impl LedgerSuiteConfig {
         // Upgrade each canister twice to exercise pre-upgrade
         self.upgrade_index_or_panic(state_machine, &self.master_wasms.index_wasm);
         self.upgrade_index_or_panic(state_machine, &self.master_wasms.index_wasm);
-        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm, ExpectMigration::Yes)
+        let expect_migration = self.is_migration_expected(state_machine);
+        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm, expect_migration)
             .or_else(|e| {
                 match (
                     e.description().contains(
@@ -662,7 +693,6 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
         true,
     )];
     for canister_id_and_name in vec![
-        CK_SEPOLIA_LINK_LEDGER_SUITE,
         CK_SEPOLIA_LINK_LEDGER_SUITE,
         CK_SEPOLIA_PEPE_LEDGER_SUITE,
         CK_SEPOLIA_USDC_LEDGER_SUITE,
