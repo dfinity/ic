@@ -55,7 +55,7 @@ benches:
     scopes: {}
   compute_ballots_for_new_proposal_with_stable_neurons:
     total:
-      instructions: 1830966
+      instructions: 1798483
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
