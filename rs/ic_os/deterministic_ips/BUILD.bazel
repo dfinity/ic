@@ -1,11 +1,26 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
+
+rust_binary(
+    name = "deterministic-ips",
+    srcs = ["src/main.rs"],
+    crate_name = "deterministic_ips",
+    deps = [
+        # Keep sorted.
+        ":deterministic_ips",
+        "//rs/ic_os/config_types",
+        "@crate_index//:anyhow",
+        "@crate_index//:clap",
+        "@crate_index//:macaddr",
+    ],
+)
 
 rust_library(
     name = "deterministic_ips",
     srcs = glob(
         ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
     ),
     crate_name = "deterministic_ips",
     version = "0.1.0",
@@ -16,6 +31,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/crypto/sha2",
+        "//rs/ic_os/config_types",
         "@crate_index//:anyhow",
         "@crate_index//:macaddr",
         "@crate_index//:thiserror",

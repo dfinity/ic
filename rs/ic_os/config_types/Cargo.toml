@@ -5,8 +5,8 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-deterministic_ips = { path = "../deterministic_ips" }
 ic-types = { path = "../../types/types" }
+macaddr = { workspace = true }
 url = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }

@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 
 use crate::info::NetworkInfo;
 use crate::interfaces::{get_interfaces, has_ipv6_connectivity, Interface};
-use deterministic_ips::HwAddr;
+use macaddr::MacAddr6;
 
 pub static DEFAULT_SYSTEMD_NETWORK_DIR: &str = "/run/systemd/network";
 
@@ -77,7 +77,7 @@ pub fn restart_systemd_networkd() {
 fn generate_and_write_systemd_files(
     output_directory: &Path,
     interface: &Interface,
-    generated_mac: Option<&HwAddr>,
+    generated_mac: Option<&MacAddr6>,
     ipv6_address: &str,
     ipv6_gateway: &str,
 ) -> Result<()> {
@@ -116,7 +116,7 @@ fn generate_and_write_systemd_files(
 pub fn generate_systemd_config_files(
     output_directory: &Path,
     network_info: &NetworkInfo,
-    generated_mac: Option<&HwAddr>,
+    generated_mac: Option<&MacAddr6>,
     ipv6_address: &Ipv6Addr,
 ) -> Result<()> {
     let mut interfaces = get_interfaces()?;

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use deterministic_ips::HwAddr;
+use macaddr::MacAddr6;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 use url::Url;
@@ -23,7 +23,7 @@ pub struct GenerateTestnetConfigArgs {
 
     // ICOSSettings arguments
     pub node_reward_type: Option<String>,
-    pub mgmt_mac: Option<HwAddr>,
+    pub mgmt_mac: Option<MacAddr6>,
     pub deployment_environment: Option<DeploymentEnvironment>,
     pub elasticsearch_hosts: Option<String>,
     pub elasticsearch_tags: Option<String>,

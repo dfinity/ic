@@ -7,7 +7,7 @@ use config::config_ini::config_map_from_path;
 use config::deployment_json::get_deployment_settings;
 use config::{DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH};
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{calculate_deterministic_mac, IpVariant};
+use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use network::info::NetworkInfo;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use network::{generate_network_config, resolve_mgmt_mac};
@@ -22,8 +22,8 @@ pub enum Commands {
         output_directory: String,
     },
     GenerateIpv6Address {
-        #[arg(short, long, default_value = "SetupOS")]
-        node_type: String,
+        #[arg(short, long, default_value_t = NodeType::SetupOS)]
+        node_type: NodeType,
     },
 }
 
@@ -67,11 +67,12 @@ pub fn main() -> Result<()> {
             eprintln!("Deployment config: {:?}", deployment_settings);
 
             let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
+            let deployment_environment = deployment_settings.deployment.name.parse()?;
             let generated_mac = calculate_deterministic_mac(
-                mgmt_mac,
-                deployment_settings.deployment.name,
+                &mgmt_mac,
+                deployment_environment,
                 IpVariant::V6,
-                NodeType::SetupOS, /* 0xf corresponds to SetupOS */
+                NodeType::SetupOS,
             );
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
 
@@ -94,11 +95,11 @@ pub fn main() -> Result<()> {
                 ))?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
-            let node_type = node_type.parse::<NodeType>()?;
             let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
+            let deployment_environment = deployment_settings.deployment.name.parse()?;
             let generated_mac = calculate_deterministic_mac(
-                mgmt_mac,
-                deployment_settings.deployment.name,
+                &mgmt_mac,
+                deployment_environment,
                 IpVariant::V6,
                 node_type,
             );

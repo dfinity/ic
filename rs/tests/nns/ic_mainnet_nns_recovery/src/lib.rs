@@ -492,13 +492,9 @@ fn setup_boundary_node(
     let recovered_nns_node_ipv6 = recovered_nns_node.get_ip_addr();
     boundary_node.block_on_bash_script(&format!(r#"
         set -e
-        cp /etc/systemd/system/ic-boundary.service /tmp/
-        sed -i '/--nns-urls/d' /tmp/ic-boundary.service
-        sed -i '/--local-store-path/d' /tmp/ic-boundary.service
-        sed -i '/--nns-pub-key-pem/a\        --stub-replica [{recovered_nns_node_ipv6}]:8080 \\' /tmp/ic-boundary.service
-        sed -i '/--stub-replica/a\        --skip-replica-tls-verification \\' /tmp/ic-boundary.service
-        sudo mount --bind /tmp/ic-boundary.service /etc/systemd/system/ic-boundary.service
-        sudo systemctl daemon-reload
+        sudo sed -i '/REGISTRY_LOCAL_STORE_PATH/d' /run/ic-node/etc/default/ic-boundary
+        echo 'REGISTRY_STUB_REPLICA="[{recovered_nns_node_ipv6}]:8080"' | sudo tee -a /run/ic-node/etc/default/ic-boundary
+        echo 'SKIP_REPLICA_TLS_VERIFICATION="true"' | sudo tee -a /run/ic-node/etc/default/ic-boundary
         sudo systemctl restart ic-boundary
     "#)).unwrap_or_else(|e| {
         panic!("Could not reconfigure ic-boundary on {BOUNDARY_NODE_NAME} to only route to the recovered NNS because {e:?}",)
