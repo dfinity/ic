@@ -295,28 +295,26 @@ impl LedgerSuiteConfig {
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
         let args = ic_icrc1_ledger::LedgerArgument::Upgrade(None);
         let args = Encode!(&args).unwrap();
-        let res =
-            match state_machine.upgrade_canister(canister_id, wasm.clone().bytes(), args.clone()) {
-                Ok(_) => {
-                    println!(
-                        "Upgraded {} ledger '{}'",
-                        self.canister_name, self.ledger_id
-                    );
-                    if expect_migration == ExpectMigration::Yes {
-                        wait_ledger_ready(state_machine, canister_id, 100);
-                    }
-                    self.check_ledger_metrics(state_machine, expect_migration);
-                    Ok(())
+        match state_machine.upgrade_canister(canister_id, wasm.clone().bytes(), args.clone()) {
+            Ok(_) => {
+                println!(
+                    "Upgraded {} ledger '{}'",
+                    self.canister_name, self.ledger_id
+                );
+                if expect_migration == ExpectMigration::Yes {
+                    wait_ledger_ready(state_machine, canister_id, 100);
                 }
-                Err(e) => {
-                    println!(
-                        "Error upgrading {} ledger '{}': {:?}",
-                        self.canister_name, self.ledger_id, e
-                    );
-                    Err(e)
-                }
-            };
-        res
+                self.check_ledger_metrics(state_machine, expect_migration);
+                Ok(())
+            }
+            Err(e) => {
+                println!(
+                    "Error upgrading {} ledger '{}': {:?}",
+                    self.canister_name, self.ledger_id, e
+                );
+                Err(e)
+            }
+        }
     }
 
     fn upgrade_to_mainnet(&self, state_machine: &StateMachine) {
