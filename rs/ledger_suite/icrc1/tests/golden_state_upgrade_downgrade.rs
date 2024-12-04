@@ -303,6 +303,7 @@ impl LedgerSuiteConfig {
                         self.canister_name, self.ledger_id
                     );
                     wait_ledger_ready(state_machine, canister_id, 100);
+                    self.check_ledger_metrics(state_machine, expect_migration);
                     Ok(())
                 }
                 Err(e) => {
@@ -313,7 +314,6 @@ impl LedgerSuiteConfig {
                     Err(e)
                 }
             };
-        self.check_ledger_metrics(state_machine, expect_migration);
         res
     }
 
