@@ -14918,6 +14918,7 @@ version = "0.1.0"
 dependencies = [
  "clap 4.5.20",
  "config",
+ "config_types",
  "ic-prep",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
