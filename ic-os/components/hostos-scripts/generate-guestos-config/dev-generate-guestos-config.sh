@@ -61,12 +61,15 @@ function read_config_variables() {
     domain_name=$(get_config_value '.network_settings.domain_name')
     node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
     elasticsearch_hosts=$(get_config_value '.icos_settings.logging.elasticsearch_hosts')
-    use_nns_public_key=$(get_config_value '.icos_settings.use_nns_public_key')
     nns_urls=$(get_config_value '.icos_settings.nns_urls | join(",")')
+    mgmt_mac=$(get_config_value '.icos_settings.mgmt_mac')
+
+    use_nns_public_key=$(get_config_value '.icos_settings.use_nns_public_key')
     use_node_operator_private_key=$(get_config_value '.icos_settings.use_node_operator_private_key')
+    use_ssh_authorized_keys=$(get_config_value '.icos_settings.use_ssh_authorized_keys')
+
     vm_memory=$(get_config_value '.hostos_settings.vm_memory')
     vm_cpu=$(get_config_value '.hostos_settings.vm_cpu')
-    use_ssh_authorized_keys=$(get_config_value '.icos_settings.use_ssh_authorized_keys')
 }
 
 function assemble_config_media() {
@@ -81,10 +84,11 @@ function assemble_config_media() {
     if [ -f "$use_node_operator_private_key" ]; then
         cmd+=(--node_operator_private_key "/boot/config/node_operator_private_key.pem")
     fi
-    if [[ "${ssh_authorized_keys,,}" == "true" ]]; then
+    if [[ "${use_ssh_authorized_keys,,}" == "true" ]]; then
         cmd+=(--accounts_ssh_authorized_keys "/boot/config/ssh_authorized_keys")
     fi
 
+    # TODO(NODE-1518): remove passing old config
     cmd+=(--elasticsearch_hosts "${elasticsearch_hosts}")
     cmd+=(--ipv6_address "$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)")
     cmd+=(--ipv6_gateway "${ipv6_gateway}")
@@ -96,7 +100,7 @@ function assemble_config_media() {
     if [[ -n "$node_reward_type" ]]; then
         cmd+=(--node_reward_type "${node_reward_type}")
     fi
-    cmd+=(--hostname "guest-$(/opt/ic/bin/hostos_tool fetch-mac-address | sed 's/://g')")
+    cmd+=(--hostname "guest-${mgmt_mac//:/}")
     cmd+=(--nns_urls "${nns_urls}")
 
     # Run the above command
