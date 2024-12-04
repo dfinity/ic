@@ -672,8 +672,8 @@ impl Ledger {
                 .collect(),
             max_memo_length: max_memo_length.unwrap_or(DEFAULT_MAX_MEMO_LENGTH),
             feature_flags: feature_flags.unwrap_or_default(),
-            maximum_number_of_accounts: MAX_ACCOUNTS.try_into().unwrap(),
-            accounts_overflow_trim_quantity: ACCOUNTS_OVERFLOW_TRIM_QUANTITY.try_into().unwrap(),
+            maximum_number_of_accounts: MAX_ACCOUNTS,
+            accounts_overflow_trim_quantity: ACCOUNTS_OVERFLOW_TRIM_QUANTITY,
             ledger_version: LEDGER_VERSION,
         };
 
