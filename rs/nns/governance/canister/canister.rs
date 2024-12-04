@@ -60,10 +60,7 @@ use rand_chacha::ChaCha20Rng;
 use std::{
     boxed::Box,
     cell::RefCell,
-<<<<<<< HEAD
     ops::Bound,
-=======
->>>>>>> 7c6c94cf86 (Switch NNS Governance global state from static to thread_local)
     str::FromStr,
     time::{Duration, SystemTime},
 };
@@ -84,13 +81,12 @@ const WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY: u64 = 65_536;
 
 pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
-// https://dfinity.atlassian.net/browse/NNS1-1050: We are not following
-// standard/best practices for canister globals here.
-//
-// Do not access these global variables directly. Instead, use accessor
-// functions, which are defined immediately after.
 thread_local! {
-    static GOVERNANCE: RefCell<Option<Governance>> = RefCell::new(None);
+    static GOVERNANCE: RefCell<Governance> = RefCell::new(Governance::new_uninitialized(
+        Box::new(CanisterEnv::new()),
+        Box::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
+        Box::new(CMCCanister::<CdkRuntime>::new()),
+    ));
 }
 
 /*
@@ -140,12 +136,7 @@ are best practices for making use of the unsafe block:
 /// This should only be called once the global state has been initialized, which
 /// happens in `canister_init` or `canister_post_upgrade`.
 fn governance() -> &'static Governance {
-    unsafe {
-        &*GOVERNANCE.with(|g| {
-            let ptr = g.as_ptr();
-            (*ptr).as_ref().expect("Canister not initialized!")
-        })
-    }
+    unsafe { &*GOVERNANCE.with(|g| g.as_ptr()) }
 }
 
 /// Returns a mutable reference to the global state.
@@ -153,22 +144,12 @@ fn governance() -> &'static Governance {
 /// This should only be called once the global state has been initialized, which
 /// happens in `canister_init` or `canister_post_upgrade`.
 fn governance_mut() -> &'static mut Governance {
-    unsafe {
-        &mut *GOVERNANCE.with(|g| {
-            let ptr = g.as_ptr();
-            (*ptr).as_mut().expect("Canister not initialized!")
-        })
-    }
+    unsafe { &mut *GOVERNANCE.with(|g| g.as_ptr()) }
 }
 
 // Sets governance global state to the given object.
 fn set_governance(gov: Governance) {
-    assert!(
-        GOVERNANCE.with(|g| g.borrow().is_none()),
-        "{}Trying to initialize an already-initialized governance canister!",
-        LOG_PREFIX
-    );
-    GOVERNANCE.with(|g| *g.borrow_mut() = Some(gov));
+    GOVERNANCE.set(gov);
 
     governance()
         .validate()
