@@ -8,9 +8,9 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/bitcoin/checker:btc_checker_lib",
     "//rs/bitcoin/ckbtc/agent",
     "//rs/bitcoin/ckbtc/minter",
-    "//rs/bitcoin/checker:btc_checker_lib",
     "//rs/canister_client",
     "//rs/config",
     "//rs/ledger_suite/icp:icp_ledger",
@@ -76,8 +76,8 @@ system_test_nns(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
-            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/bitcoin/checker:btc_checker_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister",
             "//rs/tests:ckbtc_uvm_config_image",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
@@ -106,8 +106,8 @@ system_test_nns(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
-            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/bitcoin/checker:btc_checker_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister",
             "//rs/tests:ckbtc_uvm_config_image",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
@@ -137,8 +137,8 @@ system_test_nns(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
-            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/bitcoin/checker:btc_checker_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister",
             "//rs/tests:ckbtc_uvm_config_image",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
@@ -168,8 +168,8 @@ system_test_nns(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
-            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/bitcoin/checker:btc_checker_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister",
             "//rs/tests:ckbtc_uvm_config_image",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
@@ -199,8 +199,8 @@ system_test_nns(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
-            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/bitcoin/checker:btc_checker_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister",
             "//rs/tests:ckbtc_uvm_config_image",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
@@ -231,9 +231,8 @@ system_test_nns(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
-            "//rs/bitcoin/ckbtc/checker:checker_canister",
-            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/bitcoin/checker:btc_checker_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister",
             "//rs/tests:ckbtc_uvm_config_image",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
