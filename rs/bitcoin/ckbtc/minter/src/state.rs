@@ -1159,11 +1159,26 @@ impl CkBtcMinterState {
             other.utxos_state_addresses,
             "utxos_state_addresses do not match"
         );
-        ensure_eq!(
-            self.suspended_utxos,
-            other.suspended_utxos,
-            "suspended_utxos do not match"
-        );
+        {
+            let SuspendedUtxos {
+                utxos_without_account,
+                utxos,
+                last_time_checked_cache: _,
+            } = &self.suspended_utxos;
+            let SuspendedUtxos {
+                utxos_without_account: other_utxos_without_account,
+                utxos: other_utxos,
+                last_time_checked_cache: _,
+            } = &other.suspended_utxos;
+            // last_time_checked_cache are not preserved on upgrades
+            // to avoid adding an event every time a suspended UTXO is re-evaluated with the same outcome.
+            ensure_eq!(
+                utxos_without_account,
+                other_utxos_without_account,
+                "suspended_utxos::utxos_without_account does not match"
+            );
+            ensure_eq!(utxos, other_utxos, "suspended_utxos::utxos does not match");
+        }
 
         ensure_eq!(
             self.checked_utxos,
