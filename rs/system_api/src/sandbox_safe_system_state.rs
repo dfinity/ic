@@ -1595,8 +1595,7 @@ mod tests {
     #[test]
     fn test_on_low_wasm_memory_hook_condition_update() {
         for wasm_memory_threshold in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
-            for memory_allocation in [None, Some(GIB), Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)]
-            {
+            for memory_allocation in [None, Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)] {
                 for wasm_memory_limit in
                     [None, Some(GIB), Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)]
                 {
