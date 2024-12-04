@@ -12,6 +12,7 @@ use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use num_traits::ToPrimitive;
 use serde::Serialize;
+use std::time::Duration;
 
 // Max number of times of calling check_transaction with cycle payment, to avoid spending too
 // many cycles.
@@ -139,6 +140,8 @@ pub async fn update_balance<R: CanisterRuntime>(
         ic_cdk::trap("cannot update minter's balance");
     }
 
+    let start_time = ic_cdk::api::time();
+
     // When the minter is in the mode using a whitelist we only want a certain
     // set of principal to be able to mint. But we also want those principals
     // to mint at any desired address. Therefore the check below is on "caller".
@@ -217,6 +220,12 @@ pub async fn update_balance<R: CanisterRuntime>(
             .collect();
 
         let current_confirmations = pending_utxos.iter().map(|u| u.confirmations).max();
+
+        async fn record_update_balance_latency_with_no_new_utxos(start_time: u64) {
+            &crate::metrics::UPDATE_CALL_LATENCY_WITH_NO_NEW_UTXOS.with_borrow_mut(|histogram| {
+                histogram.observe_latency(ic_cdk::api::time() - start_time)
+            });
+        }
 
         return Err(UpdateBalanceError::NoNewUtxos {
             current_confirmations,
