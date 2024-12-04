@@ -1,5 +1,5 @@
 {
-  "checksum": "4096d5d405db9ca6279818b7093039a7c9ee0571354bc184745a2a6c9e085447",
+  "checksum": "a3824c6dae08a250d31e5907e2eff62575b38fd163dbb7e1c0f0ba342d66dc29",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18855,6 +18855,10 @@
             {
               "id": "lru 0.7.8",
               "target": "lru"
+            },
+            {
+              "id": "macaddr 1.0.1",
+              "target": "macaddr"
             },
             {
               "id": "mach2 0.4.2",
@@ -40815,6 +40819,52 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "macaddr 1.0.1": {
+      "name": "macaddr",
+      "version": "1.0.1",
+      "package_url": "https://github.com/svartalf/rust-macaddr",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/macaddr/1.0.1/download",
+          "sha256": "baee0bbc17ce759db233beb01648088061bf678383130602a298e6998eedb2d8"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "macaddr",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "macaddr",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.0.1"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "mach2 0.4.2": {
       "name": "mach2",
@@ -87635,6 +87685,7 @@
     "lmdb-rkv-sys 0.11.99",
     "local-ip-address 0.5.6",
     "lru 0.7.8",
+    "macaddr 1.0.1",
     "mach2 0.4.2",
     "maplit 1.0.2",
     "maxminddb 0.24.0",

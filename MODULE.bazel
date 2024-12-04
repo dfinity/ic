@@ -37,6 +37,10 @@ archive_override(
     urls = ["https://github.com/bazelbuild/rules_foreign_cc/archive/77d4483fadbb1b7bcace18ed8e8e87e8791050f6.tar.gz"],
 )
 
+# Misc tools
+
+bazel_dep(name = "pigz", version = "2.8")  # (parallel) gzip
+
 # Python dependencies
 
 bazel_dep(name = "rules_python", version = "0.35.0")
@@ -428,38 +432,6 @@ http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "ht
 http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 
 http_jar = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_jar")
-
-# Gzip tool
-http_archive(
-    name = "pigz",
-    build_file_content = """
-cc_library(
-    name = "zopfli",
-    hdrs = glob(["zopfli/src/zopfli/*.h"]),
-    srcs = glob(["zopfli/src/zopfli/*.c"]),
-)
-
-cc_binary(
-    name = "pigz",
-    srcs = [
-        "pigz.c",
-        "try.c",
-        "try.h",
-        "yarn.c",
-        "yarn.h",
-    ],
-    linkopts = [
-        "-lm",
-        "-lpthread",
-        "-lz",
-    ],
-    deps = [":zopfli"],
-    visibility = ["//visibility:public"],
-)""",
-    sha256 = "688fe1d805b33a4ae8cbf86ba56aa1a5d647e959219c7d3aeb7d041c228af1ef",
-    strip_prefix = "pigz-2.8",
-    url = "https://github.com/madler/pigz/archive/refs/tags/v2.8.zip",
-)
 
 # TLA+ tools
 http_jar(

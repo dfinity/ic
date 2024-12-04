@@ -252,6 +252,7 @@ thread_local! {
 // Timers
 
 const SECOND: Duration = Duration::from_secs(1);
+const DAY: Duration = Duration::from_secs(24 * 60 * 60);
 
 fn timers() {
     // ACLs
@@ -273,6 +274,10 @@ fn timers() {
                 // Clear allowed principals
                 ps.clear_new();
 
+                // Self authorize
+                ps.insert(id(), ());
+
+                // Authorize API Boundary Nodes
                 ids.iter().for_each(|p| {
                     ps.insert(p.to_owned(), ());
                 });
@@ -322,6 +327,31 @@ fn timers() {
         });
     });
 
+    // TTLs
+    set_timer_interval(7 * DAY, || {
+        // Remove all encrypted values
+        let ids = ENCRYPTED_VALUES.with(|vs| {
+            let mut vs = vs.borrow_mut();
+
+            let ids: Vec<_> = vs.iter().map(|(k, _)| k).collect();
+            vs.clear_new();
+
+            ids
+        });
+
+        // Re-queue
+        QUEUE.with(|q| {
+            let mut q = q.borrow_mut();
+
+            for id in ids {
+                q.insert(
+                    id, // principal
+                    (), // unit
+                );
+            }
+        });
+    });
+
     // Leader
     set_timer_interval(30 * SECOND, || {
         // Collect candidates that have registered a public-key
@@ -364,14 +394,6 @@ fn main() {}
 
 #[ic_cdk::init]
 fn init(_arg: InitArg) {
-    // Self-authorize
-    ALLOWED_PRINCIPALS.with(|m| {
-        m.borrow_mut().insert(
-            id(), // canister id
-            (),   // unit
-        )
-    });
-
     // Start timers
     timers();
 
