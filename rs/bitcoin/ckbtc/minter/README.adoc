@@ -44,7 +44,6 @@ dfx canister --network ic call minter get_btc_address "(record {})"
 ----
 dfx canister --network ic call minter update_balance "(record {})"
 ----
-+
 
 If you want to get the deposit address of a different account than your dfx identity, you may specify full account details including both owner principal and subaccount like this:
 ----
