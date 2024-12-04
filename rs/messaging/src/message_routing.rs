@@ -81,6 +81,7 @@ const PHASE_LOAD_STATE: &str = "load_state";
 const PHASE_COMMIT: &str = "commit";
 
 const METRIC_RECEIVE_BATCH_LATENCY: &str = "mr_receive_batch_latency_seconds";
+const METRIC_INDUCT_BATCH_LATENCY: &str = "mr_induct_batch_latency_seconds";
 const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_duration_seconds";
 const METRIC_TIMED_OUT_MESSAGES_TOTAL: &str = "mr_timed_out_messages_total";
@@ -271,6 +272,8 @@ pub(crate) struct MessageRoutingMetrics {
     registry_version: IntGauge,
     /// How long Message Routing had to wait to receive the next batch.
     receive_batch_latency: Histogram,
+    /// Wall time duration between making a block and inducting it.
+    pub(crate) induct_batch_latency: Histogram,
     /// Batch processing durations.
     process_batch_duration: Histogram,
     /// Most recently seen certified height, per remote subnet
@@ -368,6 +371,12 @@ impl MessageRoutingMetrics {
                 "How long Message Routing had to wait to receive the next batch.",
                 // 0.1ms - 5s
                 decimal_buckets(-4, 0),
+            ),
+            induct_batch_latency: metrics_registry.histogram(
+                METRIC_INDUCT_BATCH_LATENCY,
+                "Wall time duration between block making and block induction.",
+                // 1ms - 50s
+                decimal_buckets(-3, 2),
             ),
             process_batch_phase_duration: metrics_registry.histogram_vec(
                 METRIC_PROCESS_BATCH_PHASE_DURATION,
