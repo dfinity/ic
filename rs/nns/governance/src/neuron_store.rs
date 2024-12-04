@@ -1387,7 +1387,6 @@ impl NeuronStore {
 ///
 /// Returns where the scan should pick up from next time. I.e. the return value
 /// should be passed via start next time.
-#[allow(unused)]
 pub fn prune_some_following(
     voting_power_economics: &VotingPowerEconomics,
     neuron_store: &mut NeuronStore,
@@ -1424,8 +1423,8 @@ pub fn prune_some_following(
         // this line to be reached.
         if let Err(err) = result {
             println!(
-                "{}ERROR: Unable to find neuron {} while pruning following.",
-                LOG_PREFIX, current_neuron_id.id,
+                "{}ERROR: Unable to find neuron {} while pruning following: {:?}",
+                LOG_PREFIX, current_neuron_id.id, err,
             );
         }
 

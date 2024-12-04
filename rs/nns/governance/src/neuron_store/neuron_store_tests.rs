@@ -696,7 +696,7 @@ fn test_prune_some_following() {
     };
 
     assert_eq!(
-        prune_some_following(&mut neuron_store, Bound::Unbounded, carry_on),
+        prune_some_following(&VotingPowerEconomics::DEFAULT, &mut neuron_store, Bound::Unbounded, carry_on),
         Bound::Excluded(stale_neuron.id()),
     );
     assert_eq!(neuron_count, 2);
@@ -708,6 +708,7 @@ fn test_prune_some_following() {
     };
     assert_eq!(
         prune_some_following(
+            &VotingPowerEconomics::DEFAULT,
             &mut neuron_store,
             Bound::Excluded(stale_neuron.id()),
             carry_on,
