@@ -641,7 +641,7 @@ fn test_get_neuron_ids_readable_by_caller() {
 }
 
 #[test]
-fn test_prune_some_following() {
+fn test_prune_some_following_standard_voting_power_refresh_requirements() {
     // Step 1: Prepare the world.
 
     let followees = hashmap! {
@@ -706,6 +706,9 @@ fn test_prune_some_following() {
     );
     assert_eq!(neuron_count, 2);
 
+    // Do the next batch (which is empty). What we want to see is that
+    // prune_some_following "loops back around". More concretely, it should
+    // return Bound::Unbounded.
     let mut call_count = 0;
     let carry_on = || {
         call_count += 1;
@@ -741,6 +744,7 @@ fn test_prune_some_following() {
                 hashmap! {
                     // Governance got wiped out.
 
+                    // NeuronManagement did not get touched.
                     Topic::NeuronManagement as i32 => Followees {
                         followees: vec![NeuronId { id: 101 }],
                     },
@@ -748,6 +752,96 @@ fn test_prune_some_following() {
             );
         })
         .unwrap();
+
+    assert_eq!(neuron_store.len(), 2);
+}
+
+#[test]
+fn test_prune_some_following_super_strict_voting_power_refresh() {
+    // Step 1: Prepare the world. (This is exactly the same as the previous test.)
+
+    let followees = hashmap! {
+        Topic::Governance as i32 => Followees {
+            followees: vec![NeuronId { id: 99 }],
+        },
+        Topic::NeuronManagement as i32 => Followees {
+            followees: vec![NeuronId { id: 101 }],
+        },
+    };
+
+    let mut fresh_neuron = simple_neuron_builder(1)
+        .with_followees(followees.clone())
+        .build();
+    fresh_neuron.refresh_voting_power(CREATED_TIMESTAMP_SECONDS - 7 * ONE_MONTH_SECONDS + 1);
+
+    // Similar to fresh_neuron, except voting power was refrshed a "long" time
+    // ago.
+    let mut stale_neuron = simple_neuron_builder(3)
+        .with_followees(followees.clone())
+        .build();
+    stale_neuron.refresh_voting_power(CREATED_TIMESTAMP_SECONDS - 7 * ONE_MONTH_SECONDS - 1);
+
+    let mut neuron_store = NeuronStore::new(btreemap! {
+        fresh_neuron.id().id => fresh_neuron.clone(),
+        stale_neuron.id().id => stale_neuron.clone(),
+    });
+
+    // Control the perception of time by neuron_store.
+    #[derive(Debug, Clone)]
+    struct DummyClock {}
+    impl Clock for DummyClock {
+        fn now(&self) -> u64 {
+            CREATED_TIMESTAMP_SECONDS
+        }
+
+        fn set_time_warp(&mut self, _: TimeWarp) {
+            unimplemented!();
+        }
+    }
+    impl PracticalClock for DummyClock {}
+    let clock = DummyClock {};
+    neuron_store.clock = Box::new(clock);
+
+    // Step 2: Call code under test. (This is where things start looking
+    // different, compared to the previous test.)
+
+    assert_eq!(
+        prune_some_following(
+            &VotingPowerEconomics {
+                // These are much smaller than the normal values. As a result, all
+                // neurons suddenly look stale. As a result, all following is
+                // supposed to be cleared.
+                start_reducing_voting_power_after_seconds: Some(42),
+                clear_following_after_seconds: Some(58),
+            },
+            &mut neuron_store,
+            Bound::Unbounded, // Start new cycle.
+            || true, // Do a full cycle.
+        ),
+        Bound::Unbounded,
+    );
+
+    // Step 3: Inspect results.
+
+    // Assert that everyone's following got cleared, due to super strict
+    // VotingPowerEconomics.
+    for neuron_id in [fresh_neuron.id(), stale_neuron.id()] {
+        neuron_store
+            .with_neuron(&neuron_id, |observed_neuron| {
+                assert_eq!(
+                    observed_neuron.followees,
+                    hashmap! {
+                        // Governance got wiped out.
+
+                        // NeuronManagement did not get touched.
+                        Topic::NeuronManagement as i32 => Followees {
+                            followees: vec![NeuronId { id: 101 }],
+                        },
+                    },
+                );
+            })
+            .unwrap();
+    }
 
     assert_eq!(neuron_store.len(), 2);
 }
