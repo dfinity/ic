@@ -38,6 +38,7 @@ use ic_nervous_system_root::change_canister::{
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_governance_api::bitcoin::Fees;
 use ic_nns_governance_api::{
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     pb::v1::{
@@ -2641,7 +2642,7 @@ impl ProposalTitle for ProposeToSetBitcoinConfig {
 #[async_trait]
 impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
     async fn payload(&self, _: &Agent) -> BitcoinSetConfigProposal {
-        let request = SetConfigRequest {
+        let request: SetConfigRequest = SetConfigRequest {
             stability_threshold: self.stability_threshold,
             api_access: self
                 .api_access
@@ -2656,7 +2657,21 @@ impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
                     Flag::Disabled
                 }
             }),
-            fees: self.fees.into(),
+            fees: self.fees.as_ref().map(|f| ic_btc_interface::Fees {
+                get_utxos_base: f.get_utxos_base,
+                get_utxos_cycles_per_ten_instructions: f.get_utxos_cycles_per_ten_instructions,
+                get_utxos_maximum: f.get_utxos_maximum,
+                get_balance: f.get_balance,
+                get_balance_maximum: f.get_balance_maximum,
+                get_current_fee_percentiles: f.get_current_fee_percentiles,
+                get_current_fee_percentiles_maximum: f.get_current_fee_percentiles_maximum,
+                send_transaction_base: f.send_transaction_base,
+                send_transaction_per_byte: f.send_transaction_per_byte,
+                get_block_headers_base: f.get_block_headers_base,
+                get_block_headers_cycles_per_ten_instructions: f
+                    .get_block_headers_cycles_per_ten_instructions,
+                get_block_headers_maximum: f.get_block_headers_maximum,
+            }),
             ..Default::default()
         };
 
