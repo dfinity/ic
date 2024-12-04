@@ -1,5 +1,5 @@
 {
-  "checksum": "1771e8a5f1fdb0c8cf153411c37a9a8aab8ff03252dbb22817a79363ad197c9b",
+  "checksum": "3fbe6f0bc1150dc7e649e3be6d14ab3560751213130f5f2404d9e38092e2d002",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -19027,6 +19027,10 @@
             {
               "id": "lru 0.7.8",
               "target": "lru"
+            },
+            {
+              "id": "macaddr 1.0.1",
+              "target": "macaddr"
             },
             {
               "id": "mach2 0.4.2",
@@ -40066,7 +40070,13 @@
           "commitish": {
             "Rev": "4d952c8f1dca79de855af892b444d7112567b58d"
           },
-          "strip_prefix": "lmdb-sys"
+          "strip_prefix": "lmdb-sys",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:lmdb_rkv_sys.patch"
+          ]
         }
       },
       "targets": [
@@ -40119,12 +40129,6 @@
           ],
           "selects": {}
         },
-        "extra_deps": {
-          "common": [
-            "@lmdb//:lmdb"
-          ],
-          "selects": {}
-        },
         "edition": "2015",
         "version": "0.11.99"
       },
@@ -40134,6 +40138,7 @@
         ],
         "data": {
           "common": [
+            "@lmdb//:liblmdb",
             "@lmdb//:lmdb.h"
           ],
           "selects": {}
@@ -40157,7 +40162,7 @@
         "build_script_env": {
           "common": {
             "LMDB_H_PATH": "$(location @lmdb//:lmdb.h)",
-            "LMDB_NO_BUILD": "1"
+            "LMDB_OVERRIDE": "$(location @lmdb//:liblmdb)"
           },
           "selects": {}
         }
@@ -40973,6 +40978,52 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "macaddr 1.0.1": {
+      "name": "macaddr",
+      "version": "1.0.1",
+      "package_url": "https://github.com/svartalf/rust-macaddr",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/macaddr/1.0.1/download",
+          "sha256": "baee0bbc17ce759db233beb01648088061bf678383130602a298e6998eedb2d8"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "macaddr",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "macaddr",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.0.1"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "mach2 0.4.2": {
       "name": "mach2",
@@ -87754,6 +87805,7 @@
     "lmdb-rkv-sys 0.11.99",
     "local-ip-address 0.5.6",
     "lru 0.7.8",
+    "macaddr 1.0.1",
     "mach2 0.4.2",
     "maplit 1.0.2",
     "maxminddb 0.24.0",
