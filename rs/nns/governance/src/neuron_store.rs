@@ -66,6 +66,9 @@ pub enum NeuronStoreError {
         neuron_id: NeuronId,
     },
     NeuronIdGenerationUnavailable,
+    InvalidOperation {
+        reason: String,
+    },
 }
 
 impl NeuronStoreError {
@@ -170,6 +173,9 @@ impl Display for NeuronStoreError {
                     Likely due to uninitialized RNG."
                 )
             }
+            NeuronStoreError::InvalidOperation { reason } => {
+                write!(f, "Invalid operation: {}", reason)
+            }
         }
     }
 }
@@ -187,6 +193,7 @@ impl From<NeuronStoreError> for GovernanceError {
             NeuronStoreError::InvalidData { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::NotAuthorizedToGetFullNeuron { .. } => ErrorType::NotAuthorized,
             NeuronStoreError::NeuronIdGenerationUnavailable => ErrorType::Unavailable,
+            NeuronStoreError::InvalidOperation { .. } => ErrorType::PreconditionFailed,
         };
         GovernanceError::new_with_message(error_type, value.to_string())
     }
@@ -1184,6 +1191,51 @@ impl NeuronStore {
         }
 
         Ok(())
+    }
+
+    /// Modifies the maturity of the neuron.
+    pub fn modify_neuron_maturity(
+        &mut self,
+        neuron_id: &NeuronId,
+        modify: impl FnOnce(u64) -> Result<u64, String>,
+    ) -> Result<(), NeuronStoreError> {
+        // When `use_stable_memory_for_all_neurons` is true, all the neurons SHOULD be in the stable
+        // neuron store. Therefore, there is no need to move the neuron between heap/stable as it
+        // might become active/inactive due to the change of maturity.
+        if self.use_stable_memory_for_all_neurons {
+            // The validity of this approach is based on the assumption that none of the neuron
+            // indexes can be affected by its maturity.
+            if self.heap_neurons.contains_key(&neuron_id.id) {
+                self.heap_neurons
+                    .get_mut(&neuron_id.id)
+                    .map(|neuron| -> Result<(), String> {
+                        let new_maturity = modify(neuron.maturity_e8s_equivalent)?;
+                        neuron.maturity_e8s_equivalent = new_maturity;
+                        Ok(())
+                    })
+                    .transpose()
+                    .map_err(|e| NeuronStoreError::InvalidData { reason: e })?
+                    .ok_or_else(|| NeuronStoreError::not_found(*neuron_id))
+            } else {
+                with_stable_neuron_store_mut(|stable_neuron_store| {
+                    stable_neuron_store
+                        .with_main_part_mut(*neuron_id, |neuron| -> Result<(), String> {
+                            let new_maturity = modify(neuron.maturity_e8s_equivalent)?;
+                            neuron.maturity_e8s_equivalent = new_maturity;
+                            Ok(())
+                        })?
+                        .map_err(|e| NeuronStoreError::InvalidData { reason: e })?;
+                    Ok(())
+                })
+            }
+        } else {
+            self.with_neuron_mut(neuron_id, |neuron| {
+                let new_maturity = modify(neuron.maturity_e8s_equivalent)
+                    .map_err(|reason| NeuronStoreError::InvalidData { reason })?;
+                neuron.maturity_e8s_equivalent = new_maturity;
+                Ok(())
+            })?
+        }
     }
 
     // Below are indexes related methods. They don't have a unified interface yet, but NNS1-2507 will change that.
