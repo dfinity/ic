@@ -1,12 +1,11 @@
-use candid::Principal;
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
 use futures::{future::join_all, Future};
-use ic_cdk::api::management_canister::provisional::CanisterId;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::get_dependency_path;
 use slog::info;
-use std::{convert::TryFrom, env};
+use std::env;
+use xnet_test::CanisterId;
 
 /// Concurrently calls `start` on all canisters in `canisters` with the
 /// given parameters.
@@ -17,11 +16,7 @@ pub async fn start_all_canisters(
 ) {
     let topology: Vec<Vec<CanisterId>> = canisters
         .iter()
-        .map(|x| {
-            x.iter()
-                .map(|y| Principal::try_from(y.canister_id_vec8()).unwrap())
-                .collect()
-        })
+        .map(|x| x.iter().map(|y| y.canister_id_vec8()).collect())
         .collect();
     let mut futures = vec![];
     for (subnet_idx, canister_idx, canister) in canisters

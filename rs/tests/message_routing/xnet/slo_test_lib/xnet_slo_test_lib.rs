@@ -336,7 +336,7 @@ pub fn check_success(
         };
 
     for (i, m) in aggregated_metrics.iter().enumerate() {
-        let attempted_calls = m.calls_attempted;
+        let attempted_calls = m.requests_sent + m.call_errors;
         if attempted_calls != 0 {
             let failed_calls = m.call_errors + m.reject_responses;
             let error_percentage = 100. * failed_calls as f64 / attempted_calls as f64;
@@ -378,7 +378,7 @@ pub fn check_success(
             m.latency_distribution.buckets().last().unwrap().1 + m.reject_responses;
         // All messages sent more than `targeted_latency_seconds` before the end of the
         // test should have gotten a response.
-        let responses_expected = ((m.calls_attempted - m.call_errors) as f64
+        let responses_expected = (m.requests_sent as f64
             * (config.runtime.as_secs() - config.targeted_latency_seconds) as f64
             / config.runtime.as_secs() as f64) as usize;
         // Account for requests enqueued this round (in case canister messages were
@@ -392,16 +392,10 @@ pub fn check_success(
             responses_received
         );
         let responses_expected = responses_expected - config.subnet_to_subnet_rate;
-        let actual = format!(
-            "{}/{}",
-            responses_received,
-            m.calls_attempted - m.call_errors
-        );
+        let actual = format!("{}/{}", responses_received, m.requests_sent);
         let msg = format!(
             "Expected requests sent more than {}s ago ({}/{}) to receive responses",
-            config.targeted_latency_seconds,
-            responses_expected,
-            m.calls_attempted - m.call_errors
+            config.targeted_latency_seconds, responses_expected, m.requests_sent
         );
         expect(
             responses_received >= responses_expected,

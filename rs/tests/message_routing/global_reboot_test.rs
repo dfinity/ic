@@ -26,10 +26,8 @@ Success::
 end::catalog[] */
 
 use anyhow::Result;
-use candid::Principal;
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
-use ic_cdk::api::management_canister::provisional::CanisterId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::InternetComputer;
@@ -48,7 +46,7 @@ use slog::{info, Logger};
 use std::env;
 use std::time::Duration;
 use tokio::time::sleep;
-use xnet_test::Metrics;
+use xnet_test::{CanisterId, Metrics};
 
 const SUBNETS_COUNT: usize = 2;
 const CANISTERS_PER_SUBNET: usize = 3;
@@ -174,11 +172,7 @@ pub fn start_all_canisters(
 ) {
     let topology: Vec<Vec<CanisterId>> = canisters
         .iter()
-        .map(|x| {
-            x.iter()
-                .map(|y| Principal::try_from(y.canister_id_vec8()).unwrap())
-                .collect()
-        })
+        .map(|x| x.iter().map(|y| y.canister_id_vec8()).collect())
         .collect();
     block_on(async {
         for (subnet_idx, canister_idx, canister) in canisters
@@ -215,9 +209,9 @@ pub fn assert_metrics_progress_without_errors(
 
         assert_eq!(pre_reboot.seq_errors, 0);
         assert_eq!(post_reboot.seq_errors, 0);
-        assert!(pre_reboot.requests_sent() > 0);
+        assert!(pre_reboot.requests_sent > 0);
         // Assert positive dynamics after reboot.
-        assert!(post_reboot.requests_sent() > pre_reboot.requests_sent());
+        assert!(post_reboot.requests_sent > pre_reboot.requests_sent);
 
         let responses_pre_reboot = pre_reboot.latency_distribution.buckets().last().unwrap().1
             + pre_reboot.reject_responses;

@@ -1,7 +1,8 @@
 use candid::{CandidType, Deserialize};
-use ic_cdk::api::management_canister::provisional::CanisterId;
-use serde::Serialize;
 use std::time::Duration;
+
+/// Id of a canister is an opaque blob.
+pub type CanisterId = Vec<u8>;
 
 /// Configuration of the network: the outer vector enumerates canisters
 /// installed on the same subnet.
@@ -9,21 +10,13 @@ use std::time::Duration;
 /// This message is used as request payload for "start" call.
 pub type NetworkTopology = Vec<Vec<CanisterId>>;
 
-/// Arguments for the "start" call of this canister.
-#[derive(Default, Clone, CandidType, Deserialize, Debug)]
-pub struct StartArgs {
-    pub network_topology: NetworkTopology,
-    pub canister_to_subnet_rate: u64,
-    pub payload_size_bytes: u64,
-}
-
 /// Metrics observed by this canister.
 ///
 /// This message is used as reply payload for "metrics" query.
-#[derive(Default, Clone, CandidType, Serialize, Deserialize, Debug)]
+#[derive(Debug, Default, CandidType, Deserialize)]
 pub struct Metrics {
-    /// Number of calls attempted (whether successful or not).
-    pub calls_attempted: usize,
+    /// Number of requests sent.
+    pub requests_sent: usize,
 
     /// Number of times a call failed synchronously (e.g. due to a full canister
     /// output queue or running out of cycles).
@@ -46,18 +39,13 @@ pub struct Metrics {
 impl Metrics {
     /// Adds the observations of `other` to `self`.
     pub fn merge(&mut self, other: &Metrics) {
-        self.calls_attempted += other.calls_attempted;
+        self.requests_sent += other.requests_sent;
         self.call_errors += other.call_errors;
         self.reject_responses += other.reject_responses;
         self.seq_errors += other.seq_errors;
         self.latency_distribution.merge(&other.latency_distribution);
         self.log.push_str("-----\n");
         self.log.push_str(&other.log);
-    }
-
-    /// Returns the number of requests sent successfully.
-    pub fn requests_sent(&self) -> usize {
-        self.calls_attempted - self.call_errors
     }
 }
 
@@ -66,7 +54,7 @@ impl Metrics {
 ///
 /// The latency is measured using IC time, which is not guaranteed to be
 /// particularly accurate.
-#[derive(CandidType, Clone, Serialize, Deserialize, Debug)]
+#[derive(Debug, CandidType, Deserialize)]
 pub struct LatencyDistribution {
     buckets: Vec<(i64, usize)>,
     sum_millis: usize,

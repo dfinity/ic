@@ -5,24 +5,16 @@
 //! ```text
 //! cargo build --target wasm32-unknown-unknown --release
 //! ```
-use candid::{CandidType, Deserialize, Principal};
-use futures::future::join_all;
-use ic_cdk::api::management_canister::provisional::CanisterId;
-use ic_cdk::{
-    api::{
-        call::{call, call_with_payment},
-        caller, canister_balance, id, time,
-    },
-    setup,
-};
-use ic_cdk_macros::{heartbeat, query, update};
+use candid::{CandidType, Decode, Deserialize, Encode};
+use dfn_core::api;
 use rand::Rng;
 use rand_pcg::Lcg64Xsh32;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::convert::TryFrom;
 use std::str::FromStr;
 use std::time::Duration;
-use xnet_test::{Metrics, NetworkTopology, StartArgs};
+use xnet_test::{CanisterId, Metrics, NetworkTopology};
 
 thread_local! {
     /// Whether this canister is generating traffic.
@@ -55,12 +47,6 @@ thread_local! {
     static RNG: RefCell<Lcg64Xsh32> = RefCell::new(Lcg64Xsh32::new(0xcafe_f00d_d15e_a5e5, 0x0a02_bdbf_7bb3_c0a7));
 }
 
-/// Input for `return_cycles` method.
-#[derive(CandidType, Deserialize)]
-struct CanisterIdRecord {
-    canister_id: Principal,
-}
-
 /// Request sent by the "fanout" method.
 #[derive(CandidType, Deserialize)]
 struct Request {
@@ -69,8 +55,6 @@ struct Request {
     seq_no: u64,
     /// Local time observed in the round when this message was sent.
     time_nanos: u64,
-    /// Optional padding, to bring the payload to the desired byte size.
-    padding: Vec<u8>,
 }
 
 /// A `Reply` to the `Request` message, sent from the "handle_request" method.
@@ -79,8 +63,6 @@ struct Reply {
     /// Time copied from the corresponding request.  It's used to compute the
     /// roundtrip latency on the caller side.
     time_nanos: u64,
-    /// Optional padding, to bring the payload to the desired byte size.
-    padding: Vec<u8>,
 }
 
 /// State of the XNet messaging.
@@ -110,19 +92,56 @@ impl MessagingState {
     }
 }
 
+/// Calls "msg_reply" with reply being argument encoded as Candid.
+fn candid_reply<T: CandidType>(t: &T) {
+    let msg = candid::Encode!(t).expect("failed to encode reply");
+    api::reply(&msg[..])
+}
+
+/// Encodes `t` as Candid, padded to `PAYLOAD_SIZE`.
+fn candid_encode_padded<T: CandidType>(t: &T) -> Vec<u8> {
+    let msg = candid::Encode!(t, &vec![13u8; 1]).expect("failed to encode message");
+
+    let payload_size = PAYLOAD_SIZE.with(|p| *p.borrow()) as usize;
+    if msg.len() < payload_size {
+        candid::Encode!(t, &vec![13u8; payload_size - msg.len() + 1])
+            .expect("failed to encode message")
+    } else {
+        msg
+    }
+}
+
+/// Returns system time in nanoseconds.
+fn time_nanos() -> u64 {
+    unsafe { api::ic0::time() }
+}
+
+/// Callback for handling replies from "handle_request".
+fn on_reply(_env: *mut ()) {
+    let (reply, _) =
+        candid::Decode!(&api::arg_data()[..], Reply, Vec<u8>).expect("failed to decode response");
+    let elapsed = Duration::from_nanos(time_nanos() - reply.time_nanos);
+    METRICS.with(|m| m.borrow_mut().latency_distribution.observe(elapsed));
+}
+
+/// Callback for handling reject responses from "handle_request".
+fn on_reject(_env: *mut ()) {
+    METRICS.with(|m| m.borrow_mut().reject_responses += 1);
+}
+
 /// Returns true if this canister should continue generating traffic.
 fn is_running() -> bool {
     RUNNING.with(|r| *r.borrow())
 }
 
 /// Canister heartbeat, calls `fanout()` if `RUNNING` is `true`.
-#[heartbeat]
-async fn heartbeat() {
+#[export_name = "canister_heartbeat"]
+fn heartbeat() {
     if !is_running() {
         return;
     }
 
-    fanout().await;
+    fanout();
 }
 
 /// Appends a message to the log, ensuring log size stays below 2000 bytes.
@@ -143,31 +162,37 @@ fn log(message: &str) {
 
 /// Initializes network topology and instructs this canister to start sending
 /// requests to other canisters.
-#[update]
-fn start(start_args: StartArgs) -> String {
+#[export_name = "canister_update start"]
+fn start() {
+    dfn_core::printer::hook();
+    let (network_topology, rate, payload_size) =
+        candid::Decode!(&api::arg_data()[..], NetworkTopology, u64, u64)
+            .expect("failed to decode subnet canister ids");
+
     NETWORK_TOPOLOGY.with(move |canisters| {
-        *canisters.borrow_mut() = start_args.network_topology;
+        *canisters.borrow_mut() = network_topology;
     });
-    PER_SUBNET_RATE.with(|r| *r.borrow_mut() = start_args.canister_to_subnet_rate);
-    PAYLOAD_SIZE.with(|r| *r.borrow_mut() = start_args.payload_size_bytes);
+
+    PER_SUBNET_RATE.with(|r| *r.borrow_mut() = rate);
+    PAYLOAD_SIZE.with(|r| *r.borrow_mut() = payload_size);
 
     RUNNING.with(|r| *r.borrow_mut() = true);
 
-    "started".to_string()
+    candid_reply(&"started");
 }
 
 /// Stops traffic.
-#[update]
-fn stop() -> String {
+#[export_name = "canister_update stop"]
+fn stop() {
     RUNNING.with(|r| *r.borrow_mut() = false);
-    "stopped".to_string()
+    candid_reply(&"stopped");
 }
 
 /// Sends `PER_SUBNET_RATE` messages to random canisters on the remote subnets.
 /// Invoked by the canister heartbeat handler as long as `RUNNING` is `true`
 /// (`start()` was and `stop()` was not yet called).
-async fn fanout() {
-    let self_id = id();
+fn fanout() {
+    let self_id = api::id();
 
     let network_topology =
         NETWORK_TOPOLOGY.with(|network_topology| network_topology.borrow().clone());
@@ -177,98 +202,96 @@ async fn fanout() {
             continue;
         }
 
-        if canisters.contains(&self_id) {
+        if canisters.contains(&self_id.get().as_slice().to_vec()) {
             // Same subnet
             continue;
         }
 
-        let mut futures = vec![];
         for _ in 0..PER_SUBNET_RATE.with(|r| *r.borrow()) {
             let idx = RNG.with(|rng| rng.borrow_mut().gen_range(0..canisters.len()));
-            let canister = canisters[idx];
+            let canister = canisters[idx].clone();
 
-            let seq_no = STATE.with(|s| s.borrow_mut().next_out_seq_no(canister));
+            let seq_no = STATE.with(|s| s.borrow_mut().next_out_seq_no(canister.clone()));
 
-            let payload_size = PAYLOAD_SIZE.with(|p| *p.borrow()) as usize;
-            let payload = Request {
+            let msg = candid_encode_padded(&Request {
                 seq_no,
-                time_nanos: time(),
-                padding: vec![0; payload_size.saturating_sub(16)],
-            };
+                time_nanos: time_nanos(),
+            });
 
-            let res = call::<(Request,), (Reply,)>(canister, "handle_request", (payload,));
-            futures.push(res);
-            METRICS.with(move |m| m.borrow_mut().calls_attempted += 1);
-        }
+            let err_code = api::call_raw(
+                api::CanisterId::try_from(canister.clone()).unwrap(),
+                "handle_request",
+                &msg[..],
+                on_reply,
+                on_reject,
+                None,
+                std::ptr::null_mut(),
+                api::Funds::zero(),
+            );
 
-        let results = join_all(futures).await;
-
-        for res in results {
-            match res {
-                Ok((reply,)) => {
-                    let elapsed = Duration::from_nanos(time() - reply.time_nanos);
-                    METRICS.with(|m| m.borrow_mut().latency_distribution.observe(elapsed));
-                }
-                Err((err_code, err_message)) => {
-                    // Catch whether the call failed due to a synchronous or
-                    // asynchronous error. Based on the current implementation of
-                    // the Rust CDK, a synchronous error will contain a specific
-                    // error message.
-                    if err_message.contains("Couldn't send message") {
-                        log(&format!(
-                            "{} call failed with {:?}",
-                            time() / 1_000_000,
-                            err_code
-                        ));
-                        METRICS.with(|m| m.borrow_mut().call_errors += 1);
-                    } else {
-                        METRICS.with(|m| m.borrow_mut().reject_responses += 1);
-                    }
-                }
+            if err_code != 0 {
+                log(&format!(
+                    "{} call failed with {}",
+                    time_nanos() / 1_000_000,
+                    err_code
+                ));
+                METRICS.with(|m| m.borrow_mut().call_errors += 1);
+            } else {
+                METRICS.with(move |m| m.borrow_mut().requests_sent += 1);
             }
         }
     }
 }
 
 /// Endpoint that handles requests from canisters located on remote subnets.
-#[update]
-fn handle_request(req: Request) -> Reply {
-    let caller = caller();
-    let in_seq_no = STATE.with(|s| s.borrow_mut().set_in_seq_no(caller, req.seq_no));
+#[export_name = "canister_update handle_request"]
+fn handle_request() {
+    let (req, _) =
+        candid::Decode!(&api::arg_data()[..], Request, Vec<u8>).expect("failed to decode request");
+    let caller = api::caller();
+    let in_seq_no = STATE.with(|s| s.borrow_mut().set_in_seq_no(caller.into_vec(), req.seq_no));
 
     if req.seq_no <= in_seq_no {
         METRICS.with(|m| m.borrow_mut().seq_errors += 1);
     }
 
-    let payload_size = PAYLOAD_SIZE.with(|p| *p.borrow()) as usize;
-    Reply {
+    let msg = candid_encode_padded(&Reply {
         time_nanos: req.time_nanos,
-        padding: vec![0; payload_size.saturating_sub(8)],
-    }
+    });
+    api::reply(&msg[..]);
 }
 
-/// Deposits the cycles this canister has minus 1T at the given destination.
-#[update]
-async fn return_cycles(canister_id_record: CanisterIdRecord) -> String {
-    let cycle_refund = canister_balance().saturating_sub(1_000_000_000_000);
-    let _ = call_with_payment::<(CanisterIdRecord,), ()>(
-        Principal::from_str("aaaaa-aa").unwrap(),
+/// Deposits the cycles this canister has minus 1T according to the given
+/// `DepositCyclesArgs`
+#[export_name = "canister_update return_cycles"]
+fn return_cycles() {
+    let cycle_refund = api::canister_cycle_balance().saturating_sub(1_000_000_000_000);
+    let noop = |_| ();
+    let _ = api::call_raw(
+        api::CanisterId::from_str("aaaaa-aa").unwrap(),
         "deposit_cycles",
-        (canister_id_record,),
-        cycle_refund,
-    )
-    .await;
+        &api::arg_data(),
+        noop,
+        noop,
+        None,
+        std::ptr::null_mut(),
+        api::Funds {
+            cycles: cycle_refund,
+        },
+    );
 
-    "ok".to_string()
+    candid_reply(&"ok");
 }
 
 /// Query call that serializes metrics as a candid message.
-#[query]
-fn metrics() -> Metrics {
-    METRICS.with(|m| m.borrow().clone())
+#[export_name = "canister_query metrics"]
+fn metrics() {
+    let msg = METRICS
+        .with(|m| candid::Encode!(&*m.borrow()))
+        .expect("failed to encode metrics");
+
+    api::reply(&msg[..]);
 }
 
 #[export_name = "canister_init"]
-fn main() {
-    setup();
-}
+fn main() {}
