@@ -216,7 +216,7 @@ impl CanisterHttp {
                     let mut cache_guard = RwLockUpgradableReadGuard::upgrade(cache_guard);
                     self.metrics.socks_cache_miss.inc();
 
-                    match self.create_socks_client_for_ip(&next_socks_proxy_addr) {
+                    match self.create_socks_client_for_address(&next_socks_proxy_addr) {
                         Some(client) => {
                             cache_guard.insert(next_socks_proxy_addr.clone(), client.clone());
                             self.metrics.socks_cache_size.set(cache_guard.len() as i64);
