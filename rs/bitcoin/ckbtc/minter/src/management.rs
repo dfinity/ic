@@ -11,8 +11,10 @@ use ic_btc_kyt::{
     CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
 };
 use ic_canister_log::log;
-use ic_cdk::api::call::RejectionCode;
-use ic_cdk::api::management_canister::bitcoin::{BitcoinNetwork, UtxoFilter};
+use ic_cdk::api::{
+    call::RejectionCode,
+    management_canister::bitcoin::{BitcoinNetwork, UtxoFilter},
+};
 use ic_management_canister_types::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
 };
@@ -199,6 +201,57 @@ pub async fn get_utxos<R: CanisterRuntime>(
 
 /// Fetches a subset of UTXOs for the specified address.
 pub async fn bitcoin_get_utxos(request: GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
+    fn cdk_get_utxos_request(
+        request: GetUtxosRequest,
+    ) -> ic_cdk::api::management_canister::bitcoin::GetUtxosRequest {
+        use ic_btc_interface::NetworkInRequest;
+        ic_cdk::api::management_canister::bitcoin::GetUtxosRequest {
+            address: request.address,
+            network: match request.network {
+                NetworkInRequest::Mainnet | NetworkInRequest::mainnet => BitcoinNetwork::Mainnet,
+                NetworkInRequest::Testnet | NetworkInRequest::testnet => BitcoinNetwork::Testnet,
+                NetworkInRequest::Regtest | NetworkInRequest::regtest => BitcoinNetwork::Regtest,
+            },
+            filter: request.filter.map(|filter| match filter {
+                UtxosFilterInRequest::MinConfirmations(confirmations)
+                | UtxosFilterInRequest::min_confirmations(confirmations) => {
+                    UtxoFilter::MinConfirmations(confirmations)
+                }
+                UtxosFilterInRequest::Page(bytes) | UtxosFilterInRequest::page(bytes) => {
+                    UtxoFilter::Page(bytes.into_vec())
+                }
+            }),
+        }
+    }
+
+    fn parse_cdk_get_utxos_response(
+        response: ic_cdk::api::management_canister::bitcoin::GetUtxosResponse,
+    ) -> GetUtxosResponse {
+        GetUtxosResponse {
+            utxos: response
+                .utxos
+                .into_iter()
+                .map(|utxo| {
+                    let txid_bytes: [u8; 32] =
+                        utxo.outpoint.txid.try_into().unwrap_or_else(|v: Vec<u8>| {
+                            panic!("Expected TXID to be length 32, but was length {}", v.len())
+                        });
+                    Utxo {
+                        outpoint: OutPoint {
+                            txid: Txid::from(txid_bytes),
+                            vout: utxo.outpoint.vout,
+                        },
+                        value: utxo.value,
+                        height: utxo.height,
+                    }
+                })
+                .collect(),
+            tip_block_hash: response.tip_block_hash,
+            tip_height: response.tip_height,
+            next_page: response.next_page.map(ByteBuf::from),
+        }
+    }
+
     ic_cdk::api::management_canister::bitcoin::bitcoin_get_utxos(cdk_get_utxos_request(request))
         .await
         .map(|(response,)| parse_cdk_get_utxos_response(response))
@@ -333,63 +386,4 @@ fn cdk_network(network: Network) -> BitcoinNetwork {
         Network::Testnet => BitcoinNetwork::Testnet,
         Network::Regtest => BitcoinNetwork::Regtest,
     }
-}
-
-fn cdk_get_utxos_request(
-    request: GetUtxosRequest,
-) -> ic_cdk::api::management_canister::bitcoin::GetUtxosRequest {
-    use ic_btc_interface::NetworkInRequest::{
-        mainnet, regtest, testnet, Mainnet, Regtest, Testnet,
-    };
-    ic_cdk::api::management_canister::bitcoin::GetUtxosRequest {
-        address: request.address,
-        network: match request.network {
-            Mainnet | mainnet => BitcoinNetwork::Mainnet,
-            Testnet | testnet => BitcoinNetwork::Testnet,
-            Regtest | regtest => BitcoinNetwork::Regtest,
-        },
-        filter: request.filter.map(cdk_utxo_filter),
-    }
-}
-
-fn cdk_utxo_filter(filter: UtxosFilterInRequest) -> UtxoFilter {
-    use UtxosFilterInRequest::{min_confirmations, page, MinConfirmations, Page};
-    match filter {
-        MinConfirmations(confirmations) | min_confirmations(confirmations) => {
-            UtxoFilter::MinConfirmations(confirmations)
-        }
-        Page(bytes) | page(bytes) => UtxoFilter::Page(bytes.into_vec()),
-    }
-}
-
-fn parse_cdk_get_utxos_response(
-    response: ic_cdk::api::management_canister::bitcoin::GetUtxosResponse,
-) -> GetUtxosResponse {
-    GetUtxosResponse {
-        utxos: response.utxos.into_iter().map(parse_cdk_utxo).collect(),
-        tip_block_hash: response.tip_block_hash,
-        tip_height: response.tip_height,
-        next_page: response.next_page.map(ByteBuf::from),
-    }
-}
-
-fn parse_cdk_utxo(utxo: ic_cdk::api::management_canister::bitcoin::Utxo) -> Utxo {
-    Utxo {
-        outpoint: OutPoint {
-            txid: parse_cdk_txid(utxo.outpoint.txid),
-            vout: utxo.outpoint.vout,
-        },
-        value: utxo.value,
-        height: utxo.height,
-    }
-}
-
-fn parse_cdk_txid(txid: Vec<u8>) -> Txid {
-    let bytes: [u8; 32] = txid.try_into().unwrap_or_else(|v: Vec<u8>| {
-        panic!(
-            "Expected transaction ID to be length 32, but was length {}",
-            v.len()
-        )
-    });
-    Txid::from(bytes)
 }
