@@ -18,6 +18,7 @@ candid = { workspace = true }
 ciborium = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
+lazy_static = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
@@ -36,6 +37,6 @@ ic-base-types = { path = "../../types/base_types" }
 ic-types = { path = "../../types/types" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
-pocket-ic = { path = "../../../packages/pocket-ic" } 
+pocket-ic = { path = "../../../packages/pocket-ic" }
 tokio = { workspace = true }
 scraper = "0.17.1"
