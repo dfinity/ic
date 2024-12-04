@@ -1295,8 +1295,8 @@ impl SandboxSafeSystemState {
         let wasm_memory_limit =
             wasm_memory_limit.unwrap_or_else(|| NumBytes::new(4 * 1024 * 1024 * 1024));
 
-        // If the canister has memory allocation, then it maximum allowed Wasm memory can be calculated
-        // as min(memory_allocation - used_stable_memory - snapshots_memory_usage, wasm_memory_limit).
+        // If the canister has memory allocation, then it maximum allowed Wasm memory can be calculated as
+        // min(memory_allocation - used_stable_memory - snapshots_memory_usage - wasm_chunk_store_memory_usage, wasm_memory_limit).
         let wasm_capacity = memory_allocation.map_or_else(
             || wasm_memory_limit,
             |memory_allocation| {
@@ -1307,20 +1307,23 @@ impl SandboxSafeSystemState {
                     memory_allocation
                 );
                 std::cmp::min(
-                    memory_allocation - used_stable_memory - self.snapshots_memory_usage,
+                    NumBytes::new(memory_allocation.get().saturating_sub(
+                        used_stable_memory.get()
+                            + self.snapshots_memory_usage.get()
+                            + self.wasm_chunk_store_memory_usage.get(),
+                    )),
                     wasm_memory_limit,
                 )
             },
         );
 
         // Conceptually we can think that the remaining Wasm memory is equal to:
-        // `wasm_capacity - used_wasm_memory - wasm_chunk_store_memory_usage`
+        // `wasm_capacity - used_wasm_memory`
         // and that should be compared with `wasm_memory_threshold` when checking for the
         // condition for the hook. However, since `wasm_memory_limit` is ignored in some
         // executions as stated above it is possible that `used_wasm_memory` is greater
         // than `wasm_capacity` to avoid overflowing subtraction we adopted inequality.
-        let is_condition_satisfied = wasm_capacity
-            < used_wasm_memory + self.wasm_memory_threshold + self.wasm_chunk_store_memory_usage;
+        let is_condition_satisfied = wasm_capacity < used_wasm_memory + self.wasm_memory_threshold;
         self.system_state_changes
             .on_low_wasm_memory_hook_condition_check_result = Some(is_condition_satisfied);
     }
@@ -1585,17 +1588,19 @@ mod tests {
 
         let wasm_capacity = memory_allocation.map_or(wasm_memory_limit, |memory_allocation| {
             std::cmp::min(
-                memory_allocation - used_stable_memory - snapshot_memory_usage,
+                memory_allocation.saturating_sub(
+                    used_stable_memory + snapshot_memory_usage + wasm_chunk_store_memory_usage,
+                ),
                 wasm_memory_limit,
             )
         });
 
-        wasm_capacity < used_wasm_memory + wasm_memory_threshold + wasm_chunk_store_memory_usage
+        wasm_capacity < used_wasm_memory + wasm_memory_threshold
     }
     #[test]
     fn test_on_low_wasm_memory_hook_condition_update() {
         for wasm_memory_threshold in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
-            for memory_allocation in [None, Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)] {
+            for memory_allocation in [None, Some(3 * GIB), Some(4 * GIB)] {
                 for wasm_memory_limit in
                     [None, Some(GIB), Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)]
                 {
