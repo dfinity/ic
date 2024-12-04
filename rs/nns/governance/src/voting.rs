@@ -6,7 +6,6 @@ use crate::{
 };
 #[cfg(not(test))]
 use ic_nervous_system_long_message::is_message_over_threshold;
-use ic_nervous_system_long_message::noop_self_call_if_over_instructions;
 #[cfg(test)]
 use ic_nervous_system_temporary::Temporary;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -19,6 +18,8 @@ use std::{
 
 const BILLION: u64 = 1_000_000_000;
 
+/// The hard limit for the number of instructions that can be executed in a single call context.
+/// This leaves room for 750 thousand neurons with complex following.
 const HARD_VOTING_INSTRUCTIONS_LIMIT: u64 = 750 * BILLION;
 // For production, we want this higher so that we can process more votes, but without affecting
 // the overall responsiveness of the canister. 1 Billion seems like a reasonable compromise.
@@ -47,6 +48,24 @@ fn temporarily_set_over_soft_message_limit(over: bool) -> Temporary {
 #[cfg(test)]
 fn over_soft_message_limit() -> bool {
     OVER_SOFT_MESSAGE_LIMIT.with(|over| over.get())
+}
+
+async fn noop_self_call_if_over_instructions(
+    message_threshold: u64,
+    panic_threshold: Option<u64>,
+) -> Result<(), String> {
+    // canbench doesn't currently support query calls inside of benchmarks
+    // We send a no-op message to self to break up the call context into more messages
+    if cfg!(not(feature = "canbench-rs")) {
+        ic_nervous_system_long_message::noop_self_call_if_over_instructions(
+            message_threshold,
+            panic_threshold,
+        )
+        .await
+        .map_err(|e| e.to_string())
+    } else {
+        Ok(())
+    }
 }
 
 impl Governance {
@@ -87,14 +106,20 @@ impl Governance {
                     is_voting_finished = machine.is_voting_finished();
                 });
             });
-            // canbench doesn't currently support query calls inside of benchmarks
-            if cfg!(not(feature = "canbench-rs")) {
-                // We send a no-op message to self to break up the call context into more messages
-                noop_self_call_if_over_instructions(
-                    SOFT_VOTING_INSTRUCTIONS_LIMIT,
-                    Some(HARD_VOTING_INSTRUCTIONS_LIMIT),
-                )
-                .await;
+            // Realistically we will not hit the hard limit for a long time.
+            // TODO DO NOT MERGE what behavior if we hit the hard limit?  Exit this function?
+            if let Err(e) = noop_self_call_if_over_instructions(
+                SOFT_VOTING_INSTRUCTIONS_LIMIT,
+                Some(HARD_VOTING_INSTRUCTIONS_LIMIT),
+            )
+            .await
+            {
+                println!(
+                    "Error in cast_vote_and_cascade_follow, \
+                        voting will be processed asynchronously: {}",
+                    e
+                );
+                break;
             }
         }
         // We use the time from the beginning of the function to retain the behaviors needed
@@ -179,14 +204,6 @@ impl Governance {
         // Most of the time, we are not going to see new votes cast in this function, but this
         // is here to make sure the normal proposal processing still applies
         for proposal_id in proposals_with_new_votes_cast {
-            let proposal_data = self.heap_data.proposals.get(&proposal_id.id).unwrap();
-            let topic = proposal_data.topic();
-            let voting_period_seconds = self.voting_period_seconds()(topic);
-            self.heap_data
-                .proposals
-                .get_mut(&proposal_id.id)
-                .unwrap()
-                .recompute_tally(self.env.now(), voting_period_seconds);
             self.process_proposal(proposal_id.id);
         }
     }
