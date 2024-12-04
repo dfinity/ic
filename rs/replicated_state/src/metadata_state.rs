@@ -191,8 +191,8 @@ pub struct NetworkTopology {
     pub canister_migrations: Arc<CanisterMigrations>,
     pub nns_subnet_id: SubnetId,
 
-    /// Mapping from master public key_id to a list of subnets which can sign with the
-    /// given key. Keys without any signing subnets are not included in the map.
+    /// Mapping from master public key_id to a list of subnets which can use the
+    /// given key. Keys without any chain-key enabled subnets are not included in the map.
     pub chain_key_enabled_subnets: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
 
     /// The ID of the canister to forward bitcoin testnet requests to.
@@ -359,10 +359,10 @@ pub struct SubnetTopology {
     pub subnet_type: SubnetType,
     pub subnet_features: SubnetFeatures,
     /// Chain keys held by this subnet. Just because a subnet holds a Chain key
-    /// doesn't mean the subnet has been enabled to sign with that key. This
+    /// doesn't mean the subnet has been enabled to use that key. This
     /// will happen when a key is shared with a second subnet which holds it as
     /// a backup. An additional NNS proposal will be needed to allow the subnet
-    /// holding the key as backup to actually produce signatures.
+    /// holding the key as backup to actually produce signatures or VetKd key derivations.
     pub chain_keys_held: BTreeSet<MasterPublicKeyId>,
 }
 

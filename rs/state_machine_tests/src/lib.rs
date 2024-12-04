@@ -279,7 +279,7 @@ pub fn finalize_registry(
 fn make_nodes_registry(
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    chain_keys_signing_enabled_status: &BTreeMap<MasterPublicKeyId, bool>,
+    chain_keys_enabled_status: &BTreeMap<MasterPublicKeyId, bool>,
     features: SubnetFeatures,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     nodes: &Vec<StateMachineNode>,
@@ -293,15 +293,15 @@ fn make_nodes_registry(
         let latest_registry_version = registry_data_provider.latest_version();
         RegistryVersion::from(latest_registry_version.get() + 1)
     };
-    // ECDSA subnet_id must be different from nns_subnet_id, otherwise
-    // `sign_with_ecdsa` won't be charged.
+    // subnet_id must be different from nns_subnet_id, otherwise
+    // the IC00 call won't be charged.
     let subnet_id_proto = SubnetIdProto {
         principal_id: Some(PrincipalIdIdProto {
             raw: subnet_id.get_ref().to_vec(),
         }),
     };
-    for (key_id, is_signing_enabled) in chain_keys_signing_enabled_status {
-        if !*is_signing_enabled {
+    for (key_id, is_enabled) in chain_keys_enabled_status {
+        if !*is_enabled {
             continue;
         }
         registry_data_provider
@@ -408,7 +408,7 @@ fn make_nodes_registry(
         .with_max_block_payload_size(max_block_payload_size)
         .with_dkg_interval_length(u64::MAX / 2) // use the genesis CUP throughout the test
         .with_chain_key_config(ChainKeyConfig {
-            key_configs: chain_keys_signing_enabled_status
+            key_configs: chain_keys_enabled_status
                 .iter()
                 .map(|(key_id, _)| KeyConfig {
                     key_id: key_id.clone(),
@@ -914,7 +914,7 @@ pub struct StateMachineBuilder {
     nns_subnet_id: Option<SubnetId>,
     subnet_id: Option<SubnetId>,
     routing_table: RoutingTable,
-    chain_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
+    chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     ecdsa_signature_fee: Option<Cycles>,
     schnorr_signature_fee: Option<Cycles>,
     is_ecdsa_signing_enabled: bool,
@@ -943,7 +943,7 @@ impl StateMachineBuilder {
             nns_subnet_id: None,
             subnet_id: None,
             routing_table: RoutingTable::new(),
-            chain_keys_signing_enabled_status: Default::default(),
+            chain_keys_enabled_status: Default::default(),
             ecdsa_signature_fee: None,
             schnorr_signature_fee: None,
             is_ecdsa_signing_enabled: true,
@@ -1060,12 +1060,12 @@ impl StateMachineBuilder {
     }
 
     pub fn with_chain_key(mut self, key_id: MasterPublicKeyId) -> Self {
-        self.chain_keys_signing_enabled_status.insert(key_id, true);
+        self.chain_keys_enabled_status.insert(key_id, true);
         self
     }
 
     pub fn with_disabled_chain_key(mut self, key_id: MasterPublicKeyId) -> Self {
-        self.chain_keys_signing_enabled_status.insert(key_id, false);
+        self.chain_keys_enabled_status.insert(key_id, false);
         self
     }
 
@@ -1150,7 +1150,7 @@ impl StateMachineBuilder {
             self.subnet_type,
             self.subnet_size,
             self.subnet_id,
-            self.chain_keys_signing_enabled_status,
+            self.chain_keys_enabled_status,
             self.ecdsa_signature_fee,
             self.schnorr_signature_fee,
             self.is_ecdsa_signing_enabled,
@@ -1450,7 +1450,7 @@ impl StateMachine {
         subnet_type: SubnetType,
         subnet_size: usize,
         subnet_id: Option<SubnetId>,
-        chain_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
+        chain_keys_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
         ecdsa_signature_fee: Option<Cycles>,
         schnorr_signature_fee: Option<Cycles>,
         is_ecdsa_signing_enabled: bool,
@@ -1499,7 +1499,7 @@ impl StateMachine {
         let registry_client = make_nodes_registry(
             subnet_id,
             subnet_type,
-            &chain_keys_signing_enabled_status,
+            &chain_keys_enabled_status,
             features,
             registry_data_provider.clone(),
             &nodes,
@@ -1621,7 +1621,7 @@ impl StateMachine {
         let mut chain_key_subnet_public_keys = BTreeMap::new();
         let mut chain_key_subnet_secret_keys = BTreeMap::new();
 
-        for key_id in chain_keys_signing_enabled_status.keys() {
+        for key_id in chain_keys_enabled_status.keys() {
             let (public_key, private_key) = match key_id {
                 MasterPublicKeyId::Ecdsa(id) if *id == master_ecdsa_public_key => {
                     // ckETH tests rely on using the hard-coded ecdsa_secret_key
