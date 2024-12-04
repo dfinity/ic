@@ -8,7 +8,7 @@ use ic_icrc1_index_ng::{IndexArg, UpgradeArg as IndexUpgradeArg};
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
     BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
-use ic_ledger_suite_state_machine_tests::metrics::retrieve_metrics;
+use ic_ledger_suite_state_machine_tests::metrics::{parse_metric, retrieve_metrics};
 use ic_ledger_suite_state_machine_tests::{
     generate_transactions, get_all_ledger_and_archive_blocks, get_blocks, list_archives,
     wait_ledger_ready, TransactionGenerationParameters,
@@ -21,6 +21,11 @@ use std::str::FromStr;
 
 mod common;
 
+/// The number of instructions that can be executed in a single canister upgrade.
+/// The limit (<https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits#resource-constraints-and-limits>)
+/// is actually 300B, but in the ledger implementation we use a value slightly lower than the old
+/// limit 200B.
+const CANISTER_UPGRADE_INSTRUCTION_LIMIT: u64 = 199_950_000_000;
 const NUM_TRANSACTIONS_PER_TYPE: usize = 20;
 const MINT_MULTIPLIER: u64 = 10_000;
 const TRANSFER_MULTIPLIER: u64 = 1000;
@@ -125,6 +130,11 @@ struct LedgerSuiteConfig {
     master_wasms: &'static Wasms,
 }
 
+enum ExpectMigration {
+    Yes,
+    No,
+}
+
 impl LedgerSuiteConfig {
     fn new(
         canister_ids_and_name: (&'static str, &'static str, &'static str),
@@ -203,7 +213,11 @@ impl LedgerSuiteConfig {
         }
     }
 
-    fn print_ledger_metrics(&self, state_machine: &StateMachine) {
+    fn check_ledger_metrics(
+        &self,
+        state_machine: &StateMachine,
+        expect_migration: ExpectMigration,
+    ) {
         let ledger_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
         let metrics = retrieve_metrics(state_machine, ledger_id);
@@ -211,6 +225,29 @@ impl LedgerSuiteConfig {
         for metric in metrics {
             println!("  {}", metric);
         }
+        if expect_migration {
+            let migration_steps = parse_metric(
+                state_machine,
+                ledger_id,
+                "ledger_stable_upgrade_migration_steps",
+            );
+            assert!(
+                migration_steps > 0u64,
+                "Migration steps ({}) should be greater than 0",
+                migration_steps
+            );
+        }
+        let upgrade_instructions = parse_metric(
+            state_machine,
+            ledger_id,
+            "ledger_total_upgrade_instructions_consumed",
+        );
+        assert!(
+            upgrade_instructions < CANISTER_UPGRADE_INSTRUCTION_LIMIT,
+            "Upgrade instructions ({}) should be less than the instruction limit ({})",
+            upgrade_instructions,
+            CANISTER_UPGRADE_INSTRUCTION_LIMIT
+        );
     }
 
     fn upgrade_archives_or_panic(&self, state_machine: &StateMachine, wasm: &Wasm) {
@@ -247,8 +284,12 @@ impl LedgerSuiteConfig {
         println!("Upgraded {} index '{}'", self.canister_name, self.index_id);
     }
 
-    fn upgrade_ledger(&self, state_machine: &StateMachine, wasm: &Wasm) -> Result<(), UserError> {
-        self.print_ledger_metrics(state_machine);
+    fn upgrade_ledger(
+        &self,
+        state_machine: &StateMachine,
+        wasm: &Wasm,
+        expect_migration: ExpectMigration,
+    ) -> Result<(), UserError> {
         let canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
         let args = ic_icrc1_ledger::LedgerArgument::Upgrade(None);
@@ -271,7 +312,7 @@ impl LedgerSuiteConfig {
                     Err(e)
                 }
             };
-        self.print_ledger_metrics(state_machine);
+        self.check_ledger_metrics(state_machine, expect_migration);
         res
     }
 
@@ -279,7 +320,11 @@ impl LedgerSuiteConfig {
         // Upgrade each canister twice to exercise pre-upgrade
         self.upgrade_index_or_panic(state_machine, &self.mainnet_wasms.index_wasm);
         self.upgrade_index_or_panic(state_machine, &self.mainnet_wasms.index_wasm);
-        match self.upgrade_ledger(state_machine, &self.mainnet_wasms.ledger_wasm) {
+        match self.upgrade_ledger(
+            state_machine,
+            &self.mainnet_wasms.ledger_wasm,
+            ExpectMigration::No,
+        ) {
             Ok(_) => {
                 panic!("should not successfully downgrade ledger");
             }
@@ -296,7 +341,7 @@ impl LedgerSuiteConfig {
         // Upgrade each canister twice to exercise pre-upgrade
         self.upgrade_index_or_panic(state_machine, &self.master_wasms.index_wasm);
         self.upgrade_index_or_panic(state_machine, &self.master_wasms.index_wasm);
-        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm)
+        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm, ExpectMigration::Yes)
             .or_else(|e| {
                 match (
                     e.description().contains(
@@ -308,16 +353,21 @@ impl LedgerSuiteConfig {
                     // migration to stable structures, the ledger canister must be at least at V2,
                     // i.e., the ledger state must be managed by the memory manager.
                     (true, Some(wasm_v2)) => {
-                        self.upgrade_ledger(state_machine, wasm_v2)
+                        self.upgrade_ledger(state_machine, wasm_v2, ExpectMigration::No)
                             .expect("should successfully upgrade ledger to V2");
-                        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm)
+                        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm, ExpectMigration::Yes)
                     }
                     _ => Err(e)
                 }
             })
             .expect("should successfully upgrade ledger");
-        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm)
-            .expect("should successfully upgrade ledger");
+        // No migration expected in second upgrade to the same version
+        self.upgrade_ledger(
+            state_machine,
+            &self.master_wasms.ledger_wasm,
+            ExpectMigration::No,
+        )
+        .expect("should successfully upgrade ledger");
         self.upgrade_archives_or_panic(state_machine, &self.master_wasms.archive_wasm);
         self.upgrade_archives_or_panic(state_machine, &self.master_wasms.archive_wasm);
     }
