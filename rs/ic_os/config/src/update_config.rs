@@ -274,100 +274,106 @@ pub fn update_hostos_config(
     deployment_json_path: &Path,
     hostos_config_json_path: &PathBuf,
 ) -> Result<()> {
-    let hostos_config_json_path = Path::new(&hostos_config_json_path);
+    let old_config_exists = config_ini_path.exists();
 
-    let ConfigIniSettings {
-        ipv6_prefix,
-        ipv6_prefix_length,
-        ipv6_gateway,
-        ipv4_address,
-        ipv4_gateway,
-        ipv4_prefix_length,
-        domain_name,
-        verbose,
-        node_reward_type,
-    } = get_config_ini_settings(config_ini_path)?;
+    if old_config_exists {
+        let hostos_config_json_path = Path::new(&hostos_config_json_path);
 
-    let deterministic_config = DeterministicIpv6Config {
-        prefix: ipv6_prefix,
-        prefix_length: ipv6_prefix_length,
-        gateway: ipv6_gateway,
-    };
+        let ConfigIniSettings {
+            ipv6_prefix,
+            ipv6_prefix_length,
+            ipv6_gateway,
+            ipv4_address,
+            ipv4_gateway,
+            ipv4_prefix_length,
+            domain_name,
+            verbose,
+            node_reward_type,
+        } = get_config_ini_settings(config_ini_path)?;
 
-    let ipv4_config = match (ipv4_address, ipv4_gateway, ipv4_prefix_length) {
-        (Some(address), Some(gateway), Some(prefix_length)) => Some(Ipv4Config {
-            address,
-            gateway,
-            prefix_length,
-        }),
-        (None, None, None) => None,
-        _ => {
-            println!("Warning: Partial IPv4 configuration provided. All parameters are required for IPv4 configuration.");
-            None
-        }
-    };
+        let deterministic_config = DeterministicIpv6Config {
+            prefix: ipv6_prefix,
+            prefix_length: ipv6_prefix_length,
+            gateway: ipv6_gateway,
+        };
 
-    let network_settings = NetworkSettings {
-        ipv6_config: Ipv6Config::Deterministic(deterministic_config),
-        ipv4_config,
-        domain_name,
-    };
+        let ipv4_config = match (ipv4_address, ipv4_gateway, ipv4_prefix_length) {
+            (Some(address), Some(gateway), Some(prefix_length)) => Some(Ipv4Config {
+                address,
+                gateway,
+                prefix_length,
+            }),
+            (None, None, None) => None,
+            _ => {
+                println!("Warning: Partial IPv4 configuration provided. All parameters are required for IPv4 configuration.");
+                None
+            }
+        };
 
-    let deployment_json_settings = get_deployment_settings(deployment_json_path)?;
+        let network_settings = NetworkSettings {
+            ipv6_config: Ipv6Config::Deterministic(deterministic_config),
+            ipv4_config,
+            domain_name,
+        };
 
-    let logging = Logging {
-        elasticsearch_hosts: deployment_json_settings.logging.hosts.to_string(),
-        elasticsearch_tags: None,
-    };
+        let deployment_json_settings = get_deployment_settings(deployment_json_path)?;
 
-    let mgmt_mac = resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac)?;
+        let logging = Logging {
+            elasticsearch_hosts: deployment_json_settings.logging.hosts.to_string(),
+            elasticsearch_tags: None,
+        };
 
-    let use_nns_public_key = Path::new("/boot/config/nns_public_key.pem").exists();
-    let use_node_operator_private_key =
-        Path::new("/boot/config/node_operator_private_key.pem").exists();
-    let use_ssh_authorized_keys = Path::new("/boot/config/ssh_authorized_keys").exists();
+        let mgmt_mac = resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac)?;
 
-    let icos_settings = ICOSSettings {
-        node_reward_type,
-        mgmt_mac,
-        deployment_environment: deployment_json_settings.deployment.name.parse()?,
-        logging,
-        use_nns_public_key,
-        nns_urls: deployment_json_settings.nns.url.clone(),
-        use_node_operator_private_key,
-        use_ssh_authorized_keys,
-        icos_dev_settings: ICOSDevSettings::default(),
-    };
+        let use_nns_public_key = Path::new("/boot/config/nns_public_key.pem").exists();
+        let use_node_operator_private_key =
+            Path::new("/boot/config/node_operator_private_key.pem").exists();
+        let use_ssh_authorized_keys = Path::new("/boot/config/ssh_authorized_keys").exists();
 
-    let hostos_settings = HostOSSettings {
-        vm_memory: deployment_json_settings.resources.memory,
-        vm_cpu: deployment_json_settings
-            .resources
-            .cpu
-            .clone()
-            .unwrap_or("kvm".to_string()),
-        verbose,
-    };
+        let icos_settings = ICOSSettings {
+            node_reward_type,
+            mgmt_mac,
+            deployment_environment: deployment_json_settings.deployment.name.parse()?,
+            logging,
+            use_nns_public_key,
+            nns_urls: deployment_json_settings.nns.url.clone(),
+            use_node_operator_private_key,
+            use_ssh_authorized_keys,
+            icos_dev_settings: ICOSDevSettings::default(),
+        };
 
-    let guestos_settings = GuestOSSettings::default();
+        let hostos_settings = HostOSSettings {
+            vm_memory: deployment_json_settings.resources.memory,
+            vm_cpu: deployment_json_settings
+                .resources
+                .cpu
+                .clone()
+                .unwrap_or("kvm".to_string()),
+            verbose,
+        };
 
-    let hostos_config = HostOSConfig {
-        config_version: CONFIG_VERSION.to_string(),
-        network_settings,
-        icos_settings,
-        hostos_settings,
-        guestos_settings,
-    };
+        let guestos_settings = GuestOSSettings::default();
 
-    // HostOSConfig is safe to log; it does not contain any secret material
-    println!("New HostOSConfig: {:?}", hostos_config);
+        let hostos_config = HostOSConfig {
+            config_version: CONFIG_VERSION.to_string(),
+            network_settings,
+            icos_settings,
+            hostos_settings,
+            guestos_settings,
+        };
 
-    serialize_and_write_config(hostos_config_json_path, &hostos_config)?;
+        // HostOSConfig is safe to log; it does not contain any secret material
+        println!("New HostOSConfig: {:?}", hostos_config);
 
-    println!(
-        "New HostOSConfig has been written to {}",
-        hostos_config_json_path.display()
-    );
+        serialize_and_write_config(hostos_config_json_path, &hostos_config)?;
+
+        println!(
+            "New HostOSConfig has been written to {}",
+            hostos_config_json_path.display()
+        );
+    } else {
+        println!("No update-config action taken.");
+    }
 
     Ok(())
 }
