@@ -130,6 +130,7 @@ struct LedgerSuiteConfig {
     master_wasms: &'static Wasms,
 }
 
+#[derive(Eq, PartialEq)]
 enum ExpectMigration {
     Yes,
     No,
@@ -225,7 +226,7 @@ impl LedgerSuiteConfig {
         for metric in metrics {
             println!("  {}", metric);
         }
-        if expect_migration {
+        if expect_migration == ExpectMigration::Yes {
             let migration_steps = parse_metric(
                 state_machine,
                 ledger_id,
