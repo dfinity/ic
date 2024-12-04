@@ -1,5 +1,15 @@
+type StartArgs = record {
+  network_topology : vec vec principal;
+  canister_to_subnet_rate : nat64;
+  payload_size_bytes : nat64;
+};
+
+type CanisterIdRecord = record {
+  canister_id : principal;
+};
+
 service : {
-  start : (vec vec blob, nat64, nat64) -> (text);
+  start : (StartArgs) -> (text);
   stop : () -> (text);
-  return_cycles : () -> (text);
-}
+  return_cycles : (CanisterIdRecord) -> (text);
+};

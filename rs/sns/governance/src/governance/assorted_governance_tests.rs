@@ -13,6 +13,7 @@ use super::test_helpers::{
 use super::*;
 use crate::{
     pb::v1::{
+        governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
         manage_neuron_response,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
         neuron, Account as AccountProto, Motion, NeuronPermissionType, ProposalData, ProposalId,
@@ -1634,6 +1635,13 @@ fn test_distribute_rewards_does_not_block_upgrades() {
         GovernanceProto {
             root_canister_id: Some(root_canister_id.get()),
             deployed_version: Some(current_version.clone().into()),
+            cached_upgrade_steps: Some(CachedUpgradeStepsPb {
+                upgrade_steps: Some(Versions {
+                    versions: vec![current_version.clone().into(), next_version.clone().into()],
+                }),
+                requested_timestamp_seconds: Some(111),
+                response_timestamp_seconds: Some(222),
+            }),
             parameters: Some(NervousSystemParameters {
                 voting_rewards_parameters: Some(VotingRewardsParameters {
                     round_duration_seconds: Some(ONE_DAY_SECONDS),
@@ -1726,7 +1734,7 @@ fn test_distribute_rewards_does_not_block_upgrades() {
     assert_matches!(
         &governance.proto.upgrade_journal.clone().unwrap().entries[..],
         [UpgradeJournalEntry {
-            timestamp_seconds: _,
+            timestamp_seconds: Some(_),
             event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
                 upgrade_journal_entry::UpgradeOutcome {
                     human_readable: Some(_),
@@ -1819,24 +1827,43 @@ fn test_check_upgrade_status_fails_if_upgrade_not_finished_in_time() {
     assert!(governance.proto.pending_version.is_none());
     assert_eq!(
         governance.proto.deployed_version.unwrap(),
-        current_version.into()
+        current_version.clone().into()
     );
 
     // Check that the upgrade journal reflects the timed-out upgrade attempt
-    assert_matches!(
-        &governance.proto.upgrade_journal.clone().unwrap().entries[..],
-        [UpgradeJournalEntry {
-            timestamp_seconds: _,
-            event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
-                upgrade_journal_entry::UpgradeOutcome {
-                    human_readable: Some(_),
-                    status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
-                        Empty {}
-                    )),
-                }
-            )),
-        }]
-    )
+    let upgrade_journal = governance.proto.upgrade_journal.clone().unwrap();
+    let observed_upgrade_steps = assert_matches!(
+        &upgrade_journal.entries[..],
+        [
+            UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                    upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: Some(_),
+                        status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
+                            Empty {}
+                        )),
+                    }
+                )),
+            },
+            UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                    upgrade_journal_entry::UpgradeStepsReset {
+                        human_readable: Some(_),
+                        upgrade_steps: Some(observed_upgrade_steps),
+                    }
+                )),
+            },
+        ] => observed_upgrade_steps
+    );
+
+    assert_eq!(
+        observed_upgrade_steps,
+        &Versions {
+            versions: vec![current_version.into()]
+        }
+    );
 }
 
 #[test]
@@ -1959,21 +1986,34 @@ fn test_check_upgrade_status_succeeds() {
     // Check that the upgrade journal reflects the succeeded upgrade
     assert_eq!(
         governance.proto.upgrade_journal.clone().unwrap().entries,
-        vec![UpgradeJournalEntry {
-            timestamp_seconds: Some(now),
-            event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
-                upgrade_journal_entry::UpgradeOutcome {
-                    human_readable: Some(format!(
-                        "Upgrade marked successful at timestamp {} seconds, new {:?}",
-                        governance.env.now(),
-                        Version::from(next_version),
-                    )),
-                    status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
-                        Empty {}
-                    )),
-                }
-            )),
-        }]
+        vec![
+            UpgradeJournalEntry {
+                timestamp_seconds: Some(now),
+                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                    upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: Some(format!(
+                            "Upgrade marked successful at timestamp {} seconds, new {:?}",
+                            governance.env.now(),
+                            Version::from(next_version.clone()),
+                        )),
+                        status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
+                            Empty {}
+                        )),
+                    }
+                )),
+            },
+            UpgradeJournalEntry {
+                timestamp_seconds: Some(now),
+                event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                    upgrade_journal_entry::UpgradeStepsReset {
+                        human_readable: Some("Initializing the cache".to_string()),
+                        upgrade_steps: Some(Versions {
+                            versions: vec![Version::from(next_version)],
+                        }),
+                    }
+                )),
+            },
+        ]
     )
 }
 
@@ -2077,7 +2117,7 @@ fn test_check_upgrade_not_yet_failed_if_canister_summary_errs_and_before_mark_fa
     );
     assert_eq!(
         governance.proto.deployed_version.clone().unwrap(),
-        current_version.into()
+        current_version.clone().into()
     );
     // After we run our periodic tasks, the version should be marked as successful
     governance.run_periodic_tasks().now_or_never();
@@ -2109,8 +2149,21 @@ fn test_check_upgrade_not_yet_failed_if_canister_summary_errs_and_before_mark_fa
 
     assert!(proposal_data.failure_reason.is_none());
 
-    // Check that the upgrade journal has not been appended to
-    assert_eq!(governance.proto.upgrade_journal, None)
+    let journal = governance.proto.upgrade_journal.unwrap();
+    assert_eq!(
+        &journal.entries[..],
+        [UpgradeJournalEntry {
+            timestamp_seconds: Some(governance.env.now(),),
+            event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                upgrade_journal_entry::UpgradeStepsReset {
+                    human_readable: Some("Initializing the cache".to_string(),),
+                    upgrade_steps: Some(Versions {
+                        versions: vec![current_version.into()],
+                    }),
+                },
+            ),),
+        }],
+    );
 }
 
 #[test]
@@ -2252,17 +2305,28 @@ fn test_check_upgrade_fails_if_canister_summary_errs_and_past_mark_failed_at_tim
     // Check that the upgrade journal reflects the timed-out upgrade attempt
     assert_matches!(
         &governance.proto.upgrade_journal.clone().unwrap().entries[..],
-        [UpgradeJournalEntry {
-            timestamp_seconds: _,
-            event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
-                upgrade_journal_entry::UpgradeOutcome {
-                    human_readable: Some(_),
-                    status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
-                        Empty {}
-                    )),
-                }
-            )),
-        }]
+        [
+            UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                    upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: Some(_),
+                        status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
+                            Empty {}
+                        )),
+                    }
+                )),
+            },
+            UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                    upgrade_journal_entry::UpgradeStepsReset {
+                        human_readable: Some(_),
+                        upgrade_steps: Some(_),
+                    },
+                )),
+            },
+        ]
     )
 }
 
@@ -2313,7 +2377,7 @@ fn test_no_target_version_fails_check_upgrade_status() {
                 proposal_id: Some(proposal_id),
             }),
             // we make a proposal that is already decided so that it won't execute again because
-            // proposals to upgrade SNS's cannot execute if there's no deployed_version set on Governance state
+            // proposals to upgrade SNS's cannot execute if there's no target_version set on Governance state
             proposals: btreemap! {
                 proposal_id => ProposalData {
                     action: (&action).into(),
@@ -2350,7 +2414,6 @@ fn test_no_target_version_fails_check_upgrade_status() {
         Box::new(FakeCmc::new()),
     );
 
-    // After we run our periodic tasks, the version should be marked as successful
     governance.run_periodic_tasks().now_or_never();
 
     assert!(governance.proto.pending_version.is_none());
@@ -2383,20 +2446,33 @@ fn test_no_target_version_fails_check_upgrade_status() {
     // Check that the upgrade journal reflects the failed upgrade attempt
     assert_matches!(
         &governance.proto.upgrade_journal.clone().unwrap().entries[..],
-        [UpgradeJournalEntry {
-            timestamp_seconds: _,
-            event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
-                upgrade_journal_entry::UpgradeOutcome {
-                    human_readable: Some(_),
-                    status: Some(
-                        upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
-                            upgrade_journal_entry::upgrade_outcome::InvalidState { version: None }
-                        )
-                    ),
-                }
-            )),
-        }]
-    )
+        [
+            UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                    upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: Some(_),
+                        status: Some(
+                            upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
+                                upgrade_journal_entry::upgrade_outcome::InvalidState {
+                                    version: None
+                                }
+                            )
+                        ),
+                    }
+                )),
+            },
+            UpgradeJournalEntry {
+                timestamp_seconds: Some(_),
+                event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                    upgrade_journal_entry::UpgradeStepsReset {
+                        human_readable: Some(_),
+                        upgrade_steps: Some(Versions { versions: _ }),
+                    }
+                )),
+            },
+        ]
+    );
 }
 
 #[test]
@@ -2590,6 +2666,7 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
 
     // Check that the upgrade journal reflects the succeeded upgrade.
     let upgrade_journal = governance.proto.upgrade_journal.clone().unwrap();
+
     let (reset_upgrade_steps, refreshed_versions) = assert_matches!(
         &upgrade_journal.entries[..],
         [
@@ -3844,10 +3921,6 @@ fn test_disburse_maturity_succeeds_with_multiple_disbursals() {
         let expected_disbursing_maturity =
             remaining_maturity.saturating_mul(*percentage_to_disburse as u64) / 100;
         let in_progress = &neuron.disburse_maturity_in_progress[i];
-        println!(
-            "i: {}, {}, {}",
-            i, percentage_to_disburse, in_progress.amount_e8s
-        );
         assert_eq!(
             in_progress.amount_e8s, expected_disbursing_maturity,
             "unexpected disbursing maturity for percentage {}",

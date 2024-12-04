@@ -26,7 +26,7 @@ use ic_nervous_system_common::{
     cmc::CMC,
     ledger,
     ledger::{compute_neuron_staking_subaccount_bytes, IcpLedger},
-    NervousSystemError, E8, ONE_DAY_SECONDS, ONE_YEAR_SECONDS,
+    NervousSystemError, E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -72,7 +72,8 @@ use ic_nns_governance::{
             disburse::Amount,
             ChangeAutoStakeMaturity, ClaimOrRefresh, Command, Configure, Disburse,
             DisburseToNeuron, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund,
-            MergeMaturity, NeuronIdOrSubaccount, SetVisibility, Spawn, Split, StartDissolving,
+            MergeMaturity, NeuronIdOrSubaccount, RefreshVotingPower, SetVisibility, Spawn, Split,
+            StartDissolving,
         },
         manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
         neuron::{self, DissolveState, Followees},
@@ -293,6 +294,14 @@ fn test_single_neuron_proposal_new() {
                             ),
                         ),
                         NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(U32Change(0, 1,),),),
+                        NeuronChange::DecidingVotingPower(
+                            OptionChange::BothSome(
+                                U64Change(
+                                    1,
+                                    0,
+                                ),
+                            ),
+                        ),
                     ],
                 )]),
                 GovernanceChange::Proposals(vec![MapChange::Added(
@@ -967,6 +976,12 @@ async fn test_cascade_following_new() {
                     NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(U32Change(
                         0, 1,
                     ),),),
+                    NeuronChange::DecidingVotingPower(OptionChange::BothSome(U64Change(
+                        1406250000, 0,
+                    ),),),
+                    NeuronChange::PotentialVotingPower(OptionChange::BothSome(U64Change(
+                        1406250000, 1265625000,
+                    ),),),
                 ],
             )]),
             GovernanceChange::Proposals(vec![MapChange::Added(
@@ -1124,6 +1139,9 @@ async fn test_cascade_following_new() {
                     NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(U32Change(
                         0, 1,
                     ),),),
+                    NeuronChange::DecidingVotingPower(OptionChange::BothSome(U64Change(
+                        1406250000, 0,
+                    ),),),
                 ],
             )]),
             GovernanceChange::Proposals(vec![MapChange::Changed(
@@ -1188,7 +1206,12 @@ async fn test_cascade_following_new() {
             GovernanceChange::Neurons(vec![
                 MapChange::Changed(
                     1,
-                    vec![NeuronChange::NeuronFeesE8S(U64Change(100000000, 0))],
+                    vec![
+                        NeuronChange::NeuronFeesE8S(U64Change(100000000, 0)),
+                        NeuronChange::PotentialVotingPower(OptionChange::BothSome(U64Change(
+                            1265625000, 1406250000,
+                        ),),),
+                    ],
                 ),
                 MapChange::Changed(
                     2,
@@ -1250,6 +1273,9 @@ async fn test_cascade_following_new() {
                         NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(
                             U32Change(0, 1,),
                         ),),
+                        NeuronChange::DecidingVotingPower(OptionChange::BothSome(U64Change(
+                            1406250000, 0,
+                        ),),),
                     ],
                 ),
             ]),
@@ -4482,6 +4508,10 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
     } else {
         None
     };
+    let expected_voting_power = neuron_stake_e8s
+        // Age bonus.
+        * 17
+        / 16;
     assert_eq!(
         gov.get_full_neuron(&id, &from).unwrap(),
         Neuron {
@@ -4495,6 +4525,8 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             kyc_verified: true,
             visibility,
             voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
+            deciding_voting_power: Some(expected_voting_power),
+            potential_voting_power: Some(expected_voting_power),
             ..Default::default()
         }
     );
@@ -5520,13 +5552,15 @@ fn test_neuron_split() {
     let maturity_e8s = 500_000_000;
     let staked_maturity_e8s = 400_000_000;
 
-    let (driver, mut governance, id, _) = governance_with_staked_neuron(
+    let (mut driver, mut governance, id, _) = governance_with_staked_neuron(
         dissolve_delay_seconds,
         neuron_stake_e8s,
         block_height,
         from,
         nonce,
     );
+
+    driver.advance_time_by(1234);
 
     let neuron_state = governance
         .neuron_store
@@ -5593,9 +5627,10 @@ fn test_neuron_split() {
         child_neuron.staked_maturity_e8s_equivalent,
         Some(80_000_000)
     );
-    assert_eq!(
+    assert_eq!(child_neuron.created_timestamp_seconds, driver.now(),);
+    assert_ne!(
         child_neuron.created_timestamp_seconds,
-        parent_neuron.created_timestamp_seconds
+        parent_neuron.created_timestamp_seconds,
     );
     assert_eq!(
         child_neuron.aging_since_timestamp_seconds,
@@ -5603,6 +5638,21 @@ fn test_neuron_split() {
     );
     assert_eq!(child_neuron.dissolve_state, parent_neuron.dissolve_state);
     assert_eq!(child_neuron.kyc_verified, true);
+    assert_eq!(
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        Some(driver.now()),
+    );
+    assert!(
+        child_neuron
+            .voting_power_refreshed_timestamp_seconds
+            .unwrap()
+            > parent_neuron
+                .voting_power_refreshed_timestamp_seconds
+                .unwrap(),
+        "{:?} vs. {:?}",
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        parent_neuron.voting_power_refreshed_timestamp_seconds,
+    );
 
     let mut neuron_ids = governance.get_neuron_ids_by_principal(&from);
     neuron_ids.sort_unstable();
@@ -5777,7 +5827,7 @@ fn test_neuron_spawn() {
 
     // Advance the time so that we can check that the spawned neuron has the age
     // and the right creation timestamp
-    driver.advance_time_by(1);
+    driver.advance_time_by(1234);
 
     let child_nid = gov
         .spawn_neuron(
@@ -5796,11 +5846,10 @@ fn test_neuron_spawn() {
     // .. but only one ledger account since the neuron's maturity hasn't been minted yet.
     driver.assert_num_neuron_accounts_exist(1);
 
-    gov.with_neuron(&id, |parent_neuron| {
-        // Maturity on the parent neuron should be reset.
-        assert_eq!(parent_neuron.maturity_e8s_equivalent, 0);
-    })
-    .expect("The parent neuron is missing");
+    let parent_neuron = gov
+        .with_neuron(&id, |neuron| neuron.clone())
+        .expect("The parent neuron is missing");
+    assert_eq!(parent_neuron.maturity_e8s_equivalent, 0);
 
     let child_neuron = gov
         .get_full_neuron(&child_nid, &child_controller)
@@ -5832,6 +5881,19 @@ fn test_neuron_spawn() {
         parent_maturity_e8s_equivalent
     );
     assert_eq!(child_neuron.neuron_type, None);
+    assert_eq!(
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        Some(driver.now()),
+    );
+    assert!(
+        child_neuron
+            .voting_power_refreshed_timestamp_seconds
+            .unwrap()
+            > parent_neuron.voting_power_refreshed_timestamp_seconds(),
+        "{:?} vs. {:?}",
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        parent_neuron.voting_power_refreshed_timestamp_seconds(),
+    );
 
     let creation_timestamp = driver.now();
 
@@ -6501,6 +6563,21 @@ fn test_disburse_to_neuron() {
     // Instead, child is supposed to have the default followees.
     assert_ne!(child_neuron.followees, parent_neuron.followees);
     assert_eq!(child_neuron.followees, gov.heap_data.default_followees);
+    assert_eq!(
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        Some(driver.now()),
+    );
+    assert!(
+        child_neuron
+            .voting_power_refreshed_timestamp_seconds
+            .unwrap()
+            > parent_neuron
+                .voting_power_refreshed_timestamp_seconds
+                .unwrap(),
+        "{:?} vs. {:?}",
+        child_neuron.voting_power_refreshed_timestamp_seconds,
+        parent_neuron.voting_power_refreshed_timestamp_seconds,
+    );
 
     let to_subaccount = {
         let mut state = Sha256::new();
@@ -10173,6 +10250,181 @@ fn test_neuron_set_visibility() {
 }
 
 #[test]
+fn test_deciding_and_potential_voting_power() {
+    // Step 1: Prepare the world.
+
+    let neuron = Neuron {
+        id: Some(NeuronId { id: 42 }),
+        controller: Some(PrincipalId::new_user_test_id(42)),
+        account: account(42),
+
+        // Factors that affect POTENTIAL voting power.
+        cached_neuron_stake_e8s: 10 * E8, // Base
+        // Bonuses factors.
+        dissolve_state: Some(DissolveState::DissolveDelaySeconds(8 * ONE_YEAR_SECONDS)),
+        // (Remember, birth day does not change with time, but age does...)
+        aging_since_timestamp_seconds: START_TIMESTAMP_SECONDS,
+
+        // Additional factor that affects DECIDING voting power.
+        voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
+
+        ..Default::default()
+    };
+
+    let controller = neuron.controller.unwrap();
+
+    let governance_proto = GovernanceProto {
+        economics: Some(NetworkEconomics::with_default_values()),
+        neurons: btreemap! {
+            42 => neuron,
+        },
+        ..Default::default()
+    };
+
+    let mut driver = fake::FakeDriver::default()
+        .at(START_TIMESTAMP_SECONDS)
+        .with_supply(Tokens::new(200, 0).unwrap());
+
+    let governance = Governance::new(
+        governance_proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    let original_potential_voting_power = governance
+        .with_neuron(&NeuronId { id: 42 }, |neuron| {
+            neuron.potential_voting_power(START_TIMESTAMP_SECONDS)
+        })
+        .unwrap();
+    // There is a 2x dissolve delay bonus (and no age bonus).
+    assert_eq!(original_potential_voting_power, 20 * E8);
+
+    // Step 2: Call the code under test.
+    let mut previous_timestamp_seconds = START_TIMESTAMP_SECONDS
+        // This is a little hack so that the inequality assertion near the end
+        // of get_voting_power_ratio works on the first call.
+        - 1;
+    let mut previous_potential_voting_power = original_potential_voting_power
+        // Ditto above hack.
+        - 1;
+    let mut get_voting_power_ratio = |seconds_since_start| -> f64 {
+        // Advance time.
+        let new_timestamp_seconds = START_TIMESTAMP_SECONDS + seconds_since_start;
+        assert!(
+            new_timestamp_seconds > previous_timestamp_seconds,
+            "{} vs. {}",
+            new_timestamp_seconds,
+            previous_timestamp_seconds,
+        );
+        driver.advance_time_by(new_timestamp_seconds - previous_timestamp_seconds);
+        previous_timestamp_seconds = new_timestamp_seconds;
+
+        // Read back the neuron (both in full, and abstract forms).
+
+        let full_neuron = governance
+            .get_full_neuron(&NeuronId { id: 42 }, &controller)
+            .unwrap();
+
+        let neuron_info = governance
+            .get_neuron_info(&NeuronId { id: 42 }, controller)
+            .unwrap();
+
+        // Compare the two. They should at least be consistent.
+        assert_eq!(
+            full_neuron.potential_voting_power,
+            neuron_info.potential_voting_power
+        );
+        assert_eq!(
+            full_neuron.deciding_voting_power,
+            neuron_info.deciding_voting_power
+        );
+
+        let deciding_voting_power = full_neuron.deciding_voting_power.unwrap();
+        let potential_voting_power = full_neuron.potential_voting_power.unwrap();
+
+        // Because of age bonus, voting power increases.
+        assert!(
+            potential_voting_power > previous_potential_voting_power,
+            "{} vs. {}",
+            potential_voting_power,
+            previous_potential_voting_power,
+        );
+        previous_potential_voting_power = potential_voting_power;
+
+        println!("{} vs. {}", deciding_voting_power, potential_voting_power);
+        deciding_voting_power as f64 / potential_voting_power as f64
+    };
+
+    // Step 3: Inspect results.
+
+    // Step 3.1: For 6 months, there is no reduction in voting power
+    // (i.e. deciding voting power == potential voting power).
+    for seconds_after_start in [
+        0,
+        1,
+        2,
+        3,
+        ONE_MONTH_SECONDS,
+        2 * ONE_MONTH_SECONDS,
+        3 * ONE_MONTH_SECONDS,
+        6 * ONE_MONTH_SECONDS - 1,
+    ] {
+        assert_eq!(
+            get_voting_power_ratio(seconds_after_start),
+            1.0,
+            "at {} seconds ({} months) after start.",
+            seconds_after_start,
+            seconds_after_start / ONE_MONTH_SECONDS,
+        );
+    }
+
+    // Step 3.2 (the interesting phase): Then, for the next month, voting power goes down linearly.
+    for (seconds_after_decline_starts, expected_ratio) in [
+        (0, 1.0),
+        (ONE_MONTH_SECONDS / 5, 0.8),
+        (ONE_MONTH_SECONDS / 2, 0.5),
+        (ONE_MONTH_SECONDS / 4 * 3, 0.25),
+        (ONE_MONTH_SECONDS / 100 * 99, 0.01),
+    ] {
+        let observed_ratio =
+            get_voting_power_ratio(6 * ONE_MONTH_SECONDS + seconds_after_decline_starts);
+
+        fn abs_relative_error(observed: f64, expected: f64) -> f64 {
+            ((observed - expected) / expected).abs()
+        }
+
+        assert!(
+            abs_relative_error(observed_ratio, expected_ratio) < 5e-5,
+            "{} vs. {} @ {} months after start of decline.",
+            observed_ratio,
+            expected_ratio,
+            seconds_after_decline_starts as f64 / ONE_MONTH_SECONDS as f64,
+        );
+    }
+
+    // Step 3.3: Once voting power decline finishes, deciding voting power stays at 0.
+    for seconds_after_decline_ends in [
+        0,
+        1,
+        2,
+        3,
+        ONE_MONTH_SECONDS,
+        2 * ONE_MONTH_SECONDS,
+        3 * ONE_MONTH_SECONDS,
+        6 * ONE_MONTH_SECONDS - 1,
+        6 * ONE_MONTH_SECONDS,
+    ] {
+        assert_eq!(
+            get_voting_power_ratio(7 * ONE_MONTH_SECONDS + seconds_after_decline_ends),
+            0.0,
+            "{} seconds after deciding voting power decline ends.",
+            seconds_after_decline_ends,
+        );
+    }
+}
+
+#[test]
 fn test_include_public_neurons_in_full_neurons() {
     // Step 1: Prepare the world.
 
@@ -10198,9 +10450,11 @@ fn test_include_public_neurons_in_full_neurons() {
 
             cached_neuron_stake_e8s: 10 * E8,
             controller: Some(controller),
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
-            aging_since_timestamp_seconds: 1_721_727_936,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(8 * ONE_YEAR_SECONDS)),
+            aging_since_timestamp_seconds: START_TIMESTAMP_SECONDS,
             voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
+            deciding_voting_power: Some(20 * E8),
+            potential_voting_power: Some(20 * E8),
 
             ..Default::default()
         }
@@ -10284,6 +10538,133 @@ fn test_include_public_neurons_in_full_neurons() {
     }
 
     assert_eq!(list_neurons_response.full_neurons, expected_full_neurons);
+}
+
+#[tokio::test]
+async fn test_refresh_voting_power() {
+    // Step 1: Prepare the world. This mostly consists of constructing a
+    // Governance with one neuron. The code under test will operate on that
+    // neuron.
+
+    let controller = PrincipalId::new_user_test_id(42);
+    let hot_key = PrincipalId::new_user_test_id(43);
+
+    let neuron = Neuron {
+        id: Some(NeuronId { id: 42 }),
+        account: account(42),
+        hot_keys: vec![hot_key],
+        cached_neuron_stake_e8s: 10 * E8,
+        controller: Some(controller),
+        dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
+        aging_since_timestamp_seconds: 1_721_727_936,
+        voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
+
+        ..Default::default()
+    };
+
+    let governance_proto = GovernanceProto {
+        economics: Some(NetworkEconomics::default()),
+        neurons: btreemap! {
+            42 => neuron,
+        },
+        ..Default::default()
+    };
+
+    let total_icp_suppply = Tokens::new(200, 0).unwrap();
+    let mut driver = fake::FakeDriver::default()
+        .at(START_TIMESTAMP_SECONDS)
+        .with_supply(total_icp_suppply);
+
+    let mut governance = Governance::new(
+        governance_proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    let delta_seconds = 99;
+    driver.advance_time_by(delta_seconds);
+
+    // Step 2: Call code under test, which modifies the one neuron.
+    async fn refresh_voting_power(
+        governance: &mut Governance,
+        caller: PrincipalId,
+    ) -> manage_neuron_response::Command {
+        let refresh_voting_power = ManageNeuron {
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: 42 })),
+            command: Some(manage_neuron::Command::RefreshVotingPower(
+                RefreshVotingPower {},
+            )),
+            id: None,
+        };
+
+        governance
+            .manage_neuron(&caller, &refresh_voting_power)
+            .await
+            .command
+            .unwrap()
+    }
+
+    // Step 3: Inspect the neuron.
+    let get_voting_power_refreshed_timestamp_seconds = |governance: &mut Governance| {
+        governance
+            .with_neuron(&NeuronId { id: 42 }, |neuron| {
+                neuron.voting_power_refreshed_timestamp_seconds()
+            })
+            .unwrap()
+    };
+
+    // Sad case: Rando principal tries to refresh voting power.
+    let rando_principal = PrincipalId::new_user_test_id(0xDEAD_BEEF);
+    let err = refresh_voting_power(&mut governance, rando_principal).await;
+    assert_eq!(
+        get_voting_power_refreshed_timestamp_seconds(&mut governance),
+        START_TIMESTAMP_SECONDS,
+    );
+    match err {
+        manage_neuron_response::Command::Error(error) => {
+            let GovernanceError {
+                error_type,
+                error_message,
+            } = &error;
+
+            assert_eq!(
+                ErrorType::try_from(*error_type),
+                Ok(ErrorType::NotAuthorized),
+                "{:?}",
+                error
+            );
+
+            let error_message = error_message.to_lowercase();
+            for key_word in ["auth", "refresh", "voting power", "42"] {
+                assert!(error_message.contains(key_word), "{:?}", error);
+            }
+        }
+
+        wrong => panic!("{:?}", wrong),
+    }
+
+    // Main happy case: Controller tries to refresh voting power.
+    match refresh_voting_power(&mut governance, controller).await {
+        manage_neuron_response::Command::RefreshVotingPower(_ok) => {}
+        wrong => panic!("{:?}", wrong),
+    }
+    assert_eq!(
+        get_voting_power_refreshed_timestamp_seconds(&mut governance),
+        START_TIMESTAMP_SECONDS + 99,
+    );
+
+    // Secondary happy case: Hot key tries to refresh voting power.
+    let delta_seconds = 51;
+    driver.advance_time_by(delta_seconds);
+    match refresh_voting_power(&mut governance, hot_key).await {
+        manage_neuron_response::Command::RefreshVotingPower(_ok) => {}
+        wrong => panic!("{:?}", wrong),
+    }
+    assert_eq!(
+        get_voting_power_refreshed_timestamp_seconds(&mut governance),
+        START_TIMESTAMP_SECONDS + 99 + 51,
+    );
 }
 
 /// Struct to help with the wait for quiet tests.

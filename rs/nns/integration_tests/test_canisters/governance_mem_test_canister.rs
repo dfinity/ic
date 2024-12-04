@@ -314,6 +314,9 @@ fn allocate_neuron(id: u64) -> Neuron {
         neuron_type: None,
         visibility: None,
         voting_power_refreshed_timestamp_seconds: None,
+        // These are ignored, because they are derived.
+        deciding_voting_power: None,
+        potential_voting_power: None,
     }
 }
 

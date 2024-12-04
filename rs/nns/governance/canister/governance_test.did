@@ -108,6 +108,21 @@ type ClaimOrRefreshResponse = record {
   refreshed_neuron_id : opt NeuronId;
 };
 
+// This is one way for a neuron to make sure that its deciding_voting_power is
+// not less than its potential_voting_power. See the description of those fields
+// in Neuron.
+type RefreshVotingPower = record {
+  // Intentionally left blank.
+};
+
+type RefreshVotingPowerResponse = record {
+  // Intentionally left blank.
+  //
+  // We could add information such as the value in the neuron's
+  // voting_power_refreshed_timestamp_second's field, but let's keep things
+  // minimal until we discover there is a "real need". YAGNI.
+};
+
 type Command = variant {
   Spawn : Spawn;
   Split : Split;
@@ -121,6 +136,7 @@ type Command = variant {
   StakeMaturity : StakeMaturity;
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
+  RefreshVotingPower : RefreshVotingPower;
 };
 
 type Command_1 = variant {
@@ -137,6 +153,7 @@ type Command_1 = variant {
   StakeMaturity : StakeMaturityResponse;
   MergeMaturity : MergeMaturityResponse;
   Disburse : DisburseResponse;
+  RefreshVotingPower : RefreshVotingPowerResponse;
 };
 
 type Command_2 = variant {
@@ -581,6 +598,8 @@ type Neuron = record {
   known_neuron_data : opt KnownNeuronData;
   spawn_at_timestamp_seconds : opt nat64;
   voting_power_refreshed_timestamp_seconds : opt nat64;
+  deciding_voting_power : opt nat64;
+  potential_voting_power : opt nat64;
 };
 
 type NeuronBasketConstructionParameters = record {
@@ -630,9 +649,11 @@ type NeuronInfo = record {
   retrieved_at_timestamp_seconds : nat64;
   visibility : opt int32;
   known_neuron_data : opt KnownNeuronData;
-  voting_power : nat64;
   age_seconds : nat64;
   voting_power_refreshed_timestamp_seconds : opt nat64;
+  voting_power : nat64;
+  deciding_voting_power : opt nat64;
+  potential_voting_power : opt nat64;
 };
 
 type NeuronStakeTransfer = record {
