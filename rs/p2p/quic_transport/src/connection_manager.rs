@@ -36,7 +36,7 @@ use axum::{
 use futures::StreamExt;
 use ic_async_utils::JoinMap;
 use ic_base_types::NodeId;
-use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
+use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig};
 use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
@@ -127,22 +127,17 @@ enum ConnectionEstablishError {
         CONNECT_TIMEOUT
     )]
     Timeout,
-    #[error("Failed to get rustls client config for peer {peer_id:?}. {cause:?}")]
-    TlsClientConfigError {
-        peer_id: NodeId,
-        cause: TlsConfigError,
-    },
-    #[error("Failed to connect to peer {peer_id:?}. {cause:?}")]
-    ConnectError {
-        peer_id: NodeId,
-        cause: ConnectError,
-    },
     #[error("Incoming connection failed. {cause:?}")]
     ConnectionError {
         peer_id: Option<NodeId>,
         cause: ConnectionError,
     },
     // The following errors should be infallible.
+    #[error("Failed to establish outbound connection to peer {peer_id:?} due to errors in the parameters being used. {cause:?}")]
+    BadConnectParameters {
+        peer_id: NodeId,
+        cause: ConnectError,
+    },
     #[error("No peer identity available.")]
     MissingPeerIdentity,
     #[error("Malformed peer identity. {0}")]
@@ -207,7 +202,9 @@ pub(crate) fn start_connection_manager(
             SomeOrAllNodes::Some(BTreeSet::new()),
             registry_client.get_latest_version(),
         )
-        .expect("Failed to get rustls server config, so transport can't start.");
+        .expect(
+            "The rustls server config must be locally available, otherwise transport can't start.",
+        );
 
     let mut transport_config = quinn::TransportConfig::default();
 
@@ -450,21 +447,26 @@ impl ConnectionManager {
         let rustls_client_config = self
             .tls_config
             .client_config(peer_id, self.topology.latest_registry_version())
-            .map_err(|cause| ConnectionEstablishError::TlsClientConfigError { peer_id, cause })
-            .unwrap();
+            .expect("The rustls client config must be locally available, otherwise transport can't start.");
         let transport_config = self.transport_config.clone();
+        let quinn_client_config = QuicClientConfig::try_from(rustls_client_config).unwrap();
+        let mut client_config = quinn::ClientConfig::new(Arc::new(quinn_client_config));
+        client_config.transport_config(transport_config);
         let conn_fut = async move {
-            let quinn_client_config = QuicClientConfig::try_from(rustls_client_config).unwrap();
-            let mut client_config = quinn::ClientConfig::new(Arc::new(quinn_client_config));
-            client_config.transport_config(transport_config);
-            let connecting = endpoint.connect_with(client_config, addr, "irrelevant");
-            let established = connecting
-                .map_err(|cause| ConnectionEstablishError::ConnectError { peer_id, cause })?
-                .await
-                .map_err(|cause| ConnectionEstablishError::ConnectionError {
-                    peer_id: Some(peer_id),
+            // 'connect_with' is placed inside the async block so the event loop retries on failure.
+            let connecting = endpoint
+                .connect_with(client_config, addr, "irrelevant")
+                .map_err(|cause| ConnectionEstablishError::BadConnectParameters {
+                    peer_id,
                     cause,
                 })?;
+            let established =
+                connecting
+                    .await
+                    .map_err(|cause| ConnectionEstablishError::ConnectionError {
+                        peer_id: Some(peer_id),
+                        cause,
+                    })?;
 
             Ok::<_, ConnectionEstablishError>(ConnectionWithPeerId {
                 peer_id,

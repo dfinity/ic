@@ -2,7 +2,7 @@ use crate::governance::Governance;
 use crate::pb::v1::{
     governance::{Version, Versions},
     upgrade_journal_entry::{self, upgrade_outcome, upgrade_started},
-    Empty, ProposalId, UpgradeJournal, UpgradeJournalEntry,
+    Empty, GetUpgradeJournalResponse, ProposalId, UpgradeJournal, UpgradeJournalEntry,
 };
 
 impl upgrade_journal_entry::UpgradeStepsRefreshed {
@@ -126,6 +126,28 @@ impl Governance {
             Some(ref mut journal) => {
                 journal.entries.push(upgrade_journal_entry);
             }
+        }
+    }
+
+    pub fn get_upgrade_journal(&self) -> GetUpgradeJournalResponse {
+        let cached_upgrade_steps = self.proto.cached_upgrade_steps.clone();
+        match cached_upgrade_steps {
+            Some(cached_upgrade_steps) => GetUpgradeJournalResponse {
+                upgrade_steps: cached_upgrade_steps.upgrade_steps,
+                response_timestamp_seconds: cached_upgrade_steps.response_timestamp_seconds,
+                target_version: self.proto.target_version.clone(),
+                deployed_version: self.proto.deployed_version.clone(),
+                // TODO(NNS1-3416): Bound the size of the response.
+                upgrade_journal: self.proto.upgrade_journal.clone(),
+            },
+            None => GetUpgradeJournalResponse {
+                upgrade_steps: None,
+                response_timestamp_seconds: None,
+                target_version: None,
+                deployed_version: self.proto.deployed_version.clone(),
+                // TODO(NNS1-3416): Bound the size of the response.
+                upgrade_journal: self.proto.upgrade_journal.clone(),
+            },
         }
     }
 }

@@ -315,6 +315,8 @@ pub fn setup_test_router(
     let subnets = registry_snapshot.load_full().unwrap().subnets.clone();
     persister.persist(subnets.clone());
 
+    let salt: Arc<ArcSwapOption<Vec<u8>>> = Arc::new(ArcSwapOption::empty());
+
     let router = setup_router(
         registry_snapshot,
         routing_table,
@@ -326,6 +328,7 @@ pub fn setup_test_router(
         enable_cache.then_some(Arc::new(
             Cache::new(10485760, 262144, Duration::from_secs(1), false).unwrap(),
         )),
+        salt,
     );
 
     let router = router.layer(axum::middleware::from_fn(add_conninfo));
