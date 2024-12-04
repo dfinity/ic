@@ -387,7 +387,7 @@ pub fn replay<I: CheckInvariants>(
             }
             #[allow(deprecated)]
             Event::RetrieveBtcKytFailed { kyt_provider, .. } => {
-                *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;
+                *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.check_fee;
             }
             Event::ScheduleDepositReimbursement {
                 account,

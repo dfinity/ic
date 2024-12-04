@@ -105,7 +105,7 @@ pub struct Log {
 pub struct MinterInfo {
     pub min_confirmations: u32,
     pub retrieve_btc_min_amount: u64,
-    pub kyt_fee: u64,
+    pub check_fee: u64,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]

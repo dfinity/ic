@@ -78,7 +78,7 @@ pub struct InitArgs {
     /// The fee that the minter will pay for each bitcoin check.
     /// NOTE: this field is optional for backward compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub kyt_fee: Option<u64>,
+    pub check_fee: Option<u64>,
 
     /// The principal of the bitcoin checker canister.
     /// NOTE: this field is optional for backward compatibility.

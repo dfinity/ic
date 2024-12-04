@@ -146,7 +146,7 @@ mod tests {
             min_confirmations: None,
             mode: crate::state::Mode::GeneralAvailability,
             btc_checker_principal: Some(CanisterId::from(0)),
-            kyt_fee: None,
+            check_fee: None,
         }
     }
 

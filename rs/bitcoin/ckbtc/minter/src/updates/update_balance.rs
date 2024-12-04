@@ -230,17 +230,17 @@ pub async fn update_balance<R: CanisterRuntime>(
         _ => "ckTESTBTC",
     };
 
-    let kyt_fee = read_state(|s| s.kyt_fee);
+    let check_fee = read_state(|s| s.check_fee);
     let mut utxo_statuses: Vec<UtxoStatus> = vec![];
     for utxo in processable_utxos {
-        if utxo.value <= kyt_fee {
+        if utxo.value <= check_fee {
             mutate_state(|s| state::audit::ignore_utxo(s, utxo.clone(), caller_account));
             log!(
                 P1,
                 "Ignored UTXO {} for account {caller_account} because UTXO value {} is lower than the check fee {}",
                 DisplayOutpoint(&utxo.outpoint),
                 DisplayAmount(utxo.value),
-                DisplayAmount(kyt_fee),
+                DisplayAmount(check_fee),
             );
             utxo_statuses.push(UtxoStatus::ValueTooSmall(utxo));
             continue;
@@ -261,11 +261,11 @@ pub async fn update_balance<R: CanisterRuntime>(
             }
             UtxoCheckStatus::Clean => {}
         }
-        let amount = utxo.value - kyt_fee;
+        let amount = utxo.value - check_fee;
         let memo = MintMemo::Convert {
             txid: Some(utxo.outpoint.txid.as_ref()),
             vout: Some(utxo.outpoint.vout),
-            kyt_fee: Some(kyt_fee),
+            kyt_fee: Some(check_fee),
         };
 
         match runtime

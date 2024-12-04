@@ -40,7 +40,7 @@ fn default_init_args() -> InitArgs {
         max_time_in_queue_nanos: 0,
         min_confirmations: None,
         mode: Mode::GeneralAvailability,
-        kyt_fee: None,
+        check_fee: None,
         btc_checker_principal: None,
     }
 }

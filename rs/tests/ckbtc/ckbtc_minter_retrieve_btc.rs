@@ -96,7 +96,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
         };
 
         // Because bitcoind only allows to see one's own transaction, and we
-        // are using multiple addresses in this test. We have to change check 
+        // are using multiple addresses in this test. We have to change check
         // mode to AcceptAll, otherwise bitcoind will return 500 error.
         upgrade_kyt(&mut kyt_canister, NewKytMode::AcceptAll).await;
 

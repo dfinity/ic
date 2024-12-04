@@ -187,7 +187,7 @@ type InitArgs = record {
     mode : Mode;
 
     /// The fee paid per check by the bitcoin checker canister.
-    kyt_fee : opt nat64;
+    check_fee : opt nat64;
 
     /// The canister id of the bitcoin checker canister.
     btc_checker_principal: opt principal;
@@ -210,7 +210,7 @@ type UpgradeArgs = record {
     mode : opt Mode;
 
     /// The fee per check by the bitcion checker canister.
-    kyt_fee : opt nat64;
+    check_fee : opt nat64;
 
     /// The principal of the bitcoin checker canister.
     btc_checker_principal : opt principal;
@@ -308,7 +308,7 @@ type MinterInfo = record {
     // This fee is based on the `retrieve_btc_min_amount` setting during canister
     // initialization or upgrades, but may vary according to current network fees.
     retrieve_btc_min_amount : nat64;
-    kyt_fee : nat64;
+    check_fee : nat64;
 };
 
 type ReimbursementReason = variant {

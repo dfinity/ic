@@ -166,8 +166,7 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
             let _ = estimate_fee_per_vbyte().await;
         }
         TaskType::DistributeKytFee => {
-            const MAINNET_KYT_FEE_DISTRIBUTION_PERIOD: Duration =
-                Duration::from_secs(24 * 60 * 60);
+            const MAINNET_KYT_FEE_DISTRIBUTION_PERIOD: Duration = Duration::from_secs(24 * 60 * 60);
 
             let _enqueue_followup_guard = guard((), |_| {
                 schedule_after(

@@ -401,7 +401,7 @@ pub async fn install_minter(
         max_time_in_queue_nanos,
         min_confirmations: Some(BTC_MIN_CONFIRMATIONS as u32),
         mode: Mode::GeneralAvailability,
-        kyt_fee: Some(CHECK_FEE),
+        check_fee: Some(CHECK_FEE),
         btc_checker_principal: Some(kyt_canister_id),
     };
 

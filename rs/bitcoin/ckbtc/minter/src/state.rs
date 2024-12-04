@@ -386,7 +386,7 @@ pub struct CkBtcMinterState {
     pub last_fee_per_vbyte: Vec<u64>,
 
     /// The fee for a single bitcoin check request.
-    pub kyt_fee: u64,
+    pub check_fee: u64,
 
     /// The total amount of fees we owe to the KYT provider.
     pub owed_kyt_amount: BTreeMap<Principal, u64>,
@@ -440,7 +440,7 @@ impl CkBtcMinterState {
             max_time_in_queue_nanos,
             min_confirmations,
             mode,
-            kyt_fee,
+            check_fee,
             btc_checker_principal,
         }: InitArgs,
     ) {
@@ -452,8 +452,8 @@ impl CkBtcMinterState {
         self.max_time_in_queue_nanos = max_time_in_queue_nanos;
         self.mode = mode;
         self.btc_checker_principal = btc_checker_principal;
-        if let Some(kyt_fee) = kyt_fee {
-            self.kyt_fee = kyt_fee;
+        if let Some(check_fee) = check_fee {
+            self.check_fee = check_fee;
         }
         if let Some(min_confirmations) = min_confirmations {
             self.min_confirmations = min_confirmations;
@@ -467,7 +467,7 @@ impl CkBtcMinterState {
             max_time_in_queue_nanos,
             min_confirmations,
             mode,
-            kyt_fee,
+            check_fee,
             btc_checker_principal,
         }: UpgradeArgs,
     ) {
@@ -496,14 +496,14 @@ impl CkBtcMinterState {
         if let Some(btc_checker_principal) = btc_checker_principal {
             self.btc_checker_principal = Some(btc_checker_principal);
         }
-        if let Some(kyt_fee) = kyt_fee {
-            self.kyt_fee = kyt_fee;
+        if let Some(check_fee) = check_fee {
+            self.check_fee = check_fee;
         }
     }
 
     pub fn validate_config(&self) {
-        if self.kyt_fee > self.retrieve_btc_min_amount {
-            ic_cdk::trap("kyt_fee cannot be greater than retrieve_btc_min_amount");
+        if self.check_fee > self.retrieve_btc_min_amount {
+            ic_cdk::trap("check_fee cannot be greater than retrieve_btc_min_amount");
         }
         if self.ecdsa_key_name.is_empty() {
             ic_cdk::trap("ecdsa_key_name is not set");
@@ -883,7 +883,7 @@ impl CkBtcMinterState {
         }
         self.tokens_burned += request.amount;
         if let Some(kyt_provider) = request.kyt_provider {
-            *self.owed_kyt_amount.entry(kyt_provider).or_insert(0) += self.kyt_fee;
+            *self.owed_kyt_amount.entry(kyt_provider).or_insert(0) += self.check_fee;
         }
         self.pending_retrieve_btc_requests.push(request);
     }
@@ -1014,7 +1014,7 @@ impl CkBtcMinterState {
     fn ensure_reason_consistent_with_state(&self, utxo: &Utxo, reason: SuspendedReason) {
         match reason {
             SuspendedReason::ValueTooSmall => {
-                assert!(utxo.value <= self.kyt_fee);
+                assert!(utxo.value <= self.check_fee);
             }
             SuspendedReason::Quarantined => {}
         }
@@ -1047,7 +1047,7 @@ impl CkBtcMinterState {
             // Updated the owed amount only if it's the first time we mark this UTXO as
             // clean.
             if let Some(provider) = kyt_provider {
-                *self.owed_kyt_amount.entry(provider).or_insert(0) += self.kyt_fee;
+                *self.owed_kyt_amount.entry(provider).or_insert(0) += self.check_fee;
             }
         }
     }
@@ -1170,7 +1170,7 @@ impl CkBtcMinterState {
             "checked_utxos do not match"
         );
 
-        ensure_eq!(self.kyt_fee, other.kyt_fee, "kyt_fee does not match");
+        ensure_eq!(self.check_fee, other.check_fee, "check_fee does not match");
 
         ensure_eq!(
             self.owed_kyt_amount,
@@ -1402,8 +1402,8 @@ impl From<InitArgs> for CkBtcMinterState {
             is_distributing_fee: false,
             mode: args.mode,
             last_fee_per_vbyte: vec![1; 100],
-            kyt_fee: args
-                .kyt_fee
+            check_fee: args
+                .check_fee
                 .unwrap_or(crate::lifecycle::init::DEFAULT_CHECK_FEE),
             owed_kyt_amount: Default::default(),
             checked_utxos: Default::default(),

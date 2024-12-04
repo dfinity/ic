@@ -29,7 +29,7 @@ pub struct UpgradeArgs {
     pub mode: Option<Mode>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub kyt_fee: Option<u64>,
+    pub check_fee: Option<u64>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub btc_checker_principal: Option<CanisterId>,

@@ -53,7 +53,7 @@ fn default_init_args() -> CkbtcMinterInitArgs {
         max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,
         min_confirmations: Some(MIN_CONFIRMATIONS),
         mode: Mode::GeneralAvailability,
-        kyt_fee: None,
+        check_fee: None,
         btc_checker_principal: Some(CanisterId::from(0)),
     }
 }
@@ -537,7 +537,7 @@ fn test_minter() {
     let args = MinterArg::Init(CkbtcMinterInitArgs {
         retrieve_btc_min_amount: 100_000,
         min_confirmations: Some(6_u32),
-        kyt_fee: Some(1001),
+        check_fee: Some(1001),
         ..default_init_args()
     });
     let args = Encode!(&args).unwrap();
@@ -637,7 +637,7 @@ impl CkBtcSetup {
                 retrieve_btc_min_amount,
                 ledger_id,
                 max_time_in_queue_nanos: 100,
-                kyt_fee: Some(CHECK_FEE),
+                check_fee: Some(CHECK_FEE),
                 btc_checker_principal: kyt_id.into(),
                 ..default_init_args()
             }))

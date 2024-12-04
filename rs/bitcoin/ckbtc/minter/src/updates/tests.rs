@@ -42,7 +42,7 @@ mod update_balance {
         let account = ledger_account();
         let ignored_utxo = ignored_utxo();
         mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone(), account));
-        mutate_state(|s| s.kyt_fee = ignored_utxo.value - 1);
+        mutate_state(|s| s.check_fee = ignored_utxo.value - 1);
         let events_before: Vec<_> = storage::events().collect();
 
         let mut runtime = MockCanisterRuntime::new();
@@ -84,7 +84,7 @@ mod update_balance {
         let account = ledger_account();
         let ignored_utxo = ignored_utxo();
         mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone(), account));
-        mutate_state(|s| s.kyt_fee = ignored_utxo.value - 1);
+        mutate_state(|s| s.check_fee = ignored_utxo.value - 1);
         let events_before: Vec<_> = storage::events().collect();
 
         let mut runtime = MockCanisterRuntime::new();
@@ -168,8 +168,8 @@ mod update_balance {
         let account = ledger_account();
         let quarantined_utxo = quarantined_utxo();
         quarantine_utxo(quarantined_utxo.clone(), account);
-        let kyt_fee = read_state(|s| s.kyt_fee);
-        let minted_amount = quarantined_utxo.value - kyt_fee;
+        let check_fee = read_state(|s| s.check_fee);
+        let minted_amount = quarantined_utxo.value - check_fee;
         let events_before: Vec<_> = storage::events().collect();
 
         let mut runtime = MockCanisterRuntime::new();

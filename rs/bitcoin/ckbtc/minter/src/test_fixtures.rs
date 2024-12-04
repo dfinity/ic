@@ -23,7 +23,7 @@ pub fn init_args() -> InitArgs {
         min_confirmations: Some(6),
         mode: crate::state::Mode::GeneralAvailability,
         btc_checker_principal: Some(CanisterId::from(0)),
-        kyt_fee: None,
+        check_fee: None,
     }
 }
 

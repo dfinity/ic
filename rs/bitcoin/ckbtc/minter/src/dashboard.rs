@@ -317,7 +317,7 @@ pub fn build_metadata(s: &CkBtcMinterState) -> String {
         s.btc_checker_principal
             .map(|p| p.to_string())
             .unwrap_or_else(|| "N/A".to_string()),
-        DisplayAmount(s.kyt_fee),
+        DisplayAmount(s.check_fee),
         DisplayAmount(s.retrieve_btc_min_amount),
         DisplayAmount(s.fee_based_retrieve_btc_min_amount),
         DisplayAmount(s.get_total_btc_managed())
