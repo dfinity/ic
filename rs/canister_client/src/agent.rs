@@ -1,9 +1,6 @@
 //! An agent to talk to the Internet Computer through the public endpoints.
 use crate::{
-    cbor::{
-        parse_query_response, parse_read_state_response, prepare_query, prepare_read_state,
-        prepare_update, RequestStatus,
-    },
+    cbor::{parse_query_response, prepare_query, prepare_read_state, prepare_update},
     http_client::{HttpClient, HttpClientConfig},
 };
 use backoff::backoff::Backoff;
@@ -11,6 +8,7 @@ use ic_canister_client_sender::Sender;
 use ic_crypto_tree_hash::Path;
 use ic_management_canister_types::{InstallCodeArgs, Method, Payload, IC_00};
 use ic_protobuf::types::v1 as pb;
+use ic_read_state_response_parser::{parse_read_state_response, RequestStatus};
 use ic_types::{
     consensus::catchup::CatchUpPackageParam,
     crypto::threshold_sig::ThresholdSigPublicKey,

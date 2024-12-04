@@ -616,6 +616,7 @@ mod tests {
                     ThresholdArguments::Schnorr(SchnorrArguments {
                         message: Arc::new(vec![1; 64]),
                         key_id: key_id.clone(),
+                        taproot_tree_root: None,
                     })
                 }
                 MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),

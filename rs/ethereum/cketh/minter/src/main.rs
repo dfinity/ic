@@ -227,6 +227,8 @@ async fn get_minter_info() -> MinterInfo {
             last_eth_scraped_block_number,
             erc20_helper_contract_address,
             last_erc20_scraped_block_number,
+            deposit_with_subaccount_helper_contract_address,
+            last_deposit_with_subaccount_scraped_block_number,
         } = s.log_scrapings.info();
 
         MinterInfo {
@@ -234,6 +236,7 @@ async fn get_minter_info() -> MinterInfo {
             smart_contract_address: eth_helper_contract_address.clone(),
             eth_helper_contract_address,
             erc20_helper_contract_address,
+            deposit_with_subaccount_helper_contract_address,
             supported_ckerc20_tokens,
             minimum_withdrawal_amount: Some(s.cketh_minimum_withdrawal_amount.into()),
             ethereum_block_height: Some(s.ethereum_block_height.into()),
@@ -249,6 +252,7 @@ async fn get_minter_info() -> MinterInfo {
             erc20_balances,
             last_eth_scraped_block_number,
             last_erc20_scraped_block_number,
+            last_deposit_with_subaccount_scraped_block_number,
             cketh_ledger_id: Some(s.cketh_ledger_id),
             evm_rpc_id: s.evm_rpc_id,
         }
