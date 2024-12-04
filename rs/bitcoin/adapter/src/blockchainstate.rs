@@ -7,8 +7,7 @@ use ic_metrics::MetricsRegistry;
 use std::collections::HashMap;
 use thiserror::Error;
 
-/// This field contains the datatype used to store "work" of a Bitcoin blockchain
-pub type Work = primitive_types::U256;
+use bitcoin::Work;
 
 /// Contains the necessary information about a tip.
 #[derive(Clone, Debug)]
@@ -545,7 +544,7 @@ mod test {
         let initial_header = state.genesis();
         let mut chain = generate_headers(initial_header.block_hash(), initial_header.time, 16, &[]);
         let last_header = chain.get_mut(10).unwrap();
-        last_header.prev_blockhash = BlockHash::default();
+        last_header.prev_blockhash = BlockHash::all_zeros();
 
         let chain_hashes: Vec<BlockHash> = chain.iter().map(|header| header.block_hash()).collect();
         let last_hash = chain_hashes[10];

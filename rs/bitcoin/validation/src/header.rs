@@ -35,8 +35,6 @@ pub enum ValidateHeaderError {
     PrevHeaderNotFound,
 }
 
-const ONE_HOUR: u64 = 3_600;
-
 pub trait HeaderStore {
     /// Returns the header with the given block hash.
     fn get_with_block_hash(&self, hash: &BlockHash) -> Option<BlockHeader>;
@@ -61,7 +59,6 @@ pub fn validate_header(
     network: &Network,
     store: &impl HeaderStore,
     header: &BlockHeader,
-    current_time: u64,
 ) -> Result<(), ValidateHeaderError> {
     let prev_height = store.height();
     let prev_header = match store.get_with_block_hash(&header.prev_blockhash) {
@@ -70,8 +67,6 @@ pub fn validate_header(
             return Err(ValidateHeaderError::PrevHeaderNotFound);
         }
     };
-
-    is_timestamp_valid(store, header, current_time)?;
 
     let header_target = header.target();
     if header_target > max_target(network) {
@@ -90,54 +85,6 @@ pub fn validate_header(
             _ => {}
         };
         return Err(ValidateHeaderError::InvalidPoWForComputedTarget);
-    }
-
-    Ok(())
-}
-
-fn timestamp_is_less_than_2h_in_future(
-    block_time: u64,
-    current_time: u64,
-) -> Result<(), ValidateHeaderError> {
-    let max_allowed_time = current_time + 2 * ONE_HOUR;
-
-    if block_time > max_allowed_time {
-        return Err(ValidateHeaderError::HeaderIsTooFarInFuture {
-            block_time,
-            max_allowed_time,
-        });
-    }
-
-    Ok(())
-}
-
-/// Validates if a header's timestamp is valid.
-/// Bitcoin Protocol Rules wiki https://en.bitcoin.it/wiki/Protocol_rules says,
-/// "Reject if timestamp is the median time of the last 11 blocks or before"
-/// "Block timestamp must not be more than two hours in the future"
-fn is_timestamp_valid(
-    store: &impl HeaderStore,
-    header: &BlockHeader,
-    current_time: u64,
-) -> Result<(), ValidateHeaderError> {
-    timestamp_is_less_than_2h_in_future(header.time as u64, current_time)?;
-    let mut times = vec![];
-    let mut current_header = *header;
-    let initial_hash = store.get_initial_hash();
-    for _ in 0..11 {
-        if let Some(prev_header) = store.get_with_block_hash(&current_header.prev_blockhash) {
-            times.push(prev_header.time);
-            if current_header.prev_blockhash == initial_hash {
-                break;
-            }
-            current_header = prev_header;
-        }
-    }
-
-    times.sort_unstable();
-    let median = times[times.len() / 2];
-    if header.time <= median {
-        return Err(ValidateHeaderError::HeaderIsOld);
     }
 
     Ok(())
@@ -425,7 +372,7 @@ mod test {
         let header_705600 = deserialize_header(MAINNET_HEADER_705600);
         let header_705601 = deserialize_header(MAINNET_HEADER_705601);
         let store = SimpleHeaderStore::new(header_705600, 705_600);
-        let result = validate_header(&Network::Bitcoin, &store, &header_705601, MOCK_CURRENT_TIME);
+        let result = validate_header(&Network::Bitcoin, &store, &header_705601);
         assert!(result.is_ok());
     }
 
@@ -438,7 +385,6 @@ mod test {
             &Network::Testnet,
             &store,
             &header_2132556,
-            MOCK_CURRENT_TIME,
         );
         assert!(result.is_ok());
     }
@@ -449,7 +395,7 @@ mod test {
         let mut store = SimpleHeaderStore::new(header_586656, 586_656);
         let headers = get_bitcoin_headers();
         for (i, header) in headers.iter().enumerate() {
-            let result = validate_header(&Network::Bitcoin, &store, header, MOCK_CURRENT_TIME);
+            let result = validate_header(&Network::Bitcoin, &store, header);
             assert!(
                 result.is_ok(),
                 "Failed to validate header on line {}: {:?}",
@@ -461,111 +407,11 @@ mod test {
     }
 
     #[test]
-    fn test_timestamp_is_less_than_2h_in_future() {
-        // Time is represented as the number of seconds after 01.01.1970 00:00.
-        // Hence, if block time is 10 seconds after that time,
-        // 'timestamp_is_less_than_2h_in_future' should return true.
-
-        assert!(timestamp_is_less_than_2h_in_future(10, MOCK_CURRENT_TIME).is_ok());
-
-        assert!(timestamp_is_less_than_2h_in_future(
-            MOCK_CURRENT_TIME - ONE_HOUR,
-            MOCK_CURRENT_TIME
-        )
-        .is_ok());
-
-        assert!(timestamp_is_less_than_2h_in_future(MOCK_CURRENT_TIME, MOCK_CURRENT_TIME).is_ok());
-
-        assert!(timestamp_is_less_than_2h_in_future(
-            MOCK_CURRENT_TIME + ONE_HOUR,
-            MOCK_CURRENT_TIME
-        )
-        .is_ok());
-
-        assert!(timestamp_is_less_than_2h_in_future(
-            MOCK_CURRENT_TIME + 2 * ONE_HOUR - 5,
-            MOCK_CURRENT_TIME
-        )
-        .is_ok());
-
-        // 'timestamp_is_less_than_2h_in_future' should return false
-        // because the time is more than 2 hours from the current time.
-        assert_eq!(
-            timestamp_is_less_than_2h_in_future(
-                MOCK_CURRENT_TIME + 2 * ONE_HOUR + 10,
-                MOCK_CURRENT_TIME
-            ),
-            Err(ValidateHeaderError::HeaderIsTooFarInFuture {
-                block_time: MOCK_CURRENT_TIME + 2 * ONE_HOUR + 10,
-                max_allowed_time: MOCK_CURRENT_TIME + 2 * ONE_HOUR
-            })
-        );
-    }
-
-    #[test]
-    fn test_is_timestamp_valid() {
-        let header_705600 = deserialize_header(MAINNET_HEADER_705600);
-        let header_705601 = deserialize_header(MAINNET_HEADER_705601);
-        let header_705602 = deserialize_header(MAINNET_HEADER_705602);
-        let mut store = SimpleHeaderStore::new(header_705600, 705_600);
-        store.add(header_705601);
-        store.add(header_705602);
-
-        let mut header = BlockHeader {
-            version: Version::from_consensus(0x20800004),
-            prev_blockhash: BlockHash::from_str(
-                "00000000000000000001eea12c0de75000c2546da22f7bf42d805c1d2769b6ef",
-            )
-            .unwrap(),
-            merkle_root: TxMerkleNode::from_str(
-                "c120ff2ae1363593a0b92e0d281ec341a0cc989b4ee836dc3405c9f4215242a6",
-            )
-            .unwrap(),
-            time: 1634590600,
-            bits: CompactTarget::from_consensus(0x170e0408),
-            nonce: 0xb48e8b0a,
-        };
-        assert!(is_timestamp_valid(&store, &header, MOCK_CURRENT_TIME).is_ok());
-
-        // Monday, October 18, 2021 20:26:40
-        header.time = 1634588800;
-        assert!(matches!(
-            is_timestamp_valid(&store, &header, MOCK_CURRENT_TIME),
-            Err(ValidateHeaderError::HeaderIsOld)
-        ));
-
-        let result = validate_header(&Network::Bitcoin, &store, &header, MOCK_CURRENT_TIME);
-        assert!(matches!(result, Err(ValidateHeaderError::HeaderIsOld)));
-
-        header.time = (MOCK_CURRENT_TIME - ONE_HOUR) as u32;
-
-        assert!(is_timestamp_valid(&store, &header, MOCK_CURRENT_TIME).is_ok());
-
-        header.time = (MOCK_CURRENT_TIME + 2 * ONE_HOUR + 10) as u32;
-        assert_eq!(
-            is_timestamp_valid(&store, &header, MOCK_CURRENT_TIME),
-            Err(ValidateHeaderError::HeaderIsTooFarInFuture {
-                block_time: header.time as u64,
-                max_allowed_time: MOCK_CURRENT_TIME + 2 * ONE_HOUR
-            })
-        );
-
-        let result = validate_header(&Network::Bitcoin, &store, &header, MOCK_CURRENT_TIME);
-        assert_eq!(
-            result,
-            Err(ValidateHeaderError::HeaderIsTooFarInFuture {
-                block_time: header.time as u64,
-                max_allowed_time: MOCK_CURRENT_TIME + 2 * ONE_HOUR,
-            })
-        );
-    }
-
-    #[test]
     fn test_is_header_valid_missing_prev_header() {
         let header_705600 = deserialize_header(MAINNET_HEADER_705600);
         let header_705602 = deserialize_header(MAINNET_HEADER_705602);
         let store = SimpleHeaderStore::new(header_705600, 705_600);
-        let result = validate_header(&Network::Bitcoin, &store, &header_705602, MOCK_CURRENT_TIME);
+        let result = validate_header(&Network::Bitcoin, &store, &header_705602);
         assert!(matches!(
             result,
             Err(ValidateHeaderError::PrevHeaderNotFound)
@@ -578,7 +424,7 @@ mod test {
         let mut header = deserialize_header(MAINNET_HEADER_705601);
         header.bits = pow_limit_bits(&Network::Bitcoin);
         let store = SimpleHeaderStore::new(header_705600, 705_600);
-        let result = validate_header(&Network::Bitcoin, &store, &header, MOCK_CURRENT_TIME);
+        let result = validate_header(&Network::Bitcoin, &store, &header);
         assert!(matches!(
             result,
             Err(ValidateHeaderError::InvalidPoWForHeaderTarget)
@@ -596,7 +442,7 @@ mod test {
         let mut store = SimpleHeaderStore::new(h0, 0);
         store.add(h1);
         store.add(h2);
-        let result = validate_header(&Network::Regtest, &store, &h3, MOCK_CURRENT_TIME);
+        let result = validate_header(&Network::Regtest, &store, &h3);
         assert!(matches!(
             result,
             Err(ValidateHeaderError::InvalidPoWForComputedTarget)
@@ -609,7 +455,7 @@ mod test {
         let mut header = deserialize_header(MAINNET_HEADER_705601);
         header.bits = pow_limit_bits(&Network::Regtest);
         let store = SimpleHeaderStore::new(header_705600, 705_600);
-        let result = validate_header(&Network::Bitcoin, &store, &header, MOCK_CURRENT_TIME);
+        let result = validate_header(&Network::Bitcoin, &store, &header);
         assert!(matches!(
             result,
             Err(ValidateHeaderError::TargetDifficultyAboveMax)

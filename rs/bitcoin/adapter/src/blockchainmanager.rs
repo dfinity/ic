@@ -5,11 +5,10 @@ use crate::{
     Channel, Command, ProcessBitcoinNetworkMessageError,
 };
 use bitcoin::{
-    p2p::{
+    block::Header as BlockHeader, hashes::Hash as _, p2p::{
         message::{NetworkMessage, MAX_INV_SIZE},
         message_blockdata::{GetHeadersMessage, Inventory},
-    },
-    Block, BlockHash, block::Header as BlockHeader,
+    }, Block, BlockHash
 };
 use hashlink::{LinkedHashMap, LinkedHashSet};
 use ic_btc_validation::ValidateHeaderError;
@@ -389,7 +388,7 @@ impl BlockchainManager {
                         if headers.len() < MAX_HEADERS_SIZE {
                             None
                         } else {
-                            Some((vec![last.header.block_hash()], BlockHash::default()))
+                            Some((vec![last.header.block_hash()], BlockHash::all_zeros()))
                         }
                     } else {
                         None
@@ -472,7 +471,7 @@ impl BlockchainManager {
                 tip: initial_hash,
             },
         );
-        let locators = (locator_hashes, BlockHash::default());
+        let locators = (locator_hashes, BlockHash::all_zeros());
         self.send_getheaders(channel, addr, locators);
     }
 
@@ -687,7 +686,7 @@ impl BlockchainManager {
             if !self.getheaders_requests.contains_key(&addr) && self.catchup_headers.contains(&addr)
             {
                 let locators = self.blockchain.lock().unwrap().locator_hashes();
-                self.send_getheaders(channel, &addr, (locators, BlockHash::default()));
+                self.send_getheaders(channel, &addr, (locators, BlockHash::all_zeros()));
                 self.catchup_headers.remove(&addr);
             }
         }
@@ -815,7 +814,7 @@ pub mod test {
 
         assert_eq!(channel.command_count(), 1);
 
-        let locators = (vec![genesis_hash], BlockHash::default());
+        let locators = (vec![genesis_hash], BlockHash::all_zeros());
         blockchain_manager.send_getheaders(&mut channel, &addr, locators.clone());
         assert!(blockchain_manager.getheaders_requests.contains_key(&addr));
         let request = blockchain_manager.getheaders_requests.get(&addr).unwrap();
@@ -824,7 +823,7 @@ pub mod test {
         let command = channel.pop_front().expect("command not found");
         assert!(matches!(command.address, Some(address) if address == addr));
         assert!(
-            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version: _, locator_hashes: _, stop_hash }) if *stop_hash == BlockHash::default())
+            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version: _, locator_hashes: _, stop_hash }) if *stop_hash == BlockHash::all_zeros())
         );
         assert!(
             matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version, locator_hashes: _, stop_hash: _ }) if *version == MINIMUM_VERSION_NUMBER)
@@ -894,7 +893,7 @@ pub mod test {
             _ => GetHeadersMessage {
                 version: 0,
                 locator_hashes: vec![],
-                stop_hash: BlockHash::default(),
+                stop_hash: BlockHash::all_zeros(),
             },
         };
         assert_eq!(
@@ -904,7 +903,7 @@ pub mod test {
         );
         assert_eq!(
             get_headers_message.stop_hash,
-            BlockHash::default(),
+            BlockHash::all_zeros(),
             "Didn't send the right stop hash for initial syncing"
         );
 
@@ -932,7 +931,7 @@ pub mod test {
             _ => GetHeadersMessage {
                 version: 0,
                 locator_hashes: vec![],
-                stop_hash: BlockHash::default(),
+                stop_hash: BlockHash::all_zeros(),
             },
         };
         assert_eq!(
@@ -941,7 +940,7 @@ pub mod test {
         );
         assert_eq!(
             get_headers_message.stop_hash,
-            BlockHash::default(),
+            BlockHash::all_zeros(),
             "Didn't send the right stop hash for initial syncing"
         );
     }
