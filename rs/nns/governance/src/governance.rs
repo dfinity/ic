@@ -14,7 +14,8 @@ use crate::{
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
-        metrics::NeuronSubsetMetrics, prune_some_following, NeuronMetrics, NeuronStore,
+        backfill_some_voting_power_refreshed_timestamps, metrics::NeuronSubsetMetrics,
+        prune_some_following, NeuronMetrics, NeuronStore,
     },
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
@@ -6127,6 +6128,14 @@ impl Governance {
             begin,
             carry_on,
         )
+    }
+
+    pub fn backfill_some_voting_power_refreshed_timestamps(
+        &mut self,
+        begin: std::ops::Bound<NeuronId>,
+        carry_on: impl FnMut() -> bool,
+    ) -> std::ops::Bound<NeuronId> {
+        backfill_some_voting_power_refreshed_timestamps(&mut self.neuron_store, begin, carry_on)
     }
 
     /// Creates a new neuron or refreshes the stake of an existing

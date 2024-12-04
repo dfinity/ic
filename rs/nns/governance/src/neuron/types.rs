@@ -587,6 +587,13 @@ impl Neuron {
         u64::try_from(result).unwrap()
     }
 
+    pub(crate) fn backfill_voting_power_refreshed_timestamp(&mut self) {
+        if self.voting_power_refreshed_timestamp_seconds == 1731628801 {
+            self.voting_power_refreshed_timestamp_seconds =
+                DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS;
+        }
+    }
+
     pub(crate) fn ready_to_unstake_maturity(&self, now_seconds: u64) -> bool {
         self.state(now_seconds) == NeuronState::Dissolved
             && self.staked_maturity_e8s_equivalent.unwrap_or(0) > 0
