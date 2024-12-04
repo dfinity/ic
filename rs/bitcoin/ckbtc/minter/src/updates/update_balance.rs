@@ -316,8 +316,8 @@ async fn kyt_check_utxo<R: CanisterRuntime>(
 ) -> Result<UtxoCheckStatus, UpdateBalanceError> {
     use ic_btc_checker::{CheckTransactionStatus, CHECK_TRANSACTION_CYCLES_REQUIRED};
 
-    let kyt_principal = read_state(|s| {
-        s.kyt_principal
+    let btc_checker_principal = read_state(|s| {
+        s.btc_checker_principal
             .expect("BUG: upgrade procedure must ensure that the bitcoin checker principal is set")
             .get()
             .into()
@@ -328,7 +328,11 @@ async fn kyt_check_utxo<R: CanisterRuntime>(
     }
     for i in 0..MAX_CHECK_TRANSACTION_RETRY {
         match runtime
-            .check_transaction(kyt_principal, utxo, CHECK_TRANSACTION_CYCLES_REQUIRED)
+            .check_transaction(
+                btc_checker_principal,
+                utxo,
+                CHECK_TRANSACTION_CYCLES_REQUIRED,
+            )
             .await
             .map_err(|call_err| {
                 UpdateBalanceError::TemporarilyUnavailable(format!(

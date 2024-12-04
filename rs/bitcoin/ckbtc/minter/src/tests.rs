@@ -41,7 +41,7 @@ fn default_init_args() -> InitArgs {
         min_confirmations: None,
         mode: Mode::GeneralAvailability,
         kyt_fee: None,
-        kyt_principal: None,
+        btc_checker_principal: None,
     }
 }
 

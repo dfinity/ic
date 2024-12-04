@@ -227,22 +227,24 @@ pub fn replay<I: CheckInvariants>(
         None => return Err(ReplayLogError::EmptyLog),
     };
 
-    // Because `kyt_principal` was previously used as a default
+    // Because `btc_checker_principal` was previously used as a default
     // substitute for `kyt_provider` during kyt_fee accounting,
     // we need to keep track of this value so that `distribute_kyt_fee`
-    // knows when to skip giving fees to `kyt_principal`.
-    let mut previous_kyt_principal = None;
+    // knows when to skip giving fees to `btc_checker_principal`.
+    let mut previous_btc_checker_principal = None;
     for event in events {
         match event {
             Event::Init(args) => {
-                if args.kyt_principal.is_some() {
-                    previous_kyt_principal = args.kyt_principal.map(Principal::from);
+                if args.btc_checker_principal.is_some() {
+                    previous_btc_checker_principal =
+                        args.btc_checker_principal.map(Principal::from);
                 }
                 state.reinit(args);
             }
             Event::Upgrade(args) => {
-                if args.kyt_principal.is_some() {
-                    previous_kyt_principal = args.kyt_principal.map(Principal::from);
+                if args.btc_checker_principal.is_some() {
+                    previous_btc_checker_principal =
+                        args.btc_checker_principal.map(Principal::from);
                 }
                 state.upgrade(args);
             }
@@ -375,7 +377,7 @@ pub fn replay<I: CheckInvariants>(
                 amount,
                 ..
             } => {
-                if Some(kyt_provider) != previous_kyt_principal {
+                if Some(kyt_provider) != previous_btc_checker_principal {
                     if let Err(Overdraft(overdraft)) =
                         state.distribute_kyt_fee(kyt_provider, amount)
                     {

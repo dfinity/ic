@@ -190,7 +190,7 @@ type InitArgs = record {
     kyt_fee : opt nat64;
 
     /// The canister id of the bitcoin checker canister.
-    kyt_principal: opt principal;
+    btc_checker_principal: opt principal;
 };
 
 // The upgrade parameters of the minter canister.
@@ -213,7 +213,7 @@ type UpgradeArgs = record {
     kyt_fee : opt nat64;
 
     /// The principal of the bitcoin checker canister.
-    kyt_principal : opt principal;
+    btc_checker_principal : opt principal;
 };
 
 type RetrieveBtcStatus = variant {

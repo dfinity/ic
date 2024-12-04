@@ -54,7 +54,7 @@ fn default_init_args() -> CkbtcMinterInitArgs {
         min_confirmations: Some(MIN_CONFIRMATIONS),
         mode: Mode::GeneralAvailability,
         kyt_fee: None,
-        kyt_principal: Some(CanisterId::from(0)),
+        btc_checker_principal: Some(CanisterId::from(0)),
     }
 }
 
@@ -188,7 +188,7 @@ fn test_wrong_upgrade_parameter() {
         panic!("init expected to fail")
     }
     let args = MinterArg::Init(CkbtcMinterInitArgs {
-        kyt_principal: None,
+        btc_checker_principal: None,
         ..default_init_args()
     });
     let args = Encode!(&args).unwrap();
@@ -638,7 +638,7 @@ impl CkBtcSetup {
                 ledger_id,
                 max_time_in_queue_nanos: 100,
                 kyt_fee: Some(CHECK_FEE),
-                kyt_principal: kyt_id.into(),
+                btc_checker_principal: kyt_id.into(),
                 ..default_init_args()
             }))
             .unwrap(),

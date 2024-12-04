@@ -32,7 +32,7 @@ pub struct UpgradeArgs {
     pub kyt_fee: Option<u64>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub kyt_principal: Option<CanisterId>,
+    pub btc_checker_principal: Option<CanisterId>,
 }
 
 pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {

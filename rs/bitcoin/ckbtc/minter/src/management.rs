@@ -305,11 +305,11 @@ pub async fn sign_with_ecdsa(
 
 /// Check if the given Bitcoin address is blocked.
 pub async fn check_withdrawal_destination_address(
-    kyt_principal: Principal,
+    btc_checker_principal: Principal,
     address: String,
 ) -> Result<CheckAddressResponse, CallError> {
     let (res,): (CheckAddressResponse,) = ic_cdk::api::call::call(
-        kyt_principal,
+        btc_checker_principal,
         "check_address",
         (CheckAddressArgs { address },),
     )
@@ -323,12 +323,12 @@ pub async fn check_withdrawal_destination_address(
 
 /// Check if the given UTXO passes bitcoin check.
 pub async fn check_transaction(
-    kyt_principal: Principal,
+    btc_checker_principal: Principal,
     utxo: &Utxo,
     cycle_payment: u128,
 ) -> Result<CheckTransactionResponse, CallError> {
     let (res,): (CheckTransactionResponse,) = ic_cdk::api::call::call_with_payment128(
-        kyt_principal,
+        btc_checker_principal,
         "check_transaction",
         (CheckTransactionArgs {
             txid: utxo.outpoint.txid.as_ref().to_vec(),

@@ -186,13 +186,13 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         return Err(RetrieveBtcError::InsufficientFunds { balance });
     }
 
-    let kyt_principal = read_state(|s| {
-        s.kyt_principal
+    let btc_checker_principal = read_state(|s| {
+        s.btc_checker_principal
             .expect("BUG: upgrade procedure must ensure that the bitcoin checker principal is set")
             .get()
             .into()
     });
-    let status = kyt_check_address(kyt_principal, args.address.clone()).await?;
+    let status = kyt_check_address(btc_checker_principal, args.address.clone()).await?;
     match status {
         BtcAddressCheckStatus::Tainted => {
             log!(
@@ -286,17 +286,20 @@ pub async fn retrieve_btc_with_approval(
         ));
     }
 
-    let kyt_principal = read_state(|s| {
-        s.kyt_principal
+    let btc_checker_principal = read_state(|s| {
+        s.btc_checker_principal
             .expect("BUG: upgrade procedure must ensure that the bitcoin checker principal is set")
             .get()
             .into()
     });
 
-    match kyt_check_address(kyt_principal, parsed_address.display(btc_network)).await {
+    match kyt_check_address(btc_checker_principal, parsed_address.display(btc_network)).await {
         Err(error) => {
             return Err(RetrieveBtcWithApprovalError::GenericError {
-                error_message: format!("Failed to call bitcoin checker canister with error: {:?}", error),
+                error_message: format!(
+                    "Failed to call bitcoin checker canister with error: {:?}",
+                    error
+                ),
                 error_code: ErrorCode::KytCallFailed as u64,
             })
         }
@@ -520,10 +523,10 @@ pub enum BtcAddressCheckStatus {
     Tainted,
 }
 async fn kyt_check_address(
-    kyt_principal: Principal,
+    btc_checker_principal: Principal,
     address: String,
 ) -> Result<BtcAddressCheckStatus, RetrieveBtcError> {
-    match check_withdrawal_destination_address(kyt_principal, address.clone())
+    match check_withdrawal_destination_address(btc_checker_principal, address.clone())
         .await
         .map_err(|call_err| {
             RetrieveBtcError::TemporarilyUnavailable(format!(

@@ -402,7 +402,7 @@ pub async fn install_minter(
         min_confirmations: Some(BTC_MIN_CONFIRMATIONS as u32),
         mode: Mode::GeneralAvailability,
         kyt_fee: Some(CHECK_FEE),
-        kyt_principal: Some(kyt_canister_id),
+        btc_checker_principal: Some(kyt_canister_id),
     };
 
     let minter_arg = MinterArg::Init(args);

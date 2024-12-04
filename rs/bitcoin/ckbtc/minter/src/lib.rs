@@ -1287,7 +1287,7 @@ pub trait CanisterRuntime {
 
     async fn check_transaction(
         &self,
-        kyt_principal: Principal,
+        btc_checker_principal: Principal,
         utxo: &Utxo,
         cycle_payment: u128,
     ) -> Result<CheckTransactionResponse, CallError>;
@@ -1331,11 +1331,11 @@ impl CanisterRuntime for IcCanisterRuntime {
 
     async fn check_transaction(
         &self,
-        kyt_principal: Principal,
+        btc_checker_principal: Principal,
         utxo: &Utxo,
         cycle_payment: u128,
     ) -> Result<CheckTransactionResponse, CallError> {
-        management::check_transaction(kyt_principal, utxo, cycle_payment).await
+        management::check_transaction(btc_checker_principal, utxo, cycle_payment).await
     }
 
     async fn mint_ckbtc(

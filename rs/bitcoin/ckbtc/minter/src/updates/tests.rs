@@ -220,7 +220,7 @@ mod update_balance {
         use crate::lifecycle::init::InitArgs;
         use ic_base_types::CanisterId;
         init_state(InitArgs {
-            kyt_principal: Some(CanisterId::unchecked_from_principal(
+            btc_checker_principal: Some(CanisterId::unchecked_from_principal(
                 BTC_CHECKER_CANISTER_ID.into(),
             )),
             ..init_args()
@@ -252,8 +252,8 @@ mod update_balance {
         runtime
             .expect_check_transaction()
             .times(1)
-            .withf(move |kyt_principal, utxo_, _cycles| {
-                kyt_principal == &BTC_CHECKER_CANISTER_ID && utxo_ == &utxo
+            .withf(move |btc_checker_principal, utxo_, _cycles| {
+                btc_checker_principal == &BTC_CHECKER_CANISTER_ID && utxo_ == &utxo
             })
             .return_const(Ok(response));
     }
