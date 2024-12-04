@@ -840,7 +840,6 @@ impl MemoryUsage {
             return Err(HypervisorError::OutOfMemory);
         }
 
-        //here
         sandbox_safe_system_state.check_freezing_threshold_for_memory_grow(
             api_type,
             self.current_message_usage,
