@@ -59,7 +59,3 @@ path = "unstuck_subnet_test.rs"
 [[bin]]
 name = "ic-systest-node-assign-test"
 path = "node_assign_test.rs"
-
-[[bin]]
-name = "reboot-toy"
-path = "reboot_toy.rs"

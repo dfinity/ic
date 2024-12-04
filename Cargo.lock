@@ -16096,6 +16096,7 @@ dependencies = [
  "ic-registry-canister-api",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
+ "ic_consensus_system_test_utils",
  "indoc",
  "k256",
  "registry-canister",

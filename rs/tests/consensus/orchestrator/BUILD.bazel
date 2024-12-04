@@ -168,22 +168,3 @@ system_test_nns(
         "@crate_index//:slog",
     ],
 )
-
-system_test(
-    name = "reboot_toy",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-        "manual",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
-        "//rs/tests/driver:ic-system-test-driver",
-        "@crate_index//:anyhow",
-        "@crate_index//:slog",
-    ],
-)
