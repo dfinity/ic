@@ -55,14 +55,6 @@ impl Config {
         if reply_bytes.is_empty() {
             return Err("empty reply_bytes range".to_string());
         }
-        /*
-        if *reply_bytes.end() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32 {
-            return Err(format!(
-                "reply_bytes range max exceeds {}",
-                MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64
-            ));
-        }
-        */
         if instructions_count.is_empty() {
             return Err("empty instructions_count range".to_string());
         }
