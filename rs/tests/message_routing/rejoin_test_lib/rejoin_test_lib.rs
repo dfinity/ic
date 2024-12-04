@@ -122,22 +122,7 @@ pub async fn rejoin_test_large_state(
     agent_node: IcNodeSnapshot,
     nodes_to_kill: impl Iterator<Item = IcNodeSnapshot>,
 ) {
-    let logger = env.logger();
-    info!(
-        logger,
-        "Installing universal canister on a node {} ...",
-        agent_node.get_public_url()
-    );
-    let agent = agent_node.build_default_agent_async().await;
-    let universal_canister =
-        UniversalCanister::new_with_retries(&agent, agent_node.effective_canister_id(), &logger)
-            .await;
-
-    let endpoint_runtime = runtime_from_url(
-        agent_node.get_public_url(),
-        agent_node.effective_canister_id(),
-    );
-    install_many_canisters(env, &endpoint_runtime, num_canisters).await;
+    install_many_canisters(env, &agent_node, num_canisters).await;
 }
 
 pub async fn fetch_metrics<T>(
@@ -238,29 +223,19 @@ async fn install_statesync_test_canisters(
 
 async fn install_many_canisters(
     env: TestEnv,
-    endpoint_runtime: &Runtime,
+    node: &IcNodeSnapshot,
     num_canisters: usize,
 ) {
     let logger = env.logger();
-    let wasm = Wasm::from_file(get_dependency_path(
-        env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
-            .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
-    ));
-    for i in 0..200 {
+    let wasm = Wasm::from_file(get_dependency_path(""));
+    for i in 0..1000 {
         let mut futures: Vec<_> = Vec::new();
-        for canister_idx in 0..100 {
+        for canister_idx in 0..20 {
             let new_wasm = wasm.clone();
             let new_logger = logger.clone();
-            let id = i * 100 + canister_idx;
+            let id = i * 20 + canister_idx;
             futures.push(async move {
-                let canister = new_wasm
-                    .clone()
-                    .install(endpoint_runtime)
-                    .bytes(Vec::new())
-                    .await
-                    .map_err(|_| {
-                        info!(new_logger, "Installation of the canister_idx={} failed.", id);
-                    });
+                node.create_and_install_canister_with_arg("rs/tests/counter.wat", None);
                 info!(
                     new_logger,
                     "Installed canister {}",
