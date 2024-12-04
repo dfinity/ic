@@ -8,9 +8,10 @@ use ic_icrc1_index_ng::{IndexArg, UpgradeArg as IndexUpgradeArg};
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
     BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
+use ic_ledger_suite_state_machine_tests::metrics::retrieve_metrics;
 use ic_ledger_suite_state_machine_tests::{
     generate_transactions, get_all_ledger_and_archive_blocks, get_blocks, list_archives,
-    TransactionGenerationParameters,
+    wait_ledger_ready, TransactionGenerationParameters,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
@@ -202,6 +203,16 @@ impl LedgerSuiteConfig {
         }
     }
 
+    fn print_ledger_metrics(&self, state_machine: &StateMachine) {
+        let ledger_id =
+            CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
+        let metrics = retrieve_metrics(state_machine, ledger_id);
+        println!("Ledger metrics:");
+        for metric in metrics {
+            println!("  {}", metric);
+        }
+    }
+
     fn upgrade_archives_or_panic(&self, state_machine: &StateMachine, wasm: &Wasm) {
         let canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
@@ -237,26 +248,31 @@ impl LedgerSuiteConfig {
     }
 
     fn upgrade_ledger(&self, state_machine: &StateMachine, wasm: &Wasm) -> Result<(), UserError> {
+        self.print_ledger_metrics(state_machine);
         let canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
         let args = ic_icrc1_ledger::LedgerArgument::Upgrade(None);
         let args = Encode!(&args).unwrap();
-        match state_machine.upgrade_canister(canister_id, wasm.clone().bytes(), args.clone()) {
-            Ok(_) => {
-                println!(
-                    "Upgraded {} ledger '{}'",
-                    self.canister_name, self.ledger_id
-                );
-                Ok(())
-            }
-            Err(e) => {
-                println!(
-                    "Error upgrading {} ledger '{}': {:?}",
-                    self.canister_name, self.ledger_id, e
-                );
-                Err(e)
-            }
-        }
+        let res =
+            match state_machine.upgrade_canister(canister_id, wasm.clone().bytes(), args.clone()) {
+                Ok(_) => {
+                    println!(
+                        "Upgraded {} ledger '{}'",
+                        self.canister_name, self.ledger_id
+                    );
+                    wait_ledger_ready(state_machine, canister_id, 100);
+                    Ok(())
+                }
+                Err(e) => {
+                    println!(
+                        "Error upgrading {} ledger '{}': {:?}",
+                        self.canister_name, self.ledger_id, e
+                    );
+                    Err(e)
+                }
+            };
+        self.print_ledger_metrics(state_machine);
+        res
     }
 
     fn upgrade_to_mainnet(&self, state_machine: &StateMachine) {
