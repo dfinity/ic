@@ -284,7 +284,7 @@ impl ConnectionManager {
                     break;
                 },
                 Some(reconnect) = self.connect_queue.next() => {
-                    self.handle_dial(reconnect.into_inner())
+                    self.handle_outbound_conn_attemp(reconnect.into_inner())
                 },
                 // Ignore the case if the sender is dropped. It is not transport's responsibility to make
                 // sure topology senders are up and running.
@@ -293,7 +293,7 @@ impl ConnectionManager {
                 },
                 incoming = self.endpoint.accept() => {
                     if let Some(incoming) = incoming {
-                        self.handle_inbound(incoming);
+                        self.handle_inbound_conn_attemp(incoming);
                     } else {
                         error!(self.log, "Quic endpoint closed. Stopping transport.");
                         // Endpoint is closed. This indicates NOT graceful shutdown.
@@ -423,7 +423,7 @@ impl ConnectionManager {
     }
 
     /// Inserts a task into `outbound_connecting`` that handles an outbound connection attempt. (The function can also be called `handle_outbound`).
-    fn handle_dial(&mut self, peer_id: NodeId) {
+    fn handle_outbound_conn_attemp(&mut self, peer_id: NodeId) {
         if !self.can_i_dial_to(&peer_id) {
             return;
         }
@@ -545,7 +545,7 @@ impl ConnectionManager {
     }
 
     /// Inserts a task into 'inbound_connecting' that handles an inbound connection attempt.
-    fn handle_inbound(&mut self, incoming: Incoming) {
+    fn handle_inbound_conn_attemp(&mut self, incoming: Incoming) {
         self.metrics.inbound_connection_total.inc();
         let node_id = self.node_id;
         let conn_fut = async move {
