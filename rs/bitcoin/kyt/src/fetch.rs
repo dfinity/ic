@@ -3,10 +3,11 @@ use crate::state::{
     FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError,
     TransactionKytData,
 };
-use crate::{is_blocked, providers, state, Config};
+use crate::{providers, state, Config};
 use bitcoin::Transaction;
 use futures::future::try_join_all;
 use ic_btc_interface::Txid;
+use ic_btc_kyt::blocklist::is_blocked;
 use ic_btc_kyt::{
     get_tx_cycle_cost, CheckTransactionIrrecoverableError, CheckTransactionResponse,
     CheckTransactionRetriable, CheckTransactionStatus, INITIAL_MAX_RESPONSE_BYTES,

@@ -1,10 +1,10 @@
 use bitcoin::{consensus::Decodable, Address, Transaction};
 use ic_btc_interface::Txid;
 use ic_btc_kyt::{
-    get_tx_cycle_cost, is_blocked, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
-    CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionResponse,
-    CheckTransactionRetriable, CheckTransactionStatus, KytArg, KytMode,
-    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs,
+    CheckTransactionIrrecoverableError, CheckTransactionResponse, CheckTransactionRetriable,
+    CheckTransactionStatus, KytArg, KytMode, CHECK_TRANSACTION_CYCLES_REQUIRED,
+    CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
 };
 use ic_canister_log::{export as export_logs, log};
 use ic_canisters_http_types as http;
@@ -22,6 +22,7 @@ mod providers;
 mod state;
 
 use fetch::{FetchEnv, FetchResult, TryFetchResult};
+use ic_btc_kyt::blocklist::is_blocked;
 use logs::{Log, LogEntry, Priority, DEBUG, WARN};
 use state::{get_config, set_config, Config, FetchGuardError, HttpGetTxError};
 

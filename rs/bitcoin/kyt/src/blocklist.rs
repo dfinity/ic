@@ -437,3 +437,9 @@ pub const BTC_ADDRESS_BLOCKLIST: &[&str] = &[
     "bc1qx3e2axj3wsfn0ndtvlwmkghmmgm4583nqg8ngk",
     "bc1qx9upga7f09tsetqf78wa3qrmcjar58mkwz6ng6",
 ];
+
+pub fn is_blocked(address: &Address) -> bool {
+    BTC_ADDRESS_BLOCKLIST
+        .binary_search(&address.to_string().as_ref())
+        .is_ok()
+}
