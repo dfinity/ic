@@ -27,5 +27,5 @@ name = "ic-systest-ipv4-integration"
 path = "ipv4_integration_test.rs"
 
 [[bin]]
-name = "reboot-toy"
+name = "reboot_toy"
 path = "reboot_toy.rs"

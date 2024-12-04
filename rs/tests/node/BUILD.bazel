@@ -1,5 +1,5 @@
 load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES")
-load("//rs/tests:system_tests.bzl", "system_test_nns", "system_test")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
