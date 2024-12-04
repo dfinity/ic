@@ -94,7 +94,6 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
 ) -> Result<(), (String, DebugInfo)> {
     // The number of rounds to execute while chatter is on.
     const CHATTER_PHASE_ROUND_COUNT: u64 = 30;
-    //const CHATTER_PHASE_ROUND_COUNT: u64 = 200;
     // The maximum number of rounds to execute after chatter is turned off. It it takes more than
     // this number of rounds until there are no more hanging calls, the test fails.
     const SHUTDOWN_PHASE_MAX_ROUNDS: u64 = 300;
@@ -120,7 +119,6 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
     )
     .unwrap();
 
-    //fixture.query_records(fixture.canisters()[0]).unwrap();
     // Send configs to canisters, seed the rng.
     for (index, canister) in fixture.canisters().into_iter().enumerate() {
         fixture.set_config(canister, config.clone());
@@ -134,7 +132,7 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
 
     // Build up backlog and keep up chatter for while.
     //for _ in 0..CHATTER_PHASE_ROUND_COUNT {
-    for i in 0..CHATTER_PHASE_ROUND_COUNT {
+    for _ in 0..CHATTER_PHASE_ROUND_COUNT {
         fixture.tick();
 
         // Check message memory limits are respected.
@@ -144,8 +142,6 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
             REMOTE_MESSAGE_MEMORY_CAPACITY,
         )?;
     }
-
-    //    return fixture.failed_with_reason("BLA");
 
     // Shut down chatter by putting a canister into `Stopping` state every 10 ticks until they are
     // all `Stopping` or `Stopped`.
