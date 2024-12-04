@@ -3,7 +3,6 @@ use crate::metrics::{
     LABEL_HEADER_RECEIVE_SIZE, LABEL_HTTP_METHOD, LABEL_REQUEST_HEADERS, LABEL_RESPONSE_HEADERS,
     LABEL_UPLOAD, LABEL_URL_PARSE,
 };
-use rand::Rng;
 use crate::Config;
 use core::convert::TryFrom;
 use http::{header::USER_AGENT, HeaderName, HeaderValue, Uri};
@@ -13,6 +12,7 @@ use hyper::{
     header::{HeaderMap, ToStrError},
     Method,
 };
+use rand::Rng;
 
 use hyper::body::Incoming;
 use hyper_rustls::HttpsConnector;
@@ -131,7 +131,7 @@ impl CanisterHttp {
         http_connector
             .set_connect_timeout(Some(Duration::from_secs(self.http_connect_timeout_secs)));
 
-        match ip.parse() { 
+        match ip.parse() {
             Ok(proxy_addr) => {
                 let proxy_connector = SocksConnector {
                     proxy_addr,
@@ -155,6 +155,109 @@ impl CanisterHttp {
                 debug!(self.logger, "Failed to parse SOCKS IP: {}", e);
                 None
             }
+        }
+    }
+
+    fn compare_results(
+        &self,
+        result: &Result<http::Response<Incoming>, String>,
+        dl_result: &Result<http::Response<Incoming>, String>,
+    ) {
+        match (result, dl_result) {
+            (Ok(_), Ok(_)) => {
+                debug!(self.logger, "SOCKS_PROXY_DL: Both requests succeeded");
+            }
+            (Err(_), Err(_)) => {
+                debug!(self.logger, "SOCKS_PROXY_DL: Both requests failed");
+            }
+            (Ok(_), Err(_)) => {
+                debug!(
+                    self.logger,
+                    "SOCKS_PROXY_DL: regular request succeeded, DL request failed"
+                );
+            }
+            (Err(_), Ok(_)) => {
+                debug!(
+                    self.logger,
+                    "SOCKS_PROXY_DL: regular request failed, DL request succeeded"
+                );
+            }
+        }
+    }
+
+    async fn https_outcall_dl_socks_proxy(
+        &self,
+        api_bn_ips: &[String],
+        request: http::Request<Full<Bytes>>,
+    ) -> Result<http::Response<Incoming>, String> {
+        let mut api_bn_ips = api_bn_ips.to_owned();
+
+        api_bn_ips.shuffle(&mut thread_rng());
+
+        let mut last_error = None;
+
+        let mut tries = 0;
+
+        for api_bn_ip in &api_bn_ips {
+            tries += 1;
+            if tries > MAX_SOCKS_PROXY_RETRIES {
+                break;
+            }
+            let next_socks_proxy_ip = api_bn_ip.clone();
+
+            let socks_client = {
+                let cache_guard = self.cache.upgradable_read();
+
+                if let Some(client) = cache_guard.get(&next_socks_proxy_ip) {
+                    client.clone()
+                } else {
+                    let mut cache_guard = RwLockUpgradableReadGuard::upgrade(cache_guard);
+                    self.metrics.socks_cache_miss.inc();
+
+                    match self.create_socks_client_for_ip(&next_socks_proxy_ip) {
+                        Some(client) => {
+                            cache_guard.insert(next_socks_proxy_ip.clone(), client.clone());
+                            self.metrics.socks_cache_size.set(cache_guard.len() as i64);
+                            client
+                        }
+                        None => {
+                            debug!(
+                                self.logger,
+                                "Failed to create SOCKS client for IP {}", next_socks_proxy_ip
+                            );
+                            // there is something wrong with this IP, try another one.
+                            continue;
+                        }
+                    }
+                }
+            };
+
+            self.metrics.socks_connections_attempts.inc();
+
+            match socks_client.request(request.clone()).await {
+                Ok(resp) => {
+                    self.metrics
+                        .succesful_socks_connections
+                        .with_label_values(&[&tries.to_string()])
+                        .inc();
+                    return Ok(resp);
+                }
+                Err(socks_err) => {
+                    debug!(
+                        self.logger,
+                        "Failed to connect through SOCKS with IP {}: {}",
+                        next_socks_proxy_ip,
+                        socks_err
+                    );
+                    last_error = Some(socks_err);
+                }
+            }
+        }
+
+        if let Some(last_error) = last_error {
+            Err(last_error.to_string())
+        } else {
+            Err("No API BN IPs provided".to_string())
         }
     }
 }
@@ -370,99 +473,16 @@ impl HttpsOutcallsService for CanisterHttp {
             content: body_bytes.to_vec(),
         }))
     }
-}    
+}
 
+#[allow(clippy::absurd_extreme_comparisons)]
 fn should_dl_socks_proxy() -> bool {
     let mut rng = rand::thread_rng();
     let random_number: u32 = rng.gen_range(0..100);
-    random_number < REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE
-}
-
-impl CanisterHttp {
-
-    fn compare_results(&self, result: &Result<http::Response<Incoming>, String>, dl_result: &Result<http::Response<Incoming>, String>) {
-        match (result, dl_result) {
-            (Ok(_), Ok(_)) => {
-                debug!(self.logger, "SOCKS_PROXY_DL: Both requests succeeded");
-            }
-            (Err(_), Err(_)) => {
-                debug!(self.logger, "SOCKS_PROXY_DL: Both requests failed");
-            }
-            (Ok(_), Err(_)) => {
-                debug!(self.logger, "SOCKS_PROXY_DL: regular request succeeded, DL request failed");
-            }
-            (Err(_), Ok(_)) => {
-                debug!(self.logger, "SOCKS_PROXY_DL: regular request failed, DL request succeeded");
-            }
-        }
-    }
-
-    async fn https_outcall_dl_socks_proxy(
-        &self,
-        api_bn_ips: &Vec<String>,
-        request: http::Request<Full<Bytes>>,
-    ) -> Result<http::Response<Incoming>, String> {
-        let mut api_bn_ips = api_bn_ips.clone();
-
-        api_bn_ips.shuffle(&mut thread_rng());
-
-        let mut last_error = None;
-
-        let mut tries = 0;
-        
-        for api_bn_ip in &api_bn_ips {
-            tries += 1;
-            if tries > MAX_SOCKS_PROXY_RETRIES {
-                break;
-            }
-            let next_socks_proxy_ip = api_bn_ip.clone();
-            
-            let socks_client = {
-                let cache_guard = self.cache.upgradable_read();
-
-                if let Some(client) = cache_guard.get(&next_socks_proxy_ip) {
-                    client.clone()
-                } else {
-                    let mut cache_guard = RwLockUpgradableReadGuard::upgrade(cache_guard);
-                    self.metrics.socks_cache_miss.inc();   
-
-                    match self.create_socks_client_for_ip(&next_socks_proxy_ip) {
-                        Some(client) => {
-                            cache_guard.insert(next_socks_proxy_ip.clone(), client.clone());
-                            self.metrics.socks_cache_size.set(cache_guard.len() as i64);
-                            client
-                        }
-                        None => {
-                            debug!(self.logger, "Failed to create SOCKS client for IP {}", next_socks_proxy_ip);
-                            // there is something wrong with this IP, try another one. 
-                            continue;
-                        }
-                    }
-                }
-            };
-
-            self.metrics.socks_connections_attempts.inc();
-
-            match socks_client.request(request.clone()).await {
-                Ok(resp) => {
-                    self.metrics.succesful_socks_connections
-                        .with_label_values(&[&tries.to_string()])
-                        .inc();
-                    return Ok(resp);
-                }
-                Err(socks_err) => {
-                    debug!(self.logger, "Failed to connect through SOCKS with IP {}: {}", next_socks_proxy_ip, socks_err);
-                    last_error = Some(socks_err);
-                }
-            }
-        }
-
-        if last_error.is_some() {
-            return Err(last_error.unwrap().to_string());
-        } else {
-            return Err("No API BN IPs provided".to_string());
-        }
-    }
+    // This is a dark launch feature. We want to test the SOCKS proxy with a small percentage of requests.
+    // Currently this is set to 0%, hence always false.
+    random_number
+        < REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE
 }
 
 fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {
