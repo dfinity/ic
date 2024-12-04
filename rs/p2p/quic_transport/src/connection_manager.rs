@@ -258,6 +258,25 @@ impl ConnectionManager {
         self.node_id < *dst
     }
 
+    // Conditions under which the node can start outbound connecting attempt
+    // - the node is a designated dialer
+    // - peer is in the subnet
+    // - this node is not part of the subnet (can happen when a node is removed from the subnet)
+    // - there is no connect attemped
+    // - there is no established connections
+    fn can_i_dial_to(&self, dst: &NodeId) -> bool {
+        let dialer = self.am_i_dialer(dst);
+        let peer_in_subnet = self.topology.is_member(dst);
+        let node_in_subnet = self.topology.is_member(&self.node_id);
+        let no_active_connection_attempt = !self.outbound_connecting.contains(dst);
+        let no_active_connection = !self.active_connections.contains(dst);
+        no_active_connection_attempt
+            && no_active_connection
+            && dialer
+            && node_in_subnet
+            && peer_in_subnet
+    }
+
     pub async fn run(mut self, cancellation: CancellationToken) {
         loop {
             select! {
@@ -376,16 +395,7 @@ impl ConnectionManager {
 
         // Connect/Disconnect from peers according to new topology
         for (peer_id, _) in self.topology.iter() {
-            let dialer = self.am_i_dialer(peer_id);
-            let no_active_connection_attempt = !self.outbound_connecting.contains(peer_id);
-            let no_active_connection = !self.active_connections.contains(peer_id);
-            let node_in_subnet = self.topology.is_member(&self.node_id);
-            // Add to delayqueue for connecting iff
-            // - Not currently trying to connect
-            // - No active connection to this peer
-            // - Our node id is lower -> This node is dialer.
-            // - This node is part of the subnet. This can happen when a node is removed from the subnet.
-            if no_active_connection_attempt && no_active_connection && dialer && node_in_subnet {
+            if self.can_i_dial_to(peer_id) {
                 self.connect_queue.insert(*peer_id, Duration::from_secs(0));
             }
         }
@@ -414,24 +424,7 @@ impl ConnectionManager {
 
     /// Inserts a task into `outbound_connecting`` that handles an outbound connection attempt. (The function can also be called `handle_outbound`).
     fn handle_dial(&mut self, peer_id: NodeId) {
-        let not_dialer = !self.am_i_dialer(&peer_id);
-        let peer_not_in_subnet = self.topology.get_addr(&peer_id).is_none();
-        let active_connection_attempt = self.outbound_connecting.contains(&peer_id);
-        let active_connection = self.active_connections.contains(&peer_id);
-        let node_not_in_subnet = !self.topology.is_member(&self.node_id);
-
-        // Conditions under which we do NOT connect
-        // - prefer lower node id / dialing ourself
-        // - peer not in subnet
-        // - currently trying to connect
-        // - already connected
-        // - this node is not part of subnet. This can happen when a node is removed from the subnet.
-        if not_dialer
-            || peer_not_in_subnet
-            || active_connection_attempt
-            || active_connection
-            || node_not_in_subnet
-        {
+        if !self.can_i_dial_to(&peer_id) {
             return;
         }
 
