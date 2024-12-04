@@ -3,7 +3,7 @@ use clap::{Args, Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
-use config::update_config::update_guestos_config;
+use config::update_config::{update_guestos_config, update_hostos_config};
 use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
 use regex::Regex;
@@ -382,111 +382,18 @@ pub fn main() -> Result<()> {
             generate_testnet_config(args, clap_args.guestos_config_json_path)
         }
         // TODO(NODE-1519): delete UpdateGuestosConfig and UpdateHostosConfig after moved to new config format
-        Some(Commands::UpdateGuestosConfig) => update_guestos_config(),
         // Regenerate config.json on *every boot* in case the config structure changes between
         // when we roll out the update-config service and when we roll out the 'config integration'
+        Some(Commands::UpdateGuestosConfig) => update_guestos_config(),
         Some(Commands::UpdateHostosConfig {
             config_ini_path,
             deployment_json_path,
             hostos_config_json_path,
-        }) => {
-            let hostos_config_json_path = Path::new(&hostos_config_json_path);
-
-            let ConfigIniSettings {
-                ipv6_prefix,
-                ipv6_prefix_length,
-                ipv6_gateway,
-                ipv4_address,
-                ipv4_gateway,
-                ipv4_prefix_length,
-                domain_name,
-                verbose,
-                node_reward_type,
-            } = get_config_ini_settings(&config_ini_path)?;
-
-            let deterministic_config = DeterministicIpv6Config {
-                prefix: ipv6_prefix,
-                prefix_length: ipv6_prefix_length,
-                gateway: ipv6_gateway,
-            };
-
-            let ipv4_config = match (ipv4_address, ipv4_gateway, ipv4_prefix_length) {
-                (Some(address), Some(gateway), Some(prefix_length)) => Some(Ipv4Config {
-                    address,
-                    gateway,
-                    prefix_length,
-                }),
-                (None, None, None) => None,
-                _ => {
-                    println!("Warning: Partial IPv4 configuration provided. All parameters are required for IPv4 configuration.");
-                    None
-                }
-            };
-
-            let network_settings = NetworkSettings {
-                ipv6_config: Ipv6Config::Deterministic(deterministic_config),
-                ipv4_config,
-                domain_name,
-            };
-
-            let deployment_json_settings = get_deployment_settings(&deployment_json_path)?;
-
-            let logging = Logging {
-                elasticsearch_hosts: deployment_json_settings.logging.hosts.to_string(),
-                elasticsearch_tags: None,
-            };
-
-            let mgmt_mac = resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac)?;
-
-            let use_nns_public_key = Path::new("/boot/config/nns_public_key.pem").exists();
-            let use_node_operator_private_key =
-                Path::new("/boot/config/node_operator_private_key.pem").exists();
-            let use_ssh_authorized_keys = Path::new("/boot/config/ssh_authorized_keys").exists();
-
-            let icos_settings = ICOSSettings {
-                node_reward_type,
-                mgmt_mac,
-                deployment_environment: deployment_json_settings.deployment.name.parse()?,
-                logging,
-                use_nns_public_key,
-                nns_urls: deployment_json_settings.nns.url.clone(),
-                use_node_operator_private_key,
-                use_ssh_authorized_keys,
-                icos_dev_settings: ICOSDevSettings::default(),
-            };
-
-            let hostos_settings = HostOSSettings {
-                vm_memory: deployment_json_settings.resources.memory,
-                vm_cpu: deployment_json_settings
-                    .resources
-                    .cpu
-                    .clone()
-                    .unwrap_or("kvm".to_string()),
-                verbose,
-            };
-
-            let guestos_settings = GuestOSSettings::default();
-
-            let hostos_config = HostOSConfig {
-                config_version: CONFIG_VERSION.to_string(),
-                network_settings,
-                icos_settings,
-                hostos_settings,
-                guestos_settings,
-            };
-
-            // HostOSConfig is safe to log; it does not contain any secret material
-            println!("New HostOSConfig: {:?}", hostos_config);
-
-            serialize_and_write_config(hostos_config_json_path, &hostos_config)?;
-
-            println!(
-                "New HostOSConfig has been written to {}",
-                hostos_config_json_path.display()
-            );
-
-            Ok(())
-        }
+        }) => update_hostos_config(
+            &config_ini_path,
+            &deployment_json_path,
+            &hostos_config_json_path,
+        ),
         None => {
             println!("No command provided. Use --help for usage information.");
             Ok(())
