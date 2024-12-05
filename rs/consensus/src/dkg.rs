@@ -612,7 +612,10 @@ fn bootstrap_idkg_summary(
 
 #[cfg(test)]
 mod tests {
-    use super::{test_utils::complement_state_manager_with_remote_dkg_requests, *};
+    use super::{
+        test_utils::{complement_state_manager_with_remote_dkg_requests, create_dealing},
+        *,
+    };
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{
         dependencies, dependencies_with_subnet_params,
@@ -643,6 +646,7 @@ mod tests {
         PrincipalId, RegistryVersion, ReplicaVersion,
     };
     use std::{collections::BTreeSet, convert::TryFrom};
+    use test_utils::extract_remote_dkg_transcripts_from_highest_block;
 
     #[test]
     // In this test we test the creation of dealing payloads.
@@ -1768,6 +1772,7 @@ mod tests {
                 mut pool,
                 registry,
                 state_manager,
+                dkg_pool,
                 ..
             } = dependencies_with_subnet_records_with_raw_state_manager(
                 pool_config,
@@ -1821,7 +1826,27 @@ mod tests {
                 );
             };
 
-            // TODO: Advance the pool a bit and gradually put more dealings in, check that no early remote transcripts exist
+            // TODO: Advance the pool a bit and dealings in, check that no early remote transcripts exist
+            // Put validated dealings into the dkg pool
+            dkg_pool.write().unwrap().apply(vec![
+                ChangeAction::AddToValidated(create_dealing(1, remote_dkg_ids[0].clone())),
+                ChangeAction::AddToValidated(create_dealing(2, remote_dkg_ids[0].clone())),
+                ChangeAction::AddToValidated(create_dealing(3, remote_dkg_ids[0].clone())),
+                ChangeAction::AddToValidated(create_dealing(4, remote_dkg_ids[0].clone())),
+                ChangeAction::AddToValidated(create_dealing(1, remote_dkg_ids[1].clone())),
+                ChangeAction::AddToValidated(create_dealing(2, remote_dkg_ids[1].clone())),
+                ChangeAction::AddToValidated(create_dealing(3, remote_dkg_ids[1].clone())),
+                ChangeAction::AddToValidated(create_dealing(4, remote_dkg_ids[1].clone())),
+            ]);
+
+            for _ in 0..10 {
+                pool.advance_round_normal_operation();
+                assert_eq!(
+                    extract_remote_dkg_transcripts_from_highest_block(&pool).len(),
+                    0
+                );
+            }
+
             // TODO: Once sufficient dealings are in the pool, check that payload contains early remote transcripts
             // TODO: Check that the payload also validates
             // TODO: Advance the pool a bit further, check that the early remote transcripts are not generated multiple times
