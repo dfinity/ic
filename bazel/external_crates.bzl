@@ -52,15 +52,18 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ],
         )],
         "lmdb-rkv-sys": [crate.annotation(
+            # patch our fork of the lmdb-rkv-sys to allow specifying the path
+            # to the built static archive
+            patch_args = ["-p1"],
+            patches = ["@@//bazel:lmdb_rkv_sys.patch"],
             build_script_data = [
+                "@lmdb//:liblmdb",
                 "@lmdb//:lmdb.h",
             ],
             build_script_env = {
-                "LMDB_NO_BUILD": "1",
+                "LMDB_OVERRIDE": "$(location @lmdb//:liblmdb)",
                 "LMDB_H_PATH": "$(location @lmdb//:lmdb.h)",
             },
-            # ensure LMDB lib is available at runtime
-            deps = ["@lmdb"],
         )],
         "p256": [crate.annotation(
             rustc_flags = [
@@ -184,7 +187,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.7.1",
             ),
             "anyhow": crate.spec(
-                version = "^1",
+                version = "^1.0.93",
             ),
             "arrayvec": crate.spec(
                 version = "^0.7.4",
@@ -220,10 +223,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.83",
             ),
             "axum": crate.spec(
-                version = "^0.7.7",
+                version = "^0.7.9",
             ),
             "axum-extra": crate.spec(
-                version = "^0.9.0",
+                version = "^0.9.6",
                 features = ["typed-header"],
             ),
             "axum-server": crate.spec(
@@ -326,10 +329,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "canbench": crate.spec(
-                version = "^0.1.7",
+                version = "^0.1.8",
             ),
             "canbench-rs": crate.spec(
-                version = "^0.1.7",
+                version = "^0.1.8",
             ),
             "candid": crate.spec(
                 version = "^0.10.6",
@@ -438,6 +441,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "educe": crate.spec(
                 version = "^0.4",
             ),
+            "env-file-reader": crate.spec(
+                version = "^0.3",
+            ),
             "erased-serde": crate.spec(
                 version = "^0.3.11",
             ),
@@ -532,7 +538,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.1",
             ),
             "hyper": crate.spec(
-                version = "^1.5.0",
+                version = "^1.5.1",
                 features = ["full"],
             ),
             "hyper-socks2": crate.spec(
@@ -568,7 +574,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "526d34d15cfbf369d8baf2dae9932aa18d570a1d",
+                rev = "2496803db52d8182f578f098a3ffe4fcb9573fcd",
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
@@ -589,7 +595,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.16.0",
             ),
             "ic-cdk-timers": crate.spec(
-                version = "^0.7.0",
+                version = "^0.11.0",
             ),
             "ic-cdk-macros": crate.spec(
                 version = "^0.9.0",
@@ -674,7 +680,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.9",
             ),
             "inferno": crate.spec(
-                version = "^0.11.19",
+                version = "^0.12.0",
             ),
             "insta": crate.spec(
                 version = "^1.31.0",
@@ -760,6 +766,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "lru": crate.spec(
                 version = "^0.7.8",
                 default_features = False,
+            ),
+            "macaddr": crate.spec(
+                version = "^1.0",
             ),
             "mach2": crate.spec(
                 # Wasmtime depends on 0.4.2 but specifies 0.4.1.
@@ -914,7 +923,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3",
             ),
             "pprof": crate.spec(
-                version = "^0.13.0",
+                version = "^0.14.0",
                 features = [
                     "criterion",
                     "flamegraph",
@@ -1081,7 +1090,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.0",
             ),
             "rustls": crate.spec(
-                version = "^0.23.16",
+                version = "^0.23.18",
                 default_features = False,
                 features = [
                     "ring",
@@ -1255,7 +1264,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8",
             ),
             "thiserror": crate.spec(
-                version = "^1.0.65",
+                version = "^2.0.3",
             ),
             "thousands": crate.spec(
                 version = "^0.2.0",
@@ -1324,7 +1333,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["full"],
             ),
             "tower-http": crate.spec(
-                version = "^0.6.1",
+                version = "^0.6.2",
                 features = [
                     "cors",
                     "limit",
@@ -1368,6 +1377,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "env-filter",
                     "fmt",
                     "json",
+                    "time",
                 ],
             ),
             "trust-dns-resolver": crate.spec(

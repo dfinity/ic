@@ -2,6 +2,7 @@ name: CI PR Only
 # Jobs that run on PRs, but no other pipelines
 
 on:
+  merge_group:
   pull_request:
     types: [opened, synchronize, reopened]
 
@@ -10,14 +11,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref }}
   cancel-in-progress: true
 env:
-  CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
   ORG: ${{ github.repository_owner }}
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:702245a9cba671fb3740bcb810d254ad2072aea9005a0b57bfca1751f8484b15
+    image: ghcr.io/dfinity/ic-build@sha256:6a548dd4cfee96260b6938fddaa74abc86fc0df5c407d4eef135694b64c288e3
   dind-small-setup: &dind-small-setup
     timeout-minutes: 30
     runs-on:
@@ -37,11 +37,14 @@ anchors:
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
+  skip-merge-group: &skip-merge-group
+    if: ${{ github.event_name != 'merge_group' }}
 
 jobs:
   bazel-build-fuzzers-archives:
     name: Bazel Build Fuzzers Archives
     <<: *dind-large-setup
+    <<: *skip-merge-group
     steps:
       - <<: *checkout
       - name: Filter Relevant Files
@@ -76,12 +79,21 @@ jobs:
   lock-generate:
     name: Lock Generate
     <<: *dind-small-setup
+    <<: *skip-merge-group
+    env:
+      CI_EVENT_NAME: ${{ github.event_name }}
     steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-          token: ${{ secrets.IDX_PUSH_TO_PR }}
+          token: ${{ steps.app-token.outputs.token }}
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
@@ -104,6 +116,7 @@ jobs:
   dependencies-check:
     name: Dependency Scan for PR
     <<: *dind-small-setup
+    <<: *skip-merge-group
     timeout-minutes: 60
     permissions:
       contents: read
@@ -130,7 +143,8 @@ jobs:
         id: setup-python-deps
         shell: bash
         run: |
-          pip3 install --ignore-installed -r requirements.txt
+          # Ignore externally-managed-environment pip error, install packages system-wide.
+          PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
       - name: Dependency Scan for Pull Request
         id: dependencies-check
         shell: bash
@@ -144,6 +158,7 @@ jobs:
   bazel-test-coverage:
     name: Bazel Test Coverage
     <<: *dind-large-setup
+    <<: *skip-merge-group
     if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
     steps:
       - <<: *checkout

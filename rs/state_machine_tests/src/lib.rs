@@ -43,6 +43,7 @@ use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamErr
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
+use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
     self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
@@ -463,24 +464,26 @@ fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
 
 fn replica_logger(log_level: Option<Level>) -> ReplicaLogger {
     use slog::Drain;
-    let log_level = log_level
-        .or(std::env::var("RUST_LOG")
-            .ok()
-            .and_then(|level| Level::from_str(&level).ok()))
-        .unwrap_or(Level::Warning);
-
-    let writer: Box<dyn io::Write + Sync + Send> = if std::env::var("LOG_TO_STDERR").is_ok() {
-        Box::new(stderr())
+    if let Some(log_level) = std::env::var("RUST_LOG")
+        .ok()
+        .and_then(|level| Level::from_str(&level).ok())
+        .or(log_level)
+    {
+        let writer: Box<dyn io::Write + Sync + Send> = if std::env::var("LOG_TO_STDERR").is_ok() {
+            Box::new(stderr())
+        } else {
+            Box::new(slog_term::TestStdoutWriter)
+        };
+        let decorator = slog_term::PlainSyncDecorator::new(writer);
+        let drain = slog_term::FullFormat::new(decorator)
+            .build()
+            .filter_level(log_level)
+            .fuse();
+        let logger = slog::Logger::root(drain, slog::o!());
+        logger.into()
     } else {
-        Box::new(slog_term::TestStdoutWriter)
-    };
-    let decorator = slog_term::PlainSyncDecorator::new(writer);
-    let drain = slog_term::FullFormat::new(decorator)
-        .build()
-        .filter_level(log_level)
-        .fuse();
-    let logger = slog::Logger::root(drain, slog::o!());
-    logger.into()
+        no_op_logger()
+    }
 }
 
 /// Bundles the configuration of a `StateMachine`.
@@ -838,7 +841,7 @@ pub struct StateMachine {
     // the time of the last round
     // (equal to `time` when this `StateMachine` is initialized)
     time_of_last_round: RwLock<Time>,
-    idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     idkg_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
     pub replica_logger: ReplicaLogger,
     pub log_level: Option<Level>,
@@ -955,7 +958,7 @@ impl StateMachineBuilder {
             is_root_subnet: false,
             seed: [42; 32],
             with_extra_canister_range: None,
-            log_level: None,
+            log_level: Some(Level::Warning),
             bitcoin_testnet_uds_path: None,
         }
     }
@@ -1615,7 +1618,7 @@ impl StateMachine {
             name: "master_ecdsa_public_key".to_string(),
         };
 
-        let mut idkg_subnet_public_keys = BTreeMap::new();
+        let mut chain_key_subnet_public_keys = BTreeMap::new();
         let mut idkg_subnet_secret_keys = BTreeMap::new();
 
         for key_id in idkg_keys_signing_enabled_status.keys() {
@@ -1718,7 +1721,7 @@ impl StateMachine {
 
             idkg_subnet_secret_keys.insert(key_id.clone(), private_key);
 
-            idkg_subnet_public_keys.insert(key_id.clone(), public_key);
+            chain_key_subnet_public_keys.insert(key_id.clone(), public_key);
         }
 
         let time_source = FastForwardTimeSource::new();
@@ -1787,7 +1790,7 @@ impl StateMachine {
             nonce: AtomicU64::new(nonce),
             time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
             time_of_last_round: RwLock::new(time),
-            idkg_subnet_public_keys,
+            chain_key_subnet_public_keys,
             idkg_subnet_secret_keys,
             replica_logger: replica_logger.clone(),
             log_level,
@@ -2328,7 +2331,7 @@ impl StateMachine {
                 query_stats: payload.query_stats,
             },
             randomness: Randomness::from(seed),
-            idkg_subnet_public_keys: self.idkg_subnet_public_keys.clone(),
+            chain_key_subnet_public_keys: self.chain_key_subnet_public_keys.clone(),
             idkg_pre_signature_ids: BTreeMap::new(),
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,

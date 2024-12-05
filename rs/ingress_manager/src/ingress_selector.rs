@@ -94,7 +94,6 @@ impl IngressSelector for IngressManager {
         // becomes greater than byte_limit.
         let mut accumulated_size = 0;
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
-        let mut num_messages = 0;
 
         let ingress_pool = self.ingress_pool.read().unwrap();
 
@@ -170,7 +169,7 @@ impl IngressSelector for IngressManager {
                         context,
                         &settings,
                         &past_ingress_set,
-                        num_messages,
+                        messages_in_payload.len(),
                         &mut cycles_needed,
                     );
                     // Any message that generates validation errors gets removed from
@@ -207,7 +206,6 @@ impl IngressSelector for IngressManager {
                         break;
                     }
 
-                    num_messages += 1;
                     accumulated_size += ingress_size;
                     queue.msgs_included += 1;
                     queue.bytes_included += ingress_size;
@@ -410,16 +408,6 @@ impl IngressSelector for IngressManager {
 
     fn request_purge_finalized_messages(&self, message_ids: Vec<IngressMessageId>) {
         self.messages_to_purge.write().unwrap().push(message_ids)
-    }
-
-    fn has_message(&self, message_id: &IngressMessageId) -> bool {
-        self.ingress_pool
-            .as_ref()
-            .read()
-            .unwrap()
-            .validated()
-            .get(message_id)
-            .is_some()
     }
 }
 

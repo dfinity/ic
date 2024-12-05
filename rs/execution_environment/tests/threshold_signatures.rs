@@ -82,6 +82,7 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
             message: vec![],
             derivation_path: DerivationPath::new(vec![]),
             key_id: into_inner_schnorr(key_id),
+            aux: None,
         }
         .encode(),
         _ => panic!("unexpected method"),
@@ -330,7 +331,7 @@ fn test_compute_initial_idkg_dealings_with_unknown_key() {
         assert_eq!(
             result,
             Ok(WasmResult::Reject(format!(
-                "Unable to route management canister request {}: IDkgKeyError(\"Requested unknown threshold key {} on subnet {}, subnet has keys: []\")",
+                "Unable to route management canister request {}: ChainKeyError(\"Requested unknown threshold key {} on subnet {}, subnet has keys: []\")",
                 method, unknown_key, nns_subnet,
             ))),
         );
@@ -486,7 +487,7 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
         assert_eq!(
             result,
             Ok(WasmResult::Reject(format!(
-                "Unable to route management canister request {}: IDkgKeyError(\"Requested unknown or signing disabled threshold key: {}, existing keys with signing enabled: {}\")",
+                "Unable to route management canister request {}: ChainKeyError(\"Requested unknown or signing disabled threshold key: {}, existing keys with signing enabled: {}\")",
                 method,
                 wrong_key,
                 format_keys(vec![correct_key]),
@@ -610,7 +611,7 @@ fn test_threshold_key_public_key_req_with_unknown_key_rejected() {
         assert_eq!(
             result,
             Ok(WasmResult::Reject(format!(
-                "Unable to route management canister request {}: IDkgKeyError(\"Requested unknown threshold key: {}, existing keys: {}\")",
+                "Unable to route management canister request {}: ChainKeyError(\"Requested unknown threshold key: {}, existing keys: {}\")",
                 method,
                 wrong_key,
                 format_keys(vec![correct_key]),

@@ -356,7 +356,7 @@ impl SystemStateChanges {
             metadata: self
                 .requests
                 .first()
-                .and_then(|request| request.metadata.clone()),
+                .map_or_else(Default::default, |request| request.metadata.clone()),
             count: self.requests.len() as u64,
         };
 
@@ -930,7 +930,7 @@ impl SandboxSafeSystemState {
         let mut new_balance = self.cycles_balance();
 
         // It is safe to unwrap since msg_cycles_accept and msg_cycles_accept128 are
-        // available only forApiType::{Update, RepyCallback, RejectCallBack} and all of
+        // available only for ApiType::{Update, ReplyCallback, RejectCallback} and all of
         // them have CallContextId, hence SystemStateChanges::call_context_balance_taken
         // will never be `None`.
         debug_assert!(self
@@ -1368,7 +1368,7 @@ impl SandboxSafeSystemState {
 ///
 /// This is used for call tree metrics.
 pub struct RequestMetadataStats {
-    pub metadata: Option<RequestMetadata>,
+    pub metadata: RequestMetadata,
     pub count: u64,
 }
 

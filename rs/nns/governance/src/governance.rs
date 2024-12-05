@@ -13,7 +13,9 @@ use crate::{
     migrations::maybe_run_migrations,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
-    neuron_store::{metrics::NeuronSubsetMetrics, NeuronMetrics, NeuronStore},
+    neuron_store::{
+        metrics::NeuronSubsetMetrics, prune_some_following, NeuronMetrics, NeuronStore,
+    },
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
         PolynomialNeuronsFundParticipation, SwapParticipationLimits,
@@ -138,8 +140,8 @@ pub mod tla;
 
 #[cfg(feature = "tla")]
 pub use tla::{
-    claim_neuron_desc, split_neuron_desc, tla_update_method, InstrumentationState, ToTla,
-    TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+    tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, MERGE_NEURONS_DESC,
+    SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
@@ -593,6 +595,14 @@ impl ManageNeuronResponse {
                 manage_neuron_response::ClaimOrRefreshResponse {
                     refreshed_neuron_id,
                 },
+            )),
+        }
+    }
+
+    pub fn refresh_voting_power_response(_: ()) -> Self {
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::RefreshVotingPower(
+                manage_neuron_response::RefreshVotingPowerResponse {},
             )),
         }
     }
@@ -2313,7 +2323,13 @@ impl Governance {
                             && neuron.visibility() == Some(Visibility::Public)
                         );
                 if let_caller_read_full_neuron {
-                    full_neurons.push(NeuronProto::from(neuron.clone()));
+                    let mut proto = neuron.clone().into_proto(now);
+                    // We get the recent_ballots from the neuron itself, because
+                    // we are using a circular buffer to store them.  This solution is not ideal, but
+                    // we need to do a larger refactoring to use the correct API types instead of the internal
+                    // governance proto at this level.
+                    proto.recent_ballots = neuron.sorted_recent_ballots();
+                    full_neurons.push(proto);
                 }
             });
         }
@@ -2656,7 +2672,7 @@ impl Governance {
     ///   stake.
     /// - The amount to split minus the transfer fee is more than the minimum
     ///   stake.
-    #[cfg_attr(feature = "tla", tla_update_method(split_neuron_desc()))]
+    #[cfg_attr(feature = "tla", tla_update_method(SPLIT_NEURON_DESC.clone()))]
     pub async fn split_neuron(
         &mut self,
         id: &NeuronId,
@@ -2912,6 +2928,7 @@ impl Governance {
     ///   it will be merged into the stake of the target neuron; if it is less
     ///   than the transaction fee, the maturity of the source neuron will
     ///   still be merged into the maturity of the target neuron.
+    #[cfg_attr(feature = "tla", tla_update_method(MERGE_NEURONS_DESC.clone()))]
     pub async fn merge_neurons(
         &mut self,
         id: &NeuronId,
@@ -2951,6 +2968,14 @@ impl Governance {
 
         // Step 4: burn neuron fees if needed.
         if let Some(source_burn_fees) = effect.source_burn_fees() {
+            tla_log_locals! {
+                source_neuron_id: effect.source_neuron_id().id,
+                target_neuron_id: effect.target_neuron_id().id,
+                fees_amount: effect.source_burn_fees().map_or(0, |f| f.amount_e8s),
+                amount_to_target: effect.stake_transfer().map_or(0, |t| t.amount_to_target_e8s)
+            }
+            tla_log_label!("MergeNeurons_Burn");
+
             source_burn_fees
                 .burn_neuron_fees_with_ledger(&*self.ledger, &mut self.neuron_store, now)
                 .await?;
@@ -2958,6 +2983,14 @@ impl Governance {
 
         // Step 5: transfer the stake if needed.
         if let Some(stake_transfer) = effect.stake_transfer() {
+            tla_log_locals! {
+                source_neuron_id: effect.source_neuron_id().id,
+                target_neuron_id: effect.target_neuron_id().id,
+                fees_amount: effect.source_burn_fees().map_or(0, |f| f.amount_e8s),
+                amount_to_target: effect.stake_transfer().map_or(0, |t| t.amount_to_target_e8s)
+            }
+            tla_log_label!("MergeNeurons_Stake");
+
             stake_transfer
                 .transfer_neuron_stake_with_ledger(&*self.ledger, &mut self.neuron_store, now)
                 .await?;
@@ -3632,9 +3665,11 @@ impl Governance {
         id: &NeuronId,
         caller: &PrincipalId,
     ) -> Result<NeuronProto, GovernanceError> {
+        let now_seconds = self.env.now();
+
         self.neuron_store
             .get_full_neuron(*id, *caller)
-            .map(NeuronProto::from)
+            .map(|neuron| neuron.into_proto(now_seconds))
             .map_err(GovernanceError::from)
     }
 
@@ -4071,16 +4106,6 @@ impl Governance {
         };
         let topic = proposal.topic();
         let voting_period_seconds = voting_period_seconds_fn(topic);
-
-        // Recompute the tally here. It should correctly reflect all votes,
-        // even the ones after the proposal has been decided. It's possible
-        // to have Open status while it does not accept votes anymore, since
-        // the status change happens below this point.
-        if proposal.status() == ProposalStatus::Open
-            || proposal.accepts_vote(now_seconds, voting_period_seconds)
-        {
-            proposal.recompute_tally(now_seconds, voting_period_seconds);
-        }
 
         if proposal.status() != ProposalStatus::Open {
             return;
@@ -5387,7 +5412,7 @@ impl Governance {
             .collect()
     }
 
-    pub fn make_proposal(
+    pub async fn make_proposal(
         &mut self,
         proposer_id: &NeuronId,
         caller: &PrincipalId,
@@ -5592,11 +5617,21 @@ impl Governance {
         );
         self.heap_data.proposals.insert(proposal_num, proposal_data);
 
-        self.cast_vote_and_cascade_follow(proposal_id, *proposer_id, Vote::Yes, topic);
+        self.cast_vote_and_cascade_follow(proposal_id, *proposer_id, Vote::Yes, topic)
+            .await;
 
         self.process_proposal(proposal_num);
 
-        self.refresh_voting_power(proposer_id);
+        if let Err(err) = self.refresh_voting_power(proposer_id, caller) {
+            // This is unreachable, but if it is reached, just log. Do not blow
+            // up the whole operation, because this is just a secondary
+            // suboperation, not the main thing.
+            println!(
+                "{}WARNING: Unable to refresh voting power as part of making a \
+                 proposal (which involves direct voting). Err: {:?}",
+                LOG_PREFIX, err,
+            );
+        }
 
         Ok(proposal_id)
     }
@@ -5744,7 +5779,7 @@ impl Governance {
         }
     }
 
-    fn register_vote(
+    async fn register_vote(
         &mut self,
         neuron_id: &NeuronId,
         caller: &PrincipalId,
@@ -5816,16 +5851,42 @@ impl Governance {
             *neuron_id,
             vote,
             topic,
-        );
+        )
+        .await;
 
         self.process_proposal(proposal_id.id);
 
-        self.refresh_voting_power(neuron_id);
+        if let Err(err) = self.refresh_voting_power(neuron_id, caller) {
+            // This is unreachable, but if it is reached, just log. Do not blow
+            // up the whole operation, because this is just a secondary
+            // suboperation, not the main thing.
+            println!(
+                "{}WARNING: Unable to refresh voting power as part of \
+                 voting directly. Err: {:?}",
+                LOG_PREFIX, err,
+            );
+        }
 
         Ok(())
     }
 
-    fn refresh_voting_power(&mut self, neuron_id: &NeuronId) {
+    fn refresh_voting_power(
+        &mut self,
+        neuron_id: &NeuronId,
+        caller: &PrincipalId,
+    ) -> Result<(), GovernanceError> {
+        let is_authorized =
+            self.with_neuron(neuron_id, |neuron| neuron.is_authorized_to_vote(caller))?;
+        if !is_authorized {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::NotAuthorized,
+                format!(
+                    "The caller ({}) is not authorized to refresh the voting power of neuron {}.",
+                    caller, neuron_id.id,
+                ),
+            ));
+        }
+
         let now_seconds = self.env.now();
 
         let result = self.with_neuron_mut(neuron_id, |neuron| {
@@ -5833,12 +5894,17 @@ impl Governance {
         });
 
         if let Err(err) = result {
-            println!(
-                "{}WARNING: Tried to refresh the voting power of neuron {}, \
-                 but was unable to find it: {}",
-                LOG_PREFIX, neuron_id.id, err,
-            );
+            return Err(GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                format!(
+                    "Tried to refresh the voting power of neuron {}, \
+                     but was unable to find it: {:?}",
+                    neuron_id.id, err,
+                ),
+            ));
         }
+
+        Ok(())
     }
 
     /// Add or remove followees for this neuron for a specified topic.
@@ -5939,6 +6005,14 @@ impl Governance {
         self.with_neuron_mut(id, |neuron| neuron.configure(caller, now_seconds, c))??;
 
         Ok(())
+    }
+
+    pub fn prune_some_following(
+        &mut self,
+        begin: std::ops::Bound<NeuronId>,
+        carry_on: impl FnMut() -> bool,
+    ) -> std::ops::Bound<NeuronId> {
+        prune_some_following(&mut self.neuron_store, begin, carry_on)
     }
 
     /// Creates a new neuron or refreshes the stake of an existing
@@ -6081,7 +6155,7 @@ impl Governance {
     /// the neuron and lock it before we make the call, we know that any
     /// concurrent call to mutate the same neuron will need to wait for this
     /// one to finish before proceeding.
-    #[cfg_attr(feature = "tla", tla_update_method(claim_neuron_desc()))]
+    #[cfg_attr(feature = "tla", tla_update_method(CLAIM_NEURON_DESC.clone()))]
     async fn claim_neuron(
         &mut self,
         subaccount: Subaccount,
@@ -6328,7 +6402,7 @@ impl Governance {
                 .follow(&id, caller, f)
                 .map(|_| ManageNeuronResponse::follow_response()),
             Some(Command::MakeProposal(p)) => {
-                self.make_proposal(&id, caller, p).map(|proposal_id| {
+                self.make_proposal(&id, caller, p).await.map(|proposal_id| {
                     ManageNeuronResponse::make_proposal_response(
                         proposal_id,
                         "The proposal has been created successfully.".to_string(),
@@ -6337,10 +6411,14 @@ impl Governance {
             }
             Some(Command::RegisterVote(v)) => self
                 .register_vote(&id, caller, v)
+                .await
                 .map(|_| ManageNeuronResponse::register_vote_response()),
             Some(Command::ClaimOrRefresh(_)) => {
                 panic!("This should have already returned")
             }
+            Some(Command::RefreshVotingPower(_)) => self
+                .refresh_voting_power(&id, caller)
+                .map(ManageNeuronResponse::refresh_voting_power_response),
             None => panic!(),
         }
     }
@@ -6470,9 +6548,6 @@ impl Governance {
         // Try to update maturity modulation (once per day).
         } else if self.should_update_maturity_modulation() {
             self.update_maturity_modulation().await;
-        // Try to spawn neurons (potentially multiple times per day).
-        } else if self.can_spawn_neurons() {
-            self.spawn_neurons().await;
         } else {
             // This is the lowest-priority async task. All other tasks should have their own
             // `else if`, like the ones above.
@@ -6614,7 +6689,7 @@ impl Governance {
     /// This means that programming in this method needs to be extra-defensive on the handling of results so that
     /// we're sure not to trap after we've acquired the global lock and made an async call, as otherwise the global
     /// lock will be permanently held and no spawning will occur until a upgrade to fix it is made.
-    async fn spawn_neurons(&mut self) {
+    pub async fn maybe_spawn_neurons(&mut self) {
         if !self.can_spawn_neurons() {
             return;
         }
@@ -6962,6 +7037,11 @@ impl Governance {
                 latest_round_available_e8s_equivalent_float as u64,
             ),
         })
+    }
+
+    pub fn batch_adjust_neurons_storage(&mut self, start_neuron_id: NeuronId) -> Option<NeuronId> {
+        self.neuron_store
+            .batch_adjust_neurons_storage(start_neuron_id)
     }
 
     /// Recompute cached metrics once per day

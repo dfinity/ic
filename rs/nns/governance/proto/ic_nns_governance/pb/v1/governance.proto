@@ -260,6 +260,10 @@ message NeuronInfo {
   // refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
   // after the UNIX epoch).
   optional uint64 voting_power_refreshed_timestamp_seconds = 13;
+  // See the analogous field in Nueron.
+  optional uint64 deciding_voting_power = 14;
+  // See the analogous field in Neuron.
+  optional uint64 potential_voting_power = 15;
 }
 
 // A transfer performed from some account to stake a new neuron.
@@ -458,6 +462,68 @@ message Neuron {
   // refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
   // after the UNIX epoch).
   optional uint64 voting_power_refreshed_timestamp_seconds = 24;
+
+  // The index of the next entry in the recent_ballots list that will be
+  // used for the circular buffer. This is used to determine which entry
+  // to overwrite next.
+  optional uint32 recent_ballots_next_entry_index = 25;
+
+  // The amount of "sway" this neuron has when voting on proposals.
+  //
+  // When a proposal is created, each eligible neuron gets a "blank" ballot. The
+  // amount of voting power in that ballot is set to the neuron's deciding
+  // voting power at the time of proposal creation. There are two ways that a
+  // proposal can become decided:
+  //
+  //   1. Early: Either more than half of the total voting power in the ballots
+  //   votes in favor (then the proposal is approved), or at least half of the
+  //   votal voting power in the ballots votes against (then, the proposal is
+  //   rejected).
+  //
+  //   2. The proposal's voting deadline is reached. At that point, if there is
+  //   more voting power in favor than against, and at least 3% of the total
+  //   voting power voted in favor, then the proposal is approved. Otherwise, it
+  //   is rejected.
+  //
+  // If a neuron regularly refreshes its voting power, this has the same value
+  // as potential_voting_power. Actions that cause a refresh are as follows:
+  //
+  //     1. voting directly (not via following)
+  //     2. set following
+  //     3. refresh voting power
+  //
+  // (All of these actions are performed via the manage_neuron method.)
+  //
+  // However, if a neuron has not refreshed in a "long" time, this will be less
+  // than potential voting power. See VotingPowerEconomics. As a further result
+  // of less deciding voting power, not only does it have less influence on the
+  // outcome of proposals, the neuron receives less voting rewards (when it
+  // votes indirectly via following).
+  //
+  // For details, see https://dashboard.internetcomputer.org/proposal/132411.
+  //
+  // Per NNS policy, this is opt. Nevertheless, it will never be null.
+  optional uint64 deciding_voting_power = 26;
+
+  // The amount of "sway" this neuron can have if it refreshes its voting power
+  // frequently enough.
+  //
+  // Unlike deciding_voting_power, this does NOT take refreshing into account.
+  // Rather, this only takes three factors into account:
+  //
+  //     1. (Net) staked amount - This is the "base" of a neuron's voting power.
+  //        This primarily consists of the neuron's ICP balance.
+  //
+  //     2. Age - Neurons with more age have more voting power (all else being
+  //        equal).
+  //
+  //     3. Dissolve delay - Neurons with longer dissolve delay have more voting
+  //        power (all else being equal). Neurons with a dissolve delay of less
+  //        than six months are not eligible to vote. Therefore, such neurons
+  //        are considered to have 0 voting power.
+  //
+  // Per NNS policy, this is opt. Nevertheless, it will never be null.
+  optional uint64 potential_voting_power = 27;
 }
 
 // Subset of Neuron that has no collections or big fields that might not exist in most neurons, and
@@ -484,6 +550,7 @@ message AbridgedNeuron {
   optional NeuronType neuron_type = 22;
   optional Visibility visibility = 23;
   optional uint64 voting_power_refreshed_timestamp_seconds = 24;
+  optional uint32 recent_ballots_next_entry_index = 25;
 
   reserved 1;
   reserved "id";
@@ -1135,6 +1202,11 @@ message ManageNeuron {
     }
   }
 
+  // This is one way for a neuron to make sure that its deciding_voting_power is
+  // not less than its potential_voting_power. See the description of those
+  // fields in Neuron.
+  message RefreshVotingPower {}
+
   oneof command {
     Configure configure = 2;
     Disburse disburse = 3;
@@ -1148,6 +1220,7 @@ message ManageNeuron {
     MergeMaturity merge_maturity = 13;
     Merge merge = 14;
     StakeMaturity stake_maturity = 15;
+    RefreshVotingPower refresh_voting_power = 16;
   }
 }
 
@@ -1213,6 +1286,8 @@ message ManageNeuronResponse {
     ic_nns_common.pb.v1.NeuronId refreshed_neuron_id = 1;
   }
 
+  message RefreshVotingPowerResponse {}
+
   oneof command {
     GovernanceError error = 1;
     ConfigureResponse configure = 2;
@@ -1227,6 +1302,7 @@ message ManageNeuronResponse {
     MergeMaturityResponse merge_maturity = 11;
     MergeResponse merge = 12;
     StakeMaturityResponse stake_maturity = 13;
+    RefreshVotingPowerResponse refresh_voting_power = 14;
   }
 }
 

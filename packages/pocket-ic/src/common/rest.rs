@@ -98,6 +98,22 @@ pub enum RawEffectivePrincipal {
     ),
 }
 
+impl std::fmt::Display for RawEffectivePrincipal {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            RawEffectivePrincipal::None => write!(f, "None"),
+            RawEffectivePrincipal::SubnetId(subnet_id) => {
+                let principal = Principal::from_slice(subnet_id);
+                write!(f, "SubnetId({})", principal)
+            }
+            RawEffectivePrincipal::CanisterId(canister_id) => {
+                let principal = Principal::from_slice(canister_id);
+                write!(f, "CanisterId({})", principal)
+            }
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub struct RawMessageId {
     pub effective_principal: RawEffectivePrincipal,

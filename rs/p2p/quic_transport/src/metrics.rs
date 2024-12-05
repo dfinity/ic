@@ -16,13 +16,14 @@ const REQUEST_TYPE_LABEL: &str = "request";
 pub(crate) const CONNECTION_RESULT_SUCCESS_LABEL: &str = "success";
 pub(crate) const CONNECTION_RESULT_FAILED_LABEL: &str = "failed";
 pub(crate) const ERROR_TYPE_APP: &str = "app";
+// A serious internal invariant is broken (i.e. worthy of a bug or outage report)
 pub(crate) const INFALIBBLE: &str = "infallible";
-const ERROR_CLOSED_STREAM: &str = "closed_stream";
 const ERROR_RESET_STREAM: &str = "reset_stream";
 const ERROR_STOPPED_STREAM: &str = "stopped_stream";
 const ERROR_APP_CLOSED_CONN: &str = "app_closed_conn";
+const ERROR_TIMED_OUT_CONN: &str = "timed_out_conn";
+const ERROR_TRANSPORT_ERROR: &str = "transport_error_conn";
 const ERROR_LOCALLY_CLOSED_CONN: &str = "locally_closed_conn";
-const ERROR_QUIC_CLOSED_CONN: &str = "quic_closed_conn";
 
 pub(crate) const STREAM_TYPE_BIDI: &str = "bidi";
 
@@ -204,35 +205,43 @@ impl QuicTransportMetrics {
 
 pub fn observe_conn_error(err: &ConnectionError, op: &str, counter: &IntCounterVec) {
     match err {
-        // TODO: most likely this can be made infallible
+        // This can occur during a topology change or when the connection manager attempts to replace an old, broken connection with a new one.
         ConnectionError::LocallyClosed => counter
             .with_label_values(&[op, ERROR_LOCALLY_CLOSED_CONN])
             .inc(),
+        // This can occur during a topology change or when the connection manager attempts to replace an old, broken connection with a new one.
         ConnectionError::ApplicationClosed(_) => counter
             .with_label_values(&[op, ERROR_APP_CLOSED_CONN])
             .inc(),
-        // A connection was closed by the QUIC protocol.
-        _ => counter
-            .with_label_values(&[op, ERROR_QUIC_CLOSED_CONN])
+        // This can occur if the peer crashes or experiences connectivity issues.
+        ConnectionError::TimedOut => counter.with_label_values(&[op, ERROR_TIMED_OUT_CONN]).inc(),
+        // This should be made infallible.
+        ConnectionError::TransportError(_) => counter
+            .with_label_values(&[op, ERROR_TRANSPORT_ERROR])
             .inc(),
+        // A connection was closed by the QUIC protocol. Overall should be infallible.
+        _ => counter.with_label_values(&[op, INFALIBBLE]).inc(),
     }
 }
 
 pub fn observe_write_error(err: &WriteError, op: &str, counter: &IntCounterVec) {
     match err {
-        // This should be infallible. The peer will never stop a stream, it can only reset it.
+        // Occurs when the peer cancels the `RecvStream` future, similar to `ERROR_RESET_STREAM` semantics,
+        // e.g., when the RPC method is part of a `select` branch.
         WriteError::Stopped(_) => counter.with_label_values(&[op, ERROR_STOPPED_STREAM]).inc(),
         WriteError::ConnectionLost(conn_err) => observe_conn_error(conn_err, op, counter),
-        // This should be infallible
-        WriteError::ClosedStream => counter.with_label_values(&[op, ERROR_CLOSED_STREAM]).inc(),
-        _ => counter.with_label_values(&[op, INFALIBBLE]).inc(),
+        // If any of the following errors occur it means that we have a bug in the protocol implementation or
+        // there is malicious peer on the other side.
+        WriteError::ClosedStream | WriteError::ZeroRttRejected => {
+            counter.with_label_values(&[op, INFALIBBLE]).inc()
+        }
     }
 }
 
 pub fn observe_read_error(err: &ReadError, op: &str, counter: &IntCounterVec) {
     match err {
-        // This can happen if the peer reset the stream due to aborting the future that writes to the stream.
-        // E.g. the RPC method is part of a select branch.
+        // Occurs when the peer cancels the `SendStream` future, similar to `ERROR_STOPPED_STREAM` semantics,
+        // e.g., when the RPC method is part of a `select` branch.
         ReadError::Reset(_) => counter.with_label_values(&[op, ERROR_RESET_STREAM]).inc(),
         ReadError::ConnectionLost(conn_err) => observe_conn_error(conn_err, op, counter),
         // If any of the following errors occur it means that we have a bug in the protocol implementation or

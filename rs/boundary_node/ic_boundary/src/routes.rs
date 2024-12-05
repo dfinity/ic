@@ -85,7 +85,6 @@ pub enum ErrorCause {
     UnableToParseHTTPArg(String),
     LoadShed,
     MalformedRequest(String),
-    MalformedResponse(String),
     NoRoutingTable,
     SubnetNotFound,
     CanisterNotFound,
@@ -112,7 +111,6 @@ impl ErrorCause {
             Self::UnableToParseHTTPArg(x) => Some(x.clone()),
             Self::LoadShed => Some("Overloaded".into()),
             Self::MalformedRequest(x) => Some(x.clone()),
-            Self::MalformedResponse(x) => Some(x.clone()),
             Self::ReplicaErrorDNS(x) => Some(x.clone()),
             Self::ReplicaTLSErrorOther(x) => Some(x.clone()),
             Self::ReplicaTLSErrorCert(x) => Some(x.clone()),
@@ -122,7 +120,7 @@ impl ErrorCause {
     }
 
     pub fn retriable(&self) -> bool {
-        !matches!(self, Self::PayloadTooLarge(_) | Self::MalformedResponse(_))
+        !matches!(self, Self::PayloadTooLarge(_))
     }
 
     pub fn to_client_facing_error(&self) -> ErrorClientFacing {
@@ -135,7 +133,6 @@ impl ErrorCause {
             Self::UnableToParseHTTPArg(x) => ErrorClientFacing::UnableToParseHTTPArg(x.clone()),
             Self::LoadShed => ErrorClientFacing::LoadShed,
             Self::MalformedRequest(x) => ErrorClientFacing::MalformedRequest(x.clone()),
-            Self::MalformedResponse(_) => ErrorClientFacing::ReplicaError,
             Self::NoRoutingTable => ErrorClientFacing::ServiceUnavailable,
             Self::SubnetNotFound => ErrorClientFacing::SubnetNotFound,
             Self::CanisterNotFound => ErrorClientFacing::CanisterNotFound,
@@ -155,7 +152,9 @@ impl ErrorCause {
 impl IntoResponse for ErrorCause {
     fn into_response(self) -> Response {
         let client_facing_error = self.to_client_facing_error();
-        client_facing_error.into_response()
+        let mut resp = client_facing_error.into_response();
+        resp.extensions_mut().insert(self);
+        resp
     }
 }
 
@@ -224,9 +223,7 @@ impl IntoResponse for ErrorClientFacing {
         let headers = [(X_IC_ERROR_CAUSE, error_cause.clone())];
         let body = format!("error: {}\ndetails: {}", error_cause, self.details());
 
-        let mut resp = (self.status_code(), headers, body).into_response();
-        resp.extensions_mut().insert(self);
-        resp
+        (self.status_code(), headers, body).into_response()
     }
 }
 

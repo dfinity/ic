@@ -79,7 +79,9 @@ component_files = {
     Label("networking/fallback.conf"): "/etc/systemd/resolved.conf.d/fallback.conf",
     Label("networking/resolv.conf"): "/etc/resolv.conf",
     Label("networking/network-tweaks.conf"): "/etc/sysctl.d/network-tweaks.conf",
-    Label("networking/nftables/nftables-hostos.conf"): "/etc/nftables.conf",
+    Label("networking/nftables/hostos/nftables.template"): "/opt/ic/share/nftables.template",
+    Label("networking/nftables/hostos/setup-nftables.service"): "/etc/systemd/system/setup-nftables.service",
+    Label("networking/nftables/hostos/setup-nftables.sh"): "/opt/ic/bin/setup-nftables.sh",
     Label("networking/hosts"): "/etc/hosts",
 
     # ssh
@@ -95,4 +97,7 @@ component_files = {
     Label("upgrade/systemd-generators/hostos/mount-generator"): "/etc/systemd/system-generators/mount-generator",
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/install-upgrade.sh"): "/opt/ic/bin/install-upgrade.sh",
+
+    # TODO(NODE-1519): delete update-config.service after switch to new icos config
+    Label("misc/update-config/update-hostos-config.service"): "/etc/systemd/system/update-config.service",
 }

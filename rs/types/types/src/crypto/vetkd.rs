@@ -1,7 +1,7 @@
-use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use crate::crypto::impl_display_using_debug;
 use crate::crypto::threshold_sig::errors::threshold_sig_data_not_found_error::ThresholdSigDataNotFoundError;
 use crate::crypto::threshold_sig::ni_dkg::NiDkgId;
+use crate::crypto::ExtendedDerivationPath;
 use crate::crypto::HexEncoding;
 use crate::NodeId;
 use serde::{Deserialize, Serialize};
@@ -17,7 +17,7 @@ pub struct VetKdArgs {
     #[serde(with = "serde_bytes")]
     pub derivation_id: Vec<u8>,
     #[serde(with = "serde_bytes")]
-    pub encryption_key: Vec<u8>,
+    pub encryption_public_key: Vec<u8>,
 }
 
 impl fmt::Debug for VetKdArgs {
@@ -26,7 +26,10 @@ impl fmt::Debug for VetKdArgs {
             .field("ni_dkg_id", &self.ni_dkg_id)
             .field("derivation_path", &self.derivation_path)
             .field("derivation_id", &HexEncoding::from(&self.derivation_id))
-            .field("encryption_key", &HexEncoding::from(&self.encryption_key))
+            .field(
+                "encryption_public_key",
+                &HexEncoding::from(&self.encryption_public_key),
+            )
             .finish()
     }
 }
