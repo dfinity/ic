@@ -309,8 +309,8 @@ impl ConnectionManager {
                                 .connection_results_total
                                 .with_label_values(&[CONNECTION_RESULT_FAILED_LABEL])
                                 .inc();
-                                info!(self.log, "Failed to establish outbound connection {:?}.", err);
-                            self.handled_closed_conn(peer_id, CONNECT_RETRY_BACKOFF);
+                            info!(self.log, "Failed to establish outbound connection {:?}.", err);
+                            self.connect_queue.insert(peer_id, CONNECT_RETRY_BACKOFF);
                         }
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
@@ -340,7 +340,12 @@ impl ConnectionManager {
                 },
                 Some(active_result) = self.active_connections.join_next() => {
                     match active_result {
-                        Ok((_, peer_id)) => self.handled_closed_conn(peer_id, Duration::from_secs(0)),
+                        Ok((_, peer_id)) => {
+                            self.peer_map.write().unwrap().remove(&peer_id);
+                            self.connect_queue.insert(peer_id, Duration::from_secs(0));
+                            self.metrics.peer_map_size.dec();
+                            self.metrics.closed_request_handlers_total.inc();
+                        }
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
@@ -374,14 +379,6 @@ impl ConnectionManager {
         self.outbound_connecting.shutdown().await;
         self.active_connections.shutdown().await;
         self.endpoint.wait_idle().await;
-    }
-
-    /// Removes connection and sets peer status to disconnected
-    fn handled_closed_conn(&mut self, peer_id: NodeId, retry_delay: Duration) {
-        self.peer_map.write().unwrap().remove(&peer_id);
-        self.connect_queue.insert(peer_id, retry_delay);
-        self.metrics.peer_map_size.dec();
-        self.metrics.closed_request_handlers_total.inc();
     }
 
     fn handle_topology_change(&mut self) {
