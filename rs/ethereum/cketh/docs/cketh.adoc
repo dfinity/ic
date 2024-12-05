@@ -40,24 +40,24 @@ Please feel free to reach out by leaving a comment in this link:https://forum.df
 == Deposit: ETH to ckETH
 
 ----
- ┌────┐               ┌───────────────┐              ┌──────┐
- │User│               │Helper Contract│              │Minter│
- └─┬──┘               └───────┬───────┘              └──┬───┘
-   │                          │                         │
-   │deposit(amount, principal)│                         │
-   │─────────────────────────>│                         │
-   │                          │                         │
-   │                          │       get_events        │
-   │                          │<────────────────────────│
-   │                          │                         │
-   │                          │Events(amount, principal)│
-   │                          │────────────────────────>│
-   │                          │                         │
-   │              mint(amount, principal)               │
-   │<───────────────────────────────────────────────────│
- ┌─┴──┐               ┌───────┴───────┐              ┌──┴───┐
- │User│               │Helper Contract│              │Minter│
- └────┘               └───────────────┘              └──────┘
+ ┌────┐                               ┌───────────────┐                                                ┌──────┐
+ │User│                               │Helper Contract│                                                │Minter│
+ └─┬──┘                               └───────┬───────┘                                                └──┬───┘
+   │                                          │                                                           │
+   │depositEth(amount, principal, subaccount) │                                                           │
+   │─────────────────────────────────────────>│                                                           │
+   │                                          │                                                           │
+   │                                          │       get_events                                          │
+   │                                          │<──────────────────────────────────────────────────────────│
+   │                                          │                                                           │
+   │                                          │ReceivedEthOrErc20(0x, user, amount, principal, subaccount)│
+   │                                          │──────────────────────────────────────────────────────────>│
+   │                                          │                                                           │
+   │                         mint (amount, principal, subaccount)                                         │
+   │<─────────────────────────────────────────────────────────────────────────────────────────────────────│
+ ┌─┴──┐                               ┌───────┴───────┐                                                ┌──┴───┐
+ │User│                               │Helper Contract│                                                │Minter│
+ └────┘                               └───────────────┘                                                └──────┘
 ----
 
 Converting ETH into ckETH requires a call to a smart contract on Ethereum and passing your IC principal as argument, in the form of a `bytes32` array.
