@@ -118,16 +118,16 @@ genrule(
 config_setting(
     name = "is_x86_darwin",
     constraint_values = [
+        "@platforms//os:macos",
         "@platforms//cpu:x86_64",
-        "@platforms//os:osx",
     ],
 )
 
 config_setting(
     name = "is_arm_darwin",
     constraint_values = [
-        "@platforms//cpu:darwin_arm64",
-        "@platforms//os:osx",
+        "@platforms//os:macos",
+        "@platforms//cpu:arm64",
     ],
 )
 
