@@ -709,7 +709,7 @@ fn test_receives_new_3rd_party_txs() {
     let blocks = sync_until_end_block(&adapter_client, &alice_client, 101, &mut vec![], 15);
 
     assert_eq!(blocks.len(), 1);
-    assert!(blocks[0].txdata.iter().any(|tx| tx.txid() == txid));
+    assert!(blocks[0].txdata.iter().any(|tx| tx.compute_txid() == txid));
 }
 
 /// Ensures the client (replica) can send a transaction (1 BTC from Alice to Bob) using the gRPC service.

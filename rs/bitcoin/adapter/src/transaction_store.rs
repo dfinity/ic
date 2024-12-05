@@ -86,7 +86,7 @@ impl TransactionStore {
                 .txn_ops
                 .with_label_values(&["insert", "enqueued"])
                 .inc();
-            let txid = transaction.txid();
+            let txid = transaction.compute_txid();
             trace!(self.logger, "Received {} from the system component", txid);
             // If hashmap has `TX_CACHE_SIZE` values we remove the oldest transaction in the cache.
             if self.transactions.len() == TX_CACHE_SIZE {
@@ -245,7 +245,7 @@ mod test {
 
         let info = manager
             .transactions
-            .get_mut(&transaction.txid())
+            .get_mut(&transaction.compute_txid())
             .expect("transaction should be map");
         info.ttl = SystemTime::now() - Duration::from_secs(TX_CACHE_TIMEOUT_PERIOD_SECS);
         manager.advertise_txids(&mut channel);
@@ -264,12 +264,12 @@ mod test {
         let mut manager = make_transaction_manager();
         let transaction = get_transaction();
         let raw_tx = serialize(&transaction);
-        let txid = transaction.txid();
+        let txid = transaction.compute_txid();
         manager.enqueue_transaction(&raw_tx);
         assert_eq!(manager.transactions.len(), 1);
         let info = manager
             .transactions
-            .get(&transaction.txid())
+            .get(&transaction.compute_txid())
             .expect("transaction should be map");
         assert!(info.advertised.is_empty());
         // Initial broadcast
@@ -317,7 +317,7 @@ mod test {
             manager.enqueue_transaction(&raw_tx);
         }
         assert_eq!(manager.transactions.len(), TX_CACHE_SIZE);
-        assert!(manager.transactions.get(&first_tx.txid()).is_none());
+        assert!(manager.transactions.get(&first_tx.compute_txid()).is_none());
     }
 
     /// This function tests that we don't readvertise transactions that were already advertised.
@@ -344,7 +344,7 @@ mod test {
             .process_bitcoin_network_message(
                 &mut channel,
                 address,
-                &NetworkMessage::GetData(vec![Inventory::Transaction(transaction.txid())]),
+                &NetworkMessage::GetData(vec![Inventory::Transaction(transaction.compute_txid())]),
             )
             .unwrap();
         // Send transaction
@@ -357,7 +357,7 @@ mod test {
         assert_eq!(
             manager
                 .transactions
-                .get(&transaction.txid())
+                .get(&transaction.compute_txid())
                 .unwrap()
                 .advertised
                 .len(),
@@ -366,7 +366,7 @@ mod test {
         assert_eq!(
             manager
                 .transactions
-                .get(&transaction.txid())
+                .get(&transaction.compute_txid())
                 .unwrap()
                 .advertised
                 .get(&address),
@@ -402,7 +402,7 @@ mod test {
             .process_bitcoin_network_message(
                 &mut channel,
                 address1,
-                &NetworkMessage::GetData(vec![Inventory::Transaction(transaction.txid())]),
+                &NetworkMessage::GetData(vec![Inventory::Transaction(transaction.compute_txid())]),
             )
             .unwrap();
         // Send transaction to peer 1
@@ -441,7 +441,7 @@ mod test {
             .process_bitcoin_network_message(
                 &mut channel,
                 address1,
-                &NetworkMessage::GetData(vec![Inventory::Transaction(transaction.txid())]),
+                &NetworkMessage::GetData(vec![Inventory::Transaction(transaction.compute_txid())]),
             )
             .unwrap();
         channel.pop_front().unwrap();
@@ -461,7 +461,7 @@ mod test {
             channel.pop_front().unwrap(),
             Command {
                 address: Some(address2),
-                message: NetworkMessage::Inv(vec![Inventory::Transaction(transaction.txid())])
+                message: NetworkMessage::Inv(vec![Inventory::Transaction(transaction.compute_txid())])
             }
         );
     }
@@ -479,7 +479,7 @@ mod test {
         let mut manager = make_transaction_manager();
         let transaction = get_transaction();
         let raw_tx = serialize(&transaction);
-        let txid = transaction.txid();
+        let txid = transaction.compute_txid();
         manager.enqueue_transaction(&raw_tx);
         assert_eq!(manager.transactions.len(), 1);
         manager
@@ -491,7 +491,7 @@ mod test {
             .ok();
         assert_eq!(channel.command_count(), 1);
         let command = channel.pop_front().unwrap();
-        assert!(matches!(command.message, NetworkMessage::Tx(t) if t.txid() == txid));
+        assert!(matches!(command.message, NetworkMessage::Tx(t) if t.compute_txid() == txid));
     }
 
     /// This function tests the `TransactionStore::process_bitcoin_network_message(...)` method.
@@ -511,7 +511,7 @@ mod test {
             let mut transaction = get_transaction();
             // Alter transaction such that we get a different `txid`
             transaction.lock_time = i.try_into().unwrap();
-            let txid = transaction.txid();
+            let txid = transaction.compute_txid();
             inventory.push(Inventory::Transaction(txid));
         }
         manager
@@ -536,7 +536,7 @@ mod test {
         let mut manager = make_transaction_manager();
         let transaction = get_transaction();
         let raw_tx = serialize(&transaction);
-        let txid = transaction.txid();
+        let txid = transaction.compute_txid();
         manager.enqueue_transaction(&raw_tx);
         manager.advertise_txids(&mut channel);
         manager
@@ -561,12 +561,12 @@ mod test {
         );
 
         let command = channel.pop_front().unwrap();
-        assert!(matches!(command.message, NetworkMessage::Tx(t) if t.txid() == txid));
+        assert!(matches!(command.message, NetworkMessage::Tx(t) if t.compute_txid() == txid));
 
         manager.enqueue_transaction(&raw_tx);
         let info = manager
             .transactions
-            .get_mut(&transaction.txid())
+            .get_mut(&transaction.compute_txid())
             .expect("transaction should be in the map");
         info.ttl = SystemTime::now() - Duration::from_secs(TX_CACHE_TIMEOUT_PERIOD_SECS);
         manager.advertise_txids(&mut channel);

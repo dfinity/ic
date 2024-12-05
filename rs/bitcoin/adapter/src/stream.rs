@@ -4,6 +4,7 @@ use bitcoin::{
     p2p::Magic,
     {consensus::encode, p2p::message::NetworkMessage},
 };
+use bitcoin::io as bitcoin_io;
 use futures::TryFutureExt;
 use http::Uri;
 use ic_logger::{debug, error, info, ReplicaLogger};
@@ -229,7 +230,7 @@ impl Stream {
                 // If the read successfully received bytes, then the bytes are added to the
                 // unparsed buffer to attempt another deserialize call. If no bytes found,
                 // return the unexpected end-of-file error.
-                Err(encode::Error::Io(ref err)) if err.kind() == io::ErrorKind::UnexpectedEof => {
+                Err(encode::Error::Io(ref err)) if err.kind() == bitcoin_io::ErrorKind::UnexpectedEof => {
                     let count = self
                         .read_half
                         .try_read(&mut self.data)
