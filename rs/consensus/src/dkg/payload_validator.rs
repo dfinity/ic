@@ -128,6 +128,7 @@ pub(crate) fn validate_payload(
     logger: ReplicaLogger,
     metrics: &IntCounterVec,
 ) -> ValidationResult<PayloadValidationError> {
+    dbg!("Validate payload is called");
     let current_height = parent.height.increment();
     let registry_version = pool_reader
         .registry_version(current_height)
@@ -217,6 +218,8 @@ fn validate_dealings_payload(
     logger: ReplicaLogger,
     metrics: &IntCounterVec,
 ) -> ValidationResult<PayloadValidationError> {
+    dbg!("Verifying dealings");
+
     if dealings.start_height != parent.payload.as_ref().dkg_interval_start_height() {
         return Err(InvalidDkgPayloadReason::DkgStartHeightDoesNotMatchParentBlock.into());
     }
@@ -284,6 +287,7 @@ fn validate_dealings_payload(
         "This payload contains {} early remote DKG transcripts in regular block payload!!",
         dealings.transcripts_for_remote_subnets.len()
     );
+    dbg!(dealings.transcripts_for_remote_subnets.len());
     // If we have early transcripts, we compare them
     if !dealings.transcripts_for_remote_subnets.is_empty() {
         // TODO: We should actually compare the  contents of the vectors

@@ -3,7 +3,15 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
 };
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_types::{ids::node_test_id, messages::RequestBuilder};
-use ic_types::{crypto::threshold_sig::ni_dkg::NiDkgTargetId, Height, RegistryVersion};
+use ic_types::{
+    consensus::dkg::DealingContent,
+    crypto::{
+        threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTargetId},
+        BasicSig,
+    },
+    signature::{BasicSignature, BasicSigned},
+    Height, RegistryVersion, ReplicaVersion,
+};
 use std::sync::Arc;
 
 pub(super) fn complement_state_manager_with_remote_dkg_requests(
@@ -39,5 +47,21 @@ pub(super) fn complement_state_manager_with_remote_dkg_requests(
             )));
     if let Some(times) = times {
         expectation.times(times);
+    }
+}
+
+pub(super) fn create_dealing(node_idx: u64, dkg_id: NiDkgId) -> BasicSigned<DealingContent> {
+    let node_id = node_test_id(node_idx);
+
+    BasicSigned {
+        content: DealingContent {
+            version: ReplicaVersion::default(),
+            dealing: NiDkgDealing::dummy_dealing_for_tests(node_idx as u8),
+            dkg_id,
+        },
+        signature: BasicSignature {
+            signature: BasicSig(vec![]).into(),
+            signer: node_id,
+        },
     }
 }

@@ -137,6 +137,8 @@ fn create_data_payload(
         .cloned()
         .collect();
 
+    dbg!(new_validated_dealings.len());
+
     // If we have dealings in the payload, we will not try to make transcripts as well
     if !new_validated_dealings.is_empty() {
         return Ok(DkgDataPayload::new(
@@ -163,6 +165,7 @@ fn create_data_payload(
             remote_dkg_transcripts.len()
         );
     }
+    dbg!(remote_dkg_transcripts.len());
 
     // Try to include remote transcripts
     Ok(DkgDataPayload::new_with_remote_dkg_transcripts(
