@@ -257,7 +257,9 @@ mod test {
         governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
-        pb::v1::{neuron::Followees, Ballot, ProposalData, Tally, Topic, Vote, VotingPowerEconomics},
+        pb::v1::{
+            neuron::Followees, Ballot, ProposalData, Tally, Topic, Vote, VotingPowerEconomics,
+        },
         test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
         voting::ProposalVotingStateMachine,
     };
