@@ -19,6 +19,7 @@ const MAX_CHECK_TRANSACTION_RETRY: usize = 10;
 
 use super::get_btc_address::init_ecdsa_public_key;
 
+use crate::metrics::LatencyHistogram;
 use crate::{
     guard::{balance_update_guard, GuardError},
     management::{get_utxos, CallError, CallSource},
@@ -149,11 +150,15 @@ pub async fn update_balance<R: CanisterRuntime>(
     }
 
     // Record start time of method execution for metrics
-    let start_time = ic_cdk::api::time();
+    let start_time = runtime.time();
+
+    let observe_latency = |histogram: &mut LatencyHistogram| {
+        histogram.observe_latency(runtime.time().checked_sub(start_time).unwrap_or(0u64))
+    };
 
     // When the minter is in the mode using a whitelist we only want a certain
     // set of principal to be able to mint. But we also want those principals
-    // to mint at any desired address. Therefore the check below is on "caller".
+    // to mint at any desired address. Therefore, the check below is on "caller".
     state::read_state(|s| s.mode.is_deposit_available_for(&caller))
         .map_err(UpdateBalanceError::TemporarilyUnavailable)?;
 
@@ -231,9 +236,8 @@ pub async fn update_balance<R: CanisterRuntime>(
 
         let current_confirmations = pending_utxos.iter().map(|u| u.confirmations).max();
 
-        let call_duration = ic_cdk::api::time() - start_time;
-        let _ = &crate::metrics::UPDATE_CALL_LATENCY_WITH_NO_NEW_UTXOS
-            .with_borrow_mut(|histogram| histogram.observe_latency(call_duration));
+        let _ =
+            &crate::metrics::UPDATE_CALL_LATENCY_WITH_NO_NEW_UTXOS.with_borrow_mut(observe_latency);
 
         return Err(UpdateBalanceError::NoNewUtxos {
             current_confirmations,
@@ -325,9 +329,7 @@ pub async fn update_balance<R: CanisterRuntime>(
 
     schedule_now(TaskType::ProcessLogic, runtime);
 
-    let call_duration = ic_cdk::api::time() - start_time;
-    let _ = &crate::metrics::UPDATE_CALL_LATENCY_WITH_NEW_UTXOS
-        .with_borrow_mut(|histogram| histogram.observe_latency(call_duration));
+    let _ = &crate::metrics::UPDATE_CALL_LATENCY_WITH_NEW_UTXOS.with_borrow_mut(observe_latency);
 
     Ok(utxo_statuses)
 }
