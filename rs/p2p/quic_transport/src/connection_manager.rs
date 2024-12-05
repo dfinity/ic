@@ -393,7 +393,6 @@ impl ConnectionManager {
         let rustls_server_config = self.tls_config
             .server_config(subnet_nodes, self.topology.latest_registry_version())
             .expect("The rustls server config must be locally available, otherwise transport can't run.");
-
         let quic_server_config = QuicServerConfig::try_from(rustls_server_config).expect("Conversion from RustTls config to Quinn config must succeed as long as this library and quinn use the same RustTls versions.");
         let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(quic_server_config));
         server_config.transport_config(self.transport_config.clone());
@@ -415,7 +414,7 @@ impl ConnectionManager {
             }
         }
 
-        self.metrics.peer_map_size.set(peer_map.len() as i64);
+        //self.metrics.peer_map_size.set(peer_map.len() as i64);
     }
 
     /// Inserts a task into `outbound_connecting`` that handles an outbound connection attempt. (The function can also be called `handle_outbound`).
