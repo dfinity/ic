@@ -204,14 +204,9 @@ pub async fn bitcoin_get_utxos(request: GetUtxosRequest) -> Result<GetUtxosRespo
     fn cdk_get_utxos_request(
         request: GetUtxosRequest,
     ) -> ic_cdk::api::management_canister::bitcoin::GetUtxosRequest {
-        use ic_btc_interface::NetworkInRequest;
         ic_cdk::api::management_canister::bitcoin::GetUtxosRequest {
             address: request.address,
-            network: match request.network {
-                NetworkInRequest::Mainnet | NetworkInRequest::mainnet => BitcoinNetwork::Mainnet,
-                NetworkInRequest::Testnet | NetworkInRequest::testnet => BitcoinNetwork::Testnet,
-                NetworkInRequest::Regtest | NetworkInRequest::regtest => BitcoinNetwork::Regtest,
-            },
+            network: cdk_network(request.network.into()),
             filter: request.filter.map(|filter| match filter {
                 UtxosFilterInRequest::MinConfirmations(confirmations)
                 | UtxosFilterInRequest::min_confirmations(confirmations) => {
@@ -231,19 +226,14 @@ pub async fn bitcoin_get_utxos(request: GetUtxosRequest) -> Result<GetUtxosRespo
             utxos: response
                 .utxos
                 .into_iter()
-                .map(|utxo| {
-                    let txid_bytes: [u8; 32] =
-                        utxo.outpoint.txid.try_into().unwrap_or_else(|v: Vec<u8>| {
-                            panic!("Expected TXID to be length 32, but was length {}", v.len())
-                        });
-                    Utxo {
-                        outpoint: OutPoint {
-                            txid: Txid::from(txid_bytes),
-                            vout: utxo.outpoint.vout,
-                        },
-                        value: utxo.value,
-                        height: utxo.height,
-                    }
+                .map(|utxo| Utxo {
+                    outpoint: OutPoint {
+                        txid: Txid::try_from(utxo.outpoint.txid.as_slice())
+                            .unwrap_or_else(|_| panic!("Unable to parse TXID")),
+                        vout: utxo.outpoint.vout,
+                    },
+                    value: utxo.value,
+                    height: utxo.height,
                 })
                 .collect(),
             tip_block_hash: response.tip_block_hash,

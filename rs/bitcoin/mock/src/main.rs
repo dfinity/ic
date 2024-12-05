@@ -1,7 +1,7 @@
 use candid::candid_method;
 use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
-    MillisatoshiPerByte, Network, NetworkInRequest, Utxo, UtxosFilterInRequest,
+    MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
 };
 use ic_cdk::api::management_canister::bitcoin::{BitcoinNetwork, SendTransactionRequest};
 use ic_cdk_macros::{init, update};
@@ -87,7 +87,7 @@ fn set_tip_height(tip_height: u32) {
 #[update]
 fn bitcoin_get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
     read_state(|s| {
-        assert_network_equivalent(&utxos_request.network, &s.network);
+        assert_eq!(Network::from(utxos_request.network), s.network);
 
         let mut utxos = s
             .address_to_utxos
@@ -241,18 +241,4 @@ fn check_candid_interface_compatibility() {
         "declared candid interface in bitcoin_mock.did file",
         candid_parser::utils::CandidSource::File(old_interface.as_path()),
     );
-}
-
-fn assert_network_equivalent(lhs: &NetworkInRequest, rhs: &Network) {
-    match lhs {
-        &NetworkInRequest::Mainnet | &NetworkInRequest::mainnet => {
-            assert_eq!(rhs, &Network::Mainnet)
-        }
-        &NetworkInRequest::Testnet | &NetworkInRequest::testnet => {
-            assert_eq!(rhs, &Network::Testnet)
-        }
-        &NetworkInRequest::Regtest | &NetworkInRequest::regtest => {
-            assert_eq!(rhs, &Network::Regtest)
-        }
-    }
 }
