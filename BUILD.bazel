@@ -108,6 +108,13 @@ config_setting(
     ],
 )
 
+genrule(
+    name = "foo",
+    outs = ["config.txt"],
+    cmd = "echo $(BAZEL_CPU) $(BAZEL_PLATFORM) > $@",
+)
+
+
 config_setting(
     name = "is_x86_darwin",
     constraint_values = [
