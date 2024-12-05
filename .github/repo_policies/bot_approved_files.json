@@ -1,5 +1,3 @@
-# List of approved files that can be changed by a bot via an automated PR
-# This is to increase security and prevent accidentally updating files that shouldn't be changed by a bot
 {
     "approved_files": [
         "ic-os/boundary-guestos/context/docker-base.prod",
