@@ -262,7 +262,7 @@ impl ConnectionManager {
     /// - the node is a designated dialer
     /// - peer is in the subnet
     /// - this node is part of the subnet (can happen when a node is removed from the subnet)
-    /// - there is no connect attemped
+    /// - there is no connect attempted
     /// - there is no established connection
     fn can_i_dial_to(&self, dst: &NodeId) -> bool {
         let dialer = self.am_i_dialer(dst);
