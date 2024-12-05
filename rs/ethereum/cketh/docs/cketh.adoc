@@ -77,11 +77,11 @@ dfx identity get-principal
 .Address of the helper smart contract
 ====
 The address of the helper smart contract may change in the future when the minter is upgraded.
-Please verify the address of the helper contract **before** any important transfer by querying the minter as follows
+Please verify the address of the helper contract **before** any important transfer by checking the address specified in the field `deposit_with_subaccount_helper_contract_address` in the response of `get_minter_info`, which can be queried as follows
 
 [source,shell]
 ----
-dfx canister --network ic call minter smart_contract_address
+dfx canister --network ic call minter get_minter_info
 ----
 ====
 
@@ -106,13 +106,11 @@ bazel run //rs/ethereum/cketh/minter:principal_to_hex -- $(dfx identity get-prin
 ----
 ====
 
-Call the link:https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e00E68#writeContract[minter helper contract] `depositEth` function with your principal encoded and the amount as parameters.
-
 Call the link:https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e00E68#writeContract[minter helper contract] `depositEth` method of the helper smart contract (can be called from the contract's Etherscan page) specifying
 
 . The amount of ETH being deposited.
 . The IC principal encoded as a `bytes32`.
-. The IC ledger subaccount (use `0x` for the default subaccount). The IC principal together with the IC ledger subaccount uniquely identify an IC ledger account to which the amount of ckERC-20 should be minted.
+. The IC ledger subaccount (use `0x` for the default subaccount), which is a 32-byte array, encoded as an hexadecimal string and prefixed by `0x`. The IC principal together with the IC ledger subaccount uniquely identify an IC ledger account to which the amount of ckERC-20 should be minted.
 
 [WARNING]
 ====
