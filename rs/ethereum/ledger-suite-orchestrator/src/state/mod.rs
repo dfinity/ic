@@ -266,9 +266,9 @@ impl ManagedCanisters {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CanisterUpgrade {
     /// Wasm hash installed on the canister after the upgrade.
-    wasm_hash: WasmHash,
+    pub wasm_hash: WasmHash,
     /// Timestamp (nanoseconds since the Unix Epoch) of then the upgrade was completed.
-    timestamp: u64,
+    pub timestamp: u64,
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
@@ -559,6 +559,10 @@ impl State {
         self.all_managed_canisters_iter().map(|(id, _)| id)
     }
 
+    pub fn completed_upgrades(&self) -> &BTreeMap<Principal, CanisterUpgrade> {
+        &self.completed_upgrades
+    }
+
     pub fn managed_canisters(&self, token_id: &TokenId) -> Option<&Canisters> {
         self.managed_canisters.find_by_id(token_id)
     }
@@ -658,6 +662,21 @@ impl State {
             canister_id,
             installed_wasm_hash: wasm_hash,
         };
+    }
+
+    pub fn record_upgrade_completed(
+        &mut self,
+        canister_id: Principal,
+        wasm_hash: WasmHash,
+        timestamp: u64,
+    ) {
+        self.completed_upgrades.insert(
+            canister_id,
+            CanisterUpgrade {
+                wasm_hash,
+                timestamp,
+            },
+        );
     }
 
     pub fn validate_config(&self) -> Result<(), InvalidStateError> {
