@@ -110,7 +110,7 @@ Call the link:https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e
 
 . The amount of ETH being deposited.
 . The IC principal encoded as a `bytes32`.
-. The IC ledger subaccount (use `0x` for the default subaccount), which is a 32-byte array, encoded as an hexadecimal string and prefixed by `0x`. The IC principal together with the IC ledger subaccount uniquely identify an IC ledger account to which the amount of ckERC-20 should be minted.
+. The IC ledger subaccount (use `0x` for the default subaccount), which is a 32-byte array, encoded as an hexadecimal string and prefixed by `0x`. The IC principal together with the IC ledger subaccount uniquely identify an IC ledger account to which the amount of ckETH should be minted.
 
 [WARNING]
 ====
