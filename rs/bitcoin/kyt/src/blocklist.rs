@@ -17,7 +17,7 @@ macro_rules! bitcoin_address {
 lazy_static! {
     /// BTC is not accepted from nor sent to addresses on this list.
     pub static ref BTC_ADDRESS_BLOCKLIST: [Address; 434] = {
-        let mut addresses: [Address; 434] = [
+        let mut addresses = [
             bitcoin_address!("123WBUDmSJv4GctdVEz6Qq6z8nXSKrJ4KX"),
             bitcoin_address!("125W5ek3DT6Zqy5S2iPt4FHQdNMCbZA3FU"),
             bitcoin_address!("1295rkVyNfFpqZpXvKGhDqwhP1jZcNNDMV"),
