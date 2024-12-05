@@ -305,7 +305,11 @@ impl ConnectionManager {
                         Ok((Ok(conn), peer_id)) => self.handle_established_connection(conn, peer_id),
                         // retry
                         Ok((Err(err), peer_id)) =>  {
-                            info!(self.log, "Failed to establish outbound connection {:?}.", err);
+                            self.metrics
+                                .connection_results_total
+                                .with_label_values(&[CONNECTION_RESULT_FAILED_LABEL])
+                                .inc();
+                                info!(self.log, "Failed to establish outbound connection {:?}.", err);
                             self.handled_closed_conn(peer_id, CONNECT_RETRY_BACKOFF);
                         }
                         Err(err) => {
@@ -319,7 +323,13 @@ impl ConnectionManager {
                 Some(conn_res) = self.inbound_connecting.join_next() => {
                     match conn_res {
                         Ok(Ok(conn)) => self.handle_established_connection(conn.connection, conn.peer_id),
-                        Ok(Err(err)) => info!(self.log, "Failed to establish inbound connection {:?}.", err),
+                        Ok(Err(err)) => {
+                            self.metrics
+                                .connection_results_total
+                                .with_label_values(&[CONNECTION_RESULT_FAILED_LABEL])
+                                .inc();
+                            info!(self.log, "Failed to establish inbound connection {:?}.", err);
+                        }
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
