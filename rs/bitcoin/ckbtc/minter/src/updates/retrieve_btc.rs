@@ -56,7 +56,7 @@ pub struct RetrieveBtcOk {
 pub enum ErrorCode {
     // The retrieval address didn't pass the bitcoin check.
     TaintedAddress = 1,
-    KytCallFailed = 2,
+    CheckCallFailed = 2,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -300,7 +300,7 @@ pub async fn retrieve_btc_with_approval(
                     "Failed to call bitcoin checker canister with error: {:?}",
                     error
                 ),
-                error_code: ErrorCode::KytCallFailed as u64,
+                error_code: ErrorCode::CheckCallFailed as u64,
             })
         }
         Ok(status) => match status {
