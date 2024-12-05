@@ -253,12 +253,13 @@ fn retain_neurons_with_castable_ballots(
 
 #[cfg(test)]
 mod test {
-
     use crate::{
         governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
-        pb::v1::{neuron::Followees, Ballot, ProposalData, Tally, Topic, Vote},
+        pb::v1::{
+            neuron::Followees, Ballot, ProposalData, Tally, Topic, Vote, VotingPowerEconomics,
+        },
         test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
         voting::ProposalVotingStateMachine,
     };
@@ -326,7 +327,8 @@ mod test {
                                       followees: Vec<u64>,
                                       vote: Vote| {
             let neuron = make_neuron(id, followees);
-            let deciding_voting_power = neuron.deciding_voting_power(now);
+            let deciding_voting_power =
+                neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now);
             neuron_map.insert(id, neuron);
             ballots.insert(id, make_ballot(deciding_voting_power, vote));
         };
@@ -366,7 +368,7 @@ mod test {
         let governance_proto = crate::pb::v1::Governance {
             neurons: heap_neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into_proto(now)))
+                .map(|(id, neuron)| (id, neuron.into_proto(&VotingPowerEconomics::DEFAULT, now)))
                 .collect(),
             proposals: btreemap! {
                 1 => ProposalData {
@@ -397,7 +399,9 @@ mod test {
         let deciding_voting_power = |neuron_id| {
             governance
                 .neuron_store
-                .with_neuron(&neuron_id, |n| n.deciding_voting_power(now))
+                .with_neuron(&neuron_id, |n| {
+                    n.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now)
+                })
                 .unwrap()
         };
         assert_eq!(
@@ -434,7 +438,8 @@ mod test {
                                       followees: Vec<u64>,
                                       vote: Vote| {
             let neuron = make_neuron(id, followees);
-            let deciding_voting_power = neuron.deciding_voting_power(now);
+            let deciding_voting_power =
+                neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now);
             neuron_map.insert(id, neuron);
             ballots.insert(id, make_ballot(deciding_voting_power, vote));
         };
@@ -462,7 +467,7 @@ mod test {
         let governance_proto = crate::pb::v1::Governance {
             neurons: neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into_proto(now)))
+                .map(|(id, neuron)| (id, neuron.into_proto(&VotingPowerEconomics::DEFAULT, now)))
                 .collect(),
             proposals: btreemap! {
                 1 => ProposalData {
@@ -493,7 +498,9 @@ mod test {
         let deciding_voting_power = |neuron_id| {
             governance
                 .neuron_store
-                .with_neuron(&neuron_id, |n| n.deciding_voting_power(now))
+                .with_neuron(&neuron_id, |n| {
+                    n.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now)
+                })
                 .unwrap()
         };
         assert_eq!(

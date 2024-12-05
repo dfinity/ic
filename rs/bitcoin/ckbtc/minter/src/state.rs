@@ -242,10 +242,10 @@ impl Default for Mode {
     }
 }
 
-/// The outcome of a UTXO KYT check.
+/// The outcome of a UTXO check.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum UtxoCheckStatus {
-    /// The KYT check did not reveal any problems.
+    /// The Bitcoin check did not reveal any problems.
     Clean,
     /// The UTXO in question is tainted.
     Tainted,
@@ -284,7 +284,7 @@ pub struct Overdraft(pub u64);
 /// Every piece of state of the Minter should be stored as field of this struct.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CkBtcMinterState {
-    /// The bitcoin network that the minter will connect to
+    /// The Bitcoin network that the minter will connect to
     pub btc_network: Network,
 
     /// The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
@@ -353,8 +353,8 @@ pub struct CkBtcMinterState {
     /// The CanisterId of the ckBTC Ledger.
     pub ledger_id: CanisterId,
 
-    /// The principal of the KYT canister.
-    pub kyt_principal: Option<CanisterId>,
+    /// The principal of the Bitcoin checker canister.
+    pub btc_checker_principal: Option<CanisterId>,
 
     /// The set of UTXOs unused in pending transactions.
     pub available_utxos: BTreeSet<Utxo>,
@@ -386,20 +386,20 @@ pub struct CkBtcMinterState {
 
     pub last_fee_per_vbyte: Vec<u64>,
 
-    /// The fee for a single KYT request.
-    pub kyt_fee: u64,
+    /// The fee for a single Bitcoin check request.
+    pub check_fee: u64,
 
     /// The total amount of fees we owe to the KYT provider.
     pub owed_kyt_amount: BTreeMap<Principal, u64>,
 
-    /// A cache of UTXO KYT check statuses.
+    /// A cache of UTXO check statuses.
     pub checked_utxos: BTreeMap<Utxo, CheckedUtxo>,
 
     /// UTXOs that cannot be yet processed.
     pub suspended_utxos: SuspendedUtxos,
 
     /// Map from burn block index to amount to reimburse because of
-    /// KYT fees.
+    /// check fees.
     pub pending_reimbursements: BTreeMap<u64, ReimburseDepositTask>,
 
     /// Map from burn block index to the the reimbursed request.
@@ -431,6 +431,7 @@ pub enum ReimbursementReason {
 }
 
 impl CkBtcMinterState {
+    #[allow(deprecated)]
     pub fn reinit(
         &mut self,
         InitArgs {
@@ -441,8 +442,10 @@ impl CkBtcMinterState {
             max_time_in_queue_nanos,
             min_confirmations,
             mode,
+            check_fee,
+            btc_checker_principal,
+            kyt_principal: _,
             kyt_fee,
-            kyt_principal,
         }: InitArgs,
     ) {
         self.btc_network = btc_network.into();
@@ -452,15 +455,18 @@ impl CkBtcMinterState {
         self.ledger_id = ledger_id;
         self.max_time_in_queue_nanos = max_time_in_queue_nanos;
         self.mode = mode;
-        self.kyt_principal = kyt_principal;
-        if let Some(kyt_fee) = kyt_fee {
-            self.kyt_fee = kyt_fee;
+        self.btc_checker_principal = btc_checker_principal;
+        if let Some(check_fee) = check_fee {
+            self.check_fee = check_fee;
+        } else if let Some(kyt_fee) = kyt_fee {
+            self.check_fee = kyt_fee;
         }
         if let Some(min_confirmations) = min_confirmations {
             self.min_confirmations = min_confirmations;
         }
     }
 
+    #[allow(deprecated)]
     pub fn upgrade(
         &mut self,
         UpgradeArgs {
@@ -468,8 +474,10 @@ impl CkBtcMinterState {
             max_time_in_queue_nanos,
             min_confirmations,
             mode,
+            check_fee,
+            btc_checker_principal,
+            kyt_principal: _,
             kyt_fee,
-            kyt_principal,
         }: UpgradeArgs,
     ) {
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
@@ -494,23 +502,25 @@ impl CkBtcMinterState {
         if let Some(mode) = mode {
             self.mode = mode;
         }
-        if let Some(kyt_principal) = kyt_principal {
-            self.kyt_principal = Some(kyt_principal);
+        if let Some(btc_checker_principal) = btc_checker_principal {
+            self.btc_checker_principal = Some(btc_checker_principal);
         }
-        if let Some(kyt_fee) = kyt_fee {
-            self.kyt_fee = kyt_fee;
+        if let Some(check_fee) = check_fee {
+            self.check_fee = check_fee;
+        } else if let Some(kyt_fee) = kyt_fee {
+            self.check_fee = kyt_fee;
         }
     }
 
     pub fn validate_config(&self) {
-        if self.kyt_fee > self.retrieve_btc_min_amount {
-            ic_cdk::trap("kyt_fee cannot be greater than retrieve_btc_min_amount");
+        if self.check_fee > self.retrieve_btc_min_amount {
+            ic_cdk::trap("check_fee cannot be greater than retrieve_btc_min_amount");
         }
         if self.ecdsa_key_name.is_empty() {
             ic_cdk::trap("ecdsa_key_name is not set");
         }
-        if self.kyt_principal.is_none() {
-            ic_cdk::trap("New KYT principal is not set");
+        if self.btc_checker_principal.is_none() {
+            ic_cdk::trap("Bitcoin checker principal is not set");
         }
     }
 
@@ -884,7 +894,7 @@ impl CkBtcMinterState {
         }
         self.tokens_burned += request.amount;
         if let Some(kyt_provider) = request.kyt_provider {
-            *self.owed_kyt_amount.entry(kyt_provider).or_insert(0) += self.kyt_fee;
+            *self.owed_kyt_amount.entry(kyt_provider).or_insert(0) += self.check_fee;
         }
         self.pending_retrieve_btc_requests.push(request);
     }
@@ -1015,7 +1025,7 @@ impl CkBtcMinterState {
     fn ensure_reason_consistent_with_state(&self, utxo: &Utxo, reason: SuspendedReason) {
         match reason {
             SuspendedReason::ValueTooSmall => {
-                assert!(utxo.value <= self.kyt_fee);
+                assert!(utxo.value <= self.check_fee);
             }
             SuspendedReason::Quarantined => {}
         }
@@ -1048,7 +1058,7 @@ impl CkBtcMinterState {
             // Updated the owed amount only if it's the first time we mark this UTXO as
             // clean.
             if let Some(provider) = kyt_provider {
-                *self.owed_kyt_amount.entry(provider).or_insert(0) += self.kyt_fee;
+                *self.owed_kyt_amount.entry(provider).or_insert(0) += self.check_fee;
             }
         }
     }
@@ -1186,7 +1196,7 @@ impl CkBtcMinterState {
             "checked_utxos do not match"
         );
 
-        ensure_eq!(self.kyt_fee, other.kyt_fee, "kyt_fee does not match");
+        ensure_eq!(self.check_fee, other.check_fee, "check_fee does not match");
 
         ensure_eq!(
             self.owed_kyt_amount,
@@ -1195,9 +1205,9 @@ impl CkBtcMinterState {
         );
 
         ensure_eq!(
-            self.kyt_principal,
-            other.kyt_principal,
-            "kyt_principal does not match"
+            self.btc_checker_principal,
+            other.btc_checker_principal,
+            "btc_checker_principal does not match"
         );
 
         ensure_eq!(
@@ -1341,9 +1351,9 @@ pub struct SuspendedUtxos {
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Serialize, Deserialize)]
 pub enum SuspendedReason {
-    /// UTXO whose value is too small to pay the KYT check fee.
+    /// UTXO whose value is too small to pay the Bitcoin check fee.
     ValueTooSmall,
-    /// UTXO that the KYT provider considered tainted.
+    /// UTXO that the Bitcoin checker considered tainted.
     Quarantined,
 }
 
@@ -1429,6 +1439,7 @@ fn as_sorted_vec<T, K: Ord>(values: impl Iterator<Item = T>, key: impl Fn(&T) ->
 }
 
 impl From<InitArgs> for CkBtcMinterState {
+    #[allow(deprecated)]
     fn from(args: InitArgs) -> Self {
         Self {
             btc_network: args.btc_network.into(),
@@ -1455,7 +1466,7 @@ impl From<InitArgs> for CkBtcMinterState {
             tokens_minted: 0,
             tokens_burned: 0,
             ledger_id: args.ledger_id,
-            kyt_principal: args.kyt_principal,
+            btc_checker_principal: args.btc_checker_principal,
             available_utxos: Default::default(),
             outpoint_account: Default::default(),
             utxos_state_addresses: Default::default(),
@@ -1464,9 +1475,9 @@ impl From<InitArgs> for CkBtcMinterState {
             is_distributing_fee: false,
             mode: args.mode,
             last_fee_per_vbyte: vec![1; 100],
-            kyt_fee: args
-                .kyt_fee
-                .unwrap_or(crate::lifecycle::init::DEFAULT_KYT_FEE),
+            check_fee: args
+                .check_fee
+                .unwrap_or(crate::lifecycle::init::DEFAULT_CHECK_FEE),
             owed_kyt_amount: Default::default(),
             checked_utxos: Default::default(),
             suspended_utxos: Default::default(),

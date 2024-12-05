@@ -7,10 +7,10 @@ use crate::state::ReimbursementReason;
 use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
+use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_interface::{
     GetUtxosRequest, GetUtxosResponse, MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo,
 };
-use ic_btc_kyt::CheckTransactionResponse;
 use ic_canister_log::log;
 use ic_management_canister_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
@@ -105,7 +105,9 @@ pub struct Log {
 pub struct MinterInfo {
     pub min_confirmations: u32,
     pub retrieve_btc_min_amount: u64,
-    pub kyt_fee: u64,
+    // Serialize to the old name to be backward compatible in Candid.
+    #[serde(rename = "kyt_fee")]
+    pub check_fee: u64,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -189,20 +191,20 @@ fn compute_min_withdrawal_amount(
     const PER_REQUEST_RBF_BOUND: u64 = 22_100;
     const PER_REQUEST_VSIZE_BOUND: u64 = 221;
     const PER_REQUEST_MINTER_FEE_BOUND: u64 = 305;
-    const PER_REQUEST_KYT_FEE: u64 = 2_000;
+    const PER_REQUEST_CHECK_FEE: u64 = 2_000;
 
     let median_fee_rate = median_fee_rate_e3s / 1_000;
     ((PER_REQUEST_RBF_BOUND
         + PER_REQUEST_VSIZE_BOUND * median_fee_rate
         + PER_REQUEST_MINTER_FEE_BOUND
-        + PER_REQUEST_KYT_FEE)
+        + PER_REQUEST_CHECK_FEE)
         / 50_000)
         * 50_000
         + min_withdrawal_amount
 }
 
 /// Returns an estimate for transaction fees in millisatoshi per vbyte. Returns
-/// None if the bitcoin canister is unavailable or does not have enough data for
+/// None if the Bitcoin canister is unavailable or does not have enough data for
 /// an estimate yet.
 pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
     /// The default fee we use on regtest networks if there are not enough data
@@ -242,7 +244,7 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
     }
 }
 
-/// Constructs and sends out signed bitcoin transactions for pending retrieve
+/// Constructs and sends out signed Bitcoin transactions for pending retrieve
 /// requests.
 async fn submit_pending_requests() {
     // We make requests if we have old requests in the queue or if have enough
@@ -414,7 +416,7 @@ async fn submit_pending_requests() {
                     Err(err) => {
                         log!(
                             P0,
-                            "[submit_pending_requests]: failed to send a bitcoin transaction: {}",
+                            "[submit_pending_requests]: failed to send a Bitcoin transaction: {}",
                             err
                         );
                     }
@@ -423,7 +425,7 @@ async fn submit_pending_requests() {
             Err(err) => {
                 log!(
                     P0,
-                    "[submit_pending_requests]: failed to sign a BTC transaction: {}",
+                    "[submit_pending_requests]: failed to sign a Bitcoin transaction: {}",
                     err
                 );
             }
@@ -1287,7 +1289,7 @@ pub trait CanisterRuntime {
 
     async fn check_transaction(
         &self,
-        kyt_principal: Principal,
+        btc_checker_principal: Principal,
         utxo: &Utxo,
         cycle_payment: u128,
     ) -> Result<CheckTransactionResponse, CallError>;
@@ -1331,11 +1333,11 @@ impl CanisterRuntime for IcCanisterRuntime {
 
     async fn check_transaction(
         &self,
-        kyt_principal: Principal,
+        btc_checker_principal: Principal,
         utxo: &Utxo,
         cycle_payment: u128,
     ) -> Result<CheckTransactionResponse, CallError> {
-        management::check_transaction(kyt_principal, utxo, cycle_payment).await
+        management::check_transaction(btc_checker_principal, utxo, cycle_payment).await
     }
 
     async fn mint_ckbtc(

@@ -4,7 +4,7 @@ use crate::{
     neuron_store::NeuronStore,
     pb::v1::{
         neuron::Followees, proposal::Action, Ballot, BallotInfo, Governance as GovernanceProto,
-        KnownNeuron, Neuron as NeuronProto, ProposalData, Topic, Vote,
+        KnownNeuron, Neuron as NeuronProto, ProposalData, Topic, Vote, VotingPowerEconomics,
     },
     temporarily_disable_active_neurons_in_stable_memory,
     temporarily_disable_stable_memory_following_index,
@@ -497,7 +497,7 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
                     1_000_000_000,
                     hashmap! {}, // get the default followees
                 )
-                .into_proto(now_seconds),
+                .into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
             )
         })
         .collect::<BTreeMap<u64, NeuronProto>>();
