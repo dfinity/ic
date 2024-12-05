@@ -97,7 +97,7 @@ go_deps.bzl               @dfinity/idx
 /rs/bitcoin/mock/                                       @dfinity/cross-chain-team
 /rs/bitcoin/client/                                     @dfinity/networking
 /rs/bitcoin/consensus/                                  @dfinity/execution @dfinity/consensus
-/rs/bitcoin/kyt/                                        @dfinity/cross-chain-team
+/rs/bitcoin/checker/                                    @dfinity/cross-chain-team
 /rs/bitcoin/service/                                    @dfinity/networking
 /rs/bitcoin/replica_types/                              @dfinity/execution
 /rs/bitcoin/validation                                  @dfinity/networking @dfinity/execution

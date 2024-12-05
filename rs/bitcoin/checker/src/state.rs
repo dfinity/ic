@@ -1,6 +1,6 @@
 use crate::{
     providers::{parse_authorization_header_from_url, Provider},
-    BtcNetwork, KytMode,
+    BtcNetwork, CheckMode,
 };
 use bitcoin::{Address, Transaction};
 use ic_btc_interface::Txid;
@@ -72,7 +72,7 @@ pub struct FetchTxStatusError {
 /// input address will be computed and filled in.
 #[derive(Clone, Debug)]
 pub struct FetchedTx {
-    pub tx: TransactionKytData,
+    pub tx: TransactionCheckData,
     pub input_addresses: Vec<Option<Address>>,
 }
 
@@ -80,7 +80,7 @@ pub struct FetchedTx {
 /// store relevant bits, including inputs (which are previous
 /// outputs) and output addresses.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TransactionKytData {
+pub struct TransactionCheckData {
     pub inputs: Vec<PreviousOutput>,
     pub outputs: Vec<Option<Address>>,
 }
@@ -91,7 +91,7 @@ pub struct PreviousOutput {
     pub vout: u32,
 }
 
-impl TransactionKytData {
+impl TransactionCheckData {
     pub fn from_transaction(
         btc_network: &BtcNetwork,
         tx: Transaction,
@@ -127,7 +127,7 @@ const MAX_CONCURRENT: u32 = 50;
 // is about 400 bytes, the estimated memory usage of the cache is in the order of 10s of MBs.
 const MAX_FETCH_TX_ENTRIES: usize = 10_000;
 
-// The internal KYT state includes:
+// The internal state includes:
 // 1. Outcall capacity, a semaphore limiting max concurrent outcalls.
 // 2. fetch transaction status, indexed by transaction id.
 //
@@ -281,17 +281,20 @@ impl Drop for FetchGuard {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
     btc_network: BtcNetwork,
-    kyt_mode: KytMode,
+    check_mode: CheckMode,
 }
 
 impl Config {
-    pub fn new_and_validate(btc_network: BtcNetwork, kyt_mode: KytMode) -> Result<Self, String> {
+    pub fn new_and_validate(
+        btc_network: BtcNetwork,
+        check_mode: CheckMode,
+    ) -> Result<Self, String> {
         if let BtcNetwork::Regtest { json_rpc_url } = &btc_network {
             let _ = parse_authorization_header_from_url(json_rpc_url)?;
         }
         Ok(Self {
             btc_network,
-            kyt_mode,
+            check_mode,
         })
     }
 
@@ -299,8 +302,8 @@ impl Config {
         self.btc_network.clone()
     }
 
-    pub fn kyt_mode(&self) -> KytMode {
-        self.kyt_mode
+    pub fn check_mode(&self) -> CheckMode {
+        self.check_mode
     }
 }
 
