@@ -194,7 +194,7 @@ fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
 #[update]
 async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, UpdateBalanceError> {
     check_anonymous_caller();
-    check_postcondition(updates::update_balance::update_balance(args).await)
+    check_postcondition(updates::update_balance::update_balance(args, &IC_CANISTER_RUNTIME).await)
 }
 
 #[update]
@@ -223,7 +223,7 @@ fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
 #[query]
 fn get_minter_info() -> MinterInfo {
     read_state(|s| MinterInfo {
-        kyt_fee: s.kyt_fee,
+        check_fee: s.check_fee,
         min_confirmations: s.min_confirmations,
         retrieve_btc_min_amount: s.fee_based_retrieve_btc_min_amount,
     })
@@ -231,7 +231,7 @@ fn get_minter_info() -> MinterInfo {
 
 #[query]
 fn get_deposit_fee() -> u64 {
-    read_state(|s| s.kyt_fee)
+    read_state(|s| s.check_fee)
 }
 
 #[query(hidden = true)]

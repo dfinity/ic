@@ -1,15 +1,15 @@
 //! This module contains async functions for interacting with the management canister.
 
 use crate::logs::P0;
-use crate::tx;
 use crate::ECDSAPublicKey;
+use crate::{tx, CanisterRuntime};
 use candid::{CandidType, Principal};
+use ic_btc_checker::{
+    CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
+};
 use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
     MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
-};
-use ic_btc_kyt::{
-    CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
 };
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
@@ -88,7 +88,7 @@ impl Reason {
     }
 }
 
-async fn call<I, O>(method: &str, payment: u64, input: &I) -> Result<O, CallError>
+pub(crate) async fn call<I, O>(method: &str, payment: u64, input: &I) -> Result<O, CallError>
 where
     I: CandidType,
     O: CandidType + DeserializeOwned,
@@ -135,11 +135,12 @@ pub enum CallSource {
 }
 
 /// Fetches the full list of UTXOs for the specified address.
-pub async fn get_utxos(
+pub async fn get_utxos<R: CanisterRuntime>(
     network: Network,
     address: &Address,
     min_confirmations: u32,
     source: CallSource,
+    runtime: &R,
 ) -> Result<GetUtxosResponse, CallError> {
     // NB. The minimum number of cycles that need to be sent with the call is 10B (4B) for
     // Bitcoin mainnet (Bitcoin testnet):
@@ -151,17 +152,18 @@ pub async fn get_utxos(
 
     // Calls "bitcoin_get_utxos" method with the specified argument on the
     // management canister.
-    async fn bitcoin_get_utxos(
+    async fn bitcoin_get_utxos<R: CanisterRuntime>(
         req: &GetUtxosRequest,
         cycles: u64,
         source: CallSource,
+        runtime: &R,
     ) -> Result<GetUtxosResponse, CallError> {
         match source {
             CallSource::Client => &crate::metrics::GET_UTXOS_CLIENT_CALLS,
             CallSource::Minter => &crate::metrics::GET_UTXOS_MINTER_CALLS,
         }
         .with(|cell| cell.set(cell.get() + 1));
-        call("bitcoin_get_utxos", cycles, req).await
+        runtime.bitcoin_get_utxos(req, cycles).await
     }
 
     let mut response = bitcoin_get_utxos(
@@ -172,6 +174,7 @@ pub async fn get_utxos(
         },
         get_utxos_cost_cycles,
         source,
+        runtime,
     )
     .await?;
 
@@ -187,6 +190,7 @@ pub async fn get_utxos(
             },
             get_utxos_cost_cycles,
             source,
+            runtime,
         )
         .await?;
 
@@ -198,7 +202,7 @@ pub async fn get_utxos(
     Ok(response)
 }
 
-/// Returns the current fee percentiles on the bitcoin network.
+/// Returns the current fee percentiles on the Bitcoin network.
 pub async fn get_current_fees(network: Network) -> Result<Vec<MillisatoshiPerByte>, CallError> {
     let cost_cycles = match network {
         Network::Mainnet => 100_000_000,
@@ -301,11 +305,11 @@ pub async fn sign_with_ecdsa(
 
 /// Check if the given Bitcoin address is blocked.
 pub async fn check_withdrawal_destination_address(
-    kyt_principal: Principal,
+    btc_checker_principal: Principal,
     address: String,
 ) -> Result<CheckAddressResponse, CallError> {
     let (res,): (CheckAddressResponse,) = ic_cdk::api::call::call(
-        kyt_principal,
+        btc_checker_principal,
         "check_address",
         (CheckAddressArgs { address },),
     )
@@ -317,14 +321,14 @@ pub async fn check_withdrawal_destination_address(
     Ok(res)
 }
 
-/// Check if the given UTXO passes KYT.
+/// Check if the given UTXO passes Bitcoin check.
 pub async fn check_transaction(
-    kyt_principal: Principal,
+    btc_checker_principal: Principal,
     utxo: &Utxo,
     cycle_payment: u128,
 ) -> Result<CheckTransactionResponse, CallError> {
     let (res,): (CheckTransactionResponse,) = ic_cdk::api::call::call_with_payment128(
-        kyt_principal,
+        btc_checker_principal,
         "check_transaction",
         (CheckTransactionArgs {
             txid: utxo.outpoint.txid.as_ref().to_vec(),

@@ -19,7 +19,7 @@ ciborium = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-btc-interface = { workspace = true }
-ic-btc-kyt = { path = "../../kyt" }
+ic-btc-checker = { path = "../../checker" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
@@ -59,6 +59,7 @@ ic-icrc1-ledger = { path = "../../../ledger_suite/icrc1/ledger" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-types = { path = "../../../types/types" }
+maplit = "1.0.2"
 mockall = { workspace = true }
 proptest = { workspace = true }
 simple_asn1 = { workspace = true }

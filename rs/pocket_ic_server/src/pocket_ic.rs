@@ -728,7 +728,7 @@ impl PocketIc {
                             algorithm,
                             name: name.to_string(),
                         };
-                        builder = builder.with_idkg_key(MasterPublicKeyId::Schnorr(key_id));
+                        builder = builder.with_chain_key(MasterPublicKeyId::Schnorr(key_id));
                     }
                 }
 
@@ -737,7 +737,7 @@ impl PocketIc {
                         curve: EcdsaCurve::Secp256k1,
                         name: name.to_string(),
                     };
-                    builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(key_id));
+                    builder = builder.with_chain_key(MasterPublicKeyId::Ecdsa(key_id));
                 }
             }
 
@@ -1707,6 +1707,33 @@ impl Operation for ExecuteIngressMessage {
     fn id(&self) -> OpId {
         let call_id = self.0.id();
         OpId(format!("canister_update_{}", call_id.0))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct IngressMessageStatus(pub MessageId);
+
+impl Operation for IngressMessageStatus {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let subnet = route(pic, self.0.effective_principal.clone(), false);
+        match subnet {
+            Ok(subnet) => match subnet.ingress_status(&self.0.msg_id) {
+                IngressStatus::Known {
+                    state: IngressState::Completed(result),
+                    ..
+                } => Ok(result).into(),
+                IngressStatus::Known {
+                    state: IngressState::Failed(error),
+                    ..
+                } => Err(error).into(),
+                _ => OpOut::NoOutput,
+            },
+            Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
+        }
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!("ingress_status_{}", self.0.msg_id))
     }
 }
 

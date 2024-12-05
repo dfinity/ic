@@ -3,7 +3,7 @@ use anyhow::Result;
 use bitcoincore_rpc::RpcApi;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_kyt::KytMode as NewKytMode;
+use ic_btc_checker::CheckMode as NewCheckMode;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{
     lifecycle::upgrade::UpgradeArgs,
@@ -24,14 +24,14 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_ledger,
-    install_minter, install_new_kyt, setup, subnet_sys, upgrade_new_kyt,
+    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_btc_checker,
+    install_ledger, install_minter, setup, subnet_sys, upgrade_btc_checker,
     utils::{
         assert_account_balance, assert_burn_transaction, assert_mint_transaction, ensure_wallet,
         generate_blocks, get_btc_address, get_btc_client, update_balance,
         upgrade_canister_with_args, wait_for_bitcoin_balance, BTC_BLOCK_REWARD,
     },
-    BTC_MIN_CONFIRMATIONS, KYT_FEE, RETRIEVE_BTC_MIN_AMOUNT, TEST_KEY_LOCAL, TRANSFER_FEE,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, RETRIEVE_BTC_MIN_AMOUNT, TEST_KEY_LOCAL, TRANSFER_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
@@ -61,14 +61,14 @@ pub fn test_retrieve_btc(env: TestEnv) {
 
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
-        let mut new_kyt_canister = create_canister(&runtime).await;
+        let mut btc_checker_canister = create_canister(&runtime).await;
 
         let minting_user = minter_canister.canister_id().get();
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let new_kyt_id = install_new_kyt(&mut new_kyt_canister, &env).await;
+        let btc_checker_id = install_btc_checker(&mut btc_checker_canister, &env).await;
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
         let minter_id =
-            install_minter(&mut minter_canister, ledger_id, &logger, 0, new_kyt_id).await;
+            install_minter(&mut minter_canister, ledger_id, &logger, 0, btc_checker_id).await;
         let minter = Principal::from(minter_id.get());
         let ledger = Principal::from(ledger_id.get());
         let universal_canister =
@@ -97,9 +97,9 @@ pub fn test_retrieve_btc(env: TestEnv) {
         };
 
         // Because bitcoind only allows to see one's own transaction, and we
-        // are using multiple addresses in this test. We have to change KYT
+        // are using multiple addresses in this test. We have to change check
         // mode to AcceptAll, otherwise bitcoind will return 500 error.
-        upgrade_new_kyt(&mut new_kyt_canister, NewKytMode::AcceptAll).await;
+        upgrade_btc_checker(&mut btc_checker_canister, NewCheckMode::AcceptAll).await;
 
         // Get the BTC address of the caller's sub-accounts.
         let btc_address0 = get_btc_address(&minter_agent, &logger, subaccount0).await;
@@ -131,7 +131,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
                     &logger,
                     *block_index,
                     &account1,
-                    BTC_BLOCK_REWARD - KYT_FEE,
+                    BTC_BLOCK_REWARD - CHECK_FEE,
                 )
                 .await;
             } else {
@@ -170,7 +170,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
         assert_account_balance(
             &ledger_agent,
             &account1,
-            3 * (BTC_BLOCK_REWARD - KYT_FEE) - transfer_amount - TRANSFER_FEE,
+            3 * (BTC_BLOCK_REWARD - CHECK_FEE) - transfer_amount - TRANSFER_FEE,
         )
         .await;
         info!(&logger, "Verify withdrawal_account balance on the ledger");

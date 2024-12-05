@@ -1134,7 +1134,7 @@ impl<T: HasTestEnv> HasIcDependencies for T {
 pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
     let dep_rel_path = "elasticsearch_hosts";
     let hosts = read_dependency_to_string(dep_rel_path)
-        .unwrap_or_else(|_| "elasticsearch.testnet.dfinity.network:443".to_string());
+        .unwrap_or_else(|_| "elasticsearch.ch1-obsdev1.dfinity.network:443".to_string());
     parse_elasticsearch_hosts(Some(hosts))
 }
 
@@ -1151,7 +1151,7 @@ pub fn get_sha256_from_cas_url(img_name: &str, url: &Url) -> Result<String> {
 }
 
 pub fn get_ic_os_img_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
@@ -1160,8 +1160,7 @@ pub fn get_ic_os_img_sha256() -> Result<String> {
 }
 
 pub fn get_malicious_ic_os_img_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
@@ -1170,7 +1169,7 @@ pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
 }
 
 pub fn get_ic_os_update_img_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
@@ -1179,7 +1178,7 @@ pub fn get_ic_os_update_img_sha256() -> Result<String> {
 }
 
 pub fn get_ic_os_update_img_test_url() -> Result<Url> {
-    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
@@ -1188,8 +1187,7 @@ pub fn get_ic_os_update_img_test_sha256() -> Result<String> {
 }
 
 pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
@@ -1201,16 +1199,15 @@ pub fn get_malicious_ic_os_update_img_sha256() -> Result<String> {
 }
 
 pub fn get_boundary_node_img_url() -> Result<Url> {
-    let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.cas-url";
-    let url = read_dependency_to_string(dep_rel_path)?;
+    let url = std::env::var("ENV_DEPS__BOUNDARY_GUESTOS_DISK_IMG_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
 pub fn get_boundary_node_img_sha256() -> Result<String> {
-    let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.sha256";
-    let sha256 = read_dependency_to_string(dep_rel_path)?;
-    bail_if_sha256_invalid(&sha256, "boundary_node_img_sha256")?;
-    Ok(sha256)
+    get_sha256_from_cas_url(
+        "ic_os_boudndary_guestos_img_sha256",
+        &get_boundary_node_img_url()?,
+    )
 }
 
 pub fn get_mainnet_ic_os_img_url() -> Result<Url> {
@@ -1226,8 +1223,7 @@ pub fn get_mainnet_ic_os_update_img_url() -> Result<Url> {
 }
 
 pub fn get_hostos_update_img_test_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    let url = std::env::var("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
     Ok(Url::parse(&url)?)
 }
 
@@ -1469,9 +1465,11 @@ pub trait SshSession {
         channel.send_eof()?;
         let mut out = String::new();
         channel.read_to_string(&mut out)?;
+        let mut err = String::new();
+        channel.stderr().read_to_string(&mut err)?;
         let exit_status = channel.exit_status()?;
         if exit_status != 0 {
-            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out}");
+            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
         }
         Ok(out)
     }

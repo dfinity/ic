@@ -12,7 +12,7 @@ use crate::{
 };
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_kyt::CheckAddressResponse;
+use ic_btc_checker::CheckAddressResponse;
 use ic_canister_log::log;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::Account;
@@ -54,9 +54,9 @@ pub struct RetrieveBtcOk {
 }
 
 pub enum ErrorCode {
-    // The retrieval address didn't pass the KYT check.
+    // The retrieval address didn't pass the Bitcoin check.
     TaintedAddress = 1,
-    KytCallFailed = 2,
+    CheckCallFailed = 2,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -67,7 +67,7 @@ pub enum RetrieveBtcError {
     /// The withdrawal amount is too low.
     AmountTooLow(u64),
 
-    /// The bitcoin address is not valid.
+    /// The Bitcoin address is not valid.
     MalformedAddress(String),
 
     /// The withdrawal account does not hold the requested ckBTC amount.
@@ -92,7 +92,7 @@ pub enum RetrieveBtcWithApprovalError {
     /// The withdrawal amount is too low.
     AmountTooLow(u64),
 
-    /// The bitcoin address is not valid.
+    /// The Bitcoin address is not valid.
     MalformedAddress(String),
 
     /// The withdrawal account does not hold the requested ckBTC amount.
@@ -186,18 +186,18 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         return Err(RetrieveBtcError::InsufficientFunds { balance });
     }
 
-    let new_kyt_principal = read_state(|s| {
-        s.new_kyt_principal
-            .expect("BUG: upgrade procedure must ensure that the new KYT principal is set")
+    let btc_checker_principal = read_state(|s| {
+        s.btc_checker_principal
+            .expect("BUG: upgrade procedure must ensure that the Bitcoin checker principal is set")
             .get()
             .into()
     });
-    let status = new_kyt_check_address(new_kyt_principal, args.address.clone()).await?;
+    let status = check_address(btc_checker_principal, args.address.clone()).await?;
     match status {
         BtcAddressCheckStatus::Tainted => {
             log!(
                 P1,
-                "rejected an attempt to withdraw {} BTC to address {} due to failed KYT check",
+                "rejected an attempt to withdraw {} BTC to address {} due to failed Bitcoin check",
                 crate::tx::DisplayAmount(args.amount),
                 args.address,
             );
@@ -286,18 +286,21 @@ pub async fn retrieve_btc_with_approval(
         ));
     }
 
-    let new_kyt_principal = read_state(|s| {
-        s.new_kyt_principal
-            .expect("BUG: upgrade procedure must ensure that the new KYT principal is set")
+    let btc_checker_principal = read_state(|s| {
+        s.btc_checker_principal
+            .expect("BUG: upgrade procedure must ensure that the Bitcoin checker principal is set")
             .get()
             .into()
     });
 
-    match new_kyt_check_address(new_kyt_principal, parsed_address.display(btc_network)).await {
+    match check_address(btc_checker_principal, parsed_address.display(btc_network)).await {
         Err(error) => {
             return Err(RetrieveBtcWithApprovalError::GenericError {
-                error_message: format!("Failed to call KYT canister with error: {:?}", error),
-                error_code: ErrorCode::KytCallFailed as u64,
+                error_message: format!(
+                    "Failed to call Bitcoin checker canister with error: {:?}",
+                    error
+                ),
+                error_code: ErrorCode::CheckCallFailed as u64,
             })
         }
         Ok(status) => match status {
@@ -511,23 +514,23 @@ async fn burn_ckbtcs_icrc2(
     }
 }
 
-/// The outcome of an address KYT check.
+/// The outcome of a Bitcoin address check.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 pub enum BtcAddressCheckStatus {
-    /// The KYT check did not find any issues with the address.
+    /// The Bitcoin check did not find any issues with the address.
     Clean,
-    /// The KYT check found issues with the address in question.
+    /// The Bitcoin check found issues with the address in question.
     Tainted,
 }
-async fn new_kyt_check_address(
-    new_kyt_principal: Principal,
+async fn check_address(
+    btc_checker_principal: Principal,
     address: String,
 ) -> Result<BtcAddressCheckStatus, RetrieveBtcError> {
-    match check_withdrawal_destination_address(new_kyt_principal, address.clone())
+    match check_withdrawal_destination_address(btc_checker_principal, address.clone())
         .await
         .map_err(|call_err| {
             RetrieveBtcError::TemporarilyUnavailable(format!(
-                "Failed to call KYT canister: {}",
+                "Failed to call Bitcoin checker canister: {}",
                 call_err
             ))
         })? {
