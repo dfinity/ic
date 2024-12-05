@@ -283,8 +283,7 @@ impl NetworkEconomics {
         /// Returns ours if it is nonzero. Otherwise, returns default.
         fn inherit_from<Primitive>(ours: Primitive, default: Primitive) -> Primitive
         where
-            Primitive:
-                Default
+            Primitive: Default
                 + Eq
                 // Not actually used. This is just to make sure we only support numbers.
                 // This could be relaxed (i.e. deleted) later.
@@ -299,13 +298,34 @@ impl NetworkEconomics {
 
         Self {
             reject_cost_e8s: inherit_from(self.reject_cost_e8s, defaults.reject_cost_e8s),
-            neuron_minimum_stake_e8s: inherit_from(self.neuron_minimum_stake_e8s, defaults.neuron_minimum_stake_e8s),
-            neuron_management_fee_per_proposal_e8s: inherit_from(self.neuron_management_fee_per_proposal_e8s, defaults.neuron_management_fee_per_proposal_e8s),
-            minimum_icp_xdr_rate: inherit_from(self.minimum_icp_xdr_rate, defaults.minimum_icp_xdr_rate),
-            neuron_spawn_dissolve_delay_seconds: inherit_from(self.neuron_spawn_dissolve_delay_seconds, defaults.neuron_spawn_dissolve_delay_seconds),
-            maximum_node_provider_rewards_e8s: inherit_from(self.maximum_node_provider_rewards_e8s, defaults.maximum_node_provider_rewards_e8s),
-            transaction_fee_e8s: inherit_from(self.transaction_fee_e8s, defaults.transaction_fee_e8s),
-            max_proposals_to_keep_per_topic: inherit_from(self.max_proposals_to_keep_per_topic, defaults.max_proposals_to_keep_per_topic),
+            neuron_minimum_stake_e8s: inherit_from(
+                self.neuron_minimum_stake_e8s,
+                defaults.neuron_minimum_stake_e8s,
+            ),
+            neuron_management_fee_per_proposal_e8s: inherit_from(
+                self.neuron_management_fee_per_proposal_e8s,
+                defaults.neuron_management_fee_per_proposal_e8s,
+            ),
+            minimum_icp_xdr_rate: inherit_from(
+                self.minimum_icp_xdr_rate,
+                defaults.minimum_icp_xdr_rate,
+            ),
+            neuron_spawn_dissolve_delay_seconds: inherit_from(
+                self.neuron_spawn_dissolve_delay_seconds,
+                defaults.neuron_spawn_dissolve_delay_seconds,
+            ),
+            maximum_node_provider_rewards_e8s: inherit_from(
+                self.maximum_node_provider_rewards_e8s,
+                defaults.maximum_node_provider_rewards_e8s,
+            ),
+            transaction_fee_e8s: inherit_from(
+                self.transaction_fee_e8s,
+                defaults.transaction_fee_e8s,
+            ),
+            max_proposals_to_keep_per_topic: inherit_from(
+                self.max_proposals_to_keep_per_topic,
+                defaults.max_proposals_to_keep_per_topic,
+            ),
 
             // TODO(NNS1-3499): Ideally, we would recurse into T, because
             // otherwise, you have to set a bundle of parameters all at once. In
