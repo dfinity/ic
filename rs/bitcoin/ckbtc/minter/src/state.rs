@@ -1326,14 +1326,17 @@ impl ProcessableUtxos {
     }
 
     fn assert_utxo_is_fresh(&self, utxo: &Utxo) {
-        assert!(!self.new_utxos.contains(utxo), "BUG: UTXO is already known");
+        assert!(
+            !self.new_utxos.contains(utxo),
+            "BUG: UTXO is already known in new_utxos"
+        );
         assert!(
             !self.previously_quarantined_utxos.contains(utxo),
-            "BUG: UTXO is already known"
+            "BUG: UTXO is already known in previously_quarantined_utxos"
         );
         assert!(
             !self.previously_ignored_utxos.contains(utxo),
-            "BUG: UTXO is already known"
+            "BUG: UTXO is already known in previously_ignored_utxos"
         );
     }
 }
