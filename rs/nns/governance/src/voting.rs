@@ -106,8 +106,10 @@ impl Governance {
                     is_voting_finished = machine.is_voting_finished();
                 });
             });
-            // Realistically we will not hit the hard limit for a long time.
-            // TODO DO NOT MERGE what behavior if we hit the hard limit?  Exit this function?
+
+            // This returns an error if we hit the hard limit, which should basically never happen
+            // in production, but we need a way out of this loop in the worst case to prevent
+            // the canister from being unable to upgrade.
             if let Err(e) = noop_self_call_if_over_instructions(
                 SOFT_VOTING_INSTRUCTIONS_LIMIT,
                 Some(HARD_VOTING_INSTRUCTIONS_LIMIT),
@@ -116,7 +118,7 @@ impl Governance {
             {
                 println!(
                     "Error in cast_vote_and_cascade_follow, \
-                        voting will be processed asynchronously: {}",
+                        voting will be processed in timers: {}",
                     e
                 );
                 break;
@@ -554,24 +556,32 @@ fn retain_neurons_with_castable_ballots(
 #[cfg(test)]
 mod test {
     use crate::{
-        governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
+        governance::{
+            Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+            REWARD_DISTRIBUTION_PERIOD_SECONDS,
+        },
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
         pb::v1::{
             neuron::Followees, proposal::Action, Ballot, Governance as GovernanceProto, Motion,
-            Proposal, ProposalData, Tally, Topic, Vote, VotingPowerEconomics,
+            Proposal, ProposalData, Tally, Topic, Vote, VotingPowerEconomics, WaitForQuietState,
         },
         storage::with_voting_state_machines_mut,
-        test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+        test_utils::{
+            ExpectedCallCanisterMethodCallArguments, MockEnvironment, StubCMC, StubIcpLedger,
+        },
         voting::{
             temporarily_set_over_soft_message_limit, ProposalVotingStateMachine,
             VotingStateMachines,
         },
     };
+    use candid::Encode;
     use futures::FutureExt;
     use ic_base_types::PrincipalId;
+    use ic_ledger_core::Tokens;
     use ic_nervous_system_long_message::in_test_temporarily_set_call_context_over_threshold;
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+    use ic_nns_constants::GOVERNANCE_CANISTER_ID;
     use ic_stable_structures::DefaultMemoryImpl;
     use icp_ledger::Subaccount;
     use maplit::{btreemap, hashmap};
@@ -1365,4 +1375,151 @@ mod test {
         // It is now "decided"
         assert_eq!(proposal.decided_timestamp_seconds, 1234);
     }
+
+    #[test]
+    fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine() {
+        let now = 1733433219;
+        let topic = Topic::Governance;
+        let mut neurons = BTreeMap::new();
+        let mut ballots = HashMap::new();
+
+        for i in 1..=9 {
+            let mut followees = HashMap::new();
+            if i != 1 {
+                // cascading followees
+                followees.insert(
+                    topic as i32,
+                    Followees {
+                        followees: vec![NeuronId { id: i - 1 }],
+                    },
+                );
+            }
+            add_neuron_with_ballot(
+                &mut neurons,
+                &mut ballots,
+                make_neuron(i, 100_000_000, followees),
+            );
+        }
+
+        // Neurons should all get rewards.
+        for ballot in ballots.iter_mut() {
+            ballot.1.vote = Vote::Yes as i32;
+        }
+
+        add_neuron_with_ballot(
+            &mut neurons,
+            &mut ballots,
+            make_neuron(
+                100,
+                100_000_000,
+                hashmap! {
+                topic as i32 => Followees { followees: vec![NeuronId { id: 1 }] }},
+            ),
+        );
+
+        let motion = Motion {
+            motion_text: "".to_string(),
+        };
+        let action = Action::Motion(motion);
+        let proposal = Proposal {
+            title: Some("".to_string()),
+            summary: "".to_string(),
+            url: "".to_string(),
+            action: Some(action),
+        };
+        let governance_proto = GovernanceProto {
+            genesis_timestamp_seconds: now - REWARD_DISTRIBUTION_PERIOD_SECONDS,
+            proposals: btreemap! {
+                1 => ProposalData {
+                    id: Some(ProposalId {id: 1}),
+                    ballots,
+                    wait_for_quiet_state: Some(WaitForQuietState {
+                        current_deadline_timestamp_seconds: now - 100
+                    }),
+                    proposal: Some(proposal),
+                    decided_timestamp_seconds: now - 100,
+                    ..Default::default()
+                }
+            },
+            neurons: neurons
+                .into_iter()
+                .map(|(id, n)| (id, n.into_proto(u64::MAX)))
+                .collect(),
+            ..Default::default()
+        };
+        let environment = MockEnvironment::new(
+            vec![(
+                ExpectedCallCanisterMethodCallArguments::new(
+                    GOVERNANCE_CANISTER_ID,
+                    "get_build_metadata",
+                    Encode!().unwrap(),
+                ),
+                Ok(vec![]),
+            )],
+            now,
+        );
+        let now_setter = environment.now_setter();
+
+        let mut governance = Governance::new(
+            governance_proto,
+            Box::new(environment),
+            Box::new(StubIcpLedger {}),
+            Box::new(StubCMC {}),
+        );
+
+        assert_eq!(
+            governance
+                .neuron_store
+                .with_neuron(&NeuronId { id: 1 }, |n| n.maturity_e8s_equivalent)
+                .unwrap(),
+            0
+        );
+
+        governance.record_neuron_vote(ProposalId { id: 1 }, NeuronId { id: 100 }, Vote::Yes, topic);
+
+        with_voting_state_machines_mut(|voting_state_machines| {
+            voting_state_machines.with_machine(ProposalId { id: 1 }, topic, |machine| {
+                assert!(!machine.is_voting_finished());
+            });
+        });
+
+        assert_eq!(
+            governance
+                .neuron_store
+                .with_neuron(&NeuronId { id: 1 }, |n| n.maturity_e8s_equivalent)
+                .unwrap(),
+            0
+        );
+
+        governance.distribute_rewards(Tokens::from_e8s(100_000_000));
+
+        assert_eq!(
+            governance
+                .neuron_store
+                .with_neuron(&NeuronId { id: 1 }, |n| n.maturity_e8s_equivalent)
+                .unwrap(),
+            0
+        );
+
+        now_setter(now + REWARD_DISTRIBUTION_PERIOD_SECONDS + 1);
+        // Finish processing the vote
+        governance
+            .process_voting_state_machines()
+            .now_or_never()
+            .unwrap();
+
+        // Now rewards should be able to be distributed
+        governance.distribute_rewards(Tokens::from_e8s(100_000_000));
+
+        assert_eq!(
+            governance
+                .neuron_store
+                .with_neuron(&NeuronId { id: 1 }, |n| n.maturity_e8s_equivalent)
+                .unwrap(),
+            5474
+        );
+    }
+
+    #[test]
+    fn test_can_make_decision_is_false_if_expired_but_votes_not_recorded() {}
 }

@@ -9,6 +9,7 @@ use ic_nns_governance::{
         WaitForQuietState,
     },
     proposals::sum_weighted_voting_power,
+    storage::with_voting_state_machines_mut,
 };
 use icp_ledger::Tokens;
 use lazy_static::lazy_static;

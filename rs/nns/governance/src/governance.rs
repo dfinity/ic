@@ -4195,17 +4195,6 @@ impl Governance {
             .map(|(k, _)| ProposalId { id: *k })
     }
 
-    fn ready_to_settle_with_no_outstanding_votes_proposal_ids(
-        &self,
-        as_of_timestamp_seconds: u64,
-    ) -> impl Iterator<Item = ProposalId> + '_ {
-        self.ready_to_be_settled_proposal_ids(as_of_timestamp_seconds)
-            .filter(|pid| {
-                // TODO
-                true
-            })
-    }
-
     /// Rounds now downwards to nearest multiple of REWARD_DISTRIBUTION_PERIOD_SECONDS after genesis
     fn most_recent_fully_elapsed_reward_round_end_timestamp_seconds(&self) -> u64 {
         let now = self.env.now();
@@ -7039,7 +7028,7 @@ impl Governance {
     ///   can no longer accept votes for the purpose of rewards and that have
     ///   not yet been considered in a reward event.
     /// * Associate those proposals to the new reward event
-    fn distribute_rewards(&mut self, supply: Tokens) {
+    pub(crate) fn distribute_rewards(&mut self, supply: Tokens) {
         println!("{}distribute_rewards. Supply: {:?}", LOG_PREFIX, supply);
         let now = self.env.now();
 
@@ -7113,27 +7102,28 @@ impl Governance {
         // reward weight of proposals being voted on.
         let mut actually_distributed_e8s_equivalent = 0_u64;
 
-        let proposals = considered_proposals.iter().filter_map(|proposal_id| {
-            let result = self.heap_data.proposals.get(&proposal_id.id);
-            if result.is_none() {
-                println!(
-                    "{}ERROR: Trying to give voting rewards for proposal {}, \
-                         but it was not found.",
-                    LOG_PREFIX, proposal_id.id,
-                );
-            }
+        // We filter out proposals with votes that still need to be propogated to the ballots.
+        let considered_proposals: Vec<ProposalId> = considered_proposals
+            .into_iter()
+            .filter(
+                |proposal_id| match self.heap_data.proposals.get(&proposal_id.id) {
+                    None => {
+                        println!(
+                            "{}ERROR: Trying to give voting rewards for proposal {}, \
+                             but it was not found.",
+                            LOG_PREFIX, proposal_id.id,
+                        );
+                        false
+                    }
+                    Some(proposal_data) => !proposal_data.has_unprocessed_votes(),
+                },
+            )
+            .collect();
 
-            if result.as_ref().unwrap().has_unprocessed_votes() {
-                println!(
-                    "{} Cannot calculate rewards for proposal {},\
-                    as proposal has outstanding votes to process.",
-                    LOG_PREFIX, proposal_id.id
-                );
-                return None;
-            }
+        let proposals = considered_proposals
+            .iter()
+            .filter_map(|proposal_id| self.heap_data.proposals.get(&proposal_id.id));
 
-            result
-        });
         let (voters_to_used_voting_right, total_voting_rights) =
             sum_weighted_voting_power(proposals);
 

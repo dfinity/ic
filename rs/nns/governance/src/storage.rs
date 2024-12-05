@@ -196,9 +196,7 @@ pub(crate) fn with_node_provider_rewards_log<R>(
     })
 }
 
-pub(crate) fn with_voting_state_machines_mut<R>(
-    f: impl FnOnce(&mut VotingStateMachines<VM>) -> R,
-) -> R {
+pub fn with_voting_state_machines_mut<R>(f: impl FnOnce(&mut VotingStateMachines<VM>) -> R) -> R {
     VOTING_STATE_MACHINES.with(|voting_state_machines| {
         let voting_state_machines = &mut voting_state_machines.borrow_mut();
         f(voting_state_machines)
@@ -239,6 +237,14 @@ where
 pub fn reset_stable_memory() {
     MEMORY_MANAGER.with(|mm| *mm.borrow_mut() = MemoryManager::init(DefaultMemoryImpl::default()));
     STATE.with(|cell| *cell.borrow_mut() = State::new());
+    VOTING_STATE_MACHINES.with(|cell| {
+        *cell.borrow_mut() = {
+            MEMORY_MANAGER.with(|memory_manager| {
+                let memory = memory_manager.borrow().get(VOTING_STATE_MACHINES_MEMORY_ID);
+                VotingStateMachines::new(memory)
+            })
+        }
+    });
 }
 
 pub fn grow_upgrades_memory_to(target_pages: u64) {
