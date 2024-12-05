@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/async_utils",
     "//rs/bitcoin/ckbtc/agent",
+    "//rs/bitcoin/ckbtc/kyt",
     "//rs/bitcoin/ckbtc/minter",
     "//rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
     "//rs/canister_client",
