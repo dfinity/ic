@@ -38,15 +38,10 @@ pub enum CompilationCache {
 
 impl CompilationCache {
     pub fn new(capacity: NumBytes) -> Self {
-        // TODO: switch back to memory before merging.
-        Self::Disk {
-            dir: tempfile::tempdir().unwrap(),
+        Self::Memory {
             cache: Mutex::new(LruCache::new(capacity)),
             counter: AtomicU64::new(0),
         }
-        // Self::Memory {
-        //     cache: Mutex::new(LruCache::new(capacity)),
-        // }
     }
 
     pub fn insert_err(&self, canister_module: &CanisterModule, err: HypervisorError) {
