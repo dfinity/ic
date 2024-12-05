@@ -2,7 +2,7 @@ use canister_test::{Canister, Runtime, Wasm};
 use chrono::Utc;
 use futures::future::join_all;
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::get_dependency_path;
+use ic_system_test_driver::driver::test_env_api::{get_dependency_path, load_wasm};
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, IcNodeSnapshot};
 use ic_system_test_driver::util::{runtime_from_url, MetricsFetcher, UniversalCanister};
 use slog::info;
@@ -242,7 +242,8 @@ async fn install_many_canisters(
     num_canisters: usize,
 ) {
     let logger = env.logger();
-    let wasm = Wasm::from_file("rs/tests.counter.wat");
+    let canister_bytes = load_wasm("rs/tests/counter.wat");
+    let wasm = Wasm::from_bytes(canister_bytes);
     for i in 0..1000 {
         let mut futures: Vec<_> = Vec::new();
         for canister_idx in 0..20 {
