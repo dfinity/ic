@@ -1399,9 +1399,13 @@ impl ProposalData {
             // equivalent to (2 * yes > total) || (2 * no >= total).
             let majority =
                 (tally.yes > tally.total - tally.yes) || (tally.no >= tally.total - tally.no);
-            let expired = !self.accepts_vote(now_seconds, voting_period_seconds)
-                && !self.has_unprocessed_votes();
+            let can_accept_votes = self.accepts_vote(now_seconds, voting_period_seconds);
+            let votes_still_processing = self.has_unprocessed_votes();
+            let polls_open_or_still_counting = can_accept_votes || votes_still_processing;
+            let expired = !polls_open_or_still_counting;
 
+            // NOTE: expired is not exactly the right concept in the case where votes are still
+            // processing.
             let decision_reason = match (majority, expired) {
                 (true, true) => Some("majority and expiration"),
                 (true, false) => Some("majority"),
@@ -7120,12 +7124,11 @@ impl Governance {
             )
             .collect();
 
-        let proposals = considered_proposals
-            .iter()
-            .filter_map(|proposal_id| self.heap_data.proposals.get(&proposal_id.id));
-
-        let (voters_to_used_voting_right, total_voting_rights) =
-            sum_weighted_voting_power(proposals);
+        let (voters_to_used_voting_right, total_voting_rights) = sum_weighted_voting_power(
+            considered_proposals
+                .iter()
+                .flat_map(|proposal_id| self.heap_data.proposals.get(&proposal_id.id)),
+        );
 
         // Increment neuron maturities (and actually_distributed_e8s_equivalent).
         //

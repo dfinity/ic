@@ -38,6 +38,7 @@ fn over_soft_message_limit() -> bool {
 #[cfg(test)]
 thread_local! {
     static OVER_SOFT_MESSAGE_LIMIT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }
+    static BASELINE_INSTRUCTIONS: std::cell::Cell<Option<u64>> = const { Option::None }
 }
 
 #[cfg(test)]
@@ -462,8 +463,6 @@ impl ProposalVotingStateMachine {
         ballots: &mut HashMap<u64, Ballot>,
         is_over_instructions_limit: fn() -> bool,
     ) {
-        let mut actions_performed = 0;
-        let check_after_number_actions = 50;
         let voting_finished = self.is_voting_finished();
 
         if !voting_finished {
@@ -471,10 +470,7 @@ impl ProposalVotingStateMachine {
                 self.add_followers_to_check(neuron_store, neuron_id, self.topic);
 
                 // Before we check the next one, see if we're over the limit.
-                actions_performed += 1;
-                if actions_performed % check_after_number_actions == 0
-                    && is_over_instructions_limit()
-                {
+                if is_over_instructions_limit() {
                     return;
                 }
             }
@@ -500,11 +496,7 @@ impl ProposalVotingStateMachine {
                 // Vote::Unspecified is ignored by cast_vote.
                 self.cast_vote(ballots, follower, vote);
 
-                // Before we record the next one, see if we're over the limit.
-                actions_performed += 1;
-                if actions_performed % check_after_number_actions == 0
-                    && is_over_instructions_limit()
-                {
+                if is_over_instructions_limit() {
                     return;
                 }
             }
@@ -525,11 +517,7 @@ impl ProposalVotingStateMachine {
                     }
                 };
 
-                // Before we record the next one, see if we're over the limit.
-                actions_performed += 1;
-                if actions_performed % check_after_number_actions == 0
-                    && is_over_instructions_limit()
-                {
+                if is_over_instructions_limit() {
                     return;
                 }
             }
