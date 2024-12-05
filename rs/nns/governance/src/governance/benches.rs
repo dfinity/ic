@@ -527,3 +527,11 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
             .expect("Failed!");
     })
 }
+fn f1() {
+    ic_cdk::println!("1");
+}
+
+#[bench]
+fn bench() {
+    f1();
+}
