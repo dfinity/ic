@@ -202,7 +202,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
     Ok(response)
 }
 
-/// Returns the current fee percentiles on the bitcoin network.
+/// Returns the current fee percentiles on the Bitcoin network.
 pub async fn get_current_fees(network: Network) -> Result<Vec<MillisatoshiPerByte>, CallError> {
     let cost_cycles = match network {
         Network::Mainnet => 100_000_000,
@@ -321,7 +321,7 @@ pub async fn check_withdrawal_destination_address(
     Ok(res)
 }
 
-/// Check if the given UTXO passes bitcoin check.
+/// Check if the given UTXO passes Bitcoin check.
 pub async fn check_transaction(
     btc_checker_principal: Principal,
     utxo: &Utxo,

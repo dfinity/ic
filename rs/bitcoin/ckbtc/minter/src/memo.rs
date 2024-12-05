@@ -14,7 +14,7 @@ pub enum Status {
     #[n(0)]
     /// The minter accepted a retrieve_btc request.
     Accepted,
-    /// The minter rejected a retrieve_btc due to a failed bitcoin check.
+    /// The minter rejected a retrieve_btc due to a failed Bitcoin check.
     #[n(1)]
     Rejected,
     #[n(2)]
@@ -33,7 +33,7 @@ pub enum MintMemo<'a> {
         /// UTXO's output index within the BTC transaction.
         vout: Option<u32>,
         #[n(2)]
-        /// The bitcoin check fee.
+        /// The Bitcoin check fee.
         kyt_fee: Option<u64>,
     },
     #[n(1)]
@@ -44,10 +44,10 @@ pub enum MintMemo<'a> {
     /// or the destination address is tainted.
     KytFail {
         #[n(0)]
-        /// The bitcoin check fee.
+        /// The Bitcoin check fee.
         kyt_fee: Option<u64>,
         #[n(1)]
-        /// The status of the bitcoin check.
+        /// The status of the Bitcoin check.
         status: Option<Status>,
         #[n(2)]
         associated_burn_index: Option<u64>,
@@ -66,7 +66,7 @@ pub enum BurnMemo<'a> {
         /// The check fee for the burn.
         kyt_fee: Option<u64>,
         #[n(2)]
-        /// The status of the bitcoin check.
+        /// The status of the Bitcoin check.
         status: Option<Status>,
     },
 }

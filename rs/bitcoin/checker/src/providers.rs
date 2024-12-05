@@ -9,7 +9,7 @@ use std::fmt;
 #[cfg(test)]
 mod tests;
 
-/// Return the next bitcoin API provider for the given `btc_network`.
+/// Return the next Bitcoin API provider for the given `btc_network`.
 ///
 /// Internally it remembers the previously used provider in a thread local
 /// state and would iterate through all providers in a round-robin manner.
@@ -108,7 +108,7 @@ impl Provider {
             }
             (provider, btc_network) => {
                 panic!(
-                    "Provider {} does not support bitcoin {}",
+                    "Provider {} does not support Bitcoin {}",
                     provider, btc_network
                 )
             }

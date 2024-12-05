@@ -49,7 +49,7 @@ impl From<Network> for BtcNetwork {
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct InitArgs {
-    /// The bitcoin network that the minter will connect to
+    /// The Bitcoin network that the minter will connect to
     pub btc_network: BtcNetwork,
 
     /// The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
@@ -75,7 +75,7 @@ pub struct InitArgs {
     #[serde(default)]
     pub mode: Mode,
 
-    /// The fee that the minter will pay for each bitcoin check.
+    /// The fee that the minter will pay for each Bitcoin check.
     /// NOTE: this field is optional for backward compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub check_fee: Option<u64>,
@@ -85,7 +85,7 @@ pub struct InitArgs {
     #[deprecated(note = "use check_fee instead")]
     pub kyt_fee: Option<u64>,
 
-    /// The principal of the bitcoin checker canister.
+    /// The principal of the Bitcoin checker canister.
     /// NOTE: this field is optional for backward compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub btc_checker_principal: Option<CanisterId>,

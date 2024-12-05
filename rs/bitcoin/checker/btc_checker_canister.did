@@ -84,7 +84,7 @@ service : (CheckArg) -> {
     // of the return result.
     check_transaction: (CheckTransactionArgs) -> (CheckTransactionResponse);
 
-    // Return `Passed` if the given bitcoin address passes the bitcoin checker, or `Failed` otherwise.
+    // Return `Passed` if the given Bitcoin address passes the Bitcoin checker, or `Failed` otherwise.
     // May throw error (trap) if the given address is malformed or not a mainnet address.
     check_address: (CheckAddressArgs) -> (CheckAddressResponse) query;
 }

@@ -204,7 +204,7 @@ fn compute_min_withdrawal_amount(
 }
 
 /// Returns an estimate for transaction fees in millisatoshi per vbyte. Returns
-/// None if the bitcoin canister is unavailable or does not have enough data for
+/// None if the Bitcoin canister is unavailable or does not have enough data for
 /// an estimate yet.
 pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
     /// The default fee we use on regtest networks if there are not enough data
@@ -244,7 +244,7 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
     }
 }
 
-/// Constructs and sends out signed bitcoin transactions for pending retrieve
+/// Constructs and sends out signed Bitcoin transactions for pending retrieve
 /// requests.
 async fn submit_pending_requests() {
     // We make requests if we have old requests in the queue or if have enough
@@ -416,7 +416,7 @@ async fn submit_pending_requests() {
                     Err(err) => {
                         log!(
                             P0,
-                            "[submit_pending_requests]: failed to send a bitcoin transaction: {}",
+                            "[submit_pending_requests]: failed to send a Bitcoin transaction: {}",
                             err
                         );
                     }
@@ -425,7 +425,7 @@ async fn submit_pending_requests() {
             Err(err) => {
                 log!(
                     P0,
-                    "[submit_pending_requests]: failed to sign a BTC transaction: {}",
+                    "[submit_pending_requests]: failed to sign a Bitcoin transaction: {}",
                     err
                 );
             }

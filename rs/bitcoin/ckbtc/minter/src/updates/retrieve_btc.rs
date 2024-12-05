@@ -54,7 +54,7 @@ pub struct RetrieveBtcOk {
 }
 
 pub enum ErrorCode {
-    // The retrieval address didn't pass the bitcoin check.
+    // The retrieval address didn't pass the Bitcoin check.
     TaintedAddress = 1,
     CheckCallFailed = 2,
 }
@@ -67,7 +67,7 @@ pub enum RetrieveBtcError {
     /// The withdrawal amount is too low.
     AmountTooLow(u64),
 
-    /// The bitcoin address is not valid.
+    /// The Bitcoin address is not valid.
     MalformedAddress(String),
 
     /// The withdrawal account does not hold the requested ckBTC amount.
@@ -92,7 +92,7 @@ pub enum RetrieveBtcWithApprovalError {
     /// The withdrawal amount is too low.
     AmountTooLow(u64),
 
-    /// The bitcoin address is not valid.
+    /// The Bitcoin address is not valid.
     MalformedAddress(String),
 
     /// The withdrawal account does not hold the requested ckBTC amount.
@@ -188,7 +188,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
 
     let btc_checker_principal = read_state(|s| {
         s.btc_checker_principal
-            .expect("BUG: upgrade procedure must ensure that the bitcoin checker principal is set")
+            .expect("BUG: upgrade procedure must ensure that the Bitcoin checker principal is set")
             .get()
             .into()
     });
@@ -197,7 +197,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         BtcAddressCheckStatus::Tainted => {
             log!(
                 P1,
-                "rejected an attempt to withdraw {} BTC to address {} due to failed bitcoin check",
+                "rejected an attempt to withdraw {} BTC to address {} due to failed Bitcoin check",
                 crate::tx::DisplayAmount(args.amount),
                 args.address,
             );
@@ -288,7 +288,7 @@ pub async fn retrieve_btc_with_approval(
 
     let btc_checker_principal = read_state(|s| {
         s.btc_checker_principal
-            .expect("BUG: upgrade procedure must ensure that the bitcoin checker principal is set")
+            .expect("BUG: upgrade procedure must ensure that the Bitcoin checker principal is set")
             .get()
             .into()
     });
@@ -297,7 +297,7 @@ pub async fn retrieve_btc_with_approval(
         Err(error) => {
             return Err(RetrieveBtcWithApprovalError::GenericError {
                 error_message: format!(
-                    "Failed to call bitcoin checker canister with error: {:?}",
+                    "Failed to call Bitcoin checker canister with error: {:?}",
                     error
                 ),
                 error_code: ErrorCode::CheckCallFailed as u64,
@@ -514,12 +514,12 @@ async fn burn_ckbtcs_icrc2(
     }
 }
 
-/// The outcome of a bitcoin address check.
+/// The outcome of a Bitcoin address check.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 pub enum BtcAddressCheckStatus {
-    /// The bitcoin check did not find any issues with the address.
+    /// The Bitcoin check did not find any issues with the address.
     Clean,
-    /// The bitcoin check found issues with the address in question.
+    /// The Bitcoin check found issues with the address in question.
     Tainted,
 }
 async fn check_address(
@@ -530,7 +530,7 @@ async fn check_address(
         .await
         .map_err(|call_err| {
             RetrieveBtcError::TemporarilyUnavailable(format!(
-                "Failed to call bitcoin checker canister: {}",
+                "Failed to call Bitcoin checker canister: {}",
                 call_err
             ))
         })? {

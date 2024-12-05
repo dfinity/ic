@@ -554,7 +554,7 @@ fn test_minter() {
             subaccount: None,
         },
     );
-    let address_1 = Address::from_str(&btc_address_1).expect("invalid bitcoin address");
+    let address_1 = Address::from_str(&btc_address_1).expect("invalid Bitcoin address");
     let btc_address_2 = get_btc_address(
         &env,
         minter_id,
@@ -563,7 +563,7 @@ fn test_minter() {
             subaccount: Some([1; 32]),
         },
     );
-    let address_2 = Address::from_str(&btc_address_2).expect("invalid bitcoin address");
+    let address_2 = Address::from_str(&btc_address_2).expect("invalid Bitcoin address");
     assert_ne!(address_1, address_2);
 }
 
@@ -659,7 +659,7 @@ impl CkBtcSetup {
             }))
             .unwrap(),
         )
-        .expect("failed to install the bitcoin checker canister");
+        .expect("failed to install the Bitcoin checker canister");
 
         env.execute_ingress(
             bitcoin_id,
@@ -2046,7 +2046,7 @@ fn test_retrieve_btc_with_approval_fail() {
             })))
             .unwrap(),
         )
-        .expect("failed to upgrade the bitcoin checker canister");
+        .expect("failed to upgrade the Bitcoin checker canister");
 
     let retrieve_btc_result = ckbtc.retrieve_btc_with_approval(
         WITHDRAWAL_ADDRESS.to_string(),
@@ -2061,7 +2061,7 @@ fn test_retrieve_btc_with_approval_fail() {
     ckbtc.env.tick();
     assert_eq!(ckbtc.balance_of(user_account), Nat::from(deposited_value));
 
-    // Check that the correct error_code is returned if the call to the bitcoin checker canister fails
+    // Check that the correct error_code is returned if the call to the Bitcoin checker canister fails
 
     let stop_canister_result = ckbtc.env.stop_canister(ckbtc.btc_checker_id);
     assert_matches!(stop_canister_result, Ok(_));

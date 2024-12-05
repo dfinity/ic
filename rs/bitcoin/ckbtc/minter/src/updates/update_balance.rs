@@ -41,11 +41,11 @@ pub struct UpdateBalanceArgs {
 /// The outcome of UTXO processing.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum UtxoStatus {
-    /// The UTXO value does not cover the bitcoin check cost.
+    /// The UTXO value does not cover the Bitcoin check cost.
     ValueTooSmall(Utxo),
-    /// The bitcoin check found issues with the deposited UTXO.
+    /// The Bitcoin check found issues with the deposited UTXO.
     Tainted(Utxo),
-    /// The deposited UTXO passed the bitcoin check, but the minter failed to mint ckBTC on the ledger.
+    /// The deposited UTXO passed the Bitcoin check, but the minter failed to mint ckBTC on the ledger.
     /// The caller should retry the [update_balance] call.
     Checked(Utxo),
     /// The minter accepted the UTXO and minted ckBTC tokens on the ledger.
@@ -318,7 +318,7 @@ async fn check_utxo<R: CanisterRuntime>(
 
     let btc_checker_principal = read_state(|s| {
         s.btc_checker_principal
-            .expect("BUG: upgrade procedure must ensure that the bitcoin checker principal is set")
+            .expect("BUG: upgrade procedure must ensure that the Bitcoin checker principal is set")
             .get()
             .into()
     });
@@ -336,7 +336,7 @@ async fn check_utxo<R: CanisterRuntime>(
             .await
             .map_err(|call_err| {
                 UpdateBalanceError::TemporarilyUnavailable(format!(
-                    "Failed to call bitcoin checker canister: {}",
+                    "Failed to call Bitcoin checker canister: {}",
                     call_err
                 ))
             })? {
@@ -354,7 +354,7 @@ async fn check_utxo<R: CanisterRuntime>(
             CheckTransactionResponse::Unknown(CheckTransactionStatus::NotEnoughCycles) => {
                 log!(
                     P1,
-                    "The bitcoin checker canister requires more cycles, Remaining tries: {}",
+                    "The Bitcoin checker canister requires more cycles, Remaining tries: {}",
                     MAX_CHECK_TRANSACTION_RETRY - i - 1
                 );
                 continue;
@@ -362,26 +362,26 @@ async fn check_utxo<R: CanisterRuntime>(
             CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(status)) => {
                 log!(
                     P1,
-                    "The bitcoin checker canister is temporarily unavailable: {:?}",
+                    "The Bitcoin checker canister is temporarily unavailable: {:?}",
                     status
                 );
                 return Err(UpdateBalanceError::TemporarilyUnavailable(format!(
-                    "The bitcoin checker canister is temporarily unavailable: {:?}",
+                    "The Bitcoin checker canister is temporarily unavailable: {:?}",
                     status
                 )));
             }
             CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(error)) => {
-                log!(P1, "bitcoin checker error: {:?}", error);
+                log!(P1, "Bitcoin checker error: {:?}", error);
                 return Err(UpdateBalanceError::GenericError {
                     error_code: ErrorCode::KytError as u64,
-                    error_message: format!("bitcoin checker error: {:?}", error),
+                    error_message: format!("Bitcoin checker error: {:?}", error),
                 });
             }
         }
     }
     Err(UpdateBalanceError::GenericError {
         error_code: ErrorCode::KytError as u64,
-        error_message: "The bitcoin checker canister required too many calls to check_transaction"
+        error_message: "The Bitcoin checker canister required too many calls to check_transaction"
             .to_string(),
     })
 }

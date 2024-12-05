@@ -101,13 +101,13 @@ type UtxoStatus = variant {
     // The minter ignored this UTXO because UTXO's value is too small to pay
     // the check fees.
     ValueTooSmall : Utxo;
-    // The bitcoin checker considered this UTXO to be tainted.
+    // The Bitcoin checker considered this UTXO to be tainted.
     Tainted : Utxo;
-    // The UTXO passed the bitcoin check, but the minter failed to mint ckBTC
+    // The UTXO passed the Bitcoin check, but the minter failed to mint ckBTC
     // because the Ledger was unavailable. Retrying the [update_balance] call
     // should eventually advance the UTXO to the [Minted] state.
     Checked : Utxo;
-    // The UTXO passed the bitcoin check, and ckBTC has been minted.
+    // The UTXO passed the Bitcoin check, and ckBTC has been minted.
     Minted : record {
         block_index : nat64;
         minted_amount : nat64;
@@ -186,13 +186,13 @@ type InitArgs = record {
     /// The minter's operation mode.
     mode : Mode;
 
-    /// The fee paid per bitcoin check.
+    /// The fee paid per Bitcoin check.
     check_fee : opt nat64;
 
     /// The fee paid per check by the KYT canister (deprecated, use check_fee instead).
     kyt_fee : opt nat64;
 
-    /// The canister id of the bitcoin checker canister.
+    /// The canister id of the Bitcoin checker canister.
     btc_checker_principal: opt principal;
 
     /// The canister id of the KYT canister (deprecated, use btc_checker_principal instead).
@@ -215,13 +215,13 @@ type UpgradeArgs = record {
     /// If set, overrides the current minter's operation mode.
     mode : opt Mode;
 
-    /// The fee per bitcoin check.
+    /// The fee per Bitcoin check.
     check_fee : opt nat64;
 
     /// The fee paid per check by the KYT canister (deprecated, use check_fee instead).
     kyt_fee : opt nat64;
 
-    /// The principal of the bitcoin checker canister.
+    /// The principal of the Bitcoin checker canister.
     btc_checker_principal : opt principal;
 
     /// The canister id of the KYT canister (deprecated, use btc_checker_principal instead).
@@ -295,7 +295,7 @@ type RetrieveBtcStatusV2 = variant {
     // transaction for this request.  The payload contains the
     // identifier of the transaction on the Bitcoin network.
     Confirmed : record { txid : blob };
-    /// The retrieve bitcoin request has been reimbursed.
+    /// The retrieve Bitcoin request has been reimbursed.
     Reimbursed : ReimbursedDeposit;
     /// The minter will try to reimburse this transaction.
     WillReimburse : ReimbursementRequest;
@@ -336,7 +336,7 @@ type SuspendedReason = variant {
     // The minter ignored this UTXO because UTXO's value is too small to pay
     // the check fees.
     ValueTooSmall;
-    // The bitcoin checker considered this UTXO to be tainted.
+    // The Bitcoin checker considered this UTXO to be tainted.
     Quarantined;
 };
 
@@ -411,7 +411,7 @@ type MinterArg = variant {
 service : (minter_arg : MinterArg) -> {
     // Section "Convert BTC to ckBTC" {{{
 
-    // Returns the bitcoin address to which the owner should send BTC
+    // Returns the Bitcoin address to which the owner should send BTC
     // before converting the amount to ckBTC using the [update_balance]
     // endpoint.
     //

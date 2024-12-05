@@ -169,7 +169,7 @@ fn test_check_address() {
             address: "not an address".to_string(),
         },),
     );
-    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Invalid bitcoin address")));
+    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Invalid Bitcoin address")));
 
     // Test with an testnet address
     let result = query_candid::<_, (CheckAddressResponse,)>(
@@ -180,7 +180,7 @@ fn test_check_address() {
             address: "n47QBape2PcisN2mkHR2YnhqoBr56iPhJh".to_string(),
         },),
     );
-    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a bitcoin mainnet address")));
+    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a Bitcoin mainnet address")));
 
     // Test CheckMode::AcceptAll
     env.upgrade_canister(
@@ -223,7 +223,7 @@ fn test_check_address() {
             address: blocked_address,
         },),
     );
-    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a bitcoin testnet address")));
+    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a Bitcoin testnet address")));
 
     // Test CheckMode::RejectAll
     env.upgrade_canister(

@@ -136,7 +136,7 @@ mod event {
         #[serde(rename = "checked_utxo_v2")]
         CheckedUtxoV2 { utxo: Utxo, account: Account },
 
-        /// Indicates that the given UTXO's value is too small to pay for a bitcoin check.
+        /// Indicates that the given UTXO's value is too small to pay for a Bitcoin check.
         #[serde(rename = "ignored_utxo")]
         #[deprecated(note = "Use SuspendedUtxo")]
         IgnoredUtxo { utxo: Utxo },
