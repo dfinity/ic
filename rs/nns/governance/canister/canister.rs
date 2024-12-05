@@ -20,6 +20,7 @@ use ic_nns_common::{
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
+    data_migration::set_initial_voting_power_economics,
     decoder_config, encode_metrics,
     governance::{Environment, Governance, HeapGrowthPotential, RngError, TimeWarp as GovTimeWarp},
     is_prune_following_enabled,
@@ -165,6 +166,7 @@ fn schedule_timers() {
     schedule_seeding(Duration::from_nanos(0));
     schedule_adjust_neurons_storage(Duration::from_nanos(0), NeuronIdProto { id: 0 });
     schedule_prune_following(Duration::from_secs(0));
+    schedule_spawn_neurons();
 }
 
 // Seeding interval seeks to find a balance between the need for rng secrecy, and
@@ -265,6 +267,16 @@ fn schedule_adjust_neurons_storage(delay: Duration, start_neuron_id: NeuronIdPro
                 NeuronIdProto { id: 0 },
             ),
         };
+    });
+}
+
+const SPAWN_NEURONS_INTERVAL: Duration = Duration::from_secs(60);
+
+fn schedule_spawn_neurons() {
+    ic_cdk_timers::set_timer_interval(SPAWN_NEURONS_INTERVAL, || {
+        spawn(async {
+            governance_mut().maybe_spawn_neurons().await;
+        });
     });
 }
 
@@ -489,8 +501,11 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
     );
 
     schedule_timers();
+
+    let mut governance_proto = InternalGovernanceProto::from(init_payload);
+    set_initial_voting_power_economics(&mut governance_proto);
     set_governance(Governance::new(
-        InternalGovernanceProto::from(init_payload),
+        governance_proto,
         Box::new(CanisterEnv::new()),
         Box::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
         Box::new(CMCCanister::<CdkRuntime>::new()),
@@ -511,7 +526,7 @@ fn canister_pre_upgrade() {
 fn canister_post_upgrade() {
     println!("{}Executing post upgrade", LOG_PREFIX);
 
-    let restored_state = with_upgrades_memory(|memory| {
+    let mut restored_state = with_upgrades_memory(|memory| {
         let result: Result<InternalGovernanceProto, _> = load_protobuf(memory);
         result
     })
@@ -519,6 +534,9 @@ fn canister_post_upgrade() {
         "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
              CANISTER MIGHT HAVE BROKEN STATE!!!!.",
     );
+
+    // TODO(NNS1-3446): This can be deleted after it has been released.
+    set_initial_voting_power_economics(&mut restored_state);
 
     grow_upgrades_memory_to(WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY);
 

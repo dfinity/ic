@@ -1,11 +1,11 @@
 use bitcoin::{consensus::Decodable, Address, Transaction};
-use ic_btc_interface::Txid;
-use ic_btc_kyt::{
+use ic_btc_checker::{
     blocklist_contains, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
-    CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionResponse,
-    CheckTransactionRetriable, CheckTransactionStatus, KytArg, KytMode,
+    CheckArg, CheckMode, CheckTransactionArgs, CheckTransactionIrrecoverableError,
+    CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus,
     CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
 };
+use ic_btc_interface::Txid;
 use ic_canister_log::{export as export_logs, log};
 use ic_canisters_http_types as http;
 use ic_cdk::api::call::RejectionCode;
@@ -43,24 +43,24 @@ pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
 }
 
 #[ic_cdk::query]
-/// Return `Passed` if the given bitcion address passed the KYT check, or
+/// Return `Passed` if the given bitcion address passed the check, or
 /// `Failed` otherwise.
 /// May throw error (trap) if the given address is malformed or not a mainnet address.
 fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
     let config = get_config();
     let btc_network = config.btc_network();
     let address = Address::from_str(args.address.trim())
-        .unwrap_or_else(|err| ic_cdk::trap(&format!("Invalid bitcoin address: {}", err)))
+        .unwrap_or_else(|err| ic_cdk::trap(&format!("Invalid Bitcoin address: {}", err)))
         .require_network(btc_network.clone().into())
         .unwrap_or_else(|err| {
-            ic_cdk::trap(&format!("Not a bitcoin {} address: {}", btc_network, err))
+            ic_cdk::trap(&format!("Not a Bitcoin {} address: {}", btc_network, err))
         });
 
     STATS.with(|s| s.borrow_mut().check_transaction_count += 1);
-    match config.kyt_mode() {
-        KytMode::AcceptAll => CheckAddressResponse::Passed,
-        KytMode::RejectAll => CheckAddressResponse::Failed,
-        KytMode::Normal => {
+    match config.check_mode() {
+        CheckMode::AcceptAll => CheckAddressResponse::Passed,
+        CheckMode::RejectAll => CheckAddressResponse::Failed,
+        CheckMode::Normal => {
             if blocklist_contains(&address) {
                 return CheckAddressResponse::Failed;
             }
@@ -71,7 +71,7 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
 
 #[ic_cdk::update]
 /// Return `Passed` if all input addresses of the transaction of the given
-/// transaction id passed the KYT check, or `Failed` if any of them did not.
+/// transaction id passed the check, or `Failed` if any of them did not.
 ///
 /// Every call to check_transaction must attach at least `CHECK_TRANSACTION_CYCLES_REQUIRED`.
 /// Return `NotEnoughCycles` if not enough cycles are attached.
@@ -118,29 +118,29 @@ fn transform(raw: TransformArgs) -> HttpResponse {
 }
 
 #[ic_cdk::init]
-fn init(arg: KytArg) {
+fn init(arg: CheckArg) {
     match arg {
-        KytArg::InitArg(init_arg) => set_config(
-            Config::new_and_validate(init_arg.btc_network, init_arg.kyt_mode)
+        CheckArg::InitArg(init_arg) => set_config(
+            Config::new_and_validate(init_arg.btc_network, init_arg.check_mode)
                 .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err))),
         ),
-        KytArg::UpgradeArg(_) => {
+        CheckArg::UpgradeArg(_) => {
             ic_cdk::trap("cannot init canister state without init args");
         }
     }
 }
 
 #[ic_cdk::post_upgrade]
-fn post_upgrade(arg: KytArg) {
+fn post_upgrade(arg: CheckArg) {
     match arg {
-        KytArg::UpgradeArg(arg) => {
-            if let Some(kyt_mode) = arg.and_then(|arg| arg.kyt_mode) {
-                let config = Config::new_and_validate(get_config().btc_network(), kyt_mode)
+        CheckArg::UpgradeArg(arg) => {
+            if let Some(check_mode) = arg.and_then(|arg| arg.check_mode) {
+                let config = Config::new_and_validate(get_config().btc_network(), check_mode)
                     .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err)));
                 set_config(config);
             }
         }
-        KytArg::InitArg(_) => ic_cdk::trap("cannot upgrade canister state without upgrade args"),
+        CheckArg::InitArg(_) => ic_cdk::trap("cannot upgrade canister state without upgrade args"),
     }
 }
 
@@ -170,7 +170,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
         writer
             .gauge_vec("cycle_balance", "The canister cycle balance.")
             .unwrap()
-            .value(&[("canister", "btc-kyt")], cycle_balance)
+            .value(&[("canister", "btc-checker")], cycle_balance)
             .unwrap();
 
         writer
@@ -193,7 +193,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
             let stats = s.borrow();
             let mut counter = writer
                 .counter_vec(
-                    "btc_kyt_http_calls_total",
+                    "btc_checker_http_calls_total",
                     "The number of http outcalls made since the last canister upgrade.",
                 )
                 .unwrap();
@@ -210,7 +210,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
             }
             let mut counter = writer
                 .counter_vec(
-                    "btc_kyt_http_response_size",
+                    "btc_checker_http_response_size",
                     "The byte sizes of http outcall responses.",
                 )
                 .unwrap();
@@ -221,8 +221,8 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
             }
             writer
                 .counter_vec(
-                    "ckbtc_kyt_requests_total",
-                    "The number of KYT requests received since the last canister upgrade.",
+                    "btc_check_requests_total",
+                    "The number of check requests received since the last canister upgrade.",
                 )
                 .unwrap()
                 .value(
@@ -308,9 +308,9 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
     }
 }
 
-struct KytCanisterEnv;
+struct BtcCheckerCanisterEnv;
 
-impl FetchEnv for KytCanisterEnv {
+impl FetchEnv for BtcCheckerCanisterEnv {
     type FetchGuard = state::FetchGuard;
 
     fn new_fetch_guard(&self, txid: Txid) -> Result<Self::FetchGuard, FetchGuardError> {
@@ -425,11 +425,11 @@ impl FetchEnv for KytCanisterEnv {
 ///    If not, we need to additionally fetch those input transactions
 ///    in order to compute their corresponding addresses.
 pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
-    let env = &KytCanisterEnv;
-    match env.config().kyt_mode() {
-        KytMode::AcceptAll => CheckTransactionResponse::Passed,
-        KytMode::RejectAll => CheckTransactionResponse::Failed(Vec::new()),
-        KytMode::Normal => {
+    let env = &BtcCheckerCanisterEnv;
+    match env.config().check_mode() {
+        CheckMode::AcceptAll => CheckTransactionResponse::Passed,
+        CheckMode::RejectAll => CheckTransactionResponse::Failed(Vec::new()),
+        CheckMode::Normal => {
             match env.try_fetch_tx(txid) {
                 TryFetchResult::Pending => CheckTransactionRetriable::Pending.into(),
                 TryFetchResult::HighLoad => CheckTransactionRetriable::HighLoad.into(),
@@ -464,7 +464,7 @@ fn check_candid_interface_compatibility() {
 
     // check the public interface against the actual one
     let old_interface = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-        .join("btc_kyt_canister.did");
+        .join("btc_checker_canister.did");
 
     service_equal(
         CandidSource::Text(dbg!(&new_interface)),

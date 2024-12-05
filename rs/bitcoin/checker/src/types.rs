@@ -21,9 +21,9 @@ pub struct CheckTransactionArgs {
 
 #[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
 pub enum CheckTransactionResponse {
-    /// When check finishes and all input addresses passed KYT.
+    /// When check finishes and all input addresses passed.
     Passed,
-    /// When check finishes and one or more input addresses failed KYT.
+    /// When check finishes and one or more input addresses failed.
     /// The list of failed addresses are returned as a best effort, which may be non-exhaustive.
     Failed(Vec<String>),
     /// Unknown case where it is unable to give a final answer of Passed or Failed.
@@ -82,7 +82,7 @@ impl From<CheckTransactionStatus> for CheckTransactionResponse {
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize)]
 pub struct InitArg {
     pub btc_network: BtcNetwork,
-    pub kyt_mode: KytMode,
+    pub check_mode: CheckMode,
 }
 
 #[derive(CandidType, Clone, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
@@ -96,13 +96,13 @@ pub enum BtcNetwork {
 }
 
 #[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
-pub enum KytMode {
+pub enum CheckMode {
     AcceptAll,
     RejectAll,
     Normal,
 }
 
-impl fmt::Display for KytMode {
+impl fmt::Display for CheckMode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::AcceptAll => write!(f, "AcceptAll"),
@@ -134,11 +134,11 @@ impl fmt::Display for BtcNetwork {
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]
 pub struct UpgradeArg {
-    pub kyt_mode: Option<KytMode>,
+    pub check_mode: Option<CheckMode>,
 }
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]
-pub enum KytArg {
+pub enum CheckArg {
     InitArg(InitArg),
     UpgradeArg(Option<UpgradeArg>),
 }

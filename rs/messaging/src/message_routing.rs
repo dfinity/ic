@@ -44,17 +44,17 @@ use ic_types::{
 use ic_utils_thread::JoinOnDrop;
 #[cfg(test)]
 use mockall::automock;
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
+use prometheus::{
+    Gauge, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
+};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::convert::{AsRef, TryFrom};
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::ops::Range;
 use std::sync::mpsc::{sync_channel, TrySendError};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::sleep;
-use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
-    convert::TryFrom,
-    net::{Ipv4Addr, Ipv6Addr},
-    time::Instant,
-};
+use std::time::Instant;
 use tracing::instrument;
 
 #[cfg(test)]
@@ -98,6 +98,13 @@ const METRIC_WASM_CUSTOM_SECTIONS_MEMORY_USAGE_BYTES: &str =
     "mr_wasm_custom_sections_memory_usage_bytes";
 const METRIC_CANISTER_HISTORY_MEMORY_USAGE_BYTES: &str = "mr_canister_history_memory_usage_bytes";
 const METRIC_CANISTER_HISTORY_TOTAL_NUM_CHANGES: &str = "mr_canister_history_total_num_changes";
+
+const METRIC_SUBNET_INFO: &str = "mr_subnet_info";
+const METRIC_SUBNET_SIZE: &str = "mr_subnet_size";
+const METRIC_MAX_CANISTERS: &str = "mr_subnet_max_canisters";
+const METRIC_INITIAL_NOTARY_DELAY: &str = "mr_subnet_initial_notary_delay_seconds";
+const METRIC_MAX_BLOCK_PAYLOAD_SIZE: &str = "mr_subnet_max_block_payload_size_bytes";
+const METRIC_SUBNET_FEATURES: &str = "mr_subnet_features";
 
 const CRITICAL_ERROR_MISSING_SUBNET_SIZE: &str = "cycles_account_manager_missing_subnet_size_error";
 const CRITICAL_ERROR_MISSING_OR_INVALID_NODE_PUBLIC_KEYS: &str =
@@ -314,6 +321,13 @@ pub(crate) struct MessageRoutingMetrics {
     /// The total number of changes in canister history per canister on this subnet.
     canister_history_total_num_changes: Histogram,
 
+    subnet_info: IntGaugeVec,
+    subnet_size: IntGauge,
+    max_canisters: IntGauge,
+    initial_notary_delay: Gauge,
+    max_block_payload_size: IntGauge,
+    subnet_features: IntGaugeVec,
+
     /// Critical error for not being able to calculate a subnet size.
     critical_error_missing_subnet_size: IntCounter,
     /// Critical error: public keys of own subnet nodes are missing
@@ -436,6 +450,33 @@ impl MessageRoutingMetrics {
                 "Total number of changes in canister history per canister on this subnet.",
                 // 0, 1, 2, 5, …, 1000, 2000, 5000
                 decimal_buckets_with_zero(0, 3),
+            ),
+
+            subnet_info: metrics_registry.int_gauge_vec(
+                METRIC_SUBNET_INFO,
+                "Subnet ID and type, from the subnet record in the registry.",
+                &["subnet_id", "subnet_type"],
+            ),
+            subnet_size: metrics_registry.int_gauge(
+                METRIC_SUBNET_SIZE,
+                "Number of nodes in the subnet, per the subnet record in the registry.",
+            ),
+            max_canisters: metrics_registry.int_gauge(
+                METRIC_MAX_CANISTERS,
+                "Maximum number of canisters that can be created on this subnet.",
+            ),
+            initial_notary_delay: metrics_registry.gauge(
+                METRIC_INITIAL_NOTARY_DELAY,
+                "Initial delay for notarization, in seconds.",
+            ),
+            max_block_payload_size: metrics_registry.int_gauge(
+                METRIC_MAX_BLOCK_PAYLOAD_SIZE,
+                "Maximum size of a block payload, in bytes.",
+            ),
+            subnet_features: metrics_registry.int_gauge_vec(
+                METRIC_SUBNET_FEATURES,
+                "Subnet features and their status (enabled or disabled).",
+                &["feature"],
             ),
 
             critical_error_missing_subnet_size: metrics_registry
@@ -824,6 +865,40 @@ impl BatchProcessorImpl {
                 .len()
         };
 
+        let own_subnet_type: SubnetType = subnet_record.subnet_type.try_into().unwrap_or_default();
+        self.metrics
+            .subnet_info
+            .with_label_values(&[&own_subnet_id.to_string(), own_subnet_type.as_ref()])
+            .set(1);
+        self.metrics.subnet_size.set(subnet_size as i64);
+        self.metrics
+            .max_canisters
+            .set(max_number_of_canisters as i64);
+        self.metrics
+            .initial_notary_delay
+            .set(subnet_record.initial_notary_delay_millis as f64 * 1e-3);
+        self.metrics
+            .max_block_payload_size
+            .set(subnet_record.max_block_payload_size as i64);
+        // Please export any new features via the `subnet_features` metric below.
+        let SubnetFeatures {
+            canister_sandboxing,
+            http_requests,
+            sev_enabled,
+        } = &subnet_features;
+        self.metrics
+            .subnet_features
+            .with_label_values(&["canister_sandboxing"])
+            .set(*canister_sandboxing as i64);
+        self.metrics
+            .subnet_features
+            .with_label_values(&["http_requests"])
+            .set(*http_requests as i64);
+        self.metrics
+            .subnet_features
+            .with_label_values(&["sev_enabled"])
+            .set(*sev_enabled as i64);
+
         Ok((
             network_topology,
             subnet_features,
@@ -909,7 +984,7 @@ impl BatchProcessorImpl {
                         ))
                     })?;
             let subnet_features: SubnetFeatures = subnet_record.features.unwrap_or_default().into();
-            let idkg_keys_held = subnet_record
+            let chain_keys_held = subnet_record
                 .chain_key_config
                 .map(|chain_key_config| {
                     chain_key_config
@@ -937,7 +1012,7 @@ impl BatchProcessorImpl {
                     nodes,
                     subnet_type,
                     subnet_features,
-                    idkg_keys_held,
+                    chain_keys_held,
                 },
             );
         }
@@ -959,7 +1034,7 @@ impl BatchProcessorImpl {
             .map_err(|err| registry_error("NNS subnet ID", None, err))?
             .ok_or_else(|| not_found_error("NNS subnet ID", None))?;
 
-        let idkg_signing_subnets = self
+        let chain_key_enabled_subnets = self
             .registry
             .get_chain_key_signing_subnets(registry_version)
             .map_err(|err| registry_error("chain key signing subnets", None, err))?
@@ -970,7 +1045,7 @@ impl BatchProcessorImpl {
             routing_table: Arc::new(routing_table),
             nns_subnet_id,
             canister_migrations: Arc::new(canister_migrations),
-            idkg_signing_subnets,
+            chain_key_enabled_subnets,
             bitcoin_testnet_canister_id: self.bitcoin_config.testnet_canister_id,
             bitcoin_mainnet_canister_id: self.bitcoin_config.mainnet_canister_id,
         })
