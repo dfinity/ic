@@ -110,17 +110,17 @@ impl std::fmt::Debug for Record {
         match &self.caller {
             None => write!(
                 f,
-                "Call({:x}) to {} | ",
+                "{} ({:x}) | ",
+                &self.receiver.to_string()[..5],
                 self.call_tree_id,
-                &self.receiver.to_string()[..5]
             ),
             Some(caller) => write!(
                 f,
-                "Call({:x}) (caller {} @ depth {}) to {} | ",
+                "{} ({:x}) (caller {} @ depth {}) | ",
+                &self.receiver.to_string()[..5],
                 self.call_tree_id,
                 &caller.to_string()[..5],
                 self.call_depth,
-                &self.receiver.to_string()[..5],
             ),
         }?;
 
