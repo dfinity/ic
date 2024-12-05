@@ -1349,3 +1349,48 @@ impl CanisterRuntime for IcCanisterRuntime {
         updates::update_balance::mint(amount, to, memo).await
     }
 }
+
+/// Time in nanoseconds since the epoch (1970-01-01).
+#[derive(Eq, Clone, Copy, PartialEq, Debug, Default)]
+pub struct Timestamp(u64);
+
+impl Timestamp {
+    pub const fn new(ns_since_epoch: u64) -> Self {
+        Self(ns_since_epoch)
+    }
+
+    /// Number of nanoseconds since `UNIX EPOCH`.
+    pub fn as_nanos_since_unix_epoch(self) -> u64 {
+        self.0
+    }
+
+    pub fn checked_sub(self, rhs: Duration) -> Option<Timestamp> {
+        if let Ok(rhs_nanos) = u64::try_from(rhs.as_nanos()) {
+            Some(Timestamp(self.0.checked_sub(rhs_nanos)?))
+        } else {
+            None
+        }
+    }
+
+    pub fn checked_duration_since(self, rhs: Timestamp) -> Option<Duration> {
+        self.0.checked_sub(rhs.0).map(Duration::from_nanos)
+    }
+
+    pub fn checked_add(self, rhs: Duration) -> Option<Timestamp> {
+        if let Ok(rhs_nanos) = u64::try_from(rhs.as_nanos()) {
+            Some(Self(self.0.checked_add(rhs_nanos)?))
+        } else {
+            None
+        }
+    }
+
+    pub fn saturating_add(self, rhs: Duration) -> Self {
+        self.checked_add(rhs).unwrap_or(Timestamp(u64::MAX))
+    }
+}
+
+impl From<u64> for Timestamp {
+    fn from(timestamp: u64) -> Self {
+        Self(timestamp)
+    }
+}
