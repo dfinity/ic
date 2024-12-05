@@ -278,6 +278,12 @@ fn validate_dealings_payload(
         crypto.verify_dealing(config, message.signature.signer, &message.content.dealing)?;
     }
 
+    // TODO: Remove this
+    info!(
+        logger,
+        "This payload contains {} early remote DKG transcripts in regular block payload!!",
+        dealings.transcripts_for_remote_subnets.len()
+    );
     // If we have early transcripts, we compare them
     if !dealings.transcripts_for_remote_subnets.is_empty() {
         // TODO: We should actually compare the  contents of the vectors
