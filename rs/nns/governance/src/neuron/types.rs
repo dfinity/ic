@@ -559,6 +559,35 @@ impl Neuron {
             .is_some_and(|spawn_at_timestamp_seconds| now_seconds >= spawn_at_timestamp_seconds)
     }
 
+    /// Returns the number of followee neuron IDs that were removed.
+    ///
+    /// If the neuron refreshed recently, no followee neuron IDs are removed
+    /// (and returns 0).
+    pub(crate) fn prune_following(&mut self, now_seconds: u64) -> u64 {
+        let is_fresh =
+            self.voting_power_refreshed_timestamp_seconds >= now_seconds - 7 * ONE_MONTH_SECONDS;
+        if is_fresh {
+            return 0;
+        }
+
+        let mut result = 0_usize;
+        for (topic, followees) in &self.followees {
+            if *topic == Topic::NeuronManagement as i32 {
+                continue;
+            }
+            result = result.saturating_add(followees.followees.len());
+        }
+
+        // Clear all following except ManageNeuron.
+        self.followees
+            .retain(|topic, _| *topic == Topic::NeuronManagement as i32);
+
+        // If this panics, that means we somehow have around 2^64 (or more)
+        // followees, which is not only disallowed, but just way more than we
+        // would ever be able to hold in memory.
+        u64::try_from(result).unwrap()
+    }
+
     pub(crate) fn ready_to_unstake_maturity(&self, now_seconds: u64) -> bool {
         self.state(now_seconds) == NeuronState::Dissolved
             && self.staked_maturity_e8s_equivalent.unwrap_or(0) > 0

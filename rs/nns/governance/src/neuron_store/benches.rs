@@ -2,6 +2,7 @@ use super::*;
 use crate::{
     governance::{MAX_FOLLOWEES_PER_TOPIC, MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON},
     neuron::{DissolveStateAndAge, NeuronBuilder},
+    neurons_fund::{NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot},
     now_seconds,
     pb::v1::{neuron::Followees, BallotInfo, Vote},
     temporarily_disable_active_neurons_in_stable_memory,
@@ -13,6 +14,7 @@ use ic_nervous_system_common::E8;
 use ic_nns_common::pb::v1::ProposalId;
 use maplit::hashmap;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
+use std::collections::BTreeSet;
 
 /// Whether the neuron should be stored in heap or stable storage.
 #[derive(Copy, Clone)]
@@ -336,5 +338,65 @@ fn list_neurons_ready_to_unstake_maturity_stable() -> BenchResult {
 
     bench_fn(|| {
         neuron_store.list_neurons_ready_to_unstake_maturity(now_seconds());
+    })
+}
+
+fn build_neurons_fund_portion(neuron: &Neuron, amount_icp_e8s: u64) -> NeuronsFundNeuronPortion {
+    let maturity_equivalent_icp_e8s = neuron.maturity_e8s_equivalent;
+    assert!(amount_icp_e8s <= maturity_equivalent_icp_e8s);
+    let id = neuron.id();
+    let controller = neuron.controller();
+    let hotkeys = neuron.hot_keys.clone();
+    let is_capped = false;
+
+    NeuronsFundNeuronPortion {
+        id,
+        amount_icp_e8s,
+        maturity_equivalent_icp_e8s,
+        controller,
+        hotkeys,
+        is_capped,
+    }
+}
+
+#[bench(raw)]
+fn draw_maturity_from_neurons_fund_heap() -> BenchResult {
+    let _t = temporarily_disable_active_neurons_in_stable_memory();
+    let mut rng = new_rng();
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+    let mut neurons_fund_neurons = BTreeSet::new();
+    for _ in 0..100 {
+        let mut neuron = build_neuron(&mut rng, NeuronLocation::Heap, NeuronSize::Typical);
+        neuron.maturity_e8s_equivalent = 2_000_000_000;
+        neurons_fund_neurons.insert(build_neurons_fund_portion(&neuron, 1_000_000_000));
+        neuron_store.add_neuron(neuron).unwrap();
+    }
+    let neurons_fund_snapshot = NeuronsFundSnapshot::new(neurons_fund_neurons);
+
+    bench_fn(|| {
+        neuron_store
+            .draw_maturity_from_neurons_fund(&neurons_fund_snapshot)
+            .unwrap();
+    })
+}
+
+#[bench(raw)]
+fn draw_maturity_from_neurons_fund_stable() -> BenchResult {
+    let _t = temporarily_enable_active_neurons_in_stable_memory();
+    let mut rng = new_rng();
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+    let mut neurons_fund_neurons = BTreeSet::new();
+    for _ in 0..100 {
+        let mut neuron = build_neuron(&mut rng, NeuronLocation::Heap, NeuronSize::Typical);
+        neuron.maturity_e8s_equivalent = 2_000_000_000;
+        neurons_fund_neurons.insert(build_neurons_fund_portion(&neuron, 1_000_000_000));
+        neuron_store.add_neuron(neuron).unwrap();
+    }
+    let neurons_fund_snapshot = NeuronsFundSnapshot::new(neurons_fund_neurons);
+
+    bench_fn(|| {
+        neuron_store
+            .draw_maturity_from_neurons_fund(&neurons_fund_snapshot)
+            .unwrap();
     })
 }

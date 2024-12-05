@@ -1678,9 +1678,9 @@ dependencies = [
 
 [[package]]
 name = "canbench"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf010ed5b327776525d545cef0fd17ffec73af71eb1b304ca11df3494ed65c31"
+checksum = "cb548f9e006ad29b160d37e07435c499af7d2741918e18d95ddc87dfe97a0b8d"
 dependencies = [
  "canbench-rs",
  "candid",
@@ -1700,9 +1700,9 @@ dependencies = [
 
 [[package]]
 name = "canbench-rs"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e85a8f1ee95044a770b3d5166a12f55814283cb3aed71b81439dc59960ab76c1"
+checksum = "497d900e11ab1891dd9743dd45dbeaada540ce323aa1adc7fc0ce1da2c6e86ff"
 dependencies = [
  "canbench-rs-macros",
  "candid",
@@ -1712,9 +1712,9 @@ dependencies = [
 
 [[package]]
 name = "canbench-rs-macros"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37aa9dbb190b03569ab14aadf669884a331712d54462c5a6c5b86c9867fe4e65"
+checksum = "5a5509bcfe6eeb86f057d46fbf20a2ba6b6bf9a1099b053a8f491cd7a909dfa6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3129,6 +3129,7 @@ dependencies = [
  "lmdb-rkv-sys",
  "local-ip-address",
  "lru",
+ "macaddr",
  "mach2",
  "maplit",
  "maxminddb",
@@ -5096,19 +5097,6 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk"
-version = "0.13.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b1da6a25b045f9da3c9459c0cb2b0700ac368ee16382975a17185a23b9c18ab"
-dependencies = [
- "candid",
- "ic-cdk-macros 0.13.2",
- "ic0 0.21.1",
- "serde",
- "serde_bytes",
-]
-
-[[package]]
-name = "ic-cdk"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9cff1a3c3db565e3384c9c9d6d676b0a3f89a0886f4f787294d9c946d844369f"
@@ -5165,20 +5153,6 @@ name = "ic-cdk-macros"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fde5ca6ef1e69825c68916ff1bf7256b8f7ed69ac5ea3f1756f6e57f1503e27"
-dependencies = [
- "candid",
- "proc-macro2",
- "quote",
- "serde",
- "serde_tokenstream 0.1.7",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "ic-cdk-macros"
-version = "0.13.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a45800053d80a6df839a71aaea5797e723188c0b992618208ca3b941350c7355"
 dependencies = [
  "candid",
  "proc-macro2",
@@ -6678,6 +6652,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 
 [[package]]
+name = "macaddr"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "baee0bbc17ce759db233beb01648088061bf678383130602a298e6998eedb2d8"
+
+[[package]]
 name = "mach2"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8151,25 +8131,31 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "5.0.0"
+version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "beff607d4dbebff8d003453ced669d2645e905de496ca93713f3d47633357e6c"
+checksum = "124a2380ca6f557adf8b02517cbfd2f564113230e14cda6f6aadd3dfe156293c"
 dependencies = [
  "base64 0.13.1",
  "candid",
  "hex",
- "ic-cdk 0.13.5",
+ "ic-certification",
+ "ic-transport-types",
  "reqwest 0.12.9",
  "schemars",
  "serde",
  "serde_bytes",
+ "serde_cbor",
  "serde_json",
  "sha2 0.10.8",
  "slog",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
+ "thiserror 1.0.68",
  "tokio",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "wslpath",
 ]
 
 [[package]]
@@ -13085,6 +13071,12 @@ name = "wsl"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dab7ac864710bdea6594becbea5b5050333cf34fefb0dc319567eb347950d4"
+
+[[package]]
+name = "wslpath"
+version = "0.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04a2ecdf2cc4d33a6a93d71bcfbc00bb1f635cdb8029a2cc0709204a045ec7a3"
 
 [[package]]
 name = "wycheproof"
