@@ -3140,7 +3140,7 @@ fn test_sign_with_schnorr_api_is_enabled() {
             test.state()
                 .metadata
                 .subnet_call_context_manager
-                .sign_with_threshold_contexts_count(&key_id),
+                .sign_with_threshold_contexts_count(key_id),
             0
         );
 
@@ -3174,7 +3174,7 @@ fn test_sign_with_schnorr_api_is_enabled() {
             test.state()
                 .metadata
                 .subnet_call_context_manager
-                .sign_with_threshold_contexts_count(&key_id),
+                .sign_with_threshold_contexts_count(key_id),
             1
         );
     }
