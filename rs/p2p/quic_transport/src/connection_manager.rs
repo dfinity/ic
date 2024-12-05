@@ -261,7 +261,7 @@ impl ConnectionManager {
     /// Conditions under which the node can start outbound connecting attempt
     /// - the node is a designated dialer
     /// - peer is in the subnet
-    /// - this node is not part of the subnet (can happen when a node is removed from the subnet)
+    /// - this node is part of the subnet (can happen when a node is removed from the subnet)
     /// - there is no connect attemped
     /// - there is no established connection
     fn can_i_dial_to(&self, dst: &NodeId) -> bool {
@@ -302,7 +302,9 @@ impl ConnectionManager {
                 },
                 Some(conn_res) = self.outbound_connecting.join_next() => {
                     match conn_res {
-                        Ok((conn_out, peer_id)) => self.handle_connecting_result(conn_out, Some(peer_id)),
+                        Ok(Ok(conn_out, peer_id)) => self.handle_established_connection(conn_out),
+                        // retry
+                        Ok(Err(err)) =>  self.handled_closed_conn(peer_id, CONNECT_RETRY_BACKOFF),
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
@@ -313,7 +315,9 @@ impl ConnectionManager {
                 },
                 Some(conn_res) = self.inbound_connecting.join_next() => {
                     match conn_res {
-                        Ok(conn_out) => self.handle_connecting_result(conn_out, None),
+                        Ok(conn_out) => {
+                            self.handle_connecting_result(conn_out, None),
+                        }
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
@@ -361,9 +365,9 @@ impl ConnectionManager {
     }
 
     /// Removes connection and sets peer status to disconnected
-    fn handled_closed_conn(&mut self, peer_id: NodeId) {
+    fn handled_closed_conn(&mut self, peer_id: NodeId, retry_delay: Duration) {
         self.peer_map.write().unwrap().remove(&peer_id);
-        self.connect_queue.insert(peer_id, Duration::from_secs(0));
+        self.connect_queue.insert(peer_id, retry_delay);
         self.metrics.peer_map_size.dec();
         self.metrics.closed_request_handlers_total.inc();
     }
@@ -480,68 +484,53 @@ impl ConnectionManager {
     /// added to peer map. If unsuccessful and this node is dialer the
     /// connection will be retried. `peer` is `Some` if this node was
     /// the dialer. I.e lower node id.
-    fn handle_connecting_result(
+    fn handle_established_connection(
         &mut self,
-        conn_res: Result<ConnectionWithPeerId, ConnectionEstablishError>,
+        ConnectionWithPeerId {
+            peer_id,
+            connection,
+        }: ConnectionWithPeerId,
         peer_id: Option<NodeId>,
     ) {
-        match conn_res {
-            Ok(ConnectionWithPeerId {
+        self.metrics
+            .connection_results_total
+            .with_label_values(&[CONNECTION_RESULT_SUCCESS_LABEL])
+            .inc();
+        let mut peer_map_mut = self.peer_map.write().unwrap();
+        // Increase the connection ID for the newly connected peer.
+        // This should be done while holding a write lock to the peer map
+        // such that the next read call sees the new id.
+
+        let connection_handle = ConnectionHandle::new(connection, self.metrics.clone());
+
+        // dropping the old connection will result in closing it
+        if let Some(old_conn) = peer_map_mut.insert(peer_id, connection_handle.clone()) {
+            old_conn
+                .conn()
+                .close(VarInt::from_u32(0), b"using newer connection");
+            info!(
+                self.log,
+                "Replacing old connection to {:?} with newer", peer_id
+            );
+        } else {
+            self.metrics.peer_map_size.inc();
+        }
+
+        info!(
+            self.log,
+            "Spawning request handler for peer : {:?}", peer_id
+        );
+        self.active_connections.spawn_on(
+            peer_id,
+            start_stream_acceptor(
+                self.log.clone(),
                 peer_id,
-                connection,
-            }) => {
-                self.metrics
-                    .connection_results_total
-                    .with_label_values(&[CONNECTION_RESULT_SUCCESS_LABEL])
-                    .inc();
-                let mut peer_map_mut = self.peer_map.write().unwrap();
-                // Increase the connection ID for the newly connected peer.
-                // This should be done while holding a write lock to the peer map
-                // such that the next read call sees the new id.
-
-                let connection_handle = ConnectionHandle::new(connection, self.metrics.clone());
-
-                // dropping the old connection will result in closing it
-                if let Some(old_conn) = peer_map_mut.insert(peer_id, connection_handle.clone()) {
-                    old_conn
-                        .conn()
-                        .close(VarInt::from_u32(0), b"using newer connection");
-                    info!(
-                        self.log,
-                        "Replacing old connection to {:?} with newer", peer_id
-                    );
-                } else {
-                    self.metrics.peer_map_size.inc();
-                }
-
-                info!(
-                    self.log,
-                    "Spawning request handler for peer : {:?}", peer_id
-                );
-                self.active_connections.spawn_on(
-                    peer_id,
-                    start_stream_acceptor(
-                        self.log.clone(),
-                        peer_id,
-                        connection_handle,
-                        self.metrics.clone(),
-                        self.router.clone(),
-                    ),
-                    &self.rt,
-                );
-            }
-            Err(err) => {
-                self.metrics
-                    .connection_results_total
-                    .with_label_values(&[CONNECTION_RESULT_FAILED_LABEL])
-                    .inc();
-                // The peer is only present in connections that this node initiated. This node should therefore retry connecting to the peer.
-                if let Some(peer_id) = peer_id {
-                    self.connect_queue.insert(peer_id, CONNECT_RETRY_BACKOFF);
-                }
-                info!(self.log, "Failed to connect {:?}", err);
-            }
-        };
+                connection_handle,
+                self.metrics.clone(),
+                self.router.clone(),
+            ),
+            &self.rt,
+        );
     }
 
     /// Inserts a task into 'inbound_connecting' that handles an inbound connection attempt.
