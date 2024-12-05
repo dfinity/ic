@@ -34,10 +34,10 @@ pub async fn start_all_canisters(
             let _: String = canister
                 .update_("start", candid, input)
                 .await
-                .unwrap_or_else(|_| {
+                .unwrap_or_else(|e| {
                     panic!(
-                        "Starting canister_idx={} on subnet_idx={}",
-                        canister_idx, subnet_idx
+                        "Starting canister_idx={} on subnet_idx={} failed because of: {}",
+                        canister_idx, subnet_idx, e
                     )
                 });
         });
