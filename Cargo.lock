@@ -10650,6 +10650,7 @@ dependencies = [
  "on_wire",
  "phantom_newtype",
  "pocket-ic",
+ "pretty_assertions",
  "prometheus-parse",
  "prost 0.13.3",
  "rand 0.8.5",

@@ -595,7 +595,7 @@ async fn test_backfill_voting_power_refreshed_timestamps() {
         42 * E8, // active -> heap
     ];
 
-    let neurons = voting_power_refreshed_timestamp_seconds_neuron_values
+    let original_neurons = voting_power_refreshed_timestamp_seconds_neuron_values
         .into_iter()
         .cartesian_product(cached_neuron_stake_e8s_neuron_values.into_iter())
         .collect::<Vec<_>>();
@@ -603,8 +603,8 @@ async fn test_backfill_voting_power_refreshed_timestamps() {
     let controller = PrincipalId::new_user_test_id(482_783_461);
 
     let ids = 100..;
-    let neurons = ids
-        .zip(neurons.into_iter())
+    let original_neurons = ids
+        .zip(original_neurons.into_iter())
         .map(
             |(id, (voting_power_refreshed_timestamp_seconds, cached_neuron_stake_e8s))| Neuron {
                 id: Some(NeuronId { id }),
@@ -619,10 +619,10 @@ async fn test_backfill_voting_power_refreshed_timestamps() {
         )
         .collect::<Vec<_>>();
 
-    assert_eq!(neurons.len(), 8);
+    assert_eq!(original_neurons.len(), 8);
 
     let governance_proto = GovernanceCanisterInitPayloadBuilder::new()
-        .with_additional_neurons(neurons)
+        .with_additional_neurons(original_neurons.clone())
         .build();
 
     install_canister(
@@ -648,29 +648,42 @@ async fn test_backfill_voting_power_refreshed_timestamps() {
 
     // Step 3: Inspect results
 
-    let mut neurons =
+    let mut observed_neurons =
         nns::governance::list_neurons(&pocket_ic, controller)
         .await
         .full_neurons;
-    assert_eq!(neurons.len(), 8);
-    neurons.sort_by_key(|neuron| neuron.id.as_ref().unwrap().id);
+    assert_eq!(observed_neurons.len(), 8);
+    observed_neurons.sort_by_key(|neuron| neuron.id.as_ref().unwrap().id);
 
     assert_eq!(
-        neurons
+        observed_neurons
             .iter()
             .map(|neuron| neuron.voting_power_refreshed_timestamp_seconds.unwrap())
             .collect::<Vec<u64>>(),
+        // Expected values being repeated repeated reflects the fact that we are
+        // testing both heap and stable memory neurons.
         vec![
             EVIL_TIMESTAMP_SECONDS - 1,
-            DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
-            EVIL_TIMESTAMP_SECONDS + 1,
-            now_seconds,
-
             EVIL_TIMESTAMP_SECONDS - 1,
             DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
+            DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
+            EVIL_TIMESTAMP_SECONDS + 1,
             EVIL_TIMESTAMP_SECONDS + 1,
             now_seconds,
+            now_seconds,
         ],
+        "{:#?}",
+        observed_neurons
+            .iter()
+            .map(|neuron| {
+                Neuron {
+                    // Elide this, because it is uninteresting, and takes up tons of space.
+                    account: vec![],
+
+                    ..neuron.clone()
+                }
+            })
+            .collect::<Vec<_>>(),
     );
 }
 
