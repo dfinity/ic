@@ -4,8 +4,8 @@ use bitcoin::{
     absolute::LockTime, address::Address, hashes::Hash, transaction::Version, Amount, OutPoint,
     PubkeyHash, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
 };
-use ic_btc_kyt::{
-    blocklist, BtcNetwork, KytMode, CHECK_TRANSACTION_CYCLES_REQUIRED,
+use ic_btc_checker::{
+    blocklist, BtcNetwork, CheckMode, CHECK_TRANSACTION_CYCLES_REQUIRED,
     CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
 };
 use ic_cdk::api::call::RejectionCode;
@@ -36,7 +36,7 @@ impl FetchEnv for MockEnv {
     }
 
     fn config(&self) -> Config {
-        Config::new_and_validate(BtcNetwork::Mainnet, KytMode::Normal).unwrap()
+        Config::new_and_validate(BtcNetwork::Mainnet, CheckMode::Normal).unwrap()
     }
 
     async fn http_get_tx(
@@ -202,7 +202,7 @@ fn test_try_fetch_tx() {
     let txid_1 = mock_txid(1);
     let txid_2 = mock_txid(2);
     let from_tx = |tx: &bitcoin::Transaction| {
-        TransactionKytData::from_transaction(&env.config().btc_network(), tx.clone()).unwrap()
+        TransactionCheckData::from_transaction(&env.config().btc_network(), tx.clone()).unwrap()
     };
 
     // case Fetched
@@ -252,7 +252,7 @@ async fn test_fetch_tx() {
     let txid_1 = mock_txid(1);
     let txid_2 = mock_txid(2);
     let from_tx = |tx: &bitcoin::Transaction| {
-        TransactionKytData::from_transaction(&env.config().btc_network(), tx.clone()).unwrap()
+        TransactionCheckData::from_transaction(&env.config().btc_network(), tx.clone()).unwrap()
     };
 
     // case Fetched
@@ -322,7 +322,7 @@ async fn test_check_fetched() {
     let tx_2 = mock_transaction_with_outputs(2);
     let network = env.config().btc_network();
     let from_tx = |tx: &bitcoin::Transaction| {
-        TransactionKytData::from_transaction(&network, tx.clone()).unwrap()
+        TransactionCheckData::from_transaction(&network, tx.clone()).unwrap()
     };
 
     // case Passed
