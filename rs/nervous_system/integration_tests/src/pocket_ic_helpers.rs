@@ -1687,7 +1687,7 @@ pub mod sns {
             pocket_ic: &PocketIc,
             sns_governance_canister_id: PrincipalId,
         ) -> std::result::Result<sns_pb::GetUpgradeJournalResponse, PocketIcCallError> {
-            let payload = sns_pb::GetUpgradeJournalRequest {};
+            let payload = sns_pb::GetUpgradeJournalRequest::default();
             pocket_ic.call(sns_governance_canister_id, payload).await
         }
 
