@@ -307,10 +307,10 @@ impl NetworkEconomics {
             transaction_fee_e8s: inherit_from(self.transaction_fee_e8s, defaults.transaction_fee_e8s),
             max_proposals_to_keep_per_topic: inherit_from(self.max_proposals_to_keep_per_topic, defaults.max_proposals_to_keep_per_topic),
 
-            // Ideally, we would recurse into T, because otherwise, you have to
-            // set a bundle of parameters all at once. In other words, the
-            // current implementation does not support setting individual
-            // subfields, a la carte.
+            // TODO(NNS1-3499): Ideally, we would recurse into T, because
+            // otherwise, you have to set a bundle of parameters all at once. In
+            // other words, the current implementation does not support setting
+            // individual subfields, a la carte.
             neurons_fund_economics: self
                 .neurons_fund_economics
                 .as_ref()
