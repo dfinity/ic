@@ -6,8 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bitcoin = "0.32.4"
-primitive-types = "0.12"
+bitcoin = { workspace = true }
 
 [dev-dependencies]
 csv = "1.1"

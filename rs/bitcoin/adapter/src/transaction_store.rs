@@ -203,7 +203,7 @@ mod test {
     use super::*;
     use crate::common::test_common::TestChannel;
     use bitcoin::{
-        blockdata::constants::genesis_block, consensus::serialize, Network, Transaction,
+        absolute::LockTime, blockdata::constants::genesis_block, consensus::serialize, Network, Transaction
     };
     use ic_logger::replica_logger::no_op_logger;
     use std::str::FromStr;
@@ -304,7 +304,7 @@ mod test {
 
         // Send one transaction. This transaction should be removed first if we are at capacity.
         let mut first_tx = get_transaction();
-        first_tx.lock_time = u32::MAX;
+        first_tx.lock_time = LockTime::from_height(u32::MAX).unwrap();
         let raw_tx = serialize(&first_tx);
         manager.enqueue_transaction(&raw_tx);
 
@@ -312,7 +312,7 @@ mod test {
             // First regtest genesis transaction.
             let mut transaction = get_transaction();
             // Alter transaction such that we get a different `txid`
-            transaction.lock_time = i.try_into().unwrap();
+            transaction.lock_time = LockTime::from_height(i.try_into().unwrap()).unwrap();
             let raw_tx = serialize(&transaction);
             manager.enqueue_transaction(&raw_tx);
         }
@@ -333,7 +333,7 @@ mod test {
         let mut manager = make_transaction_manager();
 
         let mut transaction = get_transaction();
-        transaction.lock_time = 0;
+        transaction.lock_time = LockTime::ZERO;
         let raw_tx = serialize(&transaction);
         manager.enqueue_transaction(&raw_tx);
         manager.advertise_txids(&mut channel);
@@ -388,7 +388,7 @@ mod test {
         let mut manager = make_transaction_manager();
 
         let mut transaction = get_transaction();
-        transaction.lock_time = 0;
+        transaction.lock_time = LockTime::ZERO;
         let raw_tx = serialize(&transaction);
         manager.enqueue_transaction(&raw_tx);
         manager.advertise_txids(&mut channel);
@@ -429,7 +429,7 @@ mod test {
 
         // 1.
         let mut transaction = get_transaction();
-        transaction.lock_time = 0;
+        transaction.lock_time = LockTime::ZERO;
         let raw_tx = serialize(&transaction);
         manager.enqueue_transaction(&raw_tx);
         manager.advertise_txids(&mut channel);
@@ -510,7 +510,7 @@ mod test {
             // First regtest genesis transaction.
             let mut transaction = get_transaction();
             // Alter transaction such that we get a different `txid`
-            transaction.lock_time = i.try_into().unwrap();
+            transaction.lock_time = LockTime::from_height(i.try_into().unwrap()).unwrap();
             let txid = transaction.compute_txid();
             inventory.push(Inventory::Transaction(txid));
         }

@@ -13,8 +13,8 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:csv",
     "@crate_index//:hex",
-    "@crate_index//:proptest",
     "@crate_index//:primitive-types",
+    "@crate_index//:proptest",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

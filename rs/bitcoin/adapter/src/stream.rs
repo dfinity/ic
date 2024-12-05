@@ -515,11 +515,11 @@ pub mod test {
 
         assert_eq!(
             net_rx.recv().await.unwrap(),
-            (address, payload_large.payload())
+            (address, payload_large.payload().clone())
         );
         assert_eq!(
             net_rx.recv().await.unwrap(),
-            (address, payload_small.payload())
+            (address, payload_small.payload().clone())
         );
     }
 }

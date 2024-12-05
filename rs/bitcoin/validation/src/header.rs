@@ -77,8 +77,8 @@ pub fn validate_header(
         return Err(ValidateHeaderError::InvalidPoWForHeaderTarget);
     }
 
-    let target = get_next_target(network, store, &prev_header, prev_height, header.time);
-    if let Err(err) = header.validate_pow(Target::from_compact(target)) {
+    let compact_target = get_next_compact_target(network, store, &prev_header, prev_height, header.time);
+    if let Err(err) = header.validate_pow(Target::from_compact(compact_target)) {
         match err {
             ValidationError::BadProofOfWork => println!("bad proof of work"),
             ValidationError::BadTarget => println!("bad target"),
@@ -92,7 +92,7 @@ pub fn validate_header(
 
 // Returns the next required target at the given timestamp.
 // The target is the number that a block hash must be below for it to be accepted.
-fn get_next_target(
+fn get_next_compact_target(
     network: &Network,
     store: &impl HeaderStore,
     prev_header: &BlockHeader,
@@ -188,7 +188,6 @@ fn compute_next_difficulty(
     prev_header: &BlockHeader,
     prev_height: BlockHeight,
 ) -> CompactTarget {
-    use primitive_types::U256;
     // Difficulty is adjusted only once in every interval of 2 weeks (2016 blocks)
     // If an interval boundary is not reached, then previous difficulty target is
     // returned Regtest network doesn't adjust PoW difficult levels. For
@@ -217,28 +216,9 @@ fn compute_next_difficulty(
     // actual_interval will deviate slightly from 2 weeks. Our goal is to
     // readjust the difficulty target so that the expected time taken for the next
     // 2016 blocks is again 2 weeks.
-    let actual_interval = prev_header.time - last_adjustment_time;
-    let mut adjusted_interval = actual_interval;
+    let actual_interval = std::cmp::max((prev_header.time as i64) - (last_adjustment_time as i64), 0) as u64;
 
-    // The target_adjustment_interval_time is 2 weeks of time expressed in seconds
-    let target_adjustment_interval_time: u32 = DIFFICULTY_ADJUSTMENT_INTERVAL * TEN_MINUTES; //Number of seconds in 2 weeks
-
-    // Adjusting the actual_interval to [0.5 week, 8 week] range in case the
-    // actual_interval deviates too much from the expected 2 weeks.
-    adjusted_interval = u32::max(adjusted_interval, target_adjustment_interval_time / 4);
-    adjusted_interval = u32::min(adjusted_interval, target_adjustment_interval_time * 4);
-
-    // Computing new difficulty target.
-    // new difficulty target = old difficult target * (adjusted_interval /
-    // 2_weeks);
-    let mut target = U256::from_big_endian(&prev_header.target().to_be_bytes());
-    target *= U256::from(adjusted_interval);
-    target /= U256::from(target_adjustment_interval_time);
-    let target = Target::from_be_bytes(target.into());
-
-    // Adjusting the newly computed difficulty target so that it doesn't exceed the
-    // max_difficulty_target limit
-    target.min(max_target(network)).to_compact_lossy()
+    CompactTarget::from_next_work_required(prev_header.bits, actual_interval, *network)
 }
 
 #[cfg(test)]
@@ -490,12 +470,12 @@ mod test {
         println!("Verifying next targets...");
         proptest!(|(i in 0..up_to_height)| {
             // Compute what the target of the next header should be.
-            let expected_next_target =
-                get_next_target(&network, &store, &headers[i], i as u32, headers[i + 1].time);
+            let expected_next_compact_target =
+                get_next_compact_target(&network, &store, &headers[i], i as u32, headers[i + 1].time);
 
             // Assert that the expected next target matches the next header's target.
             assert_eq!(
-                expected_next_target,
+                expected_next_compact_target,
                 headers[i + 1].bits
             );
         });
@@ -574,7 +554,7 @@ mod test {
             let (store, last_header) = create_chain(&network, expected_pow, chain_length);
             assert_eq!(store.height() + 1, chain_length);
             // Act.
-            let target = get_next_target(
+            let compact_target = get_next_compact_target(
                 &network,
                 &store,
                 &last_header,
@@ -582,7 +562,7 @@ mod test {
                 last_header.time + TEN_MINUTES,
             );
             // Assert.
-            assert_eq!(target, expected_pow);
+            assert_eq!(compact_target, expected_pow);
         }
     }
 }

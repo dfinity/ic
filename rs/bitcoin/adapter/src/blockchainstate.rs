@@ -2,6 +2,9 @@
 //!
 use crate::{common::BlockHeight, config::Config, metrics::BlockchainStateMetrics};
 use bitcoin::{blockdata::constants::genesis_block, Block, BlockHash, block::Header as BlockHeader, Network};
+
+use bitcoin::hashes::Hash;
+
 use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
 use std::collections::HashMap;
@@ -337,6 +340,8 @@ impl HeaderStore for BlockchainState {
             .map(|cached| cached.header)
     }
 
+    // TODO: this is terribly innefficient. We should: either have and index for this, or 
+    // rething how this is used. 
     fn get_with_height(&self, height: u32) -> Option<BlockHeader> {
         self.header_cache
             .values()
@@ -581,7 +586,7 @@ mod test {
         assert!(matches!(result, Ok(())));
 
         // Make a block 2's merkle root invalid and try to add the block to the cache.
-        block_2.header.merkle_root = TxMerkleNode::default();
+        block_2.header.merkle_root = TxMerkleNode::all_zeros();
         // Block 2's hash will now be changed because of the merkle root change.
         let block_2_hash = block_2.block_hash();
         let result = state.add_block(block_2);
@@ -638,7 +643,7 @@ mod test {
         state.add_block(test_state.block_1.clone()).unwrap();
         state.add_block(test_state.block_2.clone()).unwrap();
 
-        let expected_cache_size = test_state.block_1.size() + test_state.block_2.size();
+        let expected_cache_size = test_state.block_1.total_size() + test_state.block_2.total_size();
         let block_cache_size = state.get_block_cache_size();
 
         assert_eq!(expected_cache_size, block_cache_size);
@@ -691,7 +696,7 @@ mod test {
 
     /// Test header store `get_header` function.
     #[test]
-    fn test_headerstore_get_header() {
+    fn test_headerstore_get_cached_header() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
 
@@ -706,9 +711,10 @@ mod test {
             if h == 0 {
                 assert_eq!(state.get_initial_hash(), state.genesis().block_hash(),);
             } else {
+                let header_node = state.get_cached_header(&header.block_hash()).unwrap();
                 assert_eq!(
-                    state.get_header(&header.block_hash()).unwrap(),
-                    (chain[h], (h + 1) as u32),
+                    (header_node.header, header_node.height),
+                    (chain[h], (h + 1) as u32)
                 );
             }
         }

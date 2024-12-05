@@ -1269,8 +1269,21 @@ version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd0e67dbf7a9971e7f4276f6089e9e814ce0f624a03216b7d92d00351ae7fb3e"
 dependencies = [
- "bitcoincore-rpc-json",
+ "bitcoincore-rpc-json 0.15.0",
  "jsonrpc 0.12.1",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "bitcoincore-rpc"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aedd23ae0fd321affb4bbbc36126c6f49a32818dc6b979395d24da8c9d4e80ee"
+dependencies = [
+ "bitcoincore-rpc-json 0.19.0",
+ "jsonrpc 0.18.0",
  "log",
  "serde",
  "serde_json",
@@ -1283,6 +1296,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e2ae16202721ba8c3409045681fac790a5ddc791f05731a2df22c0c6bffc0f1"
 dependencies = [
  "bitcoin 0.28.2",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "bitcoincore-rpc-json"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d8909583c5fab98508e80ef73e5592a651c954993dc6b7739963257d19f0e71a"
+dependencies = [
+ "bitcoin 0.32.4",
  "serde",
  "serde_json",
 ]
@@ -4075,7 +4099,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
- "bitcoincore-rpc",
+ "bitcoincore-rpc 0.15.0",
  "candid",
  "futures",
  "ic-agent",
@@ -5846,7 +5870,7 @@ name = "ic-btc-adapter"
 version = "0.9.0"
 dependencies = [
  "bitcoin 0.32.4",
- "bitcoincore-rpc",
+ "bitcoincore-rpc 0.19.0",
  "bitcoind",
  "clap 4.5.20",
  "criterion",
@@ -6030,7 +6054,6 @@ version = "0.1.0"
 dependencies = [
  "bitcoin 0.32.4",
  "csv",
- "primitive-types",
  "proptest 0.9.6",
 ]
 
@@ -13067,7 +13090,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
- "bitcoincore-rpc",
+ "bitcoincore-rpc 0.15.0",
  "candid",
  "canister-test",
  "dfn_candid",
@@ -14590,6 +14613,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "jsonrpc"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3662a38d341d77efecb73caf01420cfa5aa63c0253fd7bc05289ef9f6616e1bf"
+dependencies = [
+ "base64 0.13.1",
+ "minreq",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "k256"
 version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15507,6 +15542,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2d80299ef12ff69b16a84bb182e3b9df68b5a91574d3d4fa6e41b65deec4df1"
 dependencies = [
  "adler2",
+]
+
+[[package]]
+name = "minreq"
+version = "2.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36a8e50e917e18a37d500d27d40b7bc7d127e71c0c94fb2d83f43b4afd308390"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -17039,7 +17085,7 @@ dependencies = [
  "backoff",
  "base64 0.13.1",
  "bitcoin 0.28.2",
- "bitcoincore-rpc",
+ "bitcoincore-rpc 0.15.0",
  "bytes",
  "candid",
  "clap 4.5.20",

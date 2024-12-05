@@ -775,9 +775,10 @@ pub mod test {
     };
     use bitcoin::blockdata::constants::genesis_block;
     use bitcoin::consensus::deserialize;
+    //TODO(mihailjianu): check if this is needed. 
     use bitcoin::Network;
     use bitcoin::{
-        p2p::message::NetworkMessage, network::message_blockdata::Inventory, BlockHash,
+        p2p::message::NetworkMessage, BlockHash,
     };
     use hex::FromHex;
     use ic_btc_adapter_test_utils::{
