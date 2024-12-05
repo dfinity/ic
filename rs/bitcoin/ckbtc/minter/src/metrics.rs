@@ -16,6 +16,7 @@ pub type Latency = u64;
 #[derive(Default, Clone, Copy)]
 pub struct LatencyHistogram {
     latency_buckets: [Count; LATENCY_HISTOGRAM_NUM_BUCKETS],
+    latency_sum: Latency,
 }
 
 impl LatencyHistogram {
@@ -23,20 +24,22 @@ impl LatencyHistogram {
         let bucket_index = ((latency / LATENCY_HISTOGRAM_BUCKET_SIZE) as usize)
             .min(LATENCY_HISTOGRAM_NUM_BUCKETS - 1);
         self.latency_buckets[bucket_index] += 1;
+        self.latency_sum += latency;
     }
 
-    /// Returns a iterator over the histogram buckets
+    /// Returns an iterator over the histogram buckets as tuples containing the bucket upper bound
+    /// (inclusive), and the count of observed values within the bucket.
     fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
-        self.bucket_upper_bounds()
+        self.bucket_inclusive_upper_bounds()
             .zip(self.latency_buckets.iter().cloned())
             .map(|(k, v)| (k, v as f64))
     }
 
     fn sum(&self) -> u64 {
-        self.latency_buckets.iter().sum()
+        self.latency_sum
     }
 
-    fn bucket_upper_bounds(&self) -> impl Iterator<Item = f64> {
+    fn bucket_inclusive_upper_bounds(&self) -> impl Iterator<Item = f64> {
         (1..LATENCY_HISTOGRAM_NUM_BUCKETS)
             .map(|bucket| (bucket as u64) * LATENCY_HISTOGRAM_BUCKET_SIZE)
             .map(|upper_bound| upper_bound as f64)
@@ -257,18 +260,21 @@ pub fn encode_metrics(
         "The latency of ckBTC minter `update_balance` calls in milliseconds.",
     )?;
 
-    let histogram = UPDATE_CALL_LATENCY_WITH_NEW_UTXOS.get();
-    histogram_vec = histogram_vec.histogram(
-        &[("New UTXOs", "yes")],
-        histogram.iter(),
-        histogram.sum() as f64,
-    )?;
-    let histogram = UPDATE_CALL_LATENCY_WITH_NO_NEW_UTXOS.get();
-    histogram_vec.histogram(
-        &[("New UTXOs", "no")],
-        histogram.iter(),
-        histogram.sum() as f64,
-    )?;
+    histogram_vec = UPDATE_CALL_LATENCY_WITH_NEW_UTXOS.with_borrow(|histogram| {
+        histogram_vec.histogram(
+            &[("New UTXOs", "yes")],
+            histogram.iter(),
+            histogram.sum() as f64,
+        )
+    })?;
+
+    UPDATE_CALL_LATENCY_WITH_NO_NEW_UTXOS.with_borrow(|histogram| {
+        histogram_vec.histogram(
+            &[("New UTXOs", "no")],
+            histogram.iter(),
+            histogram.sum() as f64,
+        )
+    })?;
 
     Ok(())
 }

@@ -12,7 +12,6 @@ use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use num_traits::ToPrimitive;
 use serde::Serialize;
-use std::time::Duration;
 
 // Max number of times of calling check_transaction with cycle payment, to avoid spending too
 // many cycles.
@@ -149,6 +148,7 @@ pub async fn update_balance<R: CanisterRuntime>(
         ic_cdk::trap("cannot update minter's balance");
     }
 
+    // Record start time of method execution for metrics
     let start_time = ic_cdk::api::time();
 
     // When the minter is in the mode using a whitelist we only want a certain
@@ -231,11 +231,9 @@ pub async fn update_balance<R: CanisterRuntime>(
 
         let current_confirmations = pending_utxos.iter().map(|u| u.confirmations).max();
 
-        async fn record_update_balance_latency_with_no_new_utxos(start_time: u64) {
-            &crate::metrics::UPDATE_CALL_LATENCY_WITH_NO_NEW_UTXOS.with_borrow_mut(|histogram| {
-                histogram.observe_latency(ic_cdk::api::time() - start_time)
-            });
-        }
+        let call_duration = ic_cdk::api::time() - start_time;
+        let _ = &crate::metrics::UPDATE_CALL_LATENCY_WITH_NO_NEW_UTXOS
+            .with_borrow_mut(|histogram| histogram.observe_latency(call_duration));
 
         return Err(UpdateBalanceError::NoNewUtxos {
             current_confirmations,
@@ -326,6 +324,11 @@ pub async fn update_balance<R: CanisterRuntime>(
     }
 
     schedule_now(TaskType::ProcessLogic, runtime);
+
+    let call_duration = ic_cdk::api::time() - start_time;
+    let _ = &crate::metrics::UPDATE_CALL_LATENCY_WITH_NEW_UTXOS
+        .with_borrow_mut(|histogram| histogram.observe_latency(call_duration));
+
     Ok(utxo_statuses)
 }
 
