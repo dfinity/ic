@@ -261,7 +261,7 @@ impl ConnectionManager {
     /// Conditions under which the node can start outbound connecting attempt
     /// - the node is a designated dialer
     /// - peer is in the subnet
-    /// - this node is not part of the subnet (can happen when a node is removed from the subnet)
+    /// - this node is part of the subnet (can happen when a node is removed from the subnet)
     /// - there is no connect attemped
     /// - there is no established connection
     fn can_i_dial_to(&self, dst: &NodeId) -> bool {
