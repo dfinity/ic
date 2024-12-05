@@ -458,7 +458,7 @@ mod assertions {
                     .collect();
                 assert_eq!(
                     cells.len(),
-                    3,
+                    5,
                     "expected 3 cells in a row of an ERC-20 table, but got {:?}. Rendered html: {}",
                     cells,
                     self.assert.rendered_html
