@@ -22,7 +22,7 @@ fn test_statesync_test_canisters() {
         .expect("Failed to install canister");
 
     let result = env
-        .query(canister_id, "read_state", Encode!(&0u64).unwrap())
+        .query(canister_id, "read_state", Encode!(&0usize).unwrap())
         .unwrap();
     let res = assert_reply(result);
     let val = Decode!(&res, Result<u8, String>).unwrap();
@@ -46,7 +46,7 @@ fn test_statesync_test_canisters() {
     );
 
     let result = env
-        .query(canister_id, "read_state", Encode!(&0u64).unwrap())
+        .query(canister_id, "read_state", Encode!(&0usize).unwrap())
         .unwrap();
     let res = assert_reply(result);
     let val = Decode!(&res, Result<u8, String>).unwrap();
