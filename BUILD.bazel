@@ -126,7 +126,7 @@ config_setting(
 config_setting(
     name = "is_arm_darwin",
     constraint_values = [
-        "@platforms//cpu:arm",
+        "@platforms//cpu:arm64",
         "@platforms//os:osx",
     ],
 )
