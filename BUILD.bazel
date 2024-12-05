@@ -111,7 +111,7 @@ config_setting(
 genrule(
     name = "foo",
     outs = ["config.txt"],
-    cmd = "echo $(BAZEL_CPU) $(BAZEL_PLATFORM) > $@",
+    cmd = "echo $(TARGET_CPU) > $@",
 )
 
 
