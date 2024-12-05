@@ -10,6 +10,7 @@ use ic_bn_lib::{
     types::RequestType,
 };
 use ic_config::crypto::CryptoConfig;
+use ic_types::CanisterId;
 use std::time::Duration;
 use std::{net::SocketAddr, path::PathBuf};
 use url::Url;
@@ -128,6 +129,12 @@ pub struct Listen {
     /// Unix socket to listen on for HTTP
     #[clap(env, long)]
     pub listen_http_unix_socket: Option<PathBuf>,
+
+    /// Port on 127.0.0.1 to listen on for loopback usage.
+    /// Only needed if a rate-limiting canister or anonymization salt canister is used.
+    /// Change if the default one is occupied for whatever reason.
+    #[clap(env, long, default_value = "31337")]
+    pub listen_http_port_loopback: u16,
 }
 
 #[derive(Args)]
@@ -247,23 +254,25 @@ pub struct RateLimiting {
     pub rate_limit_per_second_per_ip: Option<u32>,
     /// Path to a generic rate-limiter rules, if the file does not exist - no rules are applied.
     /// File is checked every 10sec and is reloaded if the changes are detected.
-    /// Expecting YAML list with objects that have (canister_id, methods, limit) fields.
+    /// Expecting YAML list with objects that have at least one of
+    /// (canister_id, subnet_id, methods_regex, request_types, limit) fields.
     /// E.g.
     ///
     /// - canister_id: aaaaa-aa
-    ///   methods: ^(foo|bar)$
+    ///   methods_regex: ^(foo|bar)$
+    ///   request_types:
+    ///   - query
     ///   limit: 60/1s
-    ///
     /// - subnet_id: aaaaaa-aa
     ///   canister_id: aaaaa-aa
-    ///   methods: ^baz$
+    ///   methods_regex: ^baz$
     ///   limit: block (this blocks all requests)
-    #[clap(
-        env,
-        long,
-        default_value = "/run/ic-node/etc/ic-boundary/canister-ratelimit.yml"
-    )]
-    pub rate_limit_generic: PathBuf,
+    #[clap(env, long)]
+    pub rate_limit_generic_file: Option<PathBuf>,
+
+    /// ID of the rate-limiting canister where to obtain the rules
+    #[clap(env, long)]
+    pub rate_limit_generic_canister_id: Option<CanisterId>,
 }
 
 #[derive(Args)]
