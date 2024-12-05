@@ -113,27 +113,27 @@ The ckERC20 implementation consists of a suite of canisters:
 The ERC-20 deposit flow is similar to the ckETH deposit flow in that deposits will transit via a helper smart contract to be able to bind an Ethereum transaction with an IC principal.
 
 ----
- ┌────┐                      ┌───────────────┐                     ┌───────────────┐                        ┌──────┐
- │User│                      │ERC-20 Contract│                     │Helper Contract│                        │Minter│
- └─┬──┘                      └───────┬───────┘                     └───────┬───────┘                        └──┬───┘
-   │                                 │                                     │                                   │
-   │approve(helper_contract, amount) │                                     │                                   │
-   │────────────────────────────────>│                                     │                                   │
-   │                                 │                                     │                                   │
-   │                deposit(token_id, amount, principal)                   │                                   │
-   │──────────────────────────────────────────────────────────────────────>│                                   │
-   │                                 │ transferFrom(user, minter, amount)  │                                   │
-   │                                 │<────────────────────────────────────│                                   │
-   │                                 │                                     │                                   │
-   │                                 │                                     │       get_events                  │
-   │                                 │                                     │<──────────────────────────────────│
-   │                                 │                                     │Events(token_id, amount, principal)│
-   │                                 │                                     │──────────────────────────────────>│
-   │                                 │  mint(token_id, amount, principal)  │                                   │
-   │<──────────────────────────────────────────────────────────────────────────────────────────────────────────│
- ┌─┴──┐                      ┌───────┴───────┐                     ┌───────┴───────┐                        ┌──┴───┐
- │User│                      │ERC-20 Contract│                     │Helper Contract│                        │Minter│
- └────┘                      └───────────────┘                     └───────────────┘                        └──────┘
+ ┌────┐                      ┌───────────────┐                                      ┌───────────────┐                                                      ┌──────┐
+ │User│                      │ERC-20 Contract│                                      │Helper Contract│                                                      │Minter│
+ └─┬──┘                      └───────┬───────┘                                      └───────┬───────┘                                                      └──┬───┘
+   │                                 │                                                      │                                                                 │
+   │approve(helper_contract, amount) │                                                      │                                                                 │
+   │────────────────────────────────>│                                                      │                                                                 │
+   │                                 │                                                      │                                                                 │
+   │                depositErc20(token_id, amount, principal, subaccount)                   │                                                                 │
+   │───────────────────────────────────────────────────────────────────────────────────────>│                                                                 │
+   │                                 │           transferFrom(user, minter, amount)         │                                                                 │
+   │                                 │<─────────────────────────────────────────────────────│                                                                 │
+   │                                 │                                                      │                                                                 │
+   │                                 │                                                      │       get_events                                                │
+   │                                 │                                                      │<────────────────────────────────────────────────────────────────│
+   │                                 │                                                      │ReceivedEthOrErc20(token_id, user, amount, principal, subaccount)│
+   │                                 │                                                      │────────────────────────────────────────────────────────────────>│
+   │                                 │     mint(token_id, amount, principal, subaccount)    │                                                                 │
+   │<─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+ ┌─┴──┐                      ┌───────┴───────┐                                      ┌───────┴───────┐                                                      ┌──┴───┐
+ │User│                      │ERC-20 Contract│                                      │Helper Contract│                                                      │Minter│
+ └────┘                      └───────────────┘                                      └───────────────┘                                                      └──────┘
 ----
 
 [WARNING]
