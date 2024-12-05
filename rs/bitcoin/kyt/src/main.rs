@@ -6,18 +6,36 @@ use ic_btc_kyt::{
     CheckTransactionRetriable, CheckTransactionStatus, KytArg, KytMode,
     CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
 };
+use ic_canister_log::{export as export_logs, log};
 use ic_canisters_http_types as http;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
+use num_traits::cast::ToPrimitive;
+use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::str::FromStr;
 
 mod dashboard;
 mod fetch;
+mod logs;
 mod providers;
 mod state;
 
 use fetch::{FetchEnv, FetchResult, TryFetchResult};
+use logs::{Log, LogEntry, Priority, DEBUG, WARN};
 use state::{get_config, set_config, Config, FetchGuardError, HttpGetTxError};
+
+#[derive(Default)]
+struct Stats {
+    https_outcall_status: BTreeMap<(String, u16), u64>,
+    http_response_size: BTreeMap<u32, u64>,
+    check_transaction_count: u64,
+    check_address_count: u64,
+}
+
+thread_local! {
+    static STATS : RefCell<Stats> = RefCell::default();
+}
 
 pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
     code == &RejectionCode::SysFatal
@@ -38,6 +56,7 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
             ic_cdk::trap(&format!("Not a bitcoin {} address: {}", btc_network, err))
         });
 
+    STATS.with(|s| s.borrow_mut().check_transaction_count += 1);
     match config.kyt_mode() {
         KytMode::AcceptAll => CheckAddressResponse::Passed,
         KytMode::RejectAll => CheckAddressResponse::Failed,
@@ -72,6 +91,7 @@ async fn check_transaction(args: CheckTransactionArgs) -> CheckTransactionRespon
     ic_cdk::api::call::msg_cycles_accept128(CHECK_TRANSACTION_CYCLES_SERVICE_FEE);
     match Txid::try_from(args.txid.as_ref()) {
         Ok(txid) => {
+            STATS.with(|s| s.borrow_mut().check_transaction_count += 1);
             if ic_cdk::api::call::msg_cycles_available128()
                 .checked_add(CHECK_TRANSACTION_CYCLES_SERVICE_FEE)
                 .unwrap()
@@ -126,9 +146,145 @@ fn post_upgrade(arg: KytArg) {
 
 #[ic_cdk::query(hidden = true)]
 fn http_request(req: http::HttpRequest) -> http::HttpResponse {
+    if ic_cdk::api::data_certificate().is_none() {
+        ic_cdk::trap("update call rejected");
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn heap_memory_size_bytes() -> usize {
+        const WASM_PAGE_SIZE_BYTES: usize = 65536;
+        core::arch::wasm32::memory_size(0) * WASM_PAGE_SIZE_BYTES
+    }
+
+    #[cfg(not(any(target_arch = "wasm32")))]
+    fn heap_memory_size_bytes() -> usize {
+        0
+    }
+
     if req.path() == "/metrics" {
-        // TODO(XC-205): Add metrics
-        unimplemented!()
+        let mut writer =
+            ic_metrics_encoder::MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
+
+        let cycle_balance = ic_cdk::api::canister_balance128() as f64;
+
+        writer
+            .gauge_vec("cycle_balance", "The canister cycle balance.")
+            .unwrap()
+            .value(&[("canister", "btc-kyt")], cycle_balance)
+            .unwrap();
+
+        writer
+            .encode_gauge(
+                "heap_memory_bytes",
+                heap_memory_size_bytes() as f64,
+                "Size of the heap memory allocated by this canister.",
+            )
+            .unwrap();
+
+        writer
+            .encode_gauge(
+                "stable_memory_bytes",
+                ic_cdk::api::stable::stable_size() as f64 * 65536.0,
+                "Size of the stable memory allocated by this canister.",
+            )
+            .unwrap();
+
+        STATS.with(|s| {
+            let stats = s.borrow();
+            let mut counter = writer
+                .counter_vec(
+                    "btc_kyt_http_calls_total",
+                    "The number of http outcalls made since the last canister upgrade.",
+                )
+                .unwrap();
+            for ((provider, status), count) in stats.https_outcall_status.iter() {
+                counter = counter
+                    .value(
+                        &[
+                            ("provider", provider.as_str()),
+                            ("status", status.to_string().as_str()),
+                        ],
+                        *count as f64,
+                    )
+                    .unwrap();
+            }
+            let mut counter = writer
+                .counter_vec(
+                    "btc_kyt_http_response_size",
+                    "The byte sizes of http outcall responses.",
+                )
+                .unwrap();
+            for (size, count) in stats.http_response_size.iter() {
+                counter = counter
+                    .value(&[("size", size.to_string().as_str())], *count as f64)
+                    .unwrap();
+            }
+            writer
+                .counter_vec(
+                    "ckbtc_kyt_requests_total",
+                    "The number of KYT requests received since the last canister upgrade.",
+                )
+                .unwrap()
+                .value(
+                    &[("type", "check_transaction")],
+                    stats.check_transaction_count as f64,
+                )
+                .unwrap()
+                .value(
+                    &[("type", "check_address")],
+                    stats.check_address_count as f64,
+                )
+                .unwrap();
+        });
+
+        http::HttpResponseBuilder::ok()
+            .header("Content-Type", "text/plain; version=0.0.4")
+            .with_body_and_content_length(writer.into_inner())
+            .build()
+    } else if req.path() == "/logs" {
+        use serde_json;
+
+        let max_skip_timestamp = match req.raw_query_param("time") {
+            Some(arg) => match u64::from_str(arg) {
+                Ok(value) => value,
+                Err(_) => {
+                    return http::HttpResponseBuilder::bad_request()
+                        .with_body_and_content_length("failed to parse the 'time' parameter")
+                        .build()
+                }
+            },
+            None => 0,
+        };
+
+        let mut entries: Log = Default::default();
+        for entry in export_logs(&WARN) {
+            if entry.timestamp >= max_skip_timestamp {
+                entries.entries.push(LogEntry {
+                    timestamp: entry.timestamp,
+                    counter: entry.counter,
+                    priority: Priority::Warn,
+                    file: entry.file.to_string(),
+                    line: entry.line,
+                    message: entry.message,
+                });
+            }
+        }
+        for entry in export_logs(&DEBUG) {
+            if entry.timestamp >= max_skip_timestamp {
+                entries.entries.push(LogEntry {
+                    timestamp: entry.timestamp,
+                    counter: entry.counter,
+                    priority: Priority::Debug,
+                    file: entry.file.to_string(),
+                    line: entry.line,
+                    message: entry.message,
+                });
+            }
+        }
+        http::HttpResponseBuilder::ok()
+            .header("Content-Type", "application/json; charset=utf-8")
+            .with_body_and_content_length(serde_json::to_string(&entries).unwrap_or_default())
+            .build()
     } else if req.path() == "/dashboard" {
         use askama::Template;
         let page_index = match req.raw_query_param("page") {
@@ -182,6 +338,18 @@ impl FetchEnv for KytCanisterEnv {
         let cycles = get_tx_cycle_cost(max_response_bytes);
         match http_request(request.clone(), cycles).await {
             Ok((response,)) => {
+                STATS.with(|s| {
+                    let mut stat = s.borrow_mut();
+                    *stat
+                        .https_outcall_status
+                        .entry((provider.name(), response.status.0.to_u16().unwrap()))
+                        .or_default() += 1;
+                    // Calculate size bucket as a series of power of 2s.
+                    // Note that the max is bounded by `max_response_bytes`, which fits `u32`.
+                    let size = 2u32.pow((response.body.len() as f64).log2().floor() as u32);
+                    *stat.http_response_size.entry(size).or_default() += 1;
+                });
+
                 // Ensure response is 200 before decoding
                 if response.status != 200u32 {
                     // All non-200 status are treated as transient errors
@@ -224,8 +392,10 @@ impl FetchEnv for KytCanisterEnv {
             }
             Err((r, m)) if is_response_too_large(&r, &m) => Err(HttpGetTxError::ResponseTooLarge),
             Err((r, m)) => {
-                // TODO(XC-158): maybe try other providers and also log the error.
-                println!("The http_request resulted into error. RejectionCode: {r:?}, Error: {m}");
+                log!(
+                    DEBUG,
+                    "The http_request resulted into error. RejectionCode: {r:?}, Error: {m}, Request: {request:?}"
+                );
                 Err(HttpGetTxError::Rejected {
                     code: r,
                     message: m,

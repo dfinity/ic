@@ -1,0 +1,12 @@
+[Unit]
+Description=Update GuestOS Configuration
+After=bootstrap-ic-node.service
+Requires=bootstrap-ic-node.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/config update-guestos-config
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

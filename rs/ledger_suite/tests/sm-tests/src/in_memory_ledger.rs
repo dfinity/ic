@@ -13,6 +13,7 @@ use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::time::SystemTime;
 
 #[cfg(test)]
 mod tests;
@@ -699,6 +700,14 @@ where
                 actual_balance
             );
         }
+        let mut expiration_in_future_count = 0;
+        let mut expiration_in_past_count = 0;
+        let mut no_expiration_count = 0;
+        let timestamp = env
+            .time()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
         for (approval, allowance) in self.allowances.iter() {
             let (from, spender): (AccountId, AccountId) = approval.clone().into();
             assert!(
@@ -708,6 +717,18 @@ where
                 &spender
             );
             let actual_allowance = AccountId::get_allowance(env, ledger_id, from, spender);
+            match actual_allowance.expires_at {
+                None => {
+                    no_expiration_count += 1;
+                }
+                Some(expires_at) => {
+                    if expires_at > timestamp {
+                        expiration_in_future_count += 1;
+                    } else {
+                        expiration_in_past_count += 1;
+                    }
+                }
+            }
             assert_eq!(
                 allowance.amount,
                 Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
@@ -718,7 +739,22 @@ where
                 allowance,
                 actual_allowance
             );
+            assert_eq!(
+                allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
+                actual_allowance.expires_at,
+                "Mismatch in allowance expiration for approval from {:?} spender {:?}: {:?} ({:?} vs {:?}) at {:?}",
+                &from,
+                &spender,
+                approval,
+                allowance,
+                actual_allowance,
+                env.time()
+            );
         }
+        println!(
+            "allowances with no expiration: {}, expiration in future: {}, expiration in past: {}",
+            no_expiration_count, expiration_in_future_count, expiration_in_past_count
+        );
     }
 }
 
