@@ -2,6 +2,8 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 # The package is deprecated, NET-1274.
 package(default_visibility = [
+    "//rs/boundary_node/anonymization/client:__pkg__",
+    "//rs/boundary_node/ic_boundary:__pkg__",
     "//rs/cup_explorer:__pkg__",
     "//rs/http_endpoints/public:__pkg__",
     "//rs/nns/init:__pkg__",
@@ -9,7 +11,6 @@ package(default_visibility = [
     "//rs/registry/admin:__pkg__",
     "//rs/registry/nns_data_provider:__pkg__",
     "//rs/replay:__pkg__",
-    "//rs/rosetta-api:__subpackages__",
     "//rs/rust_canisters/canister_test:__pkg__",
     "//rs/tests:__subpackages__",
     "//rs/workload_generator:__pkg__",
@@ -17,6 +18,7 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/canister_client/read_state_response_parser",
     "//rs/canister_client/sender",
     "//rs/canonical_state",
     "//rs/certification",

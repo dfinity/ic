@@ -13,7 +13,9 @@ use crate::{
     migrations::maybe_run_migrations,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
-    neuron_store::{metrics::NeuronSubsetMetrics, NeuronMetrics, NeuronStore},
+    neuron_store::{
+        metrics::NeuronSubsetMetrics, prune_some_following, NeuronMetrics, NeuronStore,
+    },
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
         PolynomialNeuronsFundParticipation, SwapParticipationLimits,
@@ -137,9 +139,12 @@ pub mod tla_macros;
 pub mod tla;
 
 #[cfg(feature = "tla")]
+use std::collections::BTreeSet;
+#[cfg(feature = "tla")]
 pub use tla::{
     tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, MERGE_NEURONS_DESC,
-    SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+    SPAWN_NEURONS_DESC, SPAWN_NEURON_DESC, SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE,
+    TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
@@ -3098,6 +3103,7 @@ impl Governance {
     /// - The parent neuron is not spawning itself.
     /// - The maturity to move to the new neuron must be such that, with every maturity modulation, at least
     ///   NetworkEconomics::neuron_minimum_spawn_stake_e8s are created when the maturity is spawn.
+    #[cfg_attr(feature = "tla", tla_update_method(SPAWN_NEURON_DESC.clone()))]
     pub fn spawn_neuron(
         &mut self,
         id: &NeuronId,
@@ -4104,16 +4110,6 @@ impl Governance {
         };
         let topic = proposal.topic();
         let voting_period_seconds = voting_period_seconds_fn(topic);
-
-        // Recompute the tally here. It should correctly reflect all votes,
-        // even the ones after the proposal has been decided. It's possible
-        // to have Open status while it does not accept votes anymore, since
-        // the status change happens below this point.
-        if proposal.status() == ProposalStatus::Open
-            || proposal.accepts_vote(now_seconds, voting_period_seconds)
-        {
-            proposal.recompute_tally(now_seconds, voting_period_seconds);
-        }
 
         if proposal.status() != ProposalStatus::Open {
             return;
@@ -6015,6 +6011,14 @@ impl Governance {
         Ok(())
     }
 
+    pub fn prune_some_following(
+        &mut self,
+        begin: std::ops::Bound<NeuronId>,
+        carry_on: impl FnMut() -> bool,
+    ) -> std::ops::Bound<NeuronId> {
+        prune_some_following(&mut self.neuron_store, begin, carry_on)
+    }
+
     /// Creates a new neuron or refreshes the stake of an existing
     /// neuron from a ledger account.
     ///
@@ -6548,9 +6552,6 @@ impl Governance {
         // Try to update maturity modulation (once per day).
         } else if self.should_update_maturity_modulation() {
             self.update_maturity_modulation().await;
-        // Try to spawn neurons (potentially multiple times per day).
-        } else if self.can_spawn_neurons() {
-            self.spawn_neurons().await;
         } else {
             // This is the lowest-priority async task. All other tasks should have their own
             // `else if`, like the ones above.
@@ -6692,7 +6693,8 @@ impl Governance {
     /// This means that programming in this method needs to be extra-defensive on the handling of results so that
     /// we're sure not to trap after we've acquired the global lock and made an async call, as otherwise the global
     /// lock will be permanently held and no spawning will occur until a upgrade to fix it is made.
-    async fn spawn_neurons(&mut self) {
+    #[cfg_attr(feature = "tla", tla_update_method(SPAWN_NEURONS_DESC.clone()))]
+    pub async fn maybe_spawn_neurons(&mut self) {
         if !self.can_spawn_neurons() {
             return;
         }
@@ -6722,6 +6724,12 @@ impl Governance {
         let ready_to_spawn_ids = self
             .neuron_store
             .list_ready_to_spawn_neuron_ids(now_seconds);
+
+        // We can't alias ready_to_spawn_ids in the loop below, but the TLA model needs access to it,
+        // so we clone it here.
+        #[cfg(feature = "tla")]
+        let mut _tla_ready_to_spawn_ids: BTreeSet<u64> =
+            ready_to_spawn_ids.iter().map(|nid| nid.id).collect();
 
         for neuron_id in ready_to_spawn_ids {
             // Actually mint the neuron's ICP.
@@ -6777,6 +6785,11 @@ impl Governance {
                         })
                         .unwrap();
 
+                    tla_log_locals! {
+                        neuron_id: neuron_id.id,
+                        ready_to_spawn_ids: _tla_ready_to_spawn_ids
+                    };
+
                     // Do the transfer, this is a minting transfer, from the governance canister's
                     // (which is also the minting canister) main account into the neuron's
                     // subaccount.
@@ -6822,6 +6835,8 @@ impl Governance {
                     continue;
                 }
             }
+            #[cfg(feature = "tla")]
+            _tla_ready_to_spawn_ids.remove(&neuron_id.id);
         }
 
         // Release the global spawning lock

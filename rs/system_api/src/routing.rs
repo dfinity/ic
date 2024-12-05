@@ -548,6 +548,7 @@ mod tests {
             message: vec![1; 32],
             derivation_path: DerivationPath::new(vec![ByteBuf::from(vec![0; 10])]),
             key_id,
+            aux: None,
         };
         Encode!(&args).unwrap()
     }
