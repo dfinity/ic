@@ -1521,5 +1521,44 @@ mod test {
     }
 
     #[test]
-    fn test_can_make_decision_is_false_if_expired_but_votes_not_recorded() {}
+    fn test_can_make_decision_is_false_if_expired_but_votes_not_recorded() {
+        let now = 99;
+        // We are using this value b/c it's irrelevant to the test if
+        // wait_for_quiet_state is set.
+        let voting_period_seconds = u64::MAX;
+        let mut proposal_data = ProposalData {
+            id: Some(ProposalId { id: 1 }),
+            latest_tally: Some(Tally {
+                timestamp_seconds: 100,
+                yes: 51,
+                no: 0,
+                total: 100,
+            }),
+            wait_for_quiet_state: Some(WaitForQuietState {
+                current_deadline_timestamp_seconds: 100,
+            }),
+            ..Default::default()
+        };
+
+        // First we test majority switch
+        assert!(proposal_data.can_make_decision(now, voting_period_seconds));
+        proposal_data.latest_tally.as_mut().unwrap().yes = 49;
+        assert!(!proposal_data.can_make_decision(now, voting_period_seconds));
+
+        let now = 101;
+        assert!(proposal_data.can_make_decision(now, voting_period_seconds));
+
+        with_voting_state_machines_mut(|vsm| {
+            vsm.with_machine(ProposalId { id: 1 }, Topic::Governance, |machine| {
+                // We don't actually care about the vote being persisted, we just need to represent work still to be done.
+                machine.cast_vote(
+                    &mut hashmap! { 1 => Ballot {vote: Vote::Unspecified as i32, voting_power: 100}},
+                    NeuronId { id: 1 },
+                    Vote::Yes,
+                );
+            })
+        });
+        // Now we should no longer be able to make a decision.
+        assert!(!proposal_data.can_make_decision(now, voting_period_seconds));
+    }
 }
