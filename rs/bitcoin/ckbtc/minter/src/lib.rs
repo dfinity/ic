@@ -105,6 +105,8 @@ pub struct Log {
 pub struct MinterInfo {
     pub min_confirmations: u32,
     pub retrieve_btc_min_amount: u64,
+    // Serialize to the old name to be backward compatible in Candid.
+    #[serde(rename = "kyt_fee")]
     pub check_fee: u64,
 }
 
