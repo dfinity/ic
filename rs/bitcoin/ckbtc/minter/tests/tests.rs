@@ -2074,7 +2074,7 @@ fn test_retrieve_btc_with_approval_fail() {
     assert_matches!(
         retrieve_btc_result,
         Err(RetrieveBtcWithApprovalError::GenericError { error_code, .. })
-          if error_code == ErrorCode::KytCallFailed as u64
+          if error_code == ErrorCode::CheckCallFailed as u64
     );
 
     // Balance should be unchanged
