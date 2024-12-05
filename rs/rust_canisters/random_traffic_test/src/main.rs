@@ -87,7 +87,7 @@ fn next_call_index() -> u32 {
 }
 
 /// Returns the next call tree ID.
-fn next_call_id() -> u32 {
+fn next_call_tree_id() -> u32 {
     HASHER.with_borrow_mut(|hasher| {
         // Hash something to generate a new unique number.
         hasher.write_u64(42);
@@ -227,7 +227,7 @@ fn update_record(response: &api::call::CallResult<Vec<u8>>, index: u32) {
 async fn heartbeat() {
     let (mut futures, mut record_indices) = (Vec::new(), Vec::new());
     for _ in 0..MAX_CALLS_PER_HEARTBEAT.get() {
-        let Some((future, index)) = setup_call(next_call_id(), 0) else {
+        let Some((future, index)) = setup_call(next_call_tree_id(), 0) else {
             return;
         };
         futures.push(future);
