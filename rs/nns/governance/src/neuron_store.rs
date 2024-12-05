@@ -1397,7 +1397,7 @@ pub fn prune_some_following(
     groom_some_neurons(
         neuron_store,
         |neuron| {
-            neuron.prune_following(now_seconds);
+            neuron.prune_following(voting_power_economics, now_seconds);
         },
         next,
         carry_on,
