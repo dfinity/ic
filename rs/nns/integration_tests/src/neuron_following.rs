@@ -29,6 +29,7 @@ use ic_state_machine_tests::StateMachine;
 use itertools::Itertools;
 use maplit::hashmap;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use pretty_assertions::assert_eq;
 use prost::Message;
 use std::time::{Duration, SystemTime};
 
@@ -670,8 +671,6 @@ async fn test_backfill_voting_power_refreshed_timestamps() {
             EVIL_TIMESTAMP_SECONDS + 1,
             now_seconds,
         ],
-        "{:#?}",
-        neurons,
     );
 }
 
