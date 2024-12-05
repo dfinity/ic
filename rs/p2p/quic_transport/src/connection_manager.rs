@@ -342,6 +342,7 @@ impl ConnectionManager {
                     match active_result {
                         Ok(((), peer_id)) => {
                             self.peer_map.write().unwrap().remove(&peer_id);
+                            self.metrics.peers_removed_total.inc();
                             self.connect_queue.insert(peer_id, Duration::from_secs(0));
                             self.metrics.peer_map_size.dec();
                             self.metrics.closed_request_handlers_total.inc();
