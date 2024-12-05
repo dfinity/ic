@@ -2752,9 +2752,9 @@ impl ExecutionEnvironment {
 
         let threshold_key = args.key_id();
 
-        // Check if signing is enabled.
+        // Check if the key is enabled.
         if !topology
-            .idkg_signing_subnets(&threshold_key)
+            .chain_key_enabled_subnets(&threshold_key)
             .contains(&state.metadata.own_subnet_id)
         {
             return Err(UserError::new(

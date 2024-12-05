@@ -163,4 +163,7 @@ component_files = {
 
     # fstrim
     Label("fstrim/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
+
+    # TODO(NODE-1519): delete update-config.service after switch to new icos config
+    Label("misc/update-config/update-guestos-config.service"): "/etc/systemd/system/update-config.service",
 }

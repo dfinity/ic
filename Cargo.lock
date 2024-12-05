@@ -5988,6 +5988,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-btc-checker"
+version = "0.9.0"
+dependencies = [
+ "askama",
+ "base64 0.13.1",
+ "bitcoin 0.32.3",
+ "candid",
+ "candid_parser",
+ "ciborium",
+ "futures",
+ "hex",
+ "ic-base-types",
+ "ic-btc-interface",
+ "ic-canister-log 0.2.0",
+ "ic-canisters-http-types",
+ "ic-cdk 0.16.0",
+ "ic-metrics-encoder",
+ "ic-stable-structures",
+ "ic-test-utilities-load-wasm",
+ "ic-types",
+ "ic-universal-canister",
+ "num-traits",
+ "pocket-ic",
+ "scraper",
+ "serde",
+ "serde_json",
+ "time",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "ic-btc-consensus"
 version = "0.9.0"
 dependencies = [
@@ -6030,38 +6062,6 @@ dependencies = [
  "candid",
  "serde",
  "serde_bytes",
-]
-
-[[package]]
-name = "ic-btc-kyt"
-version = "0.9.0"
-dependencies = [
- "askama",
- "base64 0.13.1",
- "bitcoin 0.32.3",
- "candid",
- "candid_parser",
- "ciborium",
- "futures",
- "hex",
- "ic-base-types",
- "ic-btc-interface",
- "ic-canister-log 0.2.0",
- "ic-canisters-http-types",
- "ic-cdk 0.16.0",
- "ic-metrics-encoder",
- "ic-stable-structures",
- "ic-test-utilities-load-wasm",
- "ic-types",
- "ic-universal-canister",
- "num-traits",
- "pocket-ic",
- "scraper",
- "serde",
- "serde_json",
- "time",
- "tokio",
- "url",
 ]
 
 [[package]]
@@ -6633,8 +6633,8 @@ dependencies = [
  "ic-agent 0.37.1",
  "ic-base-types",
  "ic-bitcoin-canister-mock",
+ "ic-btc-checker",
  "ic-btc-interface",
- "ic-btc-kyt",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
  "ic-cdk 0.16.0",
@@ -10361,6 +10361,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-nervous-system-clients",
+ "ic-nervous-system-common",
  "ic-nervous-system-common-validation",
  "ic-nervous-system-proto",
  "ic-nns-common",
@@ -13152,11 +13153,10 @@ dependencies = [
  "dfn_candid",
  "ic-agent 0.37.1",
  "ic-base-types",
+ "ic-btc-checker",
  "ic-btc-interface",
- "ic-btc-kyt",
  "ic-canister-client",
  "ic-ckbtc-agent",
- "ic-ckbtc-kyt",
  "ic-ckbtc-minter",
  "ic-config",
  "ic-icrc1-ledger",

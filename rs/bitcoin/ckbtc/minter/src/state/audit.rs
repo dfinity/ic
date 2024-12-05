@@ -23,7 +23,7 @@ pub fn accept_retrieve_btc_request(state: &mut CkBtcMinterState, request: Retrie
             .or_insert(vec![request.block_index]);
     }
     if let Some(kyt_provider) = request.kyt_provider {
-        *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;
+        *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.check_fee;
     }
 }
 

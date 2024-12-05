@@ -1,5 +1,5 @@
 [package]
-name = "ic-btc-kyt"
+name = "ic-btc-checker"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [[bin]]
-name = "ic-btc-kyt-canister"
+name = "ic-btc-checker-canister"
 path = "src/main.rs"
 
 [dependencies]
