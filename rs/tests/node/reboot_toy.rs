@@ -58,35 +58,15 @@ EOT
 
     // Reboot once to get things fully initialized
     node.vm().reboot();
-
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_unavailable().unwrap())
-    });
-
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
+    node.await_status_is_unavailable().unwrap();
+    node.await_status_is_healthy().unwrap();
 
     // Reboot again to measure timing
     let reboot_start = Instant::now();
 
     node.vm().reboot();
-
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_unavailable().unwrap())
-    });
-
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
+    node.await_status_is_unavailable().unwrap();
+    node.await_status_is_healthy().unwrap();
 
     let reboot_time = reboot_start.elapsed();
 
