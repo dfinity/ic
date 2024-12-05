@@ -386,10 +386,6 @@ dontaudit ic_canister_sandbox_t ic_canister_sandbox_t : process { signal };
 # Forbid the sandbox from checking certs
 dontaudit ic_canister_sandbox_t cert_t : file { read };
 
-# TODO: Remove before merging. Temporary for testing.
-require { type tmp_t; }
-mmap_read_files_pattern(ic_canister_sandbox_t, tmp_t, tmp_t)
-
 ###############################################################################
 # ic-https-outcalls-adapter
 
