@@ -41,7 +41,7 @@ pub async fn start_all_canisters(
                 .await
                 .unwrap_or_else(|_| {
                     panic!(
-                        "Starting canister_idx={} on subnet_idx={} failed.",
+                        "Starting canister_idx={} on subnet_idx={}",
                         canister_idx, subnet_idx
                     )
                 });
