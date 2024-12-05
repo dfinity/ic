@@ -1,10 +1,10 @@
 use bitcoin::{consensus::Decodable, Address, Transaction};
 use ic_btc_interface::Txid;
 use ic_btc_kyt::{
-    blocklist_contains, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
-    CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionResponse,
-    CheckTransactionRetriable, CheckTransactionStatus, KytArg, KytMode,
-    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs,
+    CheckTransactionIrrecoverableError, CheckTransactionResponse, CheckTransactionRetriable,
+    CheckTransactionStatus, KytArg, KytMode, CHECK_TRANSACTION_CYCLES_REQUIRED,
+    CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
 };
 use ic_canister_log::{export as export_logs, log};
 use ic_canisters_http_types as http;
@@ -22,6 +22,7 @@ mod providers;
 mod state;
 
 use fetch::{FetchEnv, FetchResult, TryFetchResult};
+use ic_btc_kyt::blocklist::is_blocked;
 use logs::{Log, LogEntry, Priority, DEBUG, WARN};
 use state::{get_config, set_config, Config, FetchGuardError, HttpGetTxError};
 
@@ -61,7 +62,7 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
         KytMode::AcceptAll => CheckAddressResponse::Passed,
         KytMode::RejectAll => CheckAddressResponse::Failed,
         KytMode::Normal => {
-            if blocklist_contains(&address) {
+            if is_blocked(&address) {
                 return CheckAddressResponse::Failed;
             }
             CheckAddressResponse::Passed
@@ -120,10 +121,13 @@ fn transform(raw: TransformArgs) -> HttpResponse {
 #[ic_cdk::init]
 fn init(arg: KytArg) {
     match arg {
-        KytArg::InitArg(init_arg) => set_config(
-            Config::new_and_validate(init_arg.btc_network, init_arg.kyt_mode)
-                .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err))),
-        ),
+        KytArg::InitArg(init_arg) => {
+            set_config(
+                Config::new_and_validate(init_arg.btc_network, init_arg.kyt_mode)
+                    .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err))),
+            );
+            load_lazy_blocklist();
+        }
         KytArg::UpgradeArg(_) => {
             ic_cdk::trap("cannot init canister state without init args");
         }
@@ -138,6 +142,7 @@ fn post_upgrade(arg: KytArg) {
                 let config = Config::new_and_validate(get_config().btc_network(), kyt_mode)
                     .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err)));
                 set_config(config);
+                load_lazy_blocklist();
             }
         }
         KytArg::InitArg(_) => ic_cdk::trap("cannot upgrade canister state without upgrade args"),
@@ -450,6 +455,10 @@ pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
             }
         }
     }
+}
+
+fn load_lazy_blocklist() {
+    let _address = ic_btc_kyt::blocklist::BTC_ADDRESS_BLOCKLIST.first();
 }
 
 fn main() {}

@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 
 LIB_SRCS = [
     "src/blocklist.rs",
+    "src/blocklist/tests.rs",
     "src/lib.rs",
     "src/types.rs",
 ]
@@ -18,6 +19,7 @@ rust_library(
         # Keep sorted.
         "@crate_index//:bitcoin_0_32",
         "@crate_index//:candid",
+        "@crate_index//:lazy_static",
         "@crate_index//:serde",
     ],
 )

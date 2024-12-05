@@ -69,9 +69,9 @@ fn should_display_statuses() {
     });
 
     let good_address = "bc1q4h3mm2r8cn3ceu6908j56jeava8rjywppjhukp";
-    let blocked_address = BTC_ADDRESS_BLOCKLIST[0];
+    let blocked_address = BTC_ADDRESS_BLOCKLIST[0].clone();
     let status_6 = Status::Fetched(Fetched {
-        input_addresses: parse_address(&[good_address, blocked_address]),
+        input_addresses: parse_address(&[good_address, &blocked_address.to_string()]),
     });
 
     let dashboard = DashboardTemplate {
