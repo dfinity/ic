@@ -136,7 +136,7 @@ pub struct AppSubnetRecoveryArgs {
     /// The method of uploading state. Possible values are either `local` (for a
     /// local recovery on the admin node) or the ipv6 address of the target node.
     /// Local recoveries allow us to skip a potentially expensive data transfer.
-    #[clap(long, value_parser=crate::upload_method_from_str)]
+    #[clap(long, value_parser=crate::util::upload_method_from_str)]
     pub upload_method: Option<UploadMethod>,
 
     /// Id of the chain key subnet used for resharing chain keys to the subnet to be recovered

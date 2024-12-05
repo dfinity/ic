@@ -28,7 +28,6 @@ use ssh_helper::SshHelper;
 use std::io::ErrorKind;
 use std::{
     net::IpAddr,
-    net::Ipv6Addr,
     path::{Path, PathBuf},
     process::Command,
     str::FromStr,
@@ -37,7 +36,7 @@ use std::{
 };
 use steps::*;
 use url::Url;
-use util::{block_on, parse_hex_str};
+use util::{block_on, parse_hex_str, UploadMethod};
 
 pub mod admin_helper;
 pub mod app_subnet_recovery;
@@ -887,23 +886,6 @@ impl Recovery {
             key_file: self.key_file.clone(),
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum UploadMethod {
-    Local,
-    Remote(IpAddr),
-}
-
-pub fn upload_method_from_str(s: &str) -> RecoveryResult<UploadMethod> {
-    if s == "local" {
-        return Ok(UploadMethod::Local);
-    }
-    Ok(UploadMethod::Remote(IpAddr::V6(
-        Ipv6Addr::from_str(s).map_err(|e| {
-            RecoveryError::UnexpectedError(format!("Unable to parse ipv6 address {:?}", e))
-        })?,
-    )))
 }
 
 pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetrics> {

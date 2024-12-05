@@ -4,7 +4,8 @@ use crate::{
     file_sync_helper::create_dir,
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
-    RecoveryArgs, RecoveryResult, UploadMethod, CUPS_DIR,
+    util::UploadMethod,
+    RecoveryArgs, RecoveryResult, CUPS_DIR,
 };
 use clap::Parser;
 use ic_base_types::SubnetId;
@@ -68,7 +69,7 @@ pub struct NNSRecoverySameNodesArgs {
     /// The method of uploading state. Possible values are either `local` (for a
     /// local recovery on the admin node) or the ipv6 address of the target node.
     /// Local recoveries allow us to skip a potentially expensive data transfer.
-    #[clap(long, value_parser=crate::upload_method_from_str)]
+    #[clap(long, value_parser=crate::util::upload_method_from_str)]
     pub upload_method: Option<UploadMethod>,
 
     /// If present the tool will start execution for the provided step, skipping the initial ones

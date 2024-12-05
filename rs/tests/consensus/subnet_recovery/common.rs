@@ -52,7 +52,8 @@ use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType},
     steps::Step,
-    NodeMetrics, Recovery, RecoveryArgs, UploadMethod,
+    util::UploadMethod,
+    NodeMetrics, Recovery, RecoveryArgs,
 };
 use ic_recovery::{file_sync_helper, get_node_metrics};
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};

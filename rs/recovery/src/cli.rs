@@ -10,8 +10,9 @@ use crate::{
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryHelper,
     steps::Step,
-    upload_method_from_str, util,
+    util,
     util::subnet_id_from_str,
+    util::upload_method_from_str,
     NeuronArgs, RecoveryArgs, UploadMethod,
 };
 use core::fmt::Debug;

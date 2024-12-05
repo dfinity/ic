@@ -25,7 +25,8 @@ use ic_recovery::{
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryPollingStrategy,
     steps::{AdminStep, Step, UploadAndRestartStep},
-    NeuronArgs, Recovery, RecoveryArgs, UploadMethod, IC_REGISTRY_LOCAL_STORE,
+    util::UploadMethod,
+    NeuronArgs, Recovery, RecoveryArgs, IC_REGISTRY_LOCAL_STORE,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;

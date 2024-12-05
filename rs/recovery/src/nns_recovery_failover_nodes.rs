@@ -8,8 +8,8 @@ use crate::{
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
-    NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, UploadMethod, CUPS_DIR,
-    IC_REGISTRY_LOCAL_STORE,
+    util::UploadMethod,
+    NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
 };
 use clap::Parser;
 use ic_base_types::SubnetId;
@@ -83,7 +83,7 @@ pub struct NNSRecoveryFailoverNodesArgs {
     /// The method of uploading state. Possible values are either `local` (for a
     /// local recovery on the admin node) or the ipv6 address of the target node.
     /// Local recoveries allow us to skip a potentially expensive data transfer.
-    #[clap(long, value_parser=crate::upload_method_from_str)]
+    #[clap(long, value_parser=crate::util::upload_method_from_str)]
     pub upload_method: Option<UploadMethod>,
 
     /// IP address of the parent nns host to download the registry store from

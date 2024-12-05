@@ -34,7 +34,7 @@ use ic_consensus_system_test_utils::{
 use ic_recovery::nns_recovery_failover_nodes::{
     NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs, StepType,
 };
-use ic_recovery::{get_node_metrics, RecoveryArgs, UploadMethod};
+use ic_recovery::{get_node_metrics, util::UploadMethod, RecoveryArgs};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
