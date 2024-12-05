@@ -48,7 +48,7 @@ use slog::{info, Logger};
 use std::env;
 use std::time::Duration;
 use tokio::time::sleep;
-use xnet_test::Metrics;
+use xnet_test::{Metrics, StartArgs};
 
 const SUBNETS_COUNT: usize = 2;
 const CANISTERS_PER_SUBNET: usize = 3;
@@ -186,9 +186,13 @@ pub fn start_all_canisters(
             .enumerate()
             .flat_map(|(x, v)| v.iter().enumerate().map(move |(y, v)| (x, y, v)))
         {
-            let input = (&topology, canister_to_subnet_rate, payload_size_bytes);
+            let input = StartArgs {
+                network_topology: topology.clone(),
+                canister_to_subnet_rate,
+                payload_size_bytes,
+            };
             let _: String = canister
-                .update_("start", candid, input)
+                .update_("start", candid, (input,))
                 .await
                 .unwrap_or_else(|_| {
                     panic!(
