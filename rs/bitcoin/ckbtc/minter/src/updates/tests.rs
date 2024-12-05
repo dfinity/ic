@@ -3,12 +3,12 @@ mod update_balance {
     use crate::storage;
     use crate::test_fixtures::{
         ecdsa_public_key, get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
-        mock::MockCanisterRuntime, quarantined_utxo, KYT_CANISTER_ID, MINTER_CANISTER_ID,
+        mock::MockCanisterRuntime, quarantined_utxo, BTC_CHECKER_CANISTER_ID, MINTER_CANISTER_ID,
     };
     use crate::updates::update_balance;
     use crate::updates::update_balance::{UpdateBalanceArgs, UtxoStatus};
+    use ic_btc_checker::CheckTransactionResponse;
     use ic_btc_interface::{GetUtxosResponse, Utxo};
-    use ic_btc_kyt::CheckTransactionResponse;
     use icrc_ledger_types::icrc1::account::Account;
 
     #[tokio::test]
@@ -37,12 +37,12 @@ mod update_balance {
     }
 
     #[tokio::test]
-    async fn should_do_kyt_when_reevaluating_ignored_utxo() {
+    async fn should_do_btc_check_when_reevaluating_ignored_utxo() {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
         let ignored_utxo = ignored_utxo();
         mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone(), account));
-        mutate_state(|s| s.kyt_fee = ignored_utxo.value - 1);
+        mutate_state(|s| s.check_fee = ignored_utxo.value - 1);
         let events_before: Vec<_> = storage::events().collect();
 
         let mut runtime = MockCanisterRuntime::new();
@@ -84,7 +84,7 @@ mod update_balance {
         let account = ledger_account();
         let ignored_utxo = ignored_utxo();
         mutate_state(|s| audit::ignore_utxo(s, ignored_utxo.clone(), account));
-        mutate_state(|s| s.kyt_fee = ignored_utxo.value - 1);
+        mutate_state(|s| s.check_fee = ignored_utxo.value - 1);
         let events_before: Vec<_> = storage::events().collect();
 
         let mut runtime = MockCanisterRuntime::new();
@@ -168,8 +168,8 @@ mod update_balance {
         let account = ledger_account();
         let quarantined_utxo = quarantined_utxo();
         quarantine_utxo(quarantined_utxo.clone(), account);
-        let kyt_fee = read_state(|s| s.kyt_fee);
-        let minted_amount = quarantined_utxo.value - kyt_fee;
+        let check_fee = read_state(|s| s.check_fee);
+        let minted_amount = quarantined_utxo.value - check_fee;
         let events_before: Vec<_> = storage::events().collect();
 
         let mut runtime = MockCanisterRuntime::new();
@@ -220,7 +220,9 @@ mod update_balance {
         use crate::lifecycle::init::InitArgs;
         use ic_base_types::CanisterId;
         init_state(InitArgs {
-            kyt_principal: Some(CanisterId::unchecked_from_principal(KYT_CANISTER_ID.into())),
+            btc_checker_principal: Some(CanisterId::unchecked_from_principal(
+                BTC_CHECKER_CANISTER_ID.into(),
+            )),
             ..init_args()
         });
         mutate_state(|s| s.ecdsa_public_key = Some(ecdsa_public_key()))
@@ -250,8 +252,8 @@ mod update_balance {
         runtime
             .expect_check_transaction()
             .times(1)
-            .withf(move |kyt_principal, utxo_, _cycles| {
-                kyt_principal == &KYT_CANISTER_ID && utxo_ == &utxo
+            .withf(move |btc_checker_principal, utxo_, _cycles| {
+                btc_checker_principal == &BTC_CHECKER_CANISTER_ID && utxo_ == &utxo
             })
             .return_const(Ok(response));
     }

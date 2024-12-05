@@ -44,7 +44,7 @@ fn run_bench<M: criterion::measurement::Measurement>(
                     .with_subnet_type(SubnetType::Application)
                     .with_nns_subnet_id(nns_subnet_id)
                     .with_subnet_id(subnet_id)
-                    .with_idkg_key(MasterPublicKeyId::Ecdsa(ecdsa_key.clone()))
+                    .with_chain_key(MasterPublicKeyId::Ecdsa(ecdsa_key.clone()))
                     .build();
                 let test_canister = env
                     .install_canister_with_cycles(

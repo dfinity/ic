@@ -8,7 +8,7 @@ use crate::{
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
         governance_error::ErrorType,
-        GovernanceError, Neuron as NeuronProto, Topic,
+        GovernanceError, Neuron as NeuronProto, Topic, VotingPowerEconomics,
     },
     storage::{
         neuron_indexes::{CorruptedNeuronIndexes, NeuronIndex},
@@ -411,7 +411,12 @@ impl NeuronStore {
         (
             self.heap_neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into_proto(now_seconds)))
+                .map(|(id, neuron)| {
+                    (
+                        id,
+                        neuron.into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
+                    )
+                })
                 .collect(),
             heap_topic_followee_index_to_proto(self.topic_followee_index),
         )
@@ -460,13 +465,25 @@ impl NeuronStore {
         let mut stable_neurons = with_stable_neuron_store(|stable_store| {
             stable_store
                 .range_neurons(..)
-                .map(|neuron| (neuron.id().id, neuron.into_proto(now_seconds)))
+                .map(|neuron| {
+                    (
+                        neuron.id().id,
+                        neuron.into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
+                    )
+                })
                 .collect::<BTreeMap<u64, NeuronProto>>()
         });
         let heap_neurons = self
             .heap_neurons
             .iter()
-            .map(|(id, neuron)| (*id, neuron.clone().into_proto(now_seconds)))
+            .map(|(id, neuron)| {
+                (
+                    *id,
+                    neuron
+                        .clone()
+                        .into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
+                )
+            })
             .collect::<BTreeMap<u64, NeuronProto>>();
 
         stable_neurons.extend(heap_neurons);
@@ -980,6 +997,7 @@ impl NeuronStore {
 
     pub fn create_ballots_for_standard_proposal(
         &self,
+        voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
     ) -> (
         HashMap<u64, Ballot>,
@@ -998,7 +1016,7 @@ impl NeuronStore {
                 return;
             }
 
-            let voting_power = neuron.deciding_voting_power(now_seconds);
+            let voting_power = neuron.deciding_voting_power(voting_power_economics, now_seconds);
             deciding_voting_power += voting_power as u128;
             potential_voting_power += neuron.potential_voting_power(now_seconds) as u128;
             ballots.insert(
@@ -1369,8 +1387,8 @@ impl NeuronStore {
 ///
 /// Returns where the scan should pick up from next time. I.e. the return value
 /// should be passed via start next time.
-#[allow(unused)] // This line will be removed soon...
 pub fn prune_some_following(
+    voting_power_economics: &VotingPowerEconomics,
     neuron_store: &mut NeuronStore,
     mut next: Bound<NeuronId>,
     mut carry_on: impl FnMut() -> bool,
@@ -1397,7 +1415,7 @@ pub fn prune_some_following(
         let result = neuron_store.with_neuron_mut(&current_neuron_id, |neuron| {
             // This is where the "real work" takes place. Everything else is to
             // keep the scan going.
-            neuron.prune_following(now_seconds);
+            neuron.prune_following(voting_power_economics, now_seconds);
         });
 
         // Log if somehow with_neuron_mut returns Err. This should not be
@@ -1405,8 +1423,8 @@ pub fn prune_some_following(
         // this line to be reached.
         if let Err(err) = result {
             println!(
-                "{}ERROR: Unable to find neuron {} while pruning following.",
-                LOG_PREFIX, current_neuron_id.id,
+                "{}ERROR: Unable to find neuron {} while pruning following: {:?}",
+                LOG_PREFIX, current_neuron_id.id, err,
             );
         }
 
