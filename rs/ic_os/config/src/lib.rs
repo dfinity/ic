@@ -59,10 +59,7 @@ mod tests {
             ipv4_config: None,
             domain_name: None,
         };
-        let logging = Logging {
-            elasticsearch_hosts: [""].join(" "),
-            elasticsearch_tags: None,
-        };
+        let logging = Logging::default();
         let icos_dev_settings = ICOSDevSettings::default();
         let icos_settings = ICOSSettings {
             node_reward_type: Some("type3.1".to_string()),
@@ -155,10 +152,7 @@ mod tests {
             "node_reward_type": "type3.1",
             "mgmt_mac": "EC:2A:72:31:A2:0C",
             "deployment_environment": "Mainnet",
-            "logging": {
-                "elasticsearch_hosts": "",
-                "elasticsearch_tags": "tag1 tag2"
-            },
+            "logging": {},
             "use_nns_public_key": true,
             "nns_urls": [
                 "http://localhost"
@@ -215,10 +209,7 @@ mod tests {
             "node_reward_type": "type3.1",
             "mgmt_mac": "EC:2A:72:31:A2:0C",
             "deployment_environment": "Mainnet",
-            "logging": {
-                "elasticsearch_hosts": "",
-                "elasticsearch_tags": "tag1 tag2"
-            },
+            "logging": {},
             "use_nns_public_key": true,
             "nns_urls": [
                 "http://localhost"
