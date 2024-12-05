@@ -11,12 +11,13 @@ use axum::{
     response::IntoResponse,
 };
 use candid::Principal;
+use ic_canister_client::Agent;
 use ic_types::CanisterId;
 use rate_limits_api::v1::{Action, RateLimitRule};
 use ratelimit::Ratelimiter;
 use tracing::warn;
 
-use super::fetcher::{FetchesRules, FileFetcher};
+use super::fetcher::{CanisterConfigFetcher, CanisterFetcher, FetchesRules, FileFetcher};
 
 use crate::{
     core::Run,
@@ -51,14 +52,15 @@ impl Limiter {
         }
     }
 
-    // pub fn new_from_canister(canister_id: Principal) -> Self {
-    //     let fetcher = Arc::new(FileFetcher(path));
+    pub fn new_from_canister(canister_id: CanisterId, agent: Agent) -> Self {
+        let config_fetcher = CanisterConfigFetcher(agent, canister_id);
+        let fetcher = Arc::new(CanisterFetcher(Arc::new(config_fetcher)));
 
-    //     Self {
-    //         fetcher,
-    //         buckets: ArcSwap::new(Arc::new(vec![])),
-    //     }
-    // }
+        Self {
+            fetcher,
+            buckets: ArcSwap::new(Arc::new(vec![])),
+        }
+    }
 
     fn process_rules(rules: Vec<RateLimitRule>) -> Vec<Bucket> {
         rules

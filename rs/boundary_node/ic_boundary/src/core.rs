@@ -278,7 +278,12 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let generic_limiter = if let Some(v) = &cli.rate_limiting.rate_limit_generic_file {
         Some(Arc::new(generic::Limiter::new_from_file(v.clone())))
     } else {
-        None
+        cli.rate_limiting.rate_limit_generic_canister_id.map(|x| {
+            Arc::new(generic::Limiter::new_from_canister(
+                x,
+                agent.clone().unwrap(),
+            ))
+        })
     };
 
     // HTTP Logs Anonymization

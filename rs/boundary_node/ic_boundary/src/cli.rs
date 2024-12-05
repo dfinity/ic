@@ -260,17 +260,18 @@ pub struct RateLimiting {
     ///
     /// - canister_id: aaaaa-aa
     ///   methods_regex: ^(foo|bar)$
-    ///   request_types:
-    ///   - query
+    ///   request_types: [query]
     ///   limit: 60/1s
+    ///
     /// - subnet_id: aaaaaa-aa
     ///   canister_id: aaaaa-aa
     ///   methods_regex: ^baz$
-    ///   limit: block (this blocks all requests)
+    ///   limit: block
     #[clap(env, long)]
     pub rate_limit_generic_file: Option<PathBuf>,
 
-    /// ID of the rate-limiting canister where to obtain the rules
+    /// ID of the rate-limiting canister where to obtain the rules.
+    /// If specified together with the file above - file takes precedence.
     #[clap(env, long)]
     pub rate_limit_generic_canister_id: Option<CanisterId>,
 }

@@ -113,6 +113,7 @@ impl FetchesRules for CanisterFetcher {
 
                 let rule = RateLimitRule::from_bytes_yaml(&raw)
                     .context(format!("unable to decode raw rule with id {}", x.id))?;
+
                 Ok(rule)
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -126,16 +127,17 @@ mod test {
     use std::time::Duration;
 
     use candid::Encode;
+    use indoc::indoc;
     use rate_limits_api::*;
     use regex::Regex;
 
     use super::*;
     use crate::test_utils::principal;
 
-    struct FakeConfigFetcher;
+    struct FakeConfigFetcherOk;
 
     #[async_trait]
-    impl FetchesConfig for FakeConfigFetcher {
+    impl FetchesConfig for FakeConfigFetcherOk {
         async fn fetch_config(&self) -> Result<Vec<u8>, Error> {
             let resp: GetConfigResponse = Ok(ConfigResponse {
                 version: 1,
@@ -147,19 +149,33 @@ mod test {
                         OutputRule {
                             id: "foobar".into(),
                             incident_id: "barfoo".into(),
-                            rule_raw: Some(b"canister_id: aaaaa-aa\nsubnet_id: 3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe\nmethods_regex: ^foo|bar$\nlimit: block\n".into()),
+                            rule_raw: Some(indoc! {"
+                                canister_id: aaaaa-aa
+                                subnet_id: 3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe
+                                methods_regex: ^foo|bar$
+                                limit: block
+                            "}.into()),
                             description: None
                         },
                         OutputRule {
                             id: "foobaz".into(),
                             incident_id: "barfoo".into(),
-                            rule_raw: Some(b"canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai\nsubnet_id: 3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe\nmethods_regex: ^baz|bax$\nlimit: 1/10s\n".into()),
+                            rule_raw: Some(indoc! {"
+                                canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
+                                subnet_id: 3hhby-wmtmw-umt4t-7ieyg-bbiig-xiylg-sblrt-voxgt-bqckd-a75bf-rqe
+                                methods_regex: ^baz|bax$
+                                limit: 1/10s
+                            "}.into()),
                             description: None
                         },
                         OutputRule {
                             id: "deadbeef".into(),
                             incident_id: "barfoo".into(),
-                            rule_raw: Some(b"canister_id: aaaaa-aa\nmethods_regex: ^foo|bax$\nlimit: 10/1m\n".into()),
+                            rule_raw: Some(indoc! {"
+                                canister_id: aaaaa-aa
+                                methods_regex: ^foo|bax$
+                                limit: 10/1m
+                            "}.into()),
                             description: None
                         },
                     ],
@@ -170,9 +186,61 @@ mod test {
         }
     }
 
+    struct FakeConfigFetcherBadSchema;
+
+    #[async_trait]
+    impl FetchesConfig for FakeConfigFetcherBadSchema {
+        async fn fetch_config(&self) -> Result<Vec<u8>, Error> {
+            let resp: GetConfigResponse = Ok(ConfigResponse {
+                version: 1,
+                active_since: 0,
+                config: OutputConfig {
+                    schema_version: SCHEMA_VERSION + 1,
+                    is_redacted: false,
+                    rules: vec![],
+                },
+            });
+
+            Ok(Encode!(&resp).unwrap())
+        }
+    }
+
+    struct FakeConfigFetcherNoneRule;
+
+    #[async_trait]
+    impl FetchesConfig for FakeConfigFetcherNoneRule {
+        async fn fetch_config(&self) -> Result<Vec<u8>, Error> {
+            let resp: GetConfigResponse = Ok(ConfigResponse {
+                version: 1,
+                active_since: 0,
+                config: OutputConfig {
+                    schema_version: SCHEMA_VERSION,
+                    is_redacted: false,
+                    rules: vec![OutputRule {
+                        id: "foobar".into(),
+                        incident_id: "barfoo".into(),
+                        rule_raw: None,
+                        description: None,
+                    }],
+                },
+            });
+
+            Ok(Encode!(&resp).unwrap())
+        }
+    }
+
     #[tokio::test]
     async fn test_canister_fetcher() {
-        let canister_fetcher = CanisterFetcher(Arc::new(FakeConfigFetcher));
+        // Check bad schema
+        let canister_fetcher = CanisterFetcher(Arc::new(FakeConfigFetcherBadSchema));
+        assert!(canister_fetcher.fetch_rules().await.is_err());
+
+        // Check missing rule
+        let canister_fetcher = CanisterFetcher(Arc::new(FakeConfigFetcherNoneRule));
+        assert!(canister_fetcher.fetch_rules().await.is_err());
+
+        // Check correct rules parsing
+        let canister_fetcher = CanisterFetcher(Arc::new(FakeConfigFetcherOk));
         let rules = canister_fetcher.fetch_rules().await.unwrap();
 
         assert_eq!(
