@@ -122,7 +122,22 @@ pub async fn rejoin_test_large_state(
     agent_node: IcNodeSnapshot,
     nodes_to_kill: impl Iterator<Item = IcNodeSnapshot>,
 ) {
-    install_many_canisters(env, &agent_node, num_canisters).await;
+    let logger = env.logger();
+    info!(
+        logger,
+        "Installing universal canister on a node {} ...",
+        agent_node.get_public_url()
+    );
+    let agent = agent_node.build_default_agent_async().await;
+    let universal_canister =
+        UniversalCanister::new_with_retries(&agent, agent_node.effective_canister_id(), &logger)
+            .await;
+
+    let endpoint_runtime = runtime_from_url(
+        agent_node.get_public_url(),
+        agent_node.effective_canister_id(),
+    );
+    install_many_canisters(env, &endpoint_runtime, num_canisters).await;
 }
 
 pub async fn fetch_metrics<T>(
@@ -223,17 +238,26 @@ async fn install_statesync_test_canisters(
 
 async fn install_many_canisters(
     env: TestEnv,
-    node: &IcNodeSnapshot,
+    endpoint_runtime: &Runtime,
     num_canisters: usize,
 ) {
     let logger = env.logger();
+    let wasm = Wasm::from_file("rs/tests.counter.wat");
     for i in 0..1000 {
         let mut futures: Vec<_> = Vec::new();
         for canister_idx in 0..20 {
+            let new_wasm = wasm.clone();
             let new_logger = logger.clone();
             let id = i * 20 + canister_idx;
             futures.push(async move {
-                node.create_and_install_canister_with_arg("rs/tests/counter.wat", None);
+                let canister = new_wasm
+                    .clone()
+                    .install(endpoint_runtime)
+                    .bytes(Vec::new())
+                    .await
+                    .map_err(|_| {
+                        info!(new_logger, "Installation of the canister_idx={} failed.", id);
+                    });
                 info!(
                     new_logger,
                     "Installed canister {}",
@@ -242,7 +266,7 @@ async fn install_many_canisters(
             });
         }
         join_all(futures).await;
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
     }
 
 }

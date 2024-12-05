@@ -954,7 +954,7 @@ impl IcNodeSnapshot {
                 .map_err(|err| format!("Couldn't install canister: {}", err))?;
             Ok::<_, String>(canister_id)
         })
-        .unwrap_or(Principal::anonymous())
+        .expect("Could not install canister")
     }
 }
 
