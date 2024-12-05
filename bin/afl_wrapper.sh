@@ -18,6 +18,11 @@ if [[ -z "$OUTPUT_DIR" ]]; then
     OUTPUT_DIR=$(mktemp -d)
 fi
 
+# stderr duplicate
+if [[ -z "$STDERR_DUPLICATE" ]]; then
+    STDERR_DUPLICATE=$(mktemp)
+fi
+
 cleanup() {
     echo "Input directory ${INPUT_DIR}"
     echo "Output directory ${OUTPUT_DIR}"
@@ -101,7 +106,9 @@ function afl_env() {
 if [[ ! -z "$AFL_PARALLEL" ]]; then
     trap cleanup EXIT
     # master fuzzer
-    afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P exploit -p explore -M fuzzer1 ${@:2} -- $1 </dev/null &>/dev/null &
+    STDERR_DUPLICATE="$OUTPUT_DIR/stderr_1.txt"
+    touch $STDERR_DUPLICATE
+    AFL_DRIVER_STDERR_DUPLICATE_FILENAME=$STDERR_DUPLICATE afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P exploit -p explore -M fuzzer1 ${@:2} -- $1 </dev/null &>/dev/null &
 
     for i in $(seq 2 $AFL_PARALLEL); do
         probability=$((100 * $i / $AFL_PARALLEL))
@@ -150,7 +157,9 @@ if [[ ! -z "$AFL_PARALLEL" ]]; then
             strategy="explore"
         fi
 
-        afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P $strategy -p $power_schedule -S fuzzer$i ${@:2} -- $1 </dev/null &>/dev/null &
+        STDERR_DUPLICATE="$OUTPUT_DIR/stderr_$i.txt"
+        touch $STDERR_DUPLICATE
+        AFL_DRIVER_STDERR_DUPLICATE_FILENAME=$STDERR_DUPLICATE afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P $strategy -p $power_schedule -S fuzzer$i ${@:2} -- $1 </dev/null &>/dev/null &
     done
 
     watch -n 5 --color "afl-whatsup -s -d $OUTPUT_DIR"
@@ -158,5 +167,5 @@ else
     # if AFL_PARALLEL is not set
     # run a single instance
     # single instance will mimic the master fuzzer
-    afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P exploit -p explore ${@:2} -- $1
+    AFL_DRIVER_STDERR_DUPLICATE_FILENAME=$STDERR_DUPLICATE afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P exploit -p explore ${@:2} -- $1
 fi
