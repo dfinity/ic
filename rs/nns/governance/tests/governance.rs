@@ -7801,6 +7801,10 @@ fn test_network_economics_proposal() {
                     url: "".to_string(),
                     action: Some(proposal::Action::ManageNetworkEconomics(NetworkEconomics {
                         reject_cost_e8s: 56789,
+                        voting_power_economics: Some(VotingPowerEconomics {
+                            start_reducing_voting_power_after_seconds: Some(42),
+                            clear_following_after_seconds: Some(4242),
+                        }),
                         ..Default::default()
                     })),
                 }))),
@@ -7824,16 +7828,16 @@ fn test_network_economics_proposal() {
 
     // Make sure only that value changed.
     assert_eq!(
-        gov.heap_data.economics.as_ref().unwrap().reject_cost_e8s,
-        56789
-    );
-    assert_eq!(
-        gov.heap_data
-            .economics
-            .as_ref()
-            .unwrap()
-            .neuron_minimum_stake_e8s,
-        1234
+        gov.heap_data.economics.as_ref().unwrap(),
+        NetworkEconomics {
+            reject_cost_e8s: 56789,
+            neuron_minimum_stake_e8s: 1234,
+            voting_power_economics: Some(VotingPowerEconomics {
+                start_reducing_voting_power_after_seconds: Some(42),
+                clear_following_after_seconds: Some(4242),
+            },
+            ..NetworkEconomics::with_default_values()
+        },
     );
 }
 

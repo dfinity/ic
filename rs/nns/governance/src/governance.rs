@@ -275,6 +275,58 @@ impl NetworkEconomics {
             voting_power_economics: Some(VotingPowerEconomics::with_default_values()),
         }
     }
+
+    /// Returns a modified copy of self where fields containing the default
+    /// value are replaced with the value from defaults. In particular, 0 and
+    /// None are replaced.
+    fn inherit_from(&self, defaults: &Self) -> Self {
+        /// Returns ours if it is nonzero. Otherwise, returns default.
+        fn inherit_from<Primitive>(ours: Primitive, default: Primitive) -> Primitive
+        where
+            Primitive:
+                Default
+                + Eq
+                // Not actually used. This is just to make sure we only support numbers.
+                // This could be relaxed (i.e. deleted) later.
+                + std::ops::Add,
+        {
+            if ours == Primitive::default() {
+                return default;
+            }
+
+            ours
+        }
+
+        // Ideally, we would recurse into T, because otherwise, you have to set
+        // a bundle of parameters all at once. In other words, the current
+        // implementation does not support setting individual subfields, a la
+        // carte.
+        fn inherit_from_option<T>(ours: &Option<T>, defaults: &Option<T>) -> T
+        where
+            T: Clone,
+        {
+            if ours.is_none() {
+                ours
+            } else {
+                defaults
+            }
+            .clone()
+        }
+
+        Self {
+            reject_cost_e8s: inherit_from(self.reject_cost_e8s, defaults.reject_cost_e8s),
+            neuron_minimum_stake_e8s: inherit_from(self.neuron_minimum_stake_e8s, defaults.neuron_minimum_stake_e8s),
+            neuron_management_fee_per_proposal_e8s: inherit_from(self.neuron_management_fee_per_proposal_e8s, defaults.neuron_management_fee_per_proposal_e8s),
+            minimum_icp_xdr_rate: inherit_from(self.minimum_icp_xdr_rate, defaults.minimum_icp_xdr_rate),
+            neuron_spawn_dissolve_delay_seconds: inherit_from(self.neuron_spawn_dissolve_delay_seconds, defaults.neuron_spawn_dissolve_delay_seconds),
+            maximum_node_provider_rewards_e8s: inherit_from(self.maximum_node_provider_rewards_e8s, defaults.maximum_node_provider_rewards_e8s),
+            transaction_fee_e8s: inherit_from(self.transaction_fee_e8s, defaults.transaction_fee_e8s),
+            max_proposals_to_keep_per_topic: inherit_from(self.max_proposals_to_keep_per_topic, defaults.max_proposals_to_keep_per_topic),
+
+            neurons_fund_economics: inherit_from_option(&self.neurons_fund_economics, &defaults.neurons_fund_economics),
+            voting_power_economics: inherit_from_option(&self.voting_power_economics, &defaults.voting_power_economics),
+        }
+    }
 }
 
 impl VotingPowerEconomics {
@@ -4596,46 +4648,8 @@ impl Governance {
                     Err(e) => self.set_proposal_execution_status(pid, Err(e)),
                 }
             }
-            Action::ManageNetworkEconomics(ne) => {
-                if let Some(economics) = &mut self.heap_data.economics {
-                    // The semantics of the proposal is to modify all values specified with a
-                    // non-default value in the proposed new `NetworkEconomics`.
-                    if ne.reject_cost_e8s != 0 {
-                        economics.reject_cost_e8s = ne.reject_cost_e8s
-                    }
-                    if ne.neuron_minimum_stake_e8s != 0 {
-                        economics.neuron_minimum_stake_e8s = ne.neuron_minimum_stake_e8s
-                    }
-                    if ne.neuron_management_fee_per_proposal_e8s != 0 {
-                        economics.neuron_management_fee_per_proposal_e8s =
-                            ne.neuron_management_fee_per_proposal_e8s
-                    }
-                    if ne.minimum_icp_xdr_rate != 0 {
-                        economics.minimum_icp_xdr_rate = ne.minimum_icp_xdr_rate
-                    }
-                    if ne.neuron_spawn_dissolve_delay_seconds != 0 {
-                        economics.neuron_spawn_dissolve_delay_seconds =
-                            ne.neuron_spawn_dissolve_delay_seconds
-                    }
-                    if ne.maximum_node_provider_rewards_e8s != 0 {
-                        economics.maximum_node_provider_rewards_e8s =
-                            ne.maximum_node_provider_rewards_e8s
-                    }
-                    if ne.transaction_fee_e8s != 0 {
-                        economics.transaction_fee_e8s = ne.transaction_fee_e8s
-                    }
-                    if ne.max_proposals_to_keep_per_topic != 0 {
-                        economics.max_proposals_to_keep_per_topic =
-                            ne.max_proposals_to_keep_per_topic
-                    }
-                    if ne.neurons_fund_economics.is_some() {
-                        economics.neurons_fund_economics = ne.neurons_fund_economics
-                    }
-                } else {
-                    // If for some reason, we don't have an
-                    // 'economics' proto, use the proposed one.
-                    self.heap_data.economics = Some(ne)
-                }
+            Action::ManageNetworkEconomics(network_economics) => {
+                self.perform_manage_network_economics(network_economics);
                 self.set_proposal_execution_status(pid, Ok(()));
             }
             // A motion is not executed, just recorded for posterity.
@@ -4799,6 +4813,20 @@ impl Governance {
                 format!("Proposal action {:?} is obsolete.", obsolete_action),
             )),
         );
+    }
+
+    fn perform_manage_network_economics(&mut self, new_network_economics: NetworkEconomics) {
+        let Some(original_network_economics) = &self.heap_data.economics else {
+            println!(
+                "{}ERROR: NetworkEconomics was not set. Setting to proposed NetworkEconomics:\n{:#?}",
+                LOG_PREFIX, new_network_economics,
+            );
+            self.heap_data.economics = Some(new_network_economics);
+            return;
+        };
+
+        self.heap_data.economics =
+            Some(new_network_economics.inherit_from(&original_network_economics));
     }
 
     async fn perform_install_code(&mut self, proposal_id: u64, install_code: InstallCode) {
