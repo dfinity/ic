@@ -201,6 +201,7 @@ impl Governance {
         for proposal_id in proposals_with_new_votes_cast {
             self.recompute_proposal_tally(proposal_id, self.env.now());
             self.process_proposal(proposal_id.id);
+
             if let Err(e) = noop_self_call_if_over_instructions(
                 SOFT_VOTING_INSTRUCTIONS_LIMIT,
                 Some(HARD_VOTING_INSTRUCTIONS_LIMIT),
@@ -557,8 +558,8 @@ mod test {
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
         pb::v1::{
-            neuron::Followees, Ballot, Governance as GovernanceProto, ProposalData, Tally, Topic,
-            Vote, VotingPowerEconomics,
+            neuron::Followees, proposal::Action, Ballot, Governance as GovernanceProto, Motion,
+            Proposal, ProposalData, Tally, Topic, Vote, VotingPowerEconomics,
         },
         storage::with_voting_state_machines_mut,
         test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
@@ -1271,5 +1272,97 @@ mod test {
                 .unwrap();
             assert_eq!(recent_ballots.len(), 1, "Neuron {} has recent ballots", i);
         }
+    }
+
+    #[test]
+    fn test_process_voting_state_machines_processes_votes_and_executes_proposals() {
+        let topic = Topic::Governance;
+        let mut neurons = BTreeMap::new();
+        let mut ballots = HashMap::new();
+
+        for i in 1..=9 {
+            let mut followees = HashMap::new();
+            if i != 1 {
+                // cascading followees
+                followees.insert(
+                    topic as i32,
+                    Followees {
+                        followees: vec![NeuronId { id: i - 1 }],
+                    },
+                );
+            }
+            add_neuron_with_ballot(&mut neurons, &mut ballots, make_neuron(i, 100, followees));
+        }
+
+        let motion = Motion {
+            motion_text: "".to_string(),
+        };
+        let action = Action::Motion(motion);
+        let proposal = Proposal {
+            title: Some("".to_string()),
+            summary: "".to_string(),
+            url: "".to_string(),
+            action: Some(action),
+        };
+        let governance_proto = GovernanceProto {
+            proposals: btreemap! {
+                1 => ProposalData {
+                    id: Some(ProposalId {id: 1}),
+                    ballots,
+                    proposal: Some(proposal),
+                    ..Default::default()
+                }
+            },
+            neurons: neurons
+                .into_iter()
+                .map(|(id, n)| (id, n.into_proto(u64::MAX)))
+                .collect(),
+            ..Default::default()
+        };
+        let mut governance = Governance::new(
+            governance_proto,
+            Box::new(MockEnvironment::new(Default::default(), 1234)),
+            Box::new(StubIcpLedger {}),
+            Box::new(StubCMC {}),
+        );
+
+        governance.record_neuron_vote(ProposalId { id: 1 }, NeuronId { id: 1 }, Vote::Yes, topic);
+
+        with_voting_state_machines_mut(|voting_state_machines| {
+            assert!(!voting_state_machines.machines.is_empty(),);
+            voting_state_machines.with_machine(ProposalId { id: 1 }, topic, |machine| {
+                assert!(!machine.is_voting_finished());
+            });
+        });
+
+        // In test mode, we are always saying we're over the soft-message limit, so we know that
+        // this will hit that limit and not record any recent ballots.
+        governance
+            .process_voting_state_machines()
+            .now_or_never()
+            .unwrap();
+
+        with_voting_state_machines_mut(|voting_state_machines| {
+            assert!(voting_state_machines.machines.is_empty(),);
+        });
+
+        let ballots = &governance.heap_data.proposals.get(&1).unwrap().ballots;
+        assert_eq!(ballots.len(), 9);
+        for (_, ballot) in ballots.iter() {
+            assert_eq!(ballot.vote, Vote::Yes as i32);
+        }
+
+        for i in 1..=9 {
+            let recent_ballots = governance
+                .neuron_store
+                .with_neuron(&NeuronId { id: i }, |n| n.recent_ballots.clone())
+                .unwrap();
+            assert_eq!(recent_ballots.len(), 1, "Neuron {} has recent ballots", i);
+        }
+
+        let proposal = governance.heap_data.proposals.get(&1).unwrap();
+        assert_eq!(proposal.latest_tally.unwrap().yes, 900);
+        // It is now "decided"
+        assert_eq!(proposal.decided_timestamp_seconds, 1234);
     }
 }
