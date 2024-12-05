@@ -107,7 +107,7 @@ struct ConnectionManager {
 
     // Local state.
     /// Task joinmap that holds stores a connecting tasks keys by peer id.
-    outbound_connecting: JoinMap<NodeId, Result<ConnectionWithPeerId, ConnectionEstablishError>>,
+    outbound_connecting: JoinMap<NodeId, Result<Connection, ConnectionEstablishError>>,
     /// Task joinset on which incoming connection requests are spawned. This is not a JoinMap
     /// because the peerId is not available until the TLS handshake succeeded.
     inbound_connecting: JoinSet<Result<ConnectionWithPeerId, ConnectionEstablishError>>,
@@ -302,9 +302,12 @@ impl ConnectionManager {
                 },
                 Some(conn_res) = self.outbound_connecting.join_next() => {
                     match conn_res {
-                        Ok(Ok(conn_out, peer_id)) => self.handle_established_connection(conn_out),
+                        Ok((Ok(conn), peer_id)) => self.handle_established_connection(conn, peer_id),
                         // retry
-                        Ok(Err(err)) =>  self.handled_closed_conn(peer_id, CONNECT_RETRY_BACKOFF),
+                        Ok((Err(err), peer_id)) =>  {
+                            info!(self.log, "Failed to establish outbound connection {:?}.", err);
+                            self.handled_closed_conn(peer_id, CONNECT_RETRY_BACKOFF);
+                        }
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
@@ -315,9 +318,8 @@ impl ConnectionManager {
                 },
                 Some(conn_res) = self.inbound_connecting.join_next() => {
                     match conn_res {
-                        Ok(conn_out) => {
-                            self.handle_connecting_result(conn_out, None),
-                        }
+                        Ok(Ok(conn)) => self.handle_established_connection(conn.connection, conn.peer_id),
+                        Ok(Err(err)) => info!(self.log, "Failed to establish inbound connection {:?}.", err),
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
@@ -328,7 +330,7 @@ impl ConnectionManager {
                 },
                 Some(active_result) = self.active_connections.join_next() => {
                     match active_result {
-                        Ok((_, peer_id)) => self.handled_closed_conn(peer_id),
+                        Ok((_, peer_id)) => self.handled_closed_conn(peer_id, Duration::from_secs(0)),
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
@@ -463,10 +465,7 @@ impl ConnectionManager {
                         cause,
                     })?;
 
-            Ok::<_, ConnectionEstablishError>(ConnectionWithPeerId {
-                peer_id,
-                connection: established,
-            })
+            Ok::<_, ConnectionEstablishError>(established)
         };
 
         let timeout_conn_fut = async move {
@@ -484,14 +483,7 @@ impl ConnectionManager {
     /// added to peer map. If unsuccessful and this node is dialer the
     /// connection will be retried. `peer` is `Some` if this node was
     /// the dialer. I.e lower node id.
-    fn handle_established_connection(
-        &mut self,
-        ConnectionWithPeerId {
-            peer_id,
-            connection,
-        }: ConnectionWithPeerId,
-        peer_id: Option<NodeId>,
-    ) {
+    fn handle_established_connection(&mut self, connection: Connection, peer_id: NodeId) {
         self.metrics
             .connection_results_total
             .with_label_values(&[CONNECTION_RESULT_SUCCESS_LABEL])
