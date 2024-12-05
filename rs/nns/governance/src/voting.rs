@@ -20,13 +20,19 @@ impl Governance {
         vote_of_neuron: Vote,
         topic: Topic,
     ) {
+        let voting_started = self.env.now();
+
         let neuron_store = &mut self.neuron_store;
-        let ballots = &mut self
-            .heap_data
-            .proposals
-            .get_mut(&proposal_id.id)
-            .unwrap()
-            .ballots;
+        let ballots = match self.heap_data.proposals.get_mut(&proposal_id.id) {
+            Some(proposal) => &mut proposal.ballots,
+            None => {
+                // This is a critical error, but there is nothing that can be done about it
+                // at this place.  We somehow have a vote for a proposal that doesn't exist.
+                eprintln!("error in cast_vote_and_cascade_follow when gathering induction votes: Proposal not found");
+                return;
+            }
+        };
+
         // Use of thread local storage to store the state machines prevents
         // more than one state machine per proposal, which limits the overall
         // memory usage for voting, which will be relevant when this can be used
@@ -44,6 +50,29 @@ impl Governance {
 
             voting_state_machines.remove_if_done(&proposal_id);
         });
+        // We use the time from the beginning of the function to retain the behaviors needed
+        // for wait for quiet even when votes can be processed asynchronously.
+        self.recompute_proposal_tally(proposal_id, voting_started);
+    }
+
+    /// Recompute the tally for a proposal, using the time provided as the current time.
+    fn recompute_proposal_tally(&mut self, proposal_id: ProposalId, now: u64) {
+        let voting_period_seconds_fn = self.voting_period_seconds();
+
+        let proposal = match self.heap_data.proposals.get_mut(&proposal_id.id) {
+            None => {
+                // This is a critical error, but there is nothing that can be done about it
+                // at this place.  We somehow have a vote for a proposal that doesn't exist.
+                eprintln!(
+                    "error in recompute_proposal_tally: Proposal not found: {}",
+                    proposal_id.id
+                );
+                return;
+            }
+            Some(proposal) => &mut *proposal,
+        };
+        let topic = proposal.topic();
+        proposal.recompute_tally(now, voting_period_seconds_fn(topic));
     }
 }
 
@@ -229,7 +258,7 @@ mod test {
         governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
-        pb::v1::{neuron::Followees, Ballot, ProposalData, Topic, Vote},
+        pb::v1::{neuron::Followees, Ballot, ProposalData, Tally, Topic, Vote},
         test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
         voting::ProposalVotingStateMachine,
     };
@@ -446,7 +475,7 @@ mod test {
         };
         let mut governance = Governance::new(
             governance_proto,
-            Box::new(MockEnvironment::new(Default::default(), 0)),
+            Box::new(MockEnvironment::new(Default::default(), 234)),
             Box::new(StubIcpLedger {}),
             Box::new(StubCMC {}),
         );
@@ -477,6 +506,22 @@ mod test {
                 5 => make_ballot(deciding_voting_power(NeuronId { id: 5 }), Vote::Yes),
                 6 => make_ballot(deciding_voting_power(NeuronId { id: 6 }), Vote::Unspecified),
             }
+        );
+        let expected_tally = Tally {
+            timestamp_seconds: 234,
+            yes: 530,
+            no: 0,
+            total: 636,
+        };
+        assert_eq!(
+            governance
+                .heap_data
+                .proposals
+                .get(&1)
+                .unwrap()
+                .latest_tally
+                .unwrap(),
+            expected_tally
         );
     }
 

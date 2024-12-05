@@ -1,11 +1,13 @@
+use candid::Principal;
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
 use futures::{future::join_all, Future};
+use ic_cdk::api::management_canister::provisional::CanisterId;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::get_dependency_path;
 use slog::info;
-use std::env;
-use xnet_test::CanisterId;
+use std::{convert::TryFrom, env};
+use xnet_test::StartArgs;
 
 /// Concurrently calls `start` on all canisters in `canisters` with the
 /// given parameters.
@@ -16,7 +18,11 @@ pub async fn start_all_canisters(
 ) {
     let topology: Vec<Vec<CanisterId>> = canisters
         .iter()
-        .map(|x| x.iter().map(|y| y.canister_id_vec8()).collect())
+        .map(|x| {
+            x.iter()
+                .map(|y| Principal::try_from(y.canister_id_vec8()).unwrap())
+                .collect()
+        })
         .collect();
     let mut futures = vec![];
     for (subnet_idx, canister_idx, canister) in canisters
@@ -24,15 +30,19 @@ pub async fn start_all_canisters(
         .enumerate()
         .flat_map(|(x, v)| v.iter().enumerate().map(move |(y, v)| (x, y, v)))
     {
-        let input = (&topology, canister_to_subnet_rate, payload_size_bytes);
+        let input = StartArgs {
+            network_topology: topology.clone(),
+            canister_to_subnet_rate,
+            payload_size_bytes,
+        };
         futures.push(async move {
             let _: String = canister
-                .update_("start", candid, input)
+                .update_("start", candid, (input,))
                 .await
-                .unwrap_or_else(|_| {
+                .unwrap_or_else(|e| {
                     panic!(
-                        "Starting canister_idx={} on subnet_idx={}",
-                        canister_idx, subnet_idx
+                        "Starting canister_idx={} on subnet_idx={} failed because of: {}",
+                        canister_idx, subnet_idx, e
                     )
                 });
         });

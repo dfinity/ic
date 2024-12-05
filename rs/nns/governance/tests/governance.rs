@@ -5737,7 +5737,7 @@ fn test_seed_neuron_split() {
 
 // Spawn neurons has the least priority in the periodic tasks, so we need to run
 // them often enough to make sure it happens.
-fn run_periodic_tasks_on_governance_often_enough_to_spawn(gov: &mut Governance) {
+fn run_periodic_tasks_often_enough_to_update_maturity_modulation(gov: &mut Governance) {
     for _i in 0..5 {
         gov.run_periodic_tasks().now_or_never();
     }
@@ -5750,6 +5750,7 @@ fn run_periodic_tasks_on_governance_often_enough_to_spawn(gov: &mut Governance) 
 /// * The spawned neuron always has neuron_type: None, even if the parent's
 ///   neuron_type is NeuronType::Seed.
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_spawn() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
@@ -5766,6 +5767,7 @@ fn test_neuron_spawn() {
         from,
         nonce,
     );
+    run_periodic_tasks_often_enough_to_update_maturity_modulation(&mut gov);
 
     let now = driver.now();
     assert_eq!(
@@ -5898,13 +5900,13 @@ fn test_neuron_spawn() {
     let creation_timestamp = driver.now();
 
     // Running periodic tasks shouldn't cause the ICP to be minted.
-    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
     driver.assert_num_neuron_accounts_exist(1);
 
     // Advance the time by one week, should cause the neuron's ICP
     // to be minted.
     driver.advance_time_by(7 * 86400);
-    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
     driver.assert_num_neuron_accounts_exist(2);
 
     let child_neuron = gov
@@ -5937,6 +5939,7 @@ fn test_neuron_spawn() {
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_spawn_with_subaccount() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
@@ -5953,6 +5956,7 @@ fn test_neuron_spawn_with_subaccount() {
         from,
         nonce,
     );
+    run_periodic_tasks_often_enough_to_update_maturity_modulation(&mut gov);
 
     let now = driver.now();
     assert_eq!(
@@ -6035,7 +6039,7 @@ fn test_neuron_spawn_with_subaccount() {
     driver.assert_num_neuron_accounts_exist(1);
 
     // Running periodic tasks shouldn't cause the ICP to be minted.
-    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
     driver.assert_num_neuron_accounts_exist(1);
 
     let parent_neuron = gov
@@ -6047,7 +6051,7 @@ fn test_neuron_spawn_with_subaccount() {
     // Advance the time by one week, should cause the neuron's ICP
     // to be minted.
     driver.advance_time_by(7 * 86400);
-    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
     driver.assert_num_neuron_accounts_exist(2);
 
     let child_neuron = gov
@@ -6132,6 +6136,7 @@ fn assert_neuron_spawn_partial(
         from,
         nonce,
     );
+    run_periodic_tasks_often_enough_to_update_maturity_modulation(&mut gov);
 
     let neuron = gov
         .with_neuron(&id, |neuron| neuron.clone())
@@ -6193,7 +6198,7 @@ fn assert_neuron_spawn_partial(
         .expect("The parent neuron is missing");
 
     // Running periodic tasks shouldn't cause the ICP to be minted.
-    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
     driver.assert_num_neuron_accounts_exist(1);
 
     // Some maturity should be remaining on the parent neuron.
@@ -6205,7 +6210,7 @@ fn assert_neuron_spawn_partial(
     // Advance the time by one week, should cause the neuron's ICP
     // to be minted.
     driver.advance_time_by(7 * 86400);
-    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
     driver.assert_num_neuron_accounts_exist(2);
 
     let child_neuron = gov
