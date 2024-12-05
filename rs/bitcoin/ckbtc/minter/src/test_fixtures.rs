@@ -9,6 +9,7 @@ pub const MINTER_CANISTER_ID: Principal = Principal::from_slice(&[0, 0, 0, 0, 2,
 pub const BTC_CHECKER_CANISTER_ID: Principal =
     Principal::from_slice(&[0, 0, 0, 0, 3, 49, 1, 8, 2, 2]);
 
+#[allow(deprecated)]
 pub fn init_args() -> InitArgs {
     InitArgs {
         btc_network: BtcNetwork::Mainnet,
@@ -24,6 +25,8 @@ pub fn init_args() -> InitArgs {
         mode: crate::state::Mode::GeneralAvailability,
         btc_checker_principal: Some(CanisterId::from(0)),
         check_fee: None,
+        kyt_principal: None,
+        kyt_fee: None,
     }
 }
 

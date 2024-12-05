@@ -37,7 +37,7 @@ mod update_balance {
     }
 
     #[tokio::test]
-    async fn should_do_kyt_when_reevaluating_ignored_utxo() {
+    async fn should_do_btc_check_when_reevaluating_ignored_utxo() {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
         let ignored_utxo = ignored_utxo();

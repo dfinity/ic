@@ -192,7 +192,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
             .get()
             .into()
     });
-    let status = kyt_check_address(btc_checker_principal, args.address.clone()).await?;
+    let status = check_address(btc_checker_principal, args.address.clone()).await?;
     match status {
         BtcAddressCheckStatus::Tainted => {
             log!(
@@ -293,7 +293,7 @@ pub async fn retrieve_btc_with_approval(
             .into()
     });
 
-    match kyt_check_address(btc_checker_principal, parsed_address.display(btc_network)).await {
+    match check_address(btc_checker_principal, parsed_address.display(btc_network)).await {
         Err(error) => {
             return Err(RetrieveBtcWithApprovalError::GenericError {
                 error_message: format!(
@@ -522,7 +522,7 @@ pub enum BtcAddressCheckStatus {
     /// The bitcoin check found issues with the address in question.
     Tainted,
 }
-async fn kyt_check_address(
+async fn check_address(
     btc_checker_principal: Principal,
     address: String,
 ) -> Result<BtcAddressCheckStatus, RetrieveBtcError> {

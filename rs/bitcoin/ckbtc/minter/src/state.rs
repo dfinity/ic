@@ -430,6 +430,7 @@ pub enum ReimbursementReason {
 }
 
 impl CkBtcMinterState {
+    #[allow(deprecated)]
     pub fn reinit(
         &mut self,
         InitArgs {
@@ -442,6 +443,8 @@ impl CkBtcMinterState {
             mode,
             check_fee,
             btc_checker_principal,
+            kyt_principal: _,
+            kyt_fee,
         }: InitArgs,
     ) {
         self.btc_network = btc_network.into();
@@ -454,12 +457,15 @@ impl CkBtcMinterState {
         self.btc_checker_principal = btc_checker_principal;
         if let Some(check_fee) = check_fee {
             self.check_fee = check_fee;
+        } else if let Some(kyt_fee) = kyt_fee {
+            self.check_fee = kyt_fee;
         }
         if let Some(min_confirmations) = min_confirmations {
             self.min_confirmations = min_confirmations;
         }
     }
 
+    #[allow(deprecated)]
     pub fn upgrade(
         &mut self,
         UpgradeArgs {
@@ -469,6 +475,8 @@ impl CkBtcMinterState {
             mode,
             check_fee,
             btc_checker_principal,
+            kyt_principal: _,
+            kyt_fee,
         }: UpgradeArgs,
     ) {
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
@@ -498,6 +506,8 @@ impl CkBtcMinterState {
         }
         if let Some(check_fee) = check_fee {
             self.check_fee = check_fee;
+        } else if let Some(kyt_fee) = kyt_fee {
+            self.check_fee = kyt_fee;
         }
     }
 
@@ -1367,6 +1377,7 @@ fn as_sorted_vec<T, K: Ord>(values: impl Iterator<Item = T>, key: impl Fn(&T) ->
 }
 
 impl From<InitArgs> for CkBtcMinterState {
+    #[allow(deprecated)]
     fn from(args: InitArgs) -> Self {
         Self {
             btc_network: args.btc_network.into(),

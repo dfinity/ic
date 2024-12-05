@@ -44,6 +44,7 @@ const MIN_CONFIRMATIONS: u32 = 12;
 const MAX_TIME_IN_QUEUE: Duration = Duration::from_secs(10);
 const WITHDRAWAL_ADDRESS: &str = "bc1q34aq5drpuwy3wgl9lhup9892qp6svr8ldzyy7c";
 
+#[allow(deprecated)]
 fn default_init_args() -> CkbtcMinterInitArgs {
     CkbtcMinterInitArgs {
         btc_network: Network::Regtest.into(),
@@ -55,6 +56,8 @@ fn default_init_args() -> CkbtcMinterInitArgs {
         mode: Mode::GeneralAvailability,
         check_fee: None,
         btc_checker_principal: Some(CanisterId::from(0)),
+        kyt_principal: None,
+        kyt_fee: None,
     }
 }
 
@@ -91,15 +94,15 @@ fn bitcoin_mock_wasm() -> Vec<u8> {
     )
 }
 
-fn kyt_wasm() -> Vec<u8> {
+fn btc_checker_wasm() -> Vec<u8> {
     load_wasm(
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
             .parent()
             .unwrap()
             .parent()
             .unwrap()
-            .join("kyt"),
-        "ic-btc-kyt",
+            .join("checker"),
+        "ic-btc-checker",
         &[],
     )
 }
@@ -591,7 +594,7 @@ struct CkBtcSetup {
     pub bitcoin_id: CanisterId,
     pub ledger_id: CanisterId,
     pub minter_id: CanisterId,
-    pub kyt_id: CanisterId,
+    pub btc_checker_id: CanisterId,
 }
 
 impl CkBtcSetup {
@@ -612,7 +615,7 @@ impl CkBtcSetup {
         let ledger_id = env.create_canister(None);
         let minter_id =
             env.create_canister_with_cycles(None, Cycles::new(100_000_000_000_000), None);
-        let kyt_id = env.create_canister(None);
+        let btc_checker_id = env.create_canister(None);
 
         env.install_existing_canister(
             ledger_id,
@@ -638,7 +641,7 @@ impl CkBtcSetup {
                 ledger_id,
                 max_time_in_queue_nanos: 100,
                 check_fee: Some(CHECK_FEE),
-                btc_checker_principal: kyt_id.into(),
+                btc_checker_principal: btc_checker_id.into(),
                 ..default_init_args()
             }))
             .unwrap(),
@@ -648,8 +651,8 @@ impl CkBtcSetup {
         let caller = PrincipalId::new_user_test_id(1);
 
         env.install_existing_canister(
-            kyt_id,
-            kyt_wasm(),
+            btc_checker_id,
+            btc_checker_wasm(),
             Encode!(&CheckArg::InitArg(CheckerInitArg {
                 btc_network: CheckerBtcNetwork::Mainnet,
                 check_mode: CheckMode::AcceptAll,
@@ -671,7 +674,7 @@ impl CkBtcSetup {
             bitcoin_id,
             ledger_id,
             minter_id,
-            kyt_id,
+            btc_checker_id,
         }
     }
 
@@ -2036,8 +2039,8 @@ fn test_retrieve_btc_with_approval_fail() {
     ckbtc
         .env
         .upgrade_canister(
-            ckbtc.kyt_id,
-            kyt_wasm(),
+            ckbtc.btc_checker_id,
+            btc_checker_wasm(),
             Encode!(&CheckArg::UpgradeArg(Some(CheckerUpgradeArg {
                 check_mode: Some(CheckMode::RejectAll),
             })))
@@ -2060,7 +2063,7 @@ fn test_retrieve_btc_with_approval_fail() {
 
     // Check that the correct error_code is returned if the call to the bitcoin checker canister fails
 
-    let stop_canister_result = ckbtc.env.stop_canister(ckbtc.kyt_id);
+    let stop_canister_result = ckbtc.env.stop_canister(ckbtc.btc_checker_id);
     assert_matches!(stop_canister_result, Ok(_));
 
     let retrieve_btc_result = ckbtc.retrieve_btc_with_approval(

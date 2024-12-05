@@ -20,8 +20,8 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, setup, subnet_sys, upgrade_kyt,
+    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_btc_checker,
+    install_ledger, install_minter, setup, subnet_sys, upgrade_btc_checker,
     utils::{
         assert_account_balance, assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
         ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
@@ -38,7 +38,7 @@ use slog::debug;
 /// Test update_balance method of the minter canister.
 /// Verify proper state preservation after canister update.
 /// Verify proper utxo management in case of a ledger failure during the mint operation.
-pub fn test_kyt(env: TestEnv) {
+pub fn test_btc_checker(env: TestEnv) {
     let logger = env.logger();
     let subnet_sys = subnet_sys(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
@@ -65,13 +65,14 @@ pub fn test_kyt(env: TestEnv) {
 
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
-        let mut kyt_canister = create_canister(&runtime).await;
+        let mut btc_checker_canister = create_canister(&runtime).await;
 
         let minting_user = minter_canister.canister_id().get();
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let kyt_id = install_kyt(&mut kyt_canister, &env).await;
+        let btc_checker_id = install_btc_checker(&mut btc_checker_canister, &env).await;
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
-        let minter_id = install_minter(&mut minter_canister, ledger_id, &logger, 0, kyt_id).await;
+        let minter_id =
+            install_minter(&mut minter_canister, ledger_id, &logger, 0, btc_checker_id).await;
         let minter = Principal::from(minter_id.get());
 
         let ledger = Principal::from(ledger_id.get());
@@ -117,8 +118,8 @@ pub fn test_kyt(env: TestEnv) {
         send_to_btc_address(&btc_rpc, &logger, &btc_address1, first_transfer_amount).await;
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
 
-        // Put the kyt canister into reject all utxos mode.
-        upgrade_kyt(&mut kyt_canister, NewCheckMode::RejectAll).await;
+        // Put the btc checker canister into reject all utxos mode.
+        upgrade_btc_checker(&mut btc_checker_canister, NewCheckMode::RejectAll).await;
 
         wait_for_bitcoin_balance(
             &universal_canister,
@@ -144,7 +145,7 @@ pub fn test_kyt(env: TestEnv) {
         assert_no_transaction(&ledger_agent, &logger).await;
 
         upgrade_canister(&mut minter_canister).await;
-        // If the kyt canister is unavailable we should get an error.
+        // If the btc checker canister is unavailable we should get an error.
         send_to_btc_address(&btc_rpc, &logger, &btc_address1, first_transfer_amount).await;
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
         wait_for_bitcoin_balance(
@@ -155,15 +156,15 @@ pub fn test_kyt(env: TestEnv) {
         )
         .await;
 
-        stop_canister(&kyt_canister).await;
-        let update_balance_kyt_unavailable = minter_agent
+        stop_canister(&btc_checker_canister).await;
+        let update_balance_checker_unavailable = minter_agent
             .update_balance(UpdateBalanceArgs {
                 owner: None,
                 subaccount: Some(subaccount1),
             })
             .await
             .expect("Error while calling update_balance");
-        match update_balance_kyt_unavailable {
+        match update_balance_checker_unavailable {
             Err(UpdateBalanceError::TemporarilyUnavailable(_)) => (),
             other => {
                 panic!(
@@ -172,10 +173,10 @@ pub fn test_kyt(env: TestEnv) {
                 );
             }
         }
-        start_canister(&kyt_canister).await;
+        start_canister(&btc_checker_canister).await;
 
-        upgrade_kyt(&mut kyt_canister, NewCheckMode::Normal).await;
-        // Now that the kyt canister is available and accept all utxos
+        upgrade_btc_checker(&mut btc_checker_canister, NewCheckMode::Normal).await;
+        // Now that the btc checker canister is available and accept all utxos
         // we should be able to mint new utxos.
         let update_balance_new_utxos = minter_agent
             .update_balance(UpdateBalanceArgs {
@@ -289,8 +290,8 @@ pub fn test_kyt(env: TestEnv) {
         );
         let retrieve_amount: u64 = 35_000_000;
 
-        // Put the new kyt canister into reject all utxos mode.
-        upgrade_kyt(&mut kyt_canister, NewCheckMode::RejectAll).await;
+        // Put the btc checker canister into reject all utxos mode.
+        upgrade_btc_checker(&mut btc_checker_canister, NewCheckMode::RejectAll).await;
 
         let retrieve_result = minter_agent
             .retrieve_btc(RetrieveBtcArgs {
@@ -320,7 +321,7 @@ pub fn test_kyt(env: TestEnv) {
             panic!("Expected to see a tainted destination address.")
         }
 
-        upgrade_kyt(&mut kyt_canister, NewCheckMode::Normal).await;
+        upgrade_btc_checker(&mut btc_checker_canister, NewCheckMode::Normal).await;
 
         let retrieve_result = minter_agent
             .retrieve_btc(RetrieveBtcArgs {
@@ -361,7 +362,7 @@ pub fn test_kyt(env: TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test_kyt))
+        .add_test(systest!(test_btc_checker))
         .execute_from_args()?;
     Ok(())
 }

@@ -308,9 +308,9 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
     }
 }
 
-struct KytCanisterEnv;
+struct BtcCheckerCanisterEnv;
 
-impl FetchEnv for KytCanisterEnv {
+impl FetchEnv for BtcCheckerCanisterEnv {
     type FetchGuard = state::FetchGuard;
 
     fn new_fetch_guard(&self, txid: Txid) -> Result<Self::FetchGuard, FetchGuardError> {
@@ -425,7 +425,7 @@ impl FetchEnv for KytCanisterEnv {
 ///    If not, we need to additionally fetch those input transactions
 ///    in order to compute their corresponding addresses.
 pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
-    let env = &KytCanisterEnv;
+    let env = &BtcCheckerCanisterEnv;
     match env.config().check_mode() {
         CheckMode::AcceptAll => CheckTransactionResponse::Passed,
         CheckMode::RejectAll => CheckTransactionResponse::Failed(Vec::new()),

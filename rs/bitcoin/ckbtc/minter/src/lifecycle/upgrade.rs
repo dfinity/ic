@@ -32,7 +32,17 @@ pub struct UpgradeArgs {
     pub check_fee: Option<u64>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[deprecated(note = "use check_fee instead")]
+    pub kyt_fee: Option<u64>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub btc_checker_principal: Option<CanisterId>,
+
+    /// The principal of the kyt canister.
+    /// NOTE: this field is optional for backward compatibility.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[deprecated(note = "use btc_checker_principal instead")]
+    pub kyt_principal: Option<CanisterId>,
 }
 
 pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {

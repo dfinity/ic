@@ -31,6 +31,7 @@ use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::str::FromStr;
 
+#[allow(deprecated)]
 fn default_init_args() -> InitArgs {
     InitArgs {
         btc_network: Network::Regtest.into(),
@@ -42,6 +43,8 @@ fn default_init_args() -> InitArgs {
         mode: Mode::GeneralAvailability,
         check_fee: None,
         btc_checker_principal: None,
+        kyt_principal: None,
+        kyt_fee: None,
     }
 }
 

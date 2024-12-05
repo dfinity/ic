@@ -186,11 +186,17 @@ type InitArgs = record {
     /// The minter's operation mode.
     mode : Mode;
 
-    /// The fee paid per check by the bitcoin checker canister.
+    /// The fee paid per bitcoin check.
     check_fee : opt nat64;
+
+    /// The fee paid per check by the KYT canister (depreicated, use check_fee instead).
+    kyt_fee : opt nat64;
 
     /// The canister id of the bitcoin checker canister.
     btc_checker_principal: opt principal;
+
+    /// The canister id of the KYT canister (deprecated, use btc_checker_principal instead).
+    kyt_principal: opt principal;
 };
 
 // The upgrade parameters of the minter canister.
@@ -209,11 +215,17 @@ type UpgradeArgs = record {
     /// If set, overrides the current minter's operation mode.
     mode : opt Mode;
 
-    /// The fee per check by the bitcion checker canister.
+    /// The fee per bitcoin check.
     check_fee : opt nat64;
+
+    /// The fee paid per check by the KYT canister (depreicated, use check_fee instead).
+    kyt_fee : opt nat64;
 
     /// The principal of the bitcoin checker canister.
     btc_checker_principal : opt principal;
+
+    /// The canister id of the KYT canister (deprecated, use btc_checker_principal instead).
+    kyt_principal: opt principal;
 };
 
 type RetrieveBtcStatus = variant {

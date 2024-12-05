@@ -245,7 +245,7 @@ pub async fn update_balance<R: CanisterRuntime>(
             utxo_statuses.push(UtxoStatus::ValueTooSmall(utxo));
             continue;
         }
-        let status = kyt_check_utxo(&utxo, &args, runtime).await?;
+        let status = check_utxo(&utxo, &args, runtime).await?;
         mutate_state(|s| match status {
             UtxoCheckStatus::Clean => {
                 state::audit::mark_utxo_checked(s, utxo.clone(), caller_account);
@@ -309,7 +309,7 @@ pub async fn update_balance<R: CanisterRuntime>(
     Ok(utxo_statuses)
 }
 
-async fn kyt_check_utxo<R: CanisterRuntime>(
+async fn check_utxo<R: CanisterRuntime>(
     utxo: &Utxo,
     args: &UpdateBalanceArgs,
     runtime: &R,

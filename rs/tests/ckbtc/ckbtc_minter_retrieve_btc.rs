@@ -24,8 +24,8 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, setup, subnet_sys, upgrade_kyt,
+    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_btc_checker,
+    install_ledger, install_minter, setup, subnet_sys, upgrade_btc_checker,
     utils::{
         assert_account_balance, assert_burn_transaction, assert_mint_transaction, ensure_wallet,
         generate_blocks, get_btc_address, get_btc_client, update_balance,
@@ -61,13 +61,14 @@ pub fn test_retrieve_btc(env: TestEnv) {
 
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
-        let mut kyt_canister = create_canister(&runtime).await;
+        let mut btc_checker_canister = create_canister(&runtime).await;
 
         let minting_user = minter_canister.canister_id().get();
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let kyt_id = install_kyt(&mut kyt_canister, &env).await;
+        let btc_checker_id = install_btc_checker(&mut btc_checker_canister, &env).await;
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
-        let minter_id = install_minter(&mut minter_canister, ledger_id, &logger, 0, kyt_id).await;
+        let minter_id =
+            install_minter(&mut minter_canister, ledger_id, &logger, 0, btc_checker_id).await;
         let minter = Principal::from(minter_id.get());
         let ledger = Principal::from(ledger_id.get());
         let universal_canister =
@@ -98,7 +99,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
         // Because bitcoind only allows to see one's own transaction, and we
         // are using multiple addresses in this test. We have to change check
         // mode to AcceptAll, otherwise bitcoind will return 500 error.
-        upgrade_kyt(&mut kyt_canister, NewCheckMode::AcceptAll).await;
+        upgrade_btc_checker(&mut btc_checker_canister, NewCheckMode::AcceptAll).await;
 
         // Get the BTC address of the caller's sub-accounts.
         let btc_address0 = get_btc_address(&minter_agent, &logger, subaccount0).await;
