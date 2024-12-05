@@ -2735,13 +2735,25 @@ fn sync_and_mark_files_readonly(
     #[allow(unused)] metrics: &StateLayoutMetrics,
     mut thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> std::io::Result<()> {
+    let start = std::time::Instant::now();
     let paths = dir_list_recursive(path)?;
+    let elapsed = start.elapsed();
+    info!(
+        log,
+        "dir_list_recursive took {:?} for {} files", elapsed, paths.len()
+    );
+    let start = std::time::Instant::now();
     let results = maybe_parallel_map(&mut thread_pool, paths.iter(), |p| {
         mark_readonly_if_file(p)?;
         #[cfg(not(target_os = "linux"))]
         sync_path(p)?;
         Ok::<(), std::io::Error>(())
     });
+    let elapsed = start.elapsed();
+    info!(
+        log,
+        "maybe_parallel_map mark_readonly_if_file took {:?} for {} files", elapsed, paths.len()
+    );
 
     results.into_iter().try_for_each(identity)?;
     #[cfg(target_os = "linux")]
