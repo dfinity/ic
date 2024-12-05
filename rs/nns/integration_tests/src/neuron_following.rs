@@ -9,7 +9,7 @@ use ic_nns_governance_api::pb::v1::{
     governance_error::ErrorType,
     manage_neuron_response::{Command, FollowResponse},
     neuron::{DissolveState, Followees},
-    Neuron, Tally, Topic, Vote,
+    Neuron, Tally, Topic, Visibility, Vote,
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_test_utils::{
@@ -565,6 +565,10 @@ async fn test_backfill_voting_power_refreshed_timestamps() {
         created_timestamp_seconds: earlier_timestamp_seconds,
         aging_since_timestamp_seconds: u64::MAX,
 
+        // This is so that original_neurons will match what gets
+        // returned by the governance canister.
+        visibility: Some(Visibility::Private as i32),
+
         ..Default::default()
     };
 
@@ -614,6 +618,7 @@ async fn test_backfill_voting_power_refreshed_timestamps() {
                 voting_power_refreshed_timestamp_seconds: Some(
                     voting_power_refreshed_timestamp_seconds,
                 ),
+
                 ..neuron_base.clone()
             },
         )
@@ -653,37 +658,27 @@ async fn test_backfill_voting_power_refreshed_timestamps() {
         .full_neurons;
     assert_eq!(observed_neurons.len(), 8);
     observed_neurons.sort_by_key(|neuron| neuron.id.as_ref().unwrap().id);
+    // Do not worry about verifying derived/automatically populated fields.
+    for observed_neuron in &mut observed_neurons {
+        observed_neuron.deciding_voting_power = None;
+        observed_neuron.potential_voting_power = None;
+    }
 
+    let mut expected_neurons = original_neurons.clone();
     assert_eq!(
-        observed_neurons
-            .iter()
-            .map(|neuron| neuron.voting_power_refreshed_timestamp_seconds.unwrap())
-            .collect::<Vec<u64>>(),
-        // Expected values being repeated repeated reflects the fact that we are
-        // testing both heap and stable memory neurons.
-        vec![
-            EVIL_TIMESTAMP_SECONDS - 1,
-            EVIL_TIMESTAMP_SECONDS - 1,
-            DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
-            DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
-            EVIL_TIMESTAMP_SECONDS + 1,
-            EVIL_TIMESTAMP_SECONDS + 1,
-            now_seconds,
-            now_seconds,
-        ],
-        "{:#?}",
-        observed_neurons
-            .iter()
-            .map(|neuron| {
-                Neuron {
-                    // Elide this, because it is uninteresting, and takes up tons of space.
-                    account: vec![],
-
-                    ..neuron.clone()
-                }
-            })
-            .collect::<Vec<_>>(),
+        expected_neurons[2].voting_power_refreshed_timestamp_seconds,
+        Some(EVIL_TIMESTAMP_SECONDS),
     );
+    assert_eq!(
+        expected_neurons[3].voting_power_refreshed_timestamp_seconds,
+        Some(EVIL_TIMESTAMP_SECONDS),
+    );
+    expected_neurons[2].voting_power_refreshed_timestamp_seconds =
+        Some(DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS);
+    expected_neurons[3].voting_power_refreshed_timestamp_seconds =
+        Some(DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS);
+
+    assert_eq!(observed_neurons, expected_neurons);
 }
 
 fn split_neuron(state_machine: &StateMachine, neuron: &TestNeuronOwner, amount: u64) -> NeuronId {
