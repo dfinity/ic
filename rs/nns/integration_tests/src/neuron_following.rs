@@ -1,9 +1,10 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::{E8, ONE_MONTH_SECONDS};
+use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{install_canister, nns};
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_governance::DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS;
 use ic_nns_governance_api::pb::v1::{
     governance_error::ErrorType,
     manage_neuron_response::{Command, FollowResponse},
@@ -535,6 +536,143 @@ async fn test_prune_some_following() {
         // Assert that neuron was pruned.
         assert_eq!(neuron.followees, followees, "{}", id,);
     }
+}
+
+#[tokio::test]
+async fn test_backfill_voting_power_refreshed_timestamps() {
+    // Step 1: Prepare the world. (This mainly consists of initializing NNS
+    // governance canister with some specially crafted neurons.)
+
+    let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
+
+    let now_seconds = pocket_ic
+        .get_time()
+        .await
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    // This is used in dissolve_state to avoid making the neuron "active" (for
+    // the purposes of storage location). To control whether a neuron is active,
+    // we instead use the cached_neuron_stake_e8s field.
+    let earlier_timestamp_seconds = now_seconds - ONE_MONTH_SECONDS;
+
+    let neuron_base = Neuron {
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+            earlier_timestamp_seconds,
+        )),
+        created_timestamp_seconds: earlier_timestamp_seconds,
+        aging_since_timestamp_seconds: u64::MAX,
+
+        ..Default::default()
+    };
+
+    // When this occurs in the voting_power_refreshed_timestamp_seconds field,
+    // that field is supposed to get set to (the new)
+    // DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS.
+    const EVIL_TIMESTAMP_SECONDS: u64 = 1731628801;
+    // Assert that evil timestamp is "much greater" than the proper value.
+    {
+        let seconds = EVIL_TIMESTAMP_SECONDS - DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS;
+        assert!(
+            seconds as f64 / ONE_DAY_SECONDS as f64 > 60.0,
+            "{} vs. {}",
+            EVIL_TIMESTAMP_SECONDS as f64 / ONE_DAY_SECONDS as f64,
+            DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS as f64 / ONE_DAY_SECONDS as f64,
+        );
+    }
+
+    let voting_power_refreshed_timestamp_seconds_neuron_values = vec![
+        EVIL_TIMESTAMP_SECONDS - 1,
+        EVIL_TIMESTAMP_SECONDS,
+        EVIL_TIMESTAMP_SECONDS + 1,
+        now_seconds,
+    ];
+
+    let cached_neuron_stake_e8s_neuron_values = vec![
+        0,       // inactive -> stable memory
+        42 * E8, // active -> heap
+    ];
+
+    let neurons = voting_power_refreshed_timestamp_seconds_neuron_values
+        .into_iter()
+        .cartesian_product(cached_neuron_stake_e8s_neuron_values.into_iter())
+        .collect::<Vec<_>>();
+
+    let controller = PrincipalId::new_user_test_id(482_783_461);
+
+    let ids = 100..;
+    let neurons = ids
+        .zip(neurons.into_iter())
+        .map(
+            |(id, (voting_power_refreshed_timestamp_seconds, cached_neuron_stake_e8s))| Neuron {
+                id: Some(NeuronId { id }),
+                controller: Some(controller),
+                account: vec![id as u8; 32],
+                cached_neuron_stake_e8s,
+                voting_power_refreshed_timestamp_seconds: Some(
+                    voting_power_refreshed_timestamp_seconds,
+                ),
+                ..neuron_base.clone()
+            },
+        )
+        .collect::<Vec<_>>();
+
+    assert_eq!(neurons.len(), 8);
+
+    let governance_proto = GovernanceCanisterInitPayloadBuilder::new()
+        .with_additional_neurons(neurons)
+        .build();
+
+    install_canister(
+        &pocket_ic,
+        "NNS Governance",
+        GOVERNANCE_CANISTER_ID,
+        governance_proto.encode_to_vec(),
+        // TODO: Once following pruning is released, replace with vanilla
+        // build_governance_wasm(). For now, the feature is only enabled when
+        // built with feature = "test".
+        build_test_governance_wasm(),
+        Some(ROOT_CANISTER_ID.get()),
+    )
+    .await;
+
+    // Step 2: Call the code under test.
+
+    // Wait for backfilling to complete.
+    for _ in 0..100 {
+        pocket_ic.advance_time(Duration::from_secs(1)).await;
+        pocket_ic.tick().await;
+    }
+
+    // Step 3: Inspect results
+
+    let mut neurons =
+        nns::governance::list_neurons(&pocket_ic, controller)
+        .await
+        .full_neurons;
+    assert_eq!(neurons.len(), 8);
+    neurons.sort_by_key(|neuron| neuron.id.as_ref().unwrap().id);
+
+    assert_eq!(
+        neurons
+            .iter()
+            .map(|neuron| neuron.voting_power_refreshed_timestamp_seconds.unwrap())
+            .collect::<Vec<u64>>(),
+        vec![
+            EVIL_TIMESTAMP_SECONDS - 1,
+            DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
+            EVIL_TIMESTAMP_SECONDS + 1,
+            now_seconds,
+
+            EVIL_TIMESTAMP_SECONDS - 1,
+            DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
+            EVIL_TIMESTAMP_SECONDS + 1,
+            now_seconds,
+        ],
+        "{:#?}",
+        neurons,
+    );
 }
 
 fn split_neuron(state_machine: &StateMachine, neuron: &TestNeuronOwner, amount: u64) -> NeuronId {
