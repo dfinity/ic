@@ -263,6 +263,14 @@ impl ManagedCanisters {
     }
 }
 
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+pub struct CanisterUpgrade {
+    /// Wasm hash installed on the canister after the upgrade.
+    wasm_hash: WasmHash,
+    /// Timestamp (nanoseconds since the Unix Epoch) of then the upgrade was completed.
+    timestamp: u64,
+}
+
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct TokenSymbol(String);
 
@@ -510,6 +518,8 @@ fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> T {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct State {
     managed_canisters: ManagedCanisters,
+    #[serde(default)]
+    completed_upgrades: BTreeMap<Principal, CanisterUpgrade>,
     cycles_management: CyclesManagement,
     more_controller_ids: Vec<Principal>,
     minter_id: Option<Principal>,
@@ -747,6 +757,7 @@ impl TryFrom<InitArg> for State {
     ) -> Result<Self, Self::Error> {
         let state = Self {
             managed_canisters: Default::default(),
+            completed_upgrades: Default::default(),
             cycles_management: cycles_management.unwrap_or_default(),
             more_controller_ids,
             minter_id,
