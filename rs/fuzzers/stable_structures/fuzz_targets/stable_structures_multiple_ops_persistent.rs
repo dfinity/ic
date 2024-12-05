@@ -53,14 +53,14 @@ thread_local! {
 
 #[derive(Clone, Debug, Arbitrary, Deserialize, Serialize)]
 enum StableStructOperation {
-    StableBTreeMapInsert { key: [u8; KEY_SIZE], value: Vec<u8> },
-    StableBTreeMapRemove { index: u16 },
-    StableBTreeMapPopFirst,
-    StableBTreeMapPopLast,
-    StableMinHeapPush { value: Vec<u8> },
-    StableMinHeapPop,
-    StableVecPush { value: Vec<u8> },
-    StableVecPop,
+    BTreeMapInsert { key: [u8; KEY_SIZE], value: Vec<u8> },
+    BTreeMapRemove { index: u16 },
+    BTreeMapPopFirst,
+    BTreeMapPopLast,
+    MinHeapPush { value: Vec<u8> },
+    MinHeapPop,
+    VecPush { value: Vec<u8> },
+    VecPop,
 }
 
 fuzz_target!(|ops: Vec<StableStructOperation>| {
@@ -140,7 +140,7 @@ fuzz_target!(|ops: Vec<StableStructOperation>| {
 
     for op in ops {
         match op {
-            StableStructOperation::StableBTreeMapInsert { key, value } => {
+            StableStructOperation::BTreeMapInsert { key, value } => {
                 let mut bounded_data = value.clone();
                 bounded_data.truncate(MAX_VALUE_SIZE as usize);
 
@@ -154,7 +154,7 @@ fuzz_target!(|ops: Vec<StableStructOperation>| {
 
                 remove_keys.push(key);
             }
-            StableStructOperation::StableBTreeMapRemove { index } => {
+            StableStructOperation::BTreeMapRemove { index } => {
                 if remove_keys.is_empty() {
                     continue;
                 }
@@ -170,7 +170,7 @@ fuzz_target!(|ops: Vec<StableStructOperation>| {
                     stable_btree.remove(&key.clone());
                 });
             }
-            StableStructOperation::StableBTreeMapPopFirst => {
+            StableStructOperation::BTreeMapPopFirst => {
                 BOUNDED_BTREEMAP.with_borrow_mut(|stable_btree| {
                     stable_btree.pop_first();
                 });
@@ -179,7 +179,7 @@ fuzz_target!(|ops: Vec<StableStructOperation>| {
                     stable_btree.pop_first();
                 });
             }
-            StableStructOperation::StableBTreeMapPopLast => {
+            StableStructOperation::BTreeMapPopLast => {
                 BOUNDED_BTREEMAP.with_borrow_mut(|stable_btree| {
                     stable_btree.pop_last();
                 });
@@ -188,7 +188,7 @@ fuzz_target!(|ops: Vec<StableStructOperation>| {
                     stable_btree.pop_last();
                 });
             }
-            StableStructOperation::StableMinHeapPush { value } => {
+            StableStructOperation::MinHeapPush { value } => {
                 let mut bounded_data = value.clone();
                 bounded_data.truncate(MAX_VALUE_SIZE as usize);
 
@@ -196,12 +196,12 @@ fuzz_target!(|ops: Vec<StableStructOperation>| {
                     let _ = stable_minheap.push(&BoundedFuzzStruct { data: bounded_data });
                 });
             }
-            StableStructOperation::StableMinHeapPop => {
+            StableStructOperation::MinHeapPop => {
                 BOUNDED_MINHEAP.with_borrow_mut(|stable_minheap| {
                     stable_minheap.pop();
                 });
             }
-            StableStructOperation::StableVecPush { value } => {
+            StableStructOperation::VecPush { value } => {
                 let mut bounded_data = value.clone();
                 bounded_data.truncate(MAX_VALUE_SIZE as usize);
 
@@ -209,7 +209,7 @@ fuzz_target!(|ops: Vec<StableStructOperation>| {
                     let _ = stable_vec.push(&BoundedFuzzStruct { data: bounded_data });
                 });
             }
-            StableStructOperation::StableVecPop => {
+            StableStructOperation::VecPop => {
                 BOUNDED_VEC.with_borrow_mut(|stable_vec| {
                     stable_vec.pop();
                 });
