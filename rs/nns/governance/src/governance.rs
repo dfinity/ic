@@ -4833,6 +4833,8 @@ impl Governance {
 
     fn perform_manage_network_economics(&mut self, new_network_economics: NetworkEconomics) {
         let Some(original_network_economics) = &self.heap_data.economics else {
+            // This wouldn't happen in production, but if it does, we try to do
+            // the best we can, because doing nothing seems more catastrophic.
             println!(
                 "{}ERROR: NetworkEconomics was not set. Setting to proposed NetworkEconomics:\n{:#?}",
                 LOG_PREFIX, new_network_economics,
@@ -4842,7 +4844,7 @@ impl Governance {
         };
 
         self.heap_data.economics =
-            Some(new_network_economics.inherit_from(&original_network_economics));
+            Some(new_network_economics.inherit_from(original_network_economics));
     }
 
     async fn perform_install_code(&mut self, proposal_id: u64, install_code: InstallCode) {
