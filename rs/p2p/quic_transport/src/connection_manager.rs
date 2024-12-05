@@ -340,7 +340,7 @@ impl ConnectionManager {
                 },
                 Some(active_result) = self.active_connections.join_next() => {
                     match active_result {
-                        Ok((_, peer_id)) => {
+                        Ok(((), peer_id)) => {
                             self.peer_map.write().unwrap().remove(&peer_id);
                             self.connect_queue.insert(peer_id, Duration::from_secs(0));
                             self.metrics.peer_map_size.dec();
@@ -390,48 +390,31 @@ impl ConnectionManager {
         let subnet_nodes = SomeOrAllNodes::Some(subnet_node_set);
 
         // Set new server config to only accept connections from the current set.
-        match self
-            .tls_config
+        let rustls_server_config = self.tls_config
             .server_config(subnet_nodes, self.topology.latest_registry_version())
-        {
-            Ok(rustls_server_config) => {
-                let quic_server_config = QuicServerConfig::try_from(rustls_server_config).expect("Conversion from RustTls config to Quinn config must succeed as long as this library and quinn use the same RustTls versions.");
-                let mut server_config =
-                    quinn::ServerConfig::with_crypto(Arc::new(quic_server_config));
-                server_config.transport_config(self.transport_config.clone());
-                self.endpoint.set_server_config(Some(server_config));
-            }
-            Err(e) => {
-                error!(self.log, "Failed to get certificate from crypto {:?}", e)
-            }
-        }
+            .expect("The rustls server config must be locally available, otherwise transport can't run.");
+
+        let quic_server_config = QuicServerConfig::try_from(rustls_server_config).expect("Conversion from RustTls config to Quinn config must succeed as long as this library and quinn use the same RustTls versions.");
+        let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(quic_server_config));
+        server_config.transport_config(self.transport_config.clone());
+        self.endpoint.set_server_config(Some(server_config));
 
         // Connect/Disconnect from peers according to new topology
         for (peer_id, _) in self.topology.iter() {
-            if self.can_i_dial_to(peer_id) {
-                self.connect_queue.insert(*peer_id, Duration::from_secs(0));
-            }
-        }
-
-        // Remove peer connections that are not part of subnet anymore.
-        // Also remove peer connections that have closed connections.
-        let mut peer_map = self.peer_map.write().unwrap();
-        peer_map.retain(|peer_id, conn_handle| {
             let peer_left_topology = !self.topology.is_member(peer_id);
             let node_left_topology = !self.topology.is_member(&self.node_id);
             // If peer is not member anymore or this node not part of subnet close connection.
             let should_close_connection = peer_left_topology || node_left_topology;
 
             if should_close_connection {
-                self.metrics.peers_removed_total.inc();
                 conn_handle
                     .conn()
                     .close(VarInt::from_u32(0), b"node not part of subnet anymore");
-                false
-            } else {
-                true
+            } else if self.can_i_dial_to(peer_id) {
+                self.connect_queue.insert(*peer_id, Duration::from_secs(0));
             }
-        });
+        }
+
         self.metrics.peer_map_size.set(peer_map.len() as i64);
     }
 
