@@ -1844,9 +1844,6 @@ message ProposalInfo {
 // to set the parameters that it wishes to change.
 // In other words, it's not possible to set any of the values of
 // NetworkEconomics to 0.
-//
-// NOTE: If adding a value to this proto, make sure there is a corresponding
-// `if` in Governance::perform_action().
 message NetworkEconomics {
   reserved 3, 7;
   // The number of E8s (10E-8 of an ICP token) that a rejected
