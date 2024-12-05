@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//rs/ic_os/deterministic_ips",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
+    "@crate_index//:macaddr",
     "@crate_index//:ping",
     "@crate_index//:rayon",
     "@crate_index//:regex",

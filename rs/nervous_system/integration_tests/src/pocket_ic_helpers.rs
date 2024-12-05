@@ -1343,6 +1343,7 @@ pub mod sns {
 
     pub mod governance {
         use super::*;
+        use assert_matches::assert_matches;
         use ic_crypto_sha2::Sha256;
         use ic_nervous_system_agent::sns::governance::GovernanceCanister;
         use ic_sns_governance::pb::v1::get_neuron_response;
@@ -1686,7 +1687,7 @@ pub mod sns {
             pocket_ic: &PocketIc,
             sns_governance_canister_id: PrincipalId,
         ) -> std::result::Result<sns_pb::GetUpgradeJournalResponse, PocketIcCallError> {
-            let payload = sns_pb::GetUpgradeJournalRequest {};
+            let payload = sns_pb::GetUpgradeJournalRequest::default();
             pocket_ic.call(sns_governance_canister_id, payload).await
         }
 
@@ -1719,13 +1720,21 @@ pub mod sns {
             sns_governance_canister_id: PrincipalId,
             expected_entries: &[sns_pb::upgrade_journal_entry::Event],
         ) {
-            let sns_pb::GetUpgradeJournalResponse {
-                upgrade_journal, ..
-            } = sns::governance::get_upgrade_journal(pocket_ic, sns_governance_canister_id).await;
+            let response =
+                sns::governance::get_upgrade_journal(pocket_ic, sns_governance_canister_id).await;
 
-            let upgrade_journal = upgrade_journal.unwrap().entries;
+            let journal_entries = assert_matches!(
+                response,
+                sns_pb::GetUpgradeJournalResponse {
+                    upgrade_journal: Some(sns_pb::UpgradeJournal {
+                        entries,
+                        ..
+                    }),
+                    ..
+                } => entries
+            );
 
-            for (index, either_or_both) in upgrade_journal
+            for (index, either_or_both) in journal_entries
                 .iter()
                 .zip_longest(expected_entries.iter())
                 .enumerate()

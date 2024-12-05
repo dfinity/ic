@@ -37,6 +37,10 @@ archive_override(
     urls = ["https://github.com/bazelbuild/rules_foreign_cc/archive/77d4483fadbb1b7bcace18ed8e8e87e8791050f6.tar.gz"],
 )
 
+# Misc tools
+
+bazel_dep(name = "pigz", version = "2.8")  # (parallel) gzip
+
 # Python dependencies
 
 bazel_dep(name = "rules_python", version = "0.35.0")
@@ -429,38 +433,6 @@ http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_
 
 http_jar = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_jar")
 
-# Gzip tool
-http_archive(
-    name = "pigz",
-    build_file_content = """
-cc_library(
-    name = "zopfli",
-    hdrs = glob(["zopfli/src/zopfli/*.h"]),
-    srcs = glob(["zopfli/src/zopfli/*.c"]),
-)
-
-cc_binary(
-    name = "pigz",
-    srcs = [
-        "pigz.c",
-        "try.c",
-        "try.h",
-        "yarn.c",
-        "yarn.h",
-    ],
-    linkopts = [
-        "-lm",
-        "-lpthread",
-        "-lz",
-    ],
-    deps = [":zopfli"],
-    visibility = ["//visibility:public"],
-)""",
-    sha256 = "688fe1d805b33a4ae8cbf86ba56aa1a5d647e959219c7d3aeb7d041c228af1ef",
-    strip_prefix = "pigz-2.8",
-    url = "https://github.com/madler/pigz/archive/refs/tags/v2.8.zip",
-)
-
 # TLA+ tools
 http_jar(
     name = "tlaplus_community_modules",
@@ -634,13 +606,6 @@ http_file(
 )
 
 # Financial Integration artifacts for upgrade testing
-
-# first ic-icrc1-ledger release (see https://dashboard.internetcomputer.org/proposal/104499)
-http_file(
-    name = "ic-icrc1-ledger-first-version.wasm.gz",
-    sha256 = "7af4f7308c883c286d4a5c0448b6bd03bd4d8bffebd58c4fc7114761ad652932",
-    url = "https://download.dfinity.systems/ic/0456f740295aabdd287811f1ed51829082b3df01/canisters/ic-icrc1-ledger.wasm.gz",
-)
 
 # ic-icrc1-ledger releases without ICRC-3
 http_file(
@@ -817,8 +782,8 @@ http_file(
 
 http_file(
     name = "pocket-ic-mainnet-gz",
-    sha256 = "454891cac2421f3f894759ec5e6b6e48fbb544d79197bc29b88d34b93d78a4f1",
-    url = "https://download.dfinity.systems/ic/52ebccfba8855e23dcad9657a8d6e6be01df71f9/binaries/x86_64-linux/pocket-ic.gz",
+    sha256 = "0935ee6ece312719aae4eabddec2dfc6af34d5edbddf4d3af53bccd1b3636044",
+    url = "https://download.dfinity.systems/ic/172f8c78653c93ad101af75b94251439b4ccf098/binaries/x86_64-linux/pocket-ic.gz",
 )
 
 # Patches
