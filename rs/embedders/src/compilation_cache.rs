@@ -40,7 +40,6 @@ impl CompilationCache {
     pub fn new(capacity: NumBytes) -> Self {
         Self::Memory {
             cache: Mutex::new(LruCache::new(capacity)),
-            counter: AtomicU64::new(0),
         }
     }
 
