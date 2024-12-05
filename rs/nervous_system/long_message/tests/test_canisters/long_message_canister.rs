@@ -44,7 +44,9 @@ async fn test_next_message_if_over_instructions(params: BreakMessageParams) {
         // Fib(17) was benchmarked at about 80k instructions
         fib(17);
         if use_break {
-            noop_self_call_if_over_instructions(message_threshold, upper_bound).await;
+            noop_self_call_if_over_instructions(message_threshold, upper_bound)
+                .await
+                .expect("Over upper bound");
         }
     }
 }

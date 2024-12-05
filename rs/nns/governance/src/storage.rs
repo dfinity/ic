@@ -196,7 +196,9 @@ pub(crate) fn with_node_provider_rewards_log<R>(
     })
 }
 
-pub fn with_voting_state_machines_mut<R>(f: impl FnOnce(&mut VotingStateMachines<VM>) -> R) -> R {
+pub(crate) fn with_voting_state_machines_mut<R>(
+    f: impl FnOnce(&mut VotingStateMachines<VM>) -> R,
+) -> R {
     VOTING_STATE_MACHINES.with(|voting_state_machines| {
         let voting_state_machines = &mut voting_state_machines.borrow_mut();
         f(voting_state_machines)
