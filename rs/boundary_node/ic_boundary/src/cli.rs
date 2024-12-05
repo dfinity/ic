@@ -1,3 +1,4 @@
+use candid::Principal;
 use clap::{Args, Parser};
 use humantime::parse_duration;
 use ic_bn_lib::{
@@ -8,6 +9,7 @@ use ic_bn_lib::{
     parse_size,
     types::RequestType,
 };
+use ic_config::crypto::CryptoConfig;
 use std::time::Duration;
 use std::{net::SocketAddr, path::PathBuf};
 use url::Url;
@@ -228,6 +230,10 @@ pub struct Observability {
     /// Enables logging to /dev/null (to benchmark logging)
     #[clap(env, long)]
     pub obs_log_null: bool,
+
+    /// Log Anonymization Canister ID
+    #[clap(env, long)]
+    pub obs_log_anonymization_canister_id: Option<Principal>,
 }
 
 #[derive(Args)]
@@ -366,4 +372,12 @@ pub struct Misc {
     /// Skip replica TLS certificate verification. DANGER: to be used only for testing
     #[clap(env, long)]
     pub skip_replica_tls_verification: bool,
+
+    /// Configuration of the node's crypto-vault
+    #[clap(env, long, value_parser=parse_crypto_config)]
+    pub crypto_config: Option<CryptoConfig>,
+}
+
+fn parse_crypto_config(arg: &str) -> Result<CryptoConfig, serde_json::Error> {
+    serde_json::from_str(arg)
 }

@@ -172,6 +172,8 @@ fn should_return_error_from_unsuccessfully_run_command() {
 #[test]
 fn should_fail_but_write_metrics_if_command_fails() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
+    let tmp_dir2 = tempdir().expect("temp dir creation should succeed");
+
     let metrics_file = tmp_dir.path().join("fstrim.prom");
     assert_matches!(
         fstrim_tool(
@@ -186,6 +188,11 @@ fn should_fail_but_write_metrics_if_command_fails() {
                 .expect("tmp_dir path should be valid")
                 .to_string(),
             false,
+            tmp_dir2
+                .path()
+                .to_str()
+                .expect("tmp_dir path should be valid")
+                .to_string(),
         ),
         Err(err)
         if err.to_string().contains("Failed to run command")
@@ -197,6 +204,8 @@ fn should_fail_but_write_metrics_if_command_fails() {
 #[test]
 fn should_fail_if_command_cannot_be_run() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
+    let tmp_dir2 = tempdir().expect("temp dir creation should succeed");
+
     let metrics_file = tmp_dir.path().join("fstrim.prom");
     assert_matches!(
         fstrim_tool(
@@ -211,6 +220,11 @@ fn should_fail_if_command_cannot_be_run() {
                 .expect("tmp_dir path should be valid")
                 .to_string(),
             false,
+            tmp_dir2
+                .path()
+                .to_str()
+                .expect("tmp_dir path should be valid")
+                .to_string(),
         ),
         Err(err)
         if err.to_string().contains("Failed to run command")
@@ -220,6 +234,7 @@ fn should_fail_if_command_cannot_be_run() {
 #[test]
 fn should_not_run_command_but_initialize_metrics_if_flag_set() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
+    let tmp_dir2 = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
     assert!(fstrim_tool(
         "/non/existent/command",
@@ -233,6 +248,11 @@ fn should_not_run_command_but_initialize_metrics_if_flag_set() {
             .expect("tmp_dir path should be valid")
             .to_string(),
         true,
+        tmp_dir2
+            .path()
+            .to_str()
+            .expect("tmp_dir path should be valid")
+            .to_string(),
     )
     .is_ok());
 
@@ -242,6 +262,8 @@ fn should_not_run_command_but_initialize_metrics_if_flag_set() {
 #[test]
 fn should_not_overwrite_existing_metrics_if_metrics_init_flag_set() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
+    let tmp_dir2 = tempdir().expect("temp dir creation should succeed");
+
     let metrics_file = tmp_dir.path().join("fstrim.prom");
     assert!(fstrim_tool(
         "true",
@@ -255,6 +277,11 @@ fn should_not_overwrite_existing_metrics_if_metrics_init_flag_set() {
             .expect("tmp_dir path should be valid")
             .to_string(),
         false,
+        tmp_dir2
+            .path()
+            .to_str()
+            .expect("tmp_dir path should be valid")
+            .to_string(),
     )
     .is_ok());
 
@@ -270,6 +297,11 @@ fn should_not_overwrite_existing_metrics_if_metrics_init_flag_set() {
             .expect("tmp_dir path should be valid")
             .to_string(),
         true,
+        tmp_dir2
+            .path()
+            .to_str()
+            .expect("tmp_dir path should be valid")
+            .to_string(),
     )
     .is_ok());
 
@@ -280,6 +312,7 @@ fn should_not_overwrite_existing_metrics_if_metrics_init_flag_set() {
 fn should_fail_if_metrics_file_cannot_be_written_to() {
     let metrics_file = PathBuf::from("/non/existent/directory/fstrim.prom");
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
+    let tmp_dir2 = tempdir().expect("temp dir creation should succeed");
     assert_matches!(
         fstrim_tool(
             "true",
@@ -293,6 +326,11 @@ fn should_fail_if_metrics_file_cannot_be_written_to() {
                 .expect("tmp_dir path should be valid")
                 .to_string(),
             false,
+            tmp_dir2
+            .path()
+            .to_str()
+            .expect("tmp_dir path should be valid")
+            .to_string(),
         ),
         Err(err)
         if err.to_string().contains("Failed to write metrics to file")
@@ -302,6 +340,8 @@ fn should_fail_if_metrics_file_cannot_be_written_to() {
 #[test]
 fn should_fail_if_target_is_not_a_directory() {
     let tmp_dir = tempdir().expect("temp dir creation should succeed");
+    let tmp_dir2 = tempdir().expect("temp dir creation should succeed");
+
     let metrics_file = tmp_dir.path().join("fstrim.prom");
     let target = PathBuf::from("/non/existent/target/directory");
     let expected_error = format!(
@@ -320,6 +360,11 @@ fn should_fail_if_target_is_not_a_directory() {
                 .expect("tmp_dir path should be valid")
                 .to_string(),
             false,
+            tmp_dir2
+            .path()
+            .to_str()
+            .expect("tmp_dir path should be valid")
+            .to_string(),
         ),
         Err(err)
         if err.to_string() == expected_error
