@@ -63,7 +63,7 @@ use crate::{
         RewardEvent, RewardNodeProvider, RewardNodeProviders,
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
         StopOrStartCanister, Tally, Topic, UpdateCanisterSettings, UpdateNodeProvider, Visibility,
-        Vote, WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
+        Vote, VotingPowerEconomics, WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
 };
@@ -81,6 +81,7 @@ use ic_nervous_system_common::{
     ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
+use ic_nervous_system_linear_map::LinearMap;
 use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
@@ -121,6 +122,7 @@ use std::{
     future::Future,
     ops::RangeInclusive,
     string::ToString,
+    time::Duration,
 };
 
 mod ledger_helper;
@@ -270,7 +272,57 @@ impl NetworkEconomics {
             transaction_fee_e8s: DEFAULT_TRANSFER_FEE.get_e8s(),
             max_proposals_to_keep_per_topic: 100,
             neurons_fund_economics: Some(NeuronsFundNetworkEconomicsPb::with_default_values()),
+            voting_power_economics: Some(VotingPowerEconomics::with_default_values()),
         }
+    }
+}
+
+impl VotingPowerEconomics {
+    pub const DEFAULT: Self = Self {
+        start_reducing_voting_power_after_seconds: Some(
+            Self::DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS,
+        ),
+        clear_following_after_seconds: Some(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS),
+    };
+
+    pub const DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
+    pub const DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS: u64 = ONE_MONTH_SECONDS;
+
+    pub fn with_default_values() -> Self {
+        Self::DEFAULT
+    }
+
+    pub fn deciding_voting_power_adjustment_factor(
+        &self,
+        time_since_last_voting_power_refreshed: Duration,
+    ) -> Decimal {
+        self.deciding_voting_power_adjustment_factor_function()
+            .apply(time_since_last_voting_power_refreshed.as_secs())
+            .clamp(Decimal::from(0), Decimal::from(1))
+    }
+
+    fn deciding_voting_power_adjustment_factor_function(&self) -> LinearMap {
+        let from_range = {
+            let begin = self.get_start_reducing_voting_power_after_seconds();
+            let end = begin + self.get_clear_following_after_seconds();
+
+            begin..end
+        };
+
+        #[allow(clippy::reversed_empty_ranges)]
+        let to_range = 1..0;
+
+        LinearMap::new(from_range, to_range)
+    }
+
+    pub fn get_start_reducing_voting_power_after_seconds(&self) -> u64 {
+        self.start_reducing_voting_power_after_seconds
+            .unwrap_or(Self::DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS)
+    }
+
+    pub fn get_clear_following_after_seconds(&self) -> u64 {
+        self.clear_following_after_seconds
+            .unwrap_or(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS)
     }
 }
 
@@ -2313,7 +2365,7 @@ impl Governance {
             // requested_neuron_ids are supplied by the caller.
             let _ignore_when_neuron_not_found = self.with_neuron(&neuron_id, |neuron| {
                 // Populate neuron_infos.
-                neuron_infos.insert(neuron_id.id, neuron.get_neuron_info(now, caller));
+                neuron_infos.insert(neuron_id.id, neuron.get_neuron_info(self.voting_power_economics(), now, caller));
 
                 // Populate full_neurons.
                 let let_caller_read_full_neuron =
@@ -2326,7 +2378,7 @@ impl Governance {
                             && neuron.visibility() == Some(Visibility::Public)
                         );
                 if let_caller_read_full_neuron {
-                    let mut proto = neuron.clone().into_proto(now);
+                    let mut proto = neuron.clone().into_proto(self.voting_power_economics(), now);
                     // We get the recent_ballots from the neuron itself, because
                     // we are using a circular buffer to store them.  This solution is not ideal, but
                     // we need to do a larger refactoring to use the correct API types instead of the internal
@@ -3017,7 +3069,13 @@ impl Governance {
 
         // Step 7: builds the response.
         Ok(ManageNeuronResponse::merge_response(
-            build_merge_neurons_response(&source_neuron, &target_neuron, now, *caller),
+            build_merge_neurons_response(
+                &source_neuron,
+                &target_neuron,
+                self.voting_power_economics(),
+                now,
+                *caller,
+            ),
         ))
     }
 
@@ -3085,7 +3143,13 @@ impl Governance {
 
         // Step 4: builds the response.
         Ok(ManageNeuronResponse::merge_response(
-            build_merge_neurons_response(&source_neuron, &target_neuron, now, *caller),
+            build_merge_neurons_response(
+                &source_neuron,
+                &target_neuron,
+                self.voting_power_economics(),
+                now,
+                *caller,
+            ),
         ))
     }
 
@@ -3629,7 +3693,9 @@ impl Governance {
         requester: PrincipalId,
     ) -> Result<NeuronInfo, GovernanceError> {
         let now = self.env.now();
-        self.with_neuron(id, |neuron| neuron.get_neuron_info(now, requester))
+        self.with_neuron(id, |neuron| {
+            neuron.get_neuron_info(self.voting_power_economics(), now, requester)
+        })
     }
 
     /// Returns the neuron info for a neuron identified by id or subaccount.
@@ -3641,7 +3707,7 @@ impl Governance {
         requester: PrincipalId,
     ) -> Result<NeuronInfo, GovernanceError> {
         self.with_neuron_by_neuron_id_or_subaccount(find_by, |neuron| {
-            neuron.get_neuron_info(self.env.now(), requester)
+            neuron.get_neuron_info(self.voting_power_economics(), self.env.now(), requester)
         })
     }
 
@@ -3673,7 +3739,7 @@ impl Governance {
 
         self.neuron_store
             .get_full_neuron(*id, *caller)
-            .map(|neuron| neuron.into_proto(now_seconds))
+            .map(|neuron| neuron.into_proto(self.voting_power_economics(), now_seconds))
             .map_err(GovernanceError::from)
     }
 
@@ -5102,6 +5168,25 @@ impl Governance {
             .expect("NetworkEconomics not present")
     }
 
+    pub fn voting_power_economics(&self) -> &VotingPowerEconomics {
+        let result = self
+            .heap_data
+            .economics
+            .as_ref()
+            .and_then(|economics| economics.voting_power_economics.as_ref());
+
+        match result {
+            Some(ok) => ok,
+            None => {
+                println!(
+                    "{}ERROR: Falling back to default VotingPowerEconomics.",
+                    LOG_PREFIX
+                );
+                &VotingPowerEconomics::DEFAULT
+            }
+        }
+    }
+
     /// The proposal id of the next proposal.
     fn next_proposal_id(&self) -> u64 {
         // Correctness is based on the following observations:
@@ -5718,9 +5803,11 @@ impl Governance {
             // vote, with a voting power determined at the
             // time of the proposal (i.e., now).
             _ => {
-                let (ballots, total_deciding_power, potential_voting_power) = self
-                    .neuron_store
-                    .create_ballots_for_standard_proposal(now_seconds);
+                let (ballots, total_deciding_power, potential_voting_power) =
+                    self.neuron_store.create_ballots_for_standard_proposal(
+                        self.voting_power_economics(),
+                        now_seconds,
+                    );
 
                 if total_deciding_power >= (u64::MAX as u128) {
                     // The way the neurons are configured, the total voting
@@ -6016,7 +6103,30 @@ impl Governance {
         begin: std::ops::Bound<NeuronId>,
         carry_on: impl FnMut() -> bool,
     ) -> std::ops::Bound<NeuronId> {
-        prune_some_following(&mut self.neuron_store, begin, carry_on)
+        // Hack: Here, we would prefer to use the voting_power_economics method
+        // instead, but if we simply passed self.voting_power_economics() to
+        // prune_some_following, we wouldn't be able to also pass &mut
+        // self.neuron_store. Hence, we essentially inline the method here.
+        let voting_power_economics = self
+            .heap_data
+            .economics
+            .as_ref()
+            .and_then(|economics| economics.voting_power_economics.as_ref())
+            .unwrap_or_else(|| {
+                println!(
+                    "{}ERROR: VotingPowerEconomics not found while pruning_some_following. \
+                     Falling back to default. (This is actually ok in tests.)",
+                    LOG_PREFIX,
+                );
+                &VotingPowerEconomics::DEFAULT
+            });
+
+        prune_some_following(
+            voting_power_economics,
+            &mut self.neuron_store,
+            begin,
+            carry_on,
+        )
     }
 
     /// Creates a new neuron or refreshes the stake of an existing

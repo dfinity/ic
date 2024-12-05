@@ -13,14 +13,13 @@ use crate::{
         neuron::{DissolveState as NeuronDissolveState, Followees},
         AbridgedNeuron, Ballot, BallotInfo, GovernanceError, KnownNeuronData,
         Neuron as NeuronProto, NeuronInfo, NeuronStakeTransfer, NeuronState, NeuronType, Topic,
-        Visibility, Vote,
+        Visibility, Vote, VotingPowerEconomics,
     },
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
-use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
-use ic_nervous_system_linear_map::LinearMap;
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
 use rust_decimal::Decimal;
@@ -359,31 +358,25 @@ impl Neuron {
             > 0
     }
 
-    fn deciding_voting_power_adjustment_factor(
-        duration_since_voting_power_refreshed: Duration,
-    ) -> Decimal {
-        let linear_map = LinearMap::new(
-            Decimal::from(6 * ONE_MONTH_SECONDS)..Decimal::from(7 * ONE_MONTH_SECONDS), // from
-            Decimal::from(1)..Decimal::from(0),                                         // to
-        );
-
-        linear_map
-            .apply(Decimal::from(
-                duration_since_voting_power_refreshed.as_secs(),
-            ))
-            .clamp(Decimal::from(0), Decimal::from(1))
-    }
-
     /// How much swap this neuron has when it casts its vote on proposals.
-    pub fn deciding_voting_power(&self, now_seconds: u64) -> u64 {
-        // Main inputs.
+    pub fn deciding_voting_power(
+        &self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+    ) -> u64 {
+        // Main inputs to main calculation.
+
         let adjustment_factor: Decimal = if is_voting_power_adjustment_enabled() {
-            Self::deciding_voting_power_adjustment_factor(Duration::from_secs(
+            let time_since_last_refreshed = Duration::from_secs(
                 now_seconds.saturating_sub(self.voting_power_refreshed_timestamp_seconds),
-            ))
+            );
+
+            voting_power_economics
+                .deciding_voting_power_adjustment_factor(time_since_last_refreshed)
         } else {
             Decimal::from(1)
         };
+
         let potential_voting_power = self.potential_voting_power(now_seconds);
 
         // Main calculation.
@@ -563,9 +556,15 @@ impl Neuron {
     ///
     /// If the neuron refreshed recently, no followee neuron IDs are removed
     /// (and returns 0).
-    pub(crate) fn prune_following(&mut self, now_seconds: u64) -> u64 {
-        let is_fresh =
-            self.voting_power_refreshed_timestamp_seconds >= now_seconds - 7 * ONE_MONTH_SECONDS;
+    pub(crate) fn prune_following(
+        &mut self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+    ) -> u64 {
+        let is_fresh = self.voting_power_refreshed_timestamp_seconds
+            >= now_seconds
+                - voting_power_economics.get_start_reducing_voting_power_after_seconds()
+                - voting_power_economics.get_clear_following_after_seconds();
         if is_fresh {
             return 0;
         }
@@ -935,7 +934,12 @@ impl Neuron {
     }
 
     /// Get the 'public' information associated with this neuron.
-    pub fn get_neuron_info(&self, now_seconds: u64, requester: PrincipalId) -> NeuronInfo {
+    pub fn get_neuron_info(
+        &self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+        requester: PrincipalId,
+    ) -> NeuronInfo {
         let mut recent_ballots = vec![];
         let mut joined_community_fund_timestamp_seconds = None;
 
@@ -948,7 +952,7 @@ impl Neuron {
         }
 
         let visibility = self.visibility().map(|visibility| visibility as i32);
-        let deciding_voting_power = self.deciding_voting_power(now_seconds);
+        let deciding_voting_power = self.deciding_voting_power(voting_power_economics, now_seconds);
         let potential_voting_power = self.potential_voting_power(now_seconds);
 
         NeuronInfo {
@@ -1166,9 +1170,14 @@ impl Neuron {
 }
 
 impl Neuron {
-    pub fn into_proto(self, now_seconds: u64) -> NeuronProto {
+    pub fn into_proto(
+        self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+    ) -> NeuronProto {
         let visibility = self.visibility().map(|visibility| visibility as i32);
-        let deciding_voting_power = Some(self.deciding_voting_power(now_seconds));
+        let deciding_voting_power =
+            Some(self.deciding_voting_power(voting_power_economics, now_seconds));
         let potential_voting_power = Some(self.potential_voting_power(now_seconds));
 
         let Neuron {
