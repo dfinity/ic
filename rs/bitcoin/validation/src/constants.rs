@@ -12,10 +12,10 @@ pub const TEN_MINUTES: u32 = 60 * 10;
 pub fn max_target(network: &Network) -> Target {
     match network {
         Network::Bitcoin => Target::MAX_ATTAINABLE_MAINNET,
-        Network::Testnet => Target::MAX_ATTAINABLE_TESTNET,
+        Network::Testnet4 => Target::MAX_ATTAINABLE_TESTNET,
         Network::Regtest => Target::MAX_ATTAINABLE_REGTEST,
         Network::Signet => Target::MAX_ATTAINABLE_SIGNET,
-        _ => unreachable!(),
+        &other => unreachable!("Unsupported network: {:?}", other),
     }
 }
 
@@ -25,7 +25,7 @@ pub fn no_pow_retargeting(network: &Network) -> bool {
     match network {
         Network::Bitcoin | Network::Testnet | Network::Signet => false,
         Network::Regtest => true,
-        _ => unreachable!(),
+        &other => unreachable!("Unsupported network: {:?}", other),
     }
 }
 
@@ -36,7 +36,7 @@ pub fn pow_limit_bits(network: &Network) -> CompactTarget {
         Network::Testnet => 0x1d00ffff,
         Network::Regtest => 0x207fffff,
         Network::Signet => 0x1e0377ae,
-        _ => unreachable!(),
+        &other => unreachable!("Unsupported network: {:?}", other),
     })
 }
 

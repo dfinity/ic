@@ -70,7 +70,7 @@ pub struct StreamConfig {
     pub logger: ReplicaLogger,
     /// This field is used to provide the magic value to the raw network message.
     /// The magic number is used to identity the type of Bitcoin network being accessed.
-    pub magic: u32,
+    pub magic: Magic,
     /// This field is used to receive network messages to send out to the connected
     /// BTC node.
     pub network_message_receiver: UnboundedReceiver<NetworkMessage>,
@@ -118,7 +118,7 @@ pub struct Stream {
     write_half: OwnedWriteHalf,
     /// This field is used to provide the magic value to the raw network message.
     /// The magic number is used to identify the type of Bitcoin network being accessed.
-    magic: u32,
+    magic: Magic,
     /// This field contains the receiver used to intake messages that are to be
     /// sent to the connected node.
     network_message_receiver: UnboundedReceiver<NetworkMessage>,
@@ -266,7 +266,7 @@ impl Stream {
     /// This function is used to write a network message to the connected Bitcoin
     /// node.
     async fn write_message(&mut self, network_message: NetworkMessage) -> StreamResult<()> {
-        let raw_network_message = RawNetworkMessage::new(Magic::from_bytes(self.magic.to_be_bytes()), network_message);
+        let raw_network_message = RawNetworkMessage::new(self.magic, network_message);
         let bytes = serialize(&raw_network_message);
         self.write_half 
             .write_all(bytes.as_slice())

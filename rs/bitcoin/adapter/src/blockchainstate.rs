@@ -327,7 +327,7 @@ impl BlockchainState {
 
     /// Returns the current size of the block cache.
     pub fn get_block_cache_size(&self) -> usize {
-        self.block_cache.values().fold(0, |sum, b| b.size() + sum)
+        self.block_cache.values().fold(0, |sum, b| b.total_size() + sum)
     }
 }
 

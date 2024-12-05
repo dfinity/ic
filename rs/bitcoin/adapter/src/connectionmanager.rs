@@ -9,7 +9,7 @@ use bitcoin::p2p::ServiceFlags;
 use bitcoin::p2p::{
     message::{CommandString, NetworkMessage},
     message_network::VersionMessage,
-    Address,
+    Address, Magic,
 };
 use ic_logger::{error, info, trace, warn, ReplicaLogger};
 use rand::prelude::*;
@@ -82,7 +82,7 @@ pub struct ConnectionManager {
     logger: ReplicaLogger,
     /// This field is used to provide the magic value to the raw network message.
     /// The magic number is used to identity the type of Bitcoin network being accessed.
-    magic: u32,
+    magic: Magic,
     /// This field contains the number of connections the connection manager can manage at one time.
     max_connections: usize,
     /// This field contains the number of connections the connection manager must have in order to send messages.
