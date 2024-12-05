@@ -1,7 +1,10 @@
 use candid::Decode;
 use ic_base_types::PrincipalId;
 use ic_management_canister_types::{
-    self as ic00, CanisterInstallMode, DerivationPath, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Method, Payload as Ic00Payload, SchnorrAlgorithm, SchnorrKeyId, SchnorrPublicKeyResponse, SignWithBip341Aux, SignWithECDSAReply, SignWithSchnorrReply, SignWithSchnorrAux,
+    self as ic00, CanisterInstallMode, DerivationPath, ECDSAPublicKeyResponse, EcdsaCurve,
+    EcdsaKeyId, MasterPublicKeyId, Method, Payload as Ic00Payload, SchnorrAlgorithm, SchnorrKeyId,
+    SchnorrPublicKeyResponse, SignWithBip341Aux, SignWithECDSAReply, SignWithSchnorrAux,
+    SignWithSchnorrReply,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError};
@@ -88,9 +91,11 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
 
             let aux = match key_id.algorithm {
                 SchnorrAlgorithm::Bip340Secp256k1 => {
-                    let aux = SignWithBip341Aux { merkle_root_hash: vec![0; 32].into() };
+                    let aux = SignWithBip341Aux {
+                        merkle_root_hash: vec![0; 32].into(),
+                    };
                     Some(SignWithSchnorrAux::Bip341(aux))
-                },
+                }
                 _ => None,
             };
 
@@ -98,7 +103,7 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
                 message: vec![],
                 derivation_path: DerivationPath::new(vec![]),
                 key_id,
-                aux
+                aux,
             }
         }
         .encode(),
