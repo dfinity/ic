@@ -297,22 +297,6 @@ impl NetworkEconomics {
             ours
         }
 
-        // Ideally, we would recurse into T, because otherwise, you have to set
-        // a bundle of parameters all at once. In other words, the current
-        // implementation does not support setting individual subfields, a la
-        // carte.
-        fn inherit_from_option<T>(ours: &Option<T>, defaults: &Option<T>) -> T
-        where
-            T: Clone,
-        {
-            if ours.is_none() {
-                ours
-            } else {
-                defaults
-            }
-            .clone()
-        }
-
         Self {
             reject_cost_e8s: inherit_from(self.reject_cost_e8s, defaults.reject_cost_e8s),
             neuron_minimum_stake_e8s: inherit_from(self.neuron_minimum_stake_e8s, defaults.neuron_minimum_stake_e8s),
@@ -323,8 +307,20 @@ impl NetworkEconomics {
             transaction_fee_e8s: inherit_from(self.transaction_fee_e8s, defaults.transaction_fee_e8s),
             max_proposals_to_keep_per_topic: inherit_from(self.max_proposals_to_keep_per_topic, defaults.max_proposals_to_keep_per_topic),
 
-            neurons_fund_economics: inherit_from_option(&self.neurons_fund_economics, &defaults.neurons_fund_economics),
-            voting_power_economics: inherit_from_option(&self.voting_power_economics, &defaults.voting_power_economics),
+            // Ideally, we would recurse into T, because otherwise, you have to
+            // set a bundle of parameters all at once. In other words, the
+            // current implementation does not support setting individual
+            // subfields, a la carte.
+            neurons_fund_economics: self
+                .neurons_fund_economics
+                .as_ref()
+                .or(defaults.neurons_fund_economics.as_ref())
+                .cloned(),
+            voting_power_economics: self
+                .voting_power_economics
+                .as_ref()
+                .or(defaults.voting_power_economics.as_ref())
+                .cloned(),
         }
     }
 }

@@ -7787,8 +7787,7 @@ fn test_network_economics_proposal() {
         .unwrap()
         .neuron_minimum_stake_e8s = 1234;
 
-    // Making a proposal to change 'reject_cost_e8s' should only change
-    // that value.
+    // Propose to change some, NetworkEconomics parameters.
     let pid = match gov
         .manage_neuron(
             &voter_pid,
@@ -7826,16 +7825,18 @@ fn test_network_economics_proposal() {
         ProposalStatus::Executed
     );
 
-    // Make sure only that value changed.
+    // Verify that only the two fields specified by the proposal are changed.
     assert_eq!(
         gov.heap_data.economics.as_ref().unwrap(),
-        NetworkEconomics {
+        &NetworkEconomics {
             reject_cost_e8s: 56789,
-            neuron_minimum_stake_e8s: 1234,
             voting_power_economics: Some(VotingPowerEconomics {
                 start_reducing_voting_power_after_seconds: Some(42),
                 clear_following_after_seconds: Some(4242),
-            },
+            }),
+
+            // No changes to the rest.
+            neuron_minimum_stake_e8s: 1234,
             ..NetworkEconomics::with_default_values()
         },
     );
