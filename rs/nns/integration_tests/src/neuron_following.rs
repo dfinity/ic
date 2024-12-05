@@ -648,8 +648,7 @@ async fn test_backfill_voting_power_refreshed_timestamps() {
 
     // Step 3: Inspect results
 
-    let mut observed_neurons =
-        nns::governance::list_neurons(&pocket_ic, controller)
+    let mut observed_neurons = nns::governance::list_neurons(&pocket_ic, controller)
         .await
         .full_neurons;
     assert_eq!(observed_neurons.len(), 8);
