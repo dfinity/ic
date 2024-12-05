@@ -189,7 +189,7 @@ type InitArgs = record {
     /// The fee paid per bitcoin check.
     check_fee : opt nat64;
 
-    /// The fee paid per check by the KYT canister (depreicated, use check_fee instead).
+    /// The fee paid per check by the KYT canister (deprecated, use check_fee instead).
     kyt_fee : opt nat64;
 
     /// The canister id of the bitcoin checker canister.
@@ -218,7 +218,7 @@ type UpgradeArgs = record {
     /// The fee per bitcoin check.
     check_fee : opt nat64;
 
-    /// The fee paid per check by the KYT canister (depreicated, use check_fee instead).
+    /// The fee paid per check by the KYT canister (deprecated, use check_fee instead).
     kyt_fee : opt nat64;
 
     /// The principal of the bitcoin checker canister.
