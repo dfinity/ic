@@ -12,9 +12,11 @@ use crate::{
 use canbench_rs::{bench, bench_fn, BenchResult};
 use ic_nervous_system_common::E8;
 use ic_nns_common::pb::v1::ProposalId;
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use maplit::hashmap;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
-use std::collections::BTreeSet;
+use std::{cell::RefCell, collections::BTreeSet};
 
 /// Whether the neuron should be stored in heap or stable storage.
 #[derive(Copy, Clone)]
@@ -398,5 +400,38 @@ fn draw_maturity_from_neurons_fund_stable() -> BenchResult {
         neuron_store
             .draw_maturity_from_neurons_fund(&neurons_fund_snapshot)
             .unwrap();
+    })
+}
+
+type Memory = VirtualMemory<DefaultMemoryImpl>;
+
+thread_local! {
+    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
+        RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
+
+    static MAP: RefCell<StableBTreeMap<u64, u64, Memory>> = RefCell::new(
+        StableBTreeMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(16))),
+        )
+    );
+}
+
+#[bench(raw)]
+fn range() -> BenchResult {
+    let mut rng = new_rng();
+    MAP.with_borrow_mut(|map| {
+        for _ in 0..1000 {
+            map.insert(rng.next_u64(), rng.next_u64());
+        }
+    });
+
+    bench_fn(|| {
+        MAP.with_borrow(|map| {
+            let mut sum: u128 = 0;
+            for (k, v) in map.range(..) {
+                sum += k as u128 + v as u128;
+            }
+            ic_cdk::println!("sum: {}", sum);
+        });
     })
 }
