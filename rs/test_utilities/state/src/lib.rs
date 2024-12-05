@@ -151,7 +151,7 @@ impl ReplicatedStateBuilder {
                 nodes: self.node_ids.into_iter().collect(),
                 subnet_type: self.subnet_type,
                 subnet_features: self.subnet_features,
-                idkg_keys_held: BTreeSet::new(),
+                chain_keys_held: BTreeSet::new(),
             },
         );
 
