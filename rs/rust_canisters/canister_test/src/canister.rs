@@ -1088,7 +1088,7 @@ impl<'a> Install<'a> {
             self.compute_allocation,
             self.memory_allocation,
         );
-        eprintln!("Install args: {}", &install_args);
+        // eprintln!("Install args: {}", &install_args);
         match self.runtime {
             Runtime::Local(local_runtime) => local_runtime
                 .install_canister_helper_async(install_args)
