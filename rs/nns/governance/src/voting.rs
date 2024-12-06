@@ -38,7 +38,6 @@ fn over_soft_message_limit() -> bool {
 #[cfg(test)]
 thread_local! {
     static OVER_SOFT_MESSAGE_LIMIT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }
-    static BASELINE_INSTRUCTIONS: std::cell::Cell<Option<u64>> = const { Option::None }
 }
 
 #[cfg(test)]
@@ -1070,7 +1069,7 @@ mod test {
             },
             neurons: neurons
                 .into_iter()
-                .map(|(id, n)| (id, n.into_proto(u64::MAX)))
+                .map(|(id, n)| (id, n.into_proto(&VotingPowerEconomics::DEFAULT, u64::MAX)))
                 .collect(),
             ..Default::default()
         };
@@ -1145,7 +1144,7 @@ mod test {
             },
             neurons: neurons
                 .into_iter()
-                .map(|(id, n)| (id, n.into_proto(u64::MAX)))
+                .map(|(id, n)| (id, n.into_proto(&VotingPowerEconomics::DEFAULT, u64::MAX)))
                 .collect(),
             ..Default::default()
         };
@@ -1205,7 +1204,7 @@ mod test {
             },
             neurons: neurons
                 .into_iter()
-                .map(|(id, n)| (id, n.into_proto(u64::MAX)))
+                .map(|(id, n)| (id, n.into_proto(&VotingPowerEconomics::DEFAULT, u64::MAX)))
                 .collect(),
             ..Default::default()
         };
@@ -1313,7 +1312,7 @@ mod test {
             },
             neurons: neurons
                 .into_iter()
-                .map(|(id, n)| (id, n.into_proto(u64::MAX)))
+                .map(|(id, n)| (id, n.into_proto(&VotingPowerEconomics::DEFAULT, u64::MAX)))
                 .collect(),
             ..Default::default()
         };
@@ -1431,7 +1430,7 @@ mod test {
             },
             neurons: neurons
                 .into_iter()
-                .map(|(id, n)| (id, n.into_proto(u64::MAX)))
+                .map(|(id, n)| (id, n.into_proto(&VotingPowerEconomics::DEFAULT, u64::MAX)))
                 .collect(),
             ..Default::default()
         };
