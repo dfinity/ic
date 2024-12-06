@@ -1053,15 +1053,11 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     };
 
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
-    <<<<<<< HEAD
-            now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1, // the canister is created in the next round after the ingress message is received
-    =======
-            now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1, // the canister is created in the same round as the ingress message is received
-    >>>>>>> 7b4246ea24... Fix some tests
-            0,
-            CanisterChangeOrigin::from_canister(ucan.into(), Some(2)),
-            CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2]),
-        )];
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1, // the canister is created in the same round as the ingress message is received
+        0,
+        CanisterChangeOrigin::from_canister(ucan.into(), Some(2)),
+        CanisterChangeDetails::canister_creation(vec![ucan.into(), user_id1, user_id2]),
+    )];
 
     now += Duration::from_secs(5);
     env.set_time(now);
