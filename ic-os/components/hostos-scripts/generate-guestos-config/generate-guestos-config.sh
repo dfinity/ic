@@ -83,9 +83,6 @@ function assemble_config_media() {
     if [ -f "$use_node_operator_private_key" ]; then
         cmd+=(--node_operator_private_key "/boot/config/node_operator_private_key.pem")
     fi
-
-    # TODO(NODE-1518): remove passing old config
-    cmd+=(--elasticsearch_hosts "${elasticsearch_hosts}")
     cmd+=(--ipv6_address "$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)")
     cmd+=(--ipv6_gateway "${ipv6_gateway}")
     if [[ -n "$ipv4_address" && -n "$ipv4_prefix_length" && -n "$ipv4_gateway" && -n "$domain_name" ]]; then

@@ -87,9 +87,6 @@ function assemble_config_media() {
     if [[ "${use_ssh_authorized_keys,,}" == "true" ]]; then
         cmd+=(--accounts_ssh_authorized_keys "/boot/config/ssh_authorized_keys")
     fi
-
-    # TODO(NODE-1518): remove passing old config
-    cmd+=(--elasticsearch_hosts "${elasticsearch_hosts}")
     cmd+=(--ipv6_address "$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)")
     cmd+=(--ipv6_gateway "${ipv6_gateway}")
     if [[ -n "$ipv4_address" && -n "$ipv4_prefix_length" && -n "$ipv4_gateway" && -n "$domain_name" ]]; then
