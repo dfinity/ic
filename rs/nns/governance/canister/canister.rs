@@ -177,7 +177,7 @@ fn schedule_timers() {
 const SEEDING_INTERVAL: Duration = Duration::from_secs(3600);
 const RETRY_SEEDING_INTERVAL: Duration = Duration::from_secs(30);
 const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(10);
-const BACKFILL_VOTING_POWER_REFRESHED_TIMESTAMPS_INTERVAL: Duration = Duration::from_secs(10);
+const BACKFILL_VOTING_POWER_REFRESHED_TIMESTAMPS_INTERVAL: Duration = Duration::from_secs(60);
 
 // Once this amount of instructions is used by the
 // Governance::prune_some_following, it stops, saves where it is, schedules more
