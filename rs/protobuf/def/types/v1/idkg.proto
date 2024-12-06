@@ -218,6 +218,7 @@ message IDkgMessage {
     SignedIDkgComplaint complaint = 4;
     SignedIDkgOpening opening = 5;
     SchnorrSigShare schnorr_sig_share = 6;
+    registry.subnet.v1.IDkgTranscript transcript = 7;
   }
 }
 
@@ -292,5 +293,6 @@ message IDkgArtifactId {
     PrefixPairIDkg complaint = 4;
     PrefixPairIDkg opening = 5;
     PrefixPairSigShare schnorr_sig_share = 6;
+    PrefixPairIDkg transcript = 7;
   }
 }

@@ -2,10 +2,12 @@
 
 use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::idkg::{
-    EcdsaSigShare, IDkgMessage, IDkgPrefixOf, IDkgStats, SchnorrSigShare, SigShare,
-    SignedIDkgComplaint, SignedIDkgOpening,
+    transcript_prefix, EcdsaSigShare, IDkgMessage, IDkgPrefixOf, IDkgStats, SchnorrSigShare,
+    SigShare, SignedIDkgComplaint, SignedIDkgOpening,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    IDkgDealingSupport, IDkgTranscript, IDkgTranscriptId, SignedIDkgDealing,
+};
 
 #[derive(Debug)]
 pub enum IDkgChangeAction {
@@ -122,6 +124,20 @@ pub trait IDkgPoolSection: Send + Sync {
         _prefix: IDkgPrefixOf<SignedIDkgOpening>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
         unimplemented!()
+    }
+
+    fn transcripts(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgTranscript)> + '_>;
+
+    fn transcripts_by_prefix(
+        &self,
+        _prefix: IDkgPrefixOf<IDkgTranscript>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgTranscript)> + '_> {
+        unimplemented!()
+    }
+
+    fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
+        let prefix = transcript_prefix(&transcript_id);
+        self.transcripts_by_prefix(prefix).next().map(|(_, t)| t)
     }
 }
 
