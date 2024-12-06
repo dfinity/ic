@@ -6319,7 +6319,9 @@ fn charge_idle_canisters_for_full_execution_round() {
         // The accumulated priority invariant should be respected.
         assert_eq!(total_accumulated_priority - total_priority_credit, 0);
     }
+}
 
+#[test]
 fn test_induct_same_subnet_management_messages() {
     let mut test = SchedulerTestBuilder::new().build();
     let subnet_id = test.own_subnet_id();

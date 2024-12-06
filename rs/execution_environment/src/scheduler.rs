@@ -246,8 +246,6 @@ impl SchedulerImpl {
         csprng: &mut Csprng,
         round_limits: &mut RoundLimits,
         measurement_scope: &MeasurementScope,
-        ongoing_long_install_code: bool,
-        long_running_canister_ids: BTreeSet<CanisterId>,
         raw_rand_action: &RawRandAction,
         registry_settings: &RegistryExecutionSettings,
         replica_version: &ReplicaVersion,
@@ -461,8 +459,6 @@ impl SchedulerImpl {
                         csprng,
                         &mut subnet_round_limits,
                         &subnet_measurement_scope,
-                        ongoing_long_install_code,
-                        long_running_canister_ids,
                         &raw_rand_action,
                         registry_settings,
                         replica_version,
@@ -1074,7 +1070,6 @@ impl SchedulerImpl {
                 messages_before_induction.saturating_sub(messages_after_induction);
             state.put_canister_state(source_canister);
         }
-        state.put_canister_states(canisters);
         self.metrics
             .inducted_messages
             .with_label_values(&["self"])

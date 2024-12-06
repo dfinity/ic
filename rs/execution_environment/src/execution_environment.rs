@@ -76,8 +76,7 @@ use ic_types::{
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,
-    CanisterId, Cycles, ExecutionRound, LongExecutionMode, NumBytes, NumInstructions,
-    ReplicaVersion, SubnetId, Time,
+    CanisterId, Cycles, ExecutionRound, NumBytes, NumInstructions, ReplicaVersion, SubnetId, Time,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_wasm_types::WasmHash;

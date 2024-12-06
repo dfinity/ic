@@ -585,8 +585,6 @@ impl SchedulerTest {
             &mut csprng,
             &mut round_limits,
             &measurements,
-            false,
-            long_running_canister_ids,
             &RawRandAction::Execute,
             self.registry_settings(),
             &self.replica_version,
