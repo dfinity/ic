@@ -684,6 +684,33 @@ where
             "Checking {} balances and {} allowances",
             actual_num_balances, actual_num_approvals
         );
+        let mut balances_checked = 0;
+        let now = Instant::now();
+        for (account, balance) in self.balances.iter() {
+            let actual_balance = AccountId::get_balance(env, ledger_id, *account);
+
+            assert_eq!(
+                &Tokens::try_from(actual_balance.clone()).unwrap(),
+                balance,
+                "Mismatch in balance for account {:?} ({} vs {})",
+                account,
+                balance,
+                actual_balance
+            );
+            if balances_checked % 100000 == 0 && balances_checked > 0 {
+                println!(
+                    "Checked {} balances in {:?}",
+                    balances_checked,
+                    now.elapsed()
+                );
+            }
+            balances_checked += 1;
+        }
+        println!(
+            "{} balances checked in {:?}",
+            balances_checked,
+            now.elapsed()
+        );
         let now = Instant::now();
         let mut allowances_checked = 0;
         let mut expiration_in_future_count = 0;
@@ -754,33 +781,6 @@ where
         println!(
             "allowances with no expiration: {}, expiration in future: {}, expiration in past: {}",
             no_expiration_count, expiration_in_future_count, expiration_in_past_count
-        );
-        let mut balances_checked = 0;
-        let now = Instant::now();
-        for (account, balance) in self.balances.iter() {
-            let actual_balance = AccountId::get_balance(env, ledger_id, *account);
-
-            assert_eq!(
-                &Tokens::try_from(actual_balance.clone()).unwrap(),
-                balance,
-                "Mismatch in balance for account {:?} ({} vs {})",
-                account,
-                balance,
-                actual_balance
-            );
-            if balances_checked % 100000 == 0 && balances_checked > 0 {
-                println!(
-                    "Checked {} balances in {:?}",
-                    balances_checked,
-                    now.elapsed()
-                );
-            }
-            balances_checked += 1;
-        }
-        println!(
-            "{} balances checked in {:?}",
-            balances_checked,
-            now.elapsed()
         );
     }
 }
