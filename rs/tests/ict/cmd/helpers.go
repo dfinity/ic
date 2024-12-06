@@ -220,28 +220,3 @@ func sparse_checkout(repoUrl, repoDir string, sparseCheckoutPaths []string) (str
 
 	return repoDir, nil
 }
-
-func replace_in_file(file, old, new string) error {
-	content, err := os.ReadFile(file)
-	if err != nil {
-		return fmt.Errorf("Could not read file %s: %v", file, err)
-	}
-
-	updatedContent := strings.ReplaceAll(string(content), old, new)
-
-	return os.WriteFile(file, []byte(updatedContent), 0644)
-}
-
-func replace_in_directory(directory, old, new string) error {
-	return filepath.Walk(directory, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if !info.IsDir() {
-			replace_in_file(path, old, new)
-		}
-
-		return nil
-	})
-}
