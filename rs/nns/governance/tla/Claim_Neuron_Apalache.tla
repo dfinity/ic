@@ -52,7 +52,11 @@ VARIABLES
     \* @type: $proc -> Int;
     neuron_id,
     \* @type: $proc -> $account;
-    account
+    account,
+    \* Not used by this model, but it's a global variable used by spawn_neurons, so
+    \* it's the easiest to just add it to all the other models
+    \* @type: Bool;
+    spawning_neurons
 
 \* @type: Set($neuronId) => $neuronId;
 FRESH_NEURON_ID(existing_neurons) == CHOOSE nid \in (Neuron_Ids \ existing_neurons): TRUE
