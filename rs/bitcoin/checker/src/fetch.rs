@@ -1,17 +1,17 @@
 use crate::logs::WARN;
 use crate::state::{
     FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError,
-    TransactionKytData,
+    TransactionCheckData,
 };
 use crate::{blocklist_contains, providers, state, Config};
 use bitcoin::Transaction;
 use futures::future::try_join_all;
-use ic_btc_interface::Txid;
-use ic_btc_kyt::{
+use ic_btc_checker::{
     get_tx_cycle_cost, CheckTransactionIrrecoverableError, CheckTransactionResponse,
     CheckTransactionRetriable, CheckTransactionStatus, INITIAL_MAX_RESPONSE_BYTES,
     RETRY_MAX_RESPONSE_BYTES,
 };
+use ic_btc_interface::Txid;
 use ic_canister_log::log;
 use std::convert::Infallible;
 
@@ -121,7 +121,7 @@ pub trait FetchEnv {
         match self.http_get_tx(&provider, txid, max_response_bytes).await {
             Ok(tx) => {
                 let input_addresses = tx.input.iter().map(|_| None).collect();
-                match TransactionKytData::from_transaction(provider.btc_network(), tx.clone()) {
+                match TransactionCheckData::from_transaction(provider.btc_network(), tx.clone()) {
                     Ok(tx) => {
                         let fetched = FetchedTx {
                             tx,

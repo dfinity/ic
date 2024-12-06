@@ -1,13 +1,13 @@
 use candid::{decode_one, CandidType, Deserialize, Encode, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_interface::Txid;
-use ic_btc_kyt::{
-    blocklist, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
-    CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionResponse,
-    CheckTransactionRetriable, CheckTransactionStatus, InitArg, KytArg, KytMode, UpgradeArg,
+use ic_btc_checker::{
+    blocklist, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse, CheckArg,
+    CheckMode, CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionResponse,
+    CheckTransactionRetriable, CheckTransactionStatus, InitArg, UpgradeArg,
     CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
     INITIAL_MAX_RESPONSE_BYTES,
 };
+use ic_btc_interface::Txid;
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -38,14 +38,14 @@ struct Setup {
     controller: Principal,
     // The `caller` canister helps to proxy update calls with cycle payment.
     caller: Principal,
-    kyt_canister: Principal,
+    btc_checker_canister: Principal,
     env: PocketIc,
 }
 
-fn kyt_wasm() -> Vec<u8> {
+fn btc_checker_wasm() -> Vec<u8> {
     load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ic-btc-kyt-canister",
+        "ic-btc-checker-canister",
         &[],
     )
 }
@@ -62,7 +62,7 @@ impl Setup {
 
         let init_arg = InitArg {
             btc_network,
-            kyt_mode: KytMode::Normal,
+            check_mode: CheckMode::Normal,
         };
         let caller = env.create_canister_with_settings(Some(controller), None);
         env.add_cycles(caller, 100_000_000_000_000);
@@ -73,24 +73,24 @@ impl Setup {
             Some(controller),
         );
 
-        let kyt_canister = env.create_canister_with_settings(Some(controller), None);
-        env.add_cycles(kyt_canister, 100_000_000_000_000);
+        let btc_checker_canister = env.create_canister_with_settings(Some(controller), None);
+        env.add_cycles(btc_checker_canister, 100_000_000_000_000);
         env.install_canister(
-            kyt_canister,
-            kyt_wasm(),
-            Encode!(&KytArg::InitArg(init_arg)).unwrap(),
+            btc_checker_canister,
+            btc_checker_wasm(),
+            Encode!(&CheckArg::InitArg(init_arg)).unwrap(),
             Some(controller),
         );
 
         Setup {
             controller,
             caller,
-            kyt_canister,
+            btc_checker_canister,
             env,
         }
     }
 
-    fn submit_kyt_call(
+    fn submit_btc_checker_call(
         &self,
         method: &str,
         args: Vec<u8>,
@@ -98,7 +98,7 @@ impl Setup {
     ) -> Result<RawMessageId, UserError> {
         let payload = wasm()
             .call_with_cycles(
-                PrincipalId(self.kyt_canister),
+                PrincipalId(self.btc_checker_canister),
                 method,
                 call_args()
                     .other_side(args)
@@ -124,7 +124,7 @@ fn test_check_address() {
     let blocked_address = blocklist::BTC_ADDRESS_BLOCKLIST[blocklist_len / 2].to_string();
 
     let Setup {
-        kyt_canister,
+        btc_checker_canister,
         env,
         controller,
         ..
@@ -133,7 +133,7 @@ fn test_check_address() {
     // Choose an address from the blocklist
     let result = query_candid(
         &env,
-        kyt_canister,
+        btc_checker_canister,
         "check_address",
         (CheckAddressArgs {
             address: blocked_address.clone(),
@@ -148,7 +148,7 @@ fn test_check_address() {
     // Satoshi's address hopefully is not in the blocklist
     let result = query_candid(
         &env,
-        kyt_canister,
+        btc_checker_canister,
         "check_address",
         (CheckAddressArgs {
             address: "12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S".to_string(),
@@ -163,31 +163,31 @@ fn test_check_address() {
     // Test with an malformed address
     let result = query_candid::<_, (CheckAddressResponse,)>(
         &env,
-        kyt_canister,
+        btc_checker_canister,
         "check_address",
         (CheckAddressArgs {
             address: "not an address".to_string(),
         },),
     );
-    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Invalid bitcoin address")));
+    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Invalid Bitcoin address")));
 
     // Test with an testnet address
     let result = query_candid::<_, (CheckAddressResponse,)>(
         &env,
-        kyt_canister,
+        btc_checker_canister,
         "check_address",
         (CheckAddressArgs {
             address: "n47QBape2PcisN2mkHR2YnhqoBr56iPhJh".to_string(),
         },),
     );
-    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a bitcoin mainnet address")));
+    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a Bitcoin mainnet address")));
 
-    // Test KytMode::AcceptAll
+    // Test CheckMode::AcceptAll
     env.upgrade_canister(
-        kyt_canister,
-        kyt_wasm(),
-        Encode!(&KytArg::UpgradeArg(Some(UpgradeArg {
-            kyt_mode: Some(KytMode::AcceptAll),
+        btc_checker_canister,
+        btc_checker_wasm(),
+        Encode!(&CheckArg::UpgradeArg(Some(UpgradeArg {
+            check_mode: Some(CheckMode::AcceptAll),
         })))
         .unwrap(),
         Some(controller),
@@ -196,7 +196,7 @@ fn test_check_address() {
 
     let result = query_candid(
         &env,
-        kyt_canister,
+        btc_checker_canister,
         "check_address",
         (CheckAddressArgs {
             address: blocked_address.clone(),
@@ -210,25 +210,27 @@ fn test_check_address() {
 
     // Test a mainnet address against testnet setup
     let Setup {
-        kyt_canister, env, ..
+        btc_checker_canister,
+        env,
+        ..
     } = Setup::new(BtcNetwork::Testnet);
 
     let result = query_candid::<_, (CheckAddressResponse,)>(
         &env,
-        kyt_canister,
+        btc_checker_canister,
         "check_address",
         (CheckAddressArgs {
             address: blocked_address,
         },),
     );
-    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a bitcoin testnet address")));
+    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a Bitcoin testnet address")));
 
-    // Test KytMode::RejectAll
+    // Test CheckMode::RejectAll
     env.upgrade_canister(
-        kyt_canister,
-        kyt_wasm(),
-        Encode!(&KytArg::UpgradeArg(Some(UpgradeArg {
-            kyt_mode: Some(KytMode::RejectAll),
+        btc_checker_canister,
+        btc_checker_wasm(),
+        Encode!(&CheckArg::UpgradeArg(Some(UpgradeArg {
+            check_mode: Some(CheckMode::RejectAll),
         })))
         .unwrap(),
         Some(controller),
@@ -237,7 +239,7 @@ fn test_check_address() {
 
     let result = query_candid(
         &env,
-        kyt_canister,
+        btc_checker_canister,
         "check_address",
         (CheckAddressArgs {
             address: "n47QBape2PcisN2mkHR2YnhqoBr56iPhJh".to_string(),
@@ -258,11 +260,11 @@ fn test_check_transaction_passed() {
     let env = &setup.env;
 
     // Normal operation requires making http outcalls.
-    // We'll run this again after testing other KytMode.
+    // We'll run this again after testing other CheckMode.
     let test_normal_operation = || {
         let cycles_before = setup.env.cycle_balance(setup.caller);
         let call_id = setup
-            .submit_kyt_call(
+            .submit_btc_checker_call(
                 "check_transaction",
                 Encode!(&CheckTransactionArgs {
                     txid: txid.as_ref().to_vec()
@@ -359,13 +361,13 @@ fn test_check_transaction_passed() {
     // With default installation
     test_normal_operation();
 
-    // Test KytMode::RejectAll
+    // Test CheckMode::RejectAll
     env.tick();
     env.upgrade_canister(
-        setup.kyt_canister,
-        kyt_wasm(),
-        Encode!(&KytArg::UpgradeArg(Some(UpgradeArg {
-            kyt_mode: Some(KytMode::RejectAll),
+        setup.btc_checker_canister,
+        btc_checker_wasm(),
+        Encode!(&CheckArg::UpgradeArg(Some(UpgradeArg {
+            check_mode: Some(CheckMode::RejectAll),
         })))
         .unwrap(),
         Some(setup.controller),
@@ -373,7 +375,7 @@ fn test_check_transaction_passed() {
     .unwrap();
     let cycles_before = env.cycle_balance(setup.caller);
     let call_id = setup
-        .submit_kyt_call(
+        .submit_btc_checker_call(
             "check_transaction",
             Encode!(&CheckTransactionArgs {
                 txid: txid.as_ref().to_vec()
@@ -396,13 +398,13 @@ fn test_check_transaction_passed() {
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
 
-    // Test KytMode::AcceptAll
+    // Test CheckMode::AcceptAll
     env.tick();
     env.upgrade_canister(
-        setup.kyt_canister,
-        kyt_wasm(),
-        Encode!(&KytArg::UpgradeArg(Some(UpgradeArg {
-            kyt_mode: Some(KytMode::AcceptAll),
+        setup.btc_checker_canister,
+        btc_checker_wasm(),
+        Encode!(&CheckArg::UpgradeArg(Some(UpgradeArg {
+            check_mode: Some(CheckMode::AcceptAll),
         })))
         .unwrap(),
         Some(setup.controller),
@@ -410,7 +412,7 @@ fn test_check_transaction_passed() {
     .unwrap();
     let cycles_before = env.cycle_balance(setup.caller);
     let call_id = setup
-        .submit_kyt_call(
+        .submit_btc_checker_call(
             "check_transaction",
             Encode!(&CheckTransactionArgs {
                 txid: txid.as_ref().to_vec()
@@ -436,13 +438,13 @@ fn test_check_transaction_passed() {
         "actual_cost: {actual_cost}, expected_cost: {expected_cost}"
     );
 
-    // Test KytMode::Normal
+    // Test CheckMode::Normal
     env.tick();
     env.upgrade_canister(
-        setup.kyt_canister,
-        kyt_wasm(),
-        Encode!(&KytArg::UpgradeArg(Some(UpgradeArg {
-            kyt_mode: Some(KytMode::Normal),
+        setup.btc_checker_canister,
+        btc_checker_wasm(),
+        Encode!(&CheckArg::UpgradeArg(Some(UpgradeArg {
+            check_mode: Some(CheckMode::Normal),
         })))
         .unwrap(),
         Some(setup.controller),
@@ -464,7 +466,7 @@ fn test_check_transaction_error() {
 
     // Test for cycles not enough
     let call_id = setup
-        .submit_kyt_call(
+        .submit_btc_checker_call(
             "check_transaction",
             Encode!(&CheckTransactionArgs { txid: txid.clone() }).unwrap(),
             CHECK_TRANSACTION_CYCLES_REQUIRED - 1,
@@ -488,7 +490,7 @@ fn test_check_transaction_error() {
     // Test for 500 error
     let cycles_before = setup.env.cycle_balance(setup.caller);
     let call_id = setup
-        .submit_kyt_call(
+        .submit_btc_checker_call(
             "check_transaction",
             Encode!(&CheckTransactionArgs { txid: txid.clone() }).unwrap(),
             CHECK_TRANSACTION_CYCLES_REQUIRED,
@@ -528,7 +530,7 @@ fn test_check_transaction_error() {
     // Test for 404 error
     let cycles_before = setup.env.cycle_balance(setup.caller);
     let call_id = setup
-        .submit_kyt_call(
+        .submit_btc_checker_call(
             "check_transaction",
             Encode!(&CheckTransactionArgs { txid: txid.clone() }).unwrap(),
             CHECK_TRANSACTION_CYCLES_REQUIRED,
@@ -568,7 +570,7 @@ fn test_check_transaction_error() {
     // Test for malformatted transaction data
     let cycles_before = setup.env.cycle_balance(setup.caller);
     let call_id = setup
-        .submit_kyt_call(
+        .submit_btc_checker_call(
             "check_transaction",
             Encode!(&CheckTransactionArgs { txid: txid.clone() }).unwrap(),
             CHECK_TRANSACTION_CYCLES_REQUIRED,
@@ -609,7 +611,7 @@ fn test_check_transaction_error() {
     let cycles_before = setup.env.cycle_balance(setup.caller);
     txid.pop();
     let call_id = setup
-        .submit_kyt_call(
+        .submit_btc_checker_call(
             "check_transaction",
             Encode!(&CheckTransactionArgs { txid }).unwrap(),
             CHECK_TRANSACTION_CYCLES_REQUIRED,
@@ -671,7 +673,7 @@ fn should_query_logs_and_metrics() {
                 setup
                     .env
                     .query_call(
-                        setup.kyt_canister,
+                        setup.btc_checker_canister,
                         Principal::anonymous(),
                         "http_request",
                         Encode!(&request).expect("failed to encode HTTP request"),
