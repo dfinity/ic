@@ -24,7 +24,7 @@ pub const REQUEST_LIFETIME: Duration = Duration::from_secs(300);
 /// Bit encoding the message kind (request or response).
 #[repr(u64)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub(super) enum Kind {
+pub enum Kind {
     Request = 0,
     Response = Self::BIT,
 }
@@ -59,7 +59,7 @@ impl Context {
 /// Bit encoding the message class (guaranteed response vs best-effort).
 #[repr(u64)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub(super) enum Class {
+pub enum Class {
     GuaranteedResponse = 0,
     BestEffort = Self::BIT,
 }
@@ -134,14 +134,14 @@ impl Id {
 /// A typed reference -- inbound (`CanisterInput`) or outbound
 /// (`RequestOrResponse`) -- to a message in the `MessagePool`.
 #[derive(Debug)]
-pub(super) struct Reference<T>(u64, PhantomData<T>);
+pub struct Reference<T>(u64, PhantomData<T>);
 
 impl<T> Reference<T>
 where
     T: ToContext,
 {
     /// Constructs a new `Reference<T>` of the given `class` and `kind`.
-    fn new(class: Class, kind: Kind, generator: u64) -> Self {
+    pub fn new(class: Class, kind: Kind, generator: u64) -> Self {
         Self(
             T::context() as u64 | class as u64 | kind as u64 | generator << Id::BITMASK_LEN,
             PhantomData,
@@ -150,7 +150,7 @@ where
 }
 
 impl<T> Reference<T> {
-    pub(super) fn kind(&self) -> Kind {
+    pub fn kind(&self) -> Kind {
         Id::from(self).kind()
     }
 
@@ -215,10 +215,10 @@ impl<T> From<Reference<T>> for Id {
 }
 
 /// A reference to an inbound message (returned as a `CanisterInput`).
-pub(super) type InboundReference = Reference<CanisterInput>;
+pub type InboundReference = Reference<CanisterInput>;
 
 /// A reference to an outbound message (returned as a `RequestOrResponse`).
-pub(super) type OutboundReference = Reference<RequestOrResponse>;
+pub type OutboundReference = Reference<RequestOrResponse>;
 
 /// A means for queue item types to declare whether they're inbound or outbound.
 pub(super) trait ToContext {
