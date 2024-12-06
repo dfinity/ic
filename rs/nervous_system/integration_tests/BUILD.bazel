@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
@@ -166,11 +166,33 @@ rust_test_suite_with_extra_srcs(
     name = "integration_tests_test",
     srcs = glob(
         ["tests/**/*.rs"],
+        exclude = [
+            "tests/sns_upgrade_test_utils.rs",
+            "tests/upgrade_everything_test.rs",
+        ],
     ),
     aliases = ALIASES,
     data = DEV_DATA,
     env = DEV_ENV,
-    extra_srcs = [],
+    extra_srcs = ["tests/sns_upgrade_test_utils.rs"],
+    flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "cpu:6",
+    ],
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "upgrade_everything_test",
+    srcs = [
+        "tests/sns_upgrade_test_utils.rs",
+        "tests/upgrade_everything_test.rs",
+    ],
+    aliases = ALIASES,
+    crate_root = "tests/upgrade_everything_test.rs",
+    data = DEV_DATA,
+    env = DEV_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
