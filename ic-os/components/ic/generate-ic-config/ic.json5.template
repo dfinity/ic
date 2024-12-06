@@ -24,7 +24,7 @@
     // ============================================
     // Configuration of the domain name
     // ============================================
-    domain: "{{ domain }}",
+    domain: "{{ domain_name }}",
 
     // ============================================
     // Configuration of registry client
