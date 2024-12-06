@@ -13,6 +13,7 @@ mod update_balance {
     use ic_btc_checker::CheckTransactionResponse;
     use ic_btc_interface::{GetUtxosResponse, Utxo};
     use icrc_ledger_types::icrc1::account::Account;
+    use std::iter;
     use std::time::Duration;
 
     #[tokio::test]
@@ -42,12 +43,7 @@ mod update_balance {
 
         let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
-        let num_time_called = 0_usize;
-        mock_time(
-            &mut runtime,
-            vec![NOW, NOW.saturating_add(Duration::from_secs(1))],
-            num_time_called,
-        );
+        mock_increasing_time(&mut runtime, NOW);
         expect_check_transaction_returning(
             &mut runtime,
             ignored_utxo.clone(),
@@ -97,12 +93,7 @@ mod update_balance {
 
         let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
-        let num_time_called = 0_usize;
-        mock_time(
-            &mut runtime,
-            vec![NOW, NOW.saturating_add(Duration::from_secs(1))],
-            num_time_called,
-        );
+        mock_increasing_time(&mut runtime, NOW);
         expect_check_transaction_returning(
             &mut runtime,
             ignored_utxo.clone(),
@@ -170,12 +161,7 @@ mod update_balance {
 
         let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![quarantined_utxo.clone()]);
-        let num_time_called = 0_usize;
-        mock_time(
-            &mut runtime,
-            vec![NOW, NOW.saturating_add(Duration::from_secs(1))],
-            num_time_called,
-        );
+        mock_increasing_time(&mut runtime, NOW);
         expect_check_transaction_returning(
             &mut runtime,
             quarantined_utxo.clone(),
@@ -236,11 +222,10 @@ mod update_balance {
 
         let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
-        let num_time_called = 0_usize;
-        mock_time(
+        mock_constant_time(
             &mut runtime,
-            vec![NOW.checked_sub(Duration::from_secs(1)).unwrap()],
-            num_time_called,
+            NOW.checked_sub(Duration::from_secs(1)).unwrap(),
+            4,
         );
 
         let result = update_balance(update_balance_args.clone(), &runtime).await;
@@ -263,11 +248,9 @@ mod update_balance {
         runtime.checkpoint();
 
         mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
-        let num_time_called = 0_usize;
         mock_time(
             &mut runtime,
-            vec![NOW, NOW.saturating_add(Duration::from_secs(1))],
-            num_time_called,
+            vec![NOW, NOW, NOW, NOW.saturating_add(Duration::from_secs(1))],
         );
         match &reason {
             SuspendedReason::ValueTooSmall => {}
@@ -295,12 +278,7 @@ mod update_balance {
         runtime.checkpoint();
 
         mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
-        let num_time_called = 0_usize;
-        mock_time(
-            &mut runtime,
-            vec![NOW.checked_add(Duration::from_secs(1)).unwrap()],
-            num_time_called,
-        );
+        mock_constant_time(&mut runtime, NOW.saturating_add(Duration::from_secs(1)), 4);
 
         let result = update_balance(update_balance_args.clone(), &runtime).await;
 
@@ -359,11 +337,26 @@ mod update_balance {
         runtime.expect_global_timer_set().return_const(());
     }
 
-    fn mock_time(
+    fn mock_increasing_time(runtime: &mut MockCanisterRuntime, start: Timestamp) {
+        let increment = |time: Timestamp| time.saturating_add(Duration::from_secs(1));
+        let mut current_time = start;
+        runtime.expect_time().returning(move || {
+            let previous_time = current_time;
+            current_time = increment(current_time);
+            previous_time.as_nanos_since_unix_epoch()
+        });
+    }
+
+    fn mock_constant_time(
         runtime: &mut MockCanisterRuntime,
-        timestamps: Vec<Timestamp>,
-        mut time_counter: usize,
+        timestamp: Timestamp,
+        num_times: usize,
     ) {
+        mock_time(runtime, iter::repeat_n(timestamp, num_times).collect());
+    }
+
+    fn mock_time(runtime: &mut MockCanisterRuntime, timestamps: Vec<Timestamp>) {
+        let mut time_counter = 0;
         runtime.expect_time().returning(move || {
             assert!(
                 time_counter < timestamps.len(),

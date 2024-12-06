@@ -153,7 +153,7 @@ pub async fn update_balance<R: CanisterRuntime>(
     let start_time = runtime.time();
 
     let observe_latency = |histogram: &mut LatencyHistogram| {
-        histogram.observe_latency(runtime.time().saturating_sub(start_time))
+        histogram.observe_latency_ns(runtime.time().saturating_sub(start_time))
     };
 
     // When the minter is in the mode using a whitelist we only want a certain

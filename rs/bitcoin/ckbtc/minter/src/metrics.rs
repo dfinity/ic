@@ -9,7 +9,7 @@ thread_local! {
 }
 
 const LATENCY_HISTOGRAM_NUM_BUCKETS: usize = 11;
-const LATENCY_HISTOGRAM_BUCKET_SIZE: u64 = 500;
+const LATENCY_HISTOGRAM_BUCKET_SIZE_MS: u64 = 500;
 pub type Count = u64;
 pub type Latency = u64;
 
@@ -20,8 +20,8 @@ pub struct LatencyHistogram {
 }
 
 impl LatencyHistogram {
-    pub fn observe_latency(&mut self, latency: Latency) {
-        let bucket_index = ((latency / LATENCY_HISTOGRAM_BUCKET_SIZE) as usize)
+    pub fn observe_latency_ns(&mut self, latency: Latency) {
+        let bucket_index = ((latency / (LATENCY_HISTOGRAM_BUCKET_SIZE_MS * 1_000)) as usize)
             .min(LATENCY_HISTOGRAM_NUM_BUCKETS - 1);
         self.latency_buckets[bucket_index] += 1;
         self.latency_sum += latency;
@@ -41,7 +41,7 @@ impl LatencyHistogram {
 
     fn bucket_inclusive_upper_bounds(&self) -> impl Iterator<Item = f64> {
         (1..LATENCY_HISTOGRAM_NUM_BUCKETS)
-            .map(|bucket| (bucket as u64) * LATENCY_HISTOGRAM_BUCKET_SIZE)
+            .map(|bucket| (bucket as u64) * LATENCY_HISTOGRAM_BUCKET_SIZE_MS)
             .map(|upper_bound| upper_bound as f64)
             .chain(std::iter::once(f64::INFINITY))
     }
@@ -262,7 +262,7 @@ pub fn encode_metrics(
 
     histogram_vec = UPDATE_CALL_LATENCY_WITH_NEW_UTXOS.with_borrow(|histogram| {
         histogram_vec.histogram(
-            &[("New UTXOs", "yes")],
+            &[("new_utxos", "yes")],
             histogram.iter(),
             histogram.sum() as f64,
         )
@@ -270,7 +270,7 @@ pub fn encode_metrics(
 
     UPDATE_CALL_LATENCY_WITH_NO_NEW_UTXOS.with_borrow(|histogram| {
         histogram_vec.histogram(
-            &[("New UTXOs", "no")],
+            &[("new_utxos", "no")],
             histogram.iter(),
             histogram.sum() as f64,
         )
