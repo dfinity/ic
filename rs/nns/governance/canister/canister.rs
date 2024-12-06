@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use candid::{candid_method, Decode, Encode};
-use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{
