@@ -120,6 +120,11 @@ pub fn install_cloner_canisters(env: TestEnv) {
         .unwrap();
     let app_node = app_subnet.nodes().next().unwrap();
     let counter_canister_bytes = load_wasm(COUNTER_CANISTER_WAT);
+    info!(
+        &logger,
+        "counter_canister_bytes: {:?}",
+        counter_canister_bytes,
+    );
 
     info!(
         &logger,
