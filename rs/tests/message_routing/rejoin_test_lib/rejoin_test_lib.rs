@@ -246,7 +246,7 @@ async fn install_many_canisters(
     let wasm = Wasm::from_bytes(canister_bytes);
     for i in 0..1000 {
         let mut futures: Vec<_> = Vec::new();
-        for canister_idx in 0..20 {
+        for canister_idx in 0..25 {
             let new_wasm = wasm.clone();
             let new_logger = logger.clone();
             let id = i * 20 + canister_idx;
@@ -267,7 +267,7 @@ async fn install_many_canisters(
             });
         }
         join_all(futures).await;
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
 }
