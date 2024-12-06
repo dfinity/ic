@@ -1597,7 +1597,7 @@ pub struct NeuronBuilder {
     // Fields that don't exist when a neuron is first built. We allow them to be set in tests.
     #[cfg(test)]
     neuron_fees_e8s: u64,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     recent_ballots: Vec<BallotInfo>,
     #[cfg(test)]
     transfer: Option<NeuronStakeTransfer>,
@@ -1637,7 +1637,7 @@ impl NeuronBuilder {
 
             #[cfg(test)]
             neuron_fees_e8s: 0,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             recent_ballots: Vec::new(),
             #[cfg(test)]
             transfer: None,
@@ -1728,7 +1728,7 @@ impl NeuronBuilder {
         self
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     pub fn with_recent_ballots(mut self, recent_ballots: Vec<BallotInfo>) -> Self {
         self.recent_ballots = recent_ballots;
         self
@@ -1780,7 +1780,7 @@ impl NeuronBuilder {
             neuron_type,
             #[cfg(test)]
             neuron_fees_e8s,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             recent_ballots,
             #[cfg(test)]
             transfer,
@@ -1801,7 +1801,7 @@ impl NeuronBuilder {
         // The below fields are always the default values for a new neuron.
         #[cfg(not(test))]
         let neuron_fees_e8s = 0;
-        #[cfg(not(test))]
+        #[cfg(not(any(test, feature = "canbench-rs")))]
         let recent_ballots = Vec::new();
         #[cfg(not(test))]
         let transfer = None;
