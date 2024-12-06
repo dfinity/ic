@@ -43,7 +43,7 @@
       "build": [
         "bazel build //rs/bitcoin/checker:btc_checker_canister"
       ],
-      "wasm": "../../../../bazel-bin/rs/bitcoin/checker/btc_checker_canister.wasm",
+      "wasm": "../../../../bazel-bin/rs/bitcoin/checker/btc_checker_canister.wasm.gz",
       "candid": "../../checker/btc_checker_canister.did",
       "shrink": false
     },
