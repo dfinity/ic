@@ -11,9 +11,9 @@ LIB_SRCS = [
 ]
 
 rust_library(
-    name = "btc_kyt_lib",
+    name = "btc_checker_lib",
     srcs = LIB_SRCS,
-    crate_name = "ic_btc_kyt",
+    crate_name = "ic_btc_checker",
     deps = [
         # Keep sorted.
         "@crate_index//:bitcoin_0_32",
@@ -24,15 +24,15 @@ rust_library(
 
 rust_test(
     name = "unit_tests",
-    crate = ":btc_kyt_lib",
+    crate = ":btc_checker_lib",
 )
 
 rust_test(
     name = "canister_tests",
-    crate = ":_wasm_btc_kyt_canister",
-    data = ["btc_kyt_canister.did"],
+    crate = ":_wasm_btc_checker_canister",
+    data = ["btc_checker_canister.did"],
     env = {
-        "CARGO_MANIFEST_DIR": "rs/bitcoin/kyt",
+        "CARGO_MANIFEST_DIR": "rs/bitcoin/checker",
     },
     deps = [
         # Keep sorted.
@@ -44,7 +44,7 @@ rust_test(
 )
 
 rust_canister(
-    name = "btc_kyt_canister",
+    name = "btc_checker_canister",
     srcs = glob(
         ["src/**"],
         exclude = LIB_SRCS,
@@ -53,10 +53,10 @@ rust_canister(
         "templates/dashboard.html",
     ],
     proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
-    service_file = "btc_kyt_canister.did",
+    service_file = "btc_checker_canister.did",
     deps = [
         # Keep sorted.
-        ":btc_kyt_lib",
+        ":btc_checker_lib",
         "//rs/rust_canisters/http_types",
         "@crate_index//:askama",
         "@crate_index//:base64",
@@ -83,18 +83,18 @@ rust_ic_test(
     name = "integration_tests",
     srcs = ["tests/tests.rs"],
     data = [
-        ":btc_kyt_canister",
+        ":btc_checker_canister",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
-        "CARGO_MANIFEST_DIR": "rs/bitcoin/kyt",
-        "IC_BTC_KYT_CANISTER_WASM_PATH": "$(rootpath :btc_kyt_canister)",
+        "CARGO_MANIFEST_DIR": "rs/bitcoin/checker",
+        "IC_BTC_CHECKER_CANISTER_WASM_PATH": "$(rootpath :btc_checker_canister)",
         "POCKET_IC_BIN": "$(rootpath //:pocket-ic-server)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     deps = [
         # Keep sorted.
-        ":btc_kyt_lib",
+        ":btc_checker_lib",
         "//:pocket-ic-server",
         "//packages/pocket-ic",
         "//rs/rust_canisters/http_types",
