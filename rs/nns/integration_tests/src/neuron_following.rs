@@ -496,7 +496,7 @@ async fn test_prune_some_following() {
     // Step 2: Call the code under test.
 
     // Wait for pruning to occur in the background.
-    for _ in 0..100 {
+    for _ in 0..15 {
         pocket_ic.advance_time(Duration::from_secs(1)).await;
         pocket_ic.tick().await;
     }
@@ -643,7 +643,7 @@ async fn test_backfill_voting_power_refreshed_timestamps() {
     // Step 2: Call the code under test.
 
     // Wait for backfilling to complete.
-    for _ in 0..100 {
+    for _ in 0..15 {
         pocket_ic.advance_time(Duration::from_secs(1)).await;
         pocket_ic.tick().await;
     }
