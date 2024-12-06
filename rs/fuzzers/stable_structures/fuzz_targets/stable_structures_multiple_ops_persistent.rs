@@ -79,7 +79,7 @@ fuzz_target!(|ops: Vec<StableStructOperation>| {
     // crash, look into AFL_PERSISTENT_RECORD. (https://github.com/AFLplusplus/AFLplusplus/blob/stable/instrumentation/README.persistent_mode.md#6-persistent-record-and-replay)
 
     std::panic::set_hook(Box::new(move |panic_info| {
-        println!("{panic_info}");
+        eprintln!("{panic_info}");
 
         let duration_since_epoch = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -97,7 +97,7 @@ fuzz_target!(|ops: Vec<StableStructOperation>| {
             );
             DIR.with(|dir| {
                 let file_path = dir.path().join(file_name);
-                println!("Creating operations dump at {}", file_path.display());
+                eprintln!("Creating operations dump at {}", file_path.display());
 
                 let mut f = File::create(file_path).unwrap();
                 f.write_all(&buffer).unwrap();
@@ -117,7 +117,7 @@ fuzz_target!(|ops: Vec<StableStructOperation>| {
                 );
                 DIR.with(|dir| {
                     let file_path = dir.path().join(file_name);
-                    println!("Creating memory dump at {}", file_path.display());
+                    eprintln!("Creating memory dump at {}", file_path.display());
 
                     let mut f = File::create(file_path).unwrap();
                     f.write_all(&buffer).unwrap();
