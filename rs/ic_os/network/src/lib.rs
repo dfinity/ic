@@ -5,8 +5,9 @@ use anyhow::{Context, Result};
 use regex::Regex;
 
 use crate::systemd::generate_systemd_config_files;
-use deterministic_ips::HwAddr;
+use deterministic_ips::MacAddr6Ext;
 use info::NetworkInfo;
+use macaddr::MacAddr6;
 
 pub mod info;
 pub mod interfaces;
@@ -16,7 +17,7 @@ pub mod systemd;
 /// Requires superuser permissions to run `ipmitool` and write to the systemd directory
 pub fn generate_network_config(
     network_info: &NetworkInfo,
-    generated_mac: &HwAddr,
+    generated_mac: &MacAddr6,
     output_directory: &Path,
 ) -> Result<()> {
     eprintln!("Generating ipv6 address");
@@ -31,7 +32,7 @@ pub fn generate_network_config(
     )
 }
 
-pub fn resolve_mgmt_mac(config_mac: Option<String>) -> Result<HwAddr> {
+pub fn resolve_mgmt_mac(config_mac: Option<String>) -> Result<MacAddr6> {
     if let Some(config_mac) = config_mac {
         // Take MAC address override from config
         let mgmt_mac = config_mac.parse()?;
@@ -57,7 +58,7 @@ pub fn resolve_mgmt_mac(config_mac: Option<String>) -> Result<HwAddr> {
     }
 }
 
-fn parse_mac_address_from_ipmitool_output(output: &str) -> Result<HwAddr> {
+fn parse_mac_address_from_ipmitool_output(output: &str) -> Result<MacAddr6> {
     let mac_line = output
         .lines()
         .find(|line| line.trim().starts_with("MAC Address"))
