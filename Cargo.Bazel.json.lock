@@ -1,5 +1,5 @@
 {
-  "checksum": "ea8bb24a6be2846c326b947cd33462b574ee9dd3dd0ad2f7102855de7752253f",
+  "checksum": "f055e4b729de3e871f1cd53eb0230b8af125104bd7cb10ed06a4b58e82313ce5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18665,8 +18665,13 @@
               "target": "ic_cbor"
             },
             {
-              "id": "ic-cdk 0.18.0-alpha.1",
+              "id": "ic-cdk 0.16.0",
               "target": "ic_cdk"
+            },
+            {
+              "id": "ic-cdk 0.18.0-alpha.1",
+              "target": "ic_cdk",
+              "alias": "ic_cdk_next"
             },
             {
               "id": "ic-cdk-timers 0.11.0",
@@ -87752,6 +87757,7 @@
     "ic-canister-log 0.2.0",
     "ic-canister-sig-creation 1.0.1",
     "ic-cbor 2.6.0",
+    "ic-cdk 0.16.0",
     "ic-cdk 0.18.0-alpha.1",
     "ic-cdk-macros 0.9.0",
     "ic-cdk-timers 0.11.0",

@@ -11,8 +11,7 @@ path = "src/main.rs"
 candid = { workspace = true }
 dfn_core = { path = "../dfn_core" }
 ic-base-types = { path = "../../types/base_types" }
-ic-cdk = { git = "https://github.com/dfinity/cdk-rs.git", branch = "next" }
-#ic-cdk = { workspace = true }
+ic-cdk-next = { package = "ic-cdk", git = "https://github.com/dfinity/cdk-rs.git", branch = "next" }
 ic-cdk-macros = { workspace = true }
 ic-error-types = { path = "../../types/error_types" }
 ic-types = { path = "../../types/types" }

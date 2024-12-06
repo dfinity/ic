@@ -6405,6 +6405,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-cdk"
+version = "0.18.0-alpha.1"
+source = "git+https://github.com/dfinity/cdk-rs.git?branch=next#605abcade44d8fa4888c564c6fab5c715d1c33c8"
+dependencies = [
+ "candid",
+ "ic-cdk-macros 0.18.0-alpha.1",
+ "ic0 0.24.0-alpha.1",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-cdk-macros"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6465,6 +6477,19 @@ name = "ic-cdk-macros"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d4d857135deef20cc7ea8f3869a30cd9cfeb1392b3a81043790b2cd82adc3e0"
+dependencies = [
+ "candid",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_tokenstream 0.2.2",
+ "syn 2.0.87",
+]
+
+[[package]]
+name = "ic-cdk-macros"
+version = "0.18.0-alpha.1"
+source = "git+https://github.com/dfinity/cdk-rs.git?branch=next#605abcade44d8fa4888c564c6fab5c715d1c33c8"
 dependencies = [
  "candid",
  "proc-macro2",
@@ -13744,6 +13769,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8de254dd67bbd58073e23dc1c8553ba12fa1dc610a19de94ad2bbcd0460c067f"
 
 [[package]]
+name = "ic0"
+version = "0.24.0-alpha.1"
+source = "git+https://github.com/dfinity/cdk-rs.git?branch=next#605abcade44d8fa4888c564c6fab5c715d1c33c8"
+
+[[package]]
 name = "ic_bls12_381"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18140,6 +18170,7 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-cdk 0.16.0",
+ "ic-cdk 0.18.0-alpha.1",
  "ic-cdk-macros 0.9.0",
  "ic-error-types",
  "ic-types",
