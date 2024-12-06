@@ -54,19 +54,13 @@ pub fn has_ipv6_connectivity(
         wait_time,
     );
 
-    let interface_cleanup = || {
-        eprintln!("Removing ip address and bringing interface down");
-        get_command_stdout("ip", ["addr", "del", &ip, "dev", &interface.name])?;
-        deactivate_link(&interface.name)
-    };
-
     if ping_success.is_err() {
         eprintln!("Failed to ping from configured interface.");
-        interface_cleanup()?;
+        cleanup_interface(&interface.name, &ip)?;
         Ok(false)
     } else {
         eprintln!("Successful ipv6 connectivity");
-        interface_cleanup()?;
+        cleanup_interface(&interface.name, &ip)?;
         Ok(true)
     }
 }
@@ -79,6 +73,12 @@ pub fn get_interface_name(interface_path: &PathBuf) -> Result<String> {
             "Error getting filename from path: {:?}",
             interface_path
         ))
+}
+
+fn cleanup_interface(interface_name: &str, ip: &str) -> Result<()> {
+    eprintln!("Removing ip address and bringing interface down");
+    get_command_stdout("ip", ["addr", "del", ip, "dev", interface_name])?;
+    deactivate_link(interface_name)
 }
 
 fn qualify_and_generate_interface(interface_name: &str) -> Result<Option<Interface>> {
