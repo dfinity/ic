@@ -1390,11 +1390,30 @@ impl NeuronStore {
 pub fn prune_some_following(
     voting_power_economics: &VotingPowerEconomics,
     neuron_store: &mut NeuronStore,
+    next: Bound<NeuronId>,
+    carry_on: impl FnMut() -> bool,
+) -> Bound<NeuronId> {
+    let now_seconds = neuron_store.now();
+    groom_some_neurons(
+        neuron_store,
+        |neuron| {
+            neuron.prune_following(voting_power_economics, now_seconds);
+        },
+        next,
+        carry_on,
+    )
+}
+
+pub fn groom_some_neurons(
+    neuron_store: &mut NeuronStore,
+    mut touch_neuron: impl FnMut(&mut Neuron),
     mut next: Bound<NeuronId>,
     mut carry_on: impl FnMut() -> bool,
 ) -> Bound<NeuronId> {
-    let now_seconds = neuron_store.now();
-
+    // Here, do-while semantics is used, rather than while. I.e. carry_on is
+    // only called at the end of the loop, not the beginnin. This results in the
+    // nice property that (when there are more neurons), this ALWAYS makes SOME
+    // progress.
     loop {
         // Which neuron do we operate on next?
         let current_neuron_id = neuron_store.first_neuron_id(next);
@@ -1413,9 +1432,7 @@ pub fn prune_some_following(
         next = Bound::Excluded(current_neuron_id);
 
         let result = neuron_store.with_neuron_mut(&current_neuron_id, |neuron| {
-            // This is where the "real work" takes place. Everything else is to
-            // keep the scan going.
-            neuron.prune_following(voting_power_economics, now_seconds);
+            touch_neuron(neuron);
         });
 
         // Log if somehow with_neuron_mut returns Err. This should not be
@@ -1432,6 +1449,19 @@ pub fn prune_some_following(
             return next;
         }
     }
+}
+
+pub fn backfill_some_voting_power_refreshed_timestamps(
+    neuron_store: &mut NeuronStore,
+    next: Bound<NeuronId>,
+    carry_on: impl FnMut() -> bool,
+) -> Bound<NeuronId> {
+    groom_some_neurons(
+        neuron_store,
+        |neuron| neuron.backfill_voting_power_refreshed_timestamp(),
+        next,
+        carry_on,
+    )
 }
 
 /// Number of entries for each neuron indexes (in stable storage)

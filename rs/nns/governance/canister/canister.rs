@@ -167,6 +167,9 @@ fn schedule_timers() {
     schedule_adjust_neurons_storage(Duration::from_nanos(0), NeuronIdProto { id: 0 });
     schedule_prune_following(Duration::from_secs(0));
     schedule_spawn_neurons();
+
+    // TODO(NNS1-3446): Delete. (This only needs to be run once, but can safely be run multiple times).
+    schedule_backfill_voting_power_refreshed_timestamps(Duration::from_secs(0));
 }
 
 // Seeding interval seeks to find a balance between the need for rng secrecy, and
@@ -174,6 +177,7 @@ fn schedule_timers() {
 const SEEDING_INTERVAL: Duration = Duration::from_secs(3600);
 const RETRY_SEEDING_INTERVAL: Duration = Duration::from_secs(30);
 const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(10);
+const BACKFILL_VOTING_POWER_REFRESHED_TIMESTAMPS_INTERVAL: Duration = Duration::from_secs(60);
 
 // Once this amount of instructions is used by the
 // Governance::prune_some_following, it stops, saves where it is, schedules more
@@ -193,6 +197,8 @@ const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(10);
 // prune_some_following. If we assume 1 terainstruction costs 1 XDR,
 // prune_some_following uses a couple of bucks worth of instructions each day.
 const MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS: u64 = 50_000_000;
+
+const MAX_BACKFILL_VOTING_POWER_REFRESHED_TIMESTAMPS_INSTRUCTIONS: u64 = 50_000_000;
 
 fn schedule_seeding(delay: Duration) {
     ic_cdk_timers::set_timer(delay, || {
@@ -244,6 +250,40 @@ fn schedule_prune_following(delay: Duration) {
         });
 
         schedule_prune_following(PRUNE_FOLLOWING_INTERVAL);
+    });
+}
+
+thread_local! {
+    static BACKFILL_VOTING_POWER_REFRESHED_TIMESTAMPS_CHECKPOINT: RefCell<Bound<NeuronIdProto>> =
+        const { RefCell::new(Bound::Unbounded) };
+}
+
+fn schedule_backfill_voting_power_refreshed_timestamps(delay: Duration) {
+    ic_cdk_timers::set_timer(delay, || {
+        let original_checkpoint =
+            BACKFILL_VOTING_POWER_REFRESHED_TIMESTAMPS_CHECKPOINT.with(|p| *p.borrow());
+
+        let carry_on = || {
+            call_context_instruction_counter()
+                < MAX_BACKFILL_VOTING_POWER_REFRESHED_TIMESTAMPS_INSTRUCTIONS
+        };
+        let new_checkpoint = governance_mut()
+            .backfill_some_voting_power_refreshed_timestamps(original_checkpoint, carry_on);
+
+        BACKFILL_VOTING_POWER_REFRESHED_TIMESTAMPS_CHECKPOINT.with(|p| {
+            let mut borrow = p.borrow_mut();
+            *borrow = new_checkpoint;
+        });
+
+        let is_done = new_checkpoint == Bound::Unbounded;
+        if is_done {
+            return;
+        }
+
+        // Otherwise, continue later.
+        schedule_backfill_voting_power_refreshed_timestamps(
+            BACKFILL_VOTING_POWER_REFRESHED_TIMESTAMPS_INTERVAL,
+        );
     });
 }
 
