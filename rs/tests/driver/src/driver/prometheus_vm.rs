@@ -160,7 +160,7 @@ impl PrometheusVm {
     /// ```
     ///
     /// This process automatically discovers all `*.json` files, which are interpreted as Grafana dashboards. It then copies these files to a destination, where they will be sent to the Prometheus VM for use with the testnets. The expected name of the dashboards directory is determined by reading the `commonAnnotations.k8s-sidecar-target-directory` path from the `kustomize.yaml` file. This value specifies the location where the dashboards should be placed so that the links don't get broken.
-    fn transform_dashboards_root_dir(logger: Logger, destination: &PathBuf) -> Result<()> {
+    fn transform_dashboards_root_dir(logger: Logger, destination: &Path) -> Result<()> {
         let dashboards_root = PathBuf::from_str(&std::env::var("IC_DASHBOARDS_DIR")?)?;
 
         for directory in dashboards_root.read_dir().map_err(|e| {
