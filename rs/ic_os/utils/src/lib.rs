@@ -10,18 +10,17 @@ pub fn to_cidr(ipv6_address: Ipv6Addr, prefix_length: u8) -> String {
 }
 
 /// Run a command with args and get the stdout if success, stderr if failure.
-pub fn get_command_stdout<'a, StringIter: IntoIterator<Item = &'a str>>(
+pub fn get_command_stdout<'a, StringIter: IntoIterator<Item = &'a str> + Clone>(
     command: &str,
     args: StringIter,
 ) -> Result<String> {
-    let args_vec: Vec<&str> = args.into_iter().collect();
-
-    let output = Command::new(command).args(&args_vec).output()?;
+    let output = Command::new(command).args(args.clone()).output()?;
     if !output.status.success() {
+        let args_str = args.into_iter().collect::<Vec<_>>().join(" ");
         bail!(
             "Error running command: '{} {}': {:?}",
             command,
-            args_vec.join(" "),
+            args_str,
             output.stderr
         );
     }
