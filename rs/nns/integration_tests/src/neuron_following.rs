@@ -485,9 +485,9 @@ async fn test_prune_some_following() {
         "NNS Governance",
         GOVERNANCE_CANISTER_ID,
         governance_proto.encode_to_vec(),
-        // TODO: Once following pruning is released, replace with vanilla
-        // build_governance_wasm(). For now, the feature is only enabled when
-        // built with feature = "test".
+        // TODO(NNS1-3446): Once following pruning is released, replace with
+        // vanilla build_governance_wasm(). For now, the feature is only enabled
+        // when built with feature = "test".
         build_test_governance_wasm(),
         Some(ROOT_CANISTER_ID.get()),
     )
@@ -635,9 +635,6 @@ async fn test_backfill_voting_power_refreshed_timestamps() {
         "NNS Governance",
         GOVERNANCE_CANISTER_ID,
         governance_proto.encode_to_vec(),
-        // TODO: Once following pruning is released, replace with vanilla
-        // build_governance_wasm(). For now, the feature is only enabled when
-        // built with feature = "test".
         build_test_governance_wasm(),
         Some(ROOT_CANISTER_ID.get()),
     )
