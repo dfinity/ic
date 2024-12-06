@@ -152,7 +152,7 @@ mod tests {
             "mgmt_mac": "EC:2A:72:31:A2:0C",
             "deployment_environment": "Mainnet",
             "logging": {
-                "elasticsearch_hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443",
+                "elasticsearch_hosts": "elasticsearch.ch1-obsdev1.dfinity.network:443",
                 "elasticsearch_tags": "tag1 tag2"
             },
             "use_nns_public_key": true,
