@@ -89,7 +89,7 @@ mod test {
                 "mgmt_mac": null
               },
               "logging": {
-                "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
+                "hosts": "elasticsearch.ch1-obsdev1.dfinity.network:443"
               },
               "nns": {
                 "url": "https://icp-api.io,https://icp0.io,https://ic0.app"
@@ -108,7 +108,7 @@ mod test {
     "mgmt_mac": null
   },
   "logging": {
-    "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
+    "hosts": "elasticsearch.ch1-obsdev1.dfinity.network:443"
   },
   "nns": {
     "url": "https://icp-api.io,https://icp0.io,https://ic0.app"
@@ -120,13 +120,7 @@ mod test {
 }"#;
 
     static DEPLOYMENT_STRUCT: Lazy<DeploymentSettings> = Lazy::new(|| {
-        let hosts = [
-            "elasticsearch-node-0.mercury.dfinity.systems:443",
-            "elasticsearch-node-1.mercury.dfinity.systems:443",
-            "elasticsearch-node-2.mercury.dfinity.systems:443",
-            "elasticsearch-node-3.mercury.dfinity.systems:443",
-        ]
-        .join(" ");
+        let hosts = ["elasticsearch.ch1-obsdev1.dfinity.network:443"].join(" ");
         DeploymentSettings {
             deployment: Deployment {
                 name: "mainnet".to_string(),
