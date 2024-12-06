@@ -369,7 +369,7 @@ pub fn replay<I: CheckInvariants>(
                 account,
                 reason,
             } => {
-                state.suspended_utxos.insert(account, utxo, reason);
+                state.suspended_utxos.insert(account, utxo, reason, None);
             }
             Event::DistributedKytFee {
                 kyt_provider,

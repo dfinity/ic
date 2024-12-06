@@ -19,7 +19,7 @@ pub fn generate_network_config(
     generated_mac: &MacAddr6,
     output_directory: &Path,
 ) -> Result<()> {
-    eprintln!("Generating ipv6 address");
+    eprintln!("Generating IPv6 address");
 
     match &network_settings.ipv6_config {
         Ipv6Config::RouterAdvertisement => {
@@ -28,7 +28,7 @@ pub fn generate_network_config(
         Ipv6Config::Fixed(_) => Err(anyhow!("Fixed IP configuration is not yet supported")),
         Ipv6Config::Deterministic(ipv6_config) => {
             let ipv6_address = generated_mac.calculate_slaac(&ipv6_config.prefix)?;
-            eprintln!("Using ipv6 address: {ipv6_address}");
+            eprintln!("Using IPv6 address: {ipv6_address}");
 
             generate_systemd_config_files(
                 output_directory,
@@ -71,12 +71,12 @@ fn parse_mac_address_from_ipmitool_output(output: &str) -> Result<MacAddr6> {
         .lines()
         .find(|line| line.trim().starts_with("MAC Address"))
         .context(format!(
-            "Could not find mac address line in ipmitool output: {}",
+            "Could not find MAC address line in ipmitool output: {}",
             output
         ))?;
 
     // Parse MAC line
-    let error_msg = format!("Could not parse mac address line: {}", mac_line);
+    let error_msg = format!("Could not parse MAC address line: {}", mac_line);
     let re = Regex::new(r"MAC Address\s+:\s+(([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2}))")?;
     let captures = re.captures(mac_line).context(error_msg.clone())?;
     let mac = captures.get(1).context(error_msg.clone())?;

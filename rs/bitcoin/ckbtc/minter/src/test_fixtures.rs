@@ -1,10 +1,14 @@
 use crate::lifecycle::init::{BtcNetwork, InitArgs};
+use crate::Timestamp;
 use crate::{lifecycle, ECDSAPublicKey};
 use candid::Principal;
 use ic_base_types::CanisterId;
 use ic_btc_interface::{GetUtxosResponse, OutPoint, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
+use std::time::Duration;
 
+pub const NOW: Timestamp = Timestamp::new(1733145560 * 1_000_000_000);
+pub const DAY: Duration = Duration::from_secs(24 * 60 * 60);
 pub const MINTER_CANISTER_ID: Principal = Principal::from_slice(&[0, 0, 0, 0, 2, 48, 0, 7, 1, 1]);
 pub const BTC_CHECKER_CANISTER_ID: Principal =
     Principal::from_slice(&[0, 0, 0, 0, 3, 49, 1, 8, 2, 2]);
@@ -132,7 +136,7 @@ pub mod mock {
             fn id(&self) -> Principal;
             fn time(&self) -> u64;
             fn global_timer_set(&self, timestamp: u64);
-            async fn bitcoin_get_utxos(&self, request: &GetUtxosRequest, cycles: u64) -> Result<GetUtxosResponse, CallError>;
+            async fn bitcoin_get_utxos(&self, request: GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
             async fn check_transaction(&self, btc_checker_principal: Principal, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
             async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;
         }

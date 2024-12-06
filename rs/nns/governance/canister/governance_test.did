@@ -504,6 +504,7 @@ type ManageNeuronCommandRequest = variant {
   StakeMaturity : StakeMaturity;
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
+  RefreshVotingPower : RefreshVotingPower;
 };
 
 type ManageNeuronRequest = record {

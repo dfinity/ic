@@ -242,11 +242,6 @@ exports_files([
     "create-universal-vm-config-image.sh",
 ])
 
-filegroup(
-    name = "grafana_dashboards",
-    srcs = glob(["dashboards/**/*"]),
-)
-
 symlink_dir(
     name = "recovery/binaries",
     testonly = True,

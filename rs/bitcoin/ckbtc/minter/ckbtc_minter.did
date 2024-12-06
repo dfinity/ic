@@ -122,12 +122,22 @@ type PendingUtxo = record {
     confirmations: nat32;
 };
 
+// Number of nanoseconds since the Unix Epoch
+type Timestamp = nat64;
+
+type SuspendedUtxo = record {
+    utxo : Utxo;
+    reason : SuspendedReason;
+    earliest_retry: Timestamp;
+};
+
 type UpdateBalanceError = variant {
     // There are no new UTXOs to process.
     NoNewUtxos : record {
         current_confirmations: opt nat32;
         required_confirmations: nat32;
         pending_utxos: opt vec PendingUtxo;
+        suspended_utxos: opt vec SuspendedUtxo;
     };
     // The minter is already processing another update balance request for the caller.
     AlreadyProcessing;
