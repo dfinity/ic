@@ -38,9 +38,7 @@ const TRANSFER_FROM_MULTIPLIER: u64 = 10;
 const BURN_MULTIPLIER: u64 = 1;
 
 struct FetchedBlocks {
-    #[allow(dead_code)]
     blocks: Vec<Block>,
-    #[allow(dead_code)]
     start_index: usize,
 }
 
@@ -143,9 +141,7 @@ impl LedgerState {
         // or new transactions triggered e.g., by timers running in other canisters on the subnet,
         // that get applied after the `StateMachine` is initialized, and are not part of the
         // transactions in `generate_transactions`.
-        // FIXME: The return value should be used as an optimization when fetching blocks from the
-        //  index to compare ledger, archive, and index block parity
-        let _ledger_and_archive_blocks = ledger_state
+        let ledger_and_archive_blocks = ledger_state
             .fetch_and_ingest_next_ledger_and_archive_blocks(
                 state_machine,
                 ledger_id,
@@ -155,8 +151,10 @@ impl LedgerState {
             ledger_state.verify_balances_and_allowances(state_machine, ledger_id);
         }
         // Verify parity between the blocks in the ledger+archive, and those in the index
-        LedgerState::verify_ledger_archive_index_block_parity(state_machine);
-        // TODO: Refactor?
+        LedgerState::verify_ledger_archive_index_block_parity(
+            state_machine,
+            ledger_and_archive_blocks,
+        );
         // Verify the reconstructed ledger state matches the previous state
         if let Some(previous_ledger_state) = &previous_ledger_state {
             ledger_state.assert_eq(previous_ledger_state);
@@ -173,44 +171,57 @@ impl LedgerState {
                 num_transactions_per_type: NUM_TRANSACTIONS_PER_TYPE,
             },
         );
-        // FIXME: Wait for index to sync here?
-        // let start = Instant::now();
-        // wait_until_sync_is_completed(state_machine, INDEX_CANISTER_ID, LEDGER_CANISTER_ID);
-        // println!("Time taken for index to sync: {:?}", start.elapsed());
-
         // Fetch all blocks into the new `ledger_state`. This call only retrieves blocks that were
         // not fetched in the previous call to `fetch_next_blocks`.
-        let _ledger_and_archive_blocks = ledger_state
+        let ledger_and_archive_blocks = ledger_state
             .fetch_and_ingest_next_ledger_and_archive_blocks(state_machine, ledger_id, None);
-        // Parity between the blocks in the ledger+archive, and those in the index, is verified separately
-        // TODO: Refactor?
+        // Verify parity between the blocks in the ledger+archive, and those in the index
+        LedgerState::verify_ledger_archive_index_block_parity(
+            state_machine,
+            ledger_and_archive_blocks,
+        );
         ledger_state
     }
 
-    fn verify_ledger_archive_index_block_parity(state_machine: &StateMachine) {
+    fn verify_ledger_archive_index_block_parity(
+        state_machine: &StateMachine,
+        ledger_and_archive_blocks: FetchedBlocks,
+    ) {
         println!("Verifying ledger, archive, and index block parity");
+        if ledger_and_archive_blocks.blocks.is_empty() {
+            println!("No blocks to retrieve from index");
+            return;
+        } else {
+            println!(
+                "Verifying ledger and archives vs index block parity for {} blocks starting at index {}",
+                ledger_and_archive_blocks.blocks.len(),
+                ledger_and_archive_blocks.start_index
+            );
+        }
         let now = Instant::now();
-        println!("Retrieving blocks from the ledger and archives");
-        // FIXME: Improve this - do not fetch all blocks every time the index parity is verified
-        let ledger_blocks = icp_get_blocks(state_machine, LEDGER_CANISTER_ID, None, None);
         // Wait for the index to sync with the ledger and archives
         wait_until_sync_is_completed(state_machine, INDEX_CANISTER_ID, LEDGER_CANISTER_ID);
-        println!("Retrieving {} blocks from the index", ledger_blocks.len());
+        println!(
+            "Retrieving {} blocks from the index",
+            ledger_and_archive_blocks.blocks.len()
+        );
         let index_blocks = get_all_blocks(
             state_machine,
             INDEX_CANISTER_ID,
-            0,
-            ledger_blocks.len() as u64,
+            ledger_and_archive_blocks.start_index as u64,
+            ledger_and_archive_blocks.blocks.len() as u64,
         )
         .blocks
         .into_iter()
         .map(icp_ledger::Block::decode)
         .collect::<Result<Vec<icp_ledger::Block>, String>>()
         .unwrap();
-        assert_eq!(ledger_blocks.len(), index_blocks.len());
-        assert_eq!(ledger_blocks, index_blocks);
+        assert_eq!(ledger_and_archive_blocks.blocks.len(), index_blocks.len());
+        assert_eq!(ledger_and_archive_blocks.blocks, index_blocks);
         println!(
-            "Ledger, archive, and index block parity verified in {:?}",
+            "Ledger, archive, and index block parity for {} blocks starting at index {} verified in {:?}",
+            ledger_and_archive_blocks.blocks.len(),
+            ledger_and_archive_blocks.start_index,
             now.elapsed()
         );
     }
@@ -224,6 +235,9 @@ fn should_create_state_machine_with_golden_nns_state() {
 
     // Perform upgrade and downgrade testing
     // (verify ledger balances and allowances, parity between ledger+archives and index)
+    // Verifying the balances requires the ledger having the (currently test-only) allowance
+    // endpoint for retrieving allowances based on AccountIdentifier pair key, so this check needs
+    // to be skipped for a ledger running the mainnet production version of the ledger.
     setup.perform_upgrade_downgrade_testing(false);
 
     // Upgrade all the canisters to the latest version
@@ -238,7 +252,7 @@ fn should_create_state_machine_with_golden_nns_state() {
     setup.downgrade_to_mainnet();
 
     // Verify ledger balance and allowance state
-    setup.perform_upgrade_downgrade_testing(false);
+    setup.perform_upgrade_downgrade_testing(true);
 }
 
 struct Wasms {
