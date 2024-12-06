@@ -117,8 +117,8 @@ fn test(env: TestEnv) {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: format!(
                     "Unable to route management canister request sign_with_schnorr: \
-                    ChainKeyError(\"Requested unknown or signing disabled threshold key: {}, \
-                    existing keys with signing enabled: {}\")",
+                    ChainKeyError(\"Requested unknown or disabled threshold key: {}, \
+                    existing enabled keys: {}\")",
                     key_id3, initial_key_ids_as_string,
                 ),
                 error_code: None,
@@ -224,8 +224,8 @@ fn test(env: TestEnv) {
                             reject_code: RejectCode::CanisterReject,
                             reject_message: format!(
                                 "Unable to route management canister request {}: \
-                                ChainKeyError(\"Requested unknown or signing disabled threshold key: {}, \
-                                existing keys with signing enabled: []\")",
+                                ChainKeyError(\"Requested unknown or disabled threshold key: {}, \
+                                existing enabled keys: []\")",
                                 method_name, key_id
                             ),
                             error_code: None

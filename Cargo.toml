@@ -23,7 +23,7 @@ members = [
     "rs/bitcoin/ckbtc/minter",
     "rs/bitcoin/ckbtc/kyt",
     "rs/bitcoin/consensus",
-    "rs/bitcoin/kyt",
+    "rs/bitcoin/checker",
     "rs/bitcoin/mock",
     "rs/bitcoin/replica_types",
     "rs/bitcoin/validation",
@@ -38,6 +38,7 @@ members = [
     "rs/boundary_node/rate_limits/canister_client",
     "rs/boundary_node/systemd_journal_gatewayd_shim",
     "rs/canister_client",
+    "rs/canister_client/read_state_response_parser",
     "rs/canister_client/sender",
     "rs/cross-chain/proposal-cli",
     "rs/cycles_account_manager",
@@ -329,7 +330,6 @@ members = [
     "rs/rust_canisters/statesync_test",
     "rs/rust_canisters/tests",
     "rs/rust_canisters/xnet_test",
-    "rs/scenario_tests",
     "rs/sns/audit",
     "rs/sns/cli",
     "rs/sns/governance",
@@ -607,6 +607,7 @@ libc = "0.2.158"
 libflate = "2.1.0"
 libnss = "0.5.0"
 local-ip-address = "0.5.6"
+macaddr = "1.0"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
 mockall = "0.13.0"

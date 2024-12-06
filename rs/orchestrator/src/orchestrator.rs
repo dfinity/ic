@@ -277,6 +277,7 @@ impl Orchestrator {
             replica_version.clone(),
             node_id,
             ic_binary_directory.clone(),
+            config.crypto.clone(),
             logger.clone(),
         );
 
