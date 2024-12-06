@@ -154,7 +154,8 @@ impl LedgerState {
         if should_verify_balances_and_allowances {
             ledger_state.verify_balances_and_allowances(state_machine, ledger_id);
         }
-        // Parity between the blocks in the ledger+archive, and those in the index, is verified separately
+        // Verify parity between the blocks in the ledger+archive, and those in the index
+        LedgerState::verify_ledger_archive_index_block_parity(state_machine);
         // TODO: Refactor?
         // Verify the reconstructed ledger state matches the previous state
         if let Some(previous_ledger_state) = &previous_ledger_state {
@@ -185,6 +186,34 @@ impl LedgerState {
         // TODO: Refactor?
         ledger_state
     }
+
+    fn verify_ledger_archive_index_block_parity(state_machine: &StateMachine) {
+        println!("Verifying ledger, archive, and index block parity");
+        let now = Instant::now();
+        println!("Retrieving blocks from the ledger and archives");
+        // FIXME: Improve this - do not fetch all blocks every time the index parity is verified
+        let ledger_blocks = icp_get_blocks(state_machine, LEDGER_CANISTER_ID, None, None);
+        // Wait for the index to sync with the ledger and archives
+        wait_until_sync_is_completed(state_machine, INDEX_CANISTER_ID, LEDGER_CANISTER_ID);
+        println!("Retrieving {} blocks from the index", ledger_blocks.len());
+        let index_blocks = get_all_blocks(
+            state_machine,
+            INDEX_CANISTER_ID,
+            0,
+            ledger_blocks.len() as u64,
+        )
+        .blocks
+        .into_iter()
+        .map(icp_ledger::Block::decode)
+        .collect::<Result<Vec<icp_ledger::Block>, String>>()
+        .unwrap();
+        assert_eq!(ledger_blocks.len(), index_blocks.len());
+        assert_eq!(ledger_blocks, index_blocks);
+        println!(
+            "Ledger, archive, and index block parity verified in {:?}",
+            now.elapsed()
+        );
+    }
 }
 
 /// Create a state machine with the golden NNS state, then upgrade and downgrade the ICP
@@ -193,38 +222,23 @@ impl LedgerState {
 fn should_create_state_machine_with_golden_nns_state() {
     let mut setup = Setup::new();
 
-    // Verify ledger balance and allowance state
+    // Perform upgrade and downgrade testing
+    // (verify ledger balances and allowances, parity between ledger+archives and index)
     setup.perform_upgrade_downgrade_testing(false);
-    // Verify ledger, archives, and index block parity
-    setup.verify_ledger_archive_index_block_parity();
 
     // Upgrade all the canisters to the latest version
     setup.upgrade_to_master();
     // Upgrade again to test the pre-upgrade
     setup.upgrade_to_master();
 
-    // Verify ledger balance and allowance state
+    // Perform upgrade and downgrade testing
     setup.perform_upgrade_downgrade_testing(true);
-    // Verify ledger, archives, and index block parity
-    setup.verify_ledger_archive_index_block_parity();
-
-    // Verify ledger balance and allowance state
-    // FIXME: This should be true, but currently the InMemoryLedger is not updated with the
-    //  transactions generated in the previous step.
-    setup.perform_upgrade_downgrade_testing(false);
 
     // Downgrade all the canisters to the mainnet version
     setup.downgrade_to_mainnet();
 
     // Verify ledger balance and allowance state
     setup.perform_upgrade_downgrade_testing(false);
-    // Verify ledger, archives, and index block parity
-    setup.verify_ledger_archive_index_block_parity();
-
-    // Verify ledger balance and allowance state
-    setup.perform_upgrade_downgrade_testing(false);
-    // Verify ledger, archives, and index block parity
-    setup.verify_ledger_archive_index_block_parity();
 }
 
 struct Wasms {
@@ -290,34 +304,6 @@ impl Setup {
             self.previous_ledger_state.take(),
             should_verify_balances_and_allowances,
         ));
-    }
-
-    pub fn verify_ledger_archive_index_block_parity(&self) {
-        println!("Verifying ledger, archive, and index block parity");
-        let now = Instant::now();
-        println!("Retrieving blocks from the ledger and archives");
-        // FIXME: Improve this - do not fetch all blocks every time the index parity is verified
-        let ledger_blocks = icp_get_blocks(&self.state_machine, LEDGER_CANISTER_ID, None, None);
-        // Wait for the index to sync with the ledger and archives
-        wait_until_sync_is_completed(&self.state_machine, INDEX_CANISTER_ID, LEDGER_CANISTER_ID);
-        println!("Retrieving {} blocks from the index", ledger_blocks.len());
-        let index_blocks = get_all_blocks(
-            &self.state_machine,
-            INDEX_CANISTER_ID,
-            0,
-            ledger_blocks.len() as u64,
-        )
-        .blocks
-        .into_iter()
-        .map(icp_ledger::Block::decode)
-        .collect::<Result<Vec<icp_ledger::Block>, String>>()
-        .unwrap();
-        assert_eq!(ledger_blocks.len(), index_blocks.len());
-        assert_eq!(ledger_blocks, index_blocks);
-        println!(
-            "Ledger, archive, and index block parity verified in {:?}",
-            now.elapsed()
-        );
     }
 
     fn list_archives(&self) -> Archives {
