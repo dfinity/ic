@@ -9,8 +9,7 @@ use std::collections::BTreeMap;
 
 fn main() {
     let mut canisters = BTreeMap::new();
-    let mut ordered_new_execution_canister_ids = Vec::new();
-    let mut ordered_long_execution_canister_ids = Vec::new();
+    let mut ordered_canister_ids = Vec::new();
     for i in 0..50_000 {
         let canister_id = canister_test_id(i);
         let scheduler_state = SchedulerState::default();
@@ -25,22 +24,11 @@ fn main() {
             CanisterState::new(system_state, None, scheduler_state),
         );
 
-        if i % 10 == 0 {
-            ordered_long_execution_canister_ids.push(canister_id);
-        } else {
-            ordered_new_execution_canister_ids.push(canister_id);
-        }
+        ordered_canister_ids.push(canister_id);
     }
 
     let scheduler_cores = 4;
-    let long_execution_cores = 1;
-    let round_schedule = RoundSchedule::new(
-        scheduler_cores,
-        long_execution_cores,
-        0,
-        ordered_new_execution_canister_ids,
-        ordered_long_execution_canister_ids,
-    );
+    let round_schedule = RoundSchedule::new(scheduler_cores, 0, ordered_canister_ids);
 
     let mut criterion = Criterion::default();
     let mut group = criterion.benchmark_group("RoundSchedule");
