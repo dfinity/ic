@@ -221,7 +221,7 @@ impl PartialEq for Neuron {
                     voting_power_refreshed_timestamp_seconds,
 
                     visibility,
-                    recent_ballots_next_entry_index: *recent_ballots_next_entry_index,
+                    recent_ballots_next_entry_index,
                 }
             }
         }
@@ -1593,11 +1593,12 @@ pub struct NeuronBuilder {
     neuron_type: Option<i32>,
     visibility: Option<Visibility>,
     voting_power_refreshed_timestamp_seconds: u64,
+    recent_ballots_next_entry_index: Option<usize>,
 
     // Fields that don't exist when a neuron is first built. We allow them to be set in tests.
     #[cfg(test)]
     neuron_fees_e8s: u64,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     recent_ballots: Vec<BallotInfo>,
     #[cfg(test)]
     recent_ballots_next_entry_index: Option<usize>,
@@ -1635,11 +1636,12 @@ impl NeuronBuilder {
             joined_community_fund_timestamp_seconds: None,
             neuron_type: None,
             visibility: None,
+            recent_ballots_next_entry_index: None,
             voting_power_refreshed_timestamp_seconds: created_timestamp_seconds,
 
             #[cfg(test)]
             neuron_fees_e8s: 0,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             recent_ballots: Vec::new(),
             #[cfg(test)]
             recent_ballots_next_entry_index: Some(0),
@@ -1732,7 +1734,7 @@ impl NeuronBuilder {
         self
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     pub fn with_recent_ballots(mut self, recent_ballots: Vec<BallotInfo>) -> Self {
         let recent_ballots_next_entry_index =
             Some(recent_ballots.len() % MAX_NEURON_RECENT_BALLOTS);
@@ -1787,9 +1789,9 @@ impl NeuronBuilder {
             neuron_type,
             #[cfg(test)]
             neuron_fees_e8s,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             recent_ballots,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             recent_ballots_next_entry_index,
             #[cfg(test)]
             transfer,
@@ -1810,9 +1812,9 @@ impl NeuronBuilder {
         // The below fields are always the default values for a new neuron.
         #[cfg(not(test))]
         let neuron_fees_e8s = 0;
-        #[cfg(not(test))]
+        #[cfg(not(any(test, feature = "canbench-rs")))]
         let recent_ballots = Vec::new();
-        #[cfg(not(test))]
+        #[cfg(not(any(test, feature = "canbench-rs")))]
         let recent_ballots_next_entry_index = Some(0);
         #[cfg(not(test))]
         let transfer = None;
