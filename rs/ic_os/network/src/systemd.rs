@@ -120,8 +120,9 @@ pub fn generate_systemd_config_files(
     ipv6_address: &Ipv6Addr,
 ) -> Result<()> {
     let mut interfaces = get_interfaces()?;
-    interfaces.sort_by(|a, b| b.speed_mbps.cmp(&a.speed_mbps));
-    eprintln!("Interfaces sorted by speed: {:?}", interfaces);
+    interfaces.sort_by_key(|v| v.speed_mbps);
+    interfaces.reverse();
+    eprintln!("Interfaces sorted decending by speed: {:?}", interfaces);
 
     let ping_target = network_info.ipv6_gateway.to_string();
     let mut fastest_interface = None;
