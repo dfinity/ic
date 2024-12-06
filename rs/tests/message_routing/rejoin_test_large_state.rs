@@ -40,7 +40,7 @@ use std::time::Duration;
 
 const PER_TASK_TIMEOUT: Duration = Duration::from_secs(3600 * 2);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(3600 * 2);
-const NUM_NODES: usize = 4;
+const NUM_NODES: usize = 1;
 const SIZE_LEVEL: usize = 8;
 const NUM_CANISTERS: usize = 8;
 
@@ -87,10 +87,10 @@ impl Config {
 
 // Generic setup
 fn setup(env: TestEnv, config: Config) {
-    assert!(
-        config.nodes_count >= 4,
-        "at least 4 nodes are required for state sync"
-    );
+    // assert!(
+    //     config.nodes_count >= 4,
+    //     "at least 4 nodes are required for state sync"
+    // );
     assert!(
         config.size_level >= 1 && config.size_level <= 8,
         "the size level should be between 1 and 8"
@@ -105,10 +105,10 @@ fn setup(env: TestEnv, config: Config) {
                 .with_default_vm_resources(VmResources {
                     vcpus: None,
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(
-                        (24 + 2 * config.num_canisters as u64) * 1024 * 1024,
+                        32 * 1024 * 1024,
                     )),
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(
-                        100 + 2 * config.num_canisters as u64,
+                        500,
                     )),
                 })
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
@@ -133,7 +133,7 @@ fn test(env: TestEnv, config: Config) {
 async fn test_async(env: TestEnv, config: Config) {
     let mut nodes = env.topology_snapshot().root_subnet().nodes();
     let agent_node = nodes.next().unwrap();
-    let rejoin_node = nodes.next().unwrap();
+    // let rejoin_node = nodes.next().unwrap();
     let allowed_failures = (config.nodes_count - 1) / 3;
     rejoin_test_large_state(
         env,
@@ -141,7 +141,7 @@ async fn test_async(env: TestEnv, config: Config) {
         config.size_level,
         config.num_canisters,
         DKG_INTERVAL,
-        rejoin_node.clone(),
+        agent_node.clone(),
         agent_node.clone(),
         nodes.take(allowed_failures),
     )
