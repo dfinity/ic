@@ -11869,6 +11869,7 @@ dependencies = [
  "base64 0.13.1",
  "build-info",
  "build-info-build",
+ "canbench-rs",
  "candid",
  "candid_parser",
  "clap 4.5.20",
