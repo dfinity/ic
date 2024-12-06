@@ -337,14 +337,15 @@ mod test {
       }
     }"#;
 
-    static DEPLOYMENT_STRUCT_NO_LOGGING_HOSTS: Lazy<DeploymentSettings> = Lazy::new(|| {
-        let hosts = [""].join(" ");
-        DeploymentSettings {
+    static DEPLOYMENT_STRUCT_NO_LOGGING_HOSTS: Lazy<DeploymentSettings> =
+        Lazy::new(|| DeploymentSettings {
             deployment: Deployment {
                 name: "mainnet".to_string(),
                 mgmt_mac: None,
             },
-            logging: Logging { hosts },
+            logging: Logging {
+                hosts: Default::default(),
+            },
             nns: Nns {
                 url: vec![Url::parse("https://wiki.internetcomputer.org").unwrap()],
             },
@@ -352,8 +353,7 @@ mod test {
                 memory: 490,
                 cpu: Some("kvm".to_string()),
             },
-        }
-    });
+        });
 
     #[test]
     fn deserialize_deployment() {
