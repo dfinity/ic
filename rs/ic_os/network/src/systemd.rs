@@ -125,35 +125,19 @@ pub fn generate_systemd_config_files(
     eprintln!("Interfaces sorted decending by speed: {:?}", interfaces);
 
     let ping_target = network_info.ipv6_gateway.to_string();
-    let mut fastest_interface = None;
 
-    for interface in interfaces.iter() {
-        // Old nodes are still configured with a local IPv4 interface connection
-        // Local IPv4 interfaces must be filtered out
-        match has_ipv6_connectivity(
-            interface,
-            ipv6_address,
-            network_info.ipv6_subnet,
-            &ping_target,
-        ) {
-            Ok(true) => {
-                fastest_interface = Some(interface);
-                break;
+    let fastest_interface = interfaces
+        .iter()
+        .find(|i| {
+            match has_ipv6_connectivity(i, ipv6_address, network_info.ipv6_subnet, &ping_target) {
+                Ok(result) => result,
+                Err(e) => {
+                    eprintln!("Error testing connectivity on {}: {}", &i.name, e);
+                    false
+                }
             }
-            Ok(false) => {
-                eprintln!(
-                    "Interface {} does not have IPv6 connectivity.",
-                    interface.name
-                );
-            }
-            Err(e) => {
-                eprintln!("Error testing connectivity on {}: {}", interface.name, e);
-            }
-        }
-    }
-
-    let fastest_interface = fastest_interface
-        .context("Could not find any network interfaces with IPv6 connectivity")?;
+        })
+        .context("Could not find any network interfaces")?;
 
     eprintln!("Using fastest interface: {:?}", fastest_interface);
 
