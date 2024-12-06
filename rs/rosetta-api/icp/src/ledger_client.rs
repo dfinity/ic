@@ -510,6 +510,15 @@ impl LedgerAccess for LedgerClient {
     }
 }
 
+/// The HTTP path for update calls on the replica.
+fn update_path(cid: CanisterId) -> String {
+    format!("api/v2/canister/{}/call", cid)
+}
+
+fn read_state_path(cid: CanisterId) -> String {
+    format!("api/v2/canister/{}/read_state", cid)
+}
+
 impl LedgerClient {
     // Exponential backoff from 100ms to 10s with a multiplier of 1.3.
     const MIN_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -575,7 +584,7 @@ impl LedgerClient {
 
         let url = self
             .ic_url
-            .join(&ic_canister_client::update_path(canister_id))
+            .join(&update_path(canister_id))
             .expect("URL join failed");
 
         // Submit the update call (with retry).
@@ -726,7 +735,7 @@ impl LedgerClient {
             let wait_timeout = Self::TIMEOUT - start_time.elapsed();
             let url = self
                 .ic_url
-                .join(&ic_canister_client::read_state_path(canister_id))
+                .join(&read_state_path(canister_id))
                 .expect("URL join failed");
 
             match send_post_request(
@@ -746,7 +755,7 @@ impl LedgerClient {
                         let cbor: serde_cbor::Value = serde_cbor::from_slice(&body)
                             .map_err(|err| format!("While parsing the status body: {}", err))?;
 
-                        let status = ic_canister_client::parse_read_state_response(
+                        let status = ic_read_state_response_parser::parse_read_state_response(
                             &request_id,
                             &canister_id,
                             self.root_key.as_ref(),

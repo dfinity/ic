@@ -149,6 +149,8 @@ pub const MATURITY_DISBURSEMENT_DELAY_SECONDS: u64 = 7 * 24 * 3600;
 pub const HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES: usize =
     MAX_HEAP_SIZE_IN_KIB / WASM32_PAGE_SIZE_IN_KIB * 7 / 8;
 
+pub const MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST: u64 = 100;
+
 /// Prefixes each log line for this canister.
 pub fn log_prefix() -> String {
     "[Governance] ".into()
@@ -3034,9 +3036,6 @@ impl Governance {
         &mut self,
         new_target: Version,
     ) -> Result<(), GovernanceError> {
-        // TODO[NNS1-3365]: Enable the AdvanceSnsTargetVersionFeature.
-        self.check_test_features_enabled();
-
         let (_, target_version) = self
             .proto
             .validate_new_target_version(Some(new_target))

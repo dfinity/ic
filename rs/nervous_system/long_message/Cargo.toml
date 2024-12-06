@@ -1,0 +1,27 @@
+[package]
+name = "ic-nervous-system-long-message"
+version = "0.0.1"
+edition = "2021"
+
+[[bin]]
+name = "long-message-canister"
+path = "tests/test_canisters/long_message_canister.rs"
+
+[dependencies]
+ic-cdk = { workspace = true }
+ic-cdk-timers = { workspace = true }
+candid = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+ic-types = { path = "../../types/types" }
+ic-cdk-timers = { workspace = true }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+ic-nervous-system-temporary = { path = "../../nervous_system/temporary" }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
+canister-test = { path = "../../rust_canisters/canister_test" }
+dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+ic-config = { path = "../../config" }
