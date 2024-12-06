@@ -280,16 +280,12 @@ impl NetworkEconomics {
     /// value are replaced with the value from defaults. In particular, 0 and
     /// None are replaced.
     fn inherit_from(&self, defaults: &Self) -> Self {
-        /// Returns ours if it is nonzero. Otherwise, returns default.
-        fn inherit_from<Primitive>(ours: Primitive, default: Primitive) -> Primitive
+        /// Returns ours if it is the default (for its type). Otherwise, returns default.
+        fn inherit_from<T>(ours: T, default: T) -> T
         where
-            Primitive: Default
-                + Eq
-                // Not actually used. This is just to make sure we only support numbers.
-                // This could be relaxed (i.e. deleted) later.
-                + std::ops::Add,
+            T: Default + PartialEq
         {
-            if ours == Primitive::default() {
+            if ours == T::default() {
                 return default;
             }
 
@@ -331,16 +327,16 @@ impl NetworkEconomics {
             // otherwise, you have to set a bundle of parameters all at once. In
             // other words, the current implementation does not support setting
             // individual subfields, a la carte.
-            neurons_fund_economics: self
-                .neurons_fund_economics
-                .as_ref()
-                .or(defaults.neurons_fund_economics.as_ref())
-                .cloned(),
-            voting_power_economics: self
-                .voting_power_economics
-                .as_ref()
-                .or(defaults.voting_power_economics.as_ref())
-                .cloned(),
+            neurons_fund_economics: inherit_from(
+                self.neurons_fund_economics.as_ref(),
+                defaults.neurons_fund_economics.as_ref(),
+            )
+            .cloned(),
+            voting_power_economics: inherit_from(
+                self.voting_power_economics.as_ref(),
+                defaults.voting_power_economics.as_ref(),
+            )
+            .cloned(),
         }
     }
 }
