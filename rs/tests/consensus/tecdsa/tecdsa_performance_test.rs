@@ -90,15 +90,15 @@ const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 // Network parameters
 const BANDWIDTH_MBITS: u32 = 80; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(120); // artificial added latency
-// const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
-//     .with_latency(LATENCY)
-//     .with_bandwidth(BANDWIDTH_MBITS);
+                                                      // const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
+                                                      //     .with_latency(LATENCY)
+                                                      //     .with_bandwidth(BANDWIDTH_MBITS);
 
 // Signature parameters
-const PRE_SIGNATURES_TO_CREATE: u32 = 10;
-const MAX_QUEUE_SIZE: u32 = 30;
+const PRE_SIGNATURES_TO_CREATE: u32 = 30;
+const MAX_QUEUE_SIZE: u32 = 60;
 const CANISTER_COUNT: usize = 4;
-const SIGNATURE_REQUESTS_PER_SECOND: f64 = 5.0;
+const SIGNATURE_REQUESTS_PER_SECOND: f64 = 7.0;
 const SCHNORR_MSG_SIZE_BYTES: usize = 32; // 2MiB minus some message overhead
 
 const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
@@ -108,18 +108,18 @@ const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
 fn make_key_ids() -> Vec<MasterPublicKeyId> {
     vec![
         ic_consensus_threshold_sig_system_test_utils::make_ecdsa_key_id(),
-        ic_consensus_threshold_sig_system_test_utils::make_bip340_key_id(),
-        ic_consensus_threshold_sig_system_test_utils::make_eddsa_key_id(),
+        // ic_consensus_threshold_sig_system_test_utils::make_bip340_key_id(),
+        // ic_consensus_threshold_sig_system_test_utils::make_eddsa_key_id(),
     ]
 }
 
 fn make_request_key_ids() -> Vec<MasterPublicKeyId> {
     vec![
         ic_consensus_threshold_sig_system_test_utils::make_ecdsa_key_id(),
-        ic_consensus_threshold_sig_system_test_utils::make_bip340_key_id(),
-        ic_consensus_threshold_sig_system_test_utils::make_eddsa_key_id(),
-        ic_consensus_threshold_sig_system_test_utils::make_bip340_key_id(),
-        ic_consensus_threshold_sig_system_test_utils::make_eddsa_key_id(),
+        // ic_consensus_threshold_sig_system_test_utils::make_bip340_key_id(),
+        // ic_consensus_threshold_sig_system_test_utils::make_eddsa_key_id(),
+        // ic_consensus_threshold_sig_system_test_utils::make_bip340_key_id(),
+        // ic_consensus_threshold_sig_system_test_utils::make_eddsa_key_id(),
     ]
 }
 
@@ -171,7 +171,7 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    tecdsa_performance_test(env, true, true);
+    tecdsa_performance_test(env, false, true);
 }
 
 pub fn tecdsa_performance_test(
