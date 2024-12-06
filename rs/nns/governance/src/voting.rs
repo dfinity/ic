@@ -1,7 +1,7 @@
 use crate::{
-    governance::Governance,
+    governance::{Governance, LOG_PREFIX},
     neuron_store::NeuronStore,
-    pb::v1::{Ballot, Topic, Topic::NeuronManagement, Vote},
+    pb::v1::{Ballot, ProposalData, Topic, Topic::NeuronManagement, Vote},
     storage::with_voting_state_machines_mut,
 };
 #[cfg(not(test))]
@@ -65,6 +65,22 @@ async fn noop_self_call_if_over_instructions(
         .map_err(|e| e.to_string())
     } else {
         Ok(())
+    }
+}
+
+fn proposal_ballots(
+    proposals: &mut BTreeMap<u64, ProposalData>,
+    proposal_id: u64,
+) -> Result<&mut HashMap<u64, Ballot>, String> {
+    match proposals.get_mut(&proposal_id) {
+        Some(proposal) => Ok(&mut proposal.ballots),
+        None => {
+            eprintln!(
+                "{} Proposal {} not found, cannot operate on ballots",
+                LOG_PREFIX, proposal_id
+            );
+            Err(format!("Proposal {} not found.", proposal_id))
+        }
     }
 }
 
@@ -138,15 +154,11 @@ impl Governance {
         topic: Topic,
     ) {
         with_voting_state_machines_mut(|voting_state_machines| {
-            let ballots = &mut self
-                .heap_data
-                .proposals
-                .get_mut(&proposal_id.id)
-                .unwrap()
-                .ballots;
-            voting_state_machines.with_machine(proposal_id, topic, |machine| {
-                machine.cast_vote(ballots, voting_neuron_id, vote)
-            });
+            if let Ok(ballots) = proposal_ballots(&mut self.heap_data.proposals, proposal_id.id) {
+                voting_state_machines.with_machine(proposal_id, topic, |machine| {
+                    machine.cast_vote(ballots, voting_neuron_id, vote)
+                });
+            }
         });
     }
 
@@ -158,16 +170,15 @@ impl Governance {
     ) {
         let proposal_id = machine.proposal_id;
         while !machine.is_completely_finished() {
-            machine.continue_processing(
-                &mut self.neuron_store,
-                &mut self
-                    .heap_data
-                    .proposals
-                    .get_mut(&proposal_id.id)
-                    .unwrap()
-                    .ballots,
-                is_over_soft_limit,
-            );
+            if let Ok(ballots) = proposal_ballots(&mut self.heap_data.proposals, proposal_id.id) {
+                machine.continue_processing(&mut self.neuron_store, ballots, is_over_soft_limit);
+            } else {
+                eprintln!(
+                    "{} Proposal {} for voting machine not found.  Machine cannot complete work.",
+                    LOG_PREFIX, proposal_id.id
+                );
+                break;
+            }
 
             if is_over_soft_limit() {
                 break;
