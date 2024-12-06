@@ -21,12 +21,14 @@ use rand::{rngs::OsRng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use slog::{info, Logger};
 use std::env;
+use std::time::Duration;
 use tokio::runtime::Runtime;
 
 use ic_agent::{
     identity::{AnonymousIdentity, Secp256k1Identity},
     Agent, Identity,
 };
+use ic_bn_lib::types::RequestType;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -41,8 +43,10 @@ use ic_system_test_driver::{
     retry_with_msg_async, systest,
     util::agent_observes_canister_module,
 };
+use regex::Regex;
+
 use rate_limits_api::{
-    v1::{RateLimitRule, RequestType},
+    v1::{Action, RateLimitRule},
     AddConfigResponse, DiscloseRulesArg, DiscloseRulesResponse, GetConfigResponse,
     GetRuleByIdResponse, IncidentId, InitArg, InputConfig, InputRule, OutputRuleMetadata, RuleId,
     Version,
@@ -166,33 +170,33 @@ async fn add_config_1(logger: Logger, agent: &Agent, canister_id: Principal) {
     let rule_1 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods_regex: Some(r"^(method_1)$".to_string()),
+        methods_regex: Some(Regex::new(r"^(method_1)$").unwrap()),
         request_types: Some(vec![RequestType::Call]),
-        limit: "1req/s".to_string(),
+        limit: Action::Limit(1, Duration::from_secs(60)),
     };
 
     let rule_2 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods_regex: Some(r"^(method_2)$".to_string()),
+        methods_regex: Some(Regex::new(r"^(method_2)$").unwrap()),
         request_types: Some(vec![RequestType::Query]),
-        limit: "2req/s".to_string(),
+        limit: Action::Limit(2, Duration::from_secs(60)),
     };
 
     let rule_3 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods_regex: Some(r"^(method_3)$".to_string()),
+        methods_regex: Some(Regex::new(r"^(method_3)$").unwrap()),
         request_types: None,
-        limit: "3req/s".to_string(),
+        limit: Action::Limit(3, Duration::from_secs(60)),
     };
 
     let rule_4 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods_regex: Some(r"^(method_4)$".to_string()),
+        methods_regex: Some(Regex::new(r"^(method_4)$").unwrap()),
         request_types: Some(vec![RequestType::ReadState]),
-        limit: "4req/s".to_string(),
+        limit: Action::Limit(4, Duration::from_secs(60)),
     };
 
     let args = Encode!(&InputConfig {
@@ -243,34 +247,34 @@ async fn add_config_2(logger: Logger, agent: &Agent, canister_id: Principal) {
     let rule_1 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods_regex: Some(r"^(method_1)$".to_string()),
+        methods_regex: Some(Regex::new(r"^(method_1)$").unwrap()),
         request_types: Some(vec![RequestType::Call]),
-        limit: "1req/s".to_string(),
+        limit: Action::Limit(1, Duration::from_secs(60)),
     };
 
     let rule_2 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods_regex: Some(r"^(method_2)$".to_string()),
+        methods_regex: Some(Regex::new(r"^(method_2)$").unwrap()),
         request_types: Some(vec![RequestType::Query]),
-        limit: "2req/s".to_string(),
+        limit: Action::Limit(2, Duration::from_secs(60)),
     };
 
     // only this rule is different from config_1
     let rule_3 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods_regex: Some(r"^(method_33)$".to_string()),
+        methods_regex: Some(Regex::new(r"^(method_33)$").unwrap()),
         request_types: None,
-        limit: "33req/s".to_string(),
+        limit: Action::Limit(33, Duration::from_secs(60)),
     };
 
     let rule_4 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods_regex: Some(r"^(method_4)$".to_string()),
+        methods_regex: Some(Regex::new(r"^(method_4)$").unwrap()),
         request_types: Some(vec![RequestType::ReadState]),
-        limit: "4req/s".to_string(),
+        limit: Action::Limit(4, Duration::from_secs(60)),
     };
 
     let args = Encode!(&InputConfig {

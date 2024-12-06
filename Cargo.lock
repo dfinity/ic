@@ -13763,6 +13763,7 @@ dependencies = [
  "certificate_orchestrator_interface",
  "ic-agent 0.37.1",
  "ic-base-types",
+ "ic-bn-lib",
  "ic-boundary-nodes-integration-test-common",
  "ic-boundary-nodes-performance-test-common",
  "ic-boundary-nodes-system-test-utils",
