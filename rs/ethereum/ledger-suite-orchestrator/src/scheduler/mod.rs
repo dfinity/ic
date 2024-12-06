@@ -1296,6 +1296,8 @@ async fn upgrade_canister<T: StorableWasm, R: CanisterRuntime>(
         canister_id,
         wasm_hash
     );
+    let now = runtime.time();
+    mutate_state(|s| s.record_upgrade_completed(canister_id, wasm_hash.clone(), now));
     Ok(())
 }
 
