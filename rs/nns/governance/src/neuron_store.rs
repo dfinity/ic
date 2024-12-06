@@ -1410,6 +1410,10 @@ pub fn groom_some_neurons(
     mut next: Bound<NeuronId>,
     mut carry_on: impl FnMut() -> bool,
 ) -> Bound<NeuronId> {
+    // Here, do-while semantics is used, rather than while. I.e. carry_on is
+    // only called at the end of the loop, not the beginnin. This results in the
+    // nice property that (when there are more neurons), this ALWAYS makes SOME
+    // progress.
     loop {
         // Which neuron do we operate on next?
         let current_neuron_id = neuron_store.first_neuron_id(next);
