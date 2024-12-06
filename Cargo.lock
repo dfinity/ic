@@ -2409,7 +2409,6 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "canister-test",
- "canister_http",
  "ic-agent 0.37.1",
  "ic-base-types",
  "ic-interfaces-registry",
@@ -16099,6 +16098,7 @@ dependencies = [
  "ic-registry-canister-api",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
+ "ic_consensus_system_test_utils",
  "indoc",
  "k256",
  "registry-canister",
