@@ -108,7 +108,7 @@ fn qualify_and_generate_interfaces(interface_names: &[&str]) -> Result<Vec<Inter
     let wait_time = Duration::from_secs(2);
     let interface_results: Vec<Result<Option<Interface>>> = interface_names
         .par_iter()
-        .map(|&i| {
+        .map(|i| {
             retry_pred(
                 10,
                 || qualify_and_generate_interface(i),
