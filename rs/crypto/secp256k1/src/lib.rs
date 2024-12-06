@@ -620,6 +620,16 @@ impl PrivateKey {
         Ok(tweaked_key.sign_message_with_bip340(message, rng))
     }
 
+    /// Sign a message with BIP340 Schnorr with Taproot derivation, without using an external RNG
+    ///
+    /// The aux_rand parameter for BIP340 is just to re-randomize the signature,
+    /// and may prevent certain forms of fault attack. It it is otherwise not necessary
+    /// for security.
+    pub fn sign_message_with_bip341_no_rng(&self, message: &[u8], taproot_tree_hash: &[u8]) -> Result<[u8; 64], InvalidTaprootHash> {
+        let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(0);
+        self.sign_message_with_bip341(message, &mut rng, taproot_tree_hash)
+    }
+
     /// Return the public key corresponding to this private key
     pub fn public_key(&self) -> PublicKey {
         PublicKey {
