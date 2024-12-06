@@ -561,6 +561,7 @@ fn compute_bouncer(
                 BouncerValue::MaybeWantsLater
             }
         }
+        IDkgMessageId::Transcript(_, _) => BouncerValue::Unwanted,
     }
 }
 

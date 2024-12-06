@@ -95,10 +95,10 @@ const LATENCY: Duration = Duration::from_millis(120); // artificial added latenc
                                                       //     .with_bandwidth(BANDWIDTH_MBITS);
 
 // Signature parameters
-const PRE_SIGNATURES_TO_CREATE: u32 = 30;
+const PRE_SIGNATURES_TO_CREATE: u32 = 120;
 const MAX_QUEUE_SIZE: u32 = 60;
 const CANISTER_COUNT: usize = 4;
-const SIGNATURE_REQUESTS_PER_SECOND: f64 = 7.0;
+const SIGNATURE_REQUESTS_PER_SECOND: f64 = 15.0;
 const SCHNORR_MSG_SIZE_BYTES: usize = 32; // 2MiB minus some message overhead
 
 const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";

@@ -753,6 +753,7 @@ pub enum IDkgMessage {
     SchnorrSigShare(SchnorrSigShare),
     Complaint(SignedIDkgComplaint),
     Opening(SignedIDkgOpening),
+    Transcript(IDkgTranscript),
 }
 
 impl IdentifiableArtifact for IDkgMessage {
@@ -779,6 +780,7 @@ impl IDkgMessage {
             IDkgMessage::SchnorrSigShare(x) => x.message_id(),
             IDkgMessage::Complaint(x) => x.message_id(),
             IDkgMessage::Opening(x) => x.message_id(),
+            IDkgMessage::Transcript(x) => x.message_id(),
         }
     }
 }
@@ -793,6 +795,7 @@ impl From<IDkgMessage> for pb::IDkgMessage {
             IDkgMessage::SchnorrSigShare(x) => Msg::SchnorrSigShare(x.into()),
             IDkgMessage::Complaint(x) => Msg::Complaint(x.into()),
             IDkgMessage::Opening(x) => Msg::Opening(x.into()),
+            IDkgMessage::Transcript(x) => Msg::Transcript(x.into()),
         };
         Self { msg: Some(msg) }
     }
@@ -813,6 +816,7 @@ impl TryFrom<pb::IDkgMessage> for IDkgMessage {
             Msg::SchnorrSigShare(x) => IDkgMessage::SchnorrSigShare(x.try_into()?),
             Msg::Complaint(x) => IDkgMessage::Complaint(x.try_into()?),
             Msg::Opening(x) => IDkgMessage::Opening(x.try_into()?),
+            Msg::Transcript(x) => IDkgMessage::Transcript(x.try_into()?),
         })
     }
 }
@@ -980,6 +984,14 @@ pub fn opening_prefix(
     IDkgPrefixOf::new(IDkgPrefix::new(transcript_id.id(), hasher.finish()))
 }
 
+pub fn transcript_prefix(transcript_id: &IDkgTranscriptId) -> IDkgPrefixOf<IDkgTranscript> {
+    // Group_tag: transcript Id, Meta info: <dealer_id + opener_id>
+    let mut hasher = Sha256::new();
+    transcript_id.id().hash(&mut hasher);
+
+    IDkgPrefixOf::new(IDkgPrefix::new(transcript_id.id(), hasher.finish()))
+}
+
 pub type IDkgArtifactIdDataOf<T> = Id<T, IDkgArtifactIdData>;
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
@@ -1071,6 +1083,10 @@ pub enum IDkgArtifactId {
         IDkgPrefixOf<SignedIDkgOpening>,
         IDkgArtifactIdDataOf<SignedIDkgOpening>,
     ),
+    Transcript(
+        IDkgPrefixOf<IDkgTranscript>,
+        IDkgArtifactIdDataOf<IDkgTranscript>,
+    ),
 }
 
 impl IDkgArtifactId {
@@ -1082,6 +1098,7 @@ impl IDkgArtifactId {
             IDkgArtifactId::SchnorrSigShare(prefix, _) => prefix.as_ref().clone(),
             IDkgArtifactId::Complaint(prefix, _) => prefix.as_ref().clone(),
             IDkgArtifactId::Opening(prefix, _) => prefix.as_ref().clone(),
+            IDkgArtifactId::Transcript(prefix, _) => prefix.as_ref().clone(),
         }
     }
 
@@ -1093,6 +1110,7 @@ impl IDkgArtifactId {
             IDkgArtifactId::SchnorrSigShare(_, data) => data.as_ref().hash.clone(),
             IDkgArtifactId::Complaint(_, data) => data.as_ref().hash.clone(),
             IDkgArtifactId::Opening(_, data) => data.as_ref().hash.clone(),
+            IDkgArtifactId::Transcript(_, data) => data.as_ref().hash.clone(),
         }
     }
 
@@ -1104,6 +1122,7 @@ impl IDkgArtifactId {
             IDkgArtifactId::SchnorrSigShare(_, data) => data.as_ref().height,
             IDkgArtifactId::Complaint(_, data) => data.as_ref().height,
             IDkgArtifactId::Opening(_, data) => data.as_ref().height,
+            IDkgArtifactId::Transcript(_, data) => data.as_ref().height,
         }
     }
 
@@ -1142,6 +1161,10 @@ impl From<IDkgArtifactId> for pb::IDkgArtifactId {
                 id_data: Some(pb::IDkgArtifactIdData::from(d.get())),
             }),
             IDkgArtifactId::Opening(p, d) => Kind::Opening(pb::PrefixPairIDkg {
+                prefix: Some((&p.get()).into()),
+                id_data: Some(pb::IDkgArtifactIdData::from(d.get())),
+            }),
+            IDkgArtifactId::Transcript(p, d) => Kind::Transcript(pb::PrefixPairIDkg {
                 prefix: Some((&p.get()).into()),
                 id_data: Some(pb::IDkgArtifactIdData::from(d.get())),
             }),
@@ -1202,6 +1225,13 @@ impl TryFrom<pb::IDkgArtifactId> for IDkgArtifactId {
                 IDkgPrefixOf::new(try_from_option_field(p.prefix.as_ref(), "Opening::prefix")?),
                 IDkgArtifactIdDataOf::new(try_from_option_field(p.id_data, "Opening::id_data")?),
             ),
+            Kind::Transcript(p) => Self::Transcript(
+                IDkgPrefixOf::new(try_from_option_field(
+                    p.prefix.as_ref(),
+                    "Transcript::prefix",
+                )?),
+                IDkgArtifactIdDataOf::new(try_from_option_field(p.id_data, "Transcript::id_data")?),
+            ),
         })
     }
 }
@@ -1216,6 +1246,7 @@ pub enum IDkgMessageType {
     SchnorrSigShare,
     Complaint,
     Opening,
+    Transcript,
 }
 
 impl From<&IDkgMessage> for IDkgMessageType {
@@ -1227,6 +1258,7 @@ impl From<&IDkgMessage> for IDkgMessageType {
             IDkgMessage::SchnorrSigShare(_) => IDkgMessageType::SchnorrSigShare,
             IDkgMessage::Complaint(_) => IDkgMessageType::Complaint,
             IDkgMessage::Opening(_) => IDkgMessageType::Opening,
+            IDkgMessage::Transcript(_) => IDkgMessageType::Transcript,
         }
     }
 }
@@ -1240,6 +1272,7 @@ impl From<&IDkgArtifactId> for IDkgMessageType {
             IDkgArtifactId::SchnorrSigShare(..) => IDkgMessageType::SchnorrSigShare,
             IDkgArtifactId::Complaint(..) => IDkgMessageType::Complaint,
             IDkgArtifactId::Opening(..) => IDkgMessageType::Opening,
+            IDkgArtifactId::Transcript(..) => IDkgMessageType::Transcript,
         }
     }
 }
@@ -1253,6 +1286,7 @@ impl IDkgMessageType {
             Self::SchnorrSigShare => "schnorr_sig_share",
             Self::Complaint => "complaint",
             Self::Opening => "opening",
+            Self::Transcript => "transcript",
         }
     }
 }
@@ -1608,6 +1642,16 @@ impl TryFrom<IDkgMessage> for SignedIDkgOpening {
     fn try_from(msg: IDkgMessage) -> Result<Self, Self::Error> {
         match msg {
             IDkgMessage::Opening(x) => Ok(x),
+            _ => Err(msg),
+        }
+    }
+}
+
+impl TryFrom<IDkgMessage> for IDkgTranscript {
+    type Error = IDkgMessage;
+    fn try_from(msg: IDkgMessage) -> Result<Self, Self::Error> {
+        match msg {
+            IDkgMessage::Transcript(x) => Ok(x),
             _ => Err(msg),
         }
     }
@@ -1997,6 +2041,22 @@ impl IDkgObject for SignedIDkgOpening {
     }
 }
 
+impl IDkgObject for IDkgTranscript {
+    fn message_prefix(&self) -> IDkgPrefixOf<Self> {
+        transcript_prefix(&self.transcript_id)
+    }
+
+    fn message_id(&self) -> IDkgArtifactId {
+        let transcript_id = self.transcript_id;
+        let id_data = IDkgArtifactIdDataOf::new(IDkgArtifactIdData {
+            height: transcript_id.source_height(),
+            hash: crypto_hash(self).get(),
+            subnet_id: *transcript_id.source_subnet(),
+        });
+        IDkgArtifactId::Transcript(self.message_prefix(), id_data)
+    }
+}
+
 impl From<&IDkgMessage> for IDkgArtifactId {
     fn from(msg: &IDkgMessage) -> IDkgArtifactId {
         match msg {
@@ -2006,6 +2066,7 @@ impl From<&IDkgMessage> for IDkgArtifactId {
             IDkgMessage::SchnorrSigShare(object) => object.message_id(),
             IDkgMessage::Complaint(object) => object.message_id(),
             IDkgMessage::Opening(object) => object.message_id(),
+            IDkgMessage::Transcript(object) => object.message_id(),
         }
     }
 }

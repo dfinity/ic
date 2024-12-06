@@ -46,7 +46,6 @@ use std::{
 };
 
 pub(crate) const MAX_PARALLELISM: usize = 2;
-pub(crate) const MAX_PARALLELISM_2: usize = 2;
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct InvalidChainCacheError(String);
