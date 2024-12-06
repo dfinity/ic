@@ -40,6 +40,7 @@ lazy_static = { workspace = true }
 minicbor = { workspace = true }
 minicbor-derive = { workspace = true }
 num-traits = { workspace = true }
+regex = "1.11.0"
 ripemd = "0.1.1"
 scopeguard = "1.1.0"
 serde = { workspace = true }
