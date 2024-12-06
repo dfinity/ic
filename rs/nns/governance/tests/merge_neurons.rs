@@ -139,14 +139,18 @@ fn do_test_merge_neurons(
                 source_neuron,
                 nns.governance
                     .neuron_store
-                    .with_neuron(&source_neuron_id, |n| n.clone().into_proto(now_seconds))
+                    .with_neuron(&source_neuron_id, |n| n
+                        .clone()
+                        .into_proto(nns.governance.voting_power_economics(), now_seconds))
                     .unwrap()
             );
             pretty_assertions::assert_eq!(
                 target_neuron,
                 nns.governance
                     .neuron_store
-                    .with_neuron(&target_neuron_id, |n| n.clone().into_proto(now_seconds))
+                    .with_neuron(&target_neuron_id, |n| n
+                        .clone()
+                        .into_proto(nns.governance.voting_power_economics(), now_seconds))
                     .unwrap()
             );
             pretty_assertions::assert_eq!(

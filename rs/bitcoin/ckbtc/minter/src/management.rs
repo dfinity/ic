@@ -4,12 +4,12 @@ use crate::logs::P0;
 use crate::ECDSAPublicKey;
 use crate::{tx, CanisterRuntime};
 use candid::{CandidType, Principal};
+use ic_btc_checker::{
+    CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
+};
 use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
     MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
-};
-use ic_btc_kyt::{
-    CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
 };
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
@@ -202,7 +202,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
     Ok(response)
 }
 
-/// Returns the current fee percentiles on the bitcoin network.
+/// Returns the current fee percentiles on the Bitcoin network.
 pub async fn get_current_fees(network: Network) -> Result<Vec<MillisatoshiPerByte>, CallError> {
     let cost_cycles = match network {
         Network::Mainnet => 100_000_000,
@@ -305,11 +305,11 @@ pub async fn sign_with_ecdsa(
 
 /// Check if the given Bitcoin address is blocked.
 pub async fn check_withdrawal_destination_address(
-    kyt_principal: Principal,
+    btc_checker_principal: Principal,
     address: String,
 ) -> Result<CheckAddressResponse, CallError> {
     let (res,): (CheckAddressResponse,) = ic_cdk::api::call::call(
-        kyt_principal,
+        btc_checker_principal,
         "check_address",
         (CheckAddressArgs { address },),
     )
@@ -321,14 +321,14 @@ pub async fn check_withdrawal_destination_address(
     Ok(res)
 }
 
-/// Check if the given UTXO passes KYT.
+/// Check if the given UTXO passes Bitcoin check.
 pub async fn check_transaction(
-    kyt_principal: Principal,
+    btc_checker_principal: Principal,
     utxo: &Utxo,
     cycle_payment: u128,
 ) -> Result<CheckTransactionResponse, CallError> {
     let (res,): (CheckTransactionResponse,) = ic_cdk::api::call::call_with_payment128(
-        kyt_principal,
+        btc_checker_principal,
         "check_transaction",
         (CheckTransactionArgs {
             txid: utxo.outpoint.txid.as_ref().to_vec(),
