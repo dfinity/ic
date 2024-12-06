@@ -18,7 +18,7 @@ Install the Bitcoin Checker canister at canister id `oltsj-fqaaa-aaaar-qal5q-cai
 
 The Bitcoin Checker implements checks for Bitcoin transactions and addresses against the OFAC (https://sanctionssearch.ofac.treas.gov/) list.
 It offers a more transparent approach than the KYT canister, and helps to simplify the process.
-A followup NNS proposal will propose to switch The ckBTC minter to using the Bitcoin Checker.
+A follow-up NNS proposal will propose to switch the ckBTC minter to using the Bitcoin Checker.
 
 More discussions on this change can be found in the forum thread https://forum.dfinity.org/t/ckbtc-and-kyt-compliance/18754.
 
