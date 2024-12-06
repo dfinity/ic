@@ -15,7 +15,7 @@ Previous ckBTC archive proposal: https://dashboard.internetcomputer.org/proposal
 ---
 
 ## Motivation
-TODO: THIS MUST BE FILLED OUT
+Upgrade the ckBTC archive canister to the same version ([ledger-suite-icrc-2024-11-28](https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2024-11-28)) as the ckBTC ledger canister to maintain a consistent versioning across the ckBTC ledger suite.
 
 
 ## Upgrade args
