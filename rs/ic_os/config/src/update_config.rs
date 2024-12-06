@@ -206,19 +206,14 @@ fn read_nns_conf(config_dir: &Path) -> Result<Vec<Url>> {
 }
 
 fn derive_mgmt_mac_from_hostname(hostname: Option<&str>) -> Result<MacAddr6> {
-    if let Some(hostname) = hostname {
-        if let Some(unformatted_mac) = hostname.strip_prefix("guest-") {
-            unformatted_mac
-                .parse()
-                .map_err(|_| anyhow!("Unable to parse mac address: {}", unformatted_mac))
-        } else {
-            Err(anyhow::anyhow!(
-                "Hostname does not start with 'guest-': {}",
-                hostname
-            ))
-        }
+    if let Some(unformatted_mac) = hostname.and_then(|h| h.strip_prefix("guest-")) {
+        unformatted_mac
+            .parse()
+            .map_err(|_| anyhow!("Unable to parse mac address: {}", unformatted_mac))
     } else {
-        Err(anyhow::anyhow!("Hostname is not specified"))
+        "00:00:00:00:00:00"
+            .parse()
+            .map_err(|_| anyhow!("Unable to parse dummy mac address"))
     }
 }
 
@@ -392,19 +387,10 @@ mod tests {
         let mac = derive_mgmt_mac_from_hostname(hostname)?;
         assert_eq!(mac, expected_mac);
 
-        // Test with invalid hostname (wrong prefix)
-        let invalid_hostname = Some("host-001122334455");
-        let result = derive_mgmt_mac_from_hostname(invalid_hostname);
-        assert!(result.is_err());
-
-        // Test with invalid hostname (wrong length)
-        let invalid_hostname_length = Some("guest-00112233");
-        let result = derive_mgmt_mac_from_hostname(invalid_hostname_length);
-        assert!(result.is_err());
-
-        // Test with None
-        let result = derive_mgmt_mac_from_hostname(None);
-        assert!(result.is_err());
+        // Test empty hostname
+        let expected_mac: MacAddr6 = "00:00:00:00:00:00".parse().unwrap();
+        let mac = derive_mgmt_mac_from_hostname(None)?;
+        assert_eq!(mac, expected_mac);
 
         Ok(())
     }
