@@ -1,7 +1,7 @@
 use std::{fmt, time::Duration};
 
 use candid::Principal;
-use humantime::parse_duration;
+use humantime::{format_duration, parse_duration};
 use ic_bn_lib::types::RequestType;
 use regex::Regex;
 use serde::{
@@ -66,7 +66,7 @@ impl fmt::Display for Action {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Block => write!(f, "block"),
-            Self::Limit(l, d) => write!(f, "{l}/{}s", d.as_secs()),
+            Self::Limit(l, d) => write!(f, "{l}/{}", format_duration(*d)),
         }
     }
 }
@@ -162,6 +162,24 @@ impl RateLimitRule {
 mod test {
     use super::*;
     use indoc::indoc;
+
+    #[test]
+    fn test_action() {
+        assert_eq!((Action::Block).to_string(), "block");
+        assert_eq!(
+            (Action::Limit(30, Duration::from_secs(3601))).to_string(),
+            "30/1h 1s"
+        );
+
+        assert_eq!(
+            serde_yaml::from_slice::<Action>(b"block").unwrap(),
+            Action::Block,
+        );
+        assert_eq!(
+            serde_yaml::from_slice::<Action>(b"30/1h 1s").unwrap(),
+            Action::Limit(30, Duration::from_secs(3601))
+        );
+    }
 
     #[test]
     fn test_rules() {

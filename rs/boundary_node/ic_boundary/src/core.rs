@@ -239,7 +239,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         || cli.obs.obs_log_anonymization_canister_id.is_some()
     {
         if cli.misc.crypto_config.is_none() || registry_client.is_none() {
-            return Err(anyhow!("Registry and crypto config are required to use rate-limiting canister client or anonymization client"));
+            return Err(anyhow!("Registry and crypto config are both required to use rate-limiting canister or anonymization salt canister"));
         }
 
         let agent = create_agent(
@@ -530,7 +530,7 @@ async fn create_agent(
         move || {
             crypto_component
                 .current_node_public_keys()
-                .map_err(|err| anyhow!("failed to retrieve public key: {err:?}"))?
+                .map_err(|e| anyhow!("failed to retrieve public key: {e:#}"))?
                 .node_signing_public_key
                 .context("missing node public key")
         }
