@@ -767,6 +767,57 @@ cc_library(
     urls = ["https://github.com/miracl/core/archive/ec77b2817a0e360b1893affe4cfa44d19391efc7.tar.gz"],
 )
 
+http_archive(
+    name = "bitcoin_core_linux",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+    name = "bitcoind",
+    srcs = ["bin/bitcoind"],
+)
+""",
+    sha256 = "2a6974c5486f528793c79d42694b5987401e4a43c97f62b1383abf35bcee44a8",
+    strip_prefix = "bitcoin-27.0",
+    urls = [
+        "https://bitcoin.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-linux-gnu.tar.gz",
+        "https://bitcoincore.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-linux-gnu.tar.gz",
+    ],
+)
+
+http_archive(
+    name = "bitcoin_core_darwin_x86",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+    name = "bitcoind",
+    srcs = ["bin/bitcoind"],
+)
+""",
+    sha256 = "e1efd8c4605b2aabc876da93b6eee2bedd868ce7d1f02b0220c1001f903b3e2c",
+    strip_prefix = "bitcoin-27.0",
+    urls = [
+        "https://bitcoin.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-apple-darwin.tar.gz",
+        "https://bitcoincore.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-apple-darwin.tar.gz",
+    ],
+)
+
+http_archive(
+    name = "bitcoin_core_darwin_arm64",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+    name = "bitcoind",
+    srcs = ["bin/bitcoind"],
+)
+""",
+    sha256 = "1d9d9b837297a73fc7a3b1cfed376644e3fa25c4e1672fbc143d5946cb52431d",
+    strip_prefix = "bitcoin-27.0",
+    urls = [
+        "https://bitcoin.org/bin/bitcoin-core-27.0/bitcoin-27.0-arm64-apple-darwin.tar.gz",
+        "https://bitcoincore.org/bin/bitcoin-core-27.0/bitcoin-27.0-arm64-apple-darwin.tar.gz",
+    ],
+)
+
 http_file(
     name = "bitcoin_example_canister",
     downloaded_file_path = "basic_bitcoin.wasm.gz",
