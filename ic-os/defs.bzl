@@ -511,6 +511,27 @@ EOF
         tags = ["manual"],
     )
 
+    native.sh_test(
+        name = "launch-remote-vm-test",
+        srcs = ["//ic-os:dev-tools/launch-remote-vm.sh"],
+        data = [
+            "//rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm",
+            "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
+            ":disk-img.tar.zst",
+            ":version.txt",
+            "//bazel:upload_systest_dep",
+        ],
+        env = {
+            "BIN": "$(location //rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm)",
+            "UPLOAD_SYSTEST_DEP": "$(location //bazel:upload_systest_dep)",
+            "SCRIPT": "$(location //ic-os/components:hostos-scripts/build-bootstrap-config-image.sh)",
+            "VERSION_FILE": "$(location :version.txt)",
+            "DISK_IMG": "$(location :disk-img.tar.zst)",
+        },
+        testonly = True,
+        tags = ["manual"],
+    )
+
     native.genrule(
         name = "launch-local-vm-script",
         outs = ["launch_local_vm_script"],
