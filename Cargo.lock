@@ -18454,9 +18454,10 @@ dependencies = [
 name = "rejoin-test-lib"
 version = "0.9.0"
 dependencies = [
+ "candid",
  "canister-test",
  "chrono",
- "dfn_json",
+ "dfn_candid",
  "futures",
  "ic-system-test-driver",
  "slog",
