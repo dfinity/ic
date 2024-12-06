@@ -11,7 +11,6 @@ rust_library(
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/dfn_candid",
         "//rs/tests/driver:ic-system-test-driver",
-        "@crate_index//:candid",
         "@crate_index//:chrono",
         "@crate_index//:futures",
         "@crate_index//:slog",
