@@ -94,10 +94,10 @@ go_deps.bzl               @dfinity/idx
 /rs/bitcoin/                                            @dfinity/ic-interface-owners
 /rs/bitcoin/adapter/                                    @dfinity/networking
 /rs/bitcoin/ckbtc/                                      @dfinity/cross-chain-team
-/rs/bitcoin/mock/                                       @dfinity/finint
+/rs/bitcoin/mock/                                       @dfinity/cross-chain-team
 /rs/bitcoin/client/                                     @dfinity/networking
 /rs/bitcoin/consensus/                                  @dfinity/execution @dfinity/consensus
-/rs/bitcoin/kyt/                                        @dfinity/cross-chain-team
+/rs/bitcoin/checker/                                    @dfinity/cross-chain-team
 /rs/bitcoin/service/                                    @dfinity/networking
 /rs/bitcoin/replica_types/                              @dfinity/execution
 /rs/bitcoin/validation                                  @dfinity/networking @dfinity/execution
@@ -209,6 +209,7 @@ go_deps.bzl               @dfinity/idx
 /rs/rust_canisters/response_payload_test/               @dfinity/execution
 /rs/rust_canisters/stable_structures/                   @dfinity/execution
 /rs/rust_canisters/stable_memory_integrity              @dfinity/execution
+/rs/rust_canisters/statesync_test                       @dfinity/ic-message-routing-owners
 /rs/rust_canisters/canister_creator                     @dfinity/execution
 /rs/rust_canisters/load_simulator                       @dfinity/execution
 /rs/rust_canisters/xnet_test/                           @dfinity/ic-message-routing-owners
