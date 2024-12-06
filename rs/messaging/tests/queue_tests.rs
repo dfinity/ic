@@ -17,7 +17,7 @@ use ic_types::{
 use maplit::btreemap;
 use std::collections::BTreeSet;
 use std::sync::Arc;
-use xnet_test::Metrics;
+use xnet_test::{Metrics, StartArgs};
 
 const MAX_TICKS: u64 = 100;
 
@@ -96,14 +96,16 @@ impl SubnetPairProxy {
         payload_size_bytes: u64,
     ) -> Result<Vec<u8>, candid::Error> {
         let network_topology = vec![
-            vec![self.local_canister_id.get().to_vec()],
-            vec![self.remote_canister_id.get().to_vec()],
+            vec![self.local_canister_id.get().into()],
+            vec![self.remote_canister_id.get().into()],
         ];
-        Encode!(
-            &network_topology,
-            &canister_to_subnet_rate,
-            &payload_size_bytes
-        )
+        Encode!(&StartArgs {
+            network_topology,
+            canister_to_subnet_rate,
+            payload_size_bytes,
+            response_payload_size_bytes: 0,
+            deadline_seconds: 0,
+        })
     }
 
     /// Calls the 'start' method on the local canister.
@@ -339,7 +341,7 @@ fn call_stop_on_xnet_canister(
     env: &StateMachine,
     canister_id: CanisterId,
 ) -> Result<(), UserError> {
-    let wasm = env.execute_ingress(canister_id, "stop", Vec::new())?;
+    let wasm = env.execute_ingress(canister_id, "stop", Encode!().unwrap())?;
     assert_eq!(
         "stopped".to_string(),
         Decode!(&wasm.bytes(), String).unwrap()
@@ -457,7 +459,9 @@ fn test_response_in_output_queue_causes_backpressure() {
     // reporting call errors, indicating back pressure.
     do_until_or_panic(MAX_TICKS, |_| {
         execute_round_with_timeout(&subnets.local_env);
-        let reply = subnets.query_local_canister("metrics", Vec::new()).unwrap();
+        let reply = subnets
+            .query_local_canister("metrics", Encode!().unwrap())
+            .unwrap();
         Ok(Decode!(&reply.bytes(), Metrics).unwrap().call_errors > 0)
     })
     .unwrap();
@@ -500,7 +504,9 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
         .unwrap();
     do_until_or_panic(MAX_TICKS, |_| {
         subnets.local_env.tick();
-        let reply = subnets.query_local_canister("metrics", Vec::new()).unwrap();
+        let reply = subnets
+            .query_local_canister("metrics", Encode!().unwrap())
+            .unwrap();
         Ok(Decode!(&reply.bytes(), Metrics).unwrap().call_errors > 0)
     })
     .unwrap();
@@ -511,7 +517,7 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
     do_until_or_panic(MAX_TICKS, |_| {
         subnets.remote_env.tick();
         let reply = subnets
-            .query_remote_canister("metrics", Vec::new())
+            .query_remote_canister("metrics", Encode!().unwrap())
             .unwrap();
         Ok(Decode!(&reply.bytes(), Metrics).unwrap().call_errors > 0)
     })
@@ -520,13 +526,13 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
     // Try inducting all the requests successfully sent by the remote canister into
     // the local canister.
     let reply = subnets
-        .query_remote_canister("metrics", Vec::new())
+        .query_remote_canister("metrics", Encode!().unwrap())
         .unwrap();
     let metrics = Decode!(&reply.bytes(), Metrics).unwrap();
     induct_from_head_of_stream(
         &subnets.remote_env,
         &subnets.local_env,
-        Some(metrics.requests_sent),
+        Some(metrics.requests_sent()),
     )
     .unwrap();
 
@@ -539,7 +545,10 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
         "type".to_string() => "request".to_string()
     });
 
-    assert_eq!(metrics.requests_sent, *requests_inducted.unwrap() as usize);
+    assert_eq!(
+        metrics.requests_sent(),
+        *requests_inducted.unwrap() as usize
+    );
 }
 
 /// Snapshot of a message in a stream or a queue that includes only the message variant and the callback id.

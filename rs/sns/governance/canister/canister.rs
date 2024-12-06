@@ -672,8 +672,7 @@ fn add_maturity(request: AddMaturityRequest) -> AddMaturityResponse {
 
 #[query]
 fn get_upgrade_journal(arg: GetUpgradeJournalRequest) -> GetUpgradeJournalResponse {
-    let GetUpgradeJournalRequest {} = arg;
-    governance().get_upgrade_journal()
+    governance().get_upgrade_journal(arg)
 }
 
 /// Mints tokens for testing
