@@ -13,10 +13,10 @@ pub fn get_command_stdout(command: &str, args: &[&str]) -> Result<String> {
     let output = Command::new(command).args(args).output()?;
     if !output.status.success() {
         bail!(
-            "Error running command: '{} {}': {:?}",
+            "Error running command: '{} {}': {}",
             command,
             args.join(" "),
-            output.stderr
+            String::from_utf8(output.stderr)?
         );
     }
     Ok(String::from_utf8(output.stdout)?)
