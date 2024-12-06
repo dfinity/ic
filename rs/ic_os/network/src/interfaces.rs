@@ -34,7 +34,7 @@ pub fn has_ipv6_connectivity(
         &ip.to_string()
     );
 
-    get_command_stdout("ip", ["addr", "add", &ip, "dev", &interface.name])?;
+    get_command_stdout("ip", &["addr", "add", &ip, "dev", &interface.name])?;
     activate_link(&interface.name)?;
 
     let wait_time = Duration::from_secs(2);
@@ -77,12 +77,12 @@ pub fn get_interface_name(interface_path: &PathBuf) -> Result<String> {
 
 fn cleanup_interface(interface_name: &str, ip: &str) -> Result<()> {
     eprintln!("Removing ip address and bringing interface down");
-    get_command_stdout("ip", ["addr", "del", ip, "dev", interface_name])?;
+    get_command_stdout("ip", &["addr", "del", ip, "dev", interface_name])?;
     deactivate_link(interface_name)
 }
 
 fn qualify_and_generate_interface(interface_name: &str) -> Result<Option<Interface>> {
-    let ethtool_output = get_command_stdout("ethtool", [interface_name])?;
+    let ethtool_output = get_command_stdout("ethtool", &[interface_name])?;
     let link_is_up = is_link_up_from_ethtool_output(&ethtool_output)?;
 
     if !link_is_up {
@@ -245,13 +245,13 @@ fn is_link_up_from_ethtool_output(output: &str) -> Result<bool> {
 }
 
 fn activate_link(interface_name: &str) -> Result<()> {
-    get_command_stdout("ip", ["link", "set", interface_name, "up"])
+    get_command_stdout("ip", &["link", "set", interface_name, "up"])
         .context("Error bringing interface online")?;
     Ok(())
 }
 
 fn deactivate_link(interface_name: &str) -> Result<()> {
-    get_command_stdout("ip", ["link", "set", interface_name, "down"])
+    get_command_stdout("ip", &["link", "set", interface_name, "down"])
         .context("Error bringing interface offline")?;
     Ok(())
 }

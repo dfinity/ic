@@ -1,4 +1,3 @@
-use std::iter::IntoIterator;
 use std::net::Ipv6Addr;
 use std::process::Command;
 
@@ -10,17 +9,13 @@ pub fn to_cidr(ipv6_address: Ipv6Addr, prefix_length: u8) -> String {
 }
 
 /// Run a command with args and get the stdout if success, stderr if failure.
-pub fn get_command_stdout<'a, StringIter: IntoIterator<Item = &'a str> + Clone>(
-    command: &str,
-    args: StringIter,
-) -> Result<String> {
-    let output = Command::new(command).args(args.clone()).output()?;
+pub fn get_command_stdout(command: &str, args: &[&str]) -> Result<String> {
+    let output = Command::new(command).args(args).output()?;
     if !output.status.success() {
-        let args_str = args.into_iter().collect::<Vec<_>>().join(" ");
         bail!(
             "Error running command: '{} {}': {:?}",
             command,
-            args_str,
+            args.join(" "),
             output.stderr
         );
     }
