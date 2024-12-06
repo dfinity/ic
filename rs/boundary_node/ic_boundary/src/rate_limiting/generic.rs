@@ -13,7 +13,7 @@ use axum::{
 use candid::Principal;
 use ic_canister_client::Agent;
 use ic_types::CanisterId;
-use rate_limits_api::v1::{Action, RateLimitRule};
+use rate_limits_api::v1::{Action, RateLimitRule, RequestType as RequestTypeRule};
 use ratelimit::Ratelimiter;
 use tracing::warn;
 
@@ -24,6 +24,19 @@ use crate::{
     persist::RouteSubnet,
     routes::{ErrorCause, RateLimitCause, RequestContext, RequestType},
 };
+
+// Converts between different request types
+// We can't use a single one because Ratelimit API crate needs to build on WASM and ic-bn-lib does not
+fn convert_request_type(rt: RequestType) -> RequestTypeRule {
+    match rt {
+        RequestType::Query => RequestTypeRule::Query,
+        RequestType::Call => RequestTypeRule::Call,
+        RequestType::SyncCall => RequestTypeRule::SyncCall,
+        RequestType::ReadState => RequestTypeRule::ReadState,
+        RequestType::ReadStateSubnet => RequestTypeRule::ReadStateSubnet,
+        _ => RequestTypeRule::Unknown,
+    }
+}
 
 struct Bucket {
     rule: RateLimitRule,
@@ -140,7 +153,7 @@ impl Limiter {
             }
 
             if let Some(v) = &b.rule.request_types {
-                if !v.contains(&request_type) {
+                if !v.contains(&convert_request_type(request_type)) {
                     continue;
                 }
             }

@@ -12,7 +12,6 @@ candid = { workspace = true }
 certificate_orchestrator_interface = { path = "../../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-bn-lib = { workspace = true }
 ic-boundary-nodes-system-test-utils = { path = "utils" }
 ic-boundary-nodes-integration-test-common = { path = "integration_test_common" }
 ic-boundary-nodes-performance-test-common = { path = "performance_test_common" }

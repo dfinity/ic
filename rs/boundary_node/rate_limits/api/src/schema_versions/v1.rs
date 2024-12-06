@@ -2,7 +2,6 @@ use std::{fmt, time::Duration};
 
 use candid::Principal;
 use humantime::{format_duration, parse_duration};
-use ic_bn_lib::types::RequestType;
 use regex::Regex;
 use serde::{
     de::{self, Deserializer},
@@ -11,6 +10,17 @@ use serde::{
 };
 
 const DOUBLE_INDENT: &str = "      ";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RequestType {
+    Unknown,
+    Query,
+    Call,
+    SyncCall,
+    ReadState,
+    ReadStateSubnet,
+}
 
 /// Implement serde parser for Action
 struct ActionVisitor;

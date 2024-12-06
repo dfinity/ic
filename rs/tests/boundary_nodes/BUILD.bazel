@@ -147,7 +147,6 @@ system_test_nns(
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:ic-agent",
-        "@crate_index//:ic-bn-lib",
         "@crate_index//:k256",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",

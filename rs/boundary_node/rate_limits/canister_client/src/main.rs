@@ -5,9 +5,8 @@ use ic_agent::{
     identity::{AnonymousIdentity, Secp256k1Identity},
     Agent, Identity,
 };
-use ic_bn_lib::types::RequestType;
 use rate_limits_api::{
-    v1::{Action, RateLimitRule},
+    v1::{Action, RateLimitRule, RequestType},
     AddConfigResponse, DiscloseRulesArg, DiscloseRulesResponse, GetConfigResponse,
     GetRuleByIdResponse, IncidentId, InputConfig, InputRule, RuleId, Version,
 };

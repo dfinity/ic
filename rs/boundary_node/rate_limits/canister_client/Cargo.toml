@@ -10,7 +10,6 @@ documentation.workspace = true
 k256 = { version = "0.13.1", features = ["pem"] }
 ic-agent = { workspace = true }
 candid = { workspace = true }
-ic-bn-lib = { workspace = true }
 rate-limits-api = { path = "../api" }
 regex = { workspace = true }
 tokio = { workspace = true }

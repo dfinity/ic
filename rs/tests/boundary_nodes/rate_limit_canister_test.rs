@@ -28,7 +28,6 @@ use ic_agent::{
     identity::{AnonymousIdentity, Secp256k1Identity},
     Agent, Identity,
 };
-use ic_bn_lib::types::RequestType;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -46,7 +45,7 @@ use ic_system_test_driver::{
 use regex::Regex;
 
 use rate_limits_api::{
-    v1::{Action, RateLimitRule},
+    v1::{Action, RateLimitRule, RequestType},
     AddConfigResponse, DiscloseRulesArg, DiscloseRulesResponse, GetConfigResponse,
     GetRuleByIdResponse, IncidentId, InitArg, InputConfig, InputRule, OutputRuleMetadata, RuleId,
     Version,

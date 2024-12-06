@@ -6,7 +6,6 @@ DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:candid",
     "@crate_index//:humantime",
-    "@crate_index//:ic-bn-lib",
     "@crate_index//:regex",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
