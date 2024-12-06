@@ -241,7 +241,7 @@ async fn read_config(agent: &Agent, version: Version, canister_id: Principal) ->
         .call()
         .await
         .expect("update call failed");
- 
+
     let decoded = Decode!(&response, GetConfigResponse)
         .expect("failed to decode candid response")
         .unwrap();
