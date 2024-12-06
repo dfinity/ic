@@ -50,25 +50,29 @@ pub fn verify_taproot_signature_using_third_party(
     msg: &[u8],
     taproot_hash: &[u8],
 ) -> bool {
-    use bitcoin::hashes::hex::FromHex;
+
+    use bitcoin::hashes::Hash;
 
     if msg.len() != 32 {
         // The bitcoin Rust library doesn't support arbitrary hash inputs yet
         // https://github.com/rust-bitcoin/rust-secp256k1/issues/702
         return true;
     }
-    use bitcoin::schnorr::TapTweak;
+    use bitcoin::key::TapTweak;
     use bitcoin::secp256k1::{schnorr::Signature, Message, Secp256k1, XOnlyPublicKey};
-    use bitcoin::util::taproot::TapBranchHash;
+    use bitcoin::TapNodeHash;
 
     let secp256k1 = Secp256k1::new();
     let pk = XOnlyPublicKey::from_slice(&sec1_pk[1..]).unwrap();
 
-    let tnh = TapBranchHash::from_hex(&hex::encode(taproot_hash)).unwrap();
+    //TODO(mihailjianu): check if this is correct. 
+    //TODO(mihailjianu): check if we can reove the hex dependency.
+    let tnh = TapNodeHash::from_slice(taproot_hash).unwrap();
 
     let dk = pk.tap_tweak(&secp256k1, Some(tnh)).0.to_inner();
 
-    let msg = Message::from_slice(msg).unwrap();
+    //TODO(mihailjianu): find a way to not use those. 
+    let msg = Message::from_digest_slice(msg).unwrap();
     let sig = Signature::from_slice(sig).unwrap();
     sig.verify(&msg, &dk).is_ok()
 }

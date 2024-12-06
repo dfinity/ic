@@ -20,6 +20,7 @@ rust_library(
         "@crate_index//:k256",
         "@crate_index//:p256",
         "@crate_index//:rand",
+        #TODO(mihailjianu): check if this is replacable with ic-secp256k1
         "@crate_index//:secp256k1",
         "@crate_index//:sha2",
     ],
