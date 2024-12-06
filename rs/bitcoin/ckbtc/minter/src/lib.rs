@@ -858,7 +858,7 @@ pub async fn sign_transaction(
     ecdsa_public_key: &ECDSAPublicKey,
     output_account: &BTreeMap<tx::OutPoint, Account>,
     unsigned_tx: tx::UnsignedTransaction,
-) -> Result<tx::SignedTransaction, management::CallError> {
+) -> Result<tx::SignedTransaction, CallError> {
     use crate::address::{derivation_path, derive_public_key};
 
     let mut signed_inputs = Vec::with_capacity(unsigned_tx.inputs.len());
@@ -1286,8 +1286,7 @@ pub trait CanisterRuntime {
     /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified Bitcoin network.
     async fn bitcoin_get_utxos(
         &self,
-        request: &GetUtxosRequest,
-        cycles: u64,
+        request: GetUtxosRequest,
     ) -> Result<GetUtxosResponse, CallError>;
 
     async fn check_transaction(
@@ -1328,10 +1327,9 @@ impl CanisterRuntime for IcCanisterRuntime {
 
     async fn bitcoin_get_utxos(
         &self,
-        request: &GetUtxosRequest,
-        cycles: u64,
+        request: GetUtxosRequest,
     ) -> Result<GetUtxosResponse, CallError> {
-        management::call("bitcoin_get_utxos", cycles, &request).await
+        management::bitcoin_get_utxos(request).await
     }
 
     async fn check_transaction(
