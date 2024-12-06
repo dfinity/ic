@@ -22,8 +22,8 @@ use crate::driver::{
     resource::{DiskImage, ImageType},
     test_env::TestEnv,
     test_env_api::{
-        get_dependency_path, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-        RetrieveIpv4Addr, SshSession, TopologySnapshot,
+        HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr, SshSession,
+        TopologySnapshot,
     },
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
@@ -85,6 +85,7 @@ const BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET: &str =
 const BN_PROMETHEUS_TARGET: &str = "boundary_nodes.json";
 const BN_EXPORTER_PROMETHEUS_TARGET: &str = "boundary_nodes_exporter.json";
 const IC_BOUNDARY_PROMETHEUS_TARGET: &str = "ic_boundary.json";
+const GRAFANA_DASHBOARDS: &str = "grafana_dashboards";
 
 pub struct PrometheusVm {
     universal_vm: UniversalVm,
@@ -159,8 +160,7 @@ impl PrometheusVm {
     /// ```
     ///
     /// This process automatically discovers all `*.json` files, which are interpreted as Grafana dashboards. It then copies these files to a destination, where they will be sent to the Prometheus VM for use with the testnets. The expected name of the dashboards directory is determined by reading the `commonAnnotations.k8s-sidecar-target-directory` path from the `kustomize.yaml` file. This value specifies the location where the dashboards should be placed so that the links don't get broken.
-    fn transform_dashboards_root_dir(logger: Logger) -> Result<()> {
-        let destination = get_dependency_path("rs/tests/dashboards");
+    fn transform_dashboards_root_dir(logger: Logger, destination: &PathBuf) -> Result<()> {
         let dashboards_root = PathBuf::from_str(&std::env::var("IC_DASHBOARDS_DIR")?)?;
 
         for directory in dashboards_root.read_dir().map_err(|e| {
@@ -270,14 +270,14 @@ fi
             )
             .unwrap();
 
-        if let Err(e) = Self::transform_dashboards_root_dir(log.clone()) {
+        let grafana_dashboards_src = env.get_path(GRAFANA_DASHBOARDS);
+        if let Err(e) = Self::transform_dashboards_root_dir(log.clone(), &grafana_dashboards_src) {
             warn!(
                 log,
                 "Failed to sync k8s dashboards to grafana. Error: {}",
                 e.to_string()
             )
         } else {
-            let grafana_dashboards_src = get_dependency_path("rs/tests/dashboards");
             let grafana_dashboards_dst = config_dir.join("grafana").join("dashboards");
             debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
             TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst).unwrap();
