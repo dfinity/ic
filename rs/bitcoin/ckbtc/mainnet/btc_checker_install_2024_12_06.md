@@ -1,4 +1,4 @@
-# Proposal to install the BTC Checker canister
+# Proposal to install the Bitcoin Checker canister
 
 Repository: `https://github.com/dfinity/ic.git`
 

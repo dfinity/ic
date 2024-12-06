@@ -1,4 +1,4 @@
-# Proposal to upgrade the ckBTC minter canister
+# Proposal to upgrade the ckBTC minter canister to start using the Bitcoin Checker canister
 
 Repository: `https://github.com/dfinity/ic.git`
 
