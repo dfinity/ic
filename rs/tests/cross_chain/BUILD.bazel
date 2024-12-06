@@ -1,5 +1,5 @@
 load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test_nns")
+load("//rs/tests:system_tests.bzl", "system_test_nns", "oci_tar", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -48,6 +48,9 @@ system_test_nns(
 
 system_test_nns(
     name = "ic_xc_cketh_test",
+    env = {
+        "CKETH_UVM_CONFIG_PATH": "$(rootpath :cketh_uvm_config_image)",
+    },
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
@@ -57,11 +60,28 @@ system_test_nns(
         BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        CANISTER_RUNTIME_DEPS,
+        CANISTER_RUNTIME_DEPS + [
+            # Keep sorted.
+            ":cketh_uvm_config_image",
+        ],
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
+)
+
+oci_tar(
+    name = "foundry.tar",
+    image = "@foundry",
+    repo_tags = ["foundry:image"],
+)
+
+uvm_config_image(
+    name = "cketh_uvm_config_image",
+    srcs = [
+        ":foundry.tar",
+    ],
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
