@@ -283,7 +283,7 @@ impl NetworkEconomics {
         /// Returns ours if it is the default (for its type). Otherwise, returns default.
         fn inherit_from<T>(ours: T, default: T) -> T
         where
-            T: Default + PartialEq
+            T: Default + PartialEq,
         {
             if ours == T::default() {
                 return default;
