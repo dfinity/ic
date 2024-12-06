@@ -625,7 +625,11 @@ impl PrivateKey {
     /// The aux_rand parameter for BIP340 is just to re-randomize the signature,
     /// and may prevent certain forms of fault attack. It it is otherwise not necessary
     /// for security.
-    pub fn sign_message_with_bip341_no_rng(&self, message: &[u8], taproot_tree_hash: &[u8]) -> Result<[u8; 64], InvalidTaprootHash> {
+    pub fn sign_message_with_bip341_no_rng(
+        &self,
+        message: &[u8],
+        taproot_tree_hash: &[u8],
+    ) -> Result<[u8; 64], InvalidTaprootHash> {
         let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(0);
         self.sign_message_with_bip341(message, &mut rng, taproot_tree_hash)
     }
