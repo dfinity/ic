@@ -1823,6 +1823,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-agent 0.37.1",
+ "ic-bn-lib",
  "k256",
  "rate-limits-api",
  "regex",
