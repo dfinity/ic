@@ -419,6 +419,7 @@ fn test_no_new_utxos() {
             }]),
             current_confirmations: Some(2),
             required_confirmations: 12,
+            suspended_utxos: Some(vec![]),
         })
     );
 }
@@ -476,7 +477,8 @@ fn update_balance_should_return_correct_confirmations() {
         Err(UpdateBalanceError::NoNewUtxos {
             current_confirmations: None,
             required_confirmations: 3,
-            pending_utxos: Some(vec![])
+            pending_utxos: Some(vec![]),
+            suspended_utxos: Some(vec![]),
         })
     );
 }

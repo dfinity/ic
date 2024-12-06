@@ -1,6 +1,6 @@
 use crate::logs::{P0, P1};
 use crate::memo::MintMemo;
-use crate::state::{mutate_state, read_state, UtxoCheckStatus};
+use crate::state::{mutate_state, read_state, SuspendedReason, UtxoCheckStatus};
 use crate::tasks::{schedule_now, TaskType};
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_btc_checker::CheckTransactionResponse;
@@ -25,7 +25,7 @@ use crate::{
     state,
     tx::{DisplayAmount, DisplayOutpoint},
     updates::get_btc_address,
-    CanisterRuntime,
+    CanisterRuntime, Timestamp,
 };
 
 /// The argument of the [update_balance] endpoint.
@@ -72,12 +72,19 @@ pub struct PendingUtxo {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct SuspendedUtxo {
+    pub utxo: Utxo,
+    pub reason: SuspendedReason,
+    pub earliest_retry: u64,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum UpdateBalanceError {
     /// The minter experiences temporary issues, try the call again later.
     TemporarilyUnavailable(String),
     /// There is a concurrent [update_balance] invocation from the same caller.
     AlreadyProcessing,
-    /// The minter didn't discover new UTXOs with enough confirmations.
+    /// The minter didn't discover new UTXOs to process.
     NoNewUtxos {
         /// If there are new UTXOs that do not have enough
         /// confirmations yet, this field will contain the number of
@@ -87,6 +94,8 @@ pub enum UpdateBalanceError {
         required_confirmations: u32,
         /// List of utxos that don't have enough confirmations yet to be processed.
         pending_utxos: Option<Vec<PendingUtxo>>,
+        /// List of utxos that are suspended, either due to a too low amount or being tainted, and cannot yet be retried.
+        suspended_utxos: Option<Vec<SuspendedUtxo>>,
     },
     GenericError {
         error_code: u64,
@@ -170,8 +179,9 @@ pub async fn update_balance<R: CanisterRuntime>(
     .await?
     .utxos;
 
-    let processable_utxos =
-        state::read_state(|s| s.processable_utxos_for_account(utxos, &caller_account));
+    let now = Timestamp::from(runtime.time());
+    let (processable_utxos, suspended_utxos) =
+        state::read_state(|s| s.processable_utxos_for_account(utxos, &caller_account, &now));
 
     // Remove pending finalized transactions for the affected principal.
     state::mutate_state(|s| s.finalized_utxos.remove(&caller_account.owner));
@@ -222,6 +232,7 @@ pub async fn update_balance<R: CanisterRuntime>(
             current_confirmations,
             required_confirmations: min_confirmations,
             pending_utxos: Some(pending_utxos),
+            suspended_utxos: Some(suspended_utxos),
         });
     }
 
@@ -234,7 +245,7 @@ pub async fn update_balance<R: CanisterRuntime>(
     let mut utxo_statuses: Vec<UtxoStatus> = vec![];
     for utxo in processable_utxos {
         if utxo.value <= check_fee {
-            mutate_state(|s| state::audit::ignore_utxo(s, utxo.clone(), caller_account));
+            mutate_state(|s| state::audit::ignore_utxo(s, utxo.clone(), caller_account, now));
             log!(
                 P1,
                 "Ignored UTXO {} for account {caller_account} because UTXO value {} is lower than the check fee {}",
@@ -251,7 +262,7 @@ pub async fn update_balance<R: CanisterRuntime>(
                 state::audit::mark_utxo_checked(s, utxo.clone(), caller_account);
             }
             UtxoCheckStatus::Tainted => {
-                state::audit::quarantine_utxo(s, utxo.clone(), caller_account);
+                state::audit::quarantine_utxo(s, utxo.clone(), caller_account, now);
             }
         });
         match status {

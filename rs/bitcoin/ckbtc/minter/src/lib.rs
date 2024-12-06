@@ -187,17 +187,17 @@ async fn fetch_main_utxos<R: CanisterRuntime>(
 fn compute_min_withdrawal_amount(
     median_fee_rate_e3s: MillisatoshiPerByte,
     min_withdrawal_amount: u64,
+    check_fee: u64,
 ) -> u64 {
     const PER_REQUEST_RBF_BOUND: u64 = 22_100;
     const PER_REQUEST_VSIZE_BOUND: u64 = 221;
     const PER_REQUEST_MINTER_FEE_BOUND: u64 = 305;
-    const PER_REQUEST_CHECK_FEE: u64 = 2_000;
 
     let median_fee_rate = median_fee_rate_e3s / 1_000;
     ((PER_REQUEST_RBF_BOUND
         + PER_REQUEST_VSIZE_BOUND * median_fee_rate
         + PER_REQUEST_MINTER_FEE_BOUND
-        + PER_REQUEST_CHECK_FEE)
+        + check_fee)
         / 50_000)
         * 50_000
         + min_withdrawal_amount
@@ -220,8 +220,11 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
             if fees.len() >= 100 {
                 state::mutate_state(|s| {
                     s.last_fee_per_vbyte.clone_from(&fees);
-                    s.fee_based_retrieve_btc_min_amount =
-                        compute_min_withdrawal_amount(fees[50], s.retrieve_btc_min_amount);
+                    s.fee_based_retrieve_btc_min_amount = compute_min_withdrawal_amount(
+                        fees[50],
+                        s.retrieve_btc_min_amount,
+                        s.check_fee,
+                    );
                 });
                 Some(fees[50])
             } else {
@@ -1347,5 +1350,50 @@ impl CanisterRuntime for IcCanisterRuntime {
         memo: Memo,
     ) -> Result<u64, UpdateBalanceError> {
         updates::update_balance::mint(amount, to, memo).await
+    }
+}
+
+/// Time in nanoseconds since the epoch (1970-01-01).
+#[derive(Eq, Clone, Copy, PartialEq, Debug, Default)]
+pub struct Timestamp(u64);
+
+impl Timestamp {
+    pub const fn new(ns_since_epoch: u64) -> Self {
+        Self(ns_since_epoch)
+    }
+
+    /// Number of nanoseconds since `UNIX EPOCH`.
+    pub fn as_nanos_since_unix_epoch(self) -> u64 {
+        self.0
+    }
+
+    pub fn checked_sub(self, rhs: Duration) -> Option<Timestamp> {
+        if let Ok(rhs_nanos) = u64::try_from(rhs.as_nanos()) {
+            Some(Timestamp(self.0.checked_sub(rhs_nanos)?))
+        } else {
+            None
+        }
+    }
+
+    pub fn checked_duration_since(self, rhs: Timestamp) -> Option<Duration> {
+        self.0.checked_sub(rhs.0).map(Duration::from_nanos)
+    }
+
+    pub fn checked_add(self, rhs: Duration) -> Option<Timestamp> {
+        if let Ok(rhs_nanos) = u64::try_from(rhs.as_nanos()) {
+            Some(Self(self.0.checked_add(rhs_nanos)?))
+        } else {
+            None
+        }
+    }
+
+    pub fn saturating_add(self, rhs: Duration) -> Self {
+        self.checked_add(rhs).unwrap_or(Timestamp(u64::MAX))
+    }
+}
+
+impl From<u64> for Timestamp {
+    fn from(timestamp: u64) -> Self {
+        Self(timestamp)
     }
 }
