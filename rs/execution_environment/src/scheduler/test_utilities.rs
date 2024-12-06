@@ -603,18 +603,24 @@ impl SchedulerTest {
             .unwrap();
 
         assert_eq!(canister.status(), CanisterStatusType::Running);
-        let call_context_manager = canister.system_state.call_context_manager_mut().unwrap();
-
+        let call_context_manager = canister.system_state.call_context_manager().unwrap();
         let callback_id = call_context_manager.next_callback_id() + 1;
         request.sender_reply_callback = CallbackId::new(callback_id);
 
-        let call_context_id = call_context_manager.new_call_context(
-            CallOrigin::CanisterUpdate(request.sender, request.sender_reply_callback, NO_DEADLINE),
-            request.payment,
-            Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
-        );
-        let _ = call_context_manager.register_callback(Callback::new(
+        let call_context_id = canister
+            .system_state
+            .new_call_context(
+                CallOrigin::CanisterUpdate(
+                    request.sender,
+                    request.sender_reply_callback,
+                    NO_DEADLINE,
+                ),
+                request.payment,
+                Time::from_nanos_since_unix_epoch(0),
+                RequestMetadata::new(0, UNIX_EPOCH),
+            )
+            .unwrap();
+        let _ = canister.system_state.register_callback(Callback::new(
             call_context_id,
             request.sender,
             request.receiver,
