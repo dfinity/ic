@@ -1285,7 +1285,7 @@ impl SandboxSafeSystemState {
 
         debug_assert!(
             wasm_memory_usage <= memory_usage,
-            "Wasm memory usage: {:?}, is grater that memory usage {}.",
+            "Wasm memory usage {} is greater that memory usage {}.",
             wasm_memory_usage,
             memory_usage
         );
