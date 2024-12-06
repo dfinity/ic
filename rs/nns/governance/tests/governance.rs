@@ -6396,7 +6396,7 @@ fn test_staked_maturity() {
         .expect("Configuring neuron failed");
 
     driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS);
-    gov.run_periodic_tasks().now_or_never();
+    gov.unstake_maturity_of_dissolved_neurons();
 
     // All the maturity should now be regular maturity
     let neuron = gov

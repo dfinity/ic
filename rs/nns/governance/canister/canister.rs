@@ -167,6 +167,7 @@ fn schedule_timers() {
     schedule_adjust_neurons_storage(Duration::from_nanos(0), NeuronIdProto { id: 0 });
     schedule_prune_following(Duration::from_secs(0));
     schedule_spawn_neurons();
+    schedule_unstake_maturity_of_dissolved_neurons();
 
     // TODO(NNS1-3446): Delete. (This only needs to be run once, but can safely be run multiple times).
     schedule_backfill_voting_power_refreshed_timestamps(Duration::from_secs(0));
@@ -311,12 +312,18 @@ fn schedule_adjust_neurons_storage(delay: Duration, start_neuron_id: NeuronIdPro
 }
 
 const SPAWN_NEURONS_INTERVAL: Duration = Duration::from_secs(60);
-
 fn schedule_spawn_neurons() {
     ic_cdk_timers::set_timer_interval(SPAWN_NEURONS_INTERVAL, || {
         spawn(async {
             governance_mut().maybe_spawn_neurons().await;
         });
+    });
+}
+
+const UNSTAKE_MATURITY_OF_DISSOLVED_NEURONS_INTERVAL: Duration = Duration::from_secs(60);
+fn schedule_unstake_maturity_of_dissolved_neurons() {
+    ic_cdk_timers::set_timer_interval(UNSTAKE_MATURITY_OF_DISSOLVED_NEURONS_INTERVAL, || {
+        governance_mut().unstake_maturity_of_dissolved_neurons();
     });
 }
 
