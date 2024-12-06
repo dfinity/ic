@@ -252,7 +252,8 @@ fn should_create_state_machine_with_golden_nns_state() {
     setup.downgrade_to_mainnet();
 
     // Verify ledger balance and allowance state
-    setup.perform_upgrade_downgrade_testing(true);
+    // As before, the allowance check needs to be skipped for the mainnet version of the ledger.
+    setup.perform_upgrade_downgrade_testing(false);
 }
 
 struct Wasms {
