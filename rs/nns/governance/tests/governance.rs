@@ -93,8 +93,8 @@ use ic_nns_governance::{
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders,
         SettleNeuronsFundParticipationRequest, SwapBackgroundInformation, SwapParticipationLimits,
-        Tally, TallyChange, Topic, UpdateNodeProvider, Visibility, Vote, WaitForQuietState,
-        WaitForQuietStateDesc,
+        Tally, TallyChange, Topic, UpdateNodeProvider, Visibility, Vote, VotingPowerEconomics,
+        WaitForQuietState, WaitForQuietStateDesc,
     },
     temporarily_disable_private_neuron_enforcement, temporarily_disable_set_visibility_proposals,
     temporarily_enable_private_neuron_enforcement, temporarily_enable_set_visibility_proposals,
@@ -2754,7 +2754,7 @@ fn deciding_voting_power(gov: &Governance, neuron_id: u64, now: u64) -> u64 {
     gov.neuron_store
         .with_neuron(&NeuronId { id: neuron_id }, |n| n.clone())
         .unwrap()
-        .deciding_voting_power(now)
+        .deciding_voting_power(&VotingPowerEconomics::DEFAULT, now)
 }
 
 #[tokio::test]
@@ -3061,12 +3061,14 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     let neuron_share = gov
         .neuron_store
         .with_neuron(&NeuronId::from_u64(1), |n| {
-            n.deciding_voting_power(fake_driver.now()) as f64
+            n.deciding_voting_power(&VotingPowerEconomics::DEFAULT, fake_driver.now()) as f64
         })
         .expect("Neuron not found")
         / gov.neuron_store.with_active_neurons_iter(|iter| {
-            iter.map(|neuron| neuron.deciding_voting_power(fake_driver.now()))
-                .sum::<u64>() as f64
+            iter.map(|neuron| {
+                neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, fake_driver.now())
+            })
+            .sum::<u64>() as f64
         });
     let expected_distributed_e8s_equivalent =
         (expected_available_e8s_equivalent as f64 * neuron_share) as u64;
@@ -4557,7 +4559,11 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             .expect("Neuron not found");
         assert_eq!(
             neuron
-                .get_neuron_info(driver.now(), *RANDOM_PRINCIPAL_ID)
+                .get_neuron_info(
+                    gov.voting_power_economics(),
+                    driver.now(),
+                    *RANDOM_PRINCIPAL_ID
+                )
                 .state(),
             NeuronState::Dissolved
         );
@@ -5452,7 +5458,11 @@ fn test_neuron_split_fails() {
 
     assert_eq!(
         neuron
-            .get_neuron_info(driver.now(), *RANDOM_PRINCIPAL_ID)
+            .get_neuron_info(
+                gov.voting_power_economics(),
+                driver.now(),
+                *RANDOM_PRINCIPAL_ID
+            )
             .state(),
         NeuronState::NotDissolving
     );
@@ -5562,18 +5572,25 @@ fn test_neuron_split() {
 
     driver.advance_time_by(1234);
 
-    let neuron_state = governance
-        .neuron_store
-        .with_neuron_mut(&id, |neuron| {
-            // Make sure the parent neuron also has maturity and staked maturity.
-            neuron.maturity_e8s_equivalent = maturity_e8s;
-            neuron.staked_maturity_e8s_equivalent = Some(staked_maturity_e8s);
+    let neuron_state = {
+        let neuron = governance
+            .neuron_store
+            .with_neuron_mut(&id, |neuron| {
+                // Make sure the parent neuron also has maturity and staked maturity.
+                neuron.maturity_e8s_equivalent = maturity_e8s;
+                neuron.staked_maturity_e8s_equivalent = Some(staked_maturity_e8s);
 
-            neuron
-                .get_neuron_info(driver.now(), *RANDOM_PRINCIPAL_ID)
-                .state()
-        })
-        .expect("Neuron not found");
+                neuron.clone()
+            })
+            .expect("Neuron not found");
+        neuron
+            .get_neuron_info(
+                governance.voting_power_economics(),
+                driver.now(),
+                *RANDOM_PRINCIPAL_ID,
+            )
+            .state()
+    };
 
     assert_eq!(neuron_state, NeuronState::NotDissolving);
 
@@ -5696,7 +5713,11 @@ fn test_seed_neuron_split() {
 
     assert_eq!(
         neuron
-            .get_neuron_info(driver.now(), *RANDOM_PRINCIPAL_ID)
+            .get_neuron_info(
+                gov.voting_power_economics(),
+                driver.now(),
+                *RANDOM_PRINCIPAL_ID
+            )
             .state(),
         NeuronState::NotDissolving
     );
@@ -5737,7 +5758,7 @@ fn test_seed_neuron_split() {
 
 // Spawn neurons has the least priority in the periodic tasks, so we need to run
 // them often enough to make sure it happens.
-fn run_periodic_tasks_on_governance_often_enough_to_spawn(gov: &mut Governance) {
+fn run_periodic_tasks_often_enough_to_update_maturity_modulation(gov: &mut Governance) {
     for _i in 0..5 {
         gov.run_periodic_tasks().now_or_never();
     }
@@ -5750,6 +5771,7 @@ fn run_periodic_tasks_on_governance_often_enough_to_spawn(gov: &mut Governance) 
 /// * The spawned neuron always has neuron_type: None, even if the parent's
 ///   neuron_type is NeuronType::Seed.
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_spawn() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
@@ -5766,11 +5788,13 @@ fn test_neuron_spawn() {
         from,
         nonce,
     );
+    run_periodic_tasks_often_enough_to_update_maturity_modulation(&mut gov);
 
     let now = driver.now();
+    let voting_power_economics = gov.voting_power_economics();
     assert_eq!(
         gov.with_neuron(&id, |neuron| neuron
-            .get_neuron_info(now, *RANDOM_PRINCIPAL_ID)
+            .get_neuron_info(voting_power_economics, now, *RANDOM_PRINCIPAL_ID)
             .state())
             .unwrap(),
         NeuronState::NotDissolving
@@ -5898,13 +5922,13 @@ fn test_neuron_spawn() {
     let creation_timestamp = driver.now();
 
     // Running periodic tasks shouldn't cause the ICP to be minted.
-    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
     driver.assert_num_neuron_accounts_exist(1);
 
     // Advance the time by one week, should cause the neuron's ICP
     // to be minted.
     driver.advance_time_by(7 * 86400);
-    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
     driver.assert_num_neuron_accounts_exist(2);
 
     let child_neuron = gov
@@ -5937,6 +5961,7 @@ fn test_neuron_spawn() {
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_spawn_with_subaccount() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
@@ -5953,11 +5978,12 @@ fn test_neuron_spawn_with_subaccount() {
         from,
         nonce,
     );
+    run_periodic_tasks_often_enough_to_update_maturity_modulation(&mut gov);
 
     let now = driver.now();
     assert_eq!(
         gov.with_neuron(&id, |neuron| neuron
-            .get_neuron_info(now, *RANDOM_PRINCIPAL_ID)
+            .get_neuron_info(gov.voting_power_economics(), now, *RANDOM_PRINCIPAL_ID)
             .state())
             .unwrap(),
         NeuronState::NotDissolving
@@ -6035,7 +6061,7 @@ fn test_neuron_spawn_with_subaccount() {
     driver.assert_num_neuron_accounts_exist(1);
 
     // Running periodic tasks shouldn't cause the ICP to be minted.
-    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
     driver.assert_num_neuron_accounts_exist(1);
 
     let parent_neuron = gov
@@ -6047,7 +6073,7 @@ fn test_neuron_spawn_with_subaccount() {
     // Advance the time by one week, should cause the neuron's ICP
     // to be minted.
     driver.advance_time_by(7 * 86400);
-    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
     driver.assert_num_neuron_accounts_exist(2);
 
     let child_neuron = gov
@@ -6132,13 +6158,18 @@ fn assert_neuron_spawn_partial(
         from,
         nonce,
     );
+    run_periodic_tasks_often_enough_to_update_maturity_modulation(&mut gov);
 
     let neuron = gov
         .with_neuron(&id, |neuron| neuron.clone())
         .expect("Neuron did not exist");
     assert_eq!(
         neuron
-            .get_neuron_info(driver.now(), *RANDOM_PRINCIPAL_ID)
+            .get_neuron_info(
+                gov.voting_power_economics(),
+                driver.now(),
+                *RANDOM_PRINCIPAL_ID
+            )
             .state(),
         NeuronState::NotDissolving
     );
@@ -6193,7 +6224,7 @@ fn assert_neuron_spawn_partial(
         .expect("The parent neuron is missing");
 
     // Running periodic tasks shouldn't cause the ICP to be minted.
-    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
     driver.assert_num_neuron_accounts_exist(1);
 
     // Some maturity should be remaining on the parent neuron.
@@ -6205,7 +6236,7 @@ fn assert_neuron_spawn_partial(
     // Advance the time by one week, should cause the neuron's ICP
     // to be minted.
     driver.advance_time_by(7 * 86400);
-    run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
+    gov.maybe_spawn_neurons().now_or_never().unwrap();
     driver.assert_num_neuron_accounts_exist(2);
 
     let child_neuron = gov
@@ -6510,7 +6541,11 @@ fn test_disburse_to_neuron() {
     // now disburse the neuron.
     assert_eq!(
         parent_neuron
-            .get_neuron_info(driver.now(), *RANDOM_PRINCIPAL_ID)
+            .get_neuron_info(
+                gov.voting_power_economics(),
+                driver.now(),
+                *RANDOM_PRINCIPAL_ID
+            )
             .state(),
         NeuronState::Dissolved
     );
