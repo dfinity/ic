@@ -126,7 +126,6 @@ fn init(arg: KytArg) {
                 Config::new_and_validate(init_arg.btc_network, init_arg.kyt_mode)
                     .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err))),
             );
-            load_lazy_blocklist();
         }
         KytArg::UpgradeArg(_) => {
             ic_cdk::trap("cannot init canister state without init args");
@@ -142,7 +141,6 @@ fn post_upgrade(arg: KytArg) {
                 let config = Config::new_and_validate(get_config().btc_network(), kyt_mode)
                     .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err)));
                 set_config(config);
-                load_lazy_blocklist();
             }
         }
         KytArg::InitArg(_) => ic_cdk::trap("cannot upgrade canister state without upgrade args"),
@@ -455,10 +453,6 @@ pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
             }
         }
     }
-}
-
-fn load_lazy_blocklist() {
-    let _address = ic_btc_kyt::blocklist::BTC_ADDRESS_BLOCKLIST.first();
 }
 
 fn main() {}

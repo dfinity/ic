@@ -18,7 +18,6 @@ candid = { workspace = true }
 ciborium = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
-lazy_static = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }

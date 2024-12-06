@@ -310,7 +310,9 @@ async fn test_check_fetched() {
     let good_address = Address::from_str("12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S")
         .unwrap()
         .assume_checked();
-    let bad_address = blocklist::BTC_ADDRESS_BLOCKLIST[0].clone();
+    let bad_address = Address::from_str(blocklist::BTC_ADDRESS_BLOCKLIST[0])
+        .unwrap()
+        .assume_checked();
 
     let txid_0 = mock_txid(0);
     let txid_1 = mock_txid(1);

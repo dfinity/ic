@@ -19,7 +19,6 @@ rust_library(
         # Keep sorted.
         "@crate_index//:bitcoin_0_32",
         "@crate_index//:candid",
-        "@crate_index//:lazy_static",
         "@crate_index//:serde",
     ],
 )
