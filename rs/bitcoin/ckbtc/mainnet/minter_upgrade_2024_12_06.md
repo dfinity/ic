@@ -20,7 +20,7 @@ Upgrade the ckBTC minter canister to use the BTC Checker canister instead of the
 
 The BTC Checker canister (`oltsj-fqaaa-aaaar-qal5q-cai`) is a new canister that is installed by proposal XXXXX.
 It implements checks for Bitcoin transactions and addresses against the OFAC (https://sanctionssearch.ofac.treas.gov/) list.
-BTC to ckBTC deposits that had previously quarantined UTXOs can be retried by the user.
+BTC to ckBTC deposits that had previously quarantined or ignored UTXOs can be retried by the user.
 Such deposits will be re-evaluated under the new approach.
 
 More discussions on this change can be found in the forum thread https://forum.dfinity.org/t/ckbtc-and-kyt-compliance/18754.
