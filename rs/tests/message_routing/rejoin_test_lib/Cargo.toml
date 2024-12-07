@@ -13,7 +13,7 @@ futures = { workspace = true }
 ic-system-test-driver = { path = "../../driver" }
 slog = { workspace = true }
 tokio = { workspace = true }
-dfn_json = { path = "../../../rust_canisters/dfn_json" }
+dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
 
 [lib]
 name = "rejoin_test_lib"
