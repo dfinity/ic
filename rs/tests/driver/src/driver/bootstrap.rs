@@ -665,6 +665,8 @@ fn configure_setupos_image(
         .arg(nns_url.to_string())
         .arg("--nns-public-key")
         .arg(nns_public_key)
+        .arg("--node-reward-type")
+        .arg("type3.1")
         .env(path_key, &new_path);
 
     if !admin_keys.is_empty() {
