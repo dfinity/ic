@@ -18,10 +18,14 @@ use std::sync::Arc;
 pub fn spawn_socketed_process(
     exec_path: &str,
     argv: &[String],
+    env: &[(&str, &str)],
     socket: RawFd,
 ) -> std::io::Result<Child> {
     let mut cmd = Command::new(exec_path);
     cmd.args(argv);
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
 
     // In case of Command we inherit the current process's environment. This should
     // particularly include things such as Rust backtrace flags. It might be
@@ -46,6 +50,7 @@ pub fn spawn_socketed_process(
     Ok(child_handle)
 }
 
+/// Only used for testing setups.
 /// Spawn a canister sandbox process and yield RPC interface object to
 /// communicate with it.
 ///
@@ -61,6 +66,8 @@ pub fn spawn_canister_sandbox_process(
 ) -> std::io::Result<(Arc<dyn SandboxService>, Pid, std::thread::JoinHandle<()>)> {
     spawn_canister_sandbox_process_with_factory(exec_path, argv, controller_service, safe_shutdown)
 }
+
+/// Only used for testing setups.
 /// Spawn a canister sandbox process and yield RPC interface object to
 /// communicate with it. When the socket is closed by the other side,
 /// we check if the safe_shutdown flag was set. If not this function
@@ -77,7 +84,7 @@ pub fn spawn_canister_sandbox_process_with_factory(
     safe_shutdown: Arc<AtomicBool>,
 ) -> std::io::Result<(Arc<dyn SandboxService>, Pid, std::thread::JoinHandle<()>)> {
     let (socket, sock_sandbox) = std::os::unix::net::UnixStream::pair()?;
-    let pid = spawn_socketed_process(exec_path, argv, sock_sandbox.as_raw_fd())?.id() as i32;
+    let pid = spawn_socketed_process(exec_path, argv, &[], sock_sandbox.as_raw_fd())?.id() as i32;
 
     let socket = Arc::new(socket);
 
