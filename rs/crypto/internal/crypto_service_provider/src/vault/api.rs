@@ -25,6 +25,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgTranscriptOperation,
 };
+use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
 use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CryptoError, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
@@ -386,6 +387,7 @@ pub trait CspVault:
     + IDkgProtocolCspVault
     + ThresholdEcdsaSignerCspVault
     + ThresholdSchnorrSignerCspVault
+    + VetKdCspVault
     + SecretKeyStoreCspVault
     + TlsHandshakeCspVault
     + PublicRandomSeedGenerator
@@ -404,6 +406,7 @@ impl<T> CspVault for T where
         + IDkgProtocolCspVault
         + ThresholdEcdsaSignerCspVault
         + ThresholdSchnorrSignerCspVault
+        + VetKdCspVault
         + SecretKeyStoreCspVault
         + TlsHandshakeCspVault
         + PublicRandomSeedGenerator
@@ -950,6 +953,29 @@ pub enum ThresholdSchnorrCreateSigShareVaultError {
     SecretSharesNotFound { commitment_string: String },
     /// On other internal errors than described above, e.g., invalid points.
     InternalError(String),
+    /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
+    TransientInternalError(String),
+}
+
+/// Operations of `CspVault` related to verifiably encrypted threshold key derivation (vetKD)
+/// (cf. [`ic_interfaces::crypto::VetKdProtocol`]).
+pub trait VetKdCspVault {
+    /// Generates an encrypted vetKD key share.
+    fn create_encrypted_vetkd_key_share(
+        &self,
+        key_id: KeyId,
+        master_public_key: Vec<u8>,
+        encryption_public_key: Vec<u8>,
+        derivation_path: ExtendedDerivationPath,
+        derivation_id: Vec<u8>,
+    ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError>;
+}
+
+/// Vault-level error for vetKD key share creation.
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub enum VetKdEncryptedKeyShareCreationVaultError {
+    /// If some arguments are invalid
+    InvalidArgument(String),
     /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
     TransientInternalError(String),
 }
