@@ -1,13 +1,16 @@
+use std::time::Duration;
+
 use candid::{Decode, Encode, Principal};
 use ic_agent::{
     identity::{AnonymousIdentity, Secp256k1Identity},
     Agent, Identity,
 };
 use rate_limits_api::{
-    v1::{RateLimitRule, RequestType},
+    v1::{Action, RateLimitRule, RequestType},
     AddConfigResponse, DiscloseRulesArg, DiscloseRulesResponse, GetConfigResponse,
     GetRuleByIdResponse, IncidentId, InputConfig, InputRule, RuleId, Version,
 };
+use regex::Regex;
 
 const IC_DOMAIN: &str = "https://ic0.app";
 
@@ -81,33 +84,33 @@ async fn add_config_1(agent: &Agent, canister_id: Principal) {
     let rule_1 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods_regex: Some(r"^(method_1)$".to_string()),
+        methods_regex: Some(Regex::new(r"^(method_1)$").unwrap()),
         request_types: Some(vec![RequestType::Call]),
-        limit: "1req/s".to_string(),
+        limit: Action::Limit(1, Duration::from_secs(60)),
     };
 
     let rule_2 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods_regex: Some(r"^(method_2)$".to_string()),
+        methods_regex: Some(Regex::new(r"^(method_2)$").unwrap()),
         request_types: Some(vec![RequestType::Query]),
-        limit: "2req/s".to_string(),
+        limit: Action::Limit(2, Duration::from_secs(60)),
     };
 
     let rule_3 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods_regex: Some(r"^(method_3)$".to_string()),
+        methods_regex: Some(Regex::new(r"^(method_3)$").unwrap()),
         request_types: None,
-        limit: "3req/s".to_string(),
+        limit: Action::Limit(3, Duration::from_secs(60)),
     };
 
     let rule_4 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods_regex: Some(r"^(method_4)$".to_string()),
+        methods_regex: Some(Regex::new(r"^(method_4)$").unwrap()),
         request_types: Some(vec![RequestType::ReadState]),
-        limit: "4req/s".to_string(),
+        limit: Action::Limit(4, Duration::from_secs(60)),
     };
 
     let args = Encode!(&InputConfig {
@@ -159,34 +162,34 @@ async fn add_config_2(agent: &Agent, canister_id: Principal) {
     let rule_1 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods_regex: Some(r"^(method_1)$".to_string()),
+        methods_regex: Some(Regex::new(r"^(method_1)$").unwrap()),
         request_types: Some(vec![RequestType::Call]),
-        limit: "1req/s".to_string(),
+        limit: Action::Limit(1, Duration::from_secs(60)),
     };
 
     let rule_2 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods_regex: Some(r"^(method_2)$".to_string()),
+        methods_regex: Some(Regex::new(r"^(method_2)$").unwrap()),
         request_types: Some(vec![RequestType::Query]),
-        limit: "2req/s".to_string(),
+        limit: Action::Limit(1, Duration::from_secs(60)),
     };
 
     // only this rule is different from config_1
     let rule_3 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods_regex: Some(r"^(method_33)$".to_string()),
+        methods_regex: Some(Regex::new(r"^(method_33)$").unwrap()),
         request_types: None,
-        limit: "33req/s".to_string(),
+        limit: Action::Limit(33, Duration::from_secs(60)),
     };
 
     let rule_4 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods_regex: Some(r"^(method_4)$".to_string()),
+        methods_regex: Some(Regex::new(r"^(method_4)$").unwrap()),
         request_types: Some(vec![RequestType::ReadState]),
-        limit: "4req/s".to_string(),
+        limit: Action::Limit(4, Duration::from_secs(60)),
     };
 
     let args = Encode!(&InputConfig {

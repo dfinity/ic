@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/boundary_node/anonymization/client",
+    "//rs/boundary_node/rate_limits/api:rate_limits_api",
     "//rs/canister_client",
     "//rs/canister_client/sender",
     "//rs/certification/test-utils",
