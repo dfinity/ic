@@ -23,9 +23,7 @@ end::catalog[] */
 use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResources,
-};
+use ic_system_test_driver::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources};
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -37,6 +35,7 @@ use ic_system_test_driver::util::block_on;
 use ic_types::Height;
 use rejoin_test_lib::rejoin_test_large_state;
 use std::time::Duration;
+use ic_system_test_driver::driver::farm::HostFeature;
 
 const PER_TASK_TIMEOUT: Duration = Duration::from_secs(3600 * 2);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(3600 * 2);
@@ -99,19 +98,18 @@ fn setup(env: TestEnv, config: Config) {
         .start(&env)
         .expect("failed to start prometheus VM");
 
+    // Production-like resources
+    let vm_resources = VmResources {
+        vcpus: Some(NrOfVCPUs::new(64)),
+        memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)), //  512 GB
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+    };
+
     InternetComputer::new()
+        .with_default_vm_resources(vm_resources)
+        .with_required_host_features(vec![HostFeature::Performance])
         .add_subnet(
             Subnet::new(SubnetType::System)
-                .with_default_vm_resources(VmResources {
-                    vcpus: None,
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(
-                        32 * 1024 * 1024,
-                    )),
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(
-                        500,
-                    )),
-                })
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(config.nodes_count),
         )
         .setup_and_start(&env)
