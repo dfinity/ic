@@ -61,6 +61,7 @@ type DefiniteCanisterSettings = record {
   wasm_memory_limit : opt nat;
   memory_allocation : opt nat;
   compute_allocation : opt nat;
+  wasm_memory_threshold : opt nat;
 };
 
 type DefiniteCanisterSettingsArgs = record {
@@ -69,6 +70,7 @@ type DefiniteCanisterSettingsArgs = record {
   wasm_memory_limit : opt nat;
   memory_allocation : nat;
   compute_allocation : nat;
+  wasm_memory_threshold : nat;
 };
 
 type FailedUpdate = record {
@@ -113,6 +115,7 @@ type ManageDappCanisterSettingsRequest = record {
   wasm_memory_limit : opt nat64;
   memory_allocation : opt nat64;
   compute_allocation : opt nat64;
+  wasm_memory_threshold : opt nat64;
 };
 
 type ManageDappCanisterSettingsResponse = record {

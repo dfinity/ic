@@ -937,6 +937,10 @@ impl DefiniteCanisterSettingsArgs {
         self.wasm_memory_limit.clone()
     }
 
+    pub fn wasm_memory_threshold(&self) -> candid::Nat {
+        self.wasm_memory_threshold.clone()
+    }
+
     pub fn compute_allocation(&self) -> candid::Nat {
         self.compute_allocation.clone()
     }

@@ -33,6 +33,7 @@ pub struct CanisterSettings {
     pub reserved_cycles_limit: Option<candid::Nat>,
     pub log_visibility: Option<LogVisibility>,
     pub wasm_memory_limit: Option<candid::Nat>,
+    pub wasm_memory_threshold: Option<candid::Nat>,
 }
 
 /// A wrapper call to the management canister `update_settings` API.

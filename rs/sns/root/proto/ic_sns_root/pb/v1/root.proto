@@ -128,6 +128,7 @@ message ManageDappCanisterSettingsRequest {
   optional uint64 reserved_cycles_limit = 5;
   optional LogVisibility log_visibility = 6;
   optional uint64 wasm_memory_limit = 7;
+  optional uint64 wasm_memory_threshold = 8;
 }
 
 message ManageDappCanisterSettingsResponse {
