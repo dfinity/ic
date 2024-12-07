@@ -168,6 +168,7 @@ fn schedule_timers() {
     schedule_prune_following(Duration::from_secs(0));
     schedule_spawn_neurons();
     schedule_unstake_maturity_of_dissolved_neurons();
+    schedule_vote_processing();
 
     // TODO(NNS1-3446): Delete. (This only needs to be run once, but can safely be run multiple times).
     schedule_backfill_voting_power_refreshed_timestamps(Duration::from_secs(0));
@@ -324,6 +325,15 @@ const UNSTAKE_MATURITY_OF_DISSOLVED_NEURONS_INTERVAL: Duration = Duration::from_
 fn schedule_unstake_maturity_of_dissolved_neurons() {
     ic_cdk_timers::set_timer_interval(UNSTAKE_MATURITY_OF_DISSOLVED_NEURONS_INTERVAL, || {
         governance_mut().unstake_maturity_of_dissolved_neurons();
+    });
+}
+
+/// The interval at which the voting state machines are processed.
+const VOTE_PROCESSING_INTERVAL: Duration = Duration::from_secs(3);
+
+fn schedule_vote_processing() {
+    ic_cdk_timers::set_timer_interval(VOTE_PROCESSING_INTERVAL, || {
+        spawn(governance_mut().process_voting_state_machines());
     });
 }
 
