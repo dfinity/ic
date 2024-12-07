@@ -52,14 +52,17 @@ impl IDkgClientMetrics {
 }
 
 #[derive(Clone)]
-pub struct IDkgPreSignerMetrics {
-    pub on_state_change_duration: HistogramVec,
-    pub pre_sign_metrics: IntCounterVec,
-    pub pre_sign_errors: IntCounterVec,
+pub(crate) struct IDkgPreSignerMetrics {
+    pub(crate) on_state_change_duration: HistogramVec,
+    pub(crate) pre_sign_metrics: IntCounterVec,
+    pub(crate) pre_sign_errors: IntCounterVec,
+    transcript_builder_metrics: IntCounterVec,
+    transcript_builder_errors: IntCounterVec,
+    pub(crate) transcript_builder_duration: HistogramVec,
 }
 
 impl IDkgPreSignerMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+    pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             on_state_change_duration: metrics_registry.histogram_vec(
                 "idkg_pre_signer_on_state_change_duration_seconds",
@@ -79,15 +82,51 @@ impl IDkgPreSignerMetrics {
                 "Pre-signing related errors",
                 &["type"],
             ),
+            transcript_builder_metrics: metrics_registry.int_counter_vec(
+                "idkg_transcript_builder_metrics",
+                "IDkg transcript builder metrics",
+                &["type"],
+            ),
+            transcript_builder_errors: metrics_registry.int_counter_vec(
+                "idkg_transcript_builder_errors",
+                "IDkg transcript builder related errors",
+                &["type"],
+            ),
+            transcript_builder_duration: metrics_registry.histogram_vec(
+                "idkg_transcript_builder_duration_seconds",
+                "Time taken by transcript builder, in seconds",
+                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
+                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
+                decimal_buckets(-4, 2),
+                &["sub_component"],
+            ),
         }
     }
 
-    pub fn pre_sign_metrics_inc(&self, label: &str) {
+    pub(crate) fn pre_sign_metrics_inc(&self, label: &str) {
         self.pre_sign_metrics.with_label_values(&[label]).inc();
     }
 
-    pub fn pre_sign_errors_inc(&self, label: &str) {
+    pub(crate) fn pre_sign_errors_inc(&self, label: &str) {
         self.pre_sign_errors.with_label_values(&[label]).inc();
+    }
+
+    pub(crate) fn transcript_builder_metrics_inc(&self, label: &str) {
+        self.transcript_builder_metrics
+            .with_label_values(&[label])
+            .inc();
+    }
+
+    pub(crate) fn transcript_builder_metrics_inc_by(&self, value: u64, label: &str) {
+        self.transcript_builder_metrics
+            .with_label_values(&[label])
+            .inc_by(value);
+    }
+
+    pub(crate) fn transcript_builder_errors_inc(&self, label: &str) {
+        self.transcript_builder_errors
+            .with_label_values(&[label])
+            .inc();
     }
 }
 
@@ -133,9 +172,6 @@ impl ThresholdSignerMetrics {
 pub(crate) struct IDkgPayloadMetrics {
     payload_metrics: IntGaugeVec,
     payload_errors: IntCounterVec,
-    transcript_builder_metrics: IntCounterVec,
-    transcript_builder_errors: IntCounterVec,
-    pub(crate) transcript_builder_duration: HistogramVec,
     /// Critical error for failure to create/reshare key transcript
     pub(crate) critical_error_master_key_transcript_missing: IntCounter,
 }
@@ -152,24 +188,6 @@ impl IDkgPayloadMetrics {
                 "idkg_payload_errors",
                 "IDkg payload related errors",
                 &["type"],
-            ),
-            transcript_builder_metrics: metrics_registry.int_counter_vec(
-                "idkg_transcript_builder_metrics",
-                "IDkg transcript builder metrics",
-                &["type"],
-            ),
-            transcript_builder_errors: metrics_registry.int_counter_vec(
-                "idkg_transcript_builder_errors",
-                "IDkg transcript builder related errors",
-                &["type"],
-            ),
-            transcript_builder_duration: metrics_registry.histogram_vec(
-                "idkg_transcript_builder_duration_seconds",
-                "Time taken by transcript builder, in seconds",
-                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
-                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
-                decimal_buckets(-4, 2),
-                &["sub_component"],
             ),
             critical_error_master_key_transcript_missing: metrics_registry
                 .error_counter(CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING),
@@ -233,24 +251,6 @@ impl IDkgPayloadMetrics {
 
     pub(crate) fn payload_errors_inc(&self, label: &str) {
         self.payload_errors.with_label_values(&[label]).inc();
-    }
-
-    pub(crate) fn transcript_builder_metrics_inc(&self, label: &str) {
-        self.transcript_builder_metrics
-            .with_label_values(&[label])
-            .inc();
-    }
-
-    pub(crate) fn transcript_builder_metrics_inc_by(&self, value: u64, label: &str) {
-        self.transcript_builder_metrics
-            .with_label_values(&[label])
-            .inc_by(value);
-    }
-
-    pub(crate) fn transcript_builder_errors_inc(&self, label: &str) {
-        self.transcript_builder_errors
-            .with_label_values(&[label])
-            .inc();
     }
 }
 

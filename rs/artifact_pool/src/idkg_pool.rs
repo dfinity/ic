@@ -8,13 +8,16 @@
 //!    one for every type of IDkgMessage (dealing, dealing support, etc)
 
 use crate::{
-    metrics::{IDkgPoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
+    metrics::{IDkgPoolMetrics, POOL_TYPE_TRANSCRIPTS, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
     IntoInner,
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
-use ic_interfaces::p2p::consensus::{
-    ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
-    ValidatedPoolReader,
+use ic_interfaces::{
+    idkg::IDkgTranscriptPool,
+    p2p::consensus::{
+        ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
+        ValidatedPoolReader,
+    },
 };
 use ic_interfaces::{
     idkg::{
@@ -25,15 +28,18 @@ use ic_interfaces::{
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::artifact::IDkgMessageId;
-use ic_types::consensus::{
-    idkg::{
-        EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefixOf, IDkgStats,
-        SchnorrSigShare, SigShare, SignedIDkgComplaint, SignedIDkgOpening,
-    },
-    CatchUpPackage,
-};
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
+use ic_types::{artifact::IDkgMessageId, crypto::canister_threshold_sig::idkg::IDkgTranscriptId};
+use ic_types::{
+    consensus::{
+        idkg::{
+            EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefixOf, IDkgStats,
+            SchnorrSigShare, SigShare, SignedIDkgComplaint, SignedIDkgOpening,
+        },
+        CatchUpPackage,
+    },
+    crypto::canister_threshold_sig::idkg::IDkgTranscript,
+};
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -45,6 +51,56 @@ const POOL_IDKG: &str = "idkg";
 /// Workaround for `IDkgMessage` not implementing `CountBytes`.
 #[allow(dead_code)]
 const MESSAGE_SIZE_BYTES: usize = 0;
+
+/// The in-memory pool holding completed transcripts
+struct IDkgTranscriptPoolImpl {
+    transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
+    metrics: IDkgPoolMetrics,
+}
+
+impl IDkgTranscriptPoolImpl {
+    fn new(metrics_registry: MetricsRegistry) -> Self {
+        Self {
+            transcripts: BTreeMap::new(),
+            metrics: IDkgPoolMetrics::new(metrics_registry, POOL_IDKG, POOL_TYPE_TRANSCRIPTS),
+        }
+    }
+
+    fn insert(&mut self, transcript: IDkgTranscript) {
+        if self
+            .transcripts
+            .insert(transcript.transcript_id, transcript)
+            .is_none()
+        {
+            self.metrics.observe_insert("transcript");
+        } else {
+            self.metrics
+                .persistence_error("insert_duplicate_transcript");
+        }
+    }
+
+    fn remove(&mut self, key: &IDkgTranscriptId) {
+        if self.transcripts.remove(key).is_some() {
+            self.metrics.observe_remove("transcript");
+        } else {
+            self.metrics.persistence_error("remove_missing_transcript");
+        }
+    }
+}
+
+impl IDkgTranscriptPool for IDkgTranscriptPoolImpl {
+    fn contains(&self, transcript_id: &IDkgTranscriptId) -> bool {
+        self.transcripts.contains_key(transcript_id)
+    }
+
+    fn get(&self, transcript_id: &IDkgTranscriptId) -> Option<IDkgTranscript> {
+        self.transcripts.get(transcript_id).cloned()
+    }
+
+    fn transcript_ids(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptId> + '_> {
+        Box::new(self.transcripts.keys())
+    }
+}
 
 /// The per-artifact type object pool
 struct IDkgObjectPool {
@@ -315,6 +371,7 @@ impl MutableIDkgPoolSection for InMemoryIDkgPoolSection {
 pub struct IDkgPoolImpl {
     validated: Box<dyn MutableIDkgPoolSection>,
     unvalidated: Box<dyn MutableIDkgPoolSection>,
+    transcripts: IDkgTranscriptPoolImpl,
     stats: Box<dyn IDkgStats>,
     invalidated_artifacts: IntCounter,
     log: ReplicaLogger,
@@ -351,10 +408,11 @@ impl IDkgPoolImpl {
             ),
             validated,
             unvalidated: Box::new(InMemoryIDkgPoolSection::new(
-                metrics_registry,
+                metrics_registry.clone(),
                 POOL_IDKG,
                 POOL_TYPE_UNVALIDATED,
             )),
+            transcripts: IDkgTranscriptPoolImpl::new(metrics_registry),
             stats,
             log,
         }
@@ -407,6 +465,10 @@ impl IDkgPool for IDkgPoolImpl {
 
     fn unvalidated(&self) -> &dyn IDkgPoolSection {
         self.unvalidated.as_pool_section()
+    }
+
+    fn transcripts(&self) -> &dyn IDkgTranscriptPool {
+        &self.transcripts
     }
 
     fn stats(&self) -> &dyn IDkgStats {
@@ -469,6 +531,12 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
                             "HandleInvalid:: artifact was not found: msg_id = {msg_id:?}, msg = {msg}"
                         );
                     }
+                }
+                IDkgChangeAction::AddTranscript(transcript) => {
+                    self.transcripts.insert(transcript);
+                }
+                IDkgChangeAction::RemoveTranscript(transcript_id) => {
+                    self.transcripts.remove(&transcript_id);
                 }
             }
         }

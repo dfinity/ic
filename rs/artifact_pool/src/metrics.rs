@@ -6,6 +6,7 @@ pub const LABEL_POOL: &str = "pool";
 pub const LABEL_POOL_TYPE: &str = "pool_type";
 pub const POOL_TYPE_VALIDATED: &str = "validated";
 pub const POOL_TYPE_UNVALIDATED: &str = "unvalidated";
+pub const POOL_TYPE_TRANSCRIPTS: &str = "transcripts";
 pub const ARTIFACT_TYPE: &str = "artifact_type";
 
 /// Metrics for a given artifact pool's validated/unvalidated section.
