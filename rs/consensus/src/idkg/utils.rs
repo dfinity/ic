@@ -31,6 +31,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
 };
 use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
+use ic_types::crypto::vetkd::VetKdArgs;
 use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use ic_types::messages::CallbackId;
 use ic_types::registry::RegistryClientError;
@@ -253,59 +254,88 @@ pub(super) fn build_signature_inputs(
     context: &SignWithThresholdContext,
     block_reader: &dyn IDkgBlockReader,
 ) -> Result<(RequestId, ThresholdSigInputsRef), BuildSignatureInputsError> {
-    let (pre_sig_id, height) = context
-        .matched_pre_signature
-        .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
     let extended_derivation_path = ExtendedDerivationPath {
         caller: context.request.sender.into(),
         derivation_path: context.derivation_path.clone(),
     };
-    let request_id = RequestId {
-        callback_id,
-        height,
-    };
-    let pre_signature = block_reader
-        .available_pre_signature(&pre_sig_id)
-        .ok_or(BuildSignatureInputsError::MissingPreSignature(request_id))?
-        .clone();
-    let nonce = Id::from(
-        context
-            .nonce
-            .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
-    );
-    let inputs = match (pre_signature, &context.args) {
-        (PreSignatureRef::Ecdsa(pre_sig), ThresholdArguments::Ecdsa(args)) => {
-            ThresholdSigInputsRef::Ecdsa(ThresholdEcdsaSigInputsRef::new(
+    match &context.args {
+        ThresholdArguments::Ecdsa(args) => {
+            let (pre_sig_id, height) = context
+                .matched_pre_signature
+                .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
+            let request_id = RequestId {
+                callback_id,
+                height,
+            };
+            let PreSignatureRef::Ecdsa(pre_sig) = block_reader
+                .available_pre_signature(&pre_sig_id)
+                .ok_or(BuildSignatureInputsError::MissingPreSignature(request_id))?
+                .clone()
+            else {
+                return Err(BuildSignatureInputsError::SignatureSchemeMismatch(
+                    request_id,
+                    SignatureScheme::Schnorr,
+                ));
+            };
+            let nonce = Id::from(
+                context
+                    .nonce
+                    .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
+            );
+            let inputs = ThresholdSigInputsRef::Ecdsa(ThresholdEcdsaSigInputsRef::new(
                 extended_derivation_path,
                 args.message_hash,
                 nonce,
                 pre_sig,
-            ))
+            ));
+            Ok((request_id, inputs))
         }
-        (PreSignatureRef::Schnorr(pre_sig), ThresholdArguments::Schnorr(args)) => {
-            ThresholdSigInputsRef::Schnorr(ThresholdSchnorrSigInputsRef::new(
+        ThresholdArguments::Schnorr(args) => {
+            let (pre_sig_id, height) = context
+                .matched_pre_signature
+                .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
+            let request_id = RequestId {
+                callback_id,
+                height,
+            };
+            let PreSignatureRef::Schnorr(pre_sig) = block_reader
+                .available_pre_signature(&pre_sig_id)
+                .ok_or(BuildSignatureInputsError::MissingPreSignature(request_id))?
+                .clone()
+            else {
+                return Err(BuildSignatureInputsError::SignatureSchemeMismatch(
+                    request_id,
+                    SignatureScheme::Ecdsa,
+                ));
+            };
+            let nonce = Id::from(
+                context
+                    .nonce
+                    .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
+            );
+            let inputs = ThresholdSigInputsRef::Schnorr(ThresholdSchnorrSigInputsRef::new(
                 extended_derivation_path,
                 args.message.clone(),
                 nonce,
                 pre_sig,
                 args.taproot_tree_root.clone(),
-            ))
+            ));
+            Ok((request_id, inputs))
         }
-        (PreSignatureRef::Ecdsa(_), _) => {
-            return Err(BuildSignatureInputsError::SignatureSchemeMismatch(
-                request_id,
-                SignatureScheme::Ecdsa,
-            ))
+        ThresholdArguments::VetKd(args) => {
+            let request_id = RequestId {
+                callback_id,
+                height: args.height,
+            };
+            let inputs = ThresholdSigInputsRef::VetKd(VetKdArgs {
+                derivation_path: extended_derivation_path,
+                ni_dkg_id: args.ni_dkg_id.clone(),
+                derivation_id: args.derivation_id.clone(),
+                encryption_public_key: args.encryption_public_key.clone(),
+            });
+            Ok((request_id, inputs))
         }
-        (PreSignatureRef::Schnorr(_), _) => {
-            return Err(BuildSignatureInputsError::SignatureSchemeMismatch(
-                request_id,
-                SignatureScheme::Schnorr,
-            ))
-        }
-    };
-
-    Ok((request_id, inputs))
+    }
 }
 
 /// Load the given transcripts

@@ -109,6 +109,7 @@ pub(crate) enum InvalidIDkgPayloadReason {
     NewSignatureUnexpected(idkg::PseudoRandomId),
     NewSignatureBuildInputsError(BuildSignatureInputsError),
     NewSignatureMissingContext(idkg::PseudoRandomId),
+    VetKdUnexpected(CallbackId),
     XNetReshareAgreementWithoutRequest(idkg::IDkgReshareRequest),
     XNetReshareRequestDisappeared(idkg::IDkgReshareRequest),
     DecodingError(String),
@@ -599,6 +600,10 @@ fn validate_new_signature_agreements(
                         )
                         .map_err(ThresholdSchnorrVerifyCombinedSignatureError)?;
                         new_signatures.insert(*id, CombinedSignature::Schnorr(signature));
+                    }
+                    ThresholdSigInputsRef::VetKd(_) => {
+                        // We don't expect to find agreements for vet KD contexts in the IDKG payload
+                        return Err(InvalidIDkgPayloadReason::VetKdUnexpected(*id).into());
                     }
                 }
             }
