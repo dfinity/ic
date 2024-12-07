@@ -123,8 +123,6 @@ type RefreshVotingPowerResponse = record {
 };
 
 // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
-//
-// Deprecated. Use ManageNeuronCommandRequest instead. It is equivalent.
 type Command = variant {
   Spawn : Spawn;
   Split : Split;
@@ -495,10 +493,6 @@ type ManageNeuron = record {
 };
 
 // KEEP THIS IN SYNC WITH COMMAND!
-//
-// Command is deprecated, but people need time to migrate to this. Therefore, we
-// have not deleted Command yet. In the meantime, ManageNeuronCommandRequest
-// must be kept in sync with Command.
 type ManageNeuronCommandRequest = variant {
   Spawn : Spawn;
   Split : Split;
