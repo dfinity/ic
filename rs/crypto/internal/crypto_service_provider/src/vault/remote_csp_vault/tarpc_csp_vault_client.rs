@@ -52,7 +52,7 @@ use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{mpsc::sync_channel, Arc};
 use std::time::{Duration, SystemTime};
 use tarpc::serde_transport;
 use tracing::instrument;
@@ -76,6 +76,7 @@ pub struct RemoteCspVault {
     // special, long timeout for RPC calls that should not really timeout.
     long_rpc_timeout: Duration,
     tokio_runtime_handle: tokio::runtime::Handle,
+    internal_rt_for_safe_block_on: tokio::runtime::Runtime,
     logger: ReplicaLogger,
     metrics: Arc<CryptoMetrics>,
     #[cfg(test)]
@@ -92,8 +93,25 @@ pub enum RemoteCspVaultError {
 }
 
 impl RemoteCspVault {
+    // This function panics if the calling stack enters (and remains within) a Tokio runtime.
     fn tokio_block_on<T: Future>(&self, task: T) -> T::Output {
         self.tokio_runtime_handle.block_on(task)
+    }
+
+    // This is a safer version of the function above that blocks the local thread until the future is executed but
+    // it will not panic if the parent context is within a Tokio runtime.
+    // Use this function when you are unsure the calling stack enters (and remains within) a Tokio runtime.
+    fn tokio_safe_block_on<F>(&self, task: F) -> F::Output
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        let (tx, rx) = sync_channel(1);
+        self.internal_rt_for_safe_block_on.spawn(async move {
+            let res = task.await;
+            let _ = tx.send(res);
+        });
+        rx.recv().expect("The channel cannot be closed before receiving a value, unless the sending thread panics.")
     }
 }
 
@@ -218,11 +236,18 @@ impl RemoteCspVaultBuilder {
             TarpcCspVaultClient::new(Default::default(), transport).spawn()
         };
         debug!(self.logger, "Instantiated remote CSP vault client");
+        let internal_rt_for_safe_block_on = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .thread_name("Crypto-Internal-Thread".to_string())
+            .enable_all()
+            .build()
+            .expect("Could not create a Tokio runtime.");
         Ok(RemoteCspVault {
             tarpc_csp_client: client,
             rpc_timeout: self.rpc_timeout,
             long_rpc_timeout: self.long_rpc_timeout,
             tokio_runtime_handle: self.rt_handle,
+            internal_rt_for_safe_block_on,
             logger: self.logger,
             metrics: self.metrics,
             #[cfg(test)]
@@ -559,23 +584,20 @@ impl TlsHandshakeCspVault for RemoteCspVault {
 
     #[instrument(skip_all)]
     fn tls_sign(&self, message: Vec<u8>, key_id: KeyId) -> Result<CspSignature, CspTlsSignError> {
-        // Here we cannot call `block_on` directly but have to wrap it in
-        // `block_in_place` because this method here is called via a Rustls
-        // callback (via our implementation of the `rustls::sign::Signer`
-        // trait) from the async function `tokio_rustls::TlsAcceptor::accept`,
-        // which in turn is called from our async function
-        // `TlsHandshake::perform_tls_server_handshake`.
-        #[allow(clippy::disallowed_methods)]
-        tokio::task::block_in_place(|| {
-            self.tokio_block_on(self.tarpc_csp_client.tls_sign(
-                context_with_timeout(self.rpc_timeout),
-                ByteBuf::from(message),
-                key_id,
-            ))
-            .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-                Err(CspTlsSignError::TransientInternalError {
-                    internal_error: rpc_error.to_string(),
-                })
+        let client = self.tarpc_csp_client.clone();
+        let timeout = self.rpc_timeout;
+        self.tokio_safe_block_on(async move {
+            client
+                .tls_sign(
+                    context_with_timeout(timeout),
+                    ByteBuf::from(message),
+                    key_id,
+                )
+                .await
+        })
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(CspTlsSignError::TransientInternalError {
+                internal_error: rpc_error.to_string(),
             })
         })
     }
