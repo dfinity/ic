@@ -1,6 +1,6 @@
 mod input_schedule;
-mod message_pool;
-mod queue;
+pub mod message_pool;
+pub mod queue;
 #[cfg(test)]
 mod tests;
 
@@ -193,7 +193,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     /// Creates a new output queue iterator from the given
     /// `CanisterQueues::canister_queues` (a map of `CanisterId` to an input queue,
     /// output queue pair) and `MessagePool`.
-    fn new(
+    pub fn new(
         queues: &'a mut BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
         store: &'a mut MessageStoreImpl,
     ) -> Self {
@@ -309,7 +309,7 @@ impl Iterator for CanisterOutputQueuesIterator<'_> {
 /// and canister requests / responses, `pop_input()` / `peek_input()` may also
 /// return concise "reject response for callback ID" messages.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) enum CanisterInput {
+pub enum CanisterInput {
     Ingress(Arc<Ingress>),
     Request(Arc<Request>),
     Response(Arc<Response>),
