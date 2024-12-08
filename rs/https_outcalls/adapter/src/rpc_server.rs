@@ -4,6 +4,7 @@ use crate::metrics::{
     LABEL_UPLOAD, LABEL_URL_PARSE,
 };
 use crate::Config;
+use arc_swap::ArcSwap;
 use core::convert::TryFrom;
 use http::{header::USER_AGENT, HeaderName, HeaderValue, Uri};
 use http_body_util::{BodyExt, Full};
@@ -24,6 +25,8 @@ use ic_https_outcalls_service::{
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use tonic::{Request, Response, Status};
 
@@ -43,13 +46,21 @@ const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 
 type OutboundRequestBody = Full<Bytes>;
 
+#[derive(Default)]
+struct Cache {
+    api_bn_ips: Vec<String>,
+    socks_clients: Vec<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>,
+}
+
 /// Implements HttpsOutcallsService
 // TODO: consider making this private
 pub struct CanisterHttp {
     client: Client<HttpsConnector<HttpConnector>, OutboundRequestBody>,
-    socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>,
+    cache: ArcSwap<Cache>,
     logger: ReplicaLogger,
     metrics: AdapterMetrics,
+    http_connect_timeout_secs: u64,
+    next_proxy_index: AtomicUsize,
 }
 
 impl CanisterHttp {
@@ -59,24 +70,6 @@ impl CanisterHttp {
         http_connector.enforce_http(false);
         http_connector
             .set_connect_timeout(Some(Duration::from_secs(config.http_connect_timeout_secs)));
-        // The proxy connnector requires a the URL scheme to be specified. I.e socks5://
-        // Config validity check ensures that url includes scheme, host and port.
-        // Therefore the parse 'Uri' will be in the correct format. I.e socks5://somehost.com:1080
-        let proxy_connector = SocksConnector {
-            proxy_addr: config
-                .socks_proxy
-                .parse()
-                .expect("Failed to parse socks url."),
-            auth: None,
-            connector: http_connector.clone(),
-        };
-        let proxied_https_connector = HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .expect("Failed to set native roots")
-            .https_only()
-            .enable_all_versions()
-            .wrap_connector(proxy_connector);
-
         // Https client setup.
         let builder = HttpsConnectorBuilder::new()
             .with_native_roots()
@@ -89,18 +82,68 @@ impl CanisterHttp {
         let builder = builder.enable_all_versions();
         let direct_https_connector = builder.wrap_connector(http_connector);
 
-        let socks_client =
-            Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(proxied_https_connector);
         let client = Client::builder(TokioExecutor::new())
             .http2_max_header_list_size(MAX_HEADER_LIST_SIZE)
             .build::<_, Full<Bytes>>(direct_https_connector);
 
         Self {
             client,
-            socks_client,
+            cache: ArcSwap::new(Arc::new(Cache::default())),
             logger,
             metrics: AdapterMetrics::new(metrics),
+            http_connect_timeout_secs: config.http_connect_timeout_secs,
+            next_proxy_index: AtomicUsize::new(0),
         }
+    }
+
+    // Round robin over the available clients, starting from the next index.
+    fn socks_clients_iter(
+        &self,
+        cache: &Cache,
+    ) -> impl Iterator<Item = Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>
+    {
+        let len = cache.socks_clients.len();
+        let start_index = self.next_proxy_index.fetch_add(1, Ordering::SeqCst) % len;
+        let clients = cache.socks_clients.clone();
+        clients.into_iter().cycle().skip(start_index).take(len)
+    }
+
+    fn create_cache(&self, api_bn_ips: Vec<String>) -> Cache {
+        let mut new_cache = Cache::default();
+
+        let mut http_connector = HttpConnector::new();
+        http_connector.enforce_http(false);
+        http_connector
+            .set_connect_timeout(Some(Duration::from_secs(self.http_connect_timeout_secs)));
+
+        for ip in api_bn_ips {
+            match ip.parse() {
+                Ok(proxy_addr) => {
+                    let proxy_connector = SocksConnector {
+                        proxy_addr,
+                        auth: None,
+                        connector: http_connector.clone(),
+                    };
+
+                    let proxied_https_connector = HttpsConnectorBuilder::new()
+                        .with_native_roots()
+                        .expect("Failed to set native roots")
+                        .https_only()
+                        .enable_all_versions()
+                        .wrap_connector(proxy_connector);
+
+                    let socks_client = Client::builder(TokioExecutor::new())
+                        .build::<_, Full<Bytes>>(proxied_https_connector);
+
+                    new_cache.api_bn_ips.push(ip);
+                    new_cache.socks_clients.push(socks_client);
+                }
+                Err(e) => {
+                    debug!(self.logger, "Failed to parse SOCKS IP: {}", e);
+                }
+            }
+        }
+        new_cache
     }
 }
 
@@ -113,6 +156,23 @@ impl HttpsOutcallsService for CanisterHttp {
         self.metrics.requests.inc();
 
         let req = request.into_inner();
+
+        let mut sorted_incoming_ips = req.api_bn_ips;
+        sorted_incoming_ips.sort();
+        sorted_incoming_ips.dedup();
+
+        let mut current_cache = self.cache.load_full();
+
+        let cached_ips = current_cache.api_bn_ips.clone();
+
+        if cached_ips != sorted_incoming_ips {
+            // Cache miss. We need to update the cache and make sure that current_cache points to the IPs in the request.
+            // Multiple threads can enter this block, but it's fine, as the whole cache is lightweight.
+            current_cache = Arc::new(self.create_cache(sorted_incoming_ips));
+            self.cache.store(current_cache.clone());
+        }
+
+        // "current_cache" now points to the Cache with the IPs from the request.
 
         let uri = req.url.parse::<Uri>().map_err(|err| {
             debug!(self.logger, "Failed to parse URL: {}", err);
@@ -198,8 +258,36 @@ impl HttpsOutcallsService for CanisterHttp {
                 // fail fast because our interface does not have an ipv4 assigned.
                 Err(direct_err) => {
                     self.metrics.requests_socks.inc();
-                    self.socks_client.request(http_req_clone).await.map_err(|e| {
-                        format!("Request failed direct connect {direct_err} and connect through socks {e}")
+
+                    let clients_iter = self.socks_clients_iter(&current_cache);
+
+                    let mut response = None;
+
+                    if current_cache.socks_clients.is_empty() {
+                        return Err(Status::new(
+                            tonic::Code::Unavailable,
+                            "No SOCKS proxy available".to_string(),
+                        ));
+                    }
+
+                    for client in clients_iter {
+                        let http_req = http_req_clone.clone();
+                        match client.request(http_req).await {
+                            Ok(resp) => {
+                                response = Some(resp);
+                                break;
+                            }
+                            Err(e) => {
+                                debug!(self.logger, "Failed to connect through SOCKS: {}", e);
+                                //TODO(mihailjiau1): add some metrics.
+                                continue;
+                            }
+                        }
+                    }
+
+                    //TODO(mihailjianu1): bubble up the errors from the socks proxy.
+                    response.ok_or_else(|| {
+                        format!("Request failed direct connect {direct_err} and connect through all socks proxies")
                     })
                 }
                 Ok(resp)=> Ok(resp),
