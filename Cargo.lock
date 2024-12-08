@@ -8646,6 +8646,7 @@ dependencies = [
 name = "ic-https-outcalls-adapter"
 version = "0.1.0"
 dependencies = [
+ "arc-swap",
  "async-stream",
  "byte-unit",
  "bytes",
