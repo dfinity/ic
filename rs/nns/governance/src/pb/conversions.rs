@@ -1309,6 +1309,9 @@ impl From<pb_api::ManageNeuronCommandRequest> for pb::manage_neuron::Command {
             pb_api::ManageNeuronCommandRequest::StakeMaturity(v) => {
                 pb::manage_neuron::Command::StakeMaturity(v.into())
             }
+            pb_api::ManageNeuronCommandRequest::RefreshVotingPower(v) => {
+                pb::manage_neuron::Command::RefreshVotingPower(v.into())
+            }
         }
     }
 }
@@ -2405,9 +2408,11 @@ impl From<pb::NetworkEconomics> for pb_api::NetworkEconomics {
             transaction_fee_e8s: item.transaction_fee_e8s,
             max_proposals_to_keep_per_topic: item.max_proposals_to_keep_per_topic,
             neurons_fund_economics: item.neurons_fund_economics.map(|x| x.into()),
+            voting_power_economics: item.voting_power_economics.map(|x| x.into()),
         }
     }
 }
+
 impl From<pb_api::NetworkEconomics> for pb::NetworkEconomics {
     fn from(item: pb_api::NetworkEconomics) -> Self {
         Self {
@@ -2420,6 +2425,27 @@ impl From<pb_api::NetworkEconomics> for pb::NetworkEconomics {
             transaction_fee_e8s: item.transaction_fee_e8s,
             max_proposals_to_keep_per_topic: item.max_proposals_to_keep_per_topic,
             neurons_fund_economics: item.neurons_fund_economics.map(|x| x.into()),
+            voting_power_economics: item.voting_power_economics.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb_api::VotingPowerEconomics> for pb::VotingPowerEconomics {
+    fn from(item: pb_api::VotingPowerEconomics) -> Self {
+        Self {
+            start_reducing_voting_power_after_seconds: item
+                .start_reducing_voting_power_after_seconds,
+            clear_following_after_seconds: item.clear_following_after_seconds,
+        }
+    }
+}
+
+impl From<pb::VotingPowerEconomics> for pb_api::VotingPowerEconomics {
+    fn from(item: pb::VotingPowerEconomics) -> Self {
+        Self {
+            start_reducing_voting_power_after_seconds: item
+                .start_reducing_voting_power_after_seconds,
+            clear_following_after_seconds: item.clear_following_after_seconds,
         }
     }
 }
