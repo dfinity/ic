@@ -12,7 +12,7 @@ QUICK="${QUICK:-no}"
 
 printf "    %-12s := %s\n" \
     "BENCH" "${BENCH:?Usage: BENCH='//rs/embedders:heap_bench' ${0}}" \
-    "BENCH_ARGS" "${BENCH_ARGS:=--warm-up-time=1 --sample-size=10 --output-format=bencher}" \
+    "BENCH_ARGS" "${BENCH_ARGS:=--warm-up-time=1 --measurement-time=1 --output-format=bencher}" \
     "FILTER" "${FILTER:=}" \
     "MIN_FILE" "${MIN_FILE:=${0##*/}.min}" \
     "LOG_FILE" "${LOG_FILE:=${MIN_FILE%.*}.log}"
