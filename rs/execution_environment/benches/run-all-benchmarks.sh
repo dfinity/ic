@@ -50,6 +50,5 @@ for i in $(seq 0 ${REPEAT}); do
     run "${i}" "System API Update" \
         "//rs/execution_environment:execute_update_bench" "SYSTEM_API_UPDATE.min"
     run "${i}" "Wasm Instructions" \
-        "//rs/execution_environment:wasm_instructions_bench" "WASM_INSTRUCTIONS.min" \
-        "confirmation"
+        "//rs/execution_environment:wasm_instructions_bench" "WASM_INSTRUCTIONS.min"
 done

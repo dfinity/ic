@@ -43,9 +43,9 @@ else
         min_bench=$(rg -F " ${name} " "${MIN_FILE}" || true)
         matches=$(echo "${min_bench}" | wc -l)
         [ "${matches}" -le 1 ] || (echo "Error matching ${name} times in ${MIN_FILE}" && exit 1)
-        min_result=$(echo "${min_bench}" | sed -E 's/.*bench: +([0-9]+) ns.*/\1/' || echo "-")
+        min_result=$(echo "${min_bench}" | sed -E 's/.*bench: +([0-9]+) ns.*/\1/')
 
-        if [ "${min_result}" = "-" ] || [ "${new_result}" -lt "${min_result}" ]; then
+        if [ -z "${min_result}" ] || [ "${new_result}" -lt "${min_result}" ]; then
             echo "    - improved ${name} time: $((new_result / 1000)) ms"
             min_bench="${new_bench}"
         fi
