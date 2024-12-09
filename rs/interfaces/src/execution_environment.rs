@@ -1133,7 +1133,8 @@ pub trait SystemApi {
     /// Mints the `amount` cycles
     /// Adds cycles to the canister's balance.
     ///
-    /// Adds no more cycles than `amount`.
+    /// Adds no more cycles than `amount`. The balance afterwards cannot
+    /// exceed u128::MAX, so the amount added may be less than `amount`.
     ///
     /// The amount of cycles added to the canister's balance is
     /// represented by a 128-bit value and is copied in the canister

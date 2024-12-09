@@ -3188,9 +3188,11 @@ impl SystemApi for SystemApiImpl {
                     // Access to this syscall not permitted.
                     Err(self.error_for("ic0_mint_cycles"))
                 } else {
-                    self.sandbox_safe_system_state
+                    let actually_minted = self
+                        .sandbox_safe_system_state
                         .mint_cycles(Cycles::from(amount))?;
-                    Ok(amount)
+                    // the actually minted amount cannot be larger than the argument which is a u64.
+                    Ok(actually_minted.low64())
                 }
             }
         };
@@ -3221,8 +3223,8 @@ impl SystemApi for SystemApiImpl {
                     // Access to this syscall not permitted.
                     Err(self.error_for("ic0_mint_cycles128"))
                 } else {
-                    self.sandbox_safe_system_state.mint_cycles(amount)?;
-                    copy_cycles_to_heap(amount, dst, heap, "ic0_mint_cycles_128")?;
+                    let actually_minted = self.sandbox_safe_system_state.mint_cycles(amount)?;
+                    copy_cycles_to_heap(actually_minted, dst, heap, "ic0_mint_cycles_128")?;
                     Ok(())
                 }
             }
