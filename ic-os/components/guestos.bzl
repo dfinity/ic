@@ -124,6 +124,7 @@ component_files = {
     Label("selinux/ic-node/ic-node.te"): "/prep/ic-node/ic-node.te",
     Label("selinux/infogetty/infogetty.fc"): "/prep/infogetty/infogetty.fc",
     Label("selinux/infogetty/infogetty.te"): "/prep/infogetty/infogetty.te",
+    Label("selinux/misc-fixes/misc-fixes.fc"): "/prep/misc-fixes/misc-fixes.fc",
     Label("selinux/misc-fixes/misc-fixes.if"): "/prep/misc-fixes/misc-fixes.if",
     Label("selinux/misc-fixes/misc-fixes.te"): "/prep/misc-fixes/misc-fixes.te",
     Label("selinux/node_exporter/node_exporter.fc"): "/prep/node_exporter/node_exporter.fc",
@@ -160,4 +161,9 @@ component_files = {
 
     # fstrim
     Label("fstrim/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
+
+    # bpftrace
+    Label("init/setup-lvs/bpftrace.service"): "/etc/systemd/system/bpftrace.service",
+    Label("init/setup-lvs/guestos/bpftrace.sh"): "/opt/ic/bin/bpftrace.sh",
+    # end bpftrace
 }

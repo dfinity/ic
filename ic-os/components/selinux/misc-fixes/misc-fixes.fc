@@ -1,0 +1,2 @@
+/usr/bin/bpftrace                      -- gen_context(system_u:object_r:bpftrace_exec_t,s0)
+/opt/ic/bin/bpftrace.sh                -- gen_context(system_u:object_r:bpftrace_exec_t,s0)

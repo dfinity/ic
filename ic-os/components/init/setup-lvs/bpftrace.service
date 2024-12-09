@@ -1,0 +1,13 @@
+[Unit]
+Description=Run BPFTrace Script
+After=setup-lvs.service
+Requires=setup-lvs.service
+
+[Service]
+Type=simple
+ExecStart=/opt/ic/bin/bpftrace.sh
+Type=oneshot
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target
