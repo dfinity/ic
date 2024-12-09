@@ -1,13 +1,16 @@
 use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::manage_neuron::{SetDissolveTimestamp, StartDissolving},
+    pb::v1::{
+        manage_neuron::{SetDissolveTimestamp, StartDissolving},
+        VotingPowerEconomics,
+    },
     temporarily_disable_private_neuron_enforcement, temporarily_disable_voting_power_adjustment,
     temporarily_enable_private_neuron_enforcement, temporarily_enable_voting_power_adjustment,
 };
 use ic_cdk::println;
 
-use ic_nervous_system_common::{E8, ONE_YEAR_SECONDS};
+use ic_nervous_system_common::{E8, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
 use icp_ledger::Subaccount;
 
 const NOW: u64 = 123_456_789;
@@ -445,10 +448,14 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
 
             assert_eq!(neuron.visibility(), Some(visibility),);
 
-            let neuron_info = neuron.get_neuron_info(timestamp_seconds, principal_id);
+            let neuron_info = neuron.get_neuron_info(
+                &VotingPowerEconomics::DEFAULT,
+                timestamp_seconds,
+                principal_id,
+            );
             assert_eq!(neuron_info.visibility, Some(visibility as i32),);
 
-            let neuron_proto = NeuronProto::from(neuron);
+            let neuron_proto = neuron.into_proto(&VotingPowerEconomics::DEFAULT, timestamp_seconds);
             assert_eq!(neuron_proto.visibility, Some(visibility as i32),);
         }
     }
@@ -460,10 +467,16 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
 
         assert_eq!(neuron.visibility(), None,);
 
-        let neuron_info = neuron.get_neuron_info(timestamp_seconds, principal_id);
+        let neuron_info = neuron.get_neuron_info(
+            &VotingPowerEconomics::DEFAULT,
+            timestamp_seconds,
+            principal_id,
+        );
         assert_eq!(neuron_info.visibility, None,);
 
-        let neuron_proto = NeuronProto::from(neuron.clone());
+        let neuron_proto = neuron
+            .clone()
+            .into_proto(&VotingPowerEconomics::DEFAULT, timestamp_seconds);
         assert_eq!(neuron_proto.visibility, None,);
     }
     {
@@ -471,10 +484,14 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
 
         assert_eq!(neuron.visibility(), Some(Visibility::Private),);
 
-        let neuron_info = neuron.get_neuron_info(timestamp_seconds, principal_id);
+        let neuron_info = neuron.get_neuron_info(
+            &VotingPowerEconomics::DEFAULT,
+            timestamp_seconds,
+            principal_id,
+        );
         assert_eq!(neuron_info.visibility, Some(Visibility::Private as i32),);
 
-        let neuron_proto = NeuronProto::from(neuron);
+        let neuron_proto = neuron.into_proto(&VotingPowerEconomics::DEFAULT, timestamp_seconds);
         assert_eq!(neuron_proto.visibility, Some(Visibility::Private as i32),);
     }
 
@@ -493,10 +510,16 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
 
         assert_eq!(neuron.visibility(), Some(Visibility::Public),);
 
-        let neuron_info = neuron.get_neuron_info(timestamp_seconds, principal_id);
+        let neuron_info = neuron.get_neuron_info(
+            &VotingPowerEconomics::DEFAULT,
+            timestamp_seconds,
+            principal_id,
+        );
         assert_eq!(neuron_info.visibility, Some(Visibility::Public as i32),);
 
-        let neuron_proto = NeuronProto::from(neuron.clone());
+        let neuron_proto = neuron
+            .clone()
+            .into_proto(&VotingPowerEconomics::DEFAULT, timestamp_seconds);
         assert_eq!(neuron_proto.visibility, Some(Visibility::Public as i32),);
     }
 }
@@ -526,7 +549,7 @@ fn test_adjust_voting_power_enabled() {
     // At first, there is no difference between deciding and potential voting
     // power. The neuron is considered "current".
     assert_eq!(
-        neuron.deciding_voting_power(created_timestamp_seconds),
+        neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, created_timestamp_seconds),
         original_potential_voting_power,
     );
 
@@ -537,7 +560,7 @@ fn test_adjust_voting_power_enabled() {
         let current_potential_voting_power = neuron.potential_voting_power(now_seconds);
 
         assert_eq!(
-            neuron.deciding_voting_power(now_seconds),
+            neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now_seconds),
             current_potential_voting_power,
         );
 
@@ -567,7 +590,7 @@ fn test_adjust_voting_power_enabled() {
             (observed_value - expected_value) / expected_value
         }
 
-        let observed = neuron.deciding_voting_power(now_seconds);
+        let observed = neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now_seconds);
         let current_potential_voting_power = neuron.potential_voting_power(now_seconds);
         let expected = (1.0 - months) * current_potential_voting_power as f64;
         let err = relative_error(
@@ -590,7 +613,10 @@ fn test_adjust_voting_power_enabled() {
     // goes all the way down to 0.
     for months in 7..=10 {
         let now_seconds = created_timestamp_seconds + months * ONE_MONTH_SECONDS;
-        assert_eq!(neuron.deciding_voting_power(now_seconds), 0,);
+        assert_eq!(
+            neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now_seconds),
+            0
+        );
     }
 }
 
@@ -626,7 +652,7 @@ fn test_adjust_voting_power_disabled() {
         let current_potential_voting_power = neuron.potential_voting_power(now_seconds);
 
         assert_eq!(
-            neuron.deciding_voting_power(now_seconds),
+            neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now_seconds),
             current_potential_voting_power,
         );
     }

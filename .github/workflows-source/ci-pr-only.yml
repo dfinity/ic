@@ -11,14 +11,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref }}
   cancel-in-progress: true
 env:
-  CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
   ORG: ${{ github.repository_owner }}
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:6a6b2a4583db6a23f2a3a84b1051322a0f975a40aa6519442f3def9810643189
+    image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
   dind-small-setup: &dind-small-setup
     timeout-minutes: 30
     runs-on:
@@ -81,6 +80,8 @@ jobs:
     name: Lock Generate
     <<: *dind-small-setup
     <<: *skip-merge-group
+    env:
+      CI_EVENT_NAME: ${{ github.event_name }}
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1

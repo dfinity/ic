@@ -1113,7 +1113,7 @@ fn test_ecdsa_disabled() {
         .unwrap()
         .0
         .unwrap_err();
-    assert!(ecdsa_signature_err.contains("Requested unknown or signing disabled threshold key: ecdsa:Secp256k1:dfx_test_key, existing keys with signing enabled: []"));
+    assert!(ecdsa_signature_err.contains("Requested unknown or disabled threshold key: ecdsa:Secp256k1:dfx_test_key, existing enabled keys: []"));
 }
 
 #[test]

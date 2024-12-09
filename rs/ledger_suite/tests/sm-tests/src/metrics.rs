@@ -167,7 +167,7 @@ fn assert_existence_of_metric(env: &StateMachine, canister_id: CanisterId, metri
     );
 }
 
-pub(crate) fn parse_metric(env: &StateMachine, canister_id: CanisterId, metric: &str) -> u64 {
+pub fn parse_metric(env: &StateMachine, canister_id: CanisterId, metric: &str) -> u64 {
     let metrics = retrieve_metrics(env, canister_id);
     for line in &metrics {
         let tokens: Vec<&str> = line.split(' ').collect();
@@ -187,7 +187,7 @@ pub(crate) fn parse_metric(env: &StateMachine, canister_id: CanisterId, metric: 
     panic!("metric '{}' not found in metrics: {:?}", metric, metrics);
 }
 
-fn retrieve_metrics(env: &StateMachine, canister_id: CanisterId) -> Vec<String> {
+pub fn retrieve_metrics(env: &StateMachine, canister_id: CanisterId) -> Vec<String> {
     let request = HttpRequest {
         method: "GET".to_string(),
         url: "/metrics".to_string(),

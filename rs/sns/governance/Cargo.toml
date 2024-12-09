@@ -27,7 +27,6 @@ path = "tests/proposal.rs"
 
 [dependencies]
 build-info = { workspace = true }
-
 async-trait = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
@@ -81,6 +80,8 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
+time = { workspace = true }
+canbench-rs = { version = "0.1.7", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 ic-types = { path = "../../types/types" }
@@ -113,3 +114,4 @@ tokio-test = { workspace = true }
 
 [features]
 test = []
+canbench-rs = ["dep:canbench-rs"]
