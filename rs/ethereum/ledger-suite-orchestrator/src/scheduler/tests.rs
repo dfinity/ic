@@ -707,11 +707,12 @@ mod upgrade_ledger_suite {
         UpgradeLedgerSuiteSubtask,
     };
     use crate::state::{
-        mutate_state, Index, Ledger, ManagedCanisterStatus, TokenId, WasmHash,
-        ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
+        mutate_state, read_state, CanisterUpgrade, Index, Ledger, ManagedCanisterStatus, TokenId,
+        WasmHash, ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
     };
     use candid::Principal;
     use icrc_ledger_types::icrc3::archive::ICRC3ArchiveInfo;
+    use maplit::btreemap;
     use UpgradeLedgerSuiteSubtask::{
         DiscoverArchives, UpgradeArchives, UpgradeIndex, UpgradeLedger,
     };
@@ -1049,7 +1050,7 @@ mod upgrade_ledger_suite {
         assert_eq!(result, Ok(()));
         runtime.checkpoint();
 
-        runtime.expect_time().return_const(0_u64);
+        runtime.expect_time().return_const(1_u64);
         let upgrade_ledger_task = pop_if_ready(&runtime).expect("missing upgrade ledger task");
 
         expect_stop_canister(&mut runtime, LEDGER_PRINCIPAL, Ok(()));
@@ -1064,6 +1065,15 @@ mod upgrade_ledger_suite {
         let result = upgrade_ledger_task.execute(&runtime).await;
 
         assert_eq!(result, Ok(()));
+
+        let completed_upgrades = read_state(|s| s.completed_upgrades().clone());
+        assert_eq!(
+            completed_upgrades,
+            btreemap! {
+                INDEX_PRINCIPAL => CanisterUpgrade {wasm_hash: read_index_wasm_hash(),timestamp: 0},
+                LEDGER_PRINCIPAL => CanisterUpgrade {wasm_hash: read_ledger_wasm_hash(),timestamp: 1},
+            }
+        )
     }
 
     #[tokio::test]
@@ -1096,14 +1106,14 @@ mod upgrade_ledger_suite {
         );
         expect_start_canister(&mut runtime, INDEX_PRINCIPAL, Ok(()));
 
-        runtime.expect_time().times(1).return_const(0_u64);
+        runtime.expect_time().return_const(0_u64);
         runtime.expect_global_timer_set().times(1).return_const(());
 
         let result = execute_now(task.clone(), &runtime).await;
         assert_eq!(result, Ok(()));
         runtime.checkpoint();
 
-        runtime.expect_time().times(1).return_const(1_u64);
+        runtime.expect_time().return_const(1_u64);
         let upgrade_ledger_task = pop_if_ready(&runtime).expect("missing upgrade ledger task");
         runtime.checkpoint();
 
@@ -1115,14 +1125,14 @@ mod upgrade_ledger_suite {
             Ok(()),
         );
         expect_start_canister(&mut runtime, LEDGER_PRINCIPAL, Ok(()));
-        runtime.expect_time().times(1).return_const(2_u64);
+        runtime.expect_time().return_const(2_u64);
         runtime.expect_global_timer_set().times(1).return_const(());
 
         let result = upgrade_ledger_task.execute(&runtime).await;
         assert_eq!(result, Ok(()));
         runtime.checkpoint();
 
-        runtime.expect_time().times(1).return_const(2_u64);
+        runtime.expect_time().return_const(2_u64);
         let discover_archive_task = pop_if_ready(&runtime).expect("missing discover archives task");
         runtime.checkpoint();
 
@@ -1143,14 +1153,14 @@ mod upgrade_ledger_suite {
             LEDGER_PRINCIPAL,
             Ok(vec![first_archive_info, second_archive_info]),
         );
-        runtime.expect_time().times(1).return_const(3_u64);
+        runtime.expect_time().return_const(3_u64);
         runtime.expect_global_timer_set().times(1).return_const(());
 
         let result = discover_archive_task.execute(&runtime).await;
         assert_eq!(result, Ok(()));
         runtime.checkpoint();
 
-        runtime.expect_time().times(1).return_const(3_u64);
+        runtime.expect_time().return_const(3_u64);
         let upgrade_archives_task = pop_if_ready(&runtime).expect("missing upgrade archives task");
         runtime.checkpoint();
 
@@ -1163,11 +1173,23 @@ mod upgrade_ledger_suite {
                 Ok(()),
             );
             expect_start_canister(&mut runtime, archive, Ok(()));
+            runtime.expect_time().return_const(4_u64);
         }
         let result = upgrade_archives_task.execute(&runtime).await;
         assert_eq!(result, Ok(()));
         assert_eq!(task_queue_from_state(), vec![]);
         runtime.checkpoint();
+
+        let completed_upgrades = read_state(|s| s.completed_upgrades().clone());
+        assert_eq!(
+            completed_upgrades,
+            btreemap! {
+                INDEX_PRINCIPAL => CanisterUpgrade {wasm_hash: read_index_wasm_hash(),timestamp: 0},
+                LEDGER_PRINCIPAL => CanisterUpgrade {wasm_hash: read_ledger_wasm_hash(),timestamp: 2},
+                first_archive => CanisterUpgrade {wasm_hash: read_archive_wasm_hash(),timestamp: 4},
+                second_archive => CanisterUpgrade {wasm_hash: read_archive_wasm_hash(),timestamp: 4},
+            }
+        )
     }
 
     fn expect_stop_canister(
