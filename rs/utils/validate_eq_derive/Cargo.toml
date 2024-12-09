@@ -1,6 +1,10 @@
 [package]
 name = "ic-validate-eq-derive"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [lib]
 name = "ic_validate_eq_derive"
