@@ -1,3 +1,4 @@
+use candid::Encode;
 use canister_test::{Canister, Runtime, Wasm};
 use chrono::Utc;
 use futures::future::join_all;
@@ -364,14 +365,11 @@ async fn modify_canister_heap(
                 continue;
             }
             let seed_for_canister = i + (x - 1) * num_canisters + seed;
+            let payload = Encode!(&(x as u32, seed_for_canister as u32)).unwrap();
             // Each call will expand the memory by writing a chunk of 128 MiB.
             // There are 8 chunks in the canister, so the memory will grow by 1 GiB after 8 calls.
             let _res: Result<u8, String> = canister
-                .update_(
-                    "expand_state",
-                    dfn_json::json,
-                    (x as u32, seed_for_canister as u32),
-                )
+                .update_("expand_state", dfn_candid::candid, (payload,))
                 .await
                 .unwrap_or_else(|e| {
                     panic!(
