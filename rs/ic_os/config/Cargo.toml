@@ -1,7 +1,6 @@
 [package]
 name = "config"
 version = "1.0.0"
-edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -27,4 +26,5 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "config"
+path = "src/main.rs"
 path = "src/main.rs"

@@ -24,7 +24,7 @@ rust_library(
     ),
     aliases = {},
     crate_name = "network",
-    edition = "2021",
+    edition.workspace = true,
     proc_macro_deps = [],
     deps = DEPENDENCIES,
 )

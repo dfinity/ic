@@ -41,7 +41,7 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_test_utils_ni_dkg",
-    edition = "2021",
+    edition.workspace = true,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -50,7 +50,7 @@ rust_test(
     name = "ni-dkg_test",
     aliases = ALIASES,
     crate = ":ni-dkg",
-    edition = "2021",
+    edition.workspace = true,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

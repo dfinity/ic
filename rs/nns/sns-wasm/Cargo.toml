@@ -1,7 +1,6 @@
 [package]
 name = "ic-sns-wasm"
 version = "1.0.0"
-edition = "2021"
 
 [[bin]]
 name = "sns-wasm-canister"
@@ -69,4 +68,5 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 
 [features]
+test = ["ic-sns-init/test"]
 test = ["ic-sns-init/test"]

@@ -1,8 +1,6 @@
 [package]
 name = "ic-nns-inspector"
 version = "0.1.0"
-edition = "2021"
-
 
 [dependencies]
 clap = { workspace = true }
@@ -16,5 +14,7 @@ icp-ledger = { path = "../../ledger_suite/icp" }
 ledger-canister = { path = "../../ledger_suite/icp/ledger" }
 prost = { workspace = true }
 serde = { workspace = true }
+serde_cbor = { workspace = true }
+stable_reader = { path = "../../rust_canisters/stable_reader" }
 serde_cbor = { workspace = true }
 stable_reader = { path = "../../rust_canisters/stable_reader" }

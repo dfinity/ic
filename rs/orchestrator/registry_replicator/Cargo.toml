@@ -1,7 +1,6 @@
 [package]
 name = "ic-registry-replicator"
 version = "0.1.0"
-edition = "2021"
 
 [dependencies]
 clap = { workspace = true }
@@ -28,4 +27,5 @@ url = { workspace = true }
 
 [[bin]]
 name = "ic-registry-replicator"
+path = "src/main.rs"
 path = "src/main.rs"

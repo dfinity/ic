@@ -1,7 +1,6 @@
 [package]
 name = "ic-nervous-system-common-test-utils"
 version = "0.1.0"
-edition = "2021"
 
 [dependencies]
 async-trait = { workspace = true }
@@ -12,4 +11,6 @@ ic-wasm = { workspace = true }
 icp-ledger = { path = "../../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 libflate = { workspace = true }
+prometheus-parse = { workspace = true }
+
 prometheus-parse = { workspace = true }

@@ -1,7 +1,6 @@
 [package]
 name = "ic-crypto-prng"
 version = "0.1.0"
-edition = "2021"
 
 [dependencies]
 ic-crypto-sha2 = { path = "../sha2" }
@@ -12,4 +11,5 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 
 [dev-dependencies]
+ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }

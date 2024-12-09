@@ -1,7 +1,6 @@
 [package]
 name = "ic-ledger-suite-orchestrator"
 version = "0.1.0"
-edition = "2021"
 
 [[bin]]
 name = "ic-ledger-suite-orchestrator"
@@ -46,4 +45,5 @@ mockall = { workspace = true }
 paste = { workspace = true }
 proptest = { workspace = true }
 scraper = "0.17.1"
+tokio = { workspace = true }
 tokio = { workspace = true }

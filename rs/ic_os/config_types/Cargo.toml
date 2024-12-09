@@ -1,7 +1,6 @@
 [package]
 name = "config_types"
 version = "1.0.0"
-edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -15,4 +14,5 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 once_cell = "1.8"
+tempfile = { workspace = true }
 tempfile = { workspace = true }

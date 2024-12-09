@@ -1,7 +1,6 @@
 [package]
 name = "icp-config"
 version = "0.1.0"
-edition = "2021"
 
 [dependencies]
 clap = { workspace = true }
@@ -15,4 +14,5 @@ serde_json = { workspace = true }
 
 [[bin]]
 name = "icp_config"
+path = "src/icp_config.rs"
 path = "src/icp_config.rs"

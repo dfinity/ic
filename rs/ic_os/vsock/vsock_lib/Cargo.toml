@@ -1,7 +1,6 @@
 [package]
 name = "vsock_lib"
 version = "1.0.0"
-edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -14,4 +13,5 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
+vsock = "0.4"
 vsock = "0.4"

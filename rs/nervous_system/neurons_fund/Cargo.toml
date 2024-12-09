@@ -1,7 +1,6 @@
 [package]
 name = "ic-neurons-fund"
 version = "0.0.1"
-edition = "2021"
 
 [lib]
 name = "ic_neurons_fund"
@@ -17,4 +16,5 @@ serde_json = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 proptest = { workspace = true }
+serde_bytes = { workspace = true }
 serde_bytes = { workspace = true }

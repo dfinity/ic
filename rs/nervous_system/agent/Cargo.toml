@@ -1,7 +1,6 @@
 [package]
 name = "ic-nervous-system-agent"
 version = "0.0.1"
-edition = "2021"
 
 [lib]
 name = "ic_nervous_system_agent"
@@ -24,4 +23,5 @@ ic-sns-swap = { path = "../../sns/swap" }
 serde = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
 tokio = { workspace = true }

@@ -1,7 +1,6 @@
 [package]
 name = "ic-artifact-downloader"
 version = "0.1.0"
-edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -36,4 +35,5 @@ ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 mockall = { workspace = true }
+tower = { workspace = true }
 tower = { workspace = true }

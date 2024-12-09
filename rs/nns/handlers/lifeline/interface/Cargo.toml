@@ -1,9 +1,9 @@
 [package]
 name = "ic-nns-handler-lifeline-interface"
 version = "0.1.0"
-edition = "2021"
 
 [dependencies]
 candid = { workspace = true }
 ic-crypto-sha2 = { path = "../../../../crypto/sha2" }
+serde = { workspace = true }
 serde = { workspace = true }

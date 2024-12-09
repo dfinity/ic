@@ -1,7 +1,6 @@
 [package]
 name = "setupos-inject-configuration"
 version = "0.1.0"
-edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -13,4 +12,5 @@ serde_with = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
-config = { path = "../../config"}
+config = { path = "../../config" }
+config = { path = "../../config" }

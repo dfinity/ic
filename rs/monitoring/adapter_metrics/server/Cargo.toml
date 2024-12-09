@@ -1,7 +1,6 @@
 [package]
 name = "ic-adapter-metrics-server"
 version = "0.1.0"
-edition = "2021"
 
 [dependencies]
 futures = { workspace = true }
@@ -11,4 +10,5 @@ ic-metrics = { path = "../../metrics" }
 protobuf = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
+tonic = { workspace = true }
 tonic = { workspace = true }

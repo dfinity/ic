@@ -1,7 +1,6 @@
 [package]
 name = "launch-single-vm"
 version = "0.1.0"
-edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -18,4 +17,5 @@ slog-async = { workspace = true }
 slog-term = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
+url = { workspace = true }
 url = { workspace = true }

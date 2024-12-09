@@ -1,11 +1,11 @@
 [package]
 name = "ic-recovery"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-clap = { workspace = true}
+clap = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }

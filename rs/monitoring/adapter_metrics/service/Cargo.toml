@@ -1,7 +1,6 @@
 [package]
 name = "ic-adapter-metrics-service"
 version = "0.1.0"
-edition = "2021"
 
 [dependencies]
 prost = { workspace = true }
@@ -9,4 +8,5 @@ tonic = { workspace = true }
 
 [build-dependencies]
 prost-build = { workspace = true }
+tonic-build = { workspace = true }
 tonic-build = { workspace = true }

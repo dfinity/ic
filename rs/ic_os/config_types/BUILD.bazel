@@ -27,7 +27,7 @@ rust_library(
         exclude = ["src/main.rs"],
     ),
     crate_name = "config_types",
-    edition = "2021",
+    edition.workspace = true,
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",

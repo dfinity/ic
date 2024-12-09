@@ -1,14 +1,14 @@
 [package]
 name = "management-canister-types-fuzz"
 version = "0.0.0"
-edition = "2021"
+edition.workspace = true
 
 [package.metadata]
 cargo-fuzz = true
 
 [dependencies]
 candid = { workspace = true }
-ic-management-canister-types = {path = ".."}
+ic-management-canister-types = { path = ".." }
 libfuzzer-sys = "0.4"
 
 # Prevent this from interfering with workspaces

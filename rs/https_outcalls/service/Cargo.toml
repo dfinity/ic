@@ -1,11 +1,11 @@
 [package]
 name = "ic-https-outcalls-service"
 version = "0.1.0"
-edition = "2021"
 
 [dependencies]
 prost = { workspace = true }
 tonic = { workspace = true }
 
 [build-dependencies]
+tonic-build = { workspace = true }
 tonic-build = { workspace = true }

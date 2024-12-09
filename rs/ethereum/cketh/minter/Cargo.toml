@@ -1,7 +1,6 @@
 [package]
 name = "ic-cketh-minter"
 version = "0.1.0"
-edition = "2021"
 
 [[bin]]
 name = "ic-cketh-minter"
@@ -31,7 +30,7 @@ ic-metrics-encoder = "1"
 ic-sha3 = { workspace = true }
 ic-stable-structures = { workspace = true }
 ic-utils-ensure = { path = "../../../utils/ensure" }
-icrc-cbor = { path = "../../../../packages/icrc-cbor", features = ["u256"]}
+icrc-cbor = { path = "../../../../packages/icrc-cbor", features = ["u256"] }
 icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 minicbor = { workspace = true }
@@ -71,4 +70,5 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 
 [features]
+debug_checks = []
 debug_checks = []

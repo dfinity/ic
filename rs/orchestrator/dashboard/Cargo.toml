@@ -1,7 +1,6 @@
 [package]
 name = "ic-dashboard"
 version = "0.1.0"
-edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -11,4 +10,5 @@ tokio = { workspace = true }
 
 [lib]
 name = "ic_dashboard"
+path = "src/dashboard.rs"
 path = "src/dashboard.rs"

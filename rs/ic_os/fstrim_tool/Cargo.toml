@@ -1,7 +1,6 @@
 [package]
 name = "ic-fstrim-tool"
 version = "0.9.0"
-edition = "2021"
 
 [[bin]]
 name = "fstrim_tool"
@@ -19,4 +18,5 @@ assert_matches = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 predicates = { workspace = true }
 rand = { workspace = true }
+tempfile = { workspace = true }
 tempfile = { workspace = true }

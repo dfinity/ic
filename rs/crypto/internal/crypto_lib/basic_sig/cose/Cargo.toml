@@ -1,7 +1,6 @@
 [package]
 name = "ic-crypto-internal-basic-sig-cose"
 version = "0.1.0"
-edition = "2021"
 
 [dependencies]
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
@@ -15,4 +14,5 @@ simple_asn1 = { workspace = true }
 [dev-dependencies]
 hex = { workspace = true }
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
+ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-crypto-sha2 = { path = "../../../../sha2" }

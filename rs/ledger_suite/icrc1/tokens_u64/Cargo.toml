@@ -2,7 +2,7 @@
 name = "ic-icrc1-tokens-u64"
 version = "0.1.0"
 authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 candid = { workspace = true }

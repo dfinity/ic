@@ -1,10 +1,10 @@
 [package]
 name = "vsock_guest"
 version = "1.0.0"
-edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [target.'cfg(target_os = "linux")'.dependencies]
 clap = { workspace = true }
+vsock_lib = { path = "../vsock_lib" }
 vsock_lib = { path = "../vsock_lib" }
