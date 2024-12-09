@@ -17,7 +17,6 @@ use ic_types_test_utils::ids::node_test_id;
 use ic_universal_canister::wasm;
 use lazy_static::lazy_static;
 
-const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 lazy_static! {
     static ref INITIAL_CYCLES: Cycles =
@@ -68,7 +67,7 @@ pub fn mint_cycles_supported_only_on_cycles_minting_canister(env: TestEnv) {
         assert_balance_equals(
             *INITIAL_CYCLES,
             Cycles::from(before_balance),
-            BALANCE_EPSILON,
+            Cycles::zero(),
         );
 
         let res = nns_agent
@@ -144,12 +143,12 @@ pub fn mint_cycles_not_supported_on_application_subnet(env: TestEnv) {
 
 pub fn mint_cycles128_supported_only_on_cycles_minting_canister(env: TestEnv) {
     let nns_node = env.get_first_healthy_nns_node_snapshot();
-    let specified_id = nns_node.get_last_canister_id_in_allocation_ranges();
+    let canister_id = nns_node.get_last_canister_id_in_allocation_ranges();
     // Check that 'specified_id' is not 'CYCLES_MINTING_CANISTER_ID'.
-    assert_ne!(specified_id, CYCLES_MINTING_CANISTER_ID.into());
+    assert_ne!(canister_id, CYCLES_MINTING_CANISTER_ID.into());
     let nns_agent = nns_node.build_default_agent();
     block_on(async move {
-        let not_cmc = UniversalCanister::new_with_cycles(&nns_agent, specified_id, *INITIAL_CYCLES)
+        let not_cmc = UniversalCanister::new_with_cycles(&nns_agent, canister_id, *INITIAL_CYCLES)
             .await
             .unwrap()
             .canister_id();
@@ -158,14 +157,14 @@ pub fn mint_cycles128_supported_only_on_cycles_minting_canister(env: TestEnv) {
         assert_balance_equals(
             *INITIAL_CYCLES,
             Cycles::from(before_balance),
-            BALANCE_EPSILON,
+            Cycles::zero(),
         );
 
         let res = nns_agent
             .update(&not_cmc, "update")
             .with_arg(
                 wasm()
-                    .mint_cycles128(Cycles::from((1u128 << 64) + 2u128))
+                    .mint_cycles128(Cycles::from(2u128))
                     .reply_data_append()
                     .reply()
                     .build(),
