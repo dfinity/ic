@@ -570,6 +570,7 @@ fn files_with_sizes_parallel(
     if metadata.is_file() {
         files.push(FileWithSize(relative_path, metadata.len()))
     } else if relative_path == PathBuf::from("canister_states") {
+        println!("files_with_sizes_parallel enters canister_states");
         let res = parallel_map(thread_pool, absolute_path.read_dir().unwrap(), |entry| {
             let entry = entry.as_ref().unwrap();
             let file_len = entry.metadata().as_ref().unwrap().len();

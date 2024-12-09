@@ -28,7 +28,7 @@ use ic_types::{
     CanisterLog, ComputeAllocation, Cycles, ExecutionRound, Height, LongExecutionMode,
     MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
 };
-use ic_utils::thread::maybe_parallel_map;
+use ic_utils::thread::{maybe_parallel_map, parallel_map};
 use ic_wasm_types::{CanisterModule, WasmHash};
 use prometheus::{Histogram, IntCounterVec};
 use std::collections::{BTreeMap, BTreeSet};
@@ -2709,20 +2709,55 @@ fn mark_readonly_if_file(path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn dir_list_recursive(path: &Path) -> std::io::Result<Vec<PathBuf>> {
-    let mut result = Vec::new();
-    fn add_content(path: &Path, result: &mut Vec<PathBuf>) -> std::io::Result<()> {
-        result.push(path.to_path_buf());
-        let metadata = path.metadata()?;
-        if metadata.is_dir() {
+fn add_content_parallel(
+    thread_pool: &mut scoped_threadpool::Pool,
+    path: &Path,
+    result: &mut Vec<PathBuf>,
+) -> std::io::Result<()> {
+    result.push(path.to_path_buf());
+    let metadata = path.metadata()?;
+    if metadata.is_dir() {
+        if path.ends_with("canister_states") {
+            println!("dir_list_recursive_parallel enters canister_states");
+            let res = parallel_map(thread_pool, path.read_dir().unwrap(), |entry| {
+                let entry = entry.as_ref().unwrap().path();
+                entry
+            });
+            result.extend(res);
+        } else {
             let entries = path.read_dir()?;
             for entry_result in entries {
                 let entry = entry_result?;
                 add_content(&entry.path(), result)?;
             }
         }
-        Ok(())
     }
+    Ok(())
+}
+
+fn dir_list_recursive_parallel(
+    thread_pool: &mut scoped_threadpool::Pool,
+    path: &Path,
+) -> std::io::Result<Vec<PathBuf>> {
+    let mut result = Vec::new();
+    add_content_parallel(thread_pool, path, &mut result)?;
+    Ok(result)
+}
+
+fn add_content(path: &Path, result: &mut Vec<PathBuf>) -> std::io::Result<()> {
+    result.push(path.to_path_buf());
+    let metadata = path.metadata()?;
+    if metadata.is_dir() {
+        let entries = path.read_dir()?;
+        for entry_result in entries {
+            let entry = entry_result?;
+            add_content(&entry.path(), result)?;
+        }
+    }
+    Ok(())
+}
+fn dir_list_recursive(path: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut result = Vec::new();
     add_content(path, &mut result)?;
     Ok(result)
 }
@@ -2740,8 +2775,34 @@ fn sync_and_mark_files_readonly(
     let elapsed = start.elapsed();
     info!(
         log,
-        "dir_list_recursive took {:?} for {} files", elapsed, paths.len()
+        "dir_list_recursive took {:?} for {} files",
+        elapsed,
+        paths.len()
     );
+
+    if let Some(thread_pool) = thread_pool {
+        let start = std::time::Instant::now();
+        let paths_parallel = dir_list_recursive_parallel(thread_pool, path)?;
+        let elapsed = start.elapsed();
+        info!(
+            log,
+            "dir_list_recursive_parallel took {:?} for {} files",
+            elapsed,
+            paths_parallel.len()
+        );
+        if paths == paths_parallel {
+            info!(
+                log,
+                "dir_list_recursive and dir_list_recursive_parallel returned the same results"
+            );
+        } else {
+            error!(
+                log,
+                "dir_list_recursive and dir_list_recursive_parallel returned different results"
+            );
+        }
+    }
+
     let start = std::time::Instant::now();
     let results = maybe_parallel_map(&mut thread_pool, paths.iter(), |p| {
         mark_readonly_if_file(p)?;
@@ -2752,7 +2813,9 @@ fn sync_and_mark_files_readonly(
     let elapsed = start.elapsed();
     info!(
         log,
-        "maybe_parallel_map mark_readonly_if_file took {:?} for {} files", elapsed, paths.len()
+        "maybe_parallel_map mark_readonly_if_file took {:?} for {} files",
+        elapsed,
+        paths.len()
     );
 
     results.into_iter().try_for_each(identity)?;
