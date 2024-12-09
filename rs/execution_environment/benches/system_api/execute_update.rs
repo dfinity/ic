@@ -336,7 +336,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ), // 10B max
-            529001006,
+            529004006,
         ),
         common::Benchmark(
             "wasm32/ic0_debug_print()/1B".into(),
@@ -664,7 +664,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
             517000006,
         ),
         common::Benchmark(
-            "wasm32/ic0_time()".into(),
+            "wasm64/ic0_time()".into(),
             Module::Test.from_ic0("time", NoParams, Result::I64, Wasm64::Enabled),
             517000006,
         ),
@@ -736,7 +736,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            517001006,
+            517004006,
         ),
         common::Benchmark(
             "wasm32/ic0_msg_cycles_available()".into(),
