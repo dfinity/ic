@@ -197,7 +197,7 @@ rust_test(
     aliases = ALIASES,
     crate_root = "tests/upgrade_everything_test.rs",
     data = DEV_DATA,
-    env = DEV_ENV,
+    env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
@@ -213,7 +213,7 @@ rust_test(
     ],
     aliases = ALIASES,
     data = DEV_DATA,
-    env = DEV_ENV,
+    env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
@@ -229,7 +229,7 @@ rust_test(
     ],
     aliases = ALIASES,
     data = DEV_DATA,
-    env = DEV_ENV,
+    env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
