@@ -374,7 +374,7 @@ fn mint_cycles_very_large_value() {
     let amount_low = 50;
     let mut heap = [0u8; 16];
     // Canisters on the System subnet can hold any amount of cycles
-    api.ic0_mint_cycles128(amount_high, amount_low, 0, &mut heap)
+    api.ic0_mint_cycles128(Cycles::from_parts(amount_high, amount_low), 0, &mut heap)
         .unwrap();
     let cycles_minted = u128::from_le_bytes(heap);
     assert_eq!(

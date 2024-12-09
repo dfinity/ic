@@ -1195,7 +1195,7 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: I| {
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
-                    s.ic0_mint_cycles128(amount_high, amount_low, dst, memory)
+                    s.ic0_mint_cycles128(Cycles::from_parts(amount_high, amount_low), dst, memory)
                 })
                 .map_err(|e| anyhow::Error::msg(format!("ic0_mint_cycles128 failed: {}", e)))
             }

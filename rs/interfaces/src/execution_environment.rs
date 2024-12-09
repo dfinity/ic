@@ -1145,11 +1145,10 @@ pub trait SystemApi {
     ///
     /// The amount of cycles added to the canister's balance is
     /// represented by a 128-bit value and is copied in the canister
-    /// memory starting starting at the location `dst`.
+    /// memory starting at the location `dst`.
     fn ic0_mint_cycles128(
         &mut self,
-        amount_high: u64,
-        amount_low: u64,
+        amount: Cycles,
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;

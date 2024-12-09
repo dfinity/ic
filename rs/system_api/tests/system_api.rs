@@ -749,7 +749,7 @@ fn api_availability_test(
         SystemApiCallId::MintCycles128 => {
             // ic0.mint_cycles128 is only supported for CMC which is tested separately
             let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
-            assert_api_not_supported(api.ic0_mint_cycles128(0, 0, 0, &mut [0u8; 16]));
+            assert_api_not_supported(api.ic0_mint_cycles128(Cycles::zero(), 0, &mut [0u8; 16]));
         }
         SystemApiCallId::IsController => {
             assert_api_availability(
@@ -839,7 +839,7 @@ fn system_api_availability() {
                 context,
             );
             assert_api_availability(
-                |mut api| api.ic0_mint_cycles128(0, 0, 0, &mut [0u8; 16]),
+                |mut api| api.ic0_mint_cycles128(Cycles::zero(), 0, &mut [0u8; 16]),
                 api_type.clone(),
                 &cmc_system_state,
                 cycles_account_manager,

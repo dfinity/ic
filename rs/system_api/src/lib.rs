@@ -3200,12 +3200,10 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_mint_cycles128(
         &mut self,
-        amount_high: u64,
-        amount_low: u64,
+        amount: Cycles,
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        let cycles = Cycles::from_parts(amount_high, amount_low);
         let result = match self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -3223,13 +3221,13 @@ impl SystemApi for SystemApiImpl {
                     // Access to this syscall not permitted.
                     Err(self.error_for("ic0_mint_cycles128"))
                 } else {
-                    self.sandbox_safe_system_state.mint_cycles(cycles)?;
-                    copy_cycles_to_heap(cycles, dst, heap, "ic0_mint_cycles_128")?;
+                    self.sandbox_safe_system_state.mint_cycles(amount)?;
+                    copy_cycles_to_heap(amount, dst, heap, "ic0_mint_cycles_128")?;
                     Ok(())
                 }
             }
         };
-        trace_syscall!(self, MintCycles128, result, cycles);
+        trace_syscall!(self, MintCycles128, result, amount);
         result
     }
 
