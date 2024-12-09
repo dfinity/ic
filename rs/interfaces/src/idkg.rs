@@ -5,14 +5,18 @@ use ic_types::consensus::idkg::{
     EcdsaSigShare, IDkgMessage, IDkgPrefixOf, IDkgStats, SchnorrSigShare, SigShare,
     SignedIDkgComplaint, SignedIDkgOpening,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    IDkgDealingSupport, IDkgTranscript, IDkgTranscriptId, SignedIDkgDealing,
+};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum IDkgChangeAction {
     AddToValidated(IDkgMessage),
     MoveToValidated(IDkgMessage),
     RemoveValidated(IDkgMessageId),
     RemoveUnvalidated(IDkgMessageId),
+    AddTranscript(IDkgTranscript),
+    RemoveTranscript(IDkgTranscriptId),
     HandleInvalid(IDkgMessageId, String),
 }
 
@@ -134,6 +138,17 @@ pub trait MutableIDkgPoolSection: Send + Sync {
     fn as_pool_section(&self) -> &dyn IDkgPoolSection;
 }
 
+pub trait IDkgTranscriptPool: Send + Sync {
+    /// Checks if the transcript is present in the pool.
+    fn contains(&self, transcript_id: &IDkgTranscriptId) -> bool;
+
+    /// Looks up a transcript by the Id.
+    fn get(&self, transcript_id: &IDkgTranscriptId) -> Option<IDkgTranscript>;
+
+    /// Returns an iterator over the IDs of all transcripts in the pool
+    fn transcript_ids(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptId> + '_>;
+}
+
 /// Artifact pool for the IDKG messages (query interface)
 pub trait IDkgPool: Send + Sync {
     /// Return a reference to the validated PoolSection.
@@ -141,6 +156,9 @@ pub trait IDkgPool: Send + Sync {
 
     /// Return a reference to the unvalidated PoolSection.
     fn unvalidated(&self) -> &dyn IDkgPoolSection;
+
+    /// Return a reference to the transcript section.
+    fn transcripts(&self) -> &dyn IDkgTranscriptPool;
 
     /// Returns reference to the stats. The stats are not persisted.
     fn stats(&self) -> &dyn IDkgStats;
