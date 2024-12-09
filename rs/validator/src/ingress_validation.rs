@@ -6,7 +6,7 @@ use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
 use ic_types::{
     crypto::{
         threshold_sig::RootOfTrustProvider, AlgorithmId, BasicSig, BasicSigOf, CanisterSig,
-        CanisterSigOf, CryptoError, UserPublicKey,
+        CanisterSigOf, CryptoError, UserPublicKey, Signable
     },
     messages::{
         Authentication, Delegation, HasCanisterId, HttpRequest, HttpRequestContent, MessageId,
@@ -545,7 +545,7 @@ where
         KeyBytesContentType::Ed25519PublicKeyDer
         | KeyBytesContentType::EcdsaP256PublicKeyDer
         | KeyBytesContentType::EcdsaSecp256k1PublicKeyDer => {
-            let basic_sig = BasicSigOf::from(BasicSig(signature.signature.clone()));
+            let basic_sig: BasicSigOf<MessageId> = BasicSigOf::from(BasicSig(signature.signature.clone()));
             validate_signature_plain(message_id, &basic_sig, &pk).map_err(InvalidSignature)?;
             Ok(targets)
         }
@@ -685,9 +685,12 @@ where
         | KeyBytesContentType::EcdsaSecp256k1PublicKeyDer
         | KeyBytesContentType::RsaSha256PublicKeyDer => {
             let basic_sig = BasicSigOf::from(BasicSig(signature.to_vec()));
-            validator
-                .verify_basic_sig_by_public_key(&basic_sig, delegation, &pk)
-                .map_err(InvalidBasicSignature)?;
+            ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key(
+                pk.algorithm_id,
+                &delegation.as_signed_bytes(),
+                &basic_sig.get_ref().0,
+                &pk.key,
+            ).map_err(InvalidBasicSignature)?;
         }
         KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
             let canister_sig = CanisterSigOf::from(CanisterSig(signature.to_vec()));
