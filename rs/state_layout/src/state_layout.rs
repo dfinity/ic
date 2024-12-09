@@ -2780,7 +2780,7 @@ fn sync_and_mark_files_readonly(
         paths.len()
     );
 
-    if let Some(thread_pool) = thread_pool {
+    if let Some(thread_pool) = &mut thread_pool {
         let start = std::time::Instant::now();
         let paths_parallel = dir_list_recursive_parallel(thread_pool, path)?;
         let elapsed = start.elapsed();
