@@ -1044,13 +1044,9 @@ mod tests {
         registry.do_update_subnet(payload);
     }
 
-    #[test]
-    #[should_panic(
-        expected =
-            "Proposal attempts to change sev_enabled for Subnet 'ge6io-epiam-aaaaa-aaaap-yai' \
-             to true, but sev_enabled can only be set during subnet creation."
-    )]
-    fn test_sev_enabled_cannot_be_changed() {
+    /// Returns an invariant-compliant Registry instance and an ID of a subnet
+    /// with an existing subnet record.
+    fn make_registry_for_update_subnet_tests() -> (Registry, SubnetId) {
         let mut registry = invariant_compliant_registry(0);
 
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
@@ -1073,18 +1069,83 @@ mod tests {
             &btreemap!(*first_node_id => first_dkg_pk.clone()),
         ));
 
-        let mut payload = make_empty_update_payload(subnet_id);
-        payload.features = Some(
-            SubnetFeatures {
-                canister_sandboxing: false,
-                http_requests: false,
-                sev_enabled: true,
-            }
-            .into(),
-        );
+        (registry, subnet_id)
+    }
 
-        // Should panic because we are changing SubnetFeatures
+    #[test]
+    #[should_panic(
+        expected = "Proposal attempts to change sev_enabled for Subnet 'ge6io-epiam-aaaaa-aaaap-yai' \
+             to true, but sev_enabled can only be set during subnet creation."
+    )]
+    fn test_sev_enabled_cannot_be_changed_to_true() {
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.features = Some(SubnetFeaturesPb {
+            canister_sandboxing: false,
+            http_requests: false,
+            sev_enabled: Some(true),
+        });
+
+        // Should panic because we are changing SEV-related subnet features.
         registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Proposal attempts to change sev_enabled for Subnet 'ge6io-epiam-aaaaa-aaaap-yai' \
+             to false, but sev_enabled can only be set during subnet creation."
+    )]
+    fn test_sev_enabled_cannot_be_changed_to_false() {
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.features = Some(SubnetFeaturesPb {
+            canister_sandboxing: false,
+            http_requests: false,
+            sev_enabled: Some(false),
+        });
+
+        // Should panic because we are changing SEV-related subnet features.
+        registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    fn test_sev_enabled_validation_does_not_prevent_setting_other_subnet_features() {
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.features = Some(SubnetFeaturesPb {
+            canister_sandboxing: true,
+            http_requests: true,
+            sev_enabled: None,
+        });
+
+        // Should not panic because we are not changing SEV-related subnet features.
+        registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    fn test_initializing_subnet_features_after_subnet_creation() {
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
+        // Disable all features by setting subnet_record.features to None.
+        {
+            let mut payload = make_empty_update_payload(subnet_id);
+            payload.features = None;
+            registry.do_update_subnet(payload);
+        }
+
+        // Enable non-SEV-related features that can be enabled after the subnet was created.
+        {
+            let mut payload = make_empty_update_payload(subnet_id);
+            payload.features = Some(SubnetFeaturesPb {
+                canister_sandboxing: true,
+                http_requests: true,
+                sev_enabled: None,
+            });
+            registry.do_update_subnet(payload);
+        }
     }
 
     #[test]
