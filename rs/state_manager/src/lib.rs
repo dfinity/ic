@@ -145,6 +145,7 @@ pub struct StateManagerMetrics {
     api_call_duration: HistogramVec,
     last_diverged_state_timestamp: IntGauge,
     latest_certified_height: IntGauge,
+    certification_duration: Histogram,
     max_resident_height: IntGauge,
     min_resident_height: IntGauge,
     last_computed_manifest_height: IntGauge,
@@ -365,6 +366,13 @@ impl StateManagerMetrics {
             "Height of the latest certified state.",
         );
 
+        let certification_latency = metrics_registry.histogram(
+            "state_manager_certification_latency_seconds",
+            "Wall time taken to deliver a certification, in seconds.",
+            // 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, …, 10s, 20s, 50s
+            decimal_buckets(-3, 2),
+        );
+
         let min_resident_height = metrics_registry.int_gauge(
             "state_manager_min_resident_height",
             "Height of the oldest state resident in memory.",
@@ -441,6 +449,7 @@ impl StateManagerMetrics {
             api_call_duration,
             last_diverged_state_timestamp,
             latest_certified_height,
+            certification_duration: certification_latency,
             max_resident_height,
             min_resident_height,
             last_computed_manifest_height,
@@ -720,6 +729,8 @@ struct CertificationMetadata {
     /// Certification of the root hash delivered by consensus via
     /// `deliver_state_certification()`.
     certification: Option<Certification>,
+    /// Wall time when certification was requested.
+    certification_requested_at: Instant,
 }
 
 fn crypto_hash_of_partial_state(d: &Digest) -> CryptoHashOfPartialState {
@@ -1962,6 +1973,7 @@ impl StateManagerImpl {
             hash_tree: Some(Arc::new(hash_tree)),
             certified_state_hash,
             certification: None,
+            certification_requested_at: Instant::now(),
         })
     }
 
@@ -2135,6 +2147,7 @@ impl StateManagerImpl {
             certified_state_hash: crypto_hash_of_tree(&hash_tree),
             hash_tree: Some(Arc::new(hash_tree)),
             certification: None,
+            certification_requested_at: Instant::now(),
         };
 
         let mut states = self.states.write();
@@ -3248,6 +3261,9 @@ impl StateManager for StateManagerImpl {
             self.metrics
                 .latest_certified_height
                 .set(latest_certified as i64);
+            self.metrics
+                .certification_duration
+                .observe(metadata.certification_requested_at.elapsed().as_secs_f64());
 
             metadata.certification = Some(certification);
 

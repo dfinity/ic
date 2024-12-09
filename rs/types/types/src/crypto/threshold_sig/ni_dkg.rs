@@ -32,6 +32,7 @@ pub use id::NiDkgId;
 mod tests;
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, EnumCount, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum NiDkgMasterPublicKeyId {
     VetKd(VetKdKeyId),
 }
@@ -93,6 +94,7 @@ impl fmt::Display for NiDkgMasterPublicKeyId {
 ///   a master public key with a particular ID
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumCount, Serialize)]
 #[repr(isize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum NiDkgTag {
     LowThreshold = 1,
     HighThreshold = 2,
