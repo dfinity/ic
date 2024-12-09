@@ -299,7 +299,7 @@ dependencies = [
  "axum",
  "bytes",
  "cfg-if 1.0.0",
- "http 1.1.0",
+ "http 1.2.0",
  "indexmap 2.6.0",
  "schemars",
  "serde",
@@ -649,7 +649,7 @@ checksum = "096146020b08dbc4587685b0730a7ba905625af13c65f8028035cdfd69573c91"
 dependencies = [
  "anyhow",
  "futures",
- "http 1.1.0",
+ "http 1.2.0",
  "httparse",
  "log",
 ]
@@ -776,7 +776,7 @@ dependencies = [
  "async-net",
  "futures",
  "futures-rustls",
- "http 1.1.0",
+ "http 1.2.0",
  "lazy_static",
  "log",
  "rustls-pki-types",
@@ -837,7 +837,7 @@ dependencies = [
  "axum-core",
  "bytes",
  "futures-util",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "http-body-util",
  "hyper 1.5.1",
@@ -870,7 +870,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "futures-util",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "http-body-util",
  "mime",
@@ -893,7 +893,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "headers 0.4.0",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "http-body-util",
  "mime",
@@ -914,7 +914,7 @@ dependencies = [
  "arc-swap",
  "bytes",
  "futures-util",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "http-body-util",
  "hyper 1.5.1",
@@ -1558,9 +1558,9 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
-version = "1.8.0"
+version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ac0150caa2ae65ca5bd83f25c7de183dea78d4d366469f148435e2acfbad0da"
+checksum = "325918d6fe32f23b19878fe4b34794ae41fc19ddbe53b10571a4874d44ffd39b"
 dependencies = [
  "serde",
 ]
@@ -1684,7 +1684,7 @@ dependencies = [
  "bytes",
  "clap 4.5.20",
  "futures-util",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "http-body-util",
  "hyper 1.5.1",
@@ -1928,7 +1928,7 @@ dependencies = [
  "cloudflare 0.12.0 (git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881)",
  "flate2",
  "futures",
- "http 1.1.0",
+ "http 1.2.0",
  "ic-agent 0.37.1",
  "ic-http-certification",
  "ic-response-verification",
@@ -2207,7 +2207,7 @@ dependencies = [
 
 [[package]]
 name = "cloner-canister-types"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "futures",
@@ -2409,7 +2409,6 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "canister-test",
- "canister_http",
  "ic-agent 0.37.1",
  "ic-base-types",
  "ic-interfaces-registry",
@@ -4636,7 +4635,7 @@ dependencies = [
  "fnv",
  "futures-core",
  "futures-sink",
- "http 1.1.0",
+ "http 1.2.0",
  "indexmap 2.6.0",
  "slab",
  "tokio",
@@ -4732,7 +4731,7 @@ dependencies = [
  "base64 0.21.7",
  "bytes",
  "headers-core 0.3.0",
- "http 1.1.0",
+ "http 1.2.0",
  "httpdate",
  "mime",
  "sha1",
@@ -4753,7 +4752,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54b4a22553d4242c49fddb9ba998a99962b5cc6f22cb5a3482bec22522403ce4"
 dependencies = [
- "http 1.1.0",
+ "http 1.2.0",
 ]
 
 [[package]]
@@ -4968,9 +4967,9 @@ dependencies = [
 
 [[package]]
 name = "http"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21b9ddb458710bc376481b842f5da65cdf31522de232c1ca8146abce2a358258"
+checksum = "f16ca2af56261c99fba8bac40a10251ce8188205a4c448fbb745a2e4daa76fea"
 dependencies = [
  "bytes",
  "fnv",
@@ -4995,7 +4994,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1efedce1fb8e6913f23e0c92de8e62cd5b772a67e7b3946df930a62566c93184"
 dependencies = [
  "bytes",
- "http 1.1.0",
+ "http 1.2.0",
 ]
 
 [[package]]
@@ -5017,7 +5016,7 @@ checksum = "793429d76616a256bcb62c2a2ec2bed781c8307e797e2598c50010f2bee2544f"
 dependencies = [
  "bytes",
  "futures-util",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "pin-project-lite",
 ]
@@ -5120,7 +5119,7 @@ dependencies = [
  "futures-channel",
  "futures-util",
  "h2 0.4.6",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "httparse",
  "httpdate",
@@ -5140,7 +5139,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "headers 0.4.0",
- "http 1.1.0",
+ "http 1.2.0",
  "hyper 1.5.1",
  "hyper-rustls 0.27.3",
  "hyper-util",
@@ -5172,7 +5171,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08afdbb5c31130e3034af566421053ab03787c640246a446327f550d11bcb333"
 dependencies = [
  "futures-util",
- "http 1.1.0",
+ "http 1.2.0",
  "hyper 1.5.1",
  "hyper-util",
  "log",
@@ -5192,7 +5191,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51c227614c208f7e7c2e040526912604a1a957fe467c9c2f5b06c5d032337dab"
 dependencies = [
  "async-socks5",
- "http 1.1.0",
+ "http 1.2.0",
  "hyper 1.5.1",
  "hyper-util",
  "thiserror 1.0.68",
@@ -5222,7 +5221,7 @@ dependencies = [
  "bytes",
  "futures-channel",
  "futures-util",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "hyper 1.5.1",
  "pin-project-lite",
@@ -5272,7 +5271,7 @@ dependencies = [
 
 [[package]]
 name = "ic-adapter-metrics-server"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "futures",
  "ic-adapter-metrics-service",
@@ -5286,7 +5285,7 @@ dependencies = [
 
 [[package]]
 name = "ic-adapter-metrics-service"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "prost 0.13.3",
  "prost-build 0.13.3",
@@ -5385,7 +5384,7 @@ dependencies = [
  "ed25519-consensus",
  "futures-util",
  "hex",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "http-body-to-bytes",
  "http-body-util",
@@ -5436,7 +5435,7 @@ dependencies = [
  "elliptic-curve",
  "futures-util",
  "hex",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "ic-certification 2.6.0",
  "ic-transport-types 0.39.1",
@@ -5465,7 +5464,7 @@ dependencies = [
 
 [[package]]
 name = "ic-artifact-downloader"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -5684,7 +5683,7 @@ dependencies = [
  "futures-util",
  "hickory-proto",
  "hickory-resolver",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "http-body-util",
  "humantime",
@@ -5748,7 +5747,7 @@ dependencies = [
  "futures",
  "futures-util",
  "hex",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "humantime",
  "ic-agent 0.39.1",
@@ -5788,6 +5787,7 @@ dependencies = [
  "nix 0.24.3",
  "prometheus",
  "rand 0.8.5",
+ "rate-limits-api",
  "ratelimit",
  "rcgen",
  "regex",
@@ -5813,7 +5813,7 @@ dependencies = [
  "tower-http 0.6.2",
  "tower_governor",
  "tracing",
- "tracing-serde",
+ "tracing-serde 0.1.3",
  "tracing-slog",
  "tracing-subscriber",
  "url",
@@ -5920,7 +5920,7 @@ dependencies = [
  "futures",
  "hashlink",
  "hex",
- "http 1.1.0",
+ "http 1.2.0",
  "hyper-util",
  "ic-adapter-metrics-server",
  "ic-async-utils",
@@ -5987,6 +5987,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-btc-checker"
+version = "0.9.0"
+dependencies = [
+ "askama",
+ "base64 0.13.1",
+ "bitcoin 0.32.3",
+ "candid",
+ "candid_parser",
+ "ciborium",
+ "futures",
+ "hex",
+ "ic-base-types",
+ "ic-btc-interface",
+ "ic-canister-log 0.2.0",
+ "ic-canisters-http-types",
+ "ic-cdk 0.16.0",
+ "ic-metrics-encoder",
+ "ic-stable-structures",
+ "ic-test-utilities-load-wasm",
+ "ic-types",
+ "ic-universal-canister",
+ "num-traits",
+ "pocket-ic",
+ "scraper",
+ "serde",
+ "serde_json",
+ "time",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "ic-btc-consensus"
 version = "0.9.0"
 dependencies = [
@@ -6032,38 +6064,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-btc-kyt"
-version = "0.9.0"
-dependencies = [
- "askama",
- "base64 0.13.1",
- "bitcoin 0.32.3",
- "candid",
- "candid_parser",
- "ciborium",
- "futures",
- "hex",
- "ic-base-types",
- "ic-btc-interface",
- "ic-canister-log 0.2.0",
- "ic-canisters-http-types",
- "ic-cdk 0.16.0",
- "ic-metrics-encoder",
- "ic-stable-structures",
- "ic-test-utilities-load-wasm",
- "ic-types",
- "ic-universal-canister",
- "num-traits",
- "pocket-ic",
- "scraper",
- "serde",
- "serde_json",
- "time",
- "tokio",
- "url",
-]
-
-[[package]]
 name = "ic-btc-replica-types"
 version = "0.9.0"
 dependencies = [
@@ -6095,7 +6095,7 @@ dependencies = [
 
 [[package]]
 name = "ic-btc-validation"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "bitcoin 0.28.2",
  "csv",
@@ -6632,8 +6632,8 @@ dependencies = [
  "ic-agent 0.37.1",
  "ic-base-types",
  "ic-bitcoin-canister-mock",
+ "ic-btc-checker",
  "ic-btc-interface",
- "ic-btc-kyt",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
  "ic-cdk 0.16.0",
@@ -6673,7 +6673,7 @@ dependencies = [
 
 [[package]]
 name = "ic-cketh-minter"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "askama",
  "assert_matches",
@@ -6855,7 +6855,7 @@ dependencies = [
 
 [[package]]
 name = "ic-consensus-manager"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -7096,7 +7096,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-iccsa"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-basic-sig-iccsa",
 ]
@@ -7110,7 +7110,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-basic-sig-cose"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -7619,7 +7619,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-node-key-generation"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
@@ -7675,7 +7675,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-prng"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-sha2",
  "ic-types",
@@ -8089,7 +8089,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-utils-ni-dkg"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-config",
@@ -8177,7 +8177,7 @@ dependencies = [
 
 [[package]]
 name = "ic-dashboard"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "tokio",
@@ -8425,7 +8425,7 @@ dependencies = [
 
 [[package]]
 name = "ic-exhaustive-derive"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8495,7 +8495,7 @@ dependencies = [
  "futures",
  "futures-util",
  "hex",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "http-body-util",
  "hyper 1.5.1",
@@ -8613,7 +8613,7 @@ dependencies = [
  "bytes",
  "candid",
  "futures",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "http-body-util",
  "ic-agent 0.37.1",
@@ -8630,7 +8630,7 @@ dependencies = [
  "assert_matches",
  "flate2",
  "hex",
- "http 1.1.0",
+ "http 1.2.0",
  "ic-crypto-sha2",
  "ic-logger",
  "ic-test-utilities-in-memory-logger",
@@ -8645,14 +8645,14 @@ dependencies = [
 
 [[package]]
 name = "ic-https-outcalls-adapter"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "async-stream",
  "byte-unit",
  "bytes",
  "clap 4.5.20",
  "futures",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body-util",
  "hyper 1.5.1",
  "hyper-rustls 0.27.3",
@@ -8685,7 +8685,7 @@ dependencies = [
 
 [[package]]
 name = "ic-https-outcalls-adapter-client"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "futures",
@@ -8750,7 +8750,7 @@ dependencies = [
 
 [[package]]
 name = "ic-https-outcalls-service"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "prost 0.13.3",
  "tonic",
@@ -9013,7 +9013,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc1-benchmark-worker"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -9183,7 +9183,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc1-tokens-u256"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
@@ -9201,7 +9201,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc1-tokens-u64"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
@@ -9448,7 +9448,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ledger-suite-orchestrator"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "askama",
  "assert_matches",
@@ -9660,7 +9660,7 @@ dependencies = [
 
 [[package]]
 name = "ic-memory-transport"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -10092,6 +10092,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-long-message"
+version = "0.0.1"
+dependencies = [
+ "candid",
+ "canister-test",
+ "dfn_candid",
+ "ic-cdk 0.16.0",
+ "ic-cdk-timers",
+ "ic-config",
+ "ic-nervous-system-temporary",
+ "ic-nns-test-utils",
+ "ic-registry-subnet-type",
+ "ic-state-machine-tests",
+ "ic-types",
+ "serde",
+]
+
+[[package]]
 name = "ic-nervous-system-proto"
 version = "0.9.0"
 dependencies = [
@@ -10299,6 +10317,7 @@ dependencies = [
  "ic-nervous-system-common-test-utils",
  "ic-nervous-system-governance",
  "ic-nervous-system-linear-map",
+ "ic-nervous-system-long-message",
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
@@ -10360,6 +10379,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-nervous-system-clients",
+ "ic-nervous-system-common",
  "ic-nervous-system-common-validation",
  "ic-nervous-system-proto",
  "ic-nns-common",
@@ -10649,6 +10669,7 @@ dependencies = [
  "on_wire",
  "phantom_newtype",
  "pocket-ic",
+ "pretty_assertions",
  "prometheus-parse",
  "prost 0.13.3",
  "rand 0.8.5",
@@ -10756,7 +10777,7 @@ dependencies = [
 
 [[package]]
 name = "ic-p2p-test-utils"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -10803,7 +10824,7 @@ dependencies = [
 
 [[package]]
 name = "ic-peer-manager"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-interfaces",
@@ -10931,7 +10952,7 @@ dependencies = [
 
 [[package]]
 name = "ic-quic-transport"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -10940,7 +10961,7 @@ dependencies = [
  "bytes",
  "criterion",
  "futures",
- "http 1.1.0",
+ "http 1.2.0",
  "ic-async-utils",
  "ic-base-types",
  "ic-crypto-tls-interfaces",
@@ -10985,7 +11006,7 @@ dependencies = [
 
 [[package]]
 name = "ic-recovery"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "clap 4.5.20",
@@ -11261,7 +11282,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-replicator"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "clap 4.5.20",
  "ic-config",
@@ -11867,6 +11888,7 @@ dependencies = [
  "base64 0.13.1",
  "build-info",
  "build-info-build",
+ "canbench-rs",
  "candid",
  "candid_parser",
  "clap 4.5.20",
@@ -12547,7 +12569,7 @@ dependencies = [
 
 [[package]]
 name = "ic-state-sync-manager"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "axum",
  "bytes",
@@ -12604,7 +12626,7 @@ dependencies = [
 
 [[package]]
 name = "ic-subnet-splitting"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "clap 4.5.20",
  "hex",
@@ -12712,7 +12734,7 @@ dependencies = [
  "ed25519-dalek",
  "futures",
  "hex",
- "http 1.1.0",
+ "http 1.2.0",
  "humantime",
  "humantime-serde",
  "hyper 1.5.1",
@@ -13150,11 +13172,10 @@ dependencies = [
  "dfn_candid",
  "ic-agent 0.37.1",
  "ic-base-types",
+ "ic-btc-checker",
  "ic-btc-interface",
- "ic-btc-kyt",
  "ic-canister-client",
  "ic-ckbtc-agent",
- "ic-ckbtc-kyt",
  "ic-ckbtc-minter",
  "ic-config",
  "ic-icrc1-ledger",
@@ -13402,14 +13423,14 @@ version = "0.9.0"
 
 [[package]]
 name = "ic-validate-eq"
-version = "0.0.0"
+version = "0.9.0"
 dependencies = [
  "ic-validate-eq-derive",
 ]
 
 [[package]]
 name = "ic-validate-eq-derive"
-version = "0.0.0"
+version = "0.9.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -13711,7 +13732,7 @@ dependencies = [
 name = "ic-xnet-uri"
 version = "0.9.0"
 dependencies = [
- "http 1.1.0",
+ "http 1.2.0",
  "ic-types",
 ]
 
@@ -13970,7 +13991,7 @@ dependencies = [
 
 [[package]]
 name = "icp-config"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "clap 4.5.20",
  "eyre",
@@ -14513,7 +14534,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "bytes",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "http-body-util",
  "hyper 1.5.1",
@@ -14786,7 +14807,7 @@ dependencies = [
  "either",
  "futures",
  "home",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "http-body-util",
  "hyper 1.5.1",
@@ -14820,7 +14841,7 @@ checksum = "cce373a74d787d439063cdefab0f3672860bd7bac01a38e39019177e764a0fe6"
 dependencies = [
  "chrono",
  "form_urlencoded",
- "http 1.1.0",
+ "http 1.2.0",
  "k8s-openapi",
  "serde",
  "serde_json",
@@ -15319,7 +15340,7 @@ checksum = "4d873d7c67ce09b42110d801813efbc9364414e356be9935700d368351657487"
 
 [[package]]
 name = "local_key"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "pin-project-lite",
 ]
@@ -15763,7 +15784,7 @@ dependencies = [
  "bytes",
  "colored",
  "futures-util",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "http-body-util",
  "hyper 1.5.1",
@@ -16097,6 +16118,7 @@ dependencies = [
  "ic-registry-canister-api",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
+ "ic_consensus_system_test_utils",
  "indoc",
  "k256",
  "registry-canister",
@@ -16438,7 +16460,7 @@ checksum = "91cf61a1868dacc576bf2b2a1c3e9ab150af7272909e80085c3173384fe11f76"
 dependencies = [
  "async-trait",
  "futures-core",
- "http 1.1.0",
+ "http 1.2.0",
  "opentelemetry 0.27.0",
  "opentelemetry-proto",
  "opentelemetry_sdk 0.27.0",
@@ -17242,7 +17264,7 @@ dependencies = [
  "fqdn 0.3.12",
  "futures",
  "hex",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body-util",
  "hyper 1.5.1",
  "hyper-util",
@@ -18175,10 +18197,15 @@ name = "rate-limits-api"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "humantime",
+ "ic-bn-lib",
+ "indoc",
  "regex",
  "serde",
  "serde_bytes",
  "serde_json",
+ "serde_regex",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -18535,7 +18562,7 @@ dependencies = [
  "futures-util",
  "h2 0.4.6",
  "hickory-resolver",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "http-body-util",
  "hyper 1.5.1",
@@ -18994,7 +19021,7 @@ dependencies = [
  "chrono",
  "futures",
  "futures-rustls",
- "http 1.1.0",
+ "http 1.2.0",
  "log",
  "pem 3.0.4",
  "rcgen",
@@ -20439,7 +20466,7 @@ dependencies = [
  "async-trait",
  "axum",
  "clap 4.5.20",
- "http 1.1.0",
+ "http 1.2.0",
  "itertools 0.12.1",
  "reqwest 0.12.9",
  "thiserror 2.0.3",
@@ -21027,7 +21054,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tla_instrumentation"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "local_key",
@@ -21039,7 +21066,7 @@ dependencies = [
 
 [[package]]
 name = "tla_instrumentation_proc_macros"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -21069,9 +21096,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.41.1"
+version = "1.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22cfb5bee7a6a52939ca9224d6ac897bb669134078daa8735560897f69de4d33"
+checksum = "5cec9b21b0450273377fc97bd4c33a8acffc8c996c987a7c5b319a0083707551"
 dependencies = [
  "backtrace",
  "bytes",
@@ -21108,9 +21135,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-metrics"
-version = "0.3.1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eace09241d62c98b7eeb1107d4c5c64ca3bd7da92e8c218c153ab3a78f9be112"
+checksum = "cb2bb07a8451c4c6fa8b3497ad198510d8b8dffa5df5cfb97a64102a58b113c8"
 dependencies = [
  "futures-util",
  "pin-project-lite",
@@ -21216,9 +21243,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-util"
-version = "0.7.12"
+version = "0.7.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61e7c3654c13bcd040d4a03abee2c75b1d14a37b423cf5a813ceae1cc903ec6a"
+checksum = "d7fcaa8d55a2bdd6b83ace262b016eca0d79ee02818c5c1bcdf0305114081078"
 dependencies = [
  "bytes",
  "futures-core",
@@ -21260,7 +21287,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "h2 0.4.6",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "http-body-util",
  "hyper 1.5.1",
@@ -21341,7 +21368,7 @@ dependencies = [
  "base64 0.21.7",
  "bitflags 2.6.0",
  "bytes",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "http-body-util",
  "mime",
@@ -21361,7 +21388,7 @@ dependencies = [
  "bitflags 2.6.0",
  "bytes",
  "futures-core",
- "http 1.1.0",
+ "http 1.2.0",
  "http-body 1.0.1",
  "http-body-util",
  "pin-project-lite",
@@ -21386,7 +21413,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "357a1f99dd439c1aa9ebbaf9c6431b41c05a26bf137e9e92879941bdac5cb66d"
 dependencies = [
- "http 1.1.0",
+ "http 1.2.0",
  "tower-layer",
  "tower-service",
  "ulid",
@@ -21421,7 +21448,7 @@ dependencies = [
  "axum",
  "forwarded-header-value",
  "governor",
- "http 1.1.0",
+ "http 1.2.0",
  "pin-project",
  "thiserror 1.0.68",
  "tower 0.5.1",
@@ -21430,9 +21457,9 @@ dependencies = [
 
 [[package]]
 name = "tracing"
-version = "0.1.40"
+version = "0.1.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3523ab5a71916ccf420eebdf5521fcef02141234bbc0b8a49f2fdc4544364ef"
+checksum = "784e0ac535deb450455cbfa28a6f0df145ea1bb7ae51b821cf5e7927fdcfbdd0"
 dependencies = [
  "log",
  "pin-project-lite",
@@ -21454,9 +21481,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-attributes"
-version = "0.1.27"
+version = "0.1.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34704c8d6ebcbc939824180af020566b01a7c01f80641264eba0999f6c2b6be7"
+checksum = "395ae124c09f9e6918a2310af6038fba074bcf474ac352496d5910dd59a2226d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -21465,9 +21492,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-core"
-version = "0.1.32"
+version = "0.1.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c06d3da6113f116aaee68e4d601191614c9053067f9ab7f6edbcb161237daa54"
+checksum = "e672c95779cf947c5311f83787af4fa8fffd12fb27e4993211a84bdfd9610f9c"
 dependencies = [
  "once_cell",
  "valuable",
@@ -21537,6 +21564,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tracing-serde"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
+dependencies = [
+ "serde",
+ "tracing-core",
+]
+
+[[package]]
 name = "tracing-slog"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -21549,9 +21586,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-subscriber"
-version = "0.3.18"
+version = "0.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad0f048c97dbd9faa9b7df56362b8ebcaa52adb06b498c050d2f4e32f90a7a8b"
+checksum = "e8189decb5ac0fa7bc8b96b7cb9b2701d60d48805aca84a238004d665fcc4008"
 dependencies = [
  "matchers",
  "nu-ansi-term",
@@ -21566,7 +21603,7 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
- "tracing-serde",
+ "tracing-serde 0.2.0",
 ]
 
 [[package]]
@@ -21656,7 +21693,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "data-encoding",
- "http 1.1.0",
+ "http 1.2.0",
  "httparse",
  "log",
  "rand 0.8.5",

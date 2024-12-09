@@ -128,7 +128,7 @@ mod test {
     fn mac_to_slaac() {
         let mgmt_mac = "b0:7b:25:c8:f6:c0".parse::<MacAddr6>().unwrap();
         let prefix = "2602:FFE4:801:17";
-        let expected_ip = "2602:FFE4:801:17:6801:ff:feec:bd51"
+        let expected_ip = "2602:ffe4:801:17:6801:ff:feec:bd51"
             .parse::<Ipv6Addr>()
             .unwrap();
         let mac = calculate_deterministic_mac(

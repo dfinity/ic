@@ -41,7 +41,7 @@ make_group_owned_and_sticky /var/lib/ic/data/recovery admin nonconfidential
 
 # Fix up security labels for everything.
 echo "Restoring SELinux security contexts in /var/lib/ic"
-/opt/ic/bin/prestorecon -j 0 /var/lib/ic/data /var/lib/ic/crypto
+/opt/ic/bin/erestorecon.sh /var/lib/ic/data /var/lib/ic/crypto
 
 # Note: we are not setting up contexts individually for /var/lib/ic/backup.
 # This is handled instead by mount option for the filesystem in its entirety.
