@@ -197,7 +197,7 @@ fn main() {
         let filename = "config.tar.gz";
         let config_path = tempdir.as_ref().join(filename);
         let local_store = prep_dir.join("ic_registry_local_store");
-        Command::new(build_bootstrap_script)
+        if !Command::new(build_bootstrap_script)
             .arg(&config_path)
             .arg("--nns_urls")
             .arg(ipv6_addr.to_string())
@@ -208,7 +208,11 @@ fn main() {
             .arg("--accounts_ssh_authorized_keys")
             .arg(&keys_dir)
             .status()
-            .unwrap();
+            .unwrap()
+            .success()
+        {
+            panic!("Unable to create config image");
+        }
 
         // Upload config image
         let image_id = farm
