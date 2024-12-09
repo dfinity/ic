@@ -36,7 +36,8 @@ use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES};
 use ic_types::time::UNIX_EPOCH;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
-use std::convert::TryFrom;
+use serde_json::Value;
+use std::{collections::HashSet, convert::TryFrom};
 
 const MAX_REQUEST_BYTES_LIMIT: usize = 2_000_000;
 
@@ -735,28 +736,34 @@ fn test_get_hello_world_call(env: TestEnv) {
         webserver_ipv6, "ascii", expected_body
     );
 
+    let max_response_bytes = 666;
+
+    let request = CanisterHttpRequestArgs {
+        url,
+        headers: BoundedHttpHeaders::new(vec![]),
+        method: HttpMethod::GET,
+        body: Some("".as_bytes().to_vec()),
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: get_proxy_canister_id(&env).into(),
+                method: "transform".to_string(),
+            }),
+            context: vec![0, 1, 2],
+        }),
+        max_response_bytes: Some(max_response_bytes),
+    };
+
     let response = block_on(submit_outcall(
         &handlers.proxy_canister(),
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
-                url,
-                headers: BoundedHttpHeaders::new(vec![]),
-                method: HttpMethod::GET,
-                body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
-                max_response_bytes: None,
-            },
+            request: request.clone(),
             cycles: 500_000_000_000,
         },
-    ));
+    ))
+    .expect("Request is successful.");
 
-    assert_matches!(response, Ok(RemoteHttpResponse {body, status: 200, ..}) if body == expected_body.to_string());
+    assert_matches!(&response, RemoteHttpResponse {body, status: 200, ..} if body == expected_body);
+    assert_distinct_headers(&response);
 }
 
 fn test_post_call(env: TestEnv) {
@@ -765,29 +772,46 @@ fn test_post_call(env: TestEnv) {
     let expected_body = "POST";
 
     let url = format!("https://[{}]:20443/{}", webserver_ipv6, "anything");
+    let body = Some("hello_world".as_bytes().to_vec());
+    let headers = BoundedHttpHeaders::new(vec![
+        HttpHeader {
+            name: "name1".to_string(),
+            value: "value1".to_string(),
+        },
+        HttpHeader {
+            name: "name2".to_string(),
+            value: "value2".to_string(),
+        },
+    ]);
+    let max_response_bytes = Some(666);
+
+    let request = CanisterHttpRequestArgs {
+        url,
+        headers,
+        method: HttpMethod::POST,
+        body,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: get_proxy_canister_id(&env).into(),
+                method: "transform".to_string(),
+            }),
+            context: vec![0, 1, 2],
+        }),
+        max_response_bytes,
+    };
 
     let response = block_on(submit_outcall(
         &handlers.proxy_canister(),
         RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
-                url,
-                headers: BoundedHttpHeaders::new(vec![]),
-                method: HttpMethod::POST,
-                body: Some("".as_bytes().to_vec()),
-                transform: Some(TransformContext {
-                    function: TransformFunc(candid::Func {
-                        principal: get_proxy_canister_id(&env).into(),
-                        method: "transform".to_string(),
-                    }),
-                    context: vec![0, 1, 2],
-                }),
-                max_response_bytes: None,
-            },
+            request: request.clone(),
             cycles: 500_000_000_000,
         },
-    ));
+    ))
+    .expect("Request succeeds.");
 
-    assert_matches!(response, Ok(RemoteHttpResponse {body, status: 200, ..}) if body.contains(expected_body));
+    assert_matches!(&response, RemoteHttpResponse {body, status: 200, ..} if body.contains(expected_body));
+    assert_distinct_headers(&response);
+    assert_http_json_response(&request, &response);
 }
 
 fn test_head_call(env: TestEnv) {
@@ -924,6 +948,181 @@ fn test_small_maximum_possible_response_size_exceeded(env: TestEnv) {
 
 // ---- END SPEC COMPLIANCE TESTS -------
 
+/// Case insensitive header names are distinct.
+fn assert_distinct_headers(http_response: &RemoteHttpResponse) {
+    // let response_body: Value =
+    //     serde_json::from_str(&http_response.body).expect("Response body is JSON");
+
+    // let headers: Vec<_> = response_body["headers"]
+    //     .as_object()
+    //     .expect("Headers are an object")
+    //     .iter()
+    //     .map(|(name, value)| {
+    //         (
+    //             name.to_string(),
+    //             value
+    //                 .as_str()
+    //                 .expect("Header value is a string")
+    //                 .to_string(),
+    //         )
+    //     })
+    //     .collect();
+
+    let response_header_set: HashSet<String> = http_response
+        .headers
+        .clone()
+        .iter()
+        .map(|(name, _)| name.to_lowercase())
+        .collect();
+
+    assert_eq!(
+        response_header_set.len(),
+        http_response.headers.len(),
+        "Found duplicate headers: {:?}",
+        http_response.headers
+    );
+}
+
+// TODO: REMOVE THIS FUNCTION. CONTENT-LENGTH HEADER IS NOT USED IN
+// HTTP/2.0 AND ABOVE.
+/// Assert that content-length header matches the body length, and that the headers are distinct.
+// fn assert_http_response(
+//     // http_request: &CanisterHttpRequestArgs,
+//     http_response: &RemoteHttpResponse,
+// ) {
+//     assert_distinct_header(http_response);
+
+//     // let response_body: Value =
+//     //     serde_json::from_str(&http_response.body).expect("Response body is JSON");
+
+//     // let content_length_header = response_body["headers"]
+//     //     .as_object()
+//     //     .expect("Headers are an object")
+//     //     .iter()
+//     //     .map(|(name, value)| {
+//     //         (
+//     //             name.to_string(),
+//     //             value
+//     //                 .as_str()
+//     //                 .expect("Header value is a string")
+//     //                 .to_string(),
+//     //         )
+//     //     })
+//     //     .find(|(name, _)| name.to_lowercase() == "content-length")
+//     //     .map(|(_, value)| value.parse::<usize>().expect("Content length is a number"))
+//     //     .expect("HTTP response must contain a \"content-length\" header");
+
+//     let content_length_header = http_response
+//         .headers
+//         .iter()
+//         .find(|(name, _)| name.to_lowercase() == "content-length")
+//         .map(|(_, value)| value.parse::<usize>())
+//         .expect(
+//             format!(
+//                 "HTTP response contains `content-length` header. Headers: {:?}",
+//                 http_response.headers
+//             )
+//             .as_str(),
+//         )
+//         .expect("content-length is a number");
+
+//     assert_eq!(
+//         content_length_header,
+//         http_response.body.len(),
+//         "Content length header does not match the body length."
+//     );
+// }
+
+/// Checks if two sets of headers match according to specific rules:
+/// 1. All headers in `outcall_headers` must exist in `http_bin_server_received_headers`
+/// 2. All headers in `http_bin_server_received_headers` must exist in `outcall_headers`, unless they are special cases:
+/// - "host"
+/// - "content-length"
+/// - "accept-encoding"
+/// - "user-agent" with value "ic/1.0"
+/// 3. Request method must match the method in the response.
+/// 4. Request body must match the body in the response.
+fn assert_http_json_response(
+    request: &CanisterHttpRequestArgs,
+    http_response: &RemoteHttpResponse,
+) {
+    let request_headers = request
+        .headers
+        .get()
+        .iter()
+        .map(|HttpHeader { name, value }| (name.clone(), value.clone()))
+        .collect::<Vec<_>>();
+
+    let response_body: Value =
+        serde_json::from_str(&http_response.body).expect("Response body is JSON formatted.");
+
+    let http_bin_server_received_headers: Vec<_> = response_body["headers"]
+        .as_object()
+        .expect("Headers is an object")
+        .iter()
+        .map(|(name, value)| {
+            (
+                name.to_string(),
+                value
+                    .as_str()
+                    .expect("Header value is a string")
+                    .to_string(),
+            )
+        })
+        .collect();
+
+    // Rule 1: Check that all left headers exist in right
+    let http_bin_server_received_all_outcall_headers = request_headers
+        .iter()
+        .all(|x| http_bin_server_received_headers.contains(x));
+
+    assert!(
+        http_bin_server_received_all_outcall_headers,
+        "1. HTTP bin server did not receive all headers specified in the outcall. Specified headers: {:?}, received headers: {:?}",
+        request_headers,
+        http_bin_server_received_headers
+    );
+
+    // Rule 2: Check that all headers received by the server was specified in outcall.
+    let http_bin_server_only_received_headers_specified_by_outcall =
+        http_bin_server_received_headers
+            .iter()
+            .filter(|(name, value)| {
+                !matches!(
+                    (name.as_str(), value.as_str()),
+                    ("host", _)
+                        | ("content-length", _)
+                        | ("accept-encoding", _)
+                        | ("user-agent", "ic/1.0")
+                )
+            })
+            .all(|(name, value)| request_headers.contains(&(name.clone(), value.clone())));
+
+    assert!(http_bin_server_only_received_headers_specified_by_outcall,
+        "2. Http bin server received headers that were not specified in the outcall. Specified headers: {:?}, received headers: {:?}",
+        request_headers,
+        http_bin_server_received_headers);
+
+    let request_method = match request.method {
+        HttpMethod::GET => "GET",
+        HttpMethod::POST => "POST",
+        HttpMethod::HEAD => "HEAD",
+    };
+
+    assert_eq!(
+        request_method,
+        response_body["method"].as_str().unwrap(),
+        "3. Mismatch in HTTP method."
+    );
+
+    let server_received_body = response_body["data"].as_str().unwrap();
+    let outcall_sent_body = String::from_utf8(request.body.clone().unwrap_or_default()).unwrap();
+
+    assert_eq!(
+        server_received_body, &outcall_sent_body,
+        "4. HTTP bin server received body does not match the outcall sent body."
+    );
+}
 type OutcallsResponse = Result<RemoteHttpResponse, (RejectionCode, String)>;
 
 async fn submit_outcall(

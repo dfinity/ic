@@ -45,6 +45,7 @@ charFromInt n = chr $ n + ord 'a'
 
 -- * Canister http calls
 
+---- Checks that all headers keys are unique with case insensitive ----
 check_distinct_headers :: Vec.Vector HttpHeader -> Bool
 check_distinct_headers v = length xs == length (nub xs)
   where
@@ -56,6 +57,7 @@ http_headers_to_map v n = lookup n $ map_to_lower $ map (\r -> (r .! #name, r .!
 map_to_lower :: [(T.Text, T.Text)] -> [(T.Text, T.Text)]
 map_to_lower = map (\(n, v) -> (T.toLower n, v))
 
+---- Assert check_distinct_headers and that content-length header is correctly set. ----
 check_http_response :: HttpResponse -> IO ()
 check_http_response resp = do
   assertBool "HTTP response header names must be distinct" $ check_distinct_headers (resp .! #headers)
@@ -111,8 +113,15 @@ instance FromJSON HttpRequestBody where
 list_subset :: (Eq a) => [a] -> [a] -> Bool
 list_subset xs ys = all (\x -> elem x ys) xs
 
+---- 1. Checks that the left header as (including value) is a subset of the header set on the right set ---
+---- 2. Check that everything on the right is also on the left, unless the name is "host", "content-length", "accept-encoding", "user-agent" && value is "ic/1.0" ---
 headers_match :: [(T.Text, T.Text)] -> [(T.Text, T.Text)] -> Bool
 headers_match xs ys = all (\x -> elem x ys) xs && all (\(n, v) -> elem (n, v) xs || n == "host" || n == "content-length" || n == "accept-encoding" || n == "user-agent" && v == "ic/1.0") ys
+
+---- Bin server gives back a JSON response describing the request -----
+---- 1. Check that HTTP method received by bin is as expected -----
+---- 2. Lower all headers (not values) and run headers_match -----
+---- 3. Check that body received by bin is as expected -----
 
 check_http_json :: String -> [(T.Text, T.Text)] -> BS.ByteString -> Maybe HttpRequest -> Assertion
 check_http_json _ _ _ Nothing = assertFailure "Could not parse the original HttpRequest from the response"
@@ -121,6 +130,7 @@ check_http_json m hs b (Just req) = do
   assertBool "Headers were not properly included in the HTTP request" $ headers_match (map_to_lower hs) (case headers req of HttpRequestHeaders hs -> map_to_lower hs)
   assertBool "Body was not properly included in the HTTP request" $ HttpRequestBody b == body req
 
+----- Check that input is valid UTF-8 and that it is al `x` chars -----
 check_http_body :: BS.ByteString -> Bool
 check_http_body = aux . fromUtf8
   where
@@ -133,11 +143,21 @@ canister_http_calls sub httpbin_proto =
    in let ecid = rawEntityId $ wordToId ecid_as_word64
        in [ -- Corner cases
 
+            ----- Invalid domain or Invalid IP gives you reject code 2. It is not failed because of HTTP, we explcitly set HTTPS. ----
+            
             -- simpleTestCase "invalid domain name" ecid $ \cid ->
             --   ic_http_invalid_address_request' (ic00viaWithCyclesRefund 0 cid) sub "https://" "xwWPqqbNqxxHmLXdguF4DN9xGq22nczV.com" Nothing Nothing cid >>= isReject [2],
+            
+
             -- simpleTestCase "invalid IP address" ecid $ \cid ->
             --   ic_http_invalid_address_request' (ic00viaWithCyclesRefund 0 cid) sub "https://" "240.0.0.0" Nothing Nothing cid >>= isReject [2],
             -- "Currently, the GET, HEAD, and POST methods are supported for HTTP requests."
+
+
+
+            ----- GET request to ascii/hello_world and specifying max response body size to 666.
+            ----- Check that status was 200 and body is hello_world
+            ----- check_http_response
 
             -- simpleTestCase "GET call" ecid $ \cid -> do
             --   let s = "hello_world"
@@ -145,6 +165,16 @@ canister_http_calls sub httpbin_proto =
             --   (resp .! #status) @?= 200
             --   (resp .! #body) @?= BLU.fromString s
             --   check_http_response resp,
+
+
+            ---- POST request
+            ---- Path /anything
+            ---- Body is "Hello, World!"
+            ---- headers (name1, value1) and (name2, value2)
+            ---- max response body size is 666
+            ---- Checks:
+            ----  check_http_response
+            ----  check_http_json
             -- simpleTestCase "POST call" ecid $ \cid -> do
             --   let b = toUtf8 $ T.pack $ "Hello, world!"
             --   let hs = [(T.pack "name1", T.pack "value1"), (T.pack "name2", T.pack "value2")]
@@ -152,6 +182,12 @@ canister_http_calls sub httpbin_proto =
             --   (resp .! #status) @?= 200
             --   check_http_response resp
             --   check_http_json "POST" hs b $ (decode (resp .! #body) :: Maybe HttpRequest),
+
+
+            ---- Send 6666 repeating `x` to /anything endpoint.
+            ---- Use HEAD http method. It only asks head, not the body.
+            ---- Set max response size to 666 (order of magnitude smaller)
+            ---- Assert that request still works, since we are only asking for the head request.\
             -- simpleTestCase "HEAD call" ecid $ \cid -> do
             --   let n = 6666
             --   let b = toUtf8 $ T.pack $ replicate n 'x'
