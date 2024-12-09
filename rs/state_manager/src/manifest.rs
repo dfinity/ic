@@ -574,13 +574,21 @@ fn files_with_sizes_parallel(
         println!("files_with_sizes_parallel enters canister_states");
         let res = parallel_map(thread_pool, absolute_path.read_dir().unwrap(), |entry| {
             let entry = entry.as_ref().unwrap();
-            let file_len = entry.metadata().as_ref().unwrap().len();
             let relative_path = relative_path.join(entry.file_name());
-            FileWithSize(relative_path, file_len)
+            let entry = entry.path();
+            let mut canister_files = vec![];
+            let entries = entry.read_dir()?;
+            for entry_result in entries {
+                let entry = entry_result?;
+                let file_len = entry.metadata().as_ref().unwrap().len();
+                let relative_path = relative_path.join(entry.file_name());
+                canister_files.push(FileWithSize(relative_path, file_len));
+            }
+            canister_files
         });
+        let res = res.into_iter().flat_map(|x| x.into_iter()).collect::<Vec<_>>();
         files.extend(res);
     } else {
-        println!("{}", relative_path.display());
         assert!(
             metadata.is_dir(),
             "Checkpoints must not contain special files, found one at {}",
@@ -599,7 +607,7 @@ fn files_with_sizes_parallel(
                 message: "failed to read dir entry".to_string(),
                 io_err: io_err.to_string(),
             })?;
-            files_with_sizes(root, relative_path.join(entry.file_name()), files)?;
+            files_with_sizes_parallel(thread_pool, root, relative_path.join(entry.file_name()), files)?;
         }
     }
     Ok(())
@@ -928,24 +936,24 @@ pub fn compute_manifest(
     opt_manifest_delta: Option<ManifestDelta>,
 ) -> Result<Manifest, CheckpointError> {
     let start = std::time::Instant::now();
-    let mut files_parrallel = {
-        let mut files_parrallel = Vec::new();
+    let mut files_parallel = {
+        let mut files_parallel = Vec::new();
         files_with_sizes_parallel(
             thread_pool,
             checkpoint.raw_path(),
             "".into(),
-            &mut files_parrallel,
+            &mut files_parallel,
         )?;
         // We sort the table to make sure that the table is the same on all replicas
-        files_parrallel.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
-        files_parrallel
+        files_parallel.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
+        files_parallel
     };
     let elapsed = start.elapsed();
     info!(
         log,
         "files_with_sizes_parallel took {:?} for {} files",
         elapsed,
-        files_parrallel.len()
+        files_parallel.len()
     );
 
     let start = std::time::Instant::now();

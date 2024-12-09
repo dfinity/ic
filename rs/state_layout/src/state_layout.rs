@@ -2722,14 +2722,21 @@ fn add_content_parallel(
             println!("dir_list_recursive_parallel enters canister_states");
             let res = parallel_map(thread_pool, path.read_dir().unwrap(), |entry| {
                 let entry = entry.as_ref().unwrap().path();
-                entry
+                let entries = entry.read_dir()?;
+                let mut canister_files = vec![entry];
+                for entry_result in entries {
+                    let entry = entry_result?;
+                    canister_files.push(entry.path());
+                }
+                canister_files
             });
+            let res = res.into_iter().flat_map(|x| x.into_iter()).collect::<Vec<_>>();
             result.extend(res);
         } else {
             let entries = path.read_dir()?;
             for entry_result in entries {
                 let entry = entry_result?;
-                add_content(&entry.path(), result)?;
+                add_content_parallel(thread_pool, &entry.path(), result)?;
             }
         }
     }
