@@ -882,16 +882,15 @@ impl SandboxSafeSystemState {
     }
 
     pub(super) fn mint_cycles(&mut self, amount_to_mint: Cycles) -> HypervisorResult<Cycles> {
-        let old_balance = self.cycles_balance();
         let mut new_balance = self.cycles_balance();
-        self.cycles_account_manager
+        let result = self
+            .cycles_account_manager
             .mint_cycles(self.canister_id, &mut new_balance, amount_to_mint)
             .map_err(|CyclesAccountManagerError::ContractViolation(msg)| {
                 HypervisorError::ToolchainContractViolation { error: msg }
-            })?;
+            });
         self.update_balance_change(new_balance);
-        // equal to amount_to_mint, except when the Cycles addition saturated
-        Ok(new_balance - old_balance)
+        result
     }
 
     /// Burns min(balance - freezing_treshold, amount_to_burn) cycles from the canister's
