@@ -711,8 +711,6 @@ pub mod proposal {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Empty {}
 
-/// DEPRECATED. USE ManageNeuronRequest INSTEAD!
-///
 /// All operations that modify the state of an existing neuron are
 /// represented by instances of `ManageNeuron`.
 ///
@@ -1085,8 +1083,6 @@ pub mod manage_neuron {
     }
 
     // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
-    //
-    // Deprecated. Use ManageNeuronCommandRequest instead.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
