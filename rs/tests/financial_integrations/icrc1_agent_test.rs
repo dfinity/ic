@@ -294,7 +294,6 @@ pub fn test(env: TestEnv) {
         assert_eq!(Nat::from(1_u8), last_block_index);
 
         let data_certificate = agent.get_data_certificate().await.unwrap();
-        assert!(data_certificate.certificate.is_some());
 
         use LookupStatus::Found;
         let hash_tree: MixedHashTree = serde_cbor::from_slice(&data_certificate.hash_tree).unwrap();
@@ -309,7 +308,7 @@ pub fn test(env: TestEnv) {
             Found(&mleaf(archived_blocks.blocks[1].hash()))
         );
 
-        let cert = serde_cbor::from_slice(&data_certificate.certificate.unwrap()).unwrap();
+        let cert = serde_cbor::from_slice(&data_certificate.certificate).unwrap();
         assert_matches!(
             agent.verify_root_hash(&cert, &hash_tree.digest().0).await,
             Ok(_)
