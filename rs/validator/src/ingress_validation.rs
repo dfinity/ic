@@ -546,8 +546,7 @@ where
         | KeyBytesContentType::EcdsaP256PublicKeyDer
         | KeyBytesContentType::EcdsaSecp256k1PublicKeyDer => {
             let basic_sig = BasicSigOf::from(BasicSig(signature.signature.clone()));
-            validate_signature_plain(validator, message_id, &basic_sig, &pk)
-                .map_err(InvalidSignature)?;
+            validate_signature_plain(message_id, &basic_sig, &pk).map_err(InvalidSignature)?;
             Ok(targets)
         }
         KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
@@ -574,14 +573,17 @@ where
 }
 
 fn validate_signature_plain(
-    validator: &dyn IngressSigVerifier,
     message_id: &MessageId,
     signature: &BasicSigOf<MessageId>,
     pubkey: &UserPublicKey,
 ) -> Result<(), AuthenticationError> {
-    validator
-        .verify_basic_sig_by_public_key(signature, message_id, pubkey)
-        .map_err(InvalidBasicSignature)
+    ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key(
+        pubkey.algorithm_id,
+        message_id.as_bytes(),
+        &signature.get_ref().0,
+        &pubkey.key,
+    )
+    .map_err(InvalidBasicSignature)
 }
 
 // Validate a chain of delegations.
