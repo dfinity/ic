@@ -525,30 +525,48 @@ pub fn encode_metrics(
 
     // Voting Power
 
-    let total_voting_power = match governance
+    let most_recent_proposal = governance
         .heap_data
         .proposals
-        .iter()
-        .filter(|(_, proposal_data)| {
+        .values()
+        // Exclude ManageNeuron proposals.
+        .filter(|proposal_data| {
             proposal_data
                 .proposal
                 .as_ref()
                 .map(|proposal| !proposal.is_manage_neuron())
                 .unwrap_or_default()
         })
-        .next_back()
-    {
-        Some((_, proposal_data)) => match &proposal_data.latest_tally {
-            Some(tally) => tally.total as f64,
-            None => 0f64,
-        },
-        None => 0f64,
-    };
+        .next_back();
+    let mut total_deciding_voting_power = 0.0;
+    let mut total_potential_voting_power = 0.0;
+    if let Some(most_recent_proposal) = &most_recent_proposal {
+        if let Some(tally) = most_recent_proposal.latest_tally {
+            total_deciding_voting_power = tally.total as f64;
+        }
+
+        total_potential_voting_power = most_recent_proposal
+            .total_potential_voting_power
+            // Convert to float.
+            .map(|result| result as f64)
+            // Fall back to deciding voting power.
+            .unwrap_or(total_deciding_voting_power);
+    }
 
     w.encode_gauge(
         "governance_voting_power_total",
-        total_voting_power,
-        "The total voting power, according to the most recent proposal.",
+        total_deciding_voting_power,
+        "Deprecated. Use governance_deciding_voting_power_total instead.",
+    )?;
+    w.encode_gauge(
+        "governance_total_deciding_voting_power",
+        total_deciding_voting_power,
+        "The total amount of deciding voting power (in the most recent proposal).",
+    )?;
+    w.encode_gauge(
+        "governance_total_potential_voting_power",
+        total_potential_voting_power,
+        "The total amount of potential voting power (in the most recent proposal).",
     )?;
 
     // Neuron Indexes
