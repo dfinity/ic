@@ -163,10 +163,23 @@ impl<T: Register> Register for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
+        // Log
         println!(
             "action = 'register', status = {status}, duration = {duration}, error = {:?}",
             out.as_ref().err()
         );
+
+        // Metrics
+        if let Some(MetricParams {
+            counter, recorder, ..
+        }) = &self.1
+        {
+            // Count
+            counter.with_label_values(&[status]).inc();
+
+            // Latency
+            recorder.with_label_values(&[status]).observe(duration);
+        }
 
         return out;
     }
@@ -257,10 +270,23 @@ impl<T: Query> Query for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
+        // Log
         println!(
             "action = 'query', status = {status}, duration = {duration}, error = {:?}",
             out.as_ref().err()
         );
+
+        // Metrics
+        if let Some(MetricParams {
+            counter, recorder, ..
+        }) = &self.1
+        {
+            // Count
+            counter.with_label_values(&[status]).inc();
+
+            // Latency
+            recorder.with_label_values(&[status]).observe(duration);
+        }
 
         return out;
     }
@@ -297,10 +323,23 @@ impl<T: Submit> Submit for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
+        // Log
         println!(
             "action = 'submit', status = {status}, duration = {duration}, error = {:?}",
             out.as_ref().err()
         );
+
+        // Metrics
+        if let Some(MetricParams {
+            counter, recorder, ..
+        }) = &self.1
+        {
+            // Count
+            counter.with_label_values(&[status]).inc();
+
+            // Latency
+            recorder.with_label_values(&[status]).observe(duration);
+        }
 
         return out;
     }
