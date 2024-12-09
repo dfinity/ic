@@ -3192,7 +3192,7 @@ impl SystemApi for SystemApiImpl {
                         .sandbox_safe_system_state
                         .mint_cycles(Cycles::from(amount))?;
                     // the actually minted amount cannot be larger than the argument, which is a u64.
-                    debug_assert!(actually_minted.high64(), 0);
+                    debug_assert_eq!(actually_minted.high64(), 0, "ic0_mint_cycles was called with u64 but minted more cycles than fit into 64 bit");
                     Ok(actually_minted.low64())
                 }
             }

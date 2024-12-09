@@ -1023,7 +1023,7 @@ impl CyclesAccountManager {
             );
             Err(CyclesAccountManagerError::ContractViolation(error_str))
         } else {
-            let before_balance = cycles_balance.clone();
+            let before_balance = *cycles_balance;
             *cycles_balance += amount_to_mint;
             // equal to amount_to_mint, except when the addition saturated
             Ok(*cycles_balance - before_balance)
