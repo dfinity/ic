@@ -2717,6 +2717,7 @@ fn add_content_parallel(
     result.push(path.to_path_buf());
     let metadata = path.metadata()?;
     if metadata.is_dir() {
+        println!("{}", path.display());
         if path.ends_with("canister_states") {
             println!("dir_list_recursive_parallel enters canister_states");
             let res = parallel_map(thread_pool, path.read_dir().unwrap(), |entry| {

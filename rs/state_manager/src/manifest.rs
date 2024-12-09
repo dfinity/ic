@@ -570,6 +570,7 @@ fn files_with_sizes_parallel(
     if metadata.is_file() {
         files.push(FileWithSize(relative_path, metadata.len()))
     } else if relative_path == PathBuf::from("canister_states") {
+        println!("{}", relative_path.display());
         println!("files_with_sizes_parallel enters canister_states");
         let res = parallel_map(thread_pool, absolute_path.read_dir().unwrap(), |entry| {
             let entry = entry.as_ref().unwrap();
@@ -579,6 +580,7 @@ fn files_with_sizes_parallel(
         });
         files.extend(res);
     } else {
+        println!("{}", relative_path.display());
         assert!(
             metadata.is_dir(),
             "Checkpoints must not contain special files, found one at {}",
