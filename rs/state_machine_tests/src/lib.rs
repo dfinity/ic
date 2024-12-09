@@ -2153,7 +2153,7 @@ impl StateMachine {
 
                 if let Some(ref aux) = context.schnorr_args().taproot_tree_root {
                     if let Ok(sig) =
-                        dk.sign_message_with_bip341_no_rng(&context.schnorr_args().message, &aux)
+                        dk.sign_message_with_bip341_no_rng(&context.schnorr_args().message, aux)
                     {
                         sig.to_vec()
                     } else {
@@ -2180,7 +2180,7 @@ impl StateMachine {
                 if context.schnorr_args().taproot_tree_root.is_some() {
                     return Err(UserError::new(
                         ErrorCode::CanisterRejectedMessage,
-                        format!("Ed25519 does not use BIP341 aux parameter"),
+                        "Ed25519 does not use BIP341 aux parameter".to_string(),
                     ));
                 }
 
