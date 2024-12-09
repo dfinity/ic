@@ -315,6 +315,22 @@ impl RootOfTrustProvider for ConstantRootOfTrustProvider {
 /// A zero-sized struct that implements the `IngressSigVerifier` trait.
 pub struct StandaloneIngressSigVerifier;
 
+impl<S: Signable> BasicSigVerifierByPublicKey<S> for StandaloneIngressSigVerifier {
+    fn verify_basic_sig_by_public_key(
+        &self,
+        signature: &BasicSigOf<S>,
+        signed_bytes: &S,
+        public_key: &UserPublicKey,
+    ) -> CryptoResult<()> {
+        ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key(
+            public_key.algorithm_id,
+            &signed_bytes.as_signed_bytes(),
+            &signature.get_ref().0,
+            &public_key.key,
+        )
+    }
+}
+
 impl<S: Signable> CanisterSigVerifier<S> for StandaloneIngressSigVerifier {
     fn verify_canister_sig(
         &self,
