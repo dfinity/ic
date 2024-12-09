@@ -9,11 +9,7 @@ use on_wire::IntoWire;
 use rand::Rng;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use ic_nns_governance_api::pb::v1::{
-    manage_neuron::{self, configure, Command, NeuronIdOrSubaccount},
-    ClaimOrRefreshNeuronFromAccount, ManageNeuron,
-};
-
+use crate::request_types::RefreshVotingPower;
 use crate::{
     convert,
     convert::{make_read_state_from_update, to_arg, to_model_account_identifier},
@@ -32,6 +28,10 @@ use crate::{
         NeuronInfo, PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType,
         SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
     },
+};
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron::{self, configure, Command, NeuronIdOrSubaccount},
+    ClaimOrRefreshNeuronFromAccount, ManageNeuron,
 };
 use rosetta_core::convert::principal_id_from_public_key;
 
@@ -223,6 +223,13 @@ impl RosettaRequestHandler {
                     &ingress_expiries,
                 )?,
                 Request::Follow(req) => handle_follow(
+                    req,
+                    &mut payloads,
+                    &mut updates,
+                    &pks_map,
+                    &ingress_expiries,
+                )?,
+                Request::RefreshVotingPower(req) => handle_refresh_voting_power(
                     req,
                     &mut payloads,
                     &mut updates,
@@ -883,6 +890,29 @@ fn handle_follow(
     Ok(())
 }
 
+fn handle_refresh_voting_power(
+    req: RefreshVotingPower,
+    payloads: &mut Vec<SigningPayload>,
+    updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
+    ingress_expiries: &[u64],
+) -> Result<(), ApiError> {
+    let account = req.account;
+    let neuron_index = req.neuron_index;
+    let command = Command::RefreshVotingPower(manage_neuron::RefreshVotingPower {});
+    add_neuron_management_payload(
+        RequestType::RefreshVotingPower { neuron_index },
+        account,
+        None,
+        neuron_index,
+        command,
+        payloads,
+        updates,
+        pks_map,
+        ingress_expiries,
+    )?;
+    Ok(())
+}
 fn add_neuron_management_payload(
     request_type: RequestType,
     account: icp_ledger::AccountIdentifier,

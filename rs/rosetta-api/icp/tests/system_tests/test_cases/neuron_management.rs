@@ -1369,3 +1369,63 @@ fn test_list_neurons() {
         );
     });
 }
+
+#[test]
+fn test_refresh_voting_power() {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async {
+        let env = RosettaTestingEnvironment::builder()
+            .with_initial_balances(
+                vec![(
+                    AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()),
+                    // A hundred million ICP should be enough
+                    icp_ledger::Tokens::from_tokens(100_000_000).unwrap(),
+                )]
+                .into_iter()
+                .collect(),
+            )
+            .with_governance_canister()
+            .build()
+            .await;
+
+        // Stake the minimum amount 100 million e8s
+        let staked_amount = 100_000_000u64;
+        let neuron_index = 0;
+        let from_subaccount = [0; 32];
+
+        env.rosetta_client
+            .create_neuron(
+                env.network_identifier.clone(),
+                &(*TEST_IDENTITY).clone(),
+                RosettaCreateNeuronArgs::builder(staked_amount.into())
+                    .with_from_subaccount(from_subaccount)
+                    .with_neuron_index(neuron_index)
+                    .build(),
+            )
+            .await
+            .unwrap();
+
+        let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
+        let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
+        let refresh_timestamp = neuron.voting_power_refreshed_timestamp_seconds.unwrap();
+
+        // Wait for a second before updating the voting power. This is done so the timestamp is sure to have a different value when refreshed
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        TransactionOperationResults::try_from(
+            env.rosetta_client
+                .refresh_voting_power(
+                    env.network_identifier.clone(),
+                    &(*TEST_IDENTITY).clone(),
+                    neuron_index,
+                )
+                .await
+                .unwrap()
+                .metadata,
+        )
+        .unwrap();
+
+        let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
+        // The voting power should have been refreshed
+        assert!(neuron.voting_power_refreshed_timestamp_seconds.unwrap() > refresh_timestamp);
+    });
+}
