@@ -39,6 +39,18 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
 
+/// Desired byte size of an outgoing stream.
+///
+/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
+/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
+const TARGET_STREAM_SIZE_BYTES: usize = 10 * 1024 * 1024;
+
+/// Maximum number of messages in a stream.
+///
+/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
+/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
+const MAX_STREAM_MESSAGES: usize = 10_000;
+
 /// Maximum message length of a synthetic reject response produced by message
 /// routing.
 pub const MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN: usize = 255;
@@ -370,6 +382,30 @@ impl MemoryTaken {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
+pub struct MessagesLimits {
+    /// Desired byte size of an outgoing stream.
+    ///
+    /// At most `max_stream_messages` are enqueued into a stream; but only until its
+    /// `count_bytes()` is greater than or equal to `target_stream_size_bytes`.
+    pub target_stream_size_bytes: usize,
+
+    /// Maximum number of messages in a stream.
+    ///
+    /// At most `max_stream_messages` are enqueued into a stream; but only until its
+    /// `count_bytes()` is greater than or equal to `target_stream_size_bytes`.
+    pub max_stream_messages: usize,
+}
+
+impl Default for MessagesLimits {
+    fn default() -> Self {
+        Self {
+            target_stream_size_bytes: TARGET_STREAM_SIZE_BYTES,
+            max_stream_messages: MAX_STREAM_MESSAGES,
+        }
+    }
+}
+
 /// ReplicatedState is the deterministic replicated state of the system.
 /// Broadly speaking it consists of two parts:  CanisterState used for canister
 /// execution and SystemMetadata used for message routing and history queries.
@@ -415,11 +451,23 @@ pub struct ReplicatedState {
     /// Manages the canister snapshots.
     #[validate_eq(CompareWithValidateEq)]
     pub canister_snapshots: CanisterSnapshots,
+
+    /// Contains limits for the stream size and the number of messages in queues.
+    messages_limits: MessagesLimits,
 }
 
 impl ReplicatedState {
-    /// Creates a new empty replicated state.
+    /// Creates a new empty replicated state with default limits.
     pub fn new(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> ReplicatedState {
+        Self::new_with_limits(own_subnet_id, own_subnet_type, MessagesLimits::default())
+    }
+
+    /// Creates a new empty replicated state with the specified limits.
+    pub fn new_with_limits(
+        own_subnet_id: SubnetId,
+        own_subnet_type: SubnetType,
+        messages_limits: MessagesLimits,
+    ) -> ReplicatedState {
         ReplicatedState {
             canister_states: BTreeMap::new(),
             metadata: SystemMetadata::new(own_subnet_id, own_subnet_type),
@@ -427,6 +475,7 @@ impl ReplicatedState {
             consensus_queue: Vec::new(),
             epoch_query_stats: RawQueryStats::default(),
             canister_snapshots: CanisterSnapshots::default(),
+            messages_limits,
         }
     }
 
@@ -445,6 +494,7 @@ impl ReplicatedState {
             consensus_queue: Vec::new(),
             epoch_query_stats,
             canister_snapshots,
+            messages_limits: MessagesLimits::default(),
         };
         res.update_stream_guaranteed_responses_size_bytes();
         res
@@ -877,6 +927,10 @@ impl ReplicatedState {
         )
     }
 
+    pub fn messages_limits(&self) -> &MessagesLimits {
+        &self.messages_limits
+    }
+
     pub fn time(&self) -> Time {
         self.metadata.time()
     }
@@ -1144,6 +1198,7 @@ impl ReplicatedState {
             consensus_queue,
             epoch_query_stats: _,
             mut canister_snapshots,
+            messages_limits,
         } = self;
 
         // Consensus queue is always empty at the end of the round.
@@ -1183,6 +1238,7 @@ impl ReplicatedState {
             consensus_queue,
             epoch_query_stats: RawQueryStats::default(), // Don't preserve query stats during subnet splitting.
             canister_snapshots,
+            messages_limits,
         })
     }
 
@@ -1206,6 +1262,7 @@ impl ReplicatedState {
             consensus_queue: _,
             epoch_query_stats: _,
             canister_snapshots: _,
+            messages_limits: _,
         } = self;
 
         // Reset query stats after subnet split
@@ -1385,6 +1442,7 @@ pub mod testing {
             epoch_query_stats: Default::default(),
             // TODO(EXC-1527): Handle canister snapshots during a subnet split.
             canister_snapshots: CanisterSnapshots::default(),
+            messages_limits: MessagesLimits::default(),
         };
     }
 }
