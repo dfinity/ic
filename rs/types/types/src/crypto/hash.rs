@@ -16,6 +16,7 @@ use crate::consensus::{
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgDealingSupport, IDkgTranscript, SignedIDkgDealing,
 };
+use crate::crypto::vetkd::VetKdEncryptedKeyShareContent;
 use crate::crypto::{CryptoHash, CryptoHashOf, Signed};
 use crate::messages::{HttpCanisterUpdate, MessageId, SignedRequestBytes};
 use crate::signature::{
@@ -118,6 +119,8 @@ mod private {
     impl CryptoHashDomainSeal for IDkgTranscript {}
     impl CryptoHashDomainSeal for EcdsaSigShare {}
     impl CryptoHashDomainSeal for SchnorrSigShare {}
+
+    impl CryptoHashDomainSeal for VetKdEncryptedKeyShareContent {}
 
     impl CryptoHashDomainSeal for IDkgComplaintContent {}
     impl CryptoHashDomainSeal for Signed<IDkgComplaintContent, BasicSignature<IDkgComplaintContent>> {}
@@ -377,6 +380,12 @@ impl CryptoHashDomain for EcdsaSigShare {
 impl CryptoHashDomain for SchnorrSigShare {
     fn domain(&self) -> String {
         DomainSeparator::SchnorrSigShare.to_string()
+    }
+}
+
+impl CryptoHashDomain for VetKdEncryptedKeyShareContent {
+    fn domain(&self) -> String {
+        DomainSeparator::VetKdEncryptedKeyShareContent.to_string()
     }
 }
 

@@ -6,6 +6,7 @@ use crate::vault::api::{
     CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspTlsKeygenError,
     CspTlsSignError, IDkgCreateDealingVaultError, PublicRandomSeedGeneratorError,
     ThresholdSchnorrSigShareBytes, ValidatePksAndSksError,
+    VetKdEncryptedKeyShareCreationVaultError,
 };
 use crate::vault::api::{
     CspPublicKeyStoreError, CspVault, IDkgDealingInternalBytes, IDkgTranscriptInternalBytes,
@@ -44,6 +45,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgTranscriptOperation,
 };
+use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
 use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
@@ -523,6 +525,28 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 key_raw,
                 presig_raw,
                 algorithm_id,
+            )
+        };
+        execute_on_thread_pool(&self.thread_pool, job).await
+    }
+
+    async fn create_encrypted_vetkd_key_share(
+        self,
+        _: context::Context,
+        key_id: KeyId,
+        master_public_key: ByteBuf,
+        encryption_public_key: ByteBuf,
+        derivation_path: ExtendedDerivationPath,
+        derivation_id: ByteBuf,
+    ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError> {
+        let vault = self.local_csp_vault;
+        let job = move || {
+            vault.create_encrypted_vetkd_key_share(
+                key_id,
+                master_public_key.into_vec(),
+                encryption_public_key.into_vec(),
+                derivation_path,
+                derivation_id.into_vec(),
             )
         };
         execute_on_thread_pool(&self.thread_pool, job).await
