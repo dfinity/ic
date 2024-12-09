@@ -2272,9 +2272,8 @@ fn ic0_mint_cycles_succeeds_on_cmc() {
     );
 }
 
-#[test]
-fn ic0_mint_cycles128_fails_on_application_subnet() {
-    let mut test = ExecutionTestBuilder::new().build();
+// helper for mint_cycles128 tests
+fn verify_error_and_no_effect(mut test: ExecutionTest) {
     let canister_id = test.universal_canister().unwrap();
     let initial_cycles = test.canister_state(canister_id).system_state.balance();
     let payload = wasm()
@@ -2297,29 +2296,17 @@ fn ic0_mint_cycles128_fails_on_application_subnet() {
 }
 
 #[test]
+fn ic0_mint_cycles128_fails_on_application_subnet() {
+    let test = ExecutionTestBuilder::new().build();
+    verify_error_and_no_effect(test);
+}
+
+#[test]
 fn ic0_mint_cycles128_fails_on_system_subnet_non_cmc() {
-    let mut test = ExecutionTestBuilder::new()
+    let test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .build();
-    let canister_id = test.universal_canister().unwrap();
-    let initial_cycles = test.canister_state(canister_id).system_state.balance();
-    let payload = wasm()
-        .mint_cycles128(Cycles::from((1u128 << 64) + 2u128))
-        .reply_data_append()
-        .reply()
-        .build();
-    let err = test.ingress(canister_id, "update", payload).unwrap_err();
-    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
-    assert!(err
-        .description()
-        .contains("ic0.mint_cycles cannot be executed"));
-    let canister_state = test.canister_state(canister_id);
-    assert_eq!(0, canister_state.system_state.queues().output_queues_len());
-    assert_balance_equals(
-        initial_cycles,
-        canister_state.system_state.balance(),
-        BALANCE_EPSILON,
-    );
+    verify_error_and_no_effect(test);
 }
 
 #[test]
