@@ -168,8 +168,8 @@ rust_test_suite_with_extra_srcs(
         ["tests/**/*.rs"],
         exclude = [
             # The following tests are flaky when run as part of this test suite.
-            # So they have been moved to dedicated bazel targets below such that we can
-            # different CPU reservations and better logging.
+            # So they have been moved to dedicated bazel targets below
+            # such that we can have different CPU reservations and better logging.
             "tests/sns_upgrade_test_utils.rs",
             "tests/upgrade_everything_test.rs",
             "tests/advance_target_version_upgrades_all_canisters_test.rs",
