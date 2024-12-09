@@ -119,7 +119,7 @@ fn transform(raw: TransformArgs) -> HttpResponse {
 
 #[ic_cdk::init]
 fn init(arg: CheckArg) {
-    const DEFAULT_NUM_SUBNET_NODES: u16 = 13;
+    const DEFAULT_NUM_SUBNET_NODES: u16 = 34;
     match arg {
         CheckArg::InitArg(init_arg) => set_config(
             Config::new_and_validate(
