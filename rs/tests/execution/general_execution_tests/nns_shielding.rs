@@ -135,7 +135,7 @@ pub fn mint_cycles_not_supported_on_application_subnet(env: TestEnv) {
         let after_balance = get_balance(&canister_id, &agent).await;
         assert!(
             after_balance < before_balance,
-            "expected {} < expected {}",
+            "expected {} < {}",
             after_balance,
             before_balance
         );
@@ -232,7 +232,7 @@ pub fn mint_cycles128_not_supported_on_application_subnet(env: TestEnv) {
         let after_balance = get_balance(&canister_id, &agent).await;
         assert!(
             after_balance < before_balance,
-            "expected {} < expected {}",
+            "expected {} < {}",
             after_balance,
             before_balance
         );
