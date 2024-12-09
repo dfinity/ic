@@ -8,6 +8,10 @@ use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
 use ic_canister_client::Agent;
+use prometheus::{
+    register_histogram_vec_with_registry, register_int_counter_vec_with_registry, HistogramOpts,
+    HistogramVec, IntCounterVec, Registry,
+};
 use rsa::{
     pkcs1::{DecodeRsaPublicKey, EncodeRsaPublicKey},
     rand_core::CryptoRngCore,
@@ -20,7 +24,58 @@ use tokio::{sync::Mutex, time::sleep};
 const SALT_SIZE: usize = 64;
 const RSA_KEY_SIZE: usize = 2048;
 
-struct WithLogs<T>(T);
+#[derive(Clone, Debug)]
+pub struct MetricParams {
+    pub action: String,
+    pub counter: IntCounterVec,
+    pub recorder: HistogramVec,
+}
+
+impl MetricParams {
+    pub fn new(registry: &Registry, action: &str) -> Self {
+        Self::new_with_opts(registry, action, &["status"], None)
+    }
+
+    pub fn new_with_opts(
+        registry: &Registry,
+        action: &str,
+        labels: &[&str],
+        buckets: Option<&[f64]>,
+    ) -> Self {
+        let mut recorder_opts = HistogramOpts::new(
+            format!("{action}_duration_sec"),                             // name
+            format!("Records the duration of {action} calls in seconds"), // description
+        );
+
+        // Set histogram buckets if given
+        buckets.inspect(|bs| {
+            recorder_opts.buckets = bs.to_vec();
+        });
+
+        Self {
+            action: action.to_string(),
+
+            // Count
+            counter: register_int_counter_vec_with_registry!(
+                format!("{action}_total"),                       // name
+                format!("Counts occurrences of {action} calls"), // description
+                labels,                                          // labels
+                registry,                                        // registry
+            )
+            .expect("failed to register counter"),
+
+            // Duration
+            recorder: register_histogram_vec_with_registry!(
+                recorder_opts, // options
+                labels,        // labels
+                registry,      // registry
+            )
+            .expect("failed to register histogram"),
+        }
+    }
+}
+
+struct WithMetrics<T>(T, Option<MetricParams>);
 
 pub struct ThrottleParams {
     pub d: Duration,
@@ -92,7 +147,7 @@ pub trait Register: Sync + Send {
 }
 
 #[async_trait]
-impl<T: Register> Register for WithLogs<T> {
+impl<T: Register> Register for WithMetrics<T> {
     async fn register(&self, pubkey: &[u8]) -> Result<(), RegisterError> {
         let start_time = Instant::now();
 
@@ -181,7 +236,7 @@ pub trait Query: Sync + Send {
 }
 
 #[async_trait]
-impl<T: Query> Query for WithLogs<T> {
+impl<T: Query> Query for WithMetrics<T> {
     async fn query(&self) -> Result<Vec<u8>, QueryError> {
         let start_time = Instant::now();
 
@@ -226,7 +281,7 @@ pub trait Submit: Sync + Send {
 }
 
 #[async_trait]
-impl<T: Submit> Submit for WithLogs<T> {
+impl<T: Submit> Submit for WithMetrics<T> {
     async fn submit(&self, vs: &[Pair]) -> Result<(), SubmitError> {
         let start_time = Instant::now();
 
@@ -424,23 +479,43 @@ pub struct CanisterMethods {
     submit: Arc<dyn Submit>,
 }
 
-impl From<Canister> for CanisterMethods {
-    fn from(value: Canister) -> Self {
+pub struct CanisterMethodsBuilder<'a> {
+    canister: Canister,
+    registry: Option<&'a Registry>,
+}
+
+impl<'a> CanisterMethodsBuilder<'a> {
+    pub fn new(c: Canister) -> Self {
         Self {
-            register: Arc::new({
-                let v = value.clone();
-                let v = WithLogs(v);
-                WithThrottle(v, ThrottleParams::new(Duration::from_secs(10)))
-            }),
-            query: Arc::new({
-                let v = value.clone();
-                let v = WithLogs(v);
-                WithThrottle(v, ThrottleParams::new(Duration::from_secs(10)))
-            }),
-            submit: Arc::new({
-                let v = value.clone();
-                WithLogs(v)
-            }),
+            canister: c,
+            registry: None,
+        }
+    }
+
+    pub fn with_metrics(mut self, r: &'a Registry) -> Self {
+        self.registry = Some(r);
+        self
+    }
+
+    pub fn build(self) -> CanisterMethods {
+        CanisterMethods {
+            register: {
+                let v = self.canister.clone();
+                let v = WithMetrics(v, self.registry.map(|r| MetricParams::new(r, "register")));
+                let v = WithThrottle(v, ThrottleParams::new(Duration::from_secs(10)));
+                Arc::new(v)
+            },
+            query: {
+                let v = self.canister.clone();
+                let v = WithMetrics(v, self.registry.map(|r| MetricParams::new(r, "query")));
+                let v = WithThrottle(v, ThrottleParams::new(Duration::from_secs(10)));
+                Arc::new(v)
+            },
+            submit: {
+                let v = self.canister.clone();
+                let v = WithMetrics(v, self.registry.map(|r| MetricParams::new(r, "submit")));
+                Arc::new(v)
+            },
         }
     }
 }

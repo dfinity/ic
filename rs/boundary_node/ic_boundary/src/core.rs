@@ -7,7 +7,9 @@ use std::{
 };
 
 use anonymization_client::{
-    Canister as AnonymizationCanister, Track, Tracker as AnonymizationTracker,
+    Canister as AnonymizationCanister,
+    CanisterMethodsBuilder as AnonymizationCanisterMethodsBuilder, Track,
+    Tracker as AnonymizationTracker,
 };
 use anyhow::{anyhow, Context, Error};
 use arc_swap::ArcSwapOption;
@@ -482,11 +484,15 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 log_anonymization_cid, // canister_id
             );
 
+            let cm = AnonymizationCanisterMethodsBuilder::new(c)
+                .with_metrics(&metrics_registry)
+                .build();
+
             // Rng
             let rng = Box::new(OsRng);
 
             // Tracker
-            let tracker = AnonymizationTracker::new(rng, c.into())?;
+            let tracker = AnonymizationTracker::new(rng, cm)?;
 
             Some(tracker)
         }
