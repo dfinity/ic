@@ -10,7 +10,7 @@ use macaddr::MacAddr6;
 
 use crate::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use crate::deployment_json::get_deployment_settings;
-use crate::serialize_and_write_config;
+use crate::{deserialize_config, serialize_and_write_config};
 use config_types::*;
 use network::resolve_mgmt_mac;
 
@@ -25,6 +25,18 @@ pub fn update_guestos_config() -> Result<()> {
 
     let network_conf_path = config_dir.join("network.conf");
     let config_json_path = config_dir.join("config.json");
+
+    // If a config already exists and is Testnet, do not update.
+    if config_json_path.exists() {
+        if let Ok(existing_config) = deserialize_config::<GuestOSConfig, _>(&config_json_path) {
+            if existing_config.icos_settings.deployment_environment
+                == DeploymentEnvironment::Testnet
+            {
+                println!("A new GuestOSConfig already exists and the environment is Testnet. Skipping update.");
+                return Ok(());
+            }
+        }
+    }
 
     let old_config_exists = network_conf_path.exists();
 
@@ -238,6 +250,19 @@ pub fn update_hostos_config(
     deployment_json_path: &Path,
     hostos_config_json_path: &PathBuf,
 ) -> Result<()> {
+    // If a config already exists and is Testnet, do not update.
+    if hostos_config_json_path.exists() {
+        if let Ok(existing_config) = deserialize_config::<HostOSConfig, _>(&hostos_config_json_path)
+        {
+            if existing_config.icos_settings.deployment_environment
+                == DeploymentEnvironment::Testnet
+            {
+                println!("A new HostOSConfig already exists and the environment is Testnet. Skipping update.");
+                return Ok(());
+            }
+        }
+    }
+
     let old_config_exists = config_ini_path.exists();
 
     if old_config_exists {
