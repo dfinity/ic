@@ -30,6 +30,7 @@ use ic_replicated_state::PageIndex;
 use ic_state_layout::{CheckpointLayout, ReadOnly, CANISTER_FILE, UNVERIFIED_CHECKPOINT_MARKER};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
 use ic_types::{crypto::CryptoHash, state_sync::StateSyncVersion, CryptoHashOfState, Height};
+use ic_utils::thread::parallel_map;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -37,7 +38,6 @@ use std::fmt;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
-use ic_utils::thread::parallel_map;
 
 /// When computing a manifest, we recompute the hash of every
 /// `REHASH_EVERY_NTH_CHUNK` chunk, even if we know it to be unchanged and
@@ -570,17 +570,12 @@ fn files_with_sizes_parallel(
     if metadata.is_file() {
         files.push(FileWithSize(relative_path, metadata.len()))
     } else if relative_path == PathBuf::from("canister_states") {
-        let res = parallel_map(
-            thread_pool,
-            absolute_path.read_dir().unwrap(),
-            |entry| {
-                let entry = entry.as_ref().unwrap();
-                let metadata = entry.metadata().as_ref().unwrap();
-                let relative_path = relative_path.join(entry.file_name());
-                let file_len = metadata.len();
-                FileWithSize(relative_path, file_len)
-            },
-        );
+        let res = parallel_map(thread_pool, absolute_path.read_dir().unwrap(), |entry| {
+            let entry = entry.as_ref().unwrap();
+            let file_len = entry.metadata().as_ref().unwrap().len();
+            let relative_path = relative_path.join(entry.file_name());
+            FileWithSize(relative_path, file_len)
+        });
         files.extend(res);
     } else {
         assert!(
@@ -932,7 +927,12 @@ pub fn compute_manifest(
     let start = std::time::Instant::now();
     let mut files_parrallel = {
         let mut files_parrallel = Vec::new();
-        files_with_sizes_parallel(thread_pool, checkpoint.raw_path(), "".into(), &mut files_parrallel)?;
+        files_with_sizes_parallel(
+            thread_pool,
+            checkpoint.raw_path(),
+            "".into(),
+            &mut files_parrallel,
+        )?;
         // We sort the table to make sure that the table is the same on all replicas
         files_parrallel.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
         files_parrallel
@@ -940,7 +940,9 @@ pub fn compute_manifest(
     let elapsed = start.elapsed();
     info!(
         log,
-        "files_with_sizes_parallel took {:?} for {} files", elapsed, files_parrallel.len()
+        "files_with_sizes_parallel took {:?} for {} files",
+        elapsed,
+        files_parrallel.len()
     );
 
     let start = std::time::Instant::now();
@@ -954,15 +956,21 @@ pub fn compute_manifest(
     let elapsed = start.elapsed();
     info!(
         log,
-        "files_with_sizes took {:?} for {} files", elapsed, files.len(),
+        "files_with_sizes took {:?} for {} files",
+        elapsed,
+        files.len(),
     );
     if files == files_parrallel {
-        info!(log, "files_with_sizes_parallel and files_with_sizes produced the same result");
+        info!(
+            log,
+            "files_with_sizes_parallel and files_with_sizes produced the same result"
+        );
     } else {
-        error!(log, "files_with_sizes_parallel and files_with_sizes produced different results");
+        error!(
+            log,
+            "files_with_sizes_parallel and files_with_sizes produced different results"
+        );
     }
-
-
 
     // Currently, the unverified checkpoint marker file should already be removed by the time we reach this point.
     // If it accidentally exists, the replica will crash in the outer function `handle_compute_manifest_request`.
