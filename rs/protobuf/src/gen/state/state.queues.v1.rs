@@ -88,6 +88,23 @@ pub struct RejectContext {
     #[prost(string, tag = "2")]
     pub reject_message: ::prost::alloc::string::String,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConsensusResponse {
+    #[prost(uint64, tag = "3")]
+    pub callback: u64,
+    #[prost(oneof = "consensus_response::Payload", tags = "5, 6")]
+    pub payload: ::core::option::Option<consensus_response::Payload>,
+}
+/// Nested message and enum types in `ConsensusResponse`.
+pub mod consensus_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Payload {
+        #[prost(bytes, tag = "5")]
+        Data(::prost::alloc::vec::Vec<u8>),
+        #[prost(message, tag = "6")]
+        Reject(super::RejectContext),
+    }
+}
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct Response {
     #[prost(message, optional, tag = "1")]
