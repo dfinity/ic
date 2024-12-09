@@ -1127,10 +1127,6 @@ pub trait SystemApi {
     ///
     /// Adds no more cycles than `amount`.
     ///
-    /// The canister balance afterwards does not exceed
-    /// maximum amount of cycles it can hold.
-    /// However, canisters on system subnets have no balance limit.
-    ///
     /// Returns the amount of cycles added to the canister's balance.
     fn ic0_mint_cycles(&mut self, amount: u64) -> HypervisorResult<u64>;
 
@@ -1138,10 +1134,6 @@ pub trait SystemApi {
     /// Adds cycles to the canister's balance.
     ///
     /// Adds no more cycles than `amount`.
-    ///
-    /// The canister balance afterwards does not exceed
-    /// maximum amount of cycles it can hold.
-    /// However, canisters on system subnets have no balance limit.
     ///
     /// The amount of cycles added to the canister's balance is
     /// represented by a 128-bit value and is copied in the canister
