@@ -2,18 +2,18 @@ use std::collections::HashMap;
 
 use candid::CandidType;
 use ic_base_types::PrincipalId;
-use ic_management_canister_types::{NodeMetrics, NodeMetricsHistoryResponse};
+use ic_management_canister_types::NodeMetricsHistoryResponse;
+use num_traits::FromPrimitive;
+use rust_decimal::Decimal;
 use serde::Deserialize;
 
 use crate::v1_logs::RewardsLog;
 
 pub type NodeMultiplierStats = (PrincipalId, MultiplierStats);
-pub type RewardablesWithNodesMetrics = (
-    HashMap<RegionNodeTypeCategory, u32>,
-    HashMap<RewardableNode, Vec<DailyNodeMetrics>>,
-);
 pub type RegionNodeTypeCategory = (String, String);
 pub type TimestampNanos = u64;
+
+pub type SubnetMetricsHistory = (PrincipalId, Vec<NodeMetricsHistoryResponse>);
 
 #[derive(Clone, Hash, Eq, PartialEq)]
 pub struct RewardableNode {
@@ -21,68 +21,37 @@ pub struct RewardableNode {
     pub node_provider_id: PrincipalId,
     pub region: String,
     pub node_type: String,
-    pub node_metrics: Option<Vec<DailyNodeMetrics>>,
 }
 
-#[derive(Clone, Hash, Eq, PartialEq)]
+#[derive(Clone, Hash, Eq, PartialEq, Debug, Default)]
 pub struct DailyNodeMetrics {
+    pub ts: u64,
+    pub subnet_assigned: PrincipalId,
     pub num_blocks_proposed: u64,
     pub num_blocks_failed: u64,
+    pub failure_rate: Decimal,
 }
 
-pub struct NodesMetricsHistory(Vec<NodeMetricsHistoryResponse>);
-
-impl From<NodesMetricsHistory> for HashMap<PrincipalId, Vec<DailyNodeMetrics>> {
-    fn from(nodes_metrics: NodesMetricsHistory) -> Self {
-        let mut sorted_metrics = nodes_metrics.0;
-        sorted_metrics.sort_by_key(|metrics| metrics.timestamp_nanos);
-        let mut sorted_metrics_per_node: HashMap<PrincipalId, Vec<NodeMetrics>> =
-            HashMap::default();
-
-        for metrics in sorted_metrics {
-            for node_metrics in metrics.node_metrics {
-                sorted_metrics_per_node
-                    .entry(node_metrics.node_id)
-                    .or_default()
-                    .push(node_metrics);
-            }
+impl DailyNodeMetrics {
+    pub fn new(
+        ts: u64,
+        subnet_assigned: PrincipalId,
+        num_blocks_proposed: u64,
+        num_blocks_failed: u64,
+    ) -> Self {
+        let daily_total = num_blocks_proposed + num_blocks_failed;
+        let failure_rate = if daily_total == 0 {
+            Decimal::ZERO
+        } else {
+            Decimal::from_f64(num_blocks_failed as f64 / daily_total as f64).unwrap()
+        };
+        DailyNodeMetrics {
+            ts,
+            num_blocks_proposed,
+            num_blocks_failed,
+            subnet_assigned,
+            failure_rate,
         }
-
-        sorted_metrics_per_node
-            .into_iter()
-            .map(|(node_id, metrics)| {
-                let mut daily_node_metrics = Vec::new();
-                let mut previous_proposed_total = 0;
-                let mut previous_failed_total = 0;
-
-                for node_metrics in metrics {
-                    let current_proposed_total = node_metrics.num_blocks_proposed_total;
-                    let current_failed_total = node_metrics.num_block_failures_total;
-
-                    let (num_blocks_proposed, num_blocks_failed) = if previous_failed_total
-                        > current_failed_total
-                        || previous_proposed_total > current_proposed_total
-                    {
-                        // This is the case when node is deployed again
-                        (current_proposed_total, current_failed_total)
-                    } else {
-                        (
-                            current_proposed_total - previous_proposed_total,
-                            current_failed_total - previous_failed_total,
-                        )
-                    };
-
-                    daily_node_metrics.push(DailyNodeMetrics {
-                        num_blocks_proposed,
-                        num_blocks_failed,
-                    });
-
-                    previous_proposed_total = num_blocks_proposed;
-                    previous_failed_total = num_blocks_failed;
-                }
-                (node_id, daily_node_metrics)
-            })
-            .collect()
     }
 }
 
@@ -98,7 +67,7 @@ pub struct MultiplierStats {
 }
 
 pub struct RewardsPerNodeProvider {
-    pub rewards_per_node_provider: HashMap<PrincipalId, (Rewards, Vec<NodeMultiplierStats>)>,
+    pub rewards_per_node_provider: HashMap<PrincipalId, Rewards>,
     pub rewards_log_per_node_provider: HashMap<PrincipalId, RewardsLog>,
 }
 
