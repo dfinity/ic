@@ -17,6 +17,7 @@ use crate::{
         with_stable_neuron_store_mut,
     },
     use_stable_memory_following_index, Clock, IcClock,
+    CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS,
 };
 use dyn_clone::DynClone;
 use ic_base_types::PrincipalId;
@@ -1394,6 +1395,15 @@ pub fn prune_some_following(
     carry_on: impl FnMut() -> bool,
 ) -> Bound<NeuronId> {
     let now_seconds = neuron_store.now();
+
+    if next == Bound::Unbounded {
+        CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS.with(
+            |start_timestamp_seconds| {
+                start_timestamp_seconds.set(now_seconds);
+            },
+        );
+    }
+
     groom_some_neurons(
         neuron_store,
         |neuron| {

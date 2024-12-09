@@ -214,6 +214,11 @@ thread_local! {
     static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
 }
 
+thread_local! {
+    static CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS: Cell<u64> =
+        const { Cell::new(0) };
+}
+
 pub fn is_voting_power_adjustment_enabled() -> bool {
     IS_VOTING_POWER_ADJUSTMENT_ENABLED.with(|ok| ok.get())
 }
@@ -444,6 +449,12 @@ pub fn encode_metrics(
         "governance_latest_gc_timestamp_seconds",
         governance.latest_gc_timestamp_seconds as f64,
         "Timestamp of the last proposal garbage collection event, in seconds since the Unix epoch.",
+    )?;
+    w.encode_gauge(
+        "governance_current_prune_following_full_cycle_start_timestamp_seconds",
+        CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS
+            .with(|timestamp_seconds| timestamp_seconds.get()) as f64,
+        "When the current full cycle of follow pruning started.",
     )?;
 
     // Proposals (more detailed breakdowns later).
