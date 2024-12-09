@@ -566,7 +566,7 @@ pub fn encode_metrics(
 
     w.encode_gauge(
         "governance_voting_power_total",
-        total_deciding_voting_power,
+        total_potential_voting_power,
         "Deprecated. Use governance_deciding_voting_power_total instead.",
     )?;
     w.encode_gauge(

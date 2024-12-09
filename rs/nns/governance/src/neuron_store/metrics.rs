@@ -167,7 +167,7 @@ impl NeuronSubsetMetrics {
             maturity_e8s_equivalent,
         );
 
-        increment(&mut self.total_voting_power, deciding_voting_power);
+        increment(&mut self.total_voting_power, potential_voting_power);
         increment(&mut self.total_deciding_voting_power, deciding_voting_power);
         increment(
             &mut self.total_potential_voting_power,
@@ -195,7 +195,7 @@ impl NeuronSubsetMetrics {
             maturity_e8s_equivalent,
         );
 
-        increment(&mut self.voting_power_buckets, deciding_voting_power);
+        increment(&mut self.voting_power_buckets, potential_voting_power);
         increment(
             &mut self.deciding_voting_power_buckets,
             deciding_voting_power,
