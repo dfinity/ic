@@ -1341,7 +1341,7 @@ impl RosettaClient {
 
     /// A neuron will lose its voting power over time when inactive
     /// To refresh the voting power of a neuron, you can use this function
-    /// For reference see the proposal for peioric confirmation of following: https://dashboard.internetcomputer.org/proposal/132411
+    /// For reference see the proposal for periodic confirmation of following: https://dashboard.internetcomputer.org/proposal/132411
     pub async fn refresh_voting_power<T>(
         &self,
         network_identifier: NetworkIdentifier,
