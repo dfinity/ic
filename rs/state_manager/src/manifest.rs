@@ -971,7 +971,7 @@ pub fn compute_manifest(
         elapsed,
         files.len(),
     );
-    if files == files_parrallel {
+    if files == files_parallel {
         info!(
             log,
             "files_with_sizes_parallel and files_with_sizes produced the same result"
