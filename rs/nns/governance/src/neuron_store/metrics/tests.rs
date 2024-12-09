@@ -227,7 +227,7 @@ fn test_compute_metrics() {
         )
         .unwrap();
 
-    let metrics = neuron_store.compute_neuron_metrics(now, 100_000_000);
+    let metrics = neuron_store.compute_neuron_metrics(E8, &VotingPowerEconomics::DEFAULT, now);
 
     let expected_metrics = NeuronMetrics {
         dissolving_neurons_count: 5,
@@ -345,12 +345,14 @@ fn test_compute_metrics_inactive_neuron_in_heap() {
         .unwrap();
 
     // Step 2: verify that 1 neuron (3) are inactive.
-    let actual_metrics = neuron_store.compute_neuron_metrics(now, 100_000_000);
+    let actual_metrics =
+        neuron_store.compute_neuron_metrics(E8, &VotingPowerEconomics::DEFAULT, now);
     assert_eq!(actual_metrics.garbage_collectable_neurons_count, 1);
 
     // Step 3: 2 days pass, and now neuron (2) is dissolved 15 days ago, and becomes inactive.
     let now = now + 2 * ONE_DAY_SECONDS;
-    let actual_metrics = neuron_store.compute_neuron_metrics(now, 100_000_000);
+    let actual_metrics =
+        neuron_store.compute_neuron_metrics(E8, &VotingPowerEconomics::DEFAULT, now);
     assert_eq!(actual_metrics.garbage_collectable_neurons_count, 2);
 }
 
@@ -482,7 +484,7 @@ fn test_compute_neuron_metrics_non_self_authenticating() {
     let NeuronMetrics {
         non_self_authenticating_controller_neuron_subset_metrics,
         ..
-    } = neuron_store.compute_neuron_metrics(now_seconds, E8);
+    } = neuron_store.compute_neuron_metrics(E8, &VotingPowerEconomics::DEFAULT, now_seconds);
 
     // Step 3: Inspect results.
     assert_eq!(
@@ -496,6 +498,8 @@ fn test_compute_neuron_metrics_non_self_authenticating() {
 
             // Voting power.
             total_voting_power: voting_power_1 + voting_power_3,
+            total_deciding_voting_power: voting_power_1 + voting_power_3,
+            total_potential_voting_power: voting_power_1 + voting_power_3,
 
             // Broken out by dissolve delay (rounded down to the nearest multiple of 6
             // months).
@@ -522,6 +526,14 @@ fn test_compute_neuron_metrics_non_self_authenticating() {
 
             // Analogous to total_voting_power.
             voting_power_buckets: hashmap! {
+                8  => voting_power_3,
+                16 => voting_power_1,
+            },
+            deciding_voting_power_buckets: hashmap! {
+                8  => voting_power_3,
+                16 => voting_power_1,
+            },
+            potential_voting_power_buckets: hashmap! {
                 8  => voting_power_3,
                 16 => voting_power_1,
             },
@@ -559,6 +571,7 @@ fn test_compute_neuron_metrics_public_neurons() {
     .with_staked_maturity_e8s_equivalent(101)
     .with_maturity_e8s_equivalent(110)
     .with_visibility(Some(Visibility::Public))
+    // DO NOT MERGE - Set refreshed_voting_power_timestamp_seconds
     .build();
 
     let neuron_2 = NeuronBuilder::new(
@@ -629,7 +642,7 @@ fn test_compute_neuron_metrics_public_neurons() {
     let NeuronMetrics {
         public_neuron_subset_metrics,
         ..
-    } = neuron_store.compute_neuron_metrics(now_seconds, E8);
+    } = neuron_store.compute_neuron_metrics(E8, &VotingPowerEconomics::DEFAULT, now_seconds);
 
     // Step 3: Inspect results.
     assert_eq!(
@@ -643,6 +656,8 @@ fn test_compute_neuron_metrics_public_neurons() {
 
             // Voting power.
             total_voting_power: voting_power_1 + voting_power_3,
+            total_deciding_voting_power: voting_power_1 + voting_power_3,
+            total_potential_voting_power: voting_power_1 + voting_power_3,
 
             // Broken out by dissolve delay (rounded down to the nearest multiple of 6
             // months).
@@ -669,6 +684,14 @@ fn test_compute_neuron_metrics_public_neurons() {
 
             // Analogous to total_voting_power.
             voting_power_buckets: hashmap! {
+                8  => voting_power_3,
+                16 => voting_power_1,
+            },
+            deciding_voting_power_buckets: hashmap! {
+                8  => voting_power_3,
+                16 => voting_power_1,
+            },
+            potential_voting_power_buckets: hashmap! {
                 8  => voting_power_3,
                 16 => voting_power_1,
             },

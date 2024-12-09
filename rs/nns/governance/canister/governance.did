@@ -767,16 +767,25 @@ type NeuronStakeTransfer = record {
 };
 
 type NeuronSubsetMetrics = record {
-  total_maturity_e8s_equivalent : opt nat64;
-  maturity_e8s_equivalent_buckets : vec record { nat64; nat64 };
-  voting_power_buckets : vec record { nat64; nat64 };
-  total_staked_e8s : opt nat64;
   count : opt nat64;
+
+  total_staked_e8s : opt nat64;
+  total_maturity_e8s_equivalent : opt nat64;
   total_staked_maturity_e8s_equivalent : opt nat64;
-  staked_maturity_e8s_equivalent_buckets : vec record { nat64; nat64 };
-  staked_e8s_buckets : vec record { nat64; nat64 };
+
   total_voting_power : opt nat64;
+  total_deciding_voting_power : opt nat64;
+  total_potential_voting_power : opt nat64;
+
   count_buckets : vec record { nat64; nat64 };
+
+  staked_e8s_buckets : vec record { nat64; nat64 };
+  maturity_e8s_equivalent_buckets : vec record { nat64; nat64 };
+  staked_maturity_e8s_equivalent_buckets : vec record { nat64; nat64 };
+
+  voting_power_buckets : vec record { nat64; nat64 };
+  deciding_voting_power_buckets : vec record { nat64; nat64 };
+  potential_voting_power_buckets : vec record { nat64; nat64 };
 };
 
 type NeuronsFundAuditInfo = record {

@@ -3629,8 +3629,17 @@ pub mod governance {
             pub total_staked_maturity_e8s_equivalent: ::core::option::Option<u64>,
             #[prost(uint64, optional, tag = "4")]
             pub total_maturity_e8s_equivalent: ::core::option::Option<u64>,
+            /// Deprecated. Use one of the following instead.
             #[prost(uint64, optional, tag = "5")]
             pub total_voting_power: ::core::option::Option<u64>,
+            /// Used to decide proposals. If all neurons refresh their voting
+            /// power/following frequently enough, this will be equal to potential
+            /// voting power. If not, this will be less.
+            #[prost(uint64, optional, tag = "11")]
+            pub total_deciding_voting_power: ::core::option::Option<u64>,
+            /// Used for voting rewards.
+            #[prost(uint64, optional, tag = "12")]
+            pub total_potential_voting_power: ::core::option::Option<u64>,
             /// These fields are keyed by floor(dissolve delay / 0.5 years). These are
             /// analogous to the (singular) fields above. Here, the usual definition of
             /// year for the IC is used: exactly 365.25 days.
@@ -3642,8 +3651,13 @@ pub mod governance {
             pub staked_maturity_e8s_equivalent_buckets: ::std::collections::HashMap<u64, u64>,
             #[prost(map = "uint64, uint64", tag = "9")]
             pub maturity_e8s_equivalent_buckets: ::std::collections::HashMap<u64, u64>,
+            /// Deprecated. Use one of the following instead.
             #[prost(map = "uint64, uint64", tag = "10")]
             pub voting_power_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "13")]
+            pub deciding_voting_power_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "14")]
+            pub potential_voting_power_buckets: ::std::collections::HashMap<u64, u64>,
         }
     }
     /// Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)

@@ -35,10 +35,14 @@ fn test_neuron_subset_metrics_pb_encode() {
     // Step 2: Call the code under test.
     let subject = NeuronSubsetMetricsPb {
         count: Some(42),
+
         total_staked_e8s: Some(43_000),
         total_staked_maturity_e8s_equivalent: Some(44_000_000),
         total_maturity_e8s_equivalent: Some(45_000_000_000),
+
         total_voting_power: Some(46_000_000_000_000),
+        total_deciding_voting_power: Some(46_000_000_000_000),
+        total_potential_voting_power: Some(47_000_000_000_000),
 
         count_buckets: hashmap! {
             3 => 3,
@@ -53,6 +57,14 @@ fn test_neuron_subset_metrics_pb_encode() {
             6 => 6_000,
         },
         voting_power_buckets: hashmap! {
+            7 =>  70_000,
+            8 => 800_000,
+        },
+        deciding_voting_power_buckets: hashmap! {
+            7 =>  70_000,
+            8 => 800_000,
+        },
+        potential_voting_power_buckets: hashmap! {
             7 =>  70_000,
             8 => 800_000,
         },
