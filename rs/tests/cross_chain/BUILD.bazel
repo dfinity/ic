@@ -69,13 +69,15 @@ system_test_nns(
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_json",
     ],
 )
 
 oci_tar(
     name = "foundry.tar",
     image = "@foundry",
-    repo_tags = ["foundry:image"],
+    repo_tags = ["foundry:latest"],
 )
 
 uvm_config_image(
