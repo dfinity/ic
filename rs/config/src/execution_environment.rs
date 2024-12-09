@@ -52,6 +52,18 @@ const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * 
 /// The number of bytes reserved for response callback executions.
 const SUBNET_MEMORY_RESERVATION: NumBytes = NumBytes::new(10 * GIB);
 
+/// Maximum number of messages in a stream.
+///
+/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
+/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
+pub const MAX_STREAM_MESSAGES: usize = 10_000;
+
+/// Desired byte size of an outgoing stream.
+///
+/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
+/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
+pub const TARGET_STREAM_SIZE_BYTES: NumBytes = NumBytes::new(10 * MIB);
+
 /// The soft limit on the subnet-wide number of callbacks.
 pub const SUBNET_CALLBACK_SOFT_LIMIT: usize = 1_000_000;
 
@@ -203,6 +215,12 @@ pub struct Config {
     /// The number of bytes reserved for response callback execution.
     pub subnet_memory_reservation: NumBytes,
 
+    /// Maximum number of messages in a stream.
+    pub max_stream_messages: usize,
+
+    /// Desired byte size of an outgoing stream.
+    pub target_stream_size_bytes: NumBytes,
+
     /// The maximum amount of memory that can be utilized by a single canister.
     pub max_canister_memory_size: NumBytes,
 
@@ -342,6 +360,8 @@ impl Default for Config {
             subnet_wasm_custom_sections_memory_capacity:
                 SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY,
             subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
+            target_stream_size_bytes: TARGET_STREAM_SIZE_BYTES,
+            max_stream_messages: MAX_STREAM_MESSAGES,
             max_canister_memory_size: NumBytes::new(
                 MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES,
             ),
