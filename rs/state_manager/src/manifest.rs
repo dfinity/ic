@@ -37,6 +37,7 @@ use std::fmt;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
+use ic_utils::thread::parallel_map;
 
 /// When computing a manifest, we recompute the hash of every
 /// `REHASH_EVERY_NTH_CHUNK` chunk, even if we know it to be unchanged and
@@ -551,6 +552,61 @@ fn build_chunk_table_sequential(
 
 /// Traverses root recursively and populates the `files` vector with entries of
 /// the form `(relative_file_name, file_len)`.
+fn files_with_sizes_parallel(
+    thread_pool: &mut scoped_threadpool::Pool,
+    root: &Path,
+    relative_path: PathBuf,
+    files: &mut Vec<FileWithSize>,
+) -> Result<(), CheckpointError> {
+    let absolute_path = root.join(&relative_path);
+    let metadata = absolute_path
+        .metadata()
+        .map_err(|io_err| CheckpointError::IoError {
+            path: absolute_path.clone(),
+            message: "failed to get metadata".to_string(),
+            io_err: io_err.to_string(),
+        })?;
+
+    if metadata.is_file() {
+        files.push(FileWithSize(relative_path, metadata.len()))
+    } else if relative_path == PathBuf::from("canister_states") {
+        let res = parallel_map(
+            thread_pool,
+            absolute_path.read_dir().unwrap(),
+            |entry| {
+                let entry = entry.as_ref().unwrap();
+                let metadata = entry.metadata().as_ref().unwrap();
+                let relative_path = relative_path.join(entry.file_name());
+                let file_len = metadata.len();
+                FileWithSize(relative_path, file_len)
+            },
+        );
+        files.extend(res);
+    } else {
+        assert!(
+            metadata.is_dir(),
+            "Checkpoints must not contain special files, found one at {}",
+            absolute_path.display()
+        );
+        for entry_result in absolute_path
+            .read_dir()
+            .map_err(|io_err| CheckpointError::IoError {
+                path: absolute_path.clone(),
+                message: "failed to read dir".to_string(),
+                io_err: io_err.to_string(),
+            })?
+        {
+            let entry = entry_result.map_err(|io_err| CheckpointError::IoError {
+                path: absolute_path.clone(),
+                message: "failed to read dir entry".to_string(),
+                io_err: io_err.to_string(),
+            })?;
+            files_with_sizes(root, relative_path.join(entry.file_name()), files)?;
+        }
+    }
+    Ok(())
+}
+
 fn files_with_sizes(
     root: &Path,
     relative_path: PathBuf,
@@ -874,6 +930,20 @@ pub fn compute_manifest(
     opt_manifest_delta: Option<ManifestDelta>,
 ) -> Result<Manifest, CheckpointError> {
     let start = std::time::Instant::now();
+    let mut files_parrallel = {
+        let mut files_parrallel = Vec::new();
+        files_with_sizes_parallel(thread_pool, checkpoint.raw_path(), "".into(), &mut files_parrallel)?;
+        // We sort the table to make sure that the table is the same on all replicas
+        files_parrallel.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
+        files_parrallel
+    };
+    let elapsed = start.elapsed();
+    info!(
+        log,
+        "files_with_sizes_parallel took {:?} for {} files", elapsed, files_parrallel.len()
+    );
+
+    let start = std::time::Instant::now();
     let mut files = {
         let mut files = Vec::new();
         files_with_sizes(checkpoint.raw_path(), "".into(), &mut files)?;
@@ -884,8 +954,15 @@ pub fn compute_manifest(
     let elapsed = start.elapsed();
     info!(
         log,
-        "files_with_sizes took {:?} for {} files", elapsed, files.len()
+        "files_with_sizes took {:?} for {} files", elapsed, files.len(),
     );
+    if files == files_parrallel {
+        info!(log, "files_with_sizes_parallel and files_with_sizes produced the same result");
+    } else {
+        error!(log, "files_with_sizes_parallel and files_with_sizes produced different results");
+    }
+
+
 
     // Currently, the unverified checkpoint marker file should already be removed by the time we reach this point.
     // If it accidentally exists, the replica will crash in the outer function `handle_compute_manifest_request`.
