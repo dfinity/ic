@@ -1,16 +1,14 @@
-use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_standalone_sig_verifier::{
     ecdsa_p256_signature_from_der_bytes, rsa_signature_from_bytes,
 };
 use ic_types::{
-    crypto::{AlgorithmId, BasicSig, BasicSigOf, Signable, UserPublicKey},
+    crypto::{AlgorithmId, BasicSig, Signable, UserPublicKey},
     messages::{WebAuthnEnvelope, WebAuthnSignature},
 };
 use std::convert::TryFrom;
 
 /// Verifies that a `WebAuthnSignature` signs a `Signable`.
 pub(crate) fn validate_webauthn_sig(
-    verifier: &dyn IngressSigVerifier,
     webauthn_sig: &WebAuthnSignature,
     signable: &impl Signable,
     public_key: &UserPublicKey,
@@ -25,8 +23,12 @@ pub(crate) fn validate_webauthn_sig(
     };
 
     // Verify the signature signs the `WebAuthnEnvelope` provided.
-    verifier
-        .verify_basic_sig_by_public_key(&BasicSigOf::from(basic_sig.clone()), &envelope, public_key)
+    ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key(
+        public_key.algorithm_id,
+        &envelope.as_signed_bytes(),
+        &basic_sig.0,
+        &public_key.key,
+    )
         .map_err(|e| {
             format!(
                 "Verifying signature failed. signature: {:?}; envelope: {:?}; public_key: {}. Error: {}",
@@ -75,8 +77,7 @@ mod tests {
         ECDSA_P256_PK_COSE_DER_WRAPPED_HEX, ECDSA_WEBAUTHN_SIG_HELLO_HEX,
     };
     use ic_crypto_standalone_sig_verifier::user_public_key_from_bytes;
-    use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
-    use ic_test_utilities_types::ids::{message_test_id, node_test_id};
+    use ic_test_utilities_types::ids::message_test_id;
     use ic_types::{
         crypto::SignableMock,
         messages::{Blob, Delegation},
@@ -99,7 +100,6 @@ mod tests {
 
         #[test]
         fn should_verify_valid_ecdsa_signature_on_bytes() {
-            let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
             // The signature parsed here verifies the bytes b"hello".
             let (pk, sig) = load_pk_and_sig(
                 ECDSA_P256_PK_COSE_DER_WRAPPED_HEX.as_ref(),
@@ -111,15 +111,11 @@ mod tests {
                 signed_bytes_without_domain: b"hello".to_vec(),
             };
 
-            assert_eq!(
-                validate_webauthn_sig(&verifier, &sig, &hello_message, &pk),
-                Ok(())
-            );
+            assert_eq!(validate_webauthn_sig(&sig, &hello_message, &pk), Ok(()));
         }
 
         #[test]
         fn should_return_error_on_valid_signature_but_wrong_message() {
-            let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
             // The signature parsed here verifies the bytes b"hello".
             let (pk, sig) = load_pk_and_sig(
                 ECDSA_P256_PK_COSE_DER_WRAPPED_HEX.as_ref(),
@@ -130,14 +126,13 @@ mod tests {
                 signed_bytes_without_domain: vec![1, 2, 3],
             };
 
-            let result = validate_webauthn_sig(&verifier, &sig, &wrong_message, &pk);
+            let result = validate_webauthn_sig(&sig, &wrong_message, &pk);
 
             assert_eq!(result, Err("Challenge in webauthn is [104, 101, 108, 108, 111] while it is expected to be [0, 1, 2, 3]".to_string()));
         }
 
         #[test]
         fn should_return_error_on_malformed_ecdsa_signature() {
-            let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
             let (pk, sig) = load_pk_and_sig(
                 ECDSA_P256_PK_COSE_DER_WRAPPED_HEX.as_ref(),
                 ECDSA_WEBAUTHN_SIG_HELLO_HEX.as_bytes(),
@@ -149,7 +144,7 @@ mod tests {
                 Blob(vec![]), /* malformed signature */
             );
 
-            let result = validate_webauthn_sig(&verifier, &sig, &SignableMock::new(vec![]), &pk);
+            let result = validate_webauthn_sig(&sig, &SignableMock::new(vec![]), &pk);
 
             assert!(result
                 .err()
@@ -160,14 +155,12 @@ mod tests {
         #[test]
         fn should_return_error_on_incorrect_public_key() {
             const WRONG_ECDSA_P256_PK_COSE_DER_WRAPPED_HEX: &str = "305E300C060A2B0601040183B8430101034E00A50102032620012158207FFD83632072FD1BFEAF3FBAA43146E0EF95C3F55E3994A41BBF2B5174D771DA22582032497EED0A7F6F000928765B8318162CFD80A94E525A6A368C2363063D04E6ED";
-            let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
             // The signature signs the delegation prepended by its domain separator.
             let (wrong_pk, sig) = load_pk_and_sig(
                 WRONG_ECDSA_P256_PK_COSE_DER_WRAPPED_HEX.as_ref(),
                 ECDSA_WEBAUTHN_SIG_HELLO_HEX.as_bytes(),
             );
-            let result =
-                validate_webauthn_sig(&verifier, &sig, &SignableMock::new(vec![]), &wrong_pk);
+            let result = validate_webauthn_sig(&sig, &SignableMock::new(vec![]), &wrong_pk);
 
             assert!(result
                 .err()
@@ -195,7 +188,6 @@ mod tests {
 
         #[test]
         fn should_verify_valid_rsa_signature_on_bytes() {
-            let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
             // The signature parsed here verifies the bytes b"hello".
             let (pk, sig) = load_pk_and_sig(
                 RSA_PK_COSE_DER_WRAPPED_HEX.as_ref(),
@@ -207,15 +199,11 @@ mod tests {
                 signed_bytes_without_domain: b"hello".to_vec(),
             };
 
-            assert_eq!(
-                validate_webauthn_sig(&verifier, &sig, &hello_message, &pk),
-                Ok(())
-            );
+            assert_eq!(validate_webauthn_sig(&sig, &hello_message, &pk), Ok(()));
         }
 
         #[test]
         fn should_return_error_on_valid_signature_but_wrong_message() {
-            let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
             // The signature parsed here verifies the bytes b"hello".
             let (pk, sig) = load_pk_and_sig(
                 RSA_PK_COSE_DER_WRAPPED_HEX.as_ref(),
@@ -226,14 +214,13 @@ mod tests {
                 signed_bytes_without_domain: vec![1, 2, 3],
             };
 
-            let result = validate_webauthn_sig(&verifier, &sig, &wrong_message, &pk);
+            let result = validate_webauthn_sig(&sig, &wrong_message, &pk);
 
             assert_eq!(result, Err("Challenge in webauthn is [104, 101, 108, 108, 111] while it is expected to be [0, 1, 2, 3]".to_string()));
         }
 
         #[test]
         fn should_return_error_on_malformed_rsa_signature() {
-            let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
             let (pk, sig) = load_pk_and_sig(
                 RSA_PK_COSE_DER_WRAPPED_HEX.as_ref(),
                 RSA_WEBAUTHN_SIG_HELLO_HEX.as_bytes(),
@@ -246,7 +233,7 @@ mod tests {
                 Blob(vec![0, 1, 2]), /* malformed signature */
             );
 
-            let result = validate_webauthn_sig(&verifier, &sig, &SignableMock::new(vec![]), &pk);
+            let result = validate_webauthn_sig(&sig, &SignableMock::new(vec![]), &pk);
 
             assert!(result.err().unwrap().contains("Verifying signature failed"));
         }
@@ -254,15 +241,13 @@ mod tests {
         #[test]
         fn should_return_error_on_incorrect_public_key() {
             const WRONG_RSA_PK_COSE_DER_WRAPPED_HEX: &str = "30820123300c060a2b0601040183b84301010382011100a401030339010020590100c0d78fff40992040ab05d549607fec811e8402770e0b99bd338d30b22b961282c75087e68481736322ba174f06c15297e283fc6fa6f5ea9e87fc6330183d1552364eb17dc2538a8029de64e4ef7f6099fe7d9db8ffb5f9d820d6092d9f8421ef6123163b993ff6fff83878165d0a609960ca16e1c427af6f7e74382afd8ec8c3ce231f96d48ea26c2013f3de07f9904f8f6a89f4a76bc2daa03e6a744559cc638380ef2f4bff030a44a8266eba1850492d90e55030bc04b34cadd74b7234e4116ee42f00915d4fb77ca37592ab86fb4d9a436ebbbefffbb9a9ce2fcb0528b3fca7fa73267750f6aa35ece632f9fbca73f2a37e4fb10e81f108dabd59d74478832143010001";
-            let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
             // The signature signs the delegation prepended by its domain separator.
             let (wrong_pk, sig) = load_pk_and_sig(
                 WRONG_RSA_PK_COSE_DER_WRAPPED_HEX.as_ref(),
                 RSA_WEBAUTHN_SIG_HELLO_HEX.as_bytes(),
             );
 
-            let result =
-                validate_webauthn_sig(&verifier, &sig, &SignableMock::new(vec![]), &wrong_pk);
+            let result = validate_webauthn_sig(&sig, &SignableMock::new(vec![]), &wrong_pk);
 
             assert!(result
                 .err()
@@ -273,7 +258,6 @@ mod tests {
 
     #[test]
     fn should_return_error_if_algorithm_id_is_not_supported() {
-        let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
         let delegation = Delegation::new(vec![1, 2, 3], UNIX_EPOCH);
         let (mut pk, sig) = load_pk_and_sig(
             ECDSA_P256_PK_COSE_DER_WRAPPED_HEX.as_ref(),
@@ -282,7 +266,7 @@ mod tests {
         let unsupported_algorithm_id = AlgorithmId::Ed25519;
         pk.algorithm_id = unsupported_algorithm_id;
 
-        let result = validate_webauthn_sig(&verifier, &sig, &delegation, &pk);
+        let result = validate_webauthn_sig(&sig, &delegation, &pk);
 
         assert!(
             result.err().unwrap().contains("Only ECDSA on curve P-256 and RSA PKCS #1 v1.5 are supported for WebAuthn, given: Ed25519")
@@ -291,7 +275,6 @@ mod tests {
 
     #[test]
     fn should_verify_delegation() {
-        let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
         let delegation = Delegation::new(vec![1, 2, 3], UNIX_EPOCH);
 
         let (pk, sig) = load_pk_and_sig(
@@ -299,12 +282,11 @@ mod tests {
             "d9d9f7a37261757468656e74696361746f725f646174615825bfabc37432958b063360d3ad6461c9c4735ae7f8edd46592a5e0f01452b2e4b5010000000170636c69656e745f646174615f6a736f6e58997b2274797065223a2022776562617574686e2e676574222c20226368616c6c656e6765223a2022476d6c6a4c584a6c6358566c63335174595856306143316b5a57786c5a32463061573975624d7952313366786f7246576730775069346566504e774b562d7a76486467504868716649536d77677141222c20226f726967696e223a202268747470733a2f2f6578616d706c652e6f7267227d697369676e617475726558483046022100d4b7541f3b1b61dd9c6f818f20f54f8b938fe222d88cca6700fabd82a522f13b022100c636b52dfd679b1f86eeb5fcaff360e70b57caa9fe186e1e77c42228eca49037".as_ref(),
         );
 
-        assert!(validate_webauthn_sig(&verifier, &sig, &delegation, &pk).is_ok());
+        assert!(validate_webauthn_sig(&sig, &delegation, &pk).is_ok());
     }
 
     #[test]
     fn should_verify_message_id() {
-        let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
         let message_id = message_test_id(13);
 
         // The signature signs the message ID prepended by its domain separator.
@@ -313,7 +295,7 @@ mod tests {
             "d9d9f7a37261757468656e74696361746f725f646174615825bfabc37432958b063360d3ad6461c9c4735ae7f8edd46592a5e0f01452b2e4b5010000000170636c69656e745f646174615f6a736f6e58847b2274797065223a2022776562617574686e2e676574222c20226368616c6c656e6765223a2022436d6c6a4c584a6c6358566c6333514e414141414141414141414141414141414141414141414141414141414141414141414141414141414141222c20226f726967696e223a202268747470733a2f2f6578616d706c652e6f7267227d697369676e617475726558473045022100e4029fcf1cec44e0e2a33b2b2b981411376d89f90bec9ee7d4e20ca33ce8f088022070e95aa9dd3f0cf0d6f97f306d52211288482d565012202b349b2a2d80852635".as_ref(),
         );
 
-        assert!(validate_webauthn_sig(&verifier, &sig, &message_id, &pk).is_ok());
+        assert!(validate_webauthn_sig(&sig, &message_id, &pk).is_ok());
     }
 
     fn load_pk_and_sig(pk_bytes: &[u8], sig_bytes: &[u8]) -> (UserPublicKey, WebAuthnSignature) {

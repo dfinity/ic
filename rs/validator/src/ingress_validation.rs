@@ -5,8 +5,8 @@ use ic_crypto_tree_hash::Path;
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
 use ic_types::{
     crypto::{
-        threshold_sig::RootOfTrustProvider, AlgorithmId, BasicSig, BasicSigOf, CanisterSig,
-        CanisterSigOf, CryptoError, UserPublicKey,
+        threshold_sig::RootOfTrustProvider, AlgorithmId, CanisterSig, CanisterSigOf, CryptoError,
+        Signable, UserPublicKey,
     },
     messages::{
         Authentication, Delegation, HasCanisterId, HttpRequest, HttpRequestContent, MessageId,
@@ -537,7 +537,7 @@ where
             let webauthn_sig = WebAuthnSignature::try_from(signature.signature.as_slice())
                 .map_err(WebAuthnError)
                 .map_err(InvalidSignature)?;
-            validate_webauthn_sig(validator, &webauthn_sig, message_id, &pk)
+            validate_webauthn_sig(&webauthn_sig, message_id, &pk)
                 .map_err(WebAuthnError)
                 .map_err(InvalidSignature)?;
             Ok(targets)
@@ -545,9 +545,14 @@ where
         KeyBytesContentType::Ed25519PublicKeyDer
         | KeyBytesContentType::EcdsaP256PublicKeyDer
         | KeyBytesContentType::EcdsaSecp256k1PublicKeyDer => {
-            let basic_sig = BasicSigOf::from(BasicSig(signature.signature.clone()));
-            validate_signature_plain(validator, message_id, &basic_sig, &pk)
-                .map_err(InvalidSignature)?;
+            ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key(
+                pk.algorithm_id,
+                &message_id.as_signed_bytes(),
+                &signature.signature,
+                &pk.key,
+            )
+            .map_err(InvalidBasicSignature)
+            .map_err(InvalidSignature)?;
             Ok(targets)
         }
         KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
@@ -571,17 +576,6 @@ where
             ))
         }
     }
-}
-
-fn validate_signature_plain(
-    validator: &dyn IngressSigVerifier,
-    message_id: &MessageId,
-    signature: &BasicSigOf<MessageId>,
-    pubkey: &UserPublicKey,
-) -> Result<(), AuthenticationError> {
-    validator
-        .verify_basic_sig_by_public_key(signature, message_id, pubkey)
-        .map_err(InvalidBasicSignature)
 }
 
 // Validate a chain of delegations.
@@ -675,17 +669,19 @@ where
         KeyBytesContentType::EcdsaP256PublicKeyDerWrappedCose
         | KeyBytesContentType::RsaSha256PublicKeyDerWrappedCose => {
             let webauthn_sig = WebAuthnSignature::try_from(signature).map_err(WebAuthnError)?;
-            validate_webauthn_sig(validator, &webauthn_sig, delegation, &pk)
-                .map_err(WebAuthnError)?;
+            validate_webauthn_sig(&webauthn_sig, delegation, &pk).map_err(WebAuthnError)?;
         }
         KeyBytesContentType::Ed25519PublicKeyDer
         | KeyBytesContentType::EcdsaP256PublicKeyDer
         | KeyBytesContentType::EcdsaSecp256k1PublicKeyDer
         | KeyBytesContentType::RsaSha256PublicKeyDer => {
-            let basic_sig = BasicSigOf::from(BasicSig(signature.to_vec()));
-            validator
-                .verify_basic_sig_by_public_key(&basic_sig, delegation, &pk)
-                .map_err(InvalidBasicSignature)?;
+            ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key(
+                pk.algorithm_id,
+                &delegation.as_signed_bytes(),
+                &signature.to_vec(),
+                &pk.key,
+            )
+            .map_err(InvalidBasicSignature)?;
         }
         KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
             let canister_sig = CanisterSigOf::from(CanisterSig(signature.to_vec()));
