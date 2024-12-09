@@ -2185,7 +2185,11 @@ pub mod sns {
             if let Some(archive) = archives.pop() {
                 return PrincipalId::from(archive.canister_id);
             }
-
+            eprintln!(
+                "Making ICRC1 transfer {:?}/{:?} ...",
+                i + 1,
+                NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE
+            );
             let user_principal_id = PrincipalId::new_user_test_id(i);
             let direct_participant_swap_account = Account {
                 owner: user_principal_id.0,
