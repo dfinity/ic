@@ -215,6 +215,7 @@ impl Request {
                 | Request::StakeMaturity(_)
                 | Request::ListNeurons(_) // not neuron management but we need it signed.
                 | Request::NeuronInfo(_) // not neuron management but we need it signed.
+                | Request::RefreshVotingPower(_)
                 | Request::Follow(_)
         )
     }
