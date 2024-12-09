@@ -85,6 +85,7 @@ async fn test_advance_target_version_upgrades_all_canisters() {
         let mut latest_version = initial_sns_version;
 
         for canister_type in canister_types {
+            eprintln!("modify_and_add_wasm for {:?} ...", canister_type);
             latest_version =
                 nns::sns_wasm::modify_and_add_wasm(&pocket_ic, latest_version, canister_type, 1)
                     .await;
