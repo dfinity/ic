@@ -571,7 +571,7 @@ fn test_compute_neuron_metrics_public_neurons() {
     .with_staked_maturity_e8s_equivalent(101)
     .with_maturity_e8s_equivalent(110)
     .with_visibility(Some(Visibility::Public))
-    // DO NOT MERGE - Set refreshed_voting_power_timestamp_seconds
+    .with_voting_power_refreshed_timestamp_seconds(now_seconds)
     .build();
 
     let neuron_2 = NeuronBuilder::new(
@@ -588,6 +588,7 @@ fn test_compute_neuron_metrics_public_neurons() {
     .with_cached_neuron_stake_e8s(200_000)
     .with_staked_maturity_e8s_equivalent(202_000)
     .with_maturity_e8s_equivalent(220_000)
+    .with_voting_power_refreshed_timestamp_seconds(now_seconds)
     .build();
 
     let neuron_3 = NeuronBuilder::new(
@@ -609,6 +610,7 @@ fn test_compute_neuron_metrics_public_neurons() {
         name: "Daniel Wong".to_string(),
         description: Some("Best engineer of all time. Of all time.".to_string()),
     }))
+    .with_voting_power_refreshed_timestamp_seconds(now_seconds)
     .build();
 
     let voting_power_1 = neuron_1.potential_voting_power(now_seconds);
@@ -626,6 +628,7 @@ fn test_compute_neuron_metrics_public_neurons() {
         2 => neuron_2,
         3 => neuron_3,
     });
+
     neuron_store
         .with_neuron(&NeuronId { id: 3 }, |neuron| {
             assert_eq!(

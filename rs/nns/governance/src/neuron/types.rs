@@ -1761,6 +1761,15 @@ impl NeuronBuilder {
         self
     }
 
+    #[cfg(test)] // To satisfy clippy. Feel free to use in production code.
+    pub fn with_voting_power_refreshed_timestamp_seconds(
+        mut self,
+        voting_power_refreshed_timestamp_seconds: u64,
+    ) -> Self {
+        self.voting_power_refreshed_timestamp_seconds = voting_power_refreshed_timestamp_seconds;
+        self
+    }
+
     pub fn build(self) -> Neuron {
         let NeuronBuilder {
             id,
