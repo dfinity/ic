@@ -1,7 +1,6 @@
 use candid::{Decode, Encode};
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
-// use ic_base_types::PrincipalId;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::Tokens;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
@@ -24,7 +23,6 @@ use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
     AccountIdentifier, Archives, Block, FeatureFlags, LedgerCanisterPayload, UpgradeArgs,
 };
-// use std::str::FromStr;
 use std::time::Instant;
 
 const INDEX_CANISTER_ID: CanisterId =
