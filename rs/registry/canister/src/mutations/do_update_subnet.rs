@@ -250,27 +250,23 @@ impl Registry {
     }
 
     /// Validates that the SEV feature is not changed on an existing subnet.
+    ///
     /// Panics if the SEV feature is attempted to be changed.
     fn validate_update_sev_feature(&self, payload: &UpdateSubnetPayload) {
-        if payload.features.is_none() {
-            return;
-        }
         let subnet_id = payload.subnet_id;
-        let subnet_record = self.get_subnet_or_panic(subnet_id);
-        if let Some(old_features) = subnet_record.features {
-            // Compare as `SubnetFeatures`, to avoid having to worry about
-            // `None` vs `Some(false)`.
-            let new_features: SubnetFeatures = payload.features.unwrap().into();
-            let old_features: SubnetFeatures = old_features.into();
-            if new_features.sev_enabled == old_features.sev_enabled {
-                return;
-            }
+
+        // Ensure the subnet record exists for this subnet ID.
+        let _subnet_record = self.get_subnet_or_panic(subnet_id);
+
+        let new_sev_feature_flag = payload.features.and_then(|features| features.sev_enabled);
+
+        if let Some(new_sev_feature_flag) = new_sev_feature_flag {
+            panic!(
+                "{}Proposal attempts to change sev_enabled for Subnet '{}' to {}, \
+                 but sev_enabled can only be set during subnet creation.",
+                LOG_PREFIX, subnet_id, new_sev_feature_flag,
+            );
         }
-        panic!(
-            "{}Proposal attempts to change sev_enabled for Subnet '{}', \
-                        but sev_enabled can only be set during subnet creation.",
-            LOG_PREFIX, subnet_id
-        );
     }
 
     /// Create the mutations that enable subnet signing for a single subnet and set of EcdsaKeyId's.
@@ -1050,8 +1046,9 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "Proposal attempts to change sev_enabled for Subnet 'ge6io-epiam-aaaaa-aaaap-yai', \
-                    but sev_enabled can only be set during subnet creation."
+        expected =
+            "Proposal attempts to change sev_enabled for Subnet 'ge6io-epiam-aaaaa-aaaap-yai' \
+             to true, but sev_enabled can only be set during subnet creation."
     )]
     fn test_sev_enabled_cannot_be_changed() {
         let mut registry = invariant_compliant_registry(0);
