@@ -173,6 +173,7 @@ rust_test_suite_with_extra_srcs(
             "tests/sns_upgrade_test_utils.rs",
             "tests/upgrade_everything_test.rs",
             "tests/advance_target_version_upgrades_all_canisters_test.rs",
+            "tests/upgrade_existing_sns_test.rs",
         ],
     ),
     aliases = ALIASES,
@@ -196,7 +197,7 @@ rust_test(
     aliases = ALIASES,
     crate_root = "tests/upgrade_everything_test.rs",
     data = DEV_DATA,
-    env = DEV_ENV,
+    env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
@@ -212,7 +213,23 @@ rust_test(
     ],
     aliases = ALIASES,
     data = DEV_DATA,
-    env = DEV_ENV,
+    env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
+    flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "cpu:4",
+    ],
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "upgrade_existing_sns_test",
+    srcs = [
+        "tests/upgrade_existing_sns_test.rs",
+    ],
+    aliases = ALIASES,
+    data = DEV_DATA,
+    env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
