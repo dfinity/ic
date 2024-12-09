@@ -249,7 +249,8 @@ impl Registry {
         }
     }
 
-    /// Validates that the SEV feature is not changed on an existing subnet.
+    /// Validates that the SEV (AMD Secure Encrypted Virtualization) feature is not changed on
+    /// an existing subnet.
     ///
     /// Panics if the SEV feature is attempted to be changed.
     fn validate_update_sev_feature(&self, payload: &UpdateSubnetPayload) {
@@ -258,13 +259,15 @@ impl Registry {
         // Ensure the subnet record exists for this subnet ID.
         let _subnet_record = self.get_subnet_or_panic(subnet_id);
 
-        let new_sev_feature_flag = payload.features.and_then(|features| features.sev_enabled);
+        let Some(features) = payload.features else {
+            return;
+        };
 
-        if let Some(new_sev_feature_flag) = new_sev_feature_flag {
+        if let Some(sev_enabled) = features.sev_enabled {
             panic!(
                 "{}Proposal attempts to change sev_enabled for Subnet '{}' to {}, \
                  but sev_enabled can only be set during subnet creation.",
-                LOG_PREFIX, subnet_id, new_sev_feature_flag,
+                LOG_PREFIX, subnet_id, sev_enabled,
             );
         }
     }
@@ -1073,10 +1076,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(
-        expected = "Proposal attempts to change sev_enabled for Subnet 'ge6io-epiam-aaaaa-aaaap-yai' \
-             to true, but sev_enabled can only be set during subnet creation."
-    )]
+    #[should_panic(expected = "Proposal attempts to change sev_enabled for Subnet \
+                    'ge6io-epiam-aaaaa-aaaap-yai' to true, but sev_enabled can only be set during \
+                    subnet creation.")]
     fn test_sev_enabled_cannot_be_changed_to_true() {
         let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
 
@@ -1087,15 +1089,13 @@ mod tests {
             sev_enabled: Some(true),
         });
 
-        // Should panic because we are changing SEV-related subnet features.
         registry.do_update_subnet(payload);
     }
 
     #[test]
-    #[should_panic(
-        expected = "Proposal attempts to change sev_enabled for Subnet 'ge6io-epiam-aaaaa-aaaap-yai' \
-             to false, but sev_enabled can only be set during subnet creation."
-    )]
+    #[should_panic(expected = "Proposal attempts to change sev_enabled for Subnet \
+                    'ge6io-epiam-aaaaa-aaaap-yai' to false, but sev_enabled can only be set during \
+                    subnet creation.")]
     fn test_sev_enabled_cannot_be_changed_to_false() {
         let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
 
@@ -1103,6 +1103,7 @@ mod tests {
         payload.features = Some(SubnetFeaturesPb {
             canister_sandboxing: false,
             http_requests: false,
+            // The only difference compared to test_sev_enabled_cannot_be_changed_to_true
             sev_enabled: Some(false),
         });
 
