@@ -529,7 +529,7 @@ EOF
             "DISK_IMG": "$(location :disk-img.tar.zst)",
         },
         testonly = True,
-        tags = ["manual"],
+        tags = ["manual", "requires-network"],
     )
 
     native.genrule(
