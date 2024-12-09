@@ -574,6 +574,17 @@ fn create_config_disk_image(
             .arg(ssh_authorized_pub_keys_dir);
     }
 
+    // TODO(NODE-1518): remove nns_urls flag, it exists only to pass CI
+    if let Some(node) = test_env
+        .topology_snapshot_by_name(ic_name)
+        .root_subnet()
+        .nodes()
+        .next()
+    {
+        cmd.arg("--nns_urls")
+            .arg(format!("http://[{}]:8080", node.get_ip_addr()));
+    }
+
     let key = "PATH";
     let old_path = match std::env::var(key) {
         Ok(val) => {
