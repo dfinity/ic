@@ -2722,10 +2722,10 @@ fn add_content_parallel(
             println!("dir_list_recursive_parallel enters canister_states");
             let res = parallel_map(thread_pool, path.read_dir().unwrap(), |entry| {
                 let entry = entry.as_ref().unwrap().path();
-                let entries = entry.read_dir()?;
+                let entries = entry.read_dir().unwrap();
                 let mut canister_files = vec![entry];
                 for entry_result in entries {
-                    let entry = entry_result?;
+                    let entry = entry_result.unwrap();
                     canister_files.push(entry.path());
                 }
                 canister_files

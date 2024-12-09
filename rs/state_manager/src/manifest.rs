@@ -577,9 +577,9 @@ fn files_with_sizes_parallel(
             let relative_path = relative_path.join(entry.file_name());
             let entry = entry.path();
             let mut canister_files = vec![];
-            let entries = entry.read_dir()?;
+            let entries = entry.read_dir().unwrap();
             for entry_result in entries {
-                let entry = entry_result?;
+                let entry = entry_result.unwrap();
                 let file_len = entry.metadata().as_ref().unwrap().len();
                 let relative_path = relative_path.join(entry.file_name());
                 canister_files.push(FileWithSize(relative_path, file_len));
