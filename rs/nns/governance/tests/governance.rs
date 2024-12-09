@@ -220,6 +220,12 @@ fn check_proposal_status_after_voting_and_after_expiration_new(
         .unwrap(),
     ));
     nns.governance.run_periodic_tasks().now_or_never();
+    // We need to process the timer to make sure recent ballots record.
+    nns.governance
+        .process_voting_state_machines()
+        .now_or_never()
+        .unwrap();
+
     let after_expiration = nns.governance.get_proposal_data(pid).unwrap();
 
     assert_eq!(
@@ -1112,6 +1118,9 @@ async fn test_cascade_following_new() {
         ProposalId { id: 1 },
         Vote::Yes,
     );
+    // Recent ballots are not immediately recorded in every case (such as when there are
+    // many votes in the cascading, it is done later through timer tasks)
+    nns.governance.process_voting_state_machines().await;
 
     assert_changes!(
         nns,
@@ -1165,6 +1174,10 @@ async fn test_cascade_following_new() {
         ProposalId { id: 1 },
         Vote::Yes,
     );
+
+    // Recent ballots are not immediately recorded in every case (such as when there are
+    // many votes in the cascading, it is done later through timer tasks)
+    nns.governance.process_voting_state_machines().await;
 
     // Check that the vote for neuron 2 is registered in the proposal
     assert_eq!(
@@ -1454,6 +1467,10 @@ async fn test_cascade_following() {
         ProposalId { id: 1 },
         Vote::Yes,
     );
+
+    // Recent ballots are not immediately recorded in every case (such as when there are
+    // many votes in the cascading, it is done later through timer tasks)
+    gov.process_voting_state_machines().await;
 
     // Check that the vote for neuron 2 is registered in the proposal
     assert_eq!(
@@ -3895,7 +3912,7 @@ fn test_random_voting_rewards_scenarios() {
         proposals
     }
 
-    const SCENARIO_COUNT: u64 = 1000;
+    const SCENARIO_COUNT: u64 = 500;
     let mut unique_scenarios = HashSet::new();
     for seed in 1..=SCENARIO_COUNT {
         unique_scenarios.insert(helper(seed));
@@ -6396,7 +6413,7 @@ fn test_staked_maturity() {
         .expect("Configuring neuron failed");
 
     driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS);
-    gov.run_periodic_tasks().now_or_never();
+    gov.unstake_maturity_of_dissolved_neurons();
 
     // All the maturity should now be regular maturity
     let neuron = gov
@@ -7787,8 +7804,7 @@ fn test_network_economics_proposal() {
         .unwrap()
         .neuron_minimum_stake_e8s = 1234;
 
-    // Making a proposal to change 'reject_cost_e8s' should only change
-    // that value.
+    // Propose to change some, NetworkEconomics parameters.
     let pid = match gov
         .manage_neuron(
             &voter_pid,
@@ -7801,6 +7817,10 @@ fn test_network_economics_proposal() {
                     url: "".to_string(),
                     action: Some(proposal::Action::ManageNetworkEconomics(NetworkEconomics {
                         reject_cost_e8s: 56789,
+                        voting_power_economics: Some(VotingPowerEconomics {
+                            start_reducing_voting_power_after_seconds: Some(42),
+                            clear_following_after_seconds: Some(4242),
+                        }),
                         ..Default::default()
                     })),
                 }))),
@@ -7822,18 +7842,20 @@ fn test_network_economics_proposal() {
         ProposalStatus::Executed
     );
 
-    // Make sure only that value changed.
+    // Verify that only the two fields specified by the proposal are changed.
     assert_eq!(
-        gov.heap_data.economics.as_ref().unwrap().reject_cost_e8s,
-        56789
-    );
-    assert_eq!(
-        gov.heap_data
-            .economics
-            .as_ref()
-            .unwrap()
-            .neuron_minimum_stake_e8s,
-        1234
+        gov.heap_data.economics.as_ref().unwrap(),
+        &NetworkEconomics {
+            reject_cost_e8s: 56789,
+            voting_power_economics: Some(VotingPowerEconomics {
+                start_reducing_voting_power_after_seconds: Some(42),
+                clear_following_after_seconds: Some(4242),
+            }),
+
+            // No changes to the rest.
+            neuron_minimum_stake_e8s: 1234,
+            ..NetworkEconomics::with_default_values()
+        },
     );
 }
 

@@ -2491,9 +2491,6 @@ pub struct ProposalInfo {
 /// to set the parameters that it wishes to change.
 /// In other words, it's not possible to set any of the values of
 /// NetworkEconomics to 0.
-///
-/// NOTE: If adding a value to this proto, make sure there is a corresponding
-/// `if` in Governance::perform_action().
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -4759,6 +4756,29 @@ pub mod archived_monthly_node_provider_rewards {
         #[prost(message, tag = "1")]
         Version1(V1),
     }
+}
+/// Internal type to allow ProposalVotingStateMachine to be stored
+/// in stable memory.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ProposalVotingStateMachine {
+    #[prost(message, optional, tag = "1")]
+    pub proposal_id: ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
+    #[prost(enumeration = "Topic", tag = "2")]
+    pub topic: i32,
+    #[prost(message, repeated, tag = "3")]
+    pub neurons_to_check_followers: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
+    #[prost(message, repeated, tag = "4")]
+    pub followers_to_check: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
+    #[prost(map = "uint64, enumeration(Vote)", tag = "5")]
+    pub recent_neuron_ballots_to_record: ::std::collections::HashMap<u64, i32>,
 }
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow

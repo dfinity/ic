@@ -587,6 +587,17 @@ impl Neuron {
         u64::try_from(result).unwrap()
     }
 
+    pub(crate) fn backfill_voting_power_refreshed_timestamp(&mut self) {
+        // This used to be the default, but we later changed our minds.
+        // The old definition:
+        // https://sourcegraph.com/github.com/dfinity/ic@1956e438af82a5b4aa9713bcbbe385684bf0704f/-/blob/rs/nns/governance/src/lib.rs?L189
+        const EVIL_TIMESTAMP_SECONDS: u64 = 1731628801;
+        if self.voting_power_refreshed_timestamp_seconds == EVIL_TIMESTAMP_SECONDS {
+            self.voting_power_refreshed_timestamp_seconds =
+                DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS;
+        }
+    }
+
     pub(crate) fn ready_to_unstake_maturity(&self, now_seconds: u64) -> bool {
         self.state(now_seconds) == NeuronState::Dissolved
             && self.staked_maturity_e8s_equivalent.unwrap_or(0) > 0

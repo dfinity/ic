@@ -1844,9 +1844,6 @@ message ProposalInfo {
 // to set the parameters that it wishes to change.
 // In other words, it's not possible to set any of the values of
 // NetworkEconomics to 0.
-//
-// NOTE: If adding a value to this proto, make sure there is a corresponding
-// `if` in Governance::perform_action().
 message NetworkEconomics {
   reserved 3, 7;
   // The number of E8s (10E-8 of an ICP token) that a rejected
@@ -3007,4 +3004,14 @@ message ArchivedMonthlyNodeProviderRewards {
   message V1 {
     ic_nns_governance.pb.v1.MonthlyNodeProviderRewards rewards = 1;
   }
+}
+
+// Internal type to allow ProposalVotingStateMachine to be stored
+// in stable memory.
+message ProposalVotingStateMachine {
+  ic_nns_common.pb.v1.ProposalId proposal_id = 1;
+  Topic topic = 2;
+  repeated ic_nns_common.pb.v1.NeuronId neurons_to_check_followers = 3;
+  repeated ic_nns_common.pb.v1.NeuronId followers_to_check = 4;
+  map<uint64, Vote> recent_neuron_ballots_to_record = 5;
 }

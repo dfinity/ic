@@ -710,6 +710,7 @@ pub mod proposal {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Empty {}
+
 /// All operations that modify the state of an existing neuron are
 /// represented by instances of `ManageNeuron`.
 ///
@@ -1080,6 +1081,8 @@ pub mod manage_neuron {
         #[prost(message, tag = "12")]
         NeuronId(NeuronId),
     }
+
+    // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -1110,6 +1113,7 @@ pub mod manage_neuron {
         StakeMaturity(StakeMaturity),
         #[prost(message, tag = "16")]
         RefreshVotingPower(RefreshVotingPower),
+        // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
     }
 }
 /// The response of the ManageNeuron command
@@ -1339,6 +1343,7 @@ pub struct ManageNeuronRequest {
     pub command: ::core::option::Option<ManageNeuronCommandRequest>,
 }
 
+// KEEP THIS IN SYNC WITH manage_neuron::Command!
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -1367,7 +1372,11 @@ pub enum ManageNeuronCommandRequest {
     Merge(manage_neuron::Merge),
     #[prost(message, tag = "15")]
     StakeMaturity(manage_neuron::StakeMaturity),
+    #[prost(message, tag = "16")]
+    RefreshVotingPower(manage_neuron::RefreshVotingPower),
+    // KEEP THIS IN SYNC WITH manage_neuron::Command!
 }
+
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[compare_default]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -2035,15 +2044,13 @@ pub struct ProposalInfo {
     #[prost(uint64, optional, tag = "21")]
     pub total_potential_voting_power: ::core::option::Option<u64>,
 }
+
 /// Network economics contains the parameters for several operations related
 /// to the economy of the network. When submitting a NetworkEconomics proposal
 /// default values (0) are considered unchanged, so a valid proposal only needs
 /// to set the parameters that it wishes to change.
 /// In other words, it's not possible to set any of the values of
 /// NetworkEconomics to 0.
-///
-/// NOTE: If adding a value to this proto, make sure there is a corresponding
-/// `if` in Governance::perform_action().
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
 #[allow(clippy::derive_partial_eq_without_eq)]
