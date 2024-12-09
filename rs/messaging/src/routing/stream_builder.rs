@@ -52,18 +52,6 @@ struct StreamBuilderMetrics {
     pub critical_error_induct_response_failed: IntCounter,
 }
 
-/// Desired byte size of an outgoing stream.
-///
-/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
-/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
-const TARGET_STREAM_SIZE_BYTES: usize = 10 * 1024 * 1024;
-
-/// Maximum number of messages in a stream.
-///
-/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
-/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
-const MAX_STREAM_MESSAGES: usize = 10_000;
-
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
 const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
 const METRIC_STREAM_BEGIN: &str = "mr_stream_begin";
@@ -174,6 +162,8 @@ pub(crate) trait StreamBuilder: Send {
 
 pub(crate) struct StreamBuilderImpl {
     subnet_id: SubnetId,
+    max_stream_messages: usize,
+    target_stream_size_bytes: usize,
     metrics: StreamBuilderMetrics,
     time_in_stream_metrics: Arc<Mutex<LatencyMetrics>>,
     log: ReplicaLogger,
@@ -182,6 +172,8 @@ pub(crate) struct StreamBuilderImpl {
 impl StreamBuilderImpl {
     pub(crate) fn new(
         subnet_id: SubnetId,
+        max_stream_messages: usize,
+        target_stream_size_bytes: usize,
         metrics_registry: &MetricsRegistry,
         message_routing_metrics: &MessageRoutingMetrics,
         time_in_stream_metrics: Arc<Mutex<LatencyMetrics>>,
@@ -189,6 +181,8 @@ impl StreamBuilderImpl {
     ) -> Self {
         Self {
             subnet_id,
+            max_stream_messages,
+            target_stream_size_bytes,
             metrics: StreamBuilderMetrics::new(metrics_registry, message_routing_metrics),
             time_in_stream_metrics,
             log,
@@ -265,12 +259,7 @@ impl StreamBuilderImpl {
     /// Implementation of `StreamBuilder::build_streams()` that takes a
     /// `target_stream_size_bytes` argument to limit how many messages will be
     /// routed into each stream.
-    fn build_streams_impl(
-        &self,
-        mut state: ReplicatedState,
-        max_stream_messages: usize,
-        target_stream_size_bytes: usize,
-    ) -> ReplicatedState {
+    fn build_streams_impl(&self, mut state: ReplicatedState) -> ReplicatedState {
         /// Pops the previously peeked message.
         ///
         /// Panics:
@@ -360,8 +349,8 @@ impl StreamBuilderImpl {
                 Some(dst_subnet_id) => {
                     if is_at_limit(
                         streams.get(&dst_subnet_id),
-                        max_stream_messages,
-                        target_stream_size_bytes,
+                        self.max_stream_messages,
+                        self.target_stream_size_bytes,
                         self.subnet_id == dst_subnet_id,
                         *subnet_types
                             .get(&dst_subnet_id)
@@ -547,6 +536,6 @@ impl StreamBuilderImpl {
 
 impl StreamBuilder for StreamBuilderImpl {
     fn build_streams(&self, state: ReplicatedState) -> ReplicatedState {
-        self.build_streams_impl(state, MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES)
+        self.build_streams_impl(state)
     }
 }
