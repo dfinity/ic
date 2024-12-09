@@ -154,3 +154,82 @@ fn cache_should_have_same_size() {
     assert_eq!(cache.status.len(), 1);
     assert_eq!(cache.created.len(), 1);
 }
+
+mod schema_upgrades {
+    use crate::state::Config;
+    use candid::Deserialize;
+    use ic_btc_checker::{BtcNetwork, CheckMode};
+    use proptest::arbitrary::any;
+    use proptest::prelude::{Just, Strategy};
+    use proptest::{prop_oneof, proptest};
+    use serde::Serialize;
+
+    #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+    pub struct ConfigPreviousVersion {
+        btc_network: BtcNetwork,
+        check_mode: CheckMode,
+    }
+
+    impl From<Config> for ConfigPreviousVersion {
+        fn from(
+            Config {
+                btc_network,
+                check_mode,
+                num_subnet_nodes: _,
+            }: Config,
+        ) -> Self {
+            Self {
+                btc_network,
+                check_mode,
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn should_be_able_to_upgrade_state(config in arb_config()) {
+            let config_before_upgrade: ConfigPreviousVersion = config.into();
+
+            let serialized_config_before_upgrade = encode(&config_before_upgrade);
+            let config_after_upgrade: Config = decode(serialized_config_before_upgrade.as_slice());
+            assert_eq!(config_before_upgrade, config_after_upgrade.clone().into());
+        }
+    }
+
+    fn encode<S: ?Sized + serde::Serialize>(state: &S) -> Vec<u8> {
+        let mut buf = vec![];
+        ciborium::ser::into_writer(state, &mut buf).expect("failed to encode state");
+        buf
+    }
+
+    fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> T {
+        ciborium::de::from_reader(bytes)
+            .unwrap_or_else(|e| panic!("failed to decode state bytes {}: {e}", hex::encode(bytes)))
+    }
+
+    pub fn arb_config() -> impl Strategy<Value = Config> {
+        (arb_btc_network(), arb_check_mode(), any::<u16>()).prop_map(
+            |(btc_network, check_mode, num_subnet_nodes)| Config {
+                btc_network,
+                check_mode,
+                num_subnet_nodes,
+            },
+        )
+    }
+
+    pub fn arb_btc_network() -> impl Strategy<Value = BtcNetwork> {
+        prop_oneof![
+            Just(BtcNetwork::Mainnet),
+            Just(BtcNetwork::Testnet),
+            ".*".prop_map(|json_rpc_url| BtcNetwork::Regtest { json_rpc_url }),
+        ]
+    }
+
+    pub fn arb_check_mode() -> impl Strategy<Value = CheckMode> {
+        prop_oneof![
+            Just(CheckMode::AcceptAll),
+            Just(CheckMode::RejectAll),
+            Just(CheckMode::Normal),
+        ]
+    }
+}

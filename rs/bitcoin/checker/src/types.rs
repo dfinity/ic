@@ -83,6 +83,7 @@ impl From<CheckTransactionStatus> for CheckTransactionResponse {
 pub struct InitArg {
     pub btc_network: BtcNetwork,
     pub check_mode: CheckMode,
+    pub num_subnet_nodes: u16,
 }
 
 #[derive(CandidType, Clone, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]

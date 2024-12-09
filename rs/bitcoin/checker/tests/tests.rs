@@ -65,6 +65,7 @@ impl Setup {
         let init_arg = InitArg {
             btc_network,
             check_mode: CheckMode::Normal,
+            num_subnet_nodes: TEST_SUBNET_NODES,
         };
         let caller = env.create_canister_with_settings(Some(controller), None);
         env.add_cycles(caller, 100_000_000_000_000);
