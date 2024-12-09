@@ -46,6 +46,7 @@ jobs:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           BAZEL_COMMAND: "run"
           BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
+          CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
           RUST_BACKTRACE: "full"
           TARGETS: ${{ matrix.targets }}
