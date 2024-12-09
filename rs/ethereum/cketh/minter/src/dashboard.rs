@@ -3,6 +3,7 @@ mod tests;
 
 use askama::Template;
 use candid::{Nat, Principal};
+use ic_canisters_http_types::HttpRequest;
 use ic_cketh_minter::endpoints::{EthTransaction, RetrieveEthStatus};
 use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedEvent};
@@ -22,6 +23,7 @@ use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
+use std::str::FromStr;
 
 mod filters {
     pub fn timestamp_to_datetime<T: std::fmt::Display>(timestamp: T) -> askama::Result<String> {
@@ -145,6 +147,36 @@ impl DashboardPendingDeposit {
     }
 }
 
+// Number of entries per page in dashboard tables (e.g. minted events, finalized transactions).
+const DEFAULT_PAGE_SIZE: usize = 100;
+
+#[derive(Default)]
+pub struct DashboardPagingParameters {
+    minted_events_start: usize,
+    finalized_transactions_start: usize,
+    reimbursed_transactions_start: usize,
+}
+
+impl DashboardPagingParameters {
+    pub(crate) fn from_query_params(
+        req: &HttpRequest,
+    ) -> Result<DashboardPagingParameters, String> {
+        fn parse_query_param(req: &HttpRequest, param_name: &str) -> Result<usize, String> {
+            Ok(match req.raw_query_param(param_name) {
+                Some(arg) => usize::from_str(arg)
+                    .map_err(|_| format!("failed to parse the '{}' parameter", param_name))?,
+                None => 0,
+            })
+        }
+
+        Ok(Self {
+            minted_events_start: parse_query_param(req, "minted_events_start")?,
+            finalized_transactions_start: parse_query_param(req, "finalized_transactions_start")?,
+            reimbursed_transactions_start: parse_query_param(req, "reimbursed_transactions_start")?,
+        })
+    }
+}
+
 #[derive(Template)]
 #[template(path = "dashboard.html")]
 #[derive(Clone)]
@@ -171,12 +203,17 @@ pub struct DashboardTemplate {
 }
 
 impl DashboardTemplate {
-    pub fn from_state(state: &State) -> Self {
+    pub fn from_state(state: &State, args: DashboardPagingParameters) -> Self {
         let mut minted_events: Vec<_> = state.minted_events.values().cloned().collect();
         minted_events.sort_unstable_by_key(|event| {
             let deposit_event = &event.deposit_event;
             Reverse((deposit_event.block_number(), deposit_event.log_index()))
         });
+        minted_events = minted_events
+            .into_iter()
+            .skip(args.minted_events_start)
+            .take(DEFAULT_PAGE_SIZE)
+            .collect();
 
         let mut supported_ckerc20_tokens: Vec<_> = state
             .supported_ck_erc20_tokens()
@@ -278,6 +315,11 @@ impl DashboardTemplate {
             })
             .collect();
         finalized_transactions.sort_unstable_by_key(|tx| Reverse(tx.ledger_burn_index));
+        finalized_transactions = finalized_transactions
+            .into_iter()
+            .skip(args.finalized_transactions_start)
+            .take(DEFAULT_PAGE_SIZE)
+            .collect();
 
         let mut reimbursed_transactions: Vec<_> = state
             .eth_transactions
@@ -320,6 +362,11 @@ impl DashboardTemplate {
             .collect();
         reimbursed_transactions
             .sort_unstable_by_key(|reimbursed_tx| Reverse(reimbursed_tx.cketh_ledger_burn_index()));
+        reimbursed_transactions = reimbursed_transactions
+            .into_iter()
+            .skip(args.reimbursed_transactions_start)
+            .take(DEFAULT_PAGE_SIZE)
+            .collect();
 
         DashboardTemplate {
             ethereum_network: state.ethereum_network,

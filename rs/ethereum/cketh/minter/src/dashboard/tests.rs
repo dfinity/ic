@@ -1,5 +1,5 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
-use crate::dashboard::DashboardTemplate;
+use crate::dashboard::{DashboardPagingParameters, DashboardTemplate};
 use crate::erc20::CkErc20Token;
 use candid::{Nat, Principal};
 use ic_cketh_minter::eth_logs::{
@@ -164,7 +164,7 @@ fn should_display_supported_erc20_tokens() {
         state.ethereum_network = EthereumNetwork::Mainnet;
         state.record_add_ckerc20_token(usdc.clone());
         state.record_add_ckerc20_token(usdt.clone());
-        DashboardTemplate::from_state(&state)
+        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
     };
 
     DashboardAssert::assert_that(dashboard)
@@ -213,7 +213,7 @@ fn should_display_pending_deposits_sorted_by_decreasing_block_number() {
         apply_state_transition(&mut state, &EventType::AcceptedDeposit(event_1));
         apply_state_transition(&mut state, &EventType::AcceptedDeposit(event_2));
         apply_state_transition(&mut state, &EventType::AcceptedErc20Deposit(event_3));
-        DashboardTemplate::from_state(&state)
+        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
     };
 
     DashboardAssert::assert_that(dashboard)
@@ -311,7 +311,7 @@ fn should_display_minted_events_sorted_by_decreasing_mint_block_index() {
                 mint_block_index: LedgerMintIndex::new(44),
             },
         );
-        DashboardTemplate::from_state(&state)
+        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
     };
 
     DashboardAssert::assert_that(dashboard)
@@ -386,7 +386,7 @@ fn should_display_rejected_deposits() {
                 reason: "failed to decode principal".to_string(),
             },
         );
-        DashboardTemplate::from_state(&state)
+        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
     };
 
     DashboardAssert::assert_that(dashboard)
@@ -423,7 +423,7 @@ fn should_display_correct_cketh_token_symbol_based_on_network() {
                     LedgerBurnIndex::new(15),
                 )),
             );
-            DashboardTemplate::from_state(&state)
+            DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
         };
         DashboardAssert::assert_that(dashboard).has_withdrawal_requests(
             1,
@@ -467,7 +467,7 @@ fn should_display_withdrawal_requests_sorted_by_decreasing_cketh_ledger_burn_ind
                 ..cketh_withdrawal_request_with_index(LedgerBurnIndex::new(17))
             }),
         );
-        DashboardTemplate::from_state(&state)
+        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
     };
 
     DashboardAssert::assert_that(dashboard)
@@ -567,7 +567,7 @@ fn should_display_pending_transactions_sorted_by_decreasing_cketh_ledger_burn_in
             );
         }
 
-        DashboardTemplate::from_state(&state)
+        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
     };
 
     DashboardAssert::assert_that(dashboard)
@@ -688,7 +688,7 @@ fn should_display_finalized_transactions_sorted_by_decreasing_cketh_ledger_burn_
             );
         }
 
-        DashboardTemplate::from_state(&state)
+        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
     };
 
     DashboardAssert::assert_that(dashboard)
@@ -895,7 +895,7 @@ fn should_display_reimbursed_requests() {
                 }
             }
         }
-        DashboardTemplate::from_state(&state)
+        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
     };
 
     // Check that we show latest first.
@@ -1002,7 +1002,7 @@ fn should_display_reimbursed_requests() {
 }
 
 fn initial_dashboard() -> DashboardTemplate {
-    DashboardTemplate::from_state(&initial_state())
+    DashboardTemplate::from_state(&initial_state(), DashboardPagingParameters::default())
 }
 
 const INITIAL_LAST_SCRAPED_BLOCK_NUMBER: u32 = 3_956_206_u32;
