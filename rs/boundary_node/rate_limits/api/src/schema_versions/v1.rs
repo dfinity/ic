@@ -16,7 +16,7 @@ pub struct RateLimitRule {
     pub canister_id: Option<Principal>,
     pub subnet_id: Option<Principal>,
     pub methods_regex: Option<String>,
-    pub request_type: Option<RequestType>,
+    pub request_types: Option<Vec<RequestType>>,
     pub limit: String,
 }
 

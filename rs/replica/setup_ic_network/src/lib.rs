@@ -65,7 +65,7 @@ use tower_http::trace::TraceLayer;
 /// we will reconstruct the blocks by looking up the referenced ingress messages in the ingress
 /// pool or, if they are not there, by fetching missing ingress messages from peers who are
 /// advertising the blocks.
-const HASHES_IN_BLOCKS_FEATURE_ENABLED: bool = false;
+const HASHES_IN_BLOCKS_FEATURE_ENABLED: bool = true;
 
 pub const MAX_ADVERT_BUFFER: usize = 100_000;
 /// This limit is used to protect against a malicious peer advertising many ingress messages.

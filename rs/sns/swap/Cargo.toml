@@ -49,8 +49,8 @@ itertools = { workspace = true }
 lazy_static = { workspace = true }
 maplit = "1.0.2"
 prost = { workspace = true }
-rust_decimal = "1.25"
-rust_decimal_macros = "1.25"
+rust_decimal = "1.36.0"
+rust_decimal_macros = "1.36.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 

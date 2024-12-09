@@ -246,10 +246,10 @@ fn take_canister_snapshot_fails_canister_does_not_own_replace_snapshot() {
 
     // Create canisters.
     let canister_id_1 = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     let canister_id_2 = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
     // Take a snapshot for canister_1.
@@ -291,7 +291,7 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
 
     // Create canister and update controllers.
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     let controllers = vec![caller_canister.get(), test.user_id().get()];
     test.canister_update_controller(canister_id, controllers)
@@ -392,7 +392,7 @@ fn take_canister_snapshot_fails_when_limit_is_reached() {
 
     // Create canister and update controllers.
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     let controllers = vec![caller_canister.get(), test.user_id().get()];
     test.canister_update_controller(canister_id, controllers)
@@ -495,7 +495,7 @@ fn canister_request_take_canister_cycles_reserved_for_app_and_verified_app_subne
 
         // Create canister.
         let canister_id = test
-            .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+            .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
             .unwrap();
         test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
             .unwrap();
@@ -556,7 +556,7 @@ fn canister_snapshot_reserves_cycles_difference() {
             .build();
 
         let canister_id = test
-            .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+            .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
             .unwrap();
         test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
             .unwrap();
@@ -653,7 +653,7 @@ fn take_canister_snapshot_fails_subnet_memory_exceeded() {
     for _ in 0..2 {
         // Create canister.
         let canister_id = test
-            .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+            .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
             .unwrap();
         test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
             .unwrap();
@@ -696,7 +696,7 @@ fn take_canister_snapshot_works_when_enough_subnet_memory_after_replacing_old_sn
     for _ in 0..2 {
         // Create canister.
         let canister_id = test
-            .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+            .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
             .unwrap();
         test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
             .unwrap();
@@ -803,7 +803,7 @@ fn take_canister_snapshot_increases_heap_delta() {
 
     // Create canister.
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
@@ -841,7 +841,7 @@ fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
 
     // Create canister.
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
@@ -902,7 +902,7 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
 
     // Create canister.
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
@@ -1000,7 +1000,7 @@ fn delete_canister_snapshot_fails_snapshot_not_found() {
 
     // Create canister.
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
     // Delete canister snapshot fails because snapshot does not exist.
@@ -1032,10 +1032,10 @@ fn delete_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
 
     // Create canister.
     let canister_id_1 = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     let canister_id_2 = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
     // Take a snapshot.
@@ -1086,7 +1086,7 @@ fn delete_canister_snapshot_succeeds() {
 
     // Create canister.
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
     // Take a snapshot.
@@ -1219,7 +1219,7 @@ fn list_canister_snapshot_succeeds() {
     let canister_id = test
         .canister_from_cycles_and_binary(
             Cycles::new(1_000_000_000_000_000),
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
         )
         .unwrap();
 
@@ -1340,7 +1340,7 @@ fn load_canister_snapshot_fails_snapshot_not_found() {
 
     // Create canister.
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
     // Load canister snapshot fails because snapshot does not exist.
@@ -1372,10 +1372,10 @@ fn load_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
 
     // Create canister.
     let canister_id_1 = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     let canister_id_2 = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
     // Take a snapshot.
@@ -1427,7 +1427,7 @@ fn load_canister_snapshot_fails_when_heap_delta_rate_limited() {
 
     // Create canister.
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
@@ -1495,7 +1495,7 @@ fn load_canister_snapshot_succeeds() {
         .build();
 
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
     // Upload chunk.
@@ -1625,7 +1625,7 @@ fn snapshot_is_deleted_with_canister_delete() {
     let canister_id = test
         .canister_from_cycles_and_binary(
             Cycles::new(1_000_000_000_000_000),
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
         )
         .unwrap();
 
@@ -1667,7 +1667,7 @@ fn take_canister_snapshot_charges_canister_cycles() {
 
     // Create canister.
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
@@ -1721,7 +1721,7 @@ fn load_canister_snapshot_charges_canister_cycles() {
 
     // Create canister.
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
@@ -1765,7 +1765,7 @@ fn snapshot_must_include_globals() {
         (import "ic0" "msg_reply" (func $msg_reply))
         (import "ic0" "msg_reply_data_append"
           (func $msg_reply_data_append (param i32 i32)))
-      
+
         (func $read_global
           (i32.store
             (i32.const 0)
@@ -1776,7 +1776,7 @@ fn snapshot_must_include_globals() {
             (i32.const 4))
           (call $msg_reply)
         )
-      
+
         (func $increase_global
           (global.set 0
             (i32.add
@@ -1786,7 +1786,7 @@ fn snapshot_must_include_globals() {
           )
           (call $msg_reply)
         )
-      
+
         (memory $memory 1)
         (export "memory" (memory $memory))
         (global (export "counter") (mut i32) (i32.const 0))

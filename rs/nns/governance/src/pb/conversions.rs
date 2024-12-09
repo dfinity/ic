@@ -66,6 +66,8 @@ impl From<pb::NeuronInfo> for pb_api::NeuronInfo {
             neuron_type: item.neuron_type,
             visibility: item.visibility,
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
+            deciding_voting_power: item.deciding_voting_power,
+            potential_voting_power: item.potential_voting_power,
         }
     }
 }
@@ -85,6 +87,8 @@ impl From<pb_api::NeuronInfo> for pb::NeuronInfo {
             neuron_type: item.neuron_type,
             visibility: item.visibility,
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
+            deciding_voting_power: item.deciding_voting_power,
+            potential_voting_power: item.potential_voting_power,
         }
     }
 }
@@ -146,6 +150,8 @@ impl From<pb::Neuron> for pb_api::Neuron {
             dissolve_state: item.dissolve_state.map(|x| x.into()),
             visibility: item.visibility,
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
+            deciding_voting_power: item.deciding_voting_power,
+            potential_voting_power: item.potential_voting_power,
         }
     }
 }
@@ -179,6 +185,10 @@ impl From<pb_api::Neuron> for pb::Neuron {
             dissolve_state: item.dissolve_state.map(|x| x.into()),
             visibility: item.visibility,
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
+            // This field is internal only and should not be read from API types.
+            recent_ballots_next_entry_index: None,
+            deciding_voting_power: item.deciding_voting_power,
+            potential_voting_power: item.potential_voting_power,
         }
     }
 }
@@ -239,78 +249,6 @@ impl From<pb_api::Visibility> for pb::Visibility {
             pb_api::Visibility::Unspecified => pb::Visibility::Unspecified,
             pb_api::Visibility::Private => pb::Visibility::Private,
             pb_api::Visibility::Public => pb::Visibility::Public,
-        }
-    }
-}
-
-impl From<pb::AbridgedNeuron> for pb_api::AbridgedNeuron {
-    fn from(item: pb::AbridgedNeuron) -> Self {
-        Self {
-            account: item.account,
-            controller: item.controller,
-            cached_neuron_stake_e8s: item.cached_neuron_stake_e8s,
-            neuron_fees_e8s: item.neuron_fees_e8s,
-            created_timestamp_seconds: item.created_timestamp_seconds,
-            aging_since_timestamp_seconds: item.aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds: item.spawn_at_timestamp_seconds,
-            kyc_verified: item.kyc_verified,
-            maturity_e8s_equivalent: item.maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent: item.staked_maturity_e8s_equivalent,
-            auto_stake_maturity: item.auto_stake_maturity,
-            not_for_profit: item.not_for_profit,
-            joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
-            neuron_type: item.neuron_type,
-            dissolve_state: item.dissolve_state.map(|x| x.into()),
-            visibility: item.visibility,
-            voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
-        }
-    }
-}
-impl From<pb_api::AbridgedNeuron> for pb::AbridgedNeuron {
-    fn from(item: pb_api::AbridgedNeuron) -> Self {
-        Self {
-            account: item.account,
-            controller: item.controller,
-            cached_neuron_stake_e8s: item.cached_neuron_stake_e8s,
-            neuron_fees_e8s: item.neuron_fees_e8s,
-            created_timestamp_seconds: item.created_timestamp_seconds,
-            aging_since_timestamp_seconds: item.aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds: item.spawn_at_timestamp_seconds,
-            kyc_verified: item.kyc_verified,
-            maturity_e8s_equivalent: item.maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent: item.staked_maturity_e8s_equivalent,
-            auto_stake_maturity: item.auto_stake_maturity,
-            not_for_profit: item.not_for_profit,
-            joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
-            neuron_type: item.neuron_type,
-            dissolve_state: item.dissolve_state.map(|x| x.into()),
-            visibility: item.visibility,
-            voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
-        }
-    }
-}
-
-impl From<pb::abridged_neuron::DissolveState> for pb_api::abridged_neuron::DissolveState {
-    fn from(item: pb::abridged_neuron::DissolveState) -> Self {
-        match item {
-            pb::abridged_neuron::DissolveState::WhenDissolvedTimestampSeconds(v) => {
-                pb_api::abridged_neuron::DissolveState::WhenDissolvedTimestampSeconds(v)
-            }
-            pb::abridged_neuron::DissolveState::DissolveDelaySeconds(v) => {
-                pb_api::abridged_neuron::DissolveState::DissolveDelaySeconds(v)
-            }
-        }
-    }
-}
-impl From<pb_api::abridged_neuron::DissolveState> for pb::abridged_neuron::DissolveState {
-    fn from(item: pb_api::abridged_neuron::DissolveState) -> Self {
-        match item {
-            pb_api::abridged_neuron::DissolveState::WhenDissolvedTimestampSeconds(v) => {
-                pb::abridged_neuron::DissolveState::WhenDissolvedTimestampSeconds(v)
-            }
-            pb_api::abridged_neuron::DissolveState::DissolveDelaySeconds(v) => {
-                pb::abridged_neuron::DissolveState::DissolveDelaySeconds(v)
-            }
         }
     }
 }
@@ -1094,6 +1032,17 @@ impl From<pb_api::manage_neuron::StakeMaturity> for pb::manage_neuron::StakeMatu
     }
 }
 
+impl From<pb::manage_neuron::RefreshVotingPower> for pb_api::manage_neuron::RefreshVotingPower {
+    fn from(_item: pb::manage_neuron::RefreshVotingPower) -> Self {
+        Self {}
+    }
+}
+impl From<pb_api::manage_neuron::RefreshVotingPower> for pb::manage_neuron::RefreshVotingPower {
+    fn from(_item: pb_api::manage_neuron::RefreshVotingPower) -> Self {
+        Self {}
+    }
+}
+
 impl From<pb::manage_neuron::DisburseToNeuron> for pb_api::manage_neuron::DisburseToNeuron {
     fn from(item: pb::manage_neuron::DisburseToNeuron) -> Self {
         Self {
@@ -1276,6 +1225,9 @@ impl From<pb::manage_neuron::Command> for pb_api::manage_neuron::Command {
             pb::manage_neuron::Command::StakeMaturity(v) => {
                 pb_api::manage_neuron::Command::StakeMaturity(v.into())
             }
+            pb::manage_neuron::Command::RefreshVotingPower(v) => {
+                pb_api::manage_neuron::Command::RefreshVotingPower(v.into())
+            }
         }
     }
 }
@@ -1311,6 +1263,9 @@ impl From<pb_api::manage_neuron::Command> for pb::manage_neuron::Command {
             pb_api::manage_neuron::Command::Merge(v) => pb::manage_neuron::Command::Merge(v.into()),
             pb_api::manage_neuron::Command::StakeMaturity(v) => {
                 pb::manage_neuron::Command::StakeMaturity(v.into())
+            }
+            pb_api::manage_neuron::Command::RefreshVotingPower(v) => {
+                pb::manage_neuron::Command::RefreshVotingPower(v.into())
             }
         }
     }
@@ -1353,6 +1308,9 @@ impl From<pb_api::ManageNeuronCommandRequest> for pb::manage_neuron::Command {
             }
             pb_api::ManageNeuronCommandRequest::StakeMaturity(v) => {
                 pb::manage_neuron::Command::StakeMaturity(v.into())
+            }
+            pb_api::ManageNeuronCommandRequest::RefreshVotingPower(v) => {
+                pb::manage_neuron::Command::RefreshVotingPower(v.into())
             }
         }
     }
@@ -1465,6 +1423,21 @@ impl From<pb_api::manage_neuron_response::StakeMaturityResponse>
             maturity_e8s: item.maturity_e8s,
             staked_maturity_e8s: item.staked_maturity_e8s,
         }
+    }
+}
+
+impl From<pb::manage_neuron_response::RefreshVotingPowerResponse>
+    for pb_api::manage_neuron_response::RefreshVotingPowerResponse
+{
+    fn from(_item: pb::manage_neuron_response::RefreshVotingPowerResponse) -> Self {
+        Self {}
+    }
+}
+impl From<pb_api::manage_neuron_response::RefreshVotingPowerResponse>
+    for pb::manage_neuron_response::RefreshVotingPowerResponse
+{
+    fn from(_item: pb_api::manage_neuron_response::RefreshVotingPowerResponse) -> Self {
+        Self {}
     }
 }
 
@@ -1643,6 +1616,9 @@ impl From<pb::manage_neuron_response::Command> for pb_api::manage_neuron_respons
             pb::manage_neuron_response::Command::StakeMaturity(v) => {
                 pb_api::manage_neuron_response::Command::StakeMaturity(v.into())
             }
+            pb::manage_neuron_response::Command::RefreshVotingPower(v) => {
+                pb_api::manage_neuron_response::Command::RefreshVotingPower(v.into())
+            }
         }
     }
 }
@@ -1687,6 +1663,9 @@ impl From<pb_api::manage_neuron_response::Command> for pb::manage_neuron_respons
             }
             pb_api::manage_neuron_response::Command::StakeMaturity(v) => {
                 pb::manage_neuron_response::Command::StakeMaturity(v.into())
+            }
+            pb_api::manage_neuron_response::Command::RefreshVotingPower(v) => {
+                pb::manage_neuron_response::Command::RefreshVotingPower(v.into())
             }
         }
     }
@@ -1897,6 +1876,7 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             sns_token_swap_lifecycle: item.sns_token_swap_lifecycle,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
+            total_potential_voting_power: item.total_potential_voting_power,
         }
     }
 }
@@ -1925,6 +1905,7 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             sns_token_swap_lifecycle: item.sns_token_swap_lifecycle,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
+            total_potential_voting_power: item.total_potential_voting_power,
         }
     }
 }
@@ -2381,9 +2362,11 @@ impl From<pb::ProposalInfo> for pb_api::ProposalInfo {
             reward_status: item.reward_status,
             deadline_timestamp_seconds: item.deadline_timestamp_seconds,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
+            total_potential_voting_power: item.total_potential_voting_power,
         }
     }
 }
+
 impl From<pb_api::ProposalInfo> for pb::ProposalInfo {
     fn from(item: pb_api::ProposalInfo) -> Self {
         Self {
@@ -2408,6 +2391,7 @@ impl From<pb_api::ProposalInfo> for pb::ProposalInfo {
             reward_status: item.reward_status,
             deadline_timestamp_seconds: item.deadline_timestamp_seconds,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
+            total_potential_voting_power: item.total_potential_voting_power,
         }
     }
 }
@@ -2424,9 +2408,11 @@ impl From<pb::NetworkEconomics> for pb_api::NetworkEconomics {
             transaction_fee_e8s: item.transaction_fee_e8s,
             max_proposals_to_keep_per_topic: item.max_proposals_to_keep_per_topic,
             neurons_fund_economics: item.neurons_fund_economics.map(|x| x.into()),
+            voting_power_economics: item.voting_power_economics.map(|x| x.into()),
         }
     }
 }
+
 impl From<pb_api::NetworkEconomics> for pb::NetworkEconomics {
     fn from(item: pb_api::NetworkEconomics) -> Self {
         Self {
@@ -2439,6 +2425,27 @@ impl From<pb_api::NetworkEconomics> for pb::NetworkEconomics {
             transaction_fee_e8s: item.transaction_fee_e8s,
             max_proposals_to_keep_per_topic: item.max_proposals_to_keep_per_topic,
             neurons_fund_economics: item.neurons_fund_economics.map(|x| x.into()),
+            voting_power_economics: item.voting_power_economics.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb_api::VotingPowerEconomics> for pb::VotingPowerEconomics {
+    fn from(item: pb_api::VotingPowerEconomics) -> Self {
+        Self {
+            start_reducing_voting_power_after_seconds: item
+                .start_reducing_voting_power_after_seconds,
+            clear_following_after_seconds: item.clear_following_after_seconds,
+        }
+    }
+}
+
+impl From<pb::VotingPowerEconomics> for pb_api::VotingPowerEconomics {
+    fn from(item: pb::VotingPowerEconomics) -> Self {
+        Self {
+            start_reducing_voting_power_after_seconds: item
+                .start_reducing_voting_power_after_seconds,
+            clear_following_after_seconds: item.clear_following_after_seconds,
         }
     }
 }

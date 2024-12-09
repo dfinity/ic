@@ -128,6 +128,12 @@ pub struct NeuronInfo {
     /// after the UNIX epoch).
     #[prost(uint64, optional, tag = "13")]
     pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
+    /// See the analogous field in Nueron.
+    #[prost(uint64, optional, tag = "14")]
+    pub deciding_voting_power: ::core::option::Option<u64>,
+    /// See the analogous field in Neuron.
+    #[prost(uint64, optional, tag = "15")]
+    pub potential_voting_power: ::core::option::Option<u64>,
 }
 /// A transfer performed from some account to stake a new neuron.
 #[derive(
@@ -306,6 +312,68 @@ pub struct Neuron {
     /// after the UNIX epoch).
     #[prost(uint64, optional, tag = "24")]
     pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
+    /// The index of the next entry in the recent_ballots list that will be
+    /// used for the circular buffer. This is used to determine which entry
+    /// to overwrite next.
+    #[prost(uint32, optional, tag = "25")]
+    pub recent_ballots_next_entry_index: ::core::option::Option<u32>,
+    /// The amount of "sway" this neuron has when voting on proposals.
+    ///
+    /// When a proposal is created, each eligible neuron gets a "blank" ballot. The
+    /// amount of voting power in that ballot is set to the neuron's deciding
+    /// voting power at the time of proposal creation. There are two ways that a
+    /// proposal can become decided:
+    ///
+    ///    1. Early: Either more than half of the total voting power in the ballots
+    ///    votes in favor (then the proposal is approved), or at least half of the
+    ///    votal voting power in the ballots votes against (then, the proposal is
+    ///    rejected).
+    ///
+    ///    2. The proposal's voting deadline is reached. At that point, if there is
+    ///    more voting power in favor than against, and at least 3% of the total
+    ///    voting power voted in favor, then the proposal is approved. Otherwise, it
+    ///    is rejected.
+    ///
+    /// If a neuron regularly refreshes its voting power, this has the same value
+    /// as potential_voting_power. Actions that cause a refresh are as follows:
+    ///
+    ///      1. voting directly (not via following)
+    ///      2. set following
+    ///      3. refresh voting power
+    ///
+    /// (All of these actions are performed via the manage_neuron method.)
+    ///
+    /// However, if a neuron has not refreshed in a "long" time, this will be less
+    /// than potential voting power. See VotingPowerEconomics. As a further result
+    /// of less deciding voting power, not only does it have less influence on the
+    /// outcome of proposals, the neuron receives less voting rewards (when it
+    /// votes indirectly via following).
+    ///
+    /// For details, see <https://dashboard.internetcomputer.org/proposal/132411.>
+    ///
+    /// Per NNS policy, this is opt. Nevertheless, it will never be null.
+    #[prost(uint64, optional, tag = "26")]
+    pub deciding_voting_power: ::core::option::Option<u64>,
+    /// The amount of "sway" this neuron can have if it refreshes its voting power
+    /// frequently enough.
+    ///
+    /// Unlike deciding_voting_power, this does NOT take refreshing into account.
+    /// Rather, this only takes three factors into account:
+    ///
+    ///      1. (Net) staked amount - This is the "base" of a neuron's voting power.
+    ///         This primarily consists of the neuron's ICP balance.
+    ///
+    ///      2. Age - Neurons with more age have more voting power (all else being
+    ///         equal).
+    ///
+    ///      3. Dissolve delay - Neurons with longer dissolve delay have more voting
+    ///         power (all else being equal). Neurons with a dissolve delay of less
+    ///         than six months are not eligible to vote. Therefore, such neurons
+    ///         are considered to have 0 voting power.
+    ///
+    /// Per NNS policy, this is opt. Nevertheless, it will never be null.
+    #[prost(uint64, optional, tag = "27")]
+    pub potential_voting_power: ::core::option::Option<u64>,
     /// At any time, at most one of `when_dissolved` and
     /// `dissolve_delay` are specified.
     ///
@@ -433,6 +501,8 @@ pub struct AbridgedNeuron {
     pub visibility: ::core::option::Option<i32>,
     #[prost(uint64, optional, tag = "24")]
     pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
+    #[prost(uint32, optional, tag = "25")]
+    pub recent_ballots_next_entry_index: ::core::option::Option<u32>,
     #[prost(oneof = "abridged_neuron::DissolveState", tags = "9, 10")]
     pub dissolve_state: ::core::option::Option<abridged_neuron::DissolveState>,
 }
@@ -847,7 +917,7 @@ pub struct ManageNeuron {
     pub neuron_id_or_subaccount: ::core::option::Option<manage_neuron::NeuronIdOrSubaccount>,
     #[prost(
         oneof = "manage_neuron::Command",
-        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15"
+        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16"
     )]
     pub command: ::core::option::Option<manage_neuron::Command>,
 }
@@ -1323,6 +1393,20 @@ pub mod manage_neuron {
             NeuronIdOrSubaccount(super::super::Empty),
         }
     }
+    /// This is one way for a neuron to make sure that its deciding_voting_power is
+    /// not less than its potential_voting_power. See the description of those
+    /// fields in Neuron.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct RefreshVotingPower {}
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     #[derive(
         candid::CandidType,
@@ -1374,6 +1458,8 @@ pub mod manage_neuron {
         Merge(Merge),
         #[prost(message, tag = "15")]
         StakeMaturity(StakeMaturity),
+        #[prost(message, tag = "16")]
+        RefreshVotingPower(RefreshVotingPower),
     }
 }
 /// The response of the ManageNeuron command
@@ -1391,7 +1477,7 @@ pub mod manage_neuron {
 pub struct ManageNeuronResponse {
     #[prost(
         oneof = "manage_neuron_response::Command",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14"
     )]
     pub command: ::core::option::Option<manage_neuron_response::Command>,
 }
@@ -1582,6 +1668,17 @@ pub mod manage_neuron_response {
         serde::Serialize,
         comparable::Comparable,
         Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct RefreshVotingPowerResponse {}
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
         PartialEq,
         ::prost::Oneof,
     )]
@@ -1612,6 +1709,8 @@ pub mod manage_neuron_response {
         Merge(MergeResponse),
         #[prost(message, tag = "13")]
         StakeMaturity(StakeMaturityResponse),
+        #[prost(message, tag = "14")]
+        RefreshVotingPower(RefreshVotingPowerResponse),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -1873,6 +1972,13 @@ pub struct ProposalData {
     /// `cf_participants` and use only this field for managing the Neurons' Fund swap participation.
     #[prost(message, optional, tag = "21")]
     pub neurons_fund_data: ::core::option::Option<NeuronsFundData>,
+    /// This is the amount of voting power that would be available if all neurons
+    /// kept themselves "refreshed". This is used as the baseline for voting
+    /// rewards. That is, the amount of maturity that a neuron receives is the
+    /// amount of voting power that it exercised (so called "deciding" voting
+    /// power) in proportion to this.
+    #[prost(uint64, optional, tag = "22")]
+    pub total_potential_voting_power: ::core::option::Option<u64>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(
@@ -2375,6 +2481,9 @@ pub struct ProposalInfo {
     pub deadline_timestamp_seconds: ::core::option::Option<u64>,
     #[prost(message, optional, tag = "20")]
     pub derived_proposal_information: ::core::option::Option<DerivedProposalInformation>,
+    /// See \[ProposalData::total_potential_voting_power\].
+    #[prost(uint64, optional, tag = "21")]
+    pub total_potential_voting_power: ::core::option::Option<u64>,
 }
 /// Network economics contains the parameters for several operations related
 /// to the economy of the network. When submitting a NetworkEconomics proposal
@@ -2382,9 +2491,6 @@ pub struct ProposalInfo {
 /// to set the parameters that it wishes to change.
 /// In other words, it's not possible to set any of the values of
 /// NetworkEconomics to 0.
-///
-/// NOTE: If adding a value to this proto, make sure there is a corresponding
-/// `if` in Governance::perform_action().
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2437,6 +2543,42 @@ pub struct NetworkEconomics {
     /// Global Neurons' Fund participation thresholds.
     #[prost(message, optional, tag = "11")]
     pub neurons_fund_economics: ::core::option::Option<NeuronsFundEconomics>,
+    /// Parameters that affect the voting power of neurons.
+    #[prost(message, optional, tag = "12")]
+    pub voting_power_economics: ::core::option::Option<VotingPowerEconomics>,
+}
+/// Parameters that affect the voting power of neurons.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct VotingPowerEconomics {
+    /// If a neuron has not "refreshed" its voting power after this amount of time,
+    /// its deciding voting power starts decreasing linearly. See also
+    /// clear_following_after_seconds.
+    ///
+    /// For explanation of what "refresh" means in this context, see
+    /// <https://dashboard.internetcomputer.org/proposal/132411>
+    ///
+    /// Initially, set to 0.5 years. (The nominal length of a year is 365.25 days).
+    #[prost(uint64, optional, tag = "1")]
+    pub start_reducing_voting_power_after_seconds: ::core::option::Option<u64>,
+    /// After a neuron has experienced voting power reduction for this amount of
+    /// time, a couple of things happen:
+    ///
+    ///      1. Deciding voting power reaches 0.
+    ///
+    ///      2. Its following on topics other than NeuronManagement are cleared.
+    ///
+    /// Initially, set to 1/12 years.
+    #[prost(uint64, optional, tag = "2")]
+    pub clear_following_after_seconds: ::core::option::Option<u64>,
 }
 /// The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
 /// determine how much to contribute for a given direct participation amount. Note that the actual
@@ -4614,6 +4756,29 @@ pub mod archived_monthly_node_provider_rewards {
         #[prost(message, tag = "1")]
         Version1(V1),
     }
+}
+/// Internal type to allow ProposalVotingStateMachine to be stored
+/// in stable memory.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ProposalVotingStateMachine {
+    #[prost(message, optional, tag = "1")]
+    pub proposal_id: ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
+    #[prost(enumeration = "Topic", tag = "2")]
+    pub topic: i32,
+    #[prost(message, repeated, tag = "3")]
+    pub neurons_to_check_followers: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
+    #[prost(message, repeated, tag = "4")]
+    pub followers_to_check: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
+    #[prost(map = "uint64, enumeration(Vote)", tag = "5")]
+    pub recent_neuron_ballots_to_record: ::std::collections::HashMap<u64, i32>,
 }
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow

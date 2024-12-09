@@ -1,3 +1,5 @@
+use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
+use crate::pb::v1::AdvanceSnsTargetVersion;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     governance::{
@@ -12,16 +14,16 @@ use crate::{
         proposal,
         proposal::Action,
         proposal_data::{
-            self, ActionAuxiliary as ActionAuxiliaryPb, MintSnsTokensActionAuxiliary,
-            TransferSnsTreasuryFundsActionAuxiliary,
+            self, ActionAuxiliary as ActionAuxiliaryPb, AdvanceSnsTargetVersionActionAuxiliary,
+            MintSnsTokensActionAuxiliary, TransferSnsTreasuryFundsActionAuxiliary,
         },
         transfer_sns_treasury_funds::TransferFrom,
         DeregisterDappCanisters, ExecuteGenericNervousSystemFunction, Governance, GovernanceError,
         LogVisibility, ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata,
         MintSnsTokens, Motion, NervousSystemFunction, NervousSystemParameters, Proposal,
         ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-        RegisterDappCanisters, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-        UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
+        RegisterDappCanisters, SnsVersion, Tally, TransferSnsTreasuryFunds,
+        UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
     },
     sns_upgrade::{get_proposal_id_that_added_wasm, get_upgrade_params, UpgradeSnsParams},
     types::Environment,
@@ -50,6 +52,7 @@ use std::{
     convert::TryFrom,
     fmt::Write,
 };
+use time;
 
 /// The maximum number of bytes in an SNS proposal's title.
 pub const PROPOSAL_TITLE_BYTES_MAX: usize = 256;
@@ -169,10 +172,11 @@ pub(crate) fn get_action_auxiliary(
         })
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum ActionAuxiliary {
     TransferSnsTreasuryFunds(Valuation),
     MintSnsTokens(Valuation),
+    AdvanceSnsTargetVersion(Version),
     None,
 }
 
@@ -186,6 +190,21 @@ impl ActionAuxiliary {
                 format!(
                     "Missing supporting information. Specifically, \
                      no treasury valuation factors: {:#?}",
+                    wrong,
+                ),
+            )),
+        }
+    }
+
+    pub fn unwrap_advance_sns_target_version_or_err(self) -> Result<Version, GovernanceError> {
+        match self {
+            Self::AdvanceSnsTargetVersion(new_target) => Ok(new_target),
+
+            wrong => Err(GovernanceError::new_with_message(
+                ErrorType::InconsistentInternalData,
+                format!(
+                    "Missing supporting information. Specifically, \
+                     no new target version: {:#?}",
                     wrong,
                 ),
             )),
@@ -215,6 +234,14 @@ impl TryFrom<ActionAuxiliary> for Option<ActionAuxiliaryPb> {
                     valuation: Some(ValuationPb::try_from(valuation)?),
                 },
             )),
+
+            ActionAuxiliary::AdvanceSnsTargetVersion(target_version) => {
+                Some(ActionAuxiliaryPb::AdvanceSnsTargetVersion(
+                    AdvanceSnsTargetVersionActionAuxiliary {
+                        target_version: Some(SnsVersion::from(target_version)),
+                    },
+                ))
+            }
         };
 
         Ok(result)
@@ -244,6 +271,21 @@ impl TryFrom<&Option<ActionAuxiliaryPb>> for ActionAuxiliary {
                     .map_err(|err| format!("Invalid ActionAuxiliaryPb {:?}: {}", src, err))?;
 
                 ActionAuxiliary::MintSnsTokens(valuation)
+            }
+            Some(ActionAuxiliaryPb::AdvanceSnsTargetVersion(action_auxiliary)) => {
+                let AdvanceSnsTargetVersionActionAuxiliary {
+                    target_version: Some(target_version),
+                } = action_auxiliary
+                else {
+                    return Err(
+                        "Invalid ActionAuxiliaryPb: target_version must be specified.".to_string(),
+                    );
+                };
+
+                let target_version = Version::try_from(target_version.clone())
+                    .map_err(|err| format!("Invalid ActionAuxiliaryPb {:?}: {}", src, err))?;
+
+                ActionAuxiliary::AdvanceSnsTargetVersion(target_version)
             }
         };
 
@@ -441,6 +483,13 @@ pub(crate) async fn validate_and_render_action(
         }
         proposal::Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
             validate_and_render_manage_dapp_canister_settings(manage_dapp_canister_settings)
+        }
+        proposal::Action::AdvanceSnsTargetVersion(advance_sns_target_version) => {
+            return validate_and_render_advance_sns_target_version_proposal(
+                env.canister_id(),
+                governance_proto,
+                advance_sns_target_version,
+            );
         }
     }
     .map(|rendering| (rendering, ActionAuxiliary::None))
@@ -1020,30 +1069,26 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     const RAW_WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
     // see https://ic-interface-spec.netlify.app/#canister-module-format
     const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
-    // Minimum length of raw WASM is 8 bytes (4 magic bytes and 4 bytes encoding version).
-    // Minimum length of gzipped WASM is 10 bytes (2 magic bytes, 1 byte encoding compression method, and 7 additional gzip header bytes).
-    const MIN_WASM_LEN: usize = 8;
-    if let Err(err) = validate_len(
-        "new_canister_wasm",
-        new_canister_wasm,
-        MIN_WASM_LEN,
-        usize::MAX,
-    ) {
-        defects.push(err);
-    } else if new_canister_wasm[..4] != RAW_WASM_HEADER[..]
-        && new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
+
+    if new_canister_wasm.len() < 4
+        || new_canister_wasm[..4] != RAW_WASM_HEADER[..]
+            && new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
     {
         defects.push("new_canister_wasm lacks the magic value in its header.".into());
     }
 
-    if new_canister_wasm.len()
-        + canister_upgrade_arg
+    if new_canister_wasm.len().saturating_add(
+        canister_upgrade_arg
             .as_ref()
             .map(|arg| arg.len())
-            .unwrap_or_default()
-        >= MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
+            .unwrap_or_default(),
+    ) >= MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
     {
-        defects.push(format!("the maximum canister WASM and argument size for UpgradeSnsControlledCanister is {} bytes.", MAX_INSTALL_CODE_WASM_AND_ARG_SIZE));
+        defects.push(format!(
+            "the maximum canister WASM and argument size \
+             for UpgradeSnsControlledCanister is {} bytes.",
+            MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
+        ));
     }
 
     // Generate final report.
@@ -1668,6 +1713,77 @@ fn validate_and_render_manage_dapp_canister_settings(
     }
 }
 
+/// Attempts to format `` as a human-readable string.
+///
+/// For example:
+/// ```
+/// assert_eq!(format_timestamp(1732896850), Some("2024-11-29 16:14:10 UTC".to_string()));
+/// ```
+fn format_timestamp(timestamp_seconds: u64) -> Option<String> {
+    let timestamp_seconds = i64::try_from(timestamp_seconds).ok()?;
+    let dt_offset = time::OffsetDateTime::from_unix_timestamp(timestamp_seconds).ok()?;
+    let format =
+        time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second] UTC")
+            .ok()?;
+    dt_offset.format(&format).ok()
+}
+
+/// Attempts to validate an `AdvanceSnsTargetVersion` action and render its human-readable text.
+/// Invalidates the action in the following cases:
+/// - There are no pending upgrades.
+/// - `new_target` is equal to `current_version`.
+/// - `new_target` comes before `current_target_version` along the `upgrade_steps`.
+///
+/// Details:
+/// 1. Validates the action's `new_target` field, if it is set.
+/// 2. Identifies the `new_target`, either based on the above, or using `upgrade_steps`.
+/// 3. Renders the Markdown proposal description.
+/// 4. Returns the rendering and the identified `target_version`.
+///    as `ActionAuxiliary`. This returned `target_version` should be used for executing
+///    this action, assuming the proposal gets adopted.
+fn validate_and_render_advance_sns_target_version_proposal(
+    sns_governance_canister_id: CanisterId,
+    governance_proto: &Governance,
+    advance_sns_target_version: &AdvanceSnsTargetVersion,
+) -> Result<(String, ActionAuxiliary), String> {
+    let (upgrade_steps, target_version) = governance_proto
+        .validate_new_target_version(advance_sns_target_version.new_target.clone())?;
+
+    let time_of_validity = {
+        let timestamp_seconds = upgrade_steps.approximate_time_of_validity_timestamp_seconds();
+        // This fallback should not occur unless `timestamp_seconds` is outside of the range
+        // from +1970-01-01 00:00:00 UTC (0)
+        // till +9999-12-31 23:59:59 UTC (253402300799).
+        format_timestamp(timestamp_seconds)
+            .unwrap_or_else(|| format!("timestamp {} seconds", timestamp_seconds))
+    };
+
+    let current_target_versions_render =
+        render_two_versions_as_markdown_table(upgrade_steps.current(), &target_version);
+
+    let upgrade_journal_url_render = format!(
+        "https://{}.raw.icp0.io/journal/json",
+        sns_governance_canister_id,
+    );
+
+    let render = format!(
+        "# Proposal to advance SNS target version\n\n\
+         {current_target_versions_render}\n\n\
+         ### Upgrade steps\n\n\
+         {upgrade_steps}\n\n\
+         ### Monitoring the upgrade process\n\n\
+         Please note: the upgrade steps mentioned above (valid around {time_of_validity}) \
+         might change during this proposal's voting period.\n\n\
+         The **upgrade journal** provides up-to-date information on this SNS's upgrade process:\n\n\
+         {upgrade_journal_url_render}"
+    );
+
+    Ok((
+        render,
+        ActionAuxiliary::AdvanceSnsTargetVersion(target_version),
+    ))
+}
+
 impl ProposalData {
     /// Returns the proposal's decision status. See [ProposalDecisionStatus] in the SNS's
     /// proto for more information.
@@ -2197,6 +2313,30 @@ impl ProposalData {
             ballots: limited_ballots,
         }
     }
+
+    /// "Upgrade proposals" are those that upgrade the SNS or a canister it controls.
+    pub(crate) fn is_upgrade_proposal(&self) -> bool {
+        let action_is_upgrade = matches!(
+            self.proposal,
+            Some(Proposal {
+                action: Some(
+                    Action::UpgradeSnsControlledCanister(_)
+                        | Action::UpgradeSnsToNextVersion(_)
+                        | Action::ManageLedgerParameters(_)
+                ),
+                ..
+            })
+        );
+        // In production, the above condition is exactly what we want. However, in some tests, we only set the action_id
+        // and not the action.
+        let upgrade_action_ids: [u64; 3] = [
+            (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into(),
+            (&Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default())).into(),
+            (&Action::ManageLedgerParameters(ManageLedgerParameters::default())).into(),
+        ];
+        let action_id_is_upgrade = upgrade_action_ids.contains(&self.action);
+        action_is_upgrade || action_id_is_upgrade
+    }
 }
 
 impl ProposalDecisionStatus {
@@ -2419,6 +2559,9 @@ mod treasury_tests;
 
 #[cfg(test)]
 mod minting_tests;
+
+#[cfg(test)]
+mod advance_sns_target_version;
 
 #[cfg(test)]
 mod tests {

@@ -12,13 +12,13 @@ pub fn encode_metrics(
     const WASM_PAGE_SIZE_IN_BYTES: f64 = 65536.0;
 
     metrics.encode_gauge(
-        "ckbtc_minter_stable_memory_bytes",
+        "stable_memory_bytes",
         ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
         "Size of the stable memory allocated by this canister.",
     )?;
 
     metrics.encode_gauge(
-        "ckbtc_minter_heap_memory_bytes",
+        "heap_memory_bytes",
         heap_memory_size_bytes() as f64,
         "Size of the heap memory allocated by this canister.",
     )?;
@@ -123,6 +123,12 @@ pub fn encode_metrics(
     )?;
 
     metrics.encode_gauge(
+        "ckbtc_minter_fee_based_min_retrievable_amount",
+        state::read_state(|s| s.fee_based_retrieve_btc_min_amount) as f64,
+        "Minimum number of ckBTC a user can withdraw (fee based).",
+    )?;
+
+    metrics.encode_gauge(
         "ckbtc_minter_min_confirmations",
         state::read_state(|s| s.min_confirmations) as f64,
         "Min number of confirmations on BTC network",
@@ -150,18 +156,7 @@ pub fn encode_metrics(
 
     metrics.encode_gauge(
         "ckbtc_minter_btc_balance",
-        state::read_state(|s| {
-            s.available_utxos.iter().map(|u| u.value).sum::<u64>()
-                + s.submitted_transactions
-                    .iter()
-                    .map(|tx| {
-                        tx.change_output
-                            .as_ref()
-                            .map(|out| out.value)
-                            .unwrap_or_default()
-                    })
-                    .sum::<u64>()
-        }) as f64,
+        state::read_state(|s| s.get_total_btc_managed()) as f64,
         "Total BTC amount locked in available UTXOs.",
     )?;
 
@@ -205,6 +200,24 @@ pub fn encode_metrics(
         "ckbtc_minter_owed_kyt_amount",
         state::read_state(|s| s.owed_kyt_amount.iter().map(|e| e.1).sum::<u64>()) as f64,
         "The total amount of ckBTC that minter owes to the KYT canister.",
+    )?;
+
+    metrics.encode_gauge(
+        "ckbtc_minter_suspended_utxos_without_account_count",
+        state::read_state(|s| s.suspended_utxos.utxos_without_account().len()) as f64,
+        "Total number of suspended UTXOs without account.",
+    )?;
+
+    metrics.encode_gauge(
+        "ckbtc_minter_ignored_utxos_count",
+        state::read_state(|s| s.ignored_utxos().count()) as f64,
+        "Total number of suspended UTXOs due to a too small value.",
+    )?;
+
+    metrics.encode_gauge(
+        "ckbtc_minter_quarantined_utxos_count",
+        state::read_state(|s| s.quarantined_utxos().count()) as f64,
+        "Total number of suspended UTXOs due to being marked as tainted.",
     )?;
 
     Ok(())

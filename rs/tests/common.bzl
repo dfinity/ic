@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "//rs/bitcoin/ckbtc/kyt",
     "//rs/bitcoin/ckbtc/minter",
     "//rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
-    "//rs/boundary_node/discower_bowndary:discower-bowndary",
     "//rs/canister_client",
     "//rs/canister_client/sender",
     "//rs/ledger_suite/icrc1/test_utils",
@@ -26,7 +25,7 @@ DEPENDENCIES = [
     "//rs/cycles_account_manager",
     "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
     "//rs/http_utils",
-    "//rs/ic_os/dev_test_tools/deterministic_ips",
+    "//rs/ic_os/deterministic_ips",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/nervous_system/clients",
@@ -310,13 +309,9 @@ UNIVERSAL_VM_RUNTIME_DEPS = [
     "//rs/tests:create-universal-vm-config-image.sh",
 ]
 
-GRAFANA_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
-    "//rs/tests:grafana_dashboards",
-]
+GRAFANA_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS
 
 BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
-    "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst.cas-url",
-    "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst.sha256",
     "//ic-os/boundary-guestos:scripts/build-bootstrap-config-image.sh",
 ]
 
@@ -328,7 +323,7 @@ CANISTER_HTTP_RUNTIME_DEPS = [
 
 XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]
 
-STATESYNC_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/statesync_test:statesync_test_canister"]
+STATESYNC_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/statesync_test:statesync-test-canister"]
 
 IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + \
                                        NNS_CANISTER_RUNTIME_DEPS + \
@@ -344,3 +339,11 @@ IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + \
     "@candid//:didc",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
 ]
+
+UNIVERSAL_CANISTER_RUNTIME_DEPS = [
+    "//rs/universal_canister/impl:universal_canister.wasm.gz",
+]
+
+UNIVERSAL_CANISTER_ENV = {
+    "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+}

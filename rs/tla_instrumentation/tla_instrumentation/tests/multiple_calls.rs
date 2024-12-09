@@ -21,7 +21,7 @@ mod tla_stuff {
     use crate::StructCanister;
     use std::collections::BTreeSet;
 
-    use candid::Nat;
+    use candid::Int;
 
     pub const PID: &str = "Multiple_Calls";
     pub const CAN_NAME: &str = "mycan";
@@ -71,14 +71,14 @@ mod tla_stuff {
                                 Some(TlaValue::Int(start_counter)),
                                 Some(TlaValue::Int(end_counter)),
                             ) => start_counter.max(end_counter).clone(),
-                            _ => Nat::from(0_u64),
+                            _ => Int::from(0_u64),
                         },
                     )
                     .max();
                 let constants = BTreeMap::from([
                     (
                         "MAX_COUNTER".to_string(),
-                        max_counter.unwrap_or(Nat::from(0_u64)).to_tla_value(),
+                        max_counter.unwrap_or(Int::from(0_u64)).to_tla_value(),
                     ),
                     (
                         "My_Method_Process_Ids".to_string(),

@@ -5,6 +5,7 @@ use crate::crypto::canister_threshold_sig::error::{
 use crate::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
 use crate::{Height, NodeId, RegistryVersion, SubnetId};
 use assert_matches::assert_matches;
+use ic_base_types::PrincipalId;
 use ic_crypto_test_utils_canister_threshold_sigs::{ordered_node_id, set_of_nodes};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::{CryptoRng, Rng};
@@ -624,6 +625,7 @@ fn should_create_schnorr_sig_inputs_correctly() {
     let tschnorr_sig_inputs = ThresholdSchnorrSigInputs::new(
         &derivation_path,
         &message,
+        None,
         nonce,
         presignature_transcript.clone(),
         key_transcript.clone(),
@@ -682,6 +684,7 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_algorithms() {
             ThresholdSchnorrSigInputs::new(
                 &derivation_path,
                 &message,
+                None,
                 nonce,
                 presignature_transcript.clone(),
                 key_transcript,
@@ -700,6 +703,7 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_algorithms() {
         ThresholdSchnorrSigInputs::new(
             &derivation_path,
             &message,
+            None,
             nonce,
             presignature_transcript,
             key_transcript,
@@ -735,6 +739,7 @@ fn should_fail_creating_schnorr_sig_inputs_with_unsupported_algorithm() {
         ThresholdSchnorrSigInputs::new(
             &derivation_path,
             &message,
+            None,
             nonce,
             presignature_transcript,
             key_transcript,
@@ -769,6 +774,7 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_receivers() {
         ThresholdSchnorrSigInputs::new(
             &derivation_path(),
             &message_in_size_range(0..1_000, rng),
+            None,
             nonce(),
             presignature_transcript,
             key_transcript,
@@ -811,6 +817,7 @@ fn should_fail_creating_schnorr_sig_inputs_with_invalid_transcript_origin() {
             ThresholdSchnorrSigInputs::new(
                 &derivation_path,
                 &message,
+                None,
                 nonce,
                 presignature_transcript.clone(),
                 key_transcript.clone(),

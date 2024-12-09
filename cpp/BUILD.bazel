@@ -26,29 +26,3 @@ genrule(
         "@platforms//os:linux",
     ],
 )
-
-cc_binary(
-    name = "prestorecon_bin",
-    srcs = [
-        "prestorecon-cpp/prestorecon.cc",
-    ],
-    copts = ["-std=c++17"],
-    linkopts = [
-        "-lselinux",
-        "-pthread",
-    ],
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-)
-
-genrule(
-    name = "prestorecon_cleaned",
-    srcs = ["prestorecon_bin"],
-    outs = ["prestorecon"],
-    cmd = "objcopy -R .comment -R .note -R .note.gnu.build-id $< $@",
-    executable = True,
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-)

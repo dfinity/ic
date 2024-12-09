@@ -271,13 +271,13 @@ pub fn setup_test_router(
 ) -> (Router, Vec<Subnet>) {
     let mut args = vec![
         "",
-        "--local-store-path",
+        "--registry-local-store-path",
         "/tmp",
-        "--log-null",
+        "--obs-log-null",
         "--retry-update-call",
     ];
     if !enable_logging {
-        args.push("--disable-request-logging");
+        args.push("--obs-disable-request-logging");
     }
 
     // Hacky, but required due to &str
@@ -291,7 +291,7 @@ pub fn setup_test_router(
     let cli = Cli::parse_from(args);
     #[cfg(feature = "tls")]
     let cli = Cli::parse_from({
-        args.extend_from_slice(&["--hostname", "foobar"]);
+        args.extend_from_slice(&["--tls-hostname", "foobar"]);
         args
     });
 
@@ -315,6 +315,8 @@ pub fn setup_test_router(
     let subnets = registry_snapshot.load_full().unwrap().subnets.clone();
     persister.persist(subnets.clone());
 
+    let salt: Arc<ArcSwapOption<Vec<u8>>> = Arc::new(ArcSwapOption::empty());
+
     let router = setup_router(
         registry_snapshot,
         routing_table,
@@ -326,6 +328,7 @@ pub fn setup_test_router(
         enable_cache.then_some(Arc::new(
             Cache::new(10485760, 262144, Duration::from_secs(1), false).unwrap(),
         )),
+        salt,
     );
 
     let router = router.layer(axum::middleware::from_fn(add_conninfo));

@@ -73,11 +73,11 @@ impl Block {
     }
 
     /// Define variables and functions used in the `code` snippet.
-    pub fn define_variables_and_functions(mut self, code: &str, wasm64_enabled: Wasm64) -> Self {
+    pub fn define_variables_and_functions(mut self, code: &str) -> Self {
         for name in ["x", "y", "z", "zero", "address", "one"] {
             for ty in ["i32", "i64", "f32", "f64", "v128"] {
                 if code.contains(&format!("${name}_{ty}")) {
-                    self.declare_variable(name, ty, wasm64_enabled);
+                    self.declare_variable(name, ty);
                 }
             }
         }
@@ -86,6 +86,20 @@ impl Block {
         }
         if code.contains("$empty_return_call") {
             self.import("(func $empty_return_call (result i32) return_call $empty)");
+        }
+        if code.contains("$recursive_call") {
+            self.import(
+                &RECURSIVE
+                    .replace("<NAME>", "$recursive_call")
+                    .replace("<RETURN>", ""),
+            );
+        }
+        if code.contains("$recursive_return_call") {
+            self.import(
+                &RECURSIVE
+                    .replace("<NAME>", "$recursive_return_call")
+                    .replace("<RETURN>", "return_"),
+            );
         }
         if code.contains("$result_i32") || code.contains("table.get") || code.contains("table.size")
         {
@@ -99,8 +113,8 @@ impl Block {
     }
 
     /// Declare a `black_box` variable with specified `name` and `type`.
-    pub fn declare_variable(&mut self, name: &str, ty: &str, wasm64_enabled: Wasm64) -> &mut Self {
-        let memory_var_address = if wasm64_enabled == Wasm64::Enabled {
+    pub fn declare_variable(&mut self, name: &str, ty: &str) -> &mut Self {
+        let memory_var_address = if ty == "i64" {
             // The address should be somewhere beyond 4 GiB.
             // This is 5 GB.
             "5368709120"
@@ -213,3 +227,18 @@ pub fn src_type(op: &str) -> &'static str {
     // Fallback to the destination type, i.e. for `i64.eqz` returns `i64`.
     dst_type(op)
 }
+
+const RECURSIVE: &str = r#"
+(func <NAME> (param $n i32) (result i32)
+    (i32.eqz (local.get $n))
+    (if (result i32)
+      (then
+      	(local.get $n)
+      )
+      (else
+      	(i32.sub (local.get $n) (i32.const 1))
+        (<RETURN>call <NAME>)
+      )
+    )
+)
+"#;

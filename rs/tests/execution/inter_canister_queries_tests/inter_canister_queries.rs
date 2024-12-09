@@ -31,7 +31,7 @@ pub fn cannot_query_xnet_canister(env: TestEnv) {
             .await;
 
             let res = canister_a
-                .query(wasm().inter_query(canister_b.canister_id(), call_args()))
+                .composite_query(wasm().composite_query(canister_b.canister_id(), call_args()))
                 .await;
             assert_reject(res, RejectCode::CanisterReject);
         }
@@ -71,7 +71,7 @@ pub fn self_loop_succeeds(env: TestEnv) {
                 UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
                     .await;
             let res = canister
-                .query(wasm().inter_query(canister.canister_id(), call_args()))
+                .composite_query(wasm().composite_query(canister.canister_id(), call_args()))
                 .await;
             assert!(res.is_ok());
         }
@@ -91,15 +91,15 @@ pub fn canisters_loop_succeeds(env: TestEnv) {
             let canister_b =
                 UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
                     .await;
-            let res = canister_a
-                .query(
-                    wasm().inter_query(
+            let res =
+                canister_a
+                    .composite_query(wasm().composite_query(
                         canister_b.canister_id(),
-                        call_args()
-                            .other_side(wasm().inter_query(canister_a.canister_id(), call_args())),
-                    ),
-                )
-                .await;
+                        call_args().other_side(
+                            wasm().composite_query(canister_a.canister_id(), call_args()),
+                        ),
+                    ))
+                    .await;
             assert!(res.is_ok());
         }
     });
@@ -120,8 +120,8 @@ pub fn intermediate_canister_does_not_reply(env: TestEnv) {
                 UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
                     .await;
             let res = canister_a
-                .query(
-                    wasm().inter_query(
+                .composite_query(
+                    wasm().composite_query(
                         canister_b.canister_id(),
                         call_args()
                             .other_side(wasm().reply())
@@ -151,7 +151,7 @@ pub fn query_two_canisters(env: TestEnv) {
             let arbitrary_bytes = b";ioapusdvzn,x";
             assert_eq!(
                 canister_a
-                    .query(wasm().inter_query(
+                    .composite_query(wasm().composite_query(
                         canister_b.canister_id(),
                         call_args().other_side(wasm().reply_data(arbitrary_bytes)),
                     ))
@@ -183,9 +183,9 @@ pub fn query_three_canisters(env: TestEnv) {
             let arbitrary_bytes = b";ioapusdvzn,x";
             assert_eq!(
                 canister_a
-                    .query(wasm().inter_query(
+                    .composite_query(wasm().composite_query(
                         canister_b.canister_id(),
-                        call_args().other_side(wasm().inter_query(
+                        call_args().other_side(wasm().composite_query(
                             canister_c.canister_id(),
                             call_args().other_side(wasm().reply_data(arbitrary_bytes))
                         ))
@@ -210,7 +210,7 @@ pub fn canister_queries_non_existent(env: TestEnv) {
                     .await;
             let non_existent = CanisterId::from(12345);
             let res = canister_a
-                .query(wasm().inter_query(non_existent, call_args()))
+                .composite_query(wasm().composite_query(non_existent, call_args()))
                 .await;
             assert_reject(res, RejectCode::CanisterReject);
         }
@@ -232,7 +232,7 @@ pub fn canister_queries_does_not_reply(env: TestEnv) {
                 UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
                     .await;
             let res = canister_a
-                .query(wasm().inter_query(
+                .composite_query(wasm().composite_query(
                     canister_b.canister_id(),
                     call_args().other_side(wasm().noop()),
                 ))
@@ -333,7 +333,7 @@ pub fn inter_canister_query_first_canister_multiple_request(env: TestEnv) {
                     (memory $memory 1)
                     (data (i32.const 0) "hi")
                     (data (i32.const 100) "{}")
-                    (export "canister_query hi" (func $hi))
+                    (export "canister_composite_query hi" (func $hi))
                     (export "memory" (memory $memory)))"#,
                 canister_b.as_slice().len(),
                 canister_b.as_slice().len(),

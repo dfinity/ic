@@ -1,5 +1,6 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -34,6 +35,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/canister_profiler",
     "//rs/rust_canisters/http_types",
+    "//rs/sns/governance/api",
     "//rs/sns/governance/proposal_criticality",
     "//rs/sns/governance/proposals_amount_total_limit",
     "//rs/sns/governance/token_valuation",
@@ -60,6 +62,7 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:strum",
+    "@crate_index//:time",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -124,6 +127,20 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES + [":build_script"],
+)
+
+rust_library(
+    name = "governance--canbench_feature",
+    srcs = LIB_SRCS,
+    aliases = ALIASES,
+    crate_features = ["canbench-rs"],
+    crate_name = "ic_sns_governance",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + [
+        ":build_script",
+        "@crate_index//:canbench-rs",
+    ],
 )
 
 rust_canister(
@@ -225,5 +242,24 @@ generated_files_check(
         "//rs/sns/governance/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
+    ],
+)
+
+# Usage:
+# bazel run //rs/sns/governance:governance-canbench for benchmarking (the output shoudl look like `canbench/canbench_results.yml`).
+# bazel run //rs/sns/governance:governance-canbench_update for updating the results file (see `canbench/canbench_results.yml`).
+# bazel test //rs/sns/governance:governance_canbench_test for checking if the results file is up to date.
+# Currently, updating the results file is not automated, and there are no tests to avoid
+# regression. For now, we can use it as an example for benchmarking as part of an
+# investigation of potential performance issues, or when we make a change that can affect
+# the performance measured in this benchmark.
+rust_canbench(
+    name = "governance-canbench",
+    srcs = ["canbench/main.rs"],
+    add_test = True,
+    results_file = "canbench/canbench_results.yml",
+    deps = [
+        # Keep sorted.
+        ":governance--canbench_feature",
     ],
 )

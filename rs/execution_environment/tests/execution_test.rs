@@ -175,7 +175,7 @@ fn create_universal_canister_with_cycles(
     settings: Option<CanisterSettingsArgs>,
     cycles: Cycles,
 ) -> CanisterId {
-    create_canister_with_cycles(env, UNIVERSAL_CANISTER_WASM.into(), settings, cycles)
+    create_canister_with_cycles(env, UNIVERSAL_CANISTER_WASM.to_vec(), settings, cycles)
 }
 
 /// The test checks that the canister heap is discarded on code
@@ -847,6 +847,45 @@ fn canister_snapshot_metrics_are_observed() {
 
     let gauge = fetch_gauge(env.metrics_registry(), "scheduler_num_canister_snapshots").unwrap();
     assert_eq!(gauge, 1.0);
+}
+
+#[test]
+fn canister_snapshot_metrics_are_consistent_after_canister_deletion() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let canister_id = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .unwrap();
+
+    let count = fetch_gauge(env.metrics_registry(), "scheduler_num_canister_snapshots").unwrap();
+    assert_eq!(count, 1.0);
+    let memory_usage = fetch_gauge(
+        env.metrics_registry(),
+        "scheduler_canister_snapshots_memory_usage_bytes",
+    )
+    .unwrap();
+    assert_gt!(memory_usage, 0.0);
+
+    env.stop_canister(canister_id)
+        .expect("Error stopping canister.");
+    env.delete_canister(canister_id)
+        .expect("Error deleting canister.");
+
+    let count = fetch_gauge(env.metrics_registry(), "scheduler_num_canister_snapshots").unwrap();
+    assert_eq!(count, 0.0);
+    let memory_usage = fetch_gauge(
+        env.metrics_registry(),
+        "scheduler_canister_snapshots_memory_usage_bytes",
+    )
+    .unwrap();
+    assert_eq!(memory_usage, 0.0);
 }
 
 fn assert_replied(result: Result<WasmResult, UserError>) {
@@ -1589,7 +1628,7 @@ fn execution_observes_oversize_messages() {
 
     let a_id = sm
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             INITIAL_CYCLES_BALANCE,
@@ -1628,7 +1667,7 @@ fn execution_observes_oversize_messages() {
     // Canister A calls B with a large message
     let b_id = sm
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             INITIAL_CYCLES_BALANCE,
@@ -1676,7 +1715,7 @@ fn test_consensus_queue_invariant_on_exceeding_heap_delta_limit() {
             subnet_config,
             HypervisorConfig::default(),
         )))
-        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
+        .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     let canister_id = env
         .install_canister_with_cycles(
@@ -1981,7 +2020,7 @@ fn system_subnets_are_not_rate_limited() {
 
     let canister_id = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             Cycles::new(100_000_000_000),
@@ -2191,24 +2230,24 @@ fn test_malicious_input() {
                     (param $reject_fun i32)         (param $reject_env i32)
                   ))
                   (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
-    
+
                   (func $proxy_msg_reply_data_append
                     (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (call $msg_arg_data_size))
                     (call $msg_reply_data_append (i32.load (i32.const 0)) (i32.load (i32.const 4)))
                     (call $msg_reply))
-    
+
                   (func $proxy_msg_arg_data_copy_from_buffer_without_input
                     (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 10)))
-    
+
                   (func $proxy_msg_arg_data_copy_to_oob_buffer
                     (call $msg_arg_data_copy (i32.const 65536) (i32.const 0) (i32.const 10))
                     (call $msg_reply))
-    
+
                   (func $proxy_msg_arg_data_copy_return_last_4_bytes
                     (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 65536))
                     (call $msg_reply_data_append (i32.const 65532) (i32.const 4))
                     (call $msg_reply))
-    
+
                   ;; All the function below are not used
                   (func $proxy_data_certificate_present
                     (i32.const 0)
@@ -2216,23 +2255,23 @@ fn test_malicious_input() {
                     (i32.store)
                     (call $msg_reply_data_append (i32.const 0) (i32.const 1))
                     (call $msg_reply))
-    
+
                   (func $proxy_certified_data_set
                     (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (call $msg_arg_data_size))
                     (call $certified_data_set (i32.const 0) (call $msg_arg_data_size))
                     (call $msg_reply_data_append (i32.const 0) (call $msg_arg_data_size))
                     (call $msg_reply))
-    
+
                   (func $proxy_data_certificate_copy
                     (call $data_certificate_copy (i32.const 0) (i32.const 0) (i32.const 32))
                     (call $msg_reply_data_append (i32.const 0) (i32.const 32))
                     (call $msg_reply))
-    
+
                   (func $f_100 (result i32)
                     i32.const 100)
                   (func $f_200 (result i32)
                     i32.const 200)
-    
+
                   (type $return_i32 (func (result i32))) ;; if this was f32, type checking would fail
                   (func $callByIndex
                     (i32.const 0)
@@ -2240,7 +2279,7 @@ fn test_malicious_input() {
                     (i32.store)
                     (call $msg_reply_data_append (i32.const 0) (i32.const 4))
                     (call $msg_reply))
-    
+
                   (table funcref (elem $f_100 $f_200))
                   (memory $memory 1)
                   (export "memory" (memory $memory))

@@ -17,9 +17,10 @@ candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 chrono = { workspace = true }
 clap = { workspace = true }
+config_types = { path = "../../ic_os/config_types" }
 crossbeam-channel = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
-deterministic_ips = { path = "../../ic_os/dev_test_tools/deterministic_ips" }
+deterministic_ips = { path = "../../ic_os/deterministic_ips" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 ed25519-dalek = { workspace = true }
@@ -105,6 +106,7 @@ kube = { workspace = true }
 lazy_static = { workspace = true }
 leb128 = "0.2.5"
 lifeline = { path = "../../nns/handlers/lifeline/impl" }
+macaddr = { workspace = true }
 maplit = "1.0.2"
 nix = { workspace = true }
 num_cpus = "1.13.1"
@@ -124,7 +126,7 @@ reqwest = { workspace = true }
 ring = { version = "0.17.7", features = ["std"] }
 rosetta-core = { path = "../../rosetta-api/common/rosetta_core" }
 rsa = { workspace = true }
-rust_decimal = "1.25"
+rust_decimal = "1.36.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }

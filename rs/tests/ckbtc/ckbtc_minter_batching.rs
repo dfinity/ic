@@ -19,14 +19,14 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, create_canister_at_id, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, set_kyt_api_key, setup, subnet_sys,
+    activate_ecdsa_signature, create_canister_at_id, install_bitcoin_canister, install_btc_checker,
+    install_ledger, install_minter, setup, subnet_sys,
     utils::{
         ensure_wallet, generate_blocks, get_btc_address, get_btc_client, retrieve_btc,
         send_to_btc_address, wait_for_finalization_no_new_blocks, wait_for_mempool_change,
         wait_for_update_balance,
     },
-    BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL, TRANSFER_FEE,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, TEST_KEY_LOCAL, TRANSFER_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -73,7 +73,7 @@ pub fn test_batching(env: TestEnv) {
 
     let minter_id = CanisterId::from_u64(200);
     let ledger_id = CanisterId::from_u64(201);
-    let kyt_id = CanisterId::from_u64(202);
+    let btc_checker_id = CanisterId::from_u64(203);
 
     block_on(async {
         let runtime = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
@@ -81,20 +81,11 @@ pub fn test_batching(env: TestEnv) {
 
         let mut ledger_canister = create_canister_at_id(&runtime, ledger_id.get()).await;
         let mut minter_canister = create_canister_at_id(&runtime, minter_id.get()).await;
-        let mut kyt_canister = create_canister_at_id(&runtime, kyt_id.get()).await;
+        let mut btc_checker_canister = create_canister_at_id(&runtime, btc_checker_id.get()).await;
 
         let minting_user = minter_canister.canister_id().get();
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let agent_principal = agent.get_principal().unwrap();
-        let kyt_id = install_kyt(
-            &mut kyt_canister,
-            &logger,
-            Principal::from(minting_user),
-            vec![agent_principal],
-        )
-        .await;
-        set_kyt_api_key(&agent, &kyt_id.get().0, "fake key".to_string()).await;
-
+        let btc_checker_id = install_btc_checker(&mut btc_checker_canister, &env).await;
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
 
         // We set the minter with a very long time in the queue parameter so we can add up requests in queue
@@ -106,7 +97,7 @@ pub fn test_batching(env: TestEnv) {
             ledger_id,
             &logger,
             five_hours_nanos,
-            kyt_id,
+            btc_checker_id,
         )
         .await;
 
@@ -153,7 +144,7 @@ pub fn test_batching(env: TestEnv) {
 
         const BITCOIN_NETWORK_TRANSFER_FEE: u64 = 2820;
 
-        let transfer_amount = btc_to_wrap - BITCOIN_NETWORK_TRANSFER_FEE - KYT_FEE - TRANSFER_FEE;
+        let transfer_amount = btc_to_wrap - BITCOIN_NETWORK_TRANSFER_FEE - CHECK_FEE - TRANSFER_FEE;
 
         let transfer_result = ledger_agent
             .transfer(TransferArg {
@@ -306,13 +297,8 @@ pub fn test_batching(env: TestEnv) {
             .sum::<u64>();
 
         // We have 1 input and 21 outputs (20 requests and the minter's address)
-        // Hence, we can compute the minter's fee
-        let minters_fee: u64 = ic_ckbtc_minter::MINTER_FEE_PER_INPUT
-            + ic_ckbtc_minter::MINTER_FEE_PER_OUTPUT
-                * (RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64 + 1)
-            + ic_ckbtc_minter::MINTER_FEE_CONSTANT;
-
-        let kyts_fee = RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64 * KYT_FEE;
+        let minters_fee: u64 =
+            ic_ckbtc_minter::evaluate_minter_fee(1, RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64 + 1);
 
         // We can check that the destination address has received all the bitcoin
         assert_eq!(
@@ -320,7 +306,6 @@ pub fn test_batching(env: TestEnv) {
             (RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64) * retrieve_amount
                 - EXPECTED_FEE
                 - minters_fee
-                - kyts_fee
         );
 
         // We also check that the destination address have received 20 utxos

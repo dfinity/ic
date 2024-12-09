@@ -31,6 +31,7 @@ const TEST_SUBNET_SIZES: [usize; 3] = [4, 13, 34];
 
 pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 pub const SCHNORR_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
+pub const VETKD_FEE: Cycles = Cycles::new(10 * B as u128);
 const DEFAULT_CYCLES_PER_NODE: Cycles = Cycles::new(100 * B as u128);
 const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 0;
 
@@ -453,7 +454,7 @@ fn simulate_sign_with_ecdsa_cost(
         .with_subnet_size(subnet_size)
         .with_nns_subnet_id(nns_subnet_id)
         .with_subnet_id(subnet_id)
-        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
+        .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     // Create canister with initial cycles for some unrelated costs (eg. ingress induction, heartbeat).
     let canister_id =
@@ -738,6 +739,7 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             // charging occurs.
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
+            vetkd_fee: VETKD_FEE,
             http_request_linear_baseline_fee: Cycles::new(0),
             http_request_quadratic_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),
@@ -748,7 +750,7 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
         },
         SubnetType::Application | SubnetType::VerifiedApplication => CyclesAccountManagerConfig {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
-            canister_creation_fee: Cycles::new(100_000_000_000),
+            canister_creation_fee: Cycles::new(500_000_000_000),
             compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
 
             // The following fields are set based on a thought experiment where
@@ -771,6 +773,7 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
+            vetkd_fee: VETKD_FEE,
             http_request_linear_baseline_fee: Cycles::new(3_000_000),
             http_request_quadratic_baseline_fee: Cycles::new(60_000),
             http_request_per_byte_fee: Cycles::new(400),

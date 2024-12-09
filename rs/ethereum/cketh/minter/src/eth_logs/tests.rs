@@ -256,6 +256,7 @@ mod scraping {
         use crate::eth_rpc::{FixedSizeData, Topic};
         use crate::lifecycle::EthereumNetwork;
         use crate::numeric::BlockNumber;
+        use crate::state::eth_logs_scraping::LogScrapingId;
         use crate::test_fixtures::initial_state;
         use hex_literal::hex;
         use ic_ethereum_types::Address;
@@ -276,12 +277,16 @@ mod scraping {
             let state = {
                 let mut state = initial_state();
                 state
-                    .deposit_with_subaccount_log_scraping
-                    .set_contract_address(CONTRACT_ADDRESS)
+                    .log_scrapings
+                    .set_contract_address(
+                        LogScrapingId::EthOrErc20DepositWithSubaccount,
+                        CONTRACT_ADDRESS,
+                    )
                     .unwrap();
-                state
-                    .deposit_with_subaccount_log_scraping
-                    .set_last_scraped_block_number(last_scraped_block_number);
+                state.log_scrapings.set_last_scraped_block_number(
+                    LogScrapingId::EthOrErc20DepositWithSubaccount,
+                    last_scraped_block_number,
+                );
                 state
             };
 
@@ -453,6 +458,7 @@ mod parse_principal_from_slice {
 
 mod subaccount {
     use crate::eth_logs::LedgerSubaccount;
+    use minicbor::{Decode, Encode};
     use proptest::{array::uniform32, prelude::any, prop_assert_eq, prop_assume, proptest};
 
     proptest! {
@@ -464,5 +470,55 @@ mod subaccount {
 
             prop_assert_eq!(bytes, actual_bytes);
         }
+    }
+
+    proptest! {
+        #[test]
+        fn should_migrate_struct_with_legacy_subaccount_set_to_none_to_new_struct_with_ledger_subaccount(
+            field_before in any::<u64>(), field_after in any::<u64>()
+        ) {
+            let legacy = WithLegacySubaccount {
+                field_before,
+                from_subaccount: None,
+                field_after,
+            };
+            let mut buf = vec![];
+            minicbor::encode(&legacy, &mut buf).expect("encoding should succeed");
+            let decoded: WithLedgerSubaccount =
+                minicbor::decode(&buf).expect("decoding should succeed");
+
+            prop_assert_eq!(
+                decoded,
+                WithLedgerSubaccount {
+                    field_before: legacy.field_before,
+                    from_subaccount: None,
+                    field_after: legacy.field_after,
+                }
+            );
+        }
+    }
+
+    #[derive(Clone, Debug, Eq, PartialEq, Decode, Encode)]
+    pub struct WithLegacySubaccount {
+        #[n(0)]
+        pub field_before: u64,
+        #[n(1)]
+        pub from_subaccount: Option<LegacySubaccount>,
+        #[n(2)]
+        pub field_after: u64,
+    }
+
+    #[derive(Clone, Debug, Eq, PartialEq, Decode, Encode)]
+    #[cbor(transparent)]
+    pub struct LegacySubaccount(#[cbor(n(0), with = "minicbor::bytes")] pub [u8; 32]);
+
+    #[derive(Clone, Debug, Eq, PartialEq, Decode, Encode)]
+    pub struct WithLedgerSubaccount {
+        #[n(0)]
+        pub field_before: u64,
+        #[n(1)]
+        pub from_subaccount: Option<LedgerSubaccount>,
+        #[n(2)]
+        pub field_after: u64,
     }
 }

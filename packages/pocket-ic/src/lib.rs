@@ -34,14 +34,16 @@
 //! ```
 //! For more information, see the [README](https://crates.io/crates/pocket-ic).
 //!
-pub use crate::management_canister::CanisterSettings;
 use crate::{
     common::rest::{
-        BlobCompression, BlobId, CanisterHttpRequest, DtsFlag, ExtendedSubnetConfigSet,
-        HttpsConfig, InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
-        SubnetId, SubnetKind, SubnetSpec, Topology,
+        BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet, HttpsConfig,
+        InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
+        SubnetKind, SubnetSpec, Topology,
     },
-    management_canister::{CanisterId, CanisterStatusResult},
+    management_canister::{
+        CanisterId, CanisterInstallMode, CanisterLogRecord, CanisterSettings, CanisterStatusResult,
+        Snapshot,
+    },
     nonblocking::PocketIc as PocketIcAsync,
 };
 use candid::{
@@ -74,7 +76,7 @@ pub mod common;
 pub mod management_canister;
 pub mod nonblocking;
 
-const EXPECTED_SERVER_VERSION: &str = "pocket-ic-server 6.0.0";
+const EXPECTED_SERVER_VERSION: &str = "pocket-ic-server 7.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -138,6 +140,7 @@ impl PocketIcBuilder {
         .await
     }
 
+    /// Use an already running PocketIC server.
     pub fn with_server_url(mut self, server_url: Url) -> Self {
         self.server_url = Some(server_url);
         self
@@ -164,8 +167,12 @@ impl PocketIcBuilder {
     }
 
     pub fn with_bitcoind_addr(self, bitcoind_addr: SocketAddr) -> Self {
+        self.with_bitcoind_addrs(vec![bitcoind_addr])
+    }
+
+    pub fn with_bitcoind_addrs(self, bitcoind_addrs: Vec<SocketAddr>) -> Self {
         Self {
-            bitcoind_addr: Some(vec![bitcoind_addr]),
+            bitcoind_addr: Some(bitcoind_addrs),
             ..self
         }
     }
@@ -326,12 +333,6 @@ impl PocketIcBuilder {
         self.config = Some(config);
         self
     }
-
-    pub fn with_dts_flag(mut self, dts_flag: DtsFlag) -> Self {
-        let config = self.config.unwrap_or_default().with_dts_flag(dts_flag);
-        self.config = Some(config);
-        self
-    }
 }
 
 /// Main entry point for interacting with PocketIC.
@@ -348,9 +349,33 @@ impl PocketIc {
         PocketIcBuilder::new().with_application_subnet().build()
     }
 
-    /// Returns the instance ID.
-    pub fn instance_id(&self) -> InstanceId {
-        self.pocket_ic.instance_id
+    /// Creates a PocketIC handle to an existing instance on a running server.
+    /// Note that this handle does not extend the lifetime of the existing instance,
+    /// i.e., the existing instance is deleted and this handle stops working
+    /// when the PocketIC handle that created the existing instance is dropped.
+    pub fn new_from_existing_instance(
+        server_url: Url,
+        instance_id: InstanceId,
+        max_request_time_ms: Option<u64>,
+    ) -> Self {
+        let (tx, rx) = channel();
+        let thread = thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            tx.send(rt).unwrap();
+        });
+        let runtime = rx.recv().unwrap();
+
+        let pocket_ic =
+            PocketIcAsync::new_from_existing_instance(server_url, instance_id, max_request_time_ms);
+
+        Self {
+            pocket_ic,
+            runtime: Arc::new(runtime),
+            thread: Some(thread),
+        }
     }
 
     pub(crate) fn from_components(
@@ -390,6 +415,16 @@ impl PocketIc {
             runtime: Arc::new(runtime),
             thread: Some(thread),
         }
+    }
+
+    /// Returns the URL of the PocketIC server on which this PocketIC instance is running.
+    pub fn get_server_url(&self) -> Url {
+        self.pocket_ic.get_server_url()
+    }
+
+    /// Returns the instance ID.
+    pub fn instance_id(&self) -> InstanceId {
+        self.pocket_ic.instance_id
     }
 
     /// Returns the topology of the different subnets of this PocketIC instance.
@@ -573,6 +608,14 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.advance_time(duration).await })
     }
 
+    /// Get the controllers of a canister.
+    /// Panics if the canister does not exist.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string()))]
+    pub fn get_controllers(&self, canister_id: CanisterId) -> Vec<Principal> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.get_controllers(canister_id).await })
+    }
+
     /// Get the current cycles balance of a canister.
     #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string()))]
     pub fn cycle_balance(&self, canister_id: CanisterId) -> u128 {
@@ -626,10 +669,29 @@ impl PocketIc {
         })
     }
 
-    /// Await an update call submitted previously by `submit_call_with_effective_principal`.
+    /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     pub fn await_call(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.await_call(message_id).await })
+    }
+
+    /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call.
+    pub fn ingress_status(
+        &self,
+        message_id: RawMessageId,
+    ) -> Option<Result<WasmResult, UserError>> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.ingress_status(message_id).await })
+    }
+
+    /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
+    /// This function does not execute rounds and thus should only be called on a "live" PocketIC instance
+    /// or if rounds are executed due to separate PocketIC library calls.
+    pub fn await_call_no_ticks(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.await_call_no_ticks(message_id).await })
     }
 
     /// Execute an update call on a canister.
@@ -662,6 +724,20 @@ impl PocketIc {
         runtime.block_on(async {
             self.pocket_ic
                 .query_call(canister_id, sender, method, payload)
+                .await
+        })
+    }
+
+    /// Fetch canister logs via a query call to the management canister.
+    pub fn fetch_canister_logs(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+    ) -> Result<Vec<CanisterLogRecord>, CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .fetch_canister_logs(canister_id, sender)
                 .await
         })
     }
@@ -737,6 +813,73 @@ impl PocketIc {
         })
     }
 
+    /// Upload a WASM chunk to the WASM chunk store of a canister.
+    /// Returns the WASM chunk hash.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn upload_chunk(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        chunk: Vec<u8>,
+    ) -> Result<Vec<u8>, CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .upload_chunk(canister_id, sender, chunk)
+                .await
+        })
+    }
+
+    /// List WASM chunk hashes in the WASM chunk store of a canister.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn stored_chunks(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<Vec<Vec<u8>>, CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.stored_chunks(canister_id, sender).await })
+    }
+
+    /// Clear the WASM chunk store of a canister.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn clear_chunk_store(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<(), CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.clear_chunk_store(canister_id, sender).await })
+    }
+
+    /// Install a WASM module assembled from chunks on an existing canister.
+    #[instrument(skip(self, mode, chunk_hashes_list, wasm_module_hash, arg), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string(), store_canister_id = %store_canister_id.to_string(), arg_len = %arg.len()))]
+    pub fn install_chunked_canister(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        mode: CanisterInstallMode,
+        store_canister_id: CanisterId,
+        chunk_hashes_list: Vec<Vec<u8>>,
+        wasm_module_hash: Vec<u8>,
+        arg: Vec<u8>,
+    ) -> Result<(), CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .install_chunked_canister(
+                    canister_id,
+                    sender,
+                    mode,
+                    store_canister_id,
+                    chunk_hashes_list,
+                    wasm_module_hash,
+                    arg,
+                )
+                .await
+        })
+    }
+
     /// Install a WASM module on an existing canister.
     #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn install_canister(
@@ -797,6 +940,69 @@ impl PocketIc {
     ) -> Result<(), CallError> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.uninstall_canister(canister_id, sender).await })
+    }
+
+    /// Take canister snapshot.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn take_canister_snapshot(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        replace_snapshot: Option<Vec<u8>>,
+    ) -> Result<Snapshot, CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .take_canister_snapshot(canister_id, sender, replace_snapshot)
+                .await
+        })
+    }
+
+    /// Load canister snapshot.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn load_canister_snapshot(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        snapshot_id: Vec<u8>,
+    ) -> Result<(), CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .load_canister_snapshot(canister_id, sender, snapshot_id)
+                .await
+        })
+    }
+
+    /// List canister snapshots.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn list_canister_snapshots(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<Vec<Snapshot>, CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .list_canister_snapshots(canister_id, sender)
+                .await
+        })
+    }
+
+    /// Delete canister snapshot.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn delete_canister_snapshot(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        snapshot_id: Vec<u8>,
+    ) -> Result<(), CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .delete_canister_snapshot(canister_id, sender, snapshot_id)
+                .await
+        })
     }
 
     /// Update canister settings.
@@ -897,6 +1103,32 @@ impl PocketIc {
         runtime.block_on(async {
             self.pocket_ic
                 .update_call_with_effective_principal(
+                    canister_id,
+                    effective_principal,
+                    sender,
+                    method,
+                    payload,
+                )
+                .await
+        })
+    }
+
+    /// Execute a query call on a canister explicitly specifying an effective principal to route the request:
+    /// this API is useful for making generic query calls (including management canister query calls) without using dedicated functions from this library
+    /// (e.g., making generic query calls in dfx to a PocketIC instance).
+    #[instrument(skip(self, payload), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), effective_principal = %effective_principal.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
+    pub fn query_call_with_effective_principal(
+        &self,
+        canister_id: CanisterId,
+        effective_principal: RawEffectivePrincipal,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+    ) -> Result<WasmResult, UserError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .query_call_with_effective_principal(
                     canister_id,
                     effective_principal,
                     sender,

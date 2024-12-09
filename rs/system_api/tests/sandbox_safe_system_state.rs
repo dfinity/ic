@@ -1,4 +1,5 @@
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, SubnetId};
+use ic_config::execution_environment::SUBNET_CALLBACK_SOFT_LIMIT;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_interfaces::execution_environment::SystemApi;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -21,7 +22,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
-    messages::{CanisterMessage, RequestMetadata, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
+    messages::{CanisterMessage, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     time::UNIX_EPOCH,
     ComputeAllocation, Cycles, NumInstructions,
 };
@@ -67,7 +68,8 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        SUBNET_CALLBACK_SOFT_LIMIT as u64,
+        Default::default(),
         Some(request.sender().into()),
         None,
     );
@@ -121,7 +123,8 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        SUBNET_CALLBACK_SOFT_LIMIT as u64,
+        Default::default(),
         Some(request.sender().into()),
         None,
     );
@@ -158,7 +161,8 @@ fn push_output_request_succeeds_with_enough_cycles() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        SUBNET_CALLBACK_SOFT_LIMIT as u64,
+        Default::default(),
         caller,
         None,
     );
@@ -209,7 +213,8 @@ fn correct_charging_source_canister_for_a_request() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        SUBNET_CALLBACK_SOFT_LIMIT as u64,
+        Default::default(),
         Some(request.sender().into()),
         None,
     );
@@ -356,7 +361,8 @@ fn is_controller_test() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        SUBNET_CALLBACK_SOFT_LIMIT as u64,
+        Default::default(),
         caller,
         None,
     );
@@ -437,7 +443,8 @@ fn test_inter_canister_call(
         topo,
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        SUBNET_CALLBACK_SOFT_LIMIT as u64,
+        Default::default(),
         Some(sender.into()),
         None,
     );

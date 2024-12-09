@@ -1,3 +1,6 @@
+// This allow(dead_code) is necessary because some parts of this file
+// are not used in canbench-rs, but are used elsewhere.  Otherwise we get annoying clippy warnings.
+#![allow(dead_code)]
 use crate::{
     governance::{Environment, HeapGrowthPotential, RngError},
     pb::v1::{ExecuteNnsFunction, GovernanceError, OpenSnsTokenSwap},
@@ -157,6 +160,14 @@ impl MockEnvironment {
                 expected_call_responses,
             ))),
             now: Arc::new(Mutex::new(now)),
+        }
+    }
+
+    pub fn now_setter(&self) -> impl Fn(u64) {
+        let arc = self.now.clone();
+        move |new_now| {
+            let mut now = arc.lock().unwrap();
+            *now = new_now;
         }
     }
 }

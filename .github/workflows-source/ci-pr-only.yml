@@ -2,6 +2,7 @@ name: CI PR Only
 # Jobs that run on PRs, but no other pipelines
 
 on:
+  merge_group:
   pull_request:
     types: [opened, synchronize, reopened]
 
@@ -10,14 +11,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref }}
   cancel-in-progress: true
 env:
-  CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
   ORG: ${{ github.repository_owner }}
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
+    image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
   dind-small-setup: &dind-small-setup
     timeout-minutes: 30
     runs-on:
@@ -34,23 +34,19 @@ anchors:
       <<: *image
       options: >-
         -e NODE_NAME
-  before-script: &before-script
-    name: Before script
-    id: before-script
-    shell: bash
-    run: |
-      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
+  skip-merge-group: &skip-merge-group
+    if: ${{ github.event_name != 'merge_group' }}
 
 jobs:
   bazel-build-fuzzers-archives:
     name: Bazel Build Fuzzers Archives
     <<: *dind-large-setup
+    <<: *skip-merge-group
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
@@ -83,13 +79,21 @@ jobs:
   lock-generate:
     name: Lock Generate
     <<: *dind-small-setup
+    <<: *skip-merge-group
+    env:
+      CI_EVENT_NAME: ${{ github.event_name }}
     steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-          token: ${{ secrets.IDX_PUSH_TO_PR }}
-      - <<: *before-script
+          token: ${{ steps.app-token.outputs.token }}
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
@@ -112,6 +116,7 @@ jobs:
   dependencies-check:
     name: Dependency Scan for PR
     <<: *dind-small-setup
+    <<: *skip-merge-group
     timeout-minutes: 60
     permissions:
       contents: read
@@ -130,7 +135,6 @@ jobs:
       - <<: *checkout
         with:
           fetch-depth: 256
-      - <<: *before-script
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -139,7 +143,8 @@ jobs:
         id: setup-python-deps
         shell: bash
         run: |
-          pip3 install --ignore-installed -r requirements.txt
+          # Ignore externally-managed-environment pip error, install packages system-wide.
+          PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
       - name: Dependency Scan for Pull Request
         id: dependencies-check
         shell: bash
@@ -148,3 +153,20 @@ jobs:
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
           cd ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
+
+  # CI job is also executed in Schedule Hourly
+  bazel-test-coverage:
+    name: Bazel Test Coverage
+    <<: *dind-large-setup
+    <<: *skip-merge-group
+    if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
+    steps:
+      - <<: *checkout
+      - name: Run Bazel Test Coverage
+        shell: bash
+        run: |
+          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+          ./ci/scripts/bazel-coverage.sh
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
