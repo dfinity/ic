@@ -281,13 +281,15 @@ impl Drop for FetchGuard {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
     btc_network: BtcNetwork,
-    check_mode: CheckMode,
+    pub check_mode: CheckMode,
+    pub num_subnet_nodes: u16,
 }
 
 impl Config {
     pub fn new_and_validate(
         btc_network: BtcNetwork,
         check_mode: CheckMode,
+        num_subnet_nodes: u16,
     ) -> Result<Self, String> {
         if let BtcNetwork::Regtest { json_rpc_url } = &btc_network {
             let _ = parse_authorization_header_from_url(json_rpc_url)?;
@@ -295,15 +297,12 @@ impl Config {
         Ok(Self {
             btc_network,
             check_mode,
+            num_subnet_nodes,
         })
     }
 
     pub fn btc_network(&self) -> BtcNetwork {
         self.btc_network.clone()
-    }
-
-    pub fn check_mode(&self) -> CheckMode {
-        self.check_mode
     }
 }
 

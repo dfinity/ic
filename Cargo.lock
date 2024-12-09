@@ -5787,6 +5787,7 @@ dependencies = [
  "nix 0.24.3",
  "prometheus",
  "rand 0.8.5",
+ "rate-limits-api",
  "ratelimit",
  "rcgen",
  "regex",
@@ -18196,10 +18197,15 @@ name = "rate-limits-api"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "humantime",
+ "ic-bn-lib",
+ "indoc",
  "regex",
  "serde",
  "serde_bytes",
  "serde_json",
+ "serde_regex",
+ "serde_yaml",
 ]
 
 [[package]]

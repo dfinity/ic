@@ -55,6 +55,7 @@ type InitArg = record {
 
 type UpgradeArg = record {
     check_mode: opt CheckMode;
+    num_subnet_nodes: opt nat16;
 };
 
 type CheckArg = variant {
