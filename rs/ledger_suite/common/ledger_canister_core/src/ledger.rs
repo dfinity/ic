@@ -208,6 +208,7 @@ pub enum TransferError<Tokens> {
 const APPROVE_PRUNE_LIMIT: usize = 100;
 
 /// Adds a new block with the specified transaction to the ledger.
+/// Prune balances and allowances if necessary.
 pub fn apply_transaction<L>(
     ledger: &mut L,
     transaction: L::Transaction,
@@ -217,6 +218,22 @@ pub fn apply_transaction<L>(
 where
     L: LedgerData,
     L::BalancesStore: InspectableBalancesStore,
+{
+    let result = apply_transaction_no_prunning(ledger, transaction, now, effective_fee);
+    prune_balances_and_allowances(ledger, now);
+    result
+}
+
+/// Adds a new block with the specified transaction to the ledger.
+/// Do not perform any balance or allowance prunning.
+pub fn apply_transaction_no_prunning<L>(
+    ledger: &mut L,
+    transaction: L::Transaction,
+    now: TimeStamp,
+    effective_fee: L::Tokens,
+) -> Result<(BlockIndex, HashOf<EncodedBlock>), TransferError<L::Tokens>>
+where
+    L: LedgerData,
 {
     let num_pruned = purge_old_transactions(ledger, now);
 
@@ -301,6 +318,17 @@ where
                 transaction_hash: tx_hash,
             });
     }
+
+    Ok((height, ledger.blockchain().last_hash.unwrap()))
+}
+
+/// Prune balances and allowances. Can be used e.g. if the ledger
+/// is low on heap memory.
+fn prune_balances_and_allowances<L>(ledger: &mut L, now: TimeStamp)
+where
+    L: LedgerData,
+    L::BalancesStore: InspectableBalancesStore,
+{
     let effective_max_number_of_accounts =
         ledger.max_number_of_accounts() + ledger.accounts_overflow_trim_quantity() - 1;
 
@@ -377,8 +405,6 @@ where
             }
         }
     }
-
-    Ok((height, ledger.blockchain().last_hash.unwrap()))
 }
 
 /// Finds the archive canister that contains the block with the specified height.
