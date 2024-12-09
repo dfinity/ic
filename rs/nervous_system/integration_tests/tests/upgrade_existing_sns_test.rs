@@ -97,7 +97,7 @@ async fn test_upgrade_existing_sns() {
     )
     .await;
 
-    eprintln!("Testing the Archive canister requires that it can be spawned. ...");
+    eprintln!("Testing the Archive canister requires that it can be spawned ...");
     sns::ensure_archive_canister_is_spawned_or_panic(
         &pocket_ic,
         sns.governance.canister_id,
