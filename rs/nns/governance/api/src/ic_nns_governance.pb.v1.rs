@@ -710,6 +710,7 @@ pub mod proposal {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Empty {}
+
 /// All operations that modify the state of an existing neuron are
 /// represented by instances of `ManageNeuron`.
 ///
@@ -1080,6 +1081,8 @@ pub mod manage_neuron {
         #[prost(message, tag = "12")]
         NeuronId(NeuronId),
     }
+
+    // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -1110,6 +1113,7 @@ pub mod manage_neuron {
         StakeMaturity(StakeMaturity),
         #[prost(message, tag = "16")]
         RefreshVotingPower(RefreshVotingPower),
+        // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
     }
 }
 /// The response of the ManageNeuron command
@@ -1339,6 +1343,7 @@ pub struct ManageNeuronRequest {
     pub command: ::core::option::Option<ManageNeuronCommandRequest>,
 }
 
+// KEEP THIS IN SYNC WITH manage_neuron::Command!
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -1367,7 +1372,11 @@ pub enum ManageNeuronCommandRequest {
     Merge(manage_neuron::Merge),
     #[prost(message, tag = "15")]
     StakeMaturity(manage_neuron::StakeMaturity),
+    #[prost(message, tag = "16")]
+    RefreshVotingPower(manage_neuron::RefreshVotingPower),
+    // KEEP THIS IN SYNC WITH manage_neuron::Command!
 }
+
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[compare_default]
 #[allow(clippy::derive_partial_eq_without_eq)]

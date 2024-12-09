@@ -1309,6 +1309,9 @@ impl From<pb_api::ManageNeuronCommandRequest> for pb::manage_neuron::Command {
             pb_api::ManageNeuronCommandRequest::StakeMaturity(v) => {
                 pb::manage_neuron::Command::StakeMaturity(v.into())
             }
+            pb_api::ManageNeuronCommandRequest::RefreshVotingPower(v) => {
+                pb::manage_neuron::Command::RefreshVotingPower(v.into())
+            }
         }
     }
 }

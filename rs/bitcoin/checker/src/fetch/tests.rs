@@ -24,6 +24,8 @@ struct MockEnv {
     called_provider: RefCell<Option<Provider>>,
 }
 
+const TEST_SUBNET_NODES: u16 = 13;
+
 impl FetchEnv for MockEnv {
     type FetchGuard = ();
 
@@ -36,7 +38,7 @@ impl FetchEnv for MockEnv {
     }
 
     fn config(&self) -> Config {
-        Config::new_and_validate(BtcNetwork::Mainnet, CheckMode::Normal).unwrap()
+        Config::new_and_validate(BtcNetwork::Mainnet, CheckMode::Normal, TEST_SUBNET_NODES).unwrap()
     }
 
     async fn http_get_tx(
@@ -240,7 +242,7 @@ fn test_try_fetch_tx() {
     ));
     assert_eq!(
         env.cycles_available(),
-        available - get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES)
+        available - get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES)
     );
 }
 
@@ -369,7 +371,7 @@ async fn test_check_fetched() {
     env.high_load = false;
 
     // case NotEnoughCycles
-    let env = MockEnv::new(get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES) / 2);
+    let env = MockEnv::new(get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES) / 2);
     assert!(matches!(
         env.check_fetched(txid_0, &fetched).await,
         CheckTransactionResponse::Unknown(CheckTransactionStatus::NotEnoughCycles)
@@ -378,7 +380,8 @@ async fn test_check_fetched() {
     assert_eq!(env.cycles_available(), 0);
 
     // case Pending: need 2 inputs, but only able to get 1 for now
-    let env = MockEnv::new(get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES) * 3 / 2);
+    let env =
+        MockEnv::new(get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES) * 3 / 2);
     let fetched = FetchedTx {
         tx: from_tx(&tx_0),
         input_addresses: vec![None, None],
@@ -394,7 +397,10 @@ async fn test_check_fetched() {
     // Check remaining cycle: we deduct all remaining cycles when they are not enough
     assert_eq!(env.cycles_available(), 0);
     // Continue to get another one, should pass
-    env.refill_cycles(get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES));
+    env.refill_cycles(get_tx_cycle_cost(
+        INITIAL_MAX_RESPONSE_BYTES,
+        TEST_SUBNET_NODES,
+    ));
     env.expect_get_tx_with_reply(Ok(tx_2.clone()));
     assert!(matches!(
         env.check_fetched(txid_0, &fetched).await,
@@ -421,7 +427,8 @@ async fn test_check_fetched() {
     // Check remaining cycle
     assert_eq!(
         env.cycles_available(),
-        CHECK_TRANSACTION_CYCLES_REQUIRED - get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES) * 2
+        CHECK_TRANSACTION_CYCLES_REQUIRED
+            - get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES) * 2
     );
 
     // case Passed: need 2 inputs, and 1 already exists in cache.
@@ -447,7 +454,8 @@ async fn test_check_fetched() {
     // Check remaining cycle
     assert_eq!(
         env.cycles_available(),
-        CHECK_TRANSACTION_CYCLES_REQUIRED - get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES)
+        CHECK_TRANSACTION_CYCLES_REQUIRED
+            - get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES)
     );
 
     // case Pending: need 2 input, but 1 of them gives RetryWithBiggerBuffer error.
@@ -477,8 +485,8 @@ async fn test_check_fetched() {
     assert_eq!(
         env.cycles_available(),
         CHECK_TRANSACTION_CYCLES_REQUIRED
-            - get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES) * 2
-            - get_tx_cycle_cost(RETRY_MAX_RESPONSE_BYTES)
+            - get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES) * 2
+            - get_tx_cycle_cost(RETRY_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES)
     );
 
     // case Error: need 2 input, but 1 of them keeps giving RetryWithBiggerBuffer error.
@@ -509,8 +517,8 @@ async fn test_check_fetched() {
     assert_eq!(
         env.cycles_available(),
         CHECK_TRANSACTION_CYCLES_REQUIRED
-            - get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES) * 2
-            - get_tx_cycle_cost(RETRY_MAX_RESPONSE_BYTES)
+            - get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES) * 2
+            - get_tx_cycle_cost(RETRY_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES)
     );
 
     // case HttpGetTxError can be retried.
@@ -537,7 +545,7 @@ async fn test_check_fetched() {
     // Check remaining cycle. The cost should match RETRY_MAX_RESPONSE_BYTES
     assert_eq!(
         env.cycles_available(),
-        remaining_cycles - get_tx_cycle_cost(RETRY_MAX_RESPONSE_BYTES)
+        remaining_cycles - get_tx_cycle_cost(RETRY_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES)
     );
 
     // case Error: "Tx .. vout .. has no address ...". It should never happen

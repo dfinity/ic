@@ -94,7 +94,8 @@ pub trait FetchEnv {
             Ok(guard) => guard,
             Err(_) => return TryFetchResult::HighLoad,
         };
-        let cycle_cost = get_tx_cycle_cost(max_response_bytes);
+        let num_subnet_nodes = self.config().num_subnet_nodes;
+        let cycle_cost = get_tx_cycle_cost(max_response_bytes, num_subnet_nodes);
         if self.cycles_accept(cycle_cost) < cycle_cost {
             TryFetchResult::NotEnoughCycles
         } else {

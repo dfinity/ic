@@ -122,6 +122,7 @@ type RefreshVotingPowerResponse = record {
   // minimal until we discover there is a "real need". YAGNI.
 };
 
+// KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
 type Command = variant {
   Spawn : Spawn;
   Split : Split;
@@ -136,6 +137,8 @@ type Command = variant {
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
   RefreshVotingPower : RefreshVotingPower;
+
+  // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
 };
 
 type Command_1 = variant {
@@ -489,6 +492,7 @@ type ManageNeuron = record {
   neuron_id_or_subaccount : opt NeuronIdOrSubaccount;
 };
 
+// KEEP THIS IN SYNC WITH COMMAND!
 type ManageNeuronCommandRequest = variant {
   Spawn : Spawn;
   Split : Split;
@@ -502,6 +506,9 @@ type ManageNeuronCommandRequest = variant {
   StakeMaturity : StakeMaturity;
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
+  RefreshVotingPower : RefreshVotingPower;
+
+  // KEEP THIS IN SYNC WITH COMMAND!
 };
 
 type ManageNeuronRequest = record {

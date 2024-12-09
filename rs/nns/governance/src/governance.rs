@@ -141,6 +141,7 @@ pub mod tla_macros;
 #[cfg(feature = "tla")]
 pub mod tla;
 
+use crate::storage::with_voting_state_machines_mut;
 #[cfg(feature = "tla")]
 use std::collections::BTreeSet;
 #[cfg(feature = "tla")]
@@ -1227,6 +1228,11 @@ impl ProposalData {
         now_seconds < self.get_deadline_timestamp_seconds(voting_period_seconds)
     }
 
+    /// Returns true if the proposal has unprocessed votes in the state machine.
+    pub fn has_unprocessed_votes(&self) -> bool {
+        with_voting_state_machines_mut(|vsm| vsm.machine_has_votes_to_process(self.id.unwrap()))
+    }
+
     pub fn evaluate_wait_for_quiet(
         &mut self,
         now_seconds: u64,
@@ -1393,7 +1399,13 @@ impl ProposalData {
             // equivalent to (2 * yes > total) || (2 * no >= total).
             let majority =
                 (tally.yes > tally.total - tally.yes) || (tally.no >= tally.total - tally.no);
-            let expired = !self.accepts_vote(now_seconds, voting_period_seconds);
+            let can_accept_votes = self.accepts_vote(now_seconds, voting_period_seconds);
+            let votes_still_processing = self.has_unprocessed_votes();
+            let polls_open_or_still_counting = can_accept_votes || votes_still_processing;
+            let expired = !polls_open_or_still_counting;
+
+            // NOTE: expired is not exactly the right concept in the case where votes are still
+            // processing.
             let decision_reason = match (majority, expired) {
                 (true, true) => Some("majority and expiration"),
                 (true, false) => Some("majority"),
@@ -6725,7 +6737,6 @@ impl Governance {
             }
         }
 
-        self.unstake_maturity_of_dissolved_neurons();
         self.maybe_gc();
         self.maybe_run_migrations();
         self.maybe_run_validations();
@@ -6810,7 +6821,7 @@ impl Governance {
 
     /// When a neuron is finally dissolved, if there is any staked maturity it is moved to regular maturity
     /// which can be spawned (and is modulated).
-    fn unstake_maturity_of_dissolved_neurons(&mut self) {
+    pub fn unstake_maturity_of_dissolved_neurons(&mut self) {
         let now_seconds = self.env.now();
         // Filter all the neurons that are currently in "dissolved" state and have some staked maturity.
         // No neuron in stable storage should have staked maturity.
@@ -7021,7 +7032,7 @@ impl Governance {
     ///   can no longer accept votes for the purpose of rewards and that have
     ///   not yet been considered in a reward event.
     /// * Associate those proposals to the new reward event
-    fn distribute_rewards(&mut self, supply: Tokens) {
+    pub(crate) fn distribute_rewards(&mut self, supply: Tokens) {
         println!("{}distribute_rewards. Supply: {:?}", LOG_PREFIX, supply);
         let now = self.env.now();
 
@@ -7095,19 +7106,29 @@ impl Governance {
         // reward weight of proposals being voted on.
         let mut actually_distributed_e8s_equivalent = 0_u64;
 
-        let proposals = considered_proposals.iter().filter_map(|proposal_id| {
-            let result = self.heap_data.proposals.get(&proposal_id.id);
-            if result.is_none() {
-                println!(
-                    "{}ERROR: Trying to give voting rewards for proposal {}, \
-                         but it was not found.",
-                    LOG_PREFIX, proposal_id.id,
-                );
-            }
-            result
-        });
-        let (voters_to_used_voting_right, total_voting_rights) =
-            sum_weighted_voting_power(proposals);
+        // We filter out proposals with votes that still need to be propogated to the ballots.
+        let considered_proposals: Vec<ProposalId> = considered_proposals
+            .into_iter()
+            .filter(
+                |proposal_id| match self.heap_data.proposals.get(&proposal_id.id) {
+                    None => {
+                        println!(
+                            "{}ERROR: Trying to give voting rewards for proposal {}, \
+                             but it was not found.",
+                            LOG_PREFIX, proposal_id.id,
+                        );
+                        false
+                    }
+                    Some(proposal_data) => !proposal_data.has_unprocessed_votes(),
+                },
+            )
+            .collect();
+
+        let (voters_to_used_voting_right, total_voting_rights) = sum_weighted_voting_power(
+            considered_proposals
+                .iter()
+                .flat_map(|proposal_id| self.heap_data.proposals.get(&proposal_id.id)),
+        );
 
         // Increment neuron maturities (and actually_distributed_e8s_equivalent).
         //
