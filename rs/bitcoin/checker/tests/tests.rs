@@ -122,8 +122,14 @@ fn decode<'a, T: CandidType + Deserialize<'a>>(result: &'a WasmResult) -> T {
 
 #[test]
 fn test_get_tx_cycle_cost() {
-    assert_eq!(get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, 13), 97_063_200); 
-    assert_eq!(get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, 34), 296_697_600); 
+    assert_eq!(
+        get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, 13),
+        97_063_200
+    );
+    assert_eq!(
+        get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, 34),
+        296_697_600
+    );
 }
 
 #[test]
