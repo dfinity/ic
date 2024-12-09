@@ -121,7 +121,7 @@ impl FeatureFlags {
             write_barrier: FlagStatus::Disabled,
             wasm_native_stable_memory: FlagStatus::Enabled,
             wasm64: FlagStatus::Enabled,
-            best_effort_responses: FlagStatus::Disabled,
+            best_effort_responses: FlagStatus::Enabled,
             canister_backtrace: FlagStatus::Enabled,
         }
     }

@@ -7,20 +7,15 @@
 //! ```
 use candid::{CandidType, Deserialize, Principal};
 use futures::future::join_all;
+use ic_cdk::api::call::{Call, ConfigurableCall, SendableCall};
 use ic_cdk::api::management_canister::provisional::CanisterId;
-use ic_cdk::{
-    api::{
-        call::{call, call_with_payment},
-        caller, canister_balance, id, time,
-    },
-    setup,
-};
+use ic_cdk::api::{caller, id, time};
+use ic_cdk::setup;
 use ic_cdk_macros::{heartbeat, query, update};
 use rand::Rng;
 use rand_pcg::Lcg64Xsh32;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::str::FromStr;
 use std::time::Duration;
 use xnet_test::{Metrics, NetworkTopology, StartArgs};
 
@@ -40,6 +35,12 @@ thread_local! {
 
     /// Pad requests AND responses to this size (in bytes) if smaller.
     static PAYLOAD_SIZE: RefCell<u64> = const { RefCell::new(1024) };
+
+    /// Response size in bytes. Overrides `PAYLOAD_SIZE` if non-zero.
+    static RESPONSE_PAYLOAD_SIZE: RefCell<u64> = const { RefCell::new(0) };
+
+    /// Timeout to set on requests. Zero for guaranteed response.
+    static TIMEOUT_SECONDS: RefCell<u32> = const { RefCell::new(0) };
 
     /// State of the messaging that we use to check invariants (e.g., sequence
     /// numbers).
@@ -150,6 +151,8 @@ fn start(start_args: StartArgs) -> String {
     });
     PER_SUBNET_RATE.with(|r| *r.borrow_mut() = start_args.canister_to_subnet_rate);
     PAYLOAD_SIZE.with(|r| *r.borrow_mut() = start_args.payload_size_bytes);
+    RESPONSE_PAYLOAD_SIZE.with(|r| *r.borrow_mut() = start_args.response_payload_size_bytes);
+    TIMEOUT_SECONDS.with(|r| *r.borrow_mut() = start_args.deadline_seconds);
 
     RUNNING.with(|r| *r.borrow_mut() = true);
 
@@ -171,6 +174,7 @@ async fn fanout() {
 
     let network_topology =
         NETWORK_TOPOLOGY.with(|network_topology| network_topology.borrow().clone());
+    let timeout_seconds = TIMEOUT_SECONDS.with(|p| *p.borrow());
 
     let mut futures = vec![];
     for canisters in network_topology {
@@ -196,7 +200,24 @@ async fn fanout() {
                 padding: vec![0; payload_size.saturating_sub(16)],
             };
 
-            let res = call::<(Request,), (Reply,)>(canister, "handle_request", (payload,));
+            // <<<<<<< HEAD
+            //             let err_code = api::call_raw(
+            //                 api::CanisterId::try_from(canister.clone()).unwrap(),
+            //                 "handle_request",
+            //                 &msg[..],
+            //                 on_reply,
+            //                 on_reject,
+            //                 None,
+            //                 std::ptr::null_mut(),
+            //                 api::Funds::zero(),
+            //                 timeout_seconds,
+            //             );
+            // =======
+            let res = Call::new(canister, "handle_request")
+                .with_args((payload,))
+                .change_timeout(timeout_seconds)
+                .call::<(Reply,)>();
+            // let res = call::<(Request,), (Reply,)>(canister, "handle_request", (payload,));
             futures.push(res);
             METRICS.with(move |m| m.borrow_mut().calls_attempted += 1);
         }
@@ -247,20 +268,20 @@ fn handle_request(req: Request) -> Reply {
     }
 }
 
-/// Deposits the cycles this canister has minus 1T at the given destination.
-#[update]
-async fn return_cycles(canister_id_record: CanisterIdRecord) -> String {
-    let cycle_refund = canister_balance().saturating_sub(1_000_000_000_000);
-    let _ = call_with_payment::<(CanisterIdRecord,), ()>(
-        Principal::from_str("aaaaa-aa").unwrap(),
-        "deposit_cycles",
-        (canister_id_record,),
-        cycle_refund,
-    )
-    .await;
+// /// Deposits the cycles this canister has minus 1T at the given destination.
+// #[update]
+// async fn return_cycles(canister_id_record: CanisterIdRecord) -> String {
+//     let cycle_refund = canister_balance().saturating_sub(1_000_000_000_000);
+//     let _ = call_with_payment::<(CanisterIdRecord,), ()>(
+//         Principal::from_str("aaaaa-aa").unwrap(),
+//         "deposit_cycles",
+//         (canister_id_record,),
+//         cycle_refund,
+//     )
+//     .await;
 
-    "ok".to_string()
-}
+//     "ok".to_string()
+// }
 
 /// Query call that serializes metrics as a candid message.
 #[query]
