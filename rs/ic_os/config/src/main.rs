@@ -207,11 +207,6 @@ pub fn main() -> Result<()> {
             // get deployment.json variables
             let deployment_json_settings = get_deployment_settings(&deployment_json_path)?;
 
-            let logging = Logging {
-                elasticsearch_hosts: deployment_json_settings.logging.hosts.to_string(),
-                elasticsearch_tags: None,
-            };
-
             let mgmt_mac = resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac)?;
 
             let node_reward_type = node_reward_type.expect("Node reward type is required.");
@@ -228,7 +223,7 @@ pub fn main() -> Result<()> {
                 node_reward_type: Some(node_reward_type),
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name.parse()?,
-                logging,
+                logging: Logging::default(),
                 use_nns_public_key,
                 nns_urls: deployment_json_settings.nns.url.clone(),
                 use_node_operator_private_key,
