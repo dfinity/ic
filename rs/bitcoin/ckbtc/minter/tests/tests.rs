@@ -658,6 +658,7 @@ impl CkBtcSetup {
             Encode!(&CheckArg::InitArg(CheckerInitArg {
                 btc_network: CheckerBtcNetwork::Mainnet,
                 check_mode: CheckMode::AcceptAll,
+                num_subnet_nodes: 1,
             }))
             .unwrap(),
         )

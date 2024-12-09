@@ -124,7 +124,7 @@ fn init(arg: CheckArg) {
             Config::new_and_validate(
                 init_arg.btc_network,
                 init_arg.check_mode,
-                state::default_num_subnet_nodes(),
+                init_arg.num_subnet_nodes,
             )
             .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err))),
         ),

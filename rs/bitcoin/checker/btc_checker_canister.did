@@ -50,7 +50,8 @@ type CheckTransactionIrrecoverableError = variant {
 
 type InitArg = record {
     btc_network : BtcNetwork;
-    check_mode: CheckMode;
+    check_mode : CheckMode;
+    num_subnet_nodes : nat16;
 };
 
 type UpgradeArg = record {
