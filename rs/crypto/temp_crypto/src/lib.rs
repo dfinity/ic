@@ -25,7 +25,6 @@ pub mod internal {
     use ic_base_types::PrincipalId;
     use ic_config::crypto::{CryptoConfig, CspVaultType};
     use ic_crypto::{CryptoComponent, CryptoComponentImpl};
-    use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
     use ic_crypto_internal_csp::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
     use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
     use ic_crypto_internal_csp::vault::local_csp_vault::ProdLocalCspVault;
@@ -489,42 +488,6 @@ pub mod internal {
         ) -> CryptoResult<BasicSigOf<T>> {
             self.crypto_component
                 .sign_basic(message, signer, registry_version)
-        }
-    }
-
-    impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable>
-        BasicSigVerifierByPublicKey<T> for TempCryptoComponentGeneric<C, R>
-    {
-        fn verify_basic_sig_by_public_key(
-            &self,
-            signature: &BasicSigOf<T>,
-            signed_bytes: &T,
-            public_key: &UserPublicKey,
-        ) -> CryptoResult<()> {
-            self.crypto_component.verify_basic_sig_by_public_key(
-                signature,
-                signed_bytes,
-                public_key,
-            )
-        }
-    }
-
-    impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> CanisterSigVerifier<T>
-        for TempCryptoComponentGeneric<C, R>
-    {
-        fn verify_canister_sig(
-            &self,
-            signature: &CanisterSigOf<T>,
-            signed_bytes: &T,
-            public_key: &UserPublicKey,
-            root_of_trust: &IcRootOfTrust,
-        ) -> CryptoResult<()> {
-            self.crypto_component.verify_canister_sig(
-                signature,
-                signed_bytes,
-                public_key,
-                root_of_trust,
-            )
         }
     }
 

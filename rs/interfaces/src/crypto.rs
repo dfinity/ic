@@ -23,7 +23,6 @@ pub use sign::canister_threshold_sig::*;
 mod vetkd;
 pub use vetkd::*;
 
-use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_types::consensus::{
     certification::CertificationContent,
     dkg as consensus_dkg,
@@ -33,7 +32,7 @@ use ic_types::consensus::{
 };
 use ic_types::{
     crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},
-    messages::{MessageId, QueryResponseHash, WebAuthnEnvelope},
+    messages::{MessageId, QueryResponseHash},
 };
 
 /// The functionality offered by the crypto component
@@ -81,9 +80,6 @@ pub trait Crypto:
     + BasicSigVerifier<CanisterHttpResponseMetadata>
     // Signed Queries
     + BasicSigner<QueryResponseHash>
-    // RequestId/WebAuthn
-    + BasicSigVerifierByPublicKey<MessageId>
-    + BasicSigVerifierByPublicKey<WebAuthnEnvelope>
     // CatchUpPackage
     + ThresholdSigner<CatchUpContent>
     + ThresholdSigVerifier<CatchUpContent>
@@ -146,8 +142,6 @@ impl<T> Crypto for T where
         + ThresholdEcdsaSigVerifier
         + ThresholdSchnorrSigner
         + ThresholdSchnorrSigVerifier
-        + BasicSigVerifierByPublicKey<MessageId>
-        + BasicSigVerifierByPublicKey<WebAuthnEnvelope>
         + ThresholdSigner<CatchUpContent>
         + ThresholdSigVerifier<CatchUpContent>
         + ThresholdSigVerifierByPublicKey<CatchUpContent>

@@ -5,7 +5,6 @@ use crate::sign::basic_sig::BasicSignerInternal;
 use crate::sign::multi_sig::MultiSigVerifierInternal;
 use crate::sign::multi_sig::MultiSignerInternal;
 use crate::sign::threshold_sig::{ThresholdSigVerifierInternal, ThresholdSignerInternal};
-use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
 use ic_crypto_internal_csp::types::{CspPublicKey, CspSignature};
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_threshold_sig_bls12381::api::bls_signature_cache_statistics;
@@ -206,51 +205,6 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
             MetricsDomain::BasicSignature,
             MetricsScope::Full,
             "verify_basic_sig_batch",
-            MetricsResult::from(&result),
-            start_time,
-        );
-        debug!(logger;
-            crypto.description => "end",
-            crypto.is_ok => result.is_ok(),
-            crypto.error => log_err(result.as_ref().err()),
-        );
-        result
-    }
-}
-
-impl<C: CryptoServiceProvider, S: Signable> BasicSigVerifierByPublicKey<S>
-    for CryptoComponentImpl<C>
-{
-    fn verify_basic_sig_by_public_key(
-        &self,
-        signature: &BasicSigOf<S>,
-        signed_bytes: &S,
-        public_key: &UserPublicKey,
-    ) -> CryptoResult<()> {
-        let log_id = get_log_id(&self.logger);
-        let logger = new_logger!(&self.logger;
-            crypto.log_id => log_id,
-            crypto.trait_name => "BasicSigVerifierByPublicBytes",
-            crypto.method_name => "verify_basic_sig_by_public_key",
-        );
-        debug!(logger;
-            crypto.description => "start",
-            crypto.signed_bytes => format!("0x{}", hex::encode(signed_bytes.as_signed_bytes())),
-            crypto.public_key => format!("{}", public_key),
-            crypto.signature => format!("{:?}", signature),
-        );
-        let start_time = self.metrics.now();
-        let metrics_label = format!("verify_basic_sig_by_public_key_{}", public_key.algorithm_id);
-        let result = ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key(
-            public_key.algorithm_id,
-            &signed_bytes.as_signed_bytes(),
-            &signature.get_ref().0,
-            &public_key.key,
-        );
-        self.metrics.observe_duration_seconds(
-            MetricsDomain::BasicSignature,
-            MetricsScope::Full,
-            &metrics_label,
             MetricsResult::from(&result),
             start_time,
         );
@@ -648,54 +602,6 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifierByPublicKey<T>
             MetricsResult::from(&result),
             start_time,
         );
-        debug!(logger;
-            crypto.description => "end",
-            crypto.is_ok => result.is_ok(),
-            crypto.error => log_err(result.as_ref().err()),
-        );
-        result
-    }
-}
-
-impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoComponentImpl<C> {
-    fn verify_canister_sig(
-        &self,
-        signature: &CanisterSigOf<S>,
-        signed_bytes: &S,
-        public_key: &UserPublicKey,
-        root_of_trust: &IcRootOfTrust,
-    ) -> CryptoResult<()> {
-        let log_id = get_log_id(&self.logger);
-        let logger = new_logger!(&self.logger;
-            crypto.log_id => log_id,
-            crypto.trait_name => "CanisterSigVerifier",
-            crypto.method_name => "verify_canister_sig",
-        );
-        debug!(logger;
-            crypto.description => "start",
-            crypto.signed_bytes => format!("0x{}", hex::encode(signed_bytes.as_signed_bytes())),
-            crypto.public_key => format!("{}", public_key),
-            crypto.signature => format!("{:?}", signature),
-        );
-        let start_time = self.metrics.now();
-        ensure_ic_canister_signature(public_key.algorithm_id)?;
-        let result = ic_crypto_standalone_sig_verifier::verify_canister_sig(
-            &signed_bytes.as_signed_bytes(),
-            &signature.get_ref().0,
-            &public_key.key,
-            root_of_trust,
-        );
-
-        // Processing of the cache statistics for metrics is deliberately
-        // part of the canister signature run time metric. It is expected to take
-        // very little time, but if something goes wrong, e.g., due to a mutex
-        // locking congestion or similar, we should be able to notice that.
-        let stats = bls_signature_cache_statistics();
-        self.metrics
-            .observe_bls12_381_sig_cache_stats(stats.size, stats.hits, stats.misses);
-
-        self.metrics
-            .observe_iccsa_verification_duration_seconds(MetricsResult::from(&result), start_time);
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),

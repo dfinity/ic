@@ -7074,16 +7074,10 @@ dependencies = [
 name = "ic-crypto-for-verification-only"
 version = "0.9.0"
 dependencies = [
- "ic-crypto-interfaces-sig-verification",
  "ic-crypto-temp-crypto",
- "ic-crypto-test-utils",
- "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
  "ic-interfaces",
  "ic-interfaces-registry",
- "ic-registry-client-fake",
- "ic-registry-proto-data-provider",
- "ic-types",
 ]
 
 [[package]]

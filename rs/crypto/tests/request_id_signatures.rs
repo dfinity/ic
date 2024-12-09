@@ -156,27 +156,6 @@ fn should_fail_verifying_sig_on_wrong_msg_with_der_encoded_ed25519_pk() {
 }
 
 #[test]
-fn should_verify_request_id_ecdsa_signature() {
-    let rng = &mut reproducible_rng();
-    let request_id = MessageId::from([42; 32]);
-    let (signature, public_key) = ecdsa_secp256k1_signature_and_public_key(&request_id, rng);
-    CryptoConfig::run_with_temp_config(|config| {
-        let crypto = crypto_component(&config);
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&signature, &request_id, &public_key)
-            .is_ok());
-    });
-    let (signature, public_key) = ecdsa_secp256r1_signature_and_public_key(&request_id, rng);
-    CryptoConfig::run_with_temp_config(|config| {
-        let crypto = crypto_component(&config);
-        assert_eq!(
-            crypto.verify_basic_sig_by_public_key(&signature, &request_id, &public_key),
-            Ok(())
-        );
-    });
-}
-
-#[test]
 fn should_correctly_parse_der_encoded_openssl_ecdsa_p256_pk() {
     let pk_der = hex::decode(test_data::ECDSA_P256_PK_DER_HEX).unwrap();
     let (pk, bytes_type) = user_public_key_from_bytes(&pk_der).unwrap();
