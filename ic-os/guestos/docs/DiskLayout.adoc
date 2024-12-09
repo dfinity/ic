@@ -41,8 +41,6 @@ tampering).
 == *config* System config store
 
 Contains the config store persisted across system upgrades.
-See link:ConfigStore{outfilesuffix}[config store] for a
-specification of its contents.
 
 == *A_boot* / *B_boot* Boot partition for system A/B
 

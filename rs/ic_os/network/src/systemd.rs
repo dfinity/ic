@@ -5,8 +5,8 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 
-use crate::info::NetworkInfo;
 use crate::interfaces::{get_interfaces, has_ipv6_connectivity, Interface};
+use config_types::DeterministicIpv6Config;
 use macaddr::MacAddr6;
 
 pub static DEFAULT_SYSTEMD_NETWORK_DIR: &str = "/run/systemd/network";
@@ -115,7 +115,7 @@ fn generate_and_write_systemd_files(
 
 pub fn generate_systemd_config_files(
     output_directory: &Path,
-    network_info: &NetworkInfo,
+    ipv6_config: &DeterministicIpv6Config,
     generated_mac: Option<&MacAddr6>,
     ipv6_address: &Ipv6Addr,
 ) -> Result<()> {
@@ -124,12 +124,12 @@ pub fn generate_systemd_config_files(
     interfaces.reverse();
     eprintln!("Interfaces sorted decending by speed: {:?}", interfaces);
 
-    let ping_target = network_info.ipv6_gateway.to_string();
+    let ping_target = ipv6_config.gateway.to_string();
 
     let fastest_interface = interfaces
         .iter()
         .find(|i| {
-            match has_ipv6_connectivity(i, ipv6_address, network_info.ipv6_subnet, &ping_target) {
+            match has_ipv6_connectivity(i, ipv6_address, ipv6_config.prefix_length, &ping_target) {
                 Ok(result) => result,
                 Err(e) => {
                     eprintln!("Error testing connectivity on {}: {}", &i.name, e);
@@ -142,13 +142,17 @@ pub fn generate_systemd_config_files(
     eprintln!("Using fastest interface: {:?}", fastest_interface);
 
     // Format the IP address to include the subnet length. See `man systemd.network`.
-    let ipv6_address = format!("{}/{}", &ipv6_address.to_string(), network_info.ipv6_subnet);
+    let ipv6_address = format!(
+        "{}/{}",
+        &ipv6_address.to_string(),
+        ipv6_config.prefix_length
+    );
     generate_and_write_systemd_files(
         output_directory,
         fastest_interface,
         generated_mac,
         &ipv6_address,
-        &network_info.ipv6_gateway.to_string(),
+        &ipv6_config.gateway.to_string(),
     )?;
 
     println!("Restarting systemd networkd");
