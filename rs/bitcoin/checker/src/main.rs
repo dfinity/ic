@@ -149,7 +149,7 @@ fn post_upgrade(arg: CheckArg) {
                 .and_then(|arg| arg.check_mode)
                 .unwrap_or(old_config.check_mode);
             let config =
-                Config::new_and_validate(get_config().btc_network(), check_mode, num_subnet_nodes)
+                Config::new_and_validate(old_config.btc_network(), check_mode, num_subnet_nodes)
                     .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err)));
             set_config(config);
         }
