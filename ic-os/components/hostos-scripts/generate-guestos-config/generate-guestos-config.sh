@@ -60,7 +60,6 @@ function read_config_variables() {
     ipv4_gateway=$(get_config_value '.network_settings.ipv4_config.gateway')
     domain_name=$(get_config_value '.network_settings.domain_name')
     node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
-    elasticsearch_hosts=$(get_config_value '.icos_settings.logging.elasticsearch_hosts')
     nns_urls=$(get_config_value '.icos_settings.nns_urls | join(",")')
     mgmt_mac=$(get_config_value '.icos_settings.mgmt_mac')
 
