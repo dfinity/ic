@@ -165,7 +165,7 @@ fn set_governance(gov: Governance) {
 fn schedule_timers() {
     schedule_seeding(Duration::from_nanos(0));
     schedule_adjust_neurons_storage(Duration::from_nanos(0), NeuronIdProto { id: 0 });
-    schedule_prune_following(Duration::from_secs(0));
+    schedule_prune_following(Duration::from_secs(0), Bound::Unbounded);
     schedule_spawn_neurons();
     schedule_unstake_maturity_of_dissolved_neurons();
     schedule_vote_processing();
@@ -227,31 +227,17 @@ fn schedule_seeding(delay: Duration) {
     });
 }
 
-thread_local! {
-    // The last neuron whose following was pruned (possibly, trivially, i.e. did
-    // not try to remove anything, because it refreshed recently enough).
-    static PRUNE_FOLLOWING_CHECKPOINT: RefCell<Bound<NeuronIdProto>> =
-        const { RefCell::new(Bound::Unbounded) };
-}
-
-fn schedule_prune_following(delay: Duration) {
+fn schedule_prune_following(delay: Duration, original_begin: Bound<NeuronIdProto>) {
     if !is_prune_following_enabled() {
         return;
     }
 
-    ic_cdk_timers::set_timer(delay, || {
-        let original_checkpoint = PRUNE_FOLLOWING_CHECKPOINT.with(|p| *p.borrow());
-
+    ic_cdk_timers::set_timer(delay, move || {
         let carry_on =
             || call_context_instruction_counter() < MAX_PRUNE_SOME_FOLLOWING_INSTRUCTIONS;
-        let new_checkpoint = governance_mut().prune_some_following(original_checkpoint, carry_on);
+        let new_begin = governance_mut().prune_some_following(original_begin, carry_on);
 
-        PRUNE_FOLLOWING_CHECKPOINT.with(|p| {
-            let mut borrow = p.borrow_mut();
-            *borrow = new_checkpoint;
-        });
-
-        schedule_prune_following(PRUNE_FOLLOWING_INTERVAL);
+        schedule_prune_following(PRUNE_FOLLOWING_INTERVAL, new_begin);
     });
 }
 
