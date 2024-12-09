@@ -1204,7 +1204,7 @@ fn test_unresponsive_gateway_backend() {
     assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
     assert!(String::from_utf8(resp.bytes().unwrap().as_ref().to_vec())
         .unwrap()
-        .contains("connection_failure: client error"));
+        .contains("connection_failure: HTTP request failed: error sending request for url"));
 }
 
 #[test]
