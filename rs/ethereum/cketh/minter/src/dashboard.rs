@@ -150,7 +150,7 @@ impl DashboardPendingDeposit {
 // Number of entries per page in dashboard tables (e.g. minted events, finalized transactions).
 const DEFAULT_PAGE_SIZE: usize = 100;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct DashboardPagingParameters {
     minted_events_start: usize,
     finalized_transactions_start: usize,
@@ -177,6 +177,87 @@ impl DashboardPagingParameters {
     }
 }
 
+#[derive(Clone)]
+pub struct DashboardPaginatedTable<T: Clone> {
+    current_page: Vec<T>,
+    pagination: DashboardTablePagination,
+}
+
+impl<T: Clone> DashboardPaginatedTable<T> {
+    pub fn from_items(
+        items: &[T],
+        current_page_offset: &usize,
+        page_size: usize,
+        num_cols: usize,
+        table_reference: &str,
+        page_offset_query_param: &str,
+    ) -> Self {
+        let current_page_offset = *current_page_offset;
+        Self {
+            current_page: items
+                .iter()
+                .skip(current_page_offset)
+                .take(page_size)
+                .cloned()
+                .collect(),
+            pagination: DashboardTablePagination::pagination(
+                items.len(),
+                current_page_offset,
+                page_size,
+                num_cols,
+                table_reference,
+                page_offset_query_param,
+            ),
+        }
+    }
+
+    pub fn has_more_than_one_page(&self) -> bool {
+        self.pagination.pages.len() > 1
+    }
+}
+
+#[derive(Clone)]
+pub struct DashboardTablePage {
+    index: usize,
+    offset: usize,
+}
+
+#[derive(Template)]
+#[template(path = "pagination.html")]
+#[derive(Clone)]
+pub struct DashboardTablePagination {
+    pub table_id: String,
+    pub table_width: usize,
+    pub page_offset_query_param: String,
+    pub current_page_index: usize,
+    pub pages: Vec<DashboardTablePage>,
+}
+
+impl DashboardTablePagination {
+    fn pagination(
+        num_items: usize,
+        current_offset: usize,
+        page_size: usize,
+        table_width: usize,
+        table_reference: &str,
+        page_offset_query_param: &str,
+    ) -> Self {
+        let pages = (0..num_items)
+            .step_by(page_size)
+            .enumerate()
+            .map(|(index, offset)| DashboardTablePage { index, offset })
+            .collect();
+        let current_page_index = current_offset / page_size;
+        Self {
+            table_id: String::from(table_reference),
+            page_offset_query_param: String::from(page_offset_query_param),
+            table_width,
+            current_page_index,
+            pages,
+        }
+    }
+}
+
 #[derive(Template)]
 #[template(path = "dashboard.html")]
 #[derive(Clone)]
@@ -200,20 +281,16 @@ pub struct DashboardTemplate {
     pub eth_balance: EthBalance,
     pub skipped_blocks: BTreeMap<String, BTreeSet<BlockNumber>>,
     pub supported_ckerc20_tokens: Vec<DashboardCkErc20Token>,
+    pub pagination_parameters: DashboardPagingParameters,
 }
 
 impl DashboardTemplate {
-    pub fn from_state(state: &State, args: DashboardPagingParameters) -> Self {
+    pub fn from_state(state: &State, pagination_parameters: DashboardPagingParameters) -> Self {
         let mut minted_events: Vec<_> = state.minted_events.values().cloned().collect();
         minted_events.sort_unstable_by_key(|event| {
             let deposit_event = &event.deposit_event;
             Reverse((deposit_event.block_number(), deposit_event.log_index()))
         });
-        minted_events = minted_events
-            .into_iter()
-            .skip(args.minted_events_start)
-            .take(DEFAULT_PAGE_SIZE)
-            .collect();
 
         let mut supported_ckerc20_tokens: Vec<_> = state
             .supported_ck_erc20_tokens()
@@ -315,11 +392,6 @@ impl DashboardTemplate {
             })
             .collect();
         finalized_transactions.sort_unstable_by_key(|tx| Reverse(tx.ledger_burn_index));
-        finalized_transactions = finalized_transactions
-            .into_iter()
-            .skip(args.finalized_transactions_start)
-            .take(DEFAULT_PAGE_SIZE)
-            .collect();
 
         let mut reimbursed_transactions: Vec<_> = state
             .eth_transactions
@@ -362,11 +434,6 @@ impl DashboardTemplate {
             .collect();
         reimbursed_transactions
             .sort_unstable_by_key(|reimbursed_tx| Reverse(reimbursed_tx.cketh_ledger_burn_index()));
-        reimbursed_transactions = reimbursed_transactions
-            .into_iter()
-            .skip(args.reimbursed_transactions_start)
-            .take(DEFAULT_PAGE_SIZE)
-            .collect();
 
         DashboardTemplate {
             ethereum_network: state.ethereum_network,
@@ -395,6 +462,7 @@ impl DashboardTemplate {
                 .map(|(contract_address, blocks)| (contract_address.to_string(), blocks.clone()))
                 .collect(),
             supported_ckerc20_tokens,
+            pagination_parameters,
         }
     }
 }

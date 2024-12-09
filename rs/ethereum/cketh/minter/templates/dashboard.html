@@ -269,7 +269,8 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for event in minted_events %}
+                    {% let table = DashboardPaginatedTable::from_items(minted_events, pagination_parameters.minted_events_start, DEFAULT_PAGE_SIZE, 7, "minted-events", "minted_events_start") %}
+                    {% for event in table.current_page %}
                     <tr>
                         <td>{% call etherscan_tx_link(event.deposit_event.transaction_hash().to_string()) %}</td>
                         <td class="numeric">{{ event.deposit_event.log_index() }}</td>
@@ -280,6 +281,7 @@
                         <td class="numeric">{{ event.mint_block_index }}</td>
                     </tr>
                     {% endfor %}
+                    {% if table.has_more_than_one_page() %}}{{ table.pagination }}{% endif %}
                 </tbody>
             </table>
             {% endif %}
@@ -374,7 +376,8 @@
                 </tr>
                 </thead>
                 <tbody>
-                {% for tx in finalized_transactions %}
+                {% let table = DashboardPaginatedTable::from_items(finalized_transactions, pagination_parameters.finalized_transactions_start, DEFAULT_PAGE_SIZE, 8, "finalized-transactions", "finalized_transactions_start") %}
+                {% for tx in table.current_page %}
                 <tr>
                     <td class="numeric">{{ tx.ledger_burn_index }}</td>
                     <td>{% call etherscan_address_link(tx.destination) %}</td>
@@ -386,6 +389,7 @@
                     <td>{{ tx.status }}</td>
                 </tr>
                 {% endfor %}
+                {% if table.has_more_than_one_page() %}}{{ table.pagination }}{% endif %}
                 </tbody>
             </table>
             {% endif %}
@@ -404,7 +408,8 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for r in reimbursed_transactions %}
+                    {% let table = DashboardPaginatedTable::from_items(reimbursed_transactions, pagination_parameters.reimbursed_transactions_start, DEFAULT_PAGE_SIZE, 6, "reimbursed-transactions", "reimbursed_transactions_start") %}
+                    {% for r in table.current_page %}
                     {% match r %}
                     {% when DashboardReimbursedTransaction::Reimbursed with {cketh_ledger_burn_index, reimbursed_in_block, reimbursed_amount, token_symbol, transaction_hash} %}
                     <tr>
@@ -426,6 +431,7 @@
                     </tr>
                     {% endmatch %}
                     {% endfor %}
+                    {% if table.has_more_than_one_page() %}}{{ table.pagination }}{% endif %}
                 </tbody>
             </table>
             {% endif %}
