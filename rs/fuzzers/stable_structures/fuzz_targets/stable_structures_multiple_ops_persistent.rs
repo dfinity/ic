@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use std::fs::File;
 use std::io::Write;
 use std::time::SystemTime;
-use tempfile::{tempdir, TempDir};
+use tempfile::{tempdir, Builder, TempDir};
 
 mod data;
 use data::{BoundedFuzzStruct, UnboundedFuzzStruct, MAX_VALUE_SIZE};
@@ -47,7 +47,7 @@ thread_local! {
         .expect("Unable to init bounded StableVec")
     );
 
-    static DIR: TempDir = tempdir().unwrap();
+    static DIR: TempDir = Builder::new().prefix("stable_structures_multiple_ops_persistent").tempdir().unwrap();
     static OPS: RefCell<Vec<StableStructOperation>>  = const { RefCell::new(vec![]) }
 }
 
@@ -91,10 +91,7 @@ fuzz_target!(|ops: Vec<StableStructOperation>| {
             let buffer =
                 serde_cbor::ser::to_vec::<Vec<StableStructOperation>>(store.borrow().as_ref())
                     .unwrap();
-            let file_name = format!(
-                "stable_structures_multiple_ops_persistent_{}.txt",
-                timestamp_nanos
-            );
+            let file_name = format!("ops_{}.txt", timestamp_nanos);
             DIR.with(|dir| {
                 let file_path = dir.path().join(file_name);
                 eprintln!("Creating operations dump at {}", file_path.display());
@@ -111,10 +108,7 @@ fuzz_target!(|ops: Vec<StableStructOperation>| {
                 let mut buffer = vec![0; (memory.size() * 65536) as usize];
                 memory.read(0, &mut buffer);
 
-                let file_name = format!(
-                    "stable_structures_multiple_ops_persistent_{}_{}.txt",
-                    memory_index, timestamp_nanos
-                );
+                let file_name = format!("memory{}_{}.txt", memory_index, timestamp_nanos);
                 DIR.with(|dir| {
                     let file_path = dir.path().join(file_name);
                     eprintln!("Creating memory dump at {}", file_path.display());
