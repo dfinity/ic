@@ -1912,9 +1912,7 @@ impl Operation for CallRequest {
             Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
             Ok(subnet) => {
                 let node = &subnet.nodes[0];
-                #[allow(clippy::disallowed_methods)]
-                let (s, mut r) =
-                    mpsc::unbounded_channel::<UnvalidatedArtifactMutation<SignedIngress>>();
+                let (s, mut r) = mpsc::channel::<UnvalidatedArtifactMutation<SignedIngress>>(1);
                 let ingress_filter = subnet.ingress_filter.clone();
 
                 let ingress_validator = IngressValidatorBuilder::builder(
