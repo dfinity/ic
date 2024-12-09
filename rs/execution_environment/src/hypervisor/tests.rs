@@ -2315,27 +2315,24 @@ fn ic0_mint_cycles128_succeeds_on_cmc() {
         .with_subnet_type(SubnetType::System)
         .build();
     let mut canister_id = test.universal_canister().unwrap();
-    // This loop should finish after four iterations.
-    while canister_id != CYCLES_MINTING_CANISTER_ID {
+    for _ in 0..4 {
         canister_id = test.universal_canister().unwrap();
     }
+    assert_eq!(canister_id, CYCLES_MINTING_CANISTER_ID);
     let initial_cycles = test.canister_state(canister_id).system_state.balance();
+    let amount: u128 = (1u128 << 64) + 2u128;
     let payload = wasm()
-        .mint_cycles128(Cycles::from((1u128 << 64) + 2u128))
+        .mint_cycles128(Cycles::from(amount))
         .reply_data_append()
         .reply()
         .build();
     let result = test.ingress(canister_id, "update", payload).unwrap();
-    // (high=1, low=2) => 2^64 + 2^1
-    assert_eq!(
-        WasmResult::Reply(vec![2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]),
-        result
-    );
+    assert_eq!(WasmResult::Reply(amount.to_le_bytes().to_vec()), result);
     let canister_state = test.canister_state(canister_id);
 
     assert_eq!(0, canister_state.system_state.queues().output_queues_len());
     assert_balance_equals(
-        initial_cycles + Cycles::new(18446744073709551618),
+        initial_cycles + Cycles::new(amount),
         canister_state.system_state.balance(),
         BALANCE_EPSILON,
     );
