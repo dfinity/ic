@@ -278,7 +278,7 @@ impl Drop for FetchGuard {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Config {
     btc_network: BtcNetwork,
     pub check_mode: CheckMode,
