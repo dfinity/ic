@@ -594,6 +594,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-cdk": crate.spec(
                 version = "^0.16.0",
             ),
+            "ic-cdk-next": crate.spec(
+                package = "ic-cdk",
+                git = "https://github.com/dfinity/cdk-rs/",
+                branch = "next",
+            ),
             "ic-cdk-timers": crate.spec(
                 version = "^0.11.0",
             ),
