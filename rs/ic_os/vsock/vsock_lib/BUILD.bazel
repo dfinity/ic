@@ -26,7 +26,6 @@ rust_library(
     ),
     aliases = ALIASES,
     crate_name = "vsock_lib",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = [
         "@platforms//os:linux",

@@ -30,7 +30,6 @@ rust_library(
     name = "xrc_mock",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "xrc_mock",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

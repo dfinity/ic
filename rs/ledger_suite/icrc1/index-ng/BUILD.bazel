@@ -37,7 +37,6 @@ rust_library(
     name = "index-ng",
     srcs = ["src/lib.rs"],
     crate_name = "ic_icrc1_index_ng",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -52,7 +51,6 @@ rust_library(
         compile_data = [":index-ng.did"],
         crate_features = features,
         crate_name = "ic_icrc1_index_ng_canister",
-        edition = "2018",
         opt = "z",
         proc_macro_deps = MACRO_DEPENDENCIES,
         rustc_env = {
