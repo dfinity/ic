@@ -145,8 +145,6 @@ impl NeuronSubsetMetrics {
             neuron.staked_maturity_e8s_equivalent.unwrap_or_default();
         let maturity_e8s_equivalent = neuron.maturity_e8s_equivalent;
 
-        // TODO: Also provide deciding voting power. Ideally, we'd rename the metrics to
-        // potential_voting_power, but that's probably not worth it.
         let potential_voting_power = neuron.potential_voting_power(now_seconds);
         let deciding_voting_power =
             neuron.deciding_voting_power(voting_power_economics, now_seconds);
