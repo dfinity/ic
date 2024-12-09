@@ -2209,7 +2209,7 @@ pub mod sns {
             panic!("Failed to spawn an Archive canister.")
         };
 
-        return PrincipalId::from(archive.canister_id);
+        PrincipalId::from(archive.canister_id)
     }
 
     pub mod root {
