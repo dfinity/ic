@@ -45,6 +45,7 @@ impl std::fmt::Debug for ApalacheError {
 }
 
 pub struct TlaCheckError {
+    pub model: PathBuf,
     pub apalache_error: ApalacheError,
     pub pair: ResolvedStatePair,
     pub constants: TlaConstantAssignment,
@@ -218,6 +219,7 @@ pub fn check_tla_code_link(
             .collect(),
     )
     .map_err(|e| TlaCheckError {
+        model: predicate.tla_module,
         apalache_error: e,
         pair: state_pair,
         constants,

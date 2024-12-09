@@ -82,7 +82,7 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
             message: vec![],
             derivation_path: DerivationPath::new(vec![]),
             key_id: into_inner_schnorr(key_id),
-            taproot_tree_root: None,
+            aux: None,
         }
         .encode(),
         _ => panic!("unexpected method"),
@@ -214,7 +214,7 @@ fn test_compute_initial_idkg_dealings_sender_on_nns() {
             .with_checkpoints_enabled(false)
             .with_subnet_id(nns_subnet)
             .with_nns_subnet_id(nns_subnet)
-            .with_idkg_key(key_id.clone())
+            .with_chain_key(key_id.clone())
             .build();
         let canister_id = create_universal_canister(&env);
 
@@ -270,7 +270,7 @@ fn test_compute_initial_idkg_dealings_sender_not_on_nns() {
             .with_checkpoints_enabled(false)
             .with_subnet_id(own_subnet)
             .with_nns_subnet_id(nns_subnet)
-            .with_idkg_key(key_id.clone())
+            .with_chain_key(key_id.clone())
             .build();
 
         let canister_id = create_universal_canister(&env);
@@ -363,7 +363,7 @@ fn test_sign_with_threshold_key_fee_charged() {
             .with_nns_subnet_id(nns_subnet)
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
-            .with_idkg_key(key_id.clone())
+            .with_chain_key(key_id.clone())
             .build();
 
         let canister_id = create_universal_canister(&env);
@@ -429,7 +429,7 @@ fn test_sign_with_threshold_key_rejected_without_fee() {
             .with_nns_subnet_id(nns_subnet)
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
-            .with_idkg_key(key_id.clone())
+            .with_chain_key(key_id.clone())
             .build();
 
         let canister_id = create_universal_canister(&env);
@@ -478,7 +478,7 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
             .with_checkpoints_enabled(false)
             .with_subnet_id(own_subnet)
             .with_nns_subnet_id(nns_subnet)
-            .with_idkg_key(correct_key.clone())
+            .with_chain_key(correct_key.clone())
             .build();
 
         let canister_id = create_universal_canister(&env);
@@ -487,7 +487,7 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
         assert_eq!(
             result,
             Ok(WasmResult::Reject(format!(
-                "Unable to route management canister request {}: ChainKeyError(\"Requested unknown or signing disabled threshold key: {}, existing keys with signing enabled: {}\")",
+                "Unable to route management canister request {}: ChainKeyError(\"Requested unknown or disabled threshold key: {}, existing enabled keys: {}\")",
                 method,
                 wrong_key,
                 format_keys(vec![correct_key]),
@@ -522,7 +522,7 @@ fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
             .with_subnet_type(SubnetType::System)
             .with_subnet_id(own_subnet)
             .with_nns_subnet_id(nns_subnet)
-            .with_signing_disabled_idkg_key(signing_disabled_key.clone())
+            .with_disabled_chain_key(signing_disabled_key.clone())
             .build();
 
         let canister_id = create_universal_canister(&env);
@@ -554,7 +554,7 @@ fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
                 sign_with_method,
                 signing_disabled_key.clone(),
             )),
-            "Requested unknown or signing disabled threshold key"
+            "Requested unknown or disabled threshold key"
         );
 
         // Requesting non-existent public key (should fail).
@@ -576,7 +576,7 @@ fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
                 sign_with_method,
                 unknown_key.clone(),
             )),
-            "Requested unknown or signing disabled threshold key"
+            "Requested unknown or disabled threshold key"
         );
     }
 }
@@ -602,7 +602,7 @@ fn test_threshold_key_public_key_req_with_unknown_key_rejected() {
             .with_checkpoints_enabled(false)
             .with_subnet_id(own_subnet)
             .with_nns_subnet_id(nns_subnet)
-            .with_idkg_key(correct_key.clone())
+            .with_chain_key(correct_key.clone())
             .build();
 
         let canister_id = create_universal_canister(&env);
@@ -636,7 +636,7 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
             .with_nns_subnet_id(nns_subnet)
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
-            .with_idkg_key(key_id.clone())
+            .with_chain_key(key_id.clone())
             .build();
 
         let canister_id = create_universal_canister(&env);
@@ -686,7 +686,7 @@ fn test_sign_with_threshold_key_queue_fills_up() {
             .with_nns_subnet_id(nns_subnet)
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
-            .with_idkg_key(key_id.clone())
+            .with_chain_key(key_id.clone())
             // Turn off automatic ECDSA signatures to fill up the queue.
             .with_ecdsa_signing_enabled(false)
             // Turn off automatic Schnorr signatures to fill up the queue.

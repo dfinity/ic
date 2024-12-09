@@ -322,17 +322,17 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.3.4",
             ),
             "bytes": crate.spec(
-                version = "^1.7.2",
+                version = "^1.9.0",
             ),
             "cached": crate.spec(
                 version = "^0.49",
                 default_features = False,
             ),
             "canbench": crate.spec(
-                version = "^0.1.7",
+                version = "^0.1.8",
             ),
             "canbench-rs": crate.spec(
-                version = "^0.1.7",
+                version = "^0.1.8",
             ),
             "candid": crate.spec(
                 version = "^0.10.6",
@@ -520,7 +520,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12",
             ),
             "http": crate.spec(
-                version = "^1.1.0",
+                version = "^1.2.0",
             ),
             "http-body": crate.spec(
                 version = "^1.0.1",
@@ -1282,14 +1282,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.36",
             ),
             "tokio": crate.spec(
-                version = "^1.41.1",
+                version = "^1.42.0",
                 features = ["full"],
             ),
             "tokio-io-timeout": crate.spec(
                 version = "^1.2.0",
             ),
             "tokio-metrics": crate.spec(
-                version = "^0.3.1",
+                version = "^0.4.0",
             ),
             "tokio-rustls": crate.spec(
                 version = "^0.26.0",
@@ -1312,7 +1312,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.4.4",
             ),
             "tokio-util": crate.spec(
-                version = "^0.7.12",
+                version = "^0.7.13",
                 features = [
                     "codec",
                     "time",
@@ -1354,7 +1354,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.4.0",
             ),
             "tracing": crate.spec(
-                version = "^0.1.40",
+                version = "^0.1.41",
             ),
             "tracing-appender": crate.spec(
                 version = "^0.2.3",
@@ -1372,7 +1372,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2",
             ),
             "tracing-subscriber": crate.spec(
-                version = "^0.3.18",
+                version = "^0.3.19",
                 features = [
                     "env-filter",
                     "fmt",

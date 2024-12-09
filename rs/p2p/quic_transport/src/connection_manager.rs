@@ -132,16 +132,14 @@ enum ConnectionEstablishError {
         peer_id: Option<NodeId>,
         cause: ConnectionError,
     },
-    // The following errors should be infallible.
+    // The following errors should be infallible/internal.
     #[error("Failed to establish outbound connection to peer {peer_id:?} due to errors in the parameters being used. {cause:?}")]
     BadConnectParameters {
         peer_id: NodeId,
         cause: ConnectError,
     },
-    #[error("No peer identity available.")]
-    MissingPeerIdentity,
-    #[error("Malformed peer identity. {0}")]
-    MalformedPeerIdentity(String),
+    #[error("Authentication failed: {0}")]
+    AuthenticationFailed(String),
     #[error("Incoming connection from {client:?}, which is > than {server:?}")]
     InvalidIncomingPeerId { client: NodeId, server: NodeId },
 }
@@ -218,9 +216,8 @@ pub(crate) fn start_connection_manager(
         .max_concurrent_uni_streams(MAX_CONCURRENT_UNI_STREAMS);
 
     let transport_config = Arc::new(transport_config);
-    let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(
-        QuicServerConfig::try_from(rustls_server_config).unwrap(),
-    ));
+    let quinn_server_config = QuicServerConfig::try_from(rustls_server_config).expect("Conversion from RustTls config to Quinn config must succeed as long as this library and quinn use the same RustTls versions.");
+    let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(quinn_server_config));
     server_config.transport_config(transport_config.clone());
 
     let endpoint = {
@@ -261,6 +258,25 @@ impl ConnectionManager {
         self.node_id < *dst
     }
 
+    /// Conditions under which the node can start outbound connecting attempt
+    /// - the node is a designated dialer
+    /// - peer is in the subnet
+    /// - this node is part of the subnet (can happen when a node is removed from the subnet)
+    /// - there is no connect attempted
+    /// - there is no established connection
+    fn can_i_dial_to(&self, dst: &NodeId) -> bool {
+        let dialer = self.am_i_dialer(dst);
+        let peer_in_subnet = self.topology.is_member(dst);
+        let node_in_subnet = self.topology.is_member(&self.node_id);
+        let no_active_connection_attempt = !self.outbound_connecting.contains(dst);
+        let no_active_connection = !self.active_connections.contains(dst);
+        no_active_connection_attempt
+            && no_active_connection
+            && dialer
+            && node_in_subnet
+            && peer_in_subnet
+    }
+
     pub async fn run(mut self, cancellation: CancellationToken) {
         loop {
             select! {
@@ -268,7 +284,7 @@ impl ConnectionManager {
                     break;
                 },
                 Some(reconnect) = self.connect_queue.next() => {
-                    self.handle_dial(reconnect.into_inner())
+                    self.handle_outbound_conn_attemp(reconnect.into_inner())
                 },
                 // Ignore the case if the sender is dropped. It is not transport's responsibility to make
                 // sure topology senders are up and running.
@@ -277,7 +293,7 @@ impl ConnectionManager {
                 },
                 incoming = self.endpoint.accept() => {
                     if let Some(incoming) = incoming {
-                        self.handle_inbound(incoming);
+                        self.handle_inbound_conn_attemp(incoming);
                     } else {
                         error!(self.log, "Quic endpoint closed. Stopping transport.");
                         // Endpoint is closed. This indicates NOT graceful shutdown.
@@ -344,7 +360,7 @@ impl ConnectionManager {
         self.endpoint.wait_idle().await;
     }
 
-    // Removes connection and sets peer status to disconnected
+    /// Removes connection and sets peer status to disconnected
     fn handled_closed_conn(&mut self, peer_id: NodeId) {
         self.peer_map.write().unwrap().remove(&peer_id);
         self.connect_queue.insert(peer_id, Duration::from_secs(0));
@@ -366,7 +382,7 @@ impl ConnectionManager {
             .server_config(subnet_nodes, self.topology.latest_registry_version())
         {
             Ok(rustls_server_config) => {
-                let quic_server_config = QuicServerConfig::try_from(rustls_server_config).unwrap();
+                let quic_server_config = QuicServerConfig::try_from(rustls_server_config).expect("Conversion from RustTls config to Quinn config must succeed as long as this library and quinn use the same RustTls versions.");
                 let mut server_config =
                     quinn::ServerConfig::with_crypto(Arc::new(quic_server_config));
                 server_config.transport_config(self.transport_config.clone());
@@ -379,16 +395,7 @@ impl ConnectionManager {
 
         // Connect/Disconnect from peers according to new topology
         for (peer_id, _) in self.topology.iter() {
-            let dialer = self.am_i_dialer(peer_id);
-            let no_active_connection_attempt = !self.outbound_connecting.contains(peer_id);
-            let no_active_connection = !self.active_connections.contains(peer_id);
-            let node_in_subnet = self.topology.is_member(&self.node_id);
-            // Add to delayqueue for connecting iff
-            // - Not currently trying to connect
-            // - No active connection to this peer
-            // - Our node id is lower -> This node is dialer.
-            // - This node is part of the subnet. This can happen when a node is removed from the subnet.
-            if no_active_connection_attempt && no_active_connection && dialer && node_in_subnet {
+            if self.can_i_dial_to(peer_id) {
                 self.connect_queue.insert(*peer_id, Duration::from_secs(0));
             }
         }
@@ -415,25 +422,9 @@ impl ConnectionManager {
         self.metrics.peer_map_size.set(peer_map.len() as i64);
     }
 
-    fn handle_dial(&mut self, peer_id: NodeId) {
-        let not_dialer = !self.am_i_dialer(&peer_id);
-        let peer_not_in_subnet = self.topology.get_addr(&peer_id).is_none();
-        let active_connection_attempt = self.outbound_connecting.contains(&peer_id);
-        let active_connection = self.active_connections.contains(&peer_id);
-        let node_not_in_subnet = !self.topology.is_member(&self.node_id);
-
-        // Conditions under which we do NOT connect
-        // - prefer lower node id / dialing ourself
-        // - peer not in subnet
-        // - currently trying to connect
-        // - already connected
-        // - this node is not part of subnet. This can happen when a node is removed from the subnet.
-        if not_dialer
-            || peer_not_in_subnet
-            || active_connection_attempt
-            || active_connection
-            || node_not_in_subnet
-        {
+    /// Inserts a task into `outbound_connecting`` that handles an outbound connection attempt. (The function can also be called `handle_outbound`).
+    fn handle_outbound_conn_attemp(&mut self, peer_id: NodeId) {
+        if !self.can_i_dial_to(&peer_id) {
             return;
         }
 
@@ -442,14 +433,14 @@ impl ConnectionManager {
         let addr = self
             .topology
             .get_addr(&peer_id)
-            .expect("Just checked this conditions");
+            .expect("Just checked this conditions.");
         let endpoint = self.endpoint.clone();
         let rustls_client_config = self
             .tls_config
             .client_config(peer_id, self.topology.latest_registry_version())
             .expect("The rustls client config must be locally available, otherwise transport can't start.");
         let transport_config = self.transport_config.clone();
-        let quinn_client_config = QuicClientConfig::try_from(rustls_client_config).unwrap();
+        let quinn_client_config = QuicClientConfig::try_from(rustls_client_config).expect("Conversion from RustTls config to Quinn config must succeed as long as this library and quinn use the same RustTls versions.");
         let mut client_config = quinn::ClientConfig::new(Arc::new(quinn_client_config));
         client_config.transport_config(transport_config);
         let conn_fut = async move {
@@ -554,7 +545,7 @@ impl ConnectionManager {
     }
 
     /// Inserts a task into 'inbound_connecting' that handles an inbound connection attempt.
-    fn handle_inbound(&mut self, incoming: Incoming) {
+    fn handle_inbound_conn_attemp(&mut self, incoming: Incoming) {
         self.metrics.inbound_connection_total.inc();
         let node_id = self.node_id;
         let conn_fut = async move {
@@ -568,17 +559,19 @@ impl ConnectionManager {
 
             let rustls_certs = established
                 .peer_identity()
-                .ok_or(ConnectionEstablishError::MissingPeerIdentity)?
+                .ok_or(ConnectionEstablishError::AuthenticationFailed(
+                    "missing peer identity".to_string(),
+                ))?
                 .downcast::<Vec<CertificateDer>>()
                 .unwrap();
             let rustls_cert =
                 rustls_certs
                     .first()
-                    .ok_or(ConnectionEstablishError::MalformedPeerIdentity(
+                    .ok_or(ConnectionEstablishError::AuthenticationFailed(
                         "a single cert must be present".to_string(),
                     ))?;
             let peer_id = node_id_from_certificate_der(rustls_cert.as_ref())
-                .map_err(|err| ConnectionEstablishError::MalformedPeerIdentity(err.to_string()))?;
+                .map_err(|err| ConnectionEstablishError::AuthenticationFailed(err.to_string()))?;
 
             // Lower ID is dialer. So we reject if this nodes id is higher.
             if peer_id > node_id {

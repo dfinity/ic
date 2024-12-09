@@ -577,7 +577,7 @@ pub async fn get_schnorr_signature_with_logger(
         message,
         derivation_path: DerivationPath::new(Vec::new()),
         key_id: key_id.clone(),
-        taproot_tree_root: None,
+        aux: None,
     };
     info!(
         logger,
@@ -871,7 +871,7 @@ impl ChainSignatureRequest {
             message: vec![1; message_size],
             derivation_path: DerivationPath::new(Vec::new()),
             key_id: schnorr_key_id,
-            taproot_tree_root: None,
+            aux: None,
         };
         ForwardParams {
             receiver: Principal::management_canister(),

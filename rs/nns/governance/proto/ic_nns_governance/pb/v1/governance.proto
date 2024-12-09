@@ -1844,9 +1844,6 @@ message ProposalInfo {
 // to set the parameters that it wishes to change.
 // In other words, it's not possible to set any of the values of
 // NetworkEconomics to 0.
-//
-// NOTE: If adding a value to this proto, make sure there is a corresponding
-// `if` in Governance::perform_action().
 message NetworkEconomics {
   reserved 3, 7;
   // The number of E8s (10E-8 of an ICP token) that a rejected
@@ -1896,6 +1893,32 @@ message NetworkEconomics {
 
   // Global Neurons' Fund participation thresholds.
   optional NeuronsFundEconomics neurons_fund_economics = 11;
+
+  // Parameters that affect the voting power of neurons.
+  VotingPowerEconomics voting_power_economics = 12;
+}
+
+// Parameters that affect the voting power of neurons.
+message VotingPowerEconomics {
+  // If a neuron has not "refreshed" its voting power after this amount of time,
+  // its deciding voting power starts decreasing linearly. See also
+  // clear_following_after_seconds.
+  //
+  // For explanation of what "refresh" means in this context, see
+  // https://dashboard.internetcomputer.org/proposal/132411
+  //
+  // Initially, set to 0.5 years. (The nominal length of a year is 365.25 days).
+  optional uint64 start_reducing_voting_power_after_seconds = 1;
+
+  // After a neuron has experienced voting power reduction for this amount of
+  // time, a couple of things happen:
+  //
+  //     1. Deciding voting power reaches 0.
+  //
+  //     2. Its following on topics other than NeuronManagement are cleared.
+  //
+  // Initially, set to 1/12 years.
+  optional uint64 clear_following_after_seconds = 2;
 }
 
 // The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
@@ -2981,4 +3004,14 @@ message ArchivedMonthlyNodeProviderRewards {
   message V1 {
     ic_nns_governance.pb.v1.MonthlyNodeProviderRewards rewards = 1;
   }
+}
+
+// Internal type to allow ProposalVotingStateMachine to be stored
+// in stable memory.
+message ProposalVotingStateMachine {
+  ic_nns_common.pb.v1.ProposalId proposal_id = 1;
+  Topic topic = 2;
+  repeated ic_nns_common.pb.v1.NeuronId neurons_to_check_followers = 3;
+  repeated ic_nns_common.pb.v1.NeuronId followers_to_check = 4;
+  map<uint64, Vote> recent_neuron_ballots_to_record = 5;
 }
