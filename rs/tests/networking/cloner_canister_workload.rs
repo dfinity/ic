@@ -46,11 +46,14 @@ const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 const SUBNET_SIZE: usize = 13;
 const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(200);
 
-// 100,000 canisters, with 500 batches, will take ~25 minutes to set up.
+// 100,000 canisters, with 250 batches, will take ~25 minutes to set up.
 // Yields 280-310ms commit and certify times.
 // We need minimum 350+ms, so we should probably push this to 150,000 canisters.
 const NUMBER_OF_CANISTERS_TO_INSTALL: u64 = 200_000;
-const CANISTERS_INSTALLED_PER_CLONER_CANISTER: u64 = 500;
+
+/// This number should not exceed `MAX_CANISTER_BALANCE` / `INITIAL_CYCLES_BALANCE`, which is 10^14 / (3 * 10^11) = 333.
+/// Otherwise, the creation and installation of counter canisters will fail due to out of cycles.
+const CANISTERS_INSTALLED_PER_CLONER_CANISTER: u64 = 250;
 const AMOUNT_OF_CLONER_CANISTERS: u64 =
     NUMBER_OF_CANISTERS_TO_INSTALL / CANISTERS_INSTALLED_PER_CLONER_CANISTER;
 
