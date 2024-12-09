@@ -46,7 +46,7 @@ const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 const SUBNET_SIZE: usize = 13;
 const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(200);
 
-// 100,000 canisters, with 250 batches, will take ~25 minutes to set up.
+// 100,000 canisters, at the rate of 250 canisters per batch, will take ~60 minutes to set up.
 // Yields 280-310ms commit and certify times.
 // We need minimum 350+ms, so we should probably push this to 150,000 canisters.
 const NUMBER_OF_CANISTERS_TO_INSTALL: u64 = 200_000;
