@@ -98,6 +98,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             patch_args = ["-p4"],
             patches = ["@@//bazel:cranelift-codegen-meta.patch"],
         )],
+        #TODO(mihailjianu): check if we need this at all.
         "secp256k1-sys": [crate.annotation(
             # This specific version is used by ic-btc-kyt canister, which
             # requires an extra cfg flag to avoid linking issues.
@@ -265,12 +266,21 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.6.3",
             ),
             "bitcoin": crate.spec(
-                package = "bitcoin",
+                #TODO(mihailjianu): upgrade to 0.32.5. here and in the cacrgo.toml.
                 version = "^0.32.4",
                 features = [
                     "default",
                     "rand",
                     "serde",
+                ],
+            ),
+            "bitcoin-0-28": crate.spec(
+                package = "bitcoin",
+                version = "^0.28.2",
+                features = [
+                    "default",
+                    "rand",
+                    "use-serde",
                 ],
             ),
             "bitcoincore-rpc": crate.spec(
@@ -1106,13 +1116,24 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "scraper": crate.spec(
                 version = "^0.17.1",
             ),
+            #TODO(mihailjianu): add this back.
             "secp256k1": crate.spec(
                 version = "^0.29",
                 features = [
                     "global-context",
                     "rand-std",
                     #TODO(mihailjianu): check if/why this is needed.
-                    "serde",
+                    #"serde",
+                ],
+            ),
+            "secp256k1-0-22": crate.spec(
+                package = "secp256k1",
+                version = "^0.22",
+                features = [
+                    "global-context",
+                    "rand-std",
+                    #TODO(mihailjianu): check if/why this is needed.
+                    #"serde",
                 ],
             ),
             "semver": crate.spec(
