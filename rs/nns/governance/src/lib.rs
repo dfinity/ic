@@ -215,6 +215,8 @@ thread_local! {
 }
 
 thread_local! {
+    // This gets set to the current time when it detects that a new cycle has
+    // begun. (This occurs in one of the prune_some_following functions.)
     static CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS: Cell<u64> =
         const { Cell::new(0) };
 }
