@@ -415,7 +415,12 @@ fn encode_dissolve_delay_buckets<W, T>(
     }
 }
 
-/// Encodes
+/// Outputs many statistics about neurons, proposals, etc in Prometheus format
+/// (via the w output parameter).
+///
+/// Some of these statistics are useful to operators (these could be called
+/// health metrics). Others are of interest to the general public, and help
+/// promote transparency of the Internet Computer (especially its governance).
 pub fn encode_metrics(
     governance: &Governance,
     w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
@@ -432,6 +437,9 @@ pub fn encode_metrics(
         ic_nervous_system_common::total_memory_size_bytes() as f64,
         "Size of the total memory allocated by this canister measured in bytes.",
     )?;
+
+    // Background Work
+
     w.encode_gauge(
         "governance_latest_gc_timestamp_seconds",
         governance.latest_gc_timestamp_seconds as f64,
