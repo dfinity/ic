@@ -26,9 +26,14 @@ pub const INITIAL_MAX_RESPONSE_BYTES: u32 = 4 * 1024;
 /// Retry max response bytes is 400kB
 pub const RETRY_MAX_RESPONSE_BYTES: u32 = 400 * 1024;
 
-pub fn get_tx_cycle_cost(max_response_bytes: u32) -> u128 {
+pub fn get_tx_cycle_cost(max_response_bytes: u32, num_subnet_nodes: u16) -> u128 {
+    let n = num_subnet_nodes as u128;
+    let m = max_response_bytes as u128;
+    let base_fee = (3_000_000 + 60_000 * n) * n;
     // 1 KiB for request, max_response_bytes for response
-    49_140_000 + 1024 * 5_200 + 10_400 * (max_response_bytes as u128)
+    let request_fee = 400 * n * 1024;
+    let response_fee = 800 * n * m;
+    base_fee + request_fee + response_fee
 }
 
 pub fn blocklist_contains(address: &Address) -> bool {
