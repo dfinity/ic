@@ -1408,6 +1408,8 @@ fn test_refresh_voting_power() {
         let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         let refresh_timestamp = neuron.voting_power_refreshed_timestamp_seconds.unwrap();
+
+        // Wait for a second before updating the voting power. This is done so the timestamp is sure to have a different value when refreshed
         std::thread::sleep(std::time::Duration::from_secs(1));
         TransactionOperationResults::try_from(
             env.rosetta_client
