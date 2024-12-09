@@ -15,6 +15,7 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use reqwest::Client;
+use serde_json::json;
 use std::env;
 
 const UNIVERSAL_VM_NAME: &str = "foundry";
@@ -52,7 +53,9 @@ fn ic_xc_cketh_test(env: TestEnv) {
 
     block_on(async {
         let response = client
-            .get(&url)
+            .post(&url)
+            .body(r#"{"method":"eth_blockNumber","params":[],"id":1,"jsonrpc":"2.0"}"#)
+            .header("Content-Type", "application/json")
             .send()
             .await
             .expect("failed to get the zone");
@@ -61,6 +64,10 @@ fn ic_xc_cketh_test(env: TestEnv) {
             .json()
             .await
             .expect("failed to decode the response");
+        assert_eq!(
+            response_json,
+            json!({"jsonrpc":"2.0","id":1,"result":"0x0"})
+        )
     });
 }
 
