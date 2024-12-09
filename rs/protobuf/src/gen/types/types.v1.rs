@@ -332,6 +332,47 @@ impl VetKdCurve {
         }
     }
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum RejectCode {
+    Unspecified = 0,
+    SysFatal = 1,
+    SysTransient = 2,
+    DestinationInvalid = 3,
+    CanisterReject = 4,
+    CanisterError = 5,
+    SysUnknown = 6,
+}
+impl RejectCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "REJECT_CODE_UNSPECIFIED",
+            Self::SysFatal => "REJECT_CODE_SYS_FATAL",
+            Self::SysTransient => "REJECT_CODE_SYS_TRANSIENT",
+            Self::DestinationInvalid => "REJECT_CODE_DESTINATION_INVALID",
+            Self::CanisterReject => "REJECT_CODE_CANISTER_REJECT",
+            Self::CanisterError => "REJECT_CODE_CANISTER_ERROR",
+            Self::SysUnknown => "REJECT_CODE_SYS_UNKNOWN",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "REJECT_CODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "REJECT_CODE_SYS_FATAL" => Some(Self::SysFatal),
+            "REJECT_CODE_SYS_TRANSIENT" => Some(Self::SysTransient),
+            "REJECT_CODE_DESTINATION_INVALID" => Some(Self::DestinationInvalid),
+            "REJECT_CODE_CANISTER_REJECT" => Some(Self::CanisterReject),
+            "REJECT_CODE_CANISTER_ERROR" => Some(Self::CanisterError),
+            "REJECT_CODE_SYS_UNKNOWN" => Some(Self::SysUnknown),
+            _ => None,
+        }
+    }
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DkgMessage {
     #[prost(message, optional, tag = "5")]
@@ -361,11 +402,20 @@ pub mod dkg_payload {
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CompletedVetKey {
+    #[prost(uint64, tag = "1")]
+    pub callback_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub unreported: ::core::option::Option<super::super::state::queues::v1::ConsensusResponse>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DkgDataPayload {
     #[prost(message, repeated, tag = "1")]
     pub dealings: ::prost::alloc::vec::Vec<DkgMessage>,
     #[prost(uint64, tag = "2")]
     pub summary_height: u64,
+    #[prost(message, repeated, tag = "3")]
+    pub vetkd_key_agreements: ::prost::alloc::vec::Vec<CompletedVetKey>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Summary {
@@ -465,47 +515,6 @@ pub struct InitialDkgAttemptCount {
     pub target_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint32, tag = "2")]
     pub attempt_no: u32,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum RejectCode {
-    Unspecified = 0,
-    SysFatal = 1,
-    SysTransient = 2,
-    DestinationInvalid = 3,
-    CanisterReject = 4,
-    CanisterError = 5,
-    SysUnknown = 6,
-}
-impl RejectCode {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "REJECT_CODE_UNSPECIFIED",
-            Self::SysFatal => "REJECT_CODE_SYS_FATAL",
-            Self::SysTransient => "REJECT_CODE_SYS_TRANSIENT",
-            Self::DestinationInvalid => "REJECT_CODE_DESTINATION_INVALID",
-            Self::CanisterReject => "REJECT_CODE_CANISTER_REJECT",
-            Self::CanisterError => "REJECT_CODE_CANISTER_ERROR",
-            Self::SysUnknown => "REJECT_CODE_SYS_UNKNOWN",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "REJECT_CODE_UNSPECIFIED" => Some(Self::Unspecified),
-            "REJECT_CODE_SYS_FATAL" => Some(Self::SysFatal),
-            "REJECT_CODE_SYS_TRANSIENT" => Some(Self::SysTransient),
-            "REJECT_CODE_DESTINATION_INVALID" => Some(Self::DestinationInvalid),
-            "REJECT_CODE_CANISTER_REJECT" => Some(Self::CanisterReject),
-            "REJECT_CODE_CANISTER_ERROR" => Some(Self::CanisterError),
-            "REJECT_CODE_SYS_UNKNOWN" => Some(Self::SysUnknown),
-            _ => None,
-        }
-    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BasicSignature {
@@ -662,23 +671,6 @@ pub struct IDkgPayload {
     pub pre_signatures_in_creation: ::prost::alloc::vec::Vec<PreSignatureInProgress>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ConsensusResponse {
-    #[prost(uint64, tag = "3")]
-    pub callback: u64,
-    #[prost(oneof = "consensus_response::Payload", tags = "5, 6")]
-    pub payload: ::core::option::Option<consensus_response::Payload>,
-}
-/// Nested message and enum types in `ConsensusResponse`.
-pub mod consensus_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Payload {
-        #[prost(bytes, tag = "5")]
-        Data(::prost::alloc::vec::Vec<u8>),
-        #[prost(message, tag = "6")]
-        Reject(super::super::super::state::queues::v1::RejectContext),
-    }
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MasterKeyTranscript {
     #[prost(message, optional, tag = "2")]
     pub current: ::core::option::Option<UnmaskedTranscriptWithAttributes>,
@@ -713,7 +705,8 @@ pub struct XnetReshareAgreement {
     #[prost(message, optional, tag = "1")]
     pub request: ::core::option::Option<IDkgReshareRequest>,
     #[prost(message, optional, tag = "4")]
-    pub initial_dealings: ::core::option::Option<ConsensusResponse>,
+    pub initial_dealings:
+        ::core::option::Option<super::super::state::queues::v1::ConsensusResponse>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct RequestId {
@@ -893,7 +886,7 @@ pub struct PreSignatureTranscriptRef {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CompletedSignature {
     #[prost(message, optional, tag = "3")]
-    pub unreported: ::core::option::Option<ConsensusResponse>,
+    pub unreported: ::core::option::Option<super::super::state::queues::v1::ConsensusResponse>,
     #[prost(bytes = "vec", tag = "4")]
     pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
 }

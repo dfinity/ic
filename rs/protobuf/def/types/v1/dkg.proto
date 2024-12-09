@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package types.v1;
 
+import "state/queues/v1/queues.proto";
 import "types/v1/types.proto";
 
 message DkgMessage {
@@ -22,9 +23,15 @@ message DkgPayload {
   reserved "dealings";
 }
 
+message CompletedVetKey {
+  uint64 callback_id = 1;
+  state.queues.v1.ConsensusResponse unreported = 2;
+}
+
 message DkgDataPayload {
   repeated DkgMessage dealings = 1;
   uint64 summary_height = 2;
+  repeated CompletedVetKey vetkd_key_agreements = 3;
 }
 
 message Summary {

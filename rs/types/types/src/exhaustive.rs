@@ -1,5 +1,6 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
+use crate::consensus::dkg::CompletedVetKey;
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::QuadrupleInCreation;
@@ -28,6 +29,7 @@ use crate::crypto::{
     CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, CryptoHashable,
     IndividualMultiSig, IndividualMultiSigOf, Signed, ThresholdSigShare, ThresholdSigShareOf,
 };
+use crate::messages::CallbackId;
 use crate::signature::{
     BasicSignature, BasicSignatureBatch, MultiSignature, MultiSignatureShare, ThresholdSignature,
     ThresholdSignatureShare,
@@ -1010,6 +1012,7 @@ impl HasId<SubnetId> for CertifiedStreamSlice {}
 impl HasId<NiDkgTargetId> for u32 {}
 impl HasId<PreSigId> for PreSignatureInCreation {}
 impl HasId<PreSigId> for PreSignatureRef {}
+impl HasId<CallbackId> for CompletedVetKey {}
 
 #[cfg(test)]
 mod tests {
