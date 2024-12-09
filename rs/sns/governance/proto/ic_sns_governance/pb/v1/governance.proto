@@ -2271,7 +2271,15 @@ message UpgradeJournal {
 
 // The upgrade journal contains all the information neede to audit previous SNS upgrades and understand its current state.
 // It is being implemented as part of the "effortless SNS upgrade" feature.
-message GetUpgradeJournalRequest {}
+message GetUpgradeJournalRequest {
+  // Maximum number of journal entries to return.
+  // If not specified, defaults to 100. Values larger than 100 will be capped at 100.
+  optional uint64 limit = 1;
+
+  // The starting index from which to return entries, counting from the oldest entry (0).
+  // If not specified, return the most recent entries.
+  optional uint64 offset = 2;
+}
 
 message GetUpgradeJournalResponse {
   Governance.Versions upgrade_steps = 1;
@@ -2283,6 +2291,7 @@ message GetUpgradeJournalResponse {
   Governance.Version deployed_version = 5;
 
   UpgradeJournal upgrade_journal = 4;
+  optional uint64 upgrade_journal_entry_count = 6;
 }
 
 // A request to mint tokens for a particular principal. The associated endpoint

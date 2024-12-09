@@ -48,12 +48,14 @@ def image_deps(mode, malicious = False):
             "//rs/ic_os/release:nft-exporter": "/opt/ic/bin/nft-exporter:0755",  # Firewall (NFTables) counter exporter for observability.
             "//rs/ic_os/release:vsock_guest": "/opt/ic/bin/vsock_guest:0755",  # HostOS <--> GuestOS communication client.
             "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",  # Terminal manager that replaces the login shell.
-            "//cpp:prestorecon": "/opt/ic/bin/prestorecon:0755",  # Parallel restorecon replacement for filesystem relabeling.
             "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",  # Proxies, filters, and serves public node metrics.
             "//rs/ic_os/release:metrics_tool": "/opt/ic/bin/metrics_tool:0755",  # Collects and reports custom metrics.
 
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
+
+            # TODO(NODE-1519): delete config tool from guestos after switch to new icos config
+            "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
         },
 
         # Set various configuration values
