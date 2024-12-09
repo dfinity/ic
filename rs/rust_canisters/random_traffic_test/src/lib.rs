@@ -83,7 +83,7 @@ impl Config {
 pub enum Reply {
     /// A response including a data payload of a distinct size was received.
     Bytes(u32),
-    /// The call was rejected asynchronously with a reject code and a reject message.
+    /// The call was rejected with a reject code and a reject message.
     Reject(u32, String),
 }
 
@@ -179,5 +179,5 @@ pub fn extract_metrics(records: &BTreeMap<u32, Record>) -> Metrics {
     metrics
 }
 
-// Enable Candid export
+// Enable Candid export.
 ic_cdk::export_candid!();

@@ -24,7 +24,7 @@ thread_local! {
     static REPLY_WEIGHT: Cell<u32> = const { Cell::new(1) };
     /// Weight for making a downstream call used in a weighted binomial distribution.
     static CALL_WEIGHT: Cell<u32> = const { Cell::new(0) };
-    /// A configuration holding parameters for how to the canister should behave, such as the range
+    /// A configuration holding parameters determining the canisters behavior, such as the range
     /// of payload bytes it should send.
     static CONFIG: RefCell<Config> = RefCell::default();
     /// The maximum number of calls each heartbeat will attempt to make.
@@ -34,7 +34,7 @@ thread_local! {
     /// An index for each attempted call; starts at 0 and then increments with each call.
     static CALL_INDEX: Cell<u32> = Cell::default();
     /// A collection of records; one record for each call. Keeps track of how each call went,
-    /// whether it was rejected or not and how many bytes we received as a reply.
+    /// whether it was rejected or not and how many bytes were received.
     static RECORDS: RefCell<BTreeMap<u32, Record>> = RefCell::default();
     /// A counter for synchronous rejections.
     static SYNCHRONOUS_REJECTIONS_COUNT: Cell<u32> = Cell::default();
