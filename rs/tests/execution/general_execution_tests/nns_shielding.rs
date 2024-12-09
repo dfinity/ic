@@ -144,7 +144,7 @@ pub fn mint_cycles_not_supported_on_application_subnet(env: TestEnv) {
 pub fn mint_cycles128_supported_only_on_cycles_minting_canister(env: TestEnv) {
     let nns_node = env.get_first_healthy_nns_node_snapshot();
     let canister_id = nns_node.get_last_canister_id_in_allocation_ranges();
-    // Check that 'specified_id' is not 'CYCLES_MINTING_CANISTER_ID'.
+    // Check that 'canister_id' is not 'CYCLES_MINTING_CANISTER_ID'.
     assert_ne!(canister_id, CYCLES_MINTING_CANISTER_ID.into());
     let nns_agent = nns_node.build_default_agent();
     block_on(async move {
