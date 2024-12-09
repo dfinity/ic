@@ -220,6 +220,24 @@ pub fn insert_test_sig_inputs<T>(
     }
 }
 
+pub(crate) trait HasPreSignature {
+    fn pre_signature(&self) -> PreSignatureRef;
+}
+
+impl HasPreSignature for ThresholdSigInputsRef {
+    fn pre_signature(&self) -> PreSignatureRef {
+        match self {
+            ThresholdSigInputsRef::Ecdsa(inputs) => {
+                PreSignatureRef::Ecdsa(inputs.presig_quadruple_ref.clone())
+            }
+            ThresholdSigInputsRef::Schnorr(inputs) => {
+                PreSignatureRef::Schnorr(inputs.presig_transcript_ref.clone())
+            }
+            ThresholdSigInputsRef::VetKd(_) => panic!("No pre-signatures for VetKd."),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct TestTranscriptParams {
     pub(crate) idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,

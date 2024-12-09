@@ -1,6 +1,6 @@
 use ic_types::crypto::vetkd::{
-    VedKdKeyShareCreationError, VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare,
-    VetKdKeyShareCombinationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
+    VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdKeyShareCombinationError,
+    VetKdKeyShareCreationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
 };
 use ic_types::NodeId;
 use std::collections::BTreeMap;
@@ -10,7 +10,7 @@ pub trait VetKdProtocol {
     fn create_encrypted_key_share(
         &self,
         args: VetKdArgs,
-    ) -> Result<VetKdEncryptedKeyShare, VedKdKeyShareCreationError>;
+    ) -> Result<VetKdEncryptedKeyShare, VetKdKeyShareCreationError>;
 
     fn verify_encrypted_key_share(
         &self,

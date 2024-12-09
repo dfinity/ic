@@ -138,6 +138,12 @@ pub(crate) fn update_signature_agreements(
                 signature: signature.signature.clone(),
             }
             .encode(),
+            Some(CombinedSignature::VetKd(_)) => {
+                if let Some(metrics) = idkg_payload_metrics {
+                    metrics.payload_errors_inc("vetkd_in_idkg_payload");
+                }
+                continue;
+            }
             None => continue,
         };
 
