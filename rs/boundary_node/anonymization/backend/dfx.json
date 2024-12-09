@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "canisters": {
+    "anonymization_backend": {
+      "type": "custom",
+      "candid": "interface.did",
+      "build": "build.sh",
+      "wasm": "target/wasm32-unknown-unknown/release/anonymization_backend.wasm.gz"
+    }
+  }
+}

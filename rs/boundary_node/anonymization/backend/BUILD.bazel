@@ -1,0 +1,32 @@
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/boundary_node/anonymization/interface",
+    "//rs/nns/constants",
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-timers",
+    "@crate_index//:ic-stable-structures",
+    "@crate_index//:lazy_static",
+    "@crate_index//:prometheus",
+    "@crate_index//:serde",
+    "@crate_index//:thiserror",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
+]
+
+rust_canister(
+    name = "anonymization_backend",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "anonymization_backend",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":interface.did",
+    deps = DEPENDENCIES,
+)
