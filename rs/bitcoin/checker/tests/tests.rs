@@ -22,7 +22,7 @@ use std::str::FromStr;
 
 const MAX_TICKS: usize = 10;
 
-const TEST_SUBNET_NODES: u16 = 13;
+const TEST_SUBNET_NODES: u16 = 34;
 
 // Because we use universal_canister to make calls with attached cycles to
 // `check_transaction`, the actual_cost would be greater than expected_cost
