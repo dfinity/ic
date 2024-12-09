@@ -537,7 +537,7 @@ where
             let webauthn_sig = WebAuthnSignature::try_from(signature.signature.as_slice())
                 .map_err(WebAuthnError)
                 .map_err(InvalidSignature)?;
-            validate_webauthn_sig(validator, &webauthn_sig, message_id, &pk)
+            validate_webauthn_sig(&webauthn_sig, message_id, &pk)
                 .map_err(WebAuthnError)
                 .map_err(InvalidSignature)?;
             Ok(targets)
@@ -547,7 +547,7 @@ where
         | KeyBytesContentType::EcdsaSecp256k1PublicKeyDer => {
             ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key(
                 pk.algorithm_id,
-                message_id.as_bytes(),
+                &message_id.as_signed_bytes(),
                 &signature.signature,
                 &pk.key,
             )
@@ -669,8 +669,7 @@ where
         KeyBytesContentType::EcdsaP256PublicKeyDerWrappedCose
         | KeyBytesContentType::RsaSha256PublicKeyDerWrappedCose => {
             let webauthn_sig = WebAuthnSignature::try_from(signature).map_err(WebAuthnError)?;
-            validate_webauthn_sig(validator, &webauthn_sig, delegation, &pk)
-                .map_err(WebAuthnError)?;
+            validate_webauthn_sig(&webauthn_sig, delegation, &pk).map_err(WebAuthnError)?;
         }
         KeyBytesContentType::Ed25519PublicKeyDer
         | KeyBytesContentType::EcdsaP256PublicKeyDer
