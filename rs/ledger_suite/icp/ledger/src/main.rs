@@ -1446,7 +1446,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     w.encode_gauge(
         "heap_memory_bytes",
         heap_memory_size_bytes() as f64,
-        "Size of the stable memory allocated by this canister measured in bytes.",
+        "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
         "ledger_transactions_by_hash_cache_entries",

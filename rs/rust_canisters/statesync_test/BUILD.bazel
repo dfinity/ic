@@ -37,7 +37,7 @@ rust_binary(
 )
 
 rust_canister(
-    name = "statesync_test_canister",
+    name = "statesync-test-canister",
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":statesync_test.did",
@@ -54,11 +54,11 @@ rust_ic_test(
     name = "statesync_test_integration_test",
     srcs = ["test/test.rs"],
     data = [
-        ":statesync_test_canister",
+        ":statesync-test-canister",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rust_canisters/statesync_test",
-        "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath :statesync_test_canister)",
+        "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath :statesync-test-canister)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
