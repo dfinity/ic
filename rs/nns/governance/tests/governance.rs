@@ -14122,6 +14122,8 @@ async fn test_metrics() {
         total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
         non_self_authenticating_controller_neuron_subset_metrics: None,
         public_neuron_subset_metrics: None,
+        still_losing_voting_power_neuron_subset_metrics: None,
+        done_losing_voting_power_neuron_subset_metrics: None,
     };
 
     let driver = fake::FakeDriver::default().at(60 * 60 * 24 * 30);
@@ -14141,6 +14143,8 @@ async fn test_metrics() {
             total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
             non_self_authenticating_controller_neuron_subset_metrics: None,
             public_neuron_subset_metrics: None,
+            still_losing_voting_power_neuron_subset_metrics: None,
+            done_losing_voting_power_neuron_subset_metrics: None,
 
             ..actual_metrics
         },
@@ -14159,6 +14163,8 @@ async fn test_metrics() {
             total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
             non_self_authenticating_controller_neuron_subset_metrics: None,
             public_neuron_subset_metrics: None,
+            still_losing_voting_power_neuron_subset_metrics: None,
+            done_losing_voting_power_neuron_subset_metrics: None,
 
             ..actual_metrics
         },
@@ -14214,6 +14220,8 @@ async fn test_metrics() {
         total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
         non_self_authenticating_controller_neuron_subset_metrics: None,
         public_neuron_subset_metrics: None,
+        still_losing_voting_power_neuron_subset_metrics: None,
+        done_losing_voting_power_neuron_subset_metrics: None,
     };
     let metrics = gov.get_metrics().expect("Error while querying metrics.");
     assert_eq!(
@@ -14224,6 +14232,8 @@ async fn test_metrics() {
             total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
             non_self_authenticating_controller_neuron_subset_metrics: None,
             public_neuron_subset_metrics: None,
+            still_losing_voting_power_neuron_subset_metrics: None,
+            done_losing_voting_power_neuron_subset_metrics: None,
 
             ..metrics
         },
