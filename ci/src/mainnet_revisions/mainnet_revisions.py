@@ -108,7 +108,6 @@ def main():
     current_app_subnet_version = get_subnet_replica_version(app_subnet_id)
     logging.info("Current App subnet (%s) revision: %s", app_subnet_id, current_app_subnet_version)
 
-    ic_repo_push_token = os.environ.get("PUSH_TO_IC", "ENV_VAR_NOT_SET")
     repo = "dfinity/ic"
 
     repo_root = pathlib.Path(get_repo_root())
