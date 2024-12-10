@@ -1292,7 +1292,6 @@ impl NeuronStore {
         caller: PrincipalId,
     ) -> Vec<NeuronId> {
         let is_non_empty = |neuron_id: &NeuronId| {
-            // TODO DO NOT MERGE - this change went from 90m instructions for 100 neurons ->
             self.with_neuron_sections(neuron_id, NeuronSections::NONE, |neuron| neuron.is_funded())
                 .unwrap_or(false)
         };
