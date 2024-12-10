@@ -114,7 +114,11 @@ def main():
     repo = "dfinity/ic"
     remote_url = f"https://oauth2:{ic_repo_push_token}@github.com/{repo}.git"
 
-    repo_root = pathlib.Path(get_repo_root())
+    repo_root_dir = tempfile.TemporaryDirectory()
+    repo_root = pathlib.Path(repo_root_dir.name)
+
+    if not repo_root.parent.exists():
+        os.makedirs(repo_root.parent)
 
     running_on_ci = os.environ.get("CI") or os.environ.get("GITHUB_ACTION")
     if running_on_ci:
@@ -125,12 +129,12 @@ def main():
     else:
         logging.info("Running locally, using default git credentials of the current user")
 
-    if not repo_root.exists():
-        subprocess.check_call(["git", "clone", "--depth=50", remote_url, repo_root])
-    else:
+    if repo_root.exists():
         subprocess.check_call(["git", "fetch", "origin", "--force"], cwd=repo_root)
         subprocess.check_call(["git", "checkout", "master"], cwd=repo_root)
         subprocess.check_call(["git", "reset", "--hard", "origin/master"], cwd=repo_root)
+    else:
+        subprocess.check_call(["git", "clone", "--depth=50", remote_url, repo_root])
 
     branch = "ic-mainnet-revisions"
     if subprocess.call(["git", "checkout", branch], cwd=repo_root) == 0:
@@ -184,6 +188,7 @@ def main():
                 env=gh_env,
             )
 
+    repo_root_dir.cleanup()
 
 if __name__ == "__main__":
     main()
