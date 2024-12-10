@@ -38,7 +38,6 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
-    crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     xnet_payload_builder::FakeXNetPayloadBuilder,
