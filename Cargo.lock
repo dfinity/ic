@@ -18165,8 +18165,10 @@ name = "random-traffic-test"
 version = "0.9.0"
 dependencies = [
  "candid",
- "dfn_core",
+ "futures",
  "ic-base-types",
+ "ic-cdk 0.16.0",
+ "ic-cdk-macros 0.9.0",
  "ic-error-types",
  "ic-types",
  "rand 0.8.5",
@@ -18489,9 +18491,10 @@ dependencies = [
 name = "rejoin-test-lib"
 version = "0.9.0"
 dependencies = [
+ "candid",
  "canister-test",
  "chrono",
- "dfn_json",
+ "dfn_candid",
  "futures",
  "ic-system-test-driver",
  "slog",
@@ -20186,10 +20189,12 @@ dependencies = [
 name = "statesync-test"
 version = "0.9.0"
 dependencies = [
+ "candid",
  "canister-test",
- "dfn_core",
- "dfn_json",
- "dfn_macro",
+ "ic-cdk 0.16.0",
+ "ic-cdk-macros 0.9.0",
+ "ic-management-canister-types",
+ "ic-state-machine-tests",
  "ic-test-utilities",
  "ic-types",
  "lazy_static",
