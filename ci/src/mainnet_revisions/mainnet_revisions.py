@@ -121,6 +121,7 @@ def main():
     running_on_ci = os.environ.get("CI") or os.environ.get("GITHUB_ACTION")
 
     branch = "ic-mainnet-revisions"
+    subprocess.call(["git", "fetch"], cwd=repo_root)
     if subprocess.call(["git", "checkout", branch], cwd=repo_root) == 0:
         # The branch already exists, update the existing MR
         logging.info("Found an already existing target branch")
