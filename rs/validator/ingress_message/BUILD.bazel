@@ -1,8 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
-package(default_visibility = ["//visibility:public"])
-
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/interfaces/sig_verification",
