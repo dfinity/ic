@@ -345,7 +345,7 @@ fn test_idiosyncratic_daily_fr_correct_values() {
         ((subnet1, 3), dec!(0.1)),
     ]);
 
-    let result = idiosyncratic_daily_fr(&mut logger, &assigned_metrics, &subnets_systematic_fr);
+    let result = nodes_idiosyncratic_fr(&mut logger, &assigned_metrics, &subnets_systematic_fr);
 
     let expected = HashMap::from([
         (node1, vec![dec!(0.1), dec!(0.3), dec!(0.749)]), // (0.2 - 0.1), (0.5 - 0.2), (0.849 - 0.1)
@@ -369,7 +369,7 @@ fn test_idiosyncratic_daily_fr_missing_systematic_fr() {
 
     let subnets_systematic_fr = HashMap::from([((subnet1, 2), dec!(0.1))]);
 
-    idiosyncratic_daily_fr(&mut logger, &assigned_metrics, &subnets_systematic_fr);
+    nodes_idiosyncratic_fr(&mut logger, &assigned_metrics, &subnets_systematic_fr);
 }
 
 #[test]
@@ -385,7 +385,7 @@ fn test_idiosyncratic_daily_fr_negative_failure_rate() {
 
     let subnets_systematic_fr = HashMap::from([((subnet1, 1), dec!(0.1))]);
 
-    let result = idiosyncratic_daily_fr(&mut logger, &assigned_metrics, &subnets_systematic_fr);
+    let result = nodes_idiosyncratic_fr(&mut logger, &assigned_metrics, &subnets_systematic_fr);
 
     // Expecting zero due to saturation
     let expected = HashMap::from([(node1, vec![Decimal::ZERO])]);
@@ -475,8 +475,6 @@ fn test_node_provider_rewards_one_assigned() {
         days_in_period,
         &node_rewards_table,
     );
-
-    println!("{}", logger.get_log());
 
     // Compute Base Rewards For RegionNodeType
     //     - node_type: type1, region: A,B, coeff: 1, base_rewards: 1000, node_count: 5

@@ -1,18 +1,14 @@
-use candid::CandidType;
 use ic_base_types::PrincipalId;
 use ic_management_canister_types::NodeMetricsHistoryResponse;
 use num_traits::FromPrimitive;
 use rust_decimal::Decimal;
-use serde::Deserialize;
 use std::collections::HashMap;
 use std::fmt;
 
 use crate::v1_logs::RewardsLog;
 
-pub type NodeMultiplierStats = (PrincipalId, MultiplierStats);
 pub type RegionNodeTypeCategory = (String, String);
 pub type TimestampNanos = u64;
-
 pub type SubnetMetricsHistory = (PrincipalId, Vec<NodeMetricsHistoryResponse>);
 
 #[derive(Clone, Hash, Eq, PartialEq)]
@@ -63,17 +59,6 @@ impl DailyNodeMetrics {
             failure_rate,
         }
     }
-}
-
-#[derive(Debug, Clone, Deserialize, CandidType)]
-pub struct MultiplierStats {
-    pub days_assigned: u64,
-    pub days_unassigned: u64,
-    pub rewards_reduction: f64,
-    pub blocks_failed: u64,
-    pub blocks_proposed: u64,
-    pub blocks_total: u64,
-    pub failure_rate: f64,
 }
 
 pub struct RewardsPerNodeProvider {
