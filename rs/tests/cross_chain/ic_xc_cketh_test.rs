@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail, Context, Result};
+use canister_test::{Canister, Runtime, Wasm};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::universal_vm::DeployedUniversalVm;
 use ic_system_test_driver::{
@@ -7,13 +8,13 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, HasTopologySnapshot, IcNodeContainer, NnsCustomizations,
-            SshSession,
+            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            NnsCustomizations, SshSession,
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
     systest,
-    util::block_on,
+    util::{block_on, runtime_from_url},
 };
 use reqwest::Client;
 use serde_json::json;
@@ -74,6 +75,18 @@ docker logs anvil
 fn ic_xc_cketh_test(env: TestEnv) {
     let logger = env.logger();
     let topology_snapshot = env.topology_snapshot();
+    let application_subnet_runtime = {
+        let application_subnet = topology_snapshot
+            .subnets()
+            .find(|s| s.subnet_type() == SubnetType::Application)
+            .expect("missing application subnet");
+        let application_node = application_subnet.nodes().next().unwrap();
+        runtime_from_url(
+            application_node.get_public_url(),
+            application_node.effective_canister_id(),
+        )
+    };
+
     let docker_host = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     let docker_host_ip = docker_host.get_vm().unwrap().ipv6;
     let client = Client::new();
@@ -97,6 +110,10 @@ fn ic_xc_cketh_test(env: TestEnv) {
             response_json,
             json!({"jsonrpc":"2.0","id":1,"result":"0x0"})
         )
+    });
+
+    block_on(async {
+        let mut ledger_canister = create_canister(&application_subnet_runtime).await;
     });
 
     let minter_address = "0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80";
@@ -153,4 +170,11 @@ fn call_smart_contract(
     method: &str,
 ) -> String {
     foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm foundry "cast call {contract_address} '{method}' --rpc-url http://anvil:{FOUNDRY_PORT}""#)).unwrap().trim().to_string()
+}
+
+pub async fn create_canister(runtime: &Runtime) -> Canister<'_> {
+    runtime
+        .create_canister_max_cycles_with_retries()
+        .await
+        .expect("Unable to create canister")
 }
