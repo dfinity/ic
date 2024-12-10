@@ -104,11 +104,7 @@ fn query_blocks(
             PrincipalId(caller),
             ledger,
             "query_blocks",
-            Encode!(&GetBlocksArgs {
-                start,
-                length: length as usize
-            })
-            .unwrap()
+            Encode!(&GetBlocksArgs { start, length }).unwrap()
         )
         .expect("failed to query blocks")
         .bytes(),
@@ -129,11 +125,7 @@ fn query_encoded_blocks(
             PrincipalId(caller),
             ledger,
             "query_encoded_blocks",
-            Encode!(&GetBlocksArgs {
-                start,
-                length: length as usize
-            })
-            .unwrap()
+            Encode!(&GetBlocksArgs { start, length }).unwrap()
         )
         .expect("failed to query blocks")
         .bytes(),
@@ -154,9 +146,12 @@ fn get_blocks_pb(
             PrincipalId(caller),
             ledger,
             "get_blocks_pb",
-            ProtoBuf(GetBlocksArgs { start, length })
-                .into_bytes()
-                .unwrap(),
+            ProtoBuf(GetBlocksArgs {
+                start,
+                length: length as u64,
+            })
+            .into_bytes()
+            .unwrap(),
         )
         .expect("failed to query blocks")
         .bytes();
@@ -744,7 +739,7 @@ fn check_block_endpoint_limits() {
 
     let get_blocks_args = Encode!(&GetBlocksArgs {
         start: 0,
-        length: MAX_BLOCKS_PER_REQUEST + 1
+        length: (MAX_BLOCKS_PER_REQUEST + 1) as u64
     })
     .unwrap();
 
@@ -799,7 +794,7 @@ fn check_block_endpoint_limits() {
     // get_blocks_pb
     let get_blocks_pb_args = ProtoBuf(GetBlocksArgs {
         start: 0,
-        length: MAX_BLOCKS_PER_REQUEST + 1,
+        length: (MAX_BLOCKS_PER_REQUEST + 1) as u64,
     })
     .into_bytes()
     .unwrap();
@@ -953,7 +948,7 @@ fn check_archive_block_endpoint_limits() {
 
     let get_blocks_args = Encode!(&GetBlocksArgs {
         start: 0,
-        length: MAX_BLOCKS_PER_REQUEST + 1
+        length: (MAX_BLOCKS_PER_REQUEST + 1) as u64
     })
     .unwrap();
 
@@ -1046,7 +1041,7 @@ fn check_archive_block_endpoint_limits() {
     // get_blocks_pb
     let get_blocks_pb_args = ProtoBuf(GetBlocksArgs {
         start: 0,
-        length: MAX_BLOCKS_PER_REQUEST + 1,
+        length: (MAX_BLOCKS_PER_REQUEST + 1) as u64,
     })
     .into_bytes()
     .unwrap();
@@ -1649,7 +1644,7 @@ fn test_query_archived_blocks() {
             callback.method.to_owned(),
             Encode!(&GetBlocksArgs {
                 start: *start,
-                length: *length as usize
+                length: *length
             })
             .unwrap()
         )
@@ -1732,7 +1727,7 @@ fn test_query_blocks_large_length() {
         .expect("Unable to install the Ledger canister with the new init");
 
     // query_blocks
-    match Decode!(
+    let res = Decode!(
         &env.execute_ingress(
             canister_id,
             "query_blocks",
@@ -1745,18 +1740,9 @@ fn test_query_blocks_large_length() {
         .expect("failed to query blocks")
         .bytes(),
         QueryBlocksResponse
-    ) {
-        Ok(query_blocks_response) => {
-            panic!("Expected an error, but got: {:?}", query_blocks_response);
-        }
-        Err(err) => {
-            println!("query_blocks returned an error: {:?}", err);
-            assert!(err.to_string().contains(&hex::encode(
-                "Fail to decode argument 0 from table0 to record { start : nat64; length : nat64 }"
-                    .as_bytes()
-            )));
-        }
-    }
+    )
+    .expect("should successfully decode QueryBlocksResponse");
+    assert_eq!(res.chain_length, 0);
 }
 
 mod metrics {
