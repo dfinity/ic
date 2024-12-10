@@ -12,7 +12,7 @@ use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::IcNodeSnapshot};
 use ic_system_test_driver::{util::CYCLES_LIMIT_PER_CANISTER, util::*};
-use ic_types::{Cycles, PrincipalId};
+use ic_types::Cycles;
 use ic_types_test_utils::ids::node_test_id;
 use ic_universal_canister::wasm;
 use lazy_static::lazy_static;
