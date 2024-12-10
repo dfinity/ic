@@ -103,7 +103,7 @@ impl NeuronMetrics {
 
     /// This could modify either declining_voting_power_neuron_subset_metrics, or
     /// fully_lost_voting_power_neuron_subset_metrics (but not both), since
-    /// they are very closely related. In particular,
+    /// those categories are mutually exclusive.
     fn increment_declining_voting_power_or_fully_lost_voting_power_neuron_subset_metrics(
         &mut self,
         voting_power_economics: &VotingPowerEconomics,
