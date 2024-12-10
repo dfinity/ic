@@ -1,0 +1,34 @@
+name: Update IC versions file
+
+on:
+  schedule:
+    - cron: "10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  update-ic-versions-file:
+    runs-on:
+      labels: dind-small
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+      options: >-
+        -e NODE_NAME
+    steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+
+      - name: Update IC versions file
+        run: |
+          set -eEuxo pipefail
+
+          time bazel run //ci/src/mainnet_revisions:mainnet_revisions --action_env=PUSH_TO_IC=${{ steps.app-token.outputs.token }}
+        shell: bash

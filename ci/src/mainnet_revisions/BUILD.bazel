@@ -1,0 +1,13 @@
+load("@rules_python//python:defs.bzl", "py_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+py_binary(
+    name = "mainnet_revisions",
+    srcs = ["mainnet_revisions.py"],
+    testonly = True,
+    data = ["//rs/registry/admin:ic-admin"],
+    env = {
+        "IC_ADMIN_PATH": "$(location //rs/registry/admin:ic-admin)"
+    }
+)
