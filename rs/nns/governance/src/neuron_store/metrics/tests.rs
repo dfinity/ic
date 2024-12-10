@@ -286,6 +286,8 @@ fn test_compute_metrics() {
         // Some garbage values, because this test was written before this feature.
         non_self_authenticating_controller_neuron_subset_metrics: NeuronSubsetMetrics::default(),
         public_neuron_subset_metrics: NeuronSubsetMetrics::default(),
+        declining_voting_power_neuron_subset_metrics: NeuronSubsetMetrics::default(),
+        fully_lost_voting_power_neuron_subset_metrics: NeuronSubsetMetrics::default(),
     };
     assert_eq!(
         NeuronMetrics {
@@ -293,6 +295,8 @@ fn test_compute_metrics() {
             non_self_authenticating_controller_neuron_subset_metrics: NeuronSubsetMetrics::default(
             ),
             public_neuron_subset_metrics: NeuronSubsetMetrics::default(),
+            declining_voting_power_neuron_subset_metrics: NeuronSubsetMetrics::default(),
+            fully_lost_voting_power_neuron_subset_metrics: NeuronSubsetMetrics::default(),
 
             ..metrics
         },
@@ -554,7 +558,7 @@ fn test_compute_neuron_metrics_public_neurons() {
 
     let now_seconds = 1718213756;
 
-    // Step 1.2: Construct neurons (as described in the docstring).
+    // Step 1.1: Construct neurons (as described in the docstring).
 
     let neuron_1 = NeuronBuilder::new(
         NeuronId { id: 1 },
@@ -621,7 +625,7 @@ fn test_compute_neuron_metrics_public_neurons() {
         (1.875 * (300.0 + 303.0) * 1_000_000.0) as u64
     );
 
-    // Step 1.3: Assemble neurons into collection.
+    // Step 1.2: Assemble neurons into collection.
 
     let neuron_store = NeuronStore::new(btreemap! {
         1 => neuron_1,
@@ -697,6 +701,214 @@ fn test_compute_neuron_metrics_public_neurons() {
             potential_voting_power_buckets: hashmap! {
                 8  => voting_power_3,
                 16 => voting_power_1,
+            },
+        },
+    );
+}
+
+/// Tests rollups related to periodic refresh of neurons.
+///
+/// There are three neurons in this test:
+///
+///     1. Refreshed recently.
+///
+///     2. Refreshed 6.5 months ago. Thus, its deciding voting power is half of
+///        its potential voting power.
+///
+///     3. Refreshed 8 months ago. Thus, deciding voting power is 0.
+#[test]
+fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
+    // Step 1: Prepare the world.
+
+    let _reset_on_drop = crate::temporarily_enable_voting_power_adjustment();
+    let now_seconds = 1718213756;
+
+    // Step 1.1: Construct neurons (as described in the docstring).
+
+    // Total voting power bonus: 2x * 1.125x = 2.25x
+    let dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
+        dissolve_delay_seconds: 8 * ONE_YEAR_SECONDS, // 100% (equivlanetly, 2x) dissolve delay bonus
+        aging_since_timestamp_seconds: now_seconds - 2 * ONE_YEAR_SECONDS, // 12.5% (equivalently 1.125x) age bonus
+    };
+    let total_bonus_multiplier = 2.25;
+
+    let fresh_neuron = NeuronBuilder::new(
+        NeuronId { id: 1 },
+        Subaccount::try_from([1_u8; 32].as_ref()).unwrap(),
+        PrincipalId::new_user_test_id(1),
+        dissolve_state_and_age,
+        now_seconds - 10 * ONE_YEAR_SECONDS,
+    )
+    .with_cached_neuron_stake_e8s(100)
+    .with_staked_maturity_e8s_equivalent(101)
+    .with_maturity_e8s_equivalent(110)
+    .with_visibility(Some(Visibility::Public))
+    .with_voting_power_refreshed_timestamp_seconds(now_seconds)
+    .build();
+
+    let stale_neuron = NeuronBuilder::new(
+        NeuronId { id: 2 },
+        Subaccount::try_from([2_u8; 32].as_ref()).unwrap(),
+        PrincipalId::new_user_test_id(2),
+        dissolve_state_and_age,
+        now_seconds - 10 * ONE_YEAR_SECONDS,
+    )
+    .with_cached_neuron_stake_e8s(200_000)
+    .with_staked_maturity_e8s_equivalent(202_000)
+    .with_maturity_e8s_equivalent(220_000)
+    .with_voting_power_refreshed_timestamp_seconds(
+        now_seconds - 6 * ONE_MONTH_SECONDS - ONE_MONTH_SECONDS / 2,
+    )
+    .build();
+
+    let expired_neuron = NeuronBuilder::new(
+        NeuronId { id: 3 },
+        Subaccount::try_from([3_u8; 32].as_ref()).unwrap(),
+        PrincipalId::new_user_test_id(3),
+        dissolve_state_and_age,
+        now_seconds - 10 * ONE_YEAR_SECONDS,
+    )
+    .with_cached_neuron_stake_e8s(300_000_000)
+    .with_staked_maturity_e8s_equivalent(303_000_000)
+    .with_maturity_e8s_equivalent(330_000_000)
+    .with_voting_power_refreshed_timestamp_seconds(now_seconds - 8 * ONE_MONTH_SECONDS)
+    .build();
+
+    let fresh_potential_voting_power = fresh_neuron.potential_voting_power(now_seconds);
+    let stale_potential_voting_power = stale_neuron.potential_voting_power(now_seconds);
+    let expired_potential_voting_power = expired_neuron.potential_voting_power(now_seconds);
+    assert_eq!(
+        fresh_potential_voting_power,
+        (total_bonus_multiplier * (100.0 + 101.0)) as u64
+    );
+    assert_eq!(
+        stale_potential_voting_power,
+        (total_bonus_multiplier * (200.0e3 + 202.0e3)) as u64
+    );
+    assert_eq!(
+        expired_potential_voting_power,
+        (total_bonus_multiplier * (300.0 + 303.0) * 1e6) as u64
+    );
+
+    // Step 1.2: Assemble neurons into collection.
+
+    let neuron_store = NeuronStore::new(btreemap! {
+        fresh_neuron.id().id => fresh_neuron,
+        stale_neuron.id().id => stale_neuron,
+        expired_neuron.id().id => expired_neuron,
+    });
+
+    // Step 2: Call code under test.
+
+    let NeuronMetrics {
+        declining_voting_power_neuron_subset_metrics,
+        fully_lost_voting_power_neuron_subset_metrics,
+        ..
+    } = neuron_store.compute_neuron_metrics(E8, &VotingPowerEconomics::DEFAULT, now_seconds);
+
+    // Step 3: Inspect results.
+
+    assert_eq!(
+        declining_voting_power_neuron_subset_metrics,
+        NeuronSubsetMetrics {
+            count: 1,
+
+            // Here, we are seeing a pretty good indicator that stale neuron
+            // detection is working, because there isn't a plausible alternative
+            // explanation for how these values can be achieved from the numbers
+            // that we fed into the stats compiler. Ofc, other fields also
+            // indicate that stale neuron detection works.
+            total_staked_e8s: 200_000,
+            total_staked_maturity_e8s_equivalent: 202_000,
+            total_maturity_e8s_equivalent: 220_000,
+
+            // Voting power. Here, we see "good" evidence that the "right"
+            // voting power (deciding vs. voting) is used to populate these
+            // fields.
+            total_voting_power: stale_potential_voting_power,
+            total_deciding_voting_power: stale_potential_voting_power / 2,
+            total_potential_voting_power: stale_potential_voting_power,
+
+            // Broken out by dissolve delay (rounded down to the nearest multiple of 6
+            // months).
+
+            // Analogous to the vanilla count field.
+            count_buckets: hashmap! {
+                16 => 1, // 1 neuron with 4 year dissolve delay.
+            },
+
+            // ICP-like resources.
+            staked_e8s_buckets: hashmap! {
+                16 => 200_000,
+            },
+            staked_maturity_e8s_equivalent_buckets: hashmap! {
+                16 => 202_000,
+            },
+            maturity_e8s_equivalent_buckets: hashmap! {
+                16 => 220_000,
+            },
+
+            // Analogous to total_voting_power.
+            voting_power_buckets: hashmap! {
+                16 => stale_potential_voting_power,
+            },
+            // Ditto earlier comments about "right" voting power.
+            deciding_voting_power_buckets: hashmap! {
+                16 => stale_potential_voting_power / 2,
+            },
+            potential_voting_power_buckets: hashmap! {
+                16 => stale_potential_voting_power,
+            },
+        },
+    );
+
+    assert_eq!(
+        fully_lost_voting_power_neuron_subset_metrics,
+        NeuronSubsetMetrics {
+            count: 1,
+
+            // Similar to the previous assert, this indicates that expired
+            // neuron detection works.
+            total_staked_e8s: 300_000_000,
+            total_staked_maturity_e8s_equivalent: 303_000_000,
+            total_maturity_e8s_equivalent: 330_000_000,
+
+            // Voting power.
+            total_voting_power: expired_potential_voting_power,
+            // Similar to the previous assert, this indicates that the "right"
+            // (deciding vs. potential) voting power is being used.
+            total_deciding_voting_power: 0,
+            total_potential_voting_power: expired_potential_voting_power,
+
+            // Broken out by dissolve delay (rounded down to the nearest multiple of 6
+            // months).
+
+            // Analogous to the vanilla count field.
+            count_buckets: hashmap! {
+                16 => 1, // 1 neuron with 4 year dissolve delay.
+            },
+
+            // ICP-like resources.
+            staked_e8s_buckets: hashmap! {
+                16 => 300_000_000,
+            },
+            staked_maturity_e8s_equivalent_buckets: hashmap! {
+                16 => 303_000_000,
+            },
+            maturity_e8s_equivalent_buckets: hashmap! {
+                16 => 330_000_000,
+            },
+
+            // Analogous to total_voting_power.
+            voting_power_buckets: hashmap! {
+                16 => expired_potential_voting_power,
+            },
+            // Ditto earlier comment about "right" voting power.
+            deciding_voting_power_buckets: hashmap! {
+                16 => 0,
+            },
+            potential_voting_power_buckets: hashmap! {
+                16 => expired_potential_voting_power,
             },
         },
     );

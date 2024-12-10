@@ -3409,6 +3409,12 @@ impl From<pb::governance::GovernanceCachedMetrics> for pb_api::governance::Gover
                 .non_self_authenticating_controller_neuron_subset_metrics
                 .map(|x| x.into()),
             public_neuron_subset_metrics: item.public_neuron_subset_metrics.map(|x| x.into()),
+            declining_voting_power_neuron_subset_metrics: item
+                .declining_voting_power_neuron_subset_metrics
+                .map(|x| x.into()),
+            fully_lost_voting_power_neuron_subset_metrics: item
+                .fully_lost_voting_power_neuron_subset_metrics
+                .map(|x| x.into()),
         }
     }
 }
@@ -3466,6 +3472,12 @@ impl From<pb_api::governance::GovernanceCachedMetrics> for pb::governance::Gover
                 .non_self_authenticating_controller_neuron_subset_metrics
                 .map(|x| x.into()),
             public_neuron_subset_metrics: item.public_neuron_subset_metrics.map(|x| x.into()),
+            declining_voting_power_neuron_subset_metrics: item
+                .declining_voting_power_neuron_subset_metrics
+                .map(|x| x.into()),
+            fully_lost_voting_power_neuron_subset_metrics: item
+                .fully_lost_voting_power_neuron_subset_metrics
+                .map(|x| x.into()),
         }
     }
 }

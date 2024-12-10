@@ -3038,6 +3038,12 @@ pub mod governance {
             Option<governance_cached_metrics::NeuronSubsetMetrics>,
         #[prost(message, optional, tag = "39")]
         pub public_neuron_subset_metrics: Option<governance_cached_metrics::NeuronSubsetMetrics>,
+        #[prost(message, optional, tag = "40")]
+        pub declining_voting_power_neuron_subset_metrics:
+            ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
+        #[prost(message, optional, tag = "41")]
+        pub fully_lost_voting_power_neuron_subset_metrics:
+            ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
     }
     /// Nested message and enum types in `GovernanceCachedMetrics`.
     pub mod governance_cached_metrics {
