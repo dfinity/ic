@@ -1,11 +1,11 @@
-use std::collections::HashMap;
-
 use candid::CandidType;
 use ic_base_types::PrincipalId;
 use ic_management_canister_types::NodeMetricsHistoryResponse;
 use num_traits::FromPrimitive;
 use rust_decimal::Decimal;
 use serde::Deserialize;
+use std::collections::HashMap;
+use std::fmt;
 
 use crate::v1_logs::RewardsLog;
 
@@ -30,6 +30,16 @@ pub struct DailyNodeMetrics {
     pub num_blocks_proposed: u64,
     pub num_blocks_failed: u64,
     pub failure_rate: Decimal,
+}
+
+impl fmt::Display for DailyNodeMetrics {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "num_blocks_proposed: {},  num_blocks_failed: {}, failure_rate: {}",
+            self.num_blocks_proposed, self.num_blocks_failed, self.failure_rate
+        )
+    }
 }
 
 impl DailyNodeMetrics {

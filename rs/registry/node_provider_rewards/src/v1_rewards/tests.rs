@@ -1,8 +1,7 @@
+use super::*;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardRates;
 use num_traits::FromPrimitive;
 use std::collections::BTreeMap;
-
-use super::*;
 
 #[derive(Clone)]
 struct MockedMetrics {
@@ -320,6 +319,7 @@ fn test_systematic_fr_calculation() {
 
 #[test]
 fn test_idiosyncratic_daily_fr_correct_values() {
+    let mut logger = RewardsLog::default();
     let node1 = PrincipalId::new_user_test_id(1);
     let node2 = PrincipalId::new_user_test_id(2);
     let subnet1 = PrincipalId::new_user_test_id(10);
@@ -345,7 +345,7 @@ fn test_idiosyncratic_daily_fr_correct_values() {
         ((subnet1, 3), dec!(0.1)),
     ]);
 
-    let result = idiosyncratic_daily_fr(&assigned_metrics, &subnets_systematic_fr);
+    let result = idiosyncratic_daily_fr(&mut logger, &assigned_metrics, &subnets_systematic_fr);
 
     let expected = HashMap::from([
         (node1, vec![dec!(0.1), dec!(0.3), dec!(0.749)]), // (0.2 - 0.1), (0.5 - 0.2), (0.849 - 0.1)
@@ -358,6 +358,7 @@ fn test_idiosyncratic_daily_fr_correct_values() {
 #[test]
 #[should_panic(expected = "Systematic failure rate not found")]
 fn test_idiosyncratic_daily_fr_missing_systematic_fr() {
+    let mut logger = RewardsLog::default();
     let node1 = PrincipalId::new_user_test_id(1);
     let subnet1 = PrincipalId::new_user_test_id(10);
 
@@ -368,11 +369,12 @@ fn test_idiosyncratic_daily_fr_missing_systematic_fr() {
 
     let subnets_systematic_fr = HashMap::from([((subnet1, 2), dec!(0.1))]);
 
-    idiosyncratic_daily_fr(&assigned_metrics, &subnets_systematic_fr);
+    idiosyncratic_daily_fr(&mut logger, &assigned_metrics, &subnets_systematic_fr);
 }
 
 #[test]
 fn test_idiosyncratic_daily_fr_negative_failure_rate() {
+    let mut logger = RewardsLog::default();
     let node1 = PrincipalId::new_user_test_id(1);
     let subnet1 = PrincipalId::new_user_test_id(10);
 
@@ -383,7 +385,7 @@ fn test_idiosyncratic_daily_fr_negative_failure_rate() {
 
     let subnets_systematic_fr = HashMap::from([((subnet1, 1), dec!(0.1))]);
 
-    let result = idiosyncratic_daily_fr(&assigned_metrics, &subnets_systematic_fr);
+    let result = idiosyncratic_daily_fr(&mut logger, &assigned_metrics, &subnets_systematic_fr);
 
     // Expecting zero due to saturation
     let expected = HashMap::from([(node1, vec![Decimal::ZERO])]);
@@ -445,15 +447,6 @@ fn test_node_provider_below_min_limit() {
     assert_eq!(rewards.xdr_permyriad_no_reduction, 2);
 }
 
-fn helper_dummy_rewardables(node_id: PrincipalId, node_provider_id: PrincipalId) -> RewardableNode {
-    RewardableNode {
-        node_id,
-        node_provider_id,
-        region: "A,B".to_string(),
-        node_type: "type1".to_string(),
-    }
-}
-
 #[test]
 fn test_node_provider_rewards_one_assigned() {
     let mut logger = RewardsLog::default();
@@ -461,11 +454,11 @@ fn test_node_provider_rewards_one_assigned() {
     let days_in_period = 30;
 
     let rewardables = (1..=5)
-        .map(|i| {
-            helper_dummy_rewardables(
-                PrincipalId::new_user_test_id(i),
-                PrincipalId::new_anonymous(),
-            )
+        .map(|i| RewardableNode {
+            node_id: PrincipalId::new_user_test_id(i),
+            node_provider_id: PrincipalId::new_anonymous(),
+            region: "A,B".to_string(),
+            node_type: "type1".to_string(),
         })
         .collect_vec();
 
@@ -483,9 +476,43 @@ fn test_node_provider_rewards_one_assigned() {
         &node_rewards_table,
     );
 
-    // Unassigned failure rate: 0.325
-    // Unassigned multiplier: 1 - (0.325-0.1) / (0.6-0.1) * 0.8 = 0.64 Rewards: 1000 * 0.64 = 640 XDRs
-    // Total rewards: 640 * 5 = 3200 XDRs
+    println!("{}", logger.get_log());
+
+    // Compute Base Rewards For RegionNodeType
+    //     - node_type: type1, region: A,B, coeff: 1, base_rewards: 1000, node_count: 5
+    // Compute Unassigned Days Failure Rate
+    //     - Avg. failure rate for node: 6fyp7-3ibaa-aaaaa-aaaap-4ai: avg(0.4,0.2,0.3,0.4) = 0.325
+    //     - Unassigned days failure rate:: avg(0.325) = 0.325
+    //     - Rewards reduction percent: (0.325 - 0.1) / (0.6 - 0.1) * 0.8 = 0.360
+    //     - Reward multiplier fully unassigned nodes:: 1 - 0.360 = 0.640
+    // Compute Rewards For Node | node_id=6fyp7-3ibaa-aaaaa-aaaap-4ai, node_type=type1, region=A,B
+    //     - Base rewards XDRs: 1000
+    //     - Node status: Assigned
+    //     - Idiosyncratic daily failure rates : 0.4,0.2,0.3,0.4,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325
+    //     - Failure rate average: avg(0.4,0.2,0.3,0.4,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325) = 0.325
+    //     - Rewards reduction percent: (0.325 - 0.1) / (0.6 - 0.1) * 0.8 = 0.360
+    //     - Reward Multiplier: 1 - 0.360 = 0.640
+    //     - Rewards XDR for the node: 1000 * 0.640 = 640.000
+    // Compute Rewards For Node | node_id=djduj-3qcaa-aaaaa-aaaap-4ai, node_type=type1, region=A,B
+    //     - Base rewards XDRs: 1000
+    //     - Node status: Unassigned
+    //     - Rewards XDR for the node: 1000 * 0.640 = 640.000
+    // Compute Rewards For Node | node_id=6wcs7-uadaa-aaaaa-aaaap-4ai, node_type=type1, region=A,B
+    //     - Base rewards XDRs: 1000
+    //     - Node status: Unassigned
+    //     - Rewards XDR for the node: 1000 * 0.640 = 640.000
+    // Compute Rewards For Node | node_id=c5mtj-kieaa-aaaaa-aaaap-4ai, node_type=type1, region=A,B
+    //     - Base rewards XDRs: 1000
+    //     - Node status: Unassigned
+    //     - Rewards XDR for the node: 1000 * 0.640 = 640.000
+    // Compute Rewards For Node | node_id=7cnv7-fyfaa-aaaaa-aaaap-4ai, node_type=type1, region=A,B
+    //     - Base rewards XDRs: 1000
+    //     - Node status: Unassigned
+    //     - Rewards XDR for the node: 1000 * 0.640 = 640.000
+    //     - Compute total permyriad XDR: sum(640.000,640.000,640.000,640.000,640.000) = 3200.000
+    //     - Compute total permyriad XDR no performance penalty: sum(1000,1000,1000,1000,1000) = 5000
+    // Total rewards XDR permyriad: 3200.000
+    // Total rewards XDR permyriad not adjusted: 5000
     assert_eq!(rewards.xdr_permyriad, 3200);
     assert_eq!(rewards.xdr_permyriad_no_reduction, 5000);
 }
@@ -497,11 +524,11 @@ fn test_node_provider_rewards_two_assigned() {
     let days_in_period = 30;
 
     let rewardables = (1..=5)
-        .map(|i| {
-            helper_dummy_rewardables(
-                PrincipalId::new_user_test_id(i),
-                PrincipalId::new_anonymous(),
-            )
+        .map(|i| RewardableNode {
+            node_id: PrincipalId::new_user_test_id(i),
+            node_provider_id: PrincipalId::new_anonymous(),
+            region: "A,B".to_string(),
+            node_type: "type1".to_string(),
         })
         .collect_vec();
 
@@ -523,150 +550,203 @@ fn test_node_provider_rewards_two_assigned() {
         &node_rewards_table,
     );
 
-    // Avg. assigned failure rate: (0.325 + 0.4765) / 2 = 0.40075
-    // 3 nodes are unassigned in the period:
-    // Unassigned failure rate: 0.40075
-    // Unassigned multiplier: 1 - (0.40075-0.1) / (0.6-0.1) * 0.8 = 0.51880
-    // Rewards: 1000 * 0.51880 = 518.80 XDRs
-    // 2 nodes are assigned in the period:
-    // node1:
-    //  failure rate = (0.325 * 4 + 0.40075 * 26) / 30 = 0.390
-    //  multiplier = 1 - (0.390-0.1) / (0.6-0.1) * 0.8 = 0.53496
-    //  Rewards: 1000 * 0.53496 = 534.96 XDRs
-    // node2:
-    //  failure rate = (0.4765 * 4 + 0.40075 * 26) / 30 = 0.41
-    //  multiplier = 1 - (0.41-0.1) / (0.6-0.1) * 0.8 = 0.50264
-    //  Rewards: 1000 * 0.50264 = 502.64 XDRs
-    // Total rewards: 518.80 * 3 + 534.96 + 502.64 = 2594 XDRs
+    // Compute Base Rewards For RegionNodeType
+    //     - node_type: type1, region: A,B, coeff: 1, base_rewards: 1000, node_count: 5
+    // Compute Unassigned Days Failure Rate
+    //     - Avg. failure rate for node: 6fyp7-3ibaa-aaaaa-aaaap-4ai: avg(0.4,0.2,0.3,0.4) = 0.325
+    //     - Avg. failure rate for node: djduj-3qcaa-aaaaa-aaaap-4ai: avg(0.9,0.6,0.304,0.102) = 0.4765
+    //     - Unassigned days failure rate:: avg(0.325,0.4765) = 0.4008
+    //     - Rewards reduction percent: (0.4008 - 0.1) / (0.6 - 0.1) * 0.8 = 0.4812
+    //     - Reward multiplier fully unassigned nodes:: 1 - 0.4812 = 0.5188
+    // Compute Rewards For Node | node_id=6fyp7-3ibaa-aaaaa-aaaap-4ai, node_type=type1, region=A,B
+    //     - Base rewards XDRs: 1000
+    //     - Node status: Assigned
+    //     - Idiosyncratic daily failure rates : 0.4,0.2,0.3,0.4,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075
+    //     - Failure rate average: avg(0.4,0.2,0.3,0.4,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008) = 0.3906
+    //     - Rewards reduction percent: (0.3906 - 0.1) / (0.6 - 0.1) * 0.8 = 0.4650
+    //     - Reward Multiplier: 1 - 0.4650 = 0.5350
+    //     - Rewards XDR for the node: 1000 * 0.5350 = 534.9600
+    // Compute Rewards For Node | node_id=djduj-3qcaa-aaaaa-aaaap-4ai, node_type=type1, region=A,B
+    //     - Base rewards XDRs: 1000
+    //     - Node status: Assigned
+    //     - Idiosyncratic daily failure rates : 0.9,0.6,0.304,0.102,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075,0.40075
+    //     - Failure rate average: avg(0.9,0.6,0.304,0.102,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008,0.4008) = 0.4108
+    //     - Rewards reduction percent: (0.4108 - 0.1) / (0.6 - 0.1) * 0.8 = 0.4974
+    //     - Reward Multiplier: 1 - 0.4974 = 0.5026
+    //     - Rewards XDR for the node: 1000 * 0.5026 = 502.6400
+    // Compute Rewards For Node | node_id=6wcs7-uadaa-aaaaa-aaaap-4ai, node_type=type1, region=A,B
+    //     - Base rewards XDRs: 1000
+    //     - Node status: Unassigned
+    //     - Rewards XDR for the node: 1000 * 0.5188 = 518.8000
+    // Compute Rewards For Node | node_id=c5mtj-kieaa-aaaaa-aaaap-4ai, node_type=type1, region=A,B
+    //     - Base rewards XDRs: 1000
+    //     - Node status: Unassigned
+    //     - Rewards XDR for the node: 1000 * 0.5188 = 518.8000
+    // Compute Rewards For Node | node_id=7cnv7-fyfaa-aaaaa-aaaap-4ai, node_type=type1, region=A,B
+    //     - Base rewards XDRs: 1000
+    //     - Node status: Unassigned
+    //     - Rewards XDR for the node: 1000 * 0.5188 = 518.8000
+    //     - Compute total permyriad XDR: sum(534.9600,502.6400,518.8000,518.8000,518.8000) = 2594.0000
+    //     - Compute total permyriad XDR no performance penalty: sum(1000,1000,1000,1000,1000) = 5000
+    // Total rewards XDR permyriad: 2594.0000
+    // Total rewards XDR permyriad not adjusted: 5000
+
     assert_eq!(rewards.xdr_permyriad, 2594);
     assert_eq!(rewards.xdr_permyriad_no_reduction, 5000);
 }
 
-// #[test]
-// fn test_np_rewards_type3_coeff() {
-//     let mut logger = RewardsLog::default();
-//     let mut assigned_multipliers: HashMap<RegionNodeTypeCategory, Vec<Decimal>> =
-//         HashMap::default();
-//     let mut rewardable_nodes: HashMap<RegionNodeTypeCategory, u32> = HashMap::default();
-//     let region_node_type = ("A,B,C".to_string(), "type3.1".to_string());
-//
-//     // 4 nodes in period: 1 assigned, 3 unassigned
-//     rewardable_nodes.insert(region_node_type.clone(), 4);
-//     assigned_multipliers.insert(region_node_type, vec![dec!(0.5)]);
-//     let node_rewards_table: NodeRewardsTable = mocked_rewards_table();
-//     let rewards = node_provider_rewards(
-//         &mut logger,
-//         &assigned_multipliers,
-//         &rewardable_nodes,
-//         &node_rewards_table,
-//     );
-//
-//     let rewardables = vec![RewardableNode {
-//         node_id: PrincipalId::new_user_test_id(1),
-//         node_provider_id: PrincipalId::new_user_test_id(2),
-//         region: "A,B,C".to_string(),
-//         node_type: "type3.1".to_string(),
-//     }];
-//     let mut assigned_metrics = HashMap::new();
-//     assigned_metrics.insert(
-//         PrincipalId::new_user_test_id(1),
-//         vec![DailyNodeMetrics::new(
-//             0,
-//             PrincipalId::new_user_test_id(1),
-//             10,
-//             1,
-//         )],
-//     );
-//     let subnets_systematic_fr = HashMap::new();
-//     let days_in_period = 30;
-//     let rewards_table = NodeRewardsTable::default();
-//
-//     let rewards = node_provider_rewards(
-//         &mut logger,
-//         &rewardables,
-//         &assigned_metrics,
-//         &subnets_systematic_fr,
-//         days_in_period,
-//         &rewards_table,
-//     );
-//
-//     // Coefficients avg., operation=avg(0.95,0.95,0.95,0.95), result=0.95
-//     // Rewards avg., operation=avg(1500,1500,1500,1500), result=1500
-//     // Total rewards after coefficient reduction, operation=sum(1500 * 1,1500 * 0.95,1500 * 0.9025,1500 * 0.8574), result=5564
-//
-//     // Rewards average after coefficient reduction, operation=5564 / 4, result=1391
-//     // Total XDR no penalties, operation=sum(1391,1391,1391,1391), result=5564
-//     assert_eq!(rewards.xdr_permyriad_no_reduction, 5564);
-//
-//     // Total XDR, operation=sum(1391 * 0.5,1391 * 0.5,1391 * 0.5,1391 * 0.5), result=2782
-//     assert_eq!(rewards.xdr_permyriad, 2782);
-// }
+#[test]
+fn test_np_rewards_type3_coeff() {
+    let mut logger = RewardsLog::default();
+    let node_rewards_table: NodeRewardsTable = mocked_rewards_table();
+    let days_in_period = 30;
 
-// #[test]
-// fn test_np_rewards_type3_coeff() {
-//     let mut logger = RewardsLog::default();
-//     let mut assigned_multipliers: HashMap<RegionNodeTypeCategory, Vec<Decimal>> =
-//         HashMap::default();
-//     let mut rewardable_nodes: HashMap<RegionNodeTypeCategory, u32> = HashMap::default();
-//     let region_node_type = ("A,B,C".to_string(), "type3.1".to_string());
-//
-//     // 4 nodes in period: 1 assigned, 3 unassigned
-//     rewardable_nodes.insert(region_node_type.clone(), 4);
-//     assigned_multipliers.insert(region_node_type, vec![dec!(0.5)]);
-//     let node_rewards_table: NodeRewardsTable = mocked_rewards_table();
-//     let rewards = node_provider_rewards(
-//         &mut logger,
-//         &assigned_multipliers,
-//         &rewardable_nodes,
-//         &node_rewards_table,
-//     );
-//
-//     // Coefficients avg., operation=avg(0.95,0.95,0.95,0.95), result=0.95
-//     // Rewards avg., operation=avg(1500,1500,1500,1500), result=1500
-//     // Total rewards after coefficient reduction, operation=sum(1500 * 1,1500 * 0.95,1500 * 0.9025,1500 * 0.8574), result=5564
-//
-//     // Rewards average after coefficient reduction, operation=5564 / 4, result=1391
-//     // Total XDR no penalties, operation=sum(1391,1391,1391,1391), result=5564
-//     assert_eq!(rewards.xdr_permyriad_no_reduction, 5564);
-//
-//     // Total XDR, operation=sum(1391 * 0.5,1391 * 0.5,1391 * 0.5,1391 * 0.5), result=2782
-//     assert_eq!(rewards.xdr_permyriad, 2782);
-// }
+    // 4 nodes in period: 1 assigned, 3 unassigned
+    let rewardables = (1..=4)
+        .map(|i| RewardableNode {
+            node_id: PrincipalId::new_user_test_id(i),
+            node_provider_id: PrincipalId::new_anonymous(),
+            region: "A,B,C".to_string(),
+            node_type: "type3.1".to_string(),
+        })
+        .collect_vec();
+    let mut nodes_idiosyncratic_fr = HashMap::new();
+    nodes_idiosyncratic_fr.insert(
+        PrincipalId::new_user_test_id(1),
+        vec![dec!(0.4), dec!(0.2), dec!(0.3), dec!(0.4)], // Avg. 0.325
+    );
 
-// #[test]
-// fn test_np_rewards_type3_mix() {
-//     let mut logger = RewardsLog::default();
-//     let mut assigned_multipliers: HashMap<RegionNodeTypeCategory, Vec<Decimal>> =
-//         HashMap::default();
-//     let mut rewardable_nodes: HashMap<RegionNodeTypeCategory, u32> = HashMap::default();
-//
-//     // 5 nodes in period: 2 assigned, 3 unassigned
-//     assigned_multipliers.insert(
-//         ("A,B,D".to_string(), "type3".to_string()),
-//         vec![dec!(0.5), dec!(0.4)],
-//     );
-//
-//     // This will take rates from outer
-//     rewardable_nodes.insert(("A,B,D".to_string(), "type3".to_string()), 3);
-//
-//     // This will take rates from inner
-//     rewardable_nodes.insert(("A,B,C".to_string(), "type3.1".to_string()), 2);
-//
-//     let node_rewards_table: NodeRewardsTable = mocked_rewards_table();
-//     let rewards = node_provider_rewards(
-//         &mut logger,
-//         &assigned_multipliers,
-//         &rewardable_nodes,
-//         &node_rewards_table,
-//     );
-//
-//     // Coefficients avg(0.95,0.95,0.97,0.97,0.97) = 0.9620
-//     // Rewards avg., operation=avg(1500,1500,1000,1000,1000), result=1200
-//     // Rewards average sum(1200 * 1,1200 * 0.9620,1200 * 0.9254,1200 * 0.8903,1200 * 0.8564) / 5, result=1112
-//     // Unassigned Nodes Multiplier, operation=avg(0.5,0.4), result=0.450
-//
-//     // Total XDR, operation=sum(1112 * 0.450,1112 * 0.450,1112 * 0.5,1112 * 0.4,1112 * 0.450), result=2502
-//     assert_eq!(rewards.xdr_permyriad, 2502);
-//     // Total XDR no penalties, operation=1112 * 5, result=5561
-//     assert_eq!(rewards.xdr_permyriad_no_reduction, 5561);
-// }
+    let rewards = node_provider_rewards(
+        &mut logger,
+        &rewardables,
+        nodes_idiosyncratic_fr,
+        days_in_period,
+        &node_rewards_table,
+    );
+
+    // Compute Base Rewards For RegionNodeType
+    //     - node_type: type3.1, region: A,B,C, coeff: 0.95, base_rewards: 1500, node_count: 4
+    //     - Coefficients avg.: avg(0.95,0.95,0.95,0.95) = 0.95
+    //     - Rewards avg.: avg(1500,1500,1500,1500) = 1500
+    //     - Total rewards after coefficient reduction: sum(1500 * 1,1500 * 0.95,1500 * 0.9025,1500 * 0.8574) = 5564.8125
+    //     - Rewards average after coefficient reduction: 5564.8125 / 4 = 1391.2031
+    // Compute Unassigned Days Failure Rate
+    //     - Avg. failure rate for node: 6fyp7-3ibaa-aaaaa-aaaap-4ai: avg(0.4,0.2,0.3,0.4) = 0.325
+    //     - Unassigned days failure rate:: avg(0.325) = 0.325
+    //     - Rewards reduction percent: (0.325 - 0.1) / (0.6 - 0.1) * 0.8 = 0.360
+    //     - Reward multiplier fully unassigned nodes:: 1 - 0.360 = 0.640
+    // Compute Rewards For Node | node_id=6fyp7-3ibaa-aaaaa-aaaap-4ai, node_type=type3.1, region=A,B,C
+    //     - Base rewards XDRs: 1391.2031
+    //     - Node status: Assigned
+    //     - Idiosyncratic daily failure rates : 0.4,0.2,0.3,0.4,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325
+    //     - Failure rate average: avg(0.4,0.2,0.3,0.4,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325,0.325) = 0.325
+    //     - Rewards reduction percent: (0.325 - 0.1) / (0.6 - 0.1) * 0.8 = 0.360
+    //     - Reward Multiplier: 1 - 0.360 = 0.640
+    //     - Rewards XDR for the node: 1391.2031 * 0.640 = 890.3700
+    // Compute Rewards For Node | node_id=djduj-3qcaa-aaaaa-aaaap-4ai, node_type=type3.1, region=A,B,C
+    //     - Base rewards XDRs: 1391.2031
+    //     - Node status: Unassigned
+    //     - Rewards XDR for the node: 1391.2031 * 0.640 = 890.3700
+    // Compute Rewards For Node | node_id=6wcs7-uadaa-aaaaa-aaaap-4ai, node_type=type3.1, region=A,B,C
+    //     - Base rewards XDRs: 1391.2031
+    //     - Node status: Unassigned
+    //     - Rewards XDR for the node: 1391.2031 * 0.640 = 890.3700
+    // Compute Rewards For Node | node_id=c5mtj-kieaa-aaaaa-aaaap-4ai, node_type=type3.1, region=A,B,C
+    //     - Base rewards XDRs: 1391.2031
+    //     - Node status: Unassigned
+    //     - Rewards XDR for the node: 1391.2031 * 0.640 = 890.3700
+    //     - Compute total permyriad XDR: sum(890.3700,890.3700,890.3700,890.3700) = 3561.4800
+    //     - Compute total permyriad XDR no performance penalty: sum(1391.2031,1391.2031,1391.2031,1391.2031) = 5564.8125
+    // Total rewards XDR permyriad: 3561.4800
+    // Total rewards XDR permyriad not adjusted: 5564.8125
+
+    assert_eq!(rewards.xdr_permyriad, 3561);
+    assert_eq!(rewards.xdr_permyriad_no_reduction, 5564);
+}
+
+#[test]
+fn test_np_rewards_type3_mix() {
+    let mut logger = RewardsLog::default();
+    let node_rewards_table: NodeRewardsTable = mocked_rewards_table();
+    let days_in_period = 30;
+
+    // 4 nodes in period: 1 assigned, 3 unassigned
+    let mut rewardables = (1..=3)
+        .map(|i| RewardableNode {
+            node_id: PrincipalId::new_user_test_id(i),
+            node_provider_id: PrincipalId::new_anonymous(),
+            region: "A,B,C".to_string(),
+            node_type: "type3.1".to_string(),
+        })
+        .collect_vec();
+
+    rewardables.push(RewardableNode {
+        node_id: PrincipalId::new_user_test_id(4),
+        node_provider_id: PrincipalId::new_anonymous(),
+        region: "A,B,D".to_string(),
+        node_type: "type3".to_string(),
+    });
+
+    let mut nodes_idiosyncratic_fr = HashMap::new();
+    nodes_idiosyncratic_fr.insert(
+        PrincipalId::new_user_test_id(3),
+        vec![dec!(0.1), dec!(0.12), dec!(0.23), dec!(0.12)],
+    );
+    nodes_idiosyncratic_fr.insert(
+        PrincipalId::new_user_test_id(4),
+        vec![dec!(0.2), dec!(0.32), dec!(0.123), dec!(0.432)],
+    );
+
+    let rewards = node_provider_rewards(
+        &mut logger,
+        &rewardables,
+        nodes_idiosyncratic_fr,
+        days_in_period,
+        &node_rewards_table,
+    );
+
+    // Compute Base Rewards For RegionNodeType
+    //     - node_type: type3, region: A,B,D, coeff: 0.97, base_rewards: 1000, node_count: 1
+    //     - node_type: type3.1, region: A,B,C, coeff: 0.95, base_rewards: 1500, node_count: 3
+    //     - Coefficients avg.: avg(0.97,0.95,0.95,0.95) = 0.9550
+    //     - Rewards avg.: avg(1000,1500,1500,1500) = 1375
+    //     - Total rewards after coefficient reduction: sum(1375 * 1,1375 * 0.9550,1375 * 0.9120,1375 * 0.8710) = 5139.7622
+    //     - Rewards average after coefficient reduction: 5139.7622 / 4 = 1284.9406
+    // Compute Unassigned Days Failure Rate
+    //     - Avg. failure rate for node: 6wcs7-uadaa-aaaaa-aaaap-4ai: avg(0.1,0.12,0.23,0.12) = 0.1425
+    //     - Avg. failure rate for node: c5mtj-kieaa-aaaaa-aaaap-4ai: avg(0.2,0.32,0.123,0.432) = 0.2688
+    //     - Unassigned days failure rate:: avg(0.1425,0.2688) = 0.2056
+    //     - Rewards reduction percent: (0.2056 - 0.1) / (0.6 - 0.1) * 0.8 = 0.1690
+    //     - Reward multiplier fully unassigned nodes:: 1 - 0.1690 = 0.8310
+    // Compute Rewards For Node | node_id=6fyp7-3ibaa-aaaaa-aaaap-4ai, node_type=type3.1, region=A,B,C
+    //     - Base rewards XDRs: 1284.9406
+    //     - Node status: Unassigned
+    //     - Rewards XDR for the node: 1284.9406 * 0.8310 = 1067.7856
+    // Compute Rewards For Node | node_id=djduj-3qcaa-aaaaa-aaaap-4ai, node_type=type3.1, region=A,B,C
+    //     - Base rewards XDRs: 1284.9406
+    //     - Node status: Unassigned
+    //     - Rewards XDR for the node: 1284.9406 * 0.8310 = 1067.7856
+    // Compute Rewards For Node | node_id=6wcs7-uadaa-aaaaa-aaaap-4ai, node_type=type3.1, region=A,B,C
+    //     - Base rewards XDRs: 1284.9406
+    //     - Node status: Assigned
+    //     - Idiosyncratic daily failure rates : 0.1,0.12,0.23,0.12,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250
+    //     - Failure rate average: avg(0.1,0.12,0.23,0.12,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056) = 0.1972
+    //     - Rewards reduction percent: (0.1972 - 0.1) / (0.6 - 0.1) * 0.8 = 0.1555
+    //     - Reward Multiplier: 1 - 0.1555 = 0.8445
+    //     - Rewards XDR for the node: 1284.9406 * 0.8445 = 1085.0895
+    // Compute Rewards For Node | node_id=c5mtj-kieaa-aaaaa-aaaap-4ai, node_type=type3, region=A,B,D
+    //     - Base rewards XDRs: 1284.9406
+    //     - Node status: Assigned
+    //     - Idiosyncratic daily failure rates : 0.2,0.32,0.123,0.432,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250,0.2056250
+    //     - Failure rate average: avg(0.2,0.32,0.123,0.432,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056,0.2056) = 0.2140
+    //     - Rewards reduction percent: (0.2140 - 0.1) / (0.6 - 0.1) * 0.8 = 0.1825
+    //     - Reward Multiplier: 1 - 0.1825 = 0.8175
+    //     - Rewards XDR for the node: 1284.9406 * 0.8175 = 1050.4817
+    //     - Compute total permyriad XDR: sum(1067.7856,1067.7856,1085.0895,1050.4817) = 4271.1424
+    //     - Compute total permyriad XDR no performance penalty: sum(1284.9406,1284.9406,1284.9406,1284.9406) = 5139.7622
+    // Total rewards XDR permyriad: 4271.1424
+    // Total rewards XDR permyriad not adjusted: 5139.7622
+
+    assert_eq!(rewards.xdr_permyriad, 4271);
+    assert_eq!(rewards.xdr_permyriad_no_reduction, 5139);
+}
