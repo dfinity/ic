@@ -26,29 +26,7 @@ const KB: u64 = 1024;
 const MB: u64 = KB * KB;
 
 const MAX_PAYLOAD_BYTES: u32 = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32;
-/*
-#[test]
-fn playground() {
-    let seeds = vec![0_u64; 3];
-    let max_payload_bytes = MAX_PAYLOAD_BYTES / 2;
-    let calls_per_round = 3;
-    let reply_weight = 1;
-    let call_weight = 1;
 
-    if let Err((msg, mut dbg)) = check_guaranteed_response_message_memory_limits_are_respected_impl(
-        seeds.as_slice(),
-        max_payload_bytes,
-        calls_per_round as u32,
-        reply_weight as u32,
-        call_weight as u32,
-    ) {
-        let r = dbg.records.pop_first().unwrap().1;
-        assert!(false, "{:?}\n\n{}\n\n{:#?}", msg, r.len(), r);
-    } else {
-        unreachable!();
-    }
-}
-*/
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(1))]
     #[test]
