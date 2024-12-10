@@ -2382,6 +2382,22 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             u8::from(state.update_exchange_rate_canister_state.as_ref().unwrap()) as f64,
             "The current state of the CMC calling the exchange rate canister.",
         )?;
+
+        w.encode_gauge(
+            "cmc_limiter_cycles",
+            state.limiter.get_count().get() as f64,
+            "The amount of cycles minted in the recent past. If someone tries \
+             to mint N cycles, but N + the value of this metric exceeds \
+             cmc_cycles_limit, then the request will be rejected.",
+        )?;
+        w.encode_gauge(
+            "cmc_cycles_limit",
+            state.cycles_limit.get() as f64,
+            "The maximum amount of cycles that can be minted in the recent past. \
+             More precisely, if someone tries to mint N cycles, N + cmc_limiter_cycles \
+             > cmc_cycles_limit, then the request will be rejected.",
+        )?;
+
         Ok(())
     })
 }
