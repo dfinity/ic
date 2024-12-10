@@ -61,7 +61,7 @@ pub(crate) struct NeuronMetrics {
     pub(crate) non_self_authenticating_controller_neuron_subset_metrics: NeuronSubsetMetrics,
     pub(crate) public_neuron_subset_metrics: NeuronSubsetMetrics,
     pub(crate) still_losing_voting_power_neuron_subset_metrics: NeuronSubsetMetrics,
-    pub(crate) done_losing_voting_power_neuron_subset_metrics: NeuronSubsetMetrics,
+    pub(crate) fully_lost_voting_power_neuron_subset_metrics: NeuronSubsetMetrics,
 }
 
 impl NeuronMetrics {
@@ -102,9 +102,9 @@ impl NeuronMetrics {
     }
 
     /// This could modify either still_losing_voting_power_neuron_subset_metrics, or
-    /// done_losing_voting_power_neuron_subset_metrics (but not both), since
+    /// fully_lost_voting_power_neuron_subset_metrics (but not both), since
     /// they are very closely related. In particular,
-    fn increment_still_losing_voting_power_or_done_losing_voting_power_neuron_subset_metrics(
+    fn increment_still_losing_voting_power_or_fully_lost_voting_power_neuron_subset_metrics(
         &mut self,
         voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
@@ -126,7 +126,7 @@ impl NeuronMetrics {
             self.still_losing_voting_power_neuron_subset_metrics
                 .increment(voting_power_economics, now_seconds, neuron);
         } else {
-            self.done_losing_voting_power_neuron_subset_metrics
+            self.fully_lost_voting_power_neuron_subset_metrics
                 .increment(voting_power_economics, now_seconds, neuron);
         }
     }
@@ -308,7 +308,7 @@ impl NeuronStore {
                     now_seconds,
                     neuron,
                 );
-                metrics.increment_still_losing_voting_power_or_done_losing_voting_power_neuron_subset_metrics(
+                metrics.increment_still_losing_voting_power_or_fully_lost_voting_power_neuron_subset_metrics(
                     voting_power_economics,
                     now_seconds,
                     neuron,
@@ -483,7 +483,7 @@ impl NeuronStore {
                 now_seconds,
                 neuron,
             );
-            metrics.increment_still_losing_voting_power_or_done_losing_voting_power_neuron_subset_metrics(
+            metrics.increment_still_losing_voting_power_or_fully_lost_voting_power_neuron_subset_metrics(
                 voting_power_economics,
                 now_seconds,
                 neuron,

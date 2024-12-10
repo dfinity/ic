@@ -3607,7 +3607,7 @@ pub mod governance {
         pub still_losing_voting_power_neuron_subset_metrics:
             ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
         #[prost(message, optional, tag = "41")]
-        pub done_losing_voting_power_neuron_subset_metrics:
+        pub fully_lost_voting_power_neuron_subset_metrics:
             ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
     }
     /// Nested message and enum types in `GovernanceCachedMetrics`.

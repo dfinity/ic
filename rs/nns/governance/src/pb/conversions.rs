@@ -3412,8 +3412,8 @@ impl From<pb::governance::GovernanceCachedMetrics> for pb_api::governance::Gover
             still_losing_voting_power_neuron_subset_metrics: item
                 .still_losing_voting_power_neuron_subset_metrics
                 .map(|x| x.into()),
-            done_losing_voting_power_neuron_subset_metrics: item
-                .done_losing_voting_power_neuron_subset_metrics
+            fully_lost_voting_power_neuron_subset_metrics: item
+                .fully_lost_voting_power_neuron_subset_metrics
                 .map(|x| x.into()),
         }
     }
@@ -3475,8 +3475,8 @@ impl From<pb_api::governance::GovernanceCachedMetrics> for pb::governance::Gover
             still_losing_voting_power_neuron_subset_metrics: item
                 .still_losing_voting_power_neuron_subset_metrics
                 .map(|x| x.into()),
-            done_losing_voting_power_neuron_subset_metrics: item
-                .done_losing_voting_power_neuron_subset_metrics
+            fully_lost_voting_power_neuron_subset_metrics: item
+                .fully_lost_voting_power_neuron_subset_metrics
                 .map(|x| x.into()),
         }
     }

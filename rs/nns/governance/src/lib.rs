@@ -708,7 +708,7 @@ pub fn encode_metrics(
             non_self_authenticating_controller_neuron_subset_metrics,
             public_neuron_subset_metrics,
             still_losing_voting_power_neuron_subset_metrics,
-            done_losing_voting_power_neuron_subset_metrics,
+            fully_lost_voting_power_neuron_subset_metrics,
         } = metrics;
 
         // ICP
@@ -954,11 +954,11 @@ pub fn encode_metrics(
             )?;
         }
 
-        if let Some(done_losing_voting_power_neuron_subset_metrics) =
-            done_losing_voting_power_neuron_subset_metrics
+        if let Some(fully_lost_voting_power_neuron_subset_metrics) =
+            fully_lost_voting_power_neuron_subset_metrics
         {
-            done_losing_voting_power_neuron_subset_metrics.encode(
-                "done_losing_voting_power",
+            fully_lost_voting_power_neuron_subset_metrics.encode(
+                "fully_lost_voting_power",
                 "have 0 deciding voting power due to not refreshing recently enough.",
                 w,
             )?;
