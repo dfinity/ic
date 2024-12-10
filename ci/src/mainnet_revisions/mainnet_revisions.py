@@ -116,11 +116,19 @@ def main():
 
     repo_root_dir = tempfile.TemporaryDirectory()
     repo_root = pathlib.Path(repo_root_dir.name)
+    credentials_file = repo_root / ".git" / ".git_credentials"
 
     if not repo_root.parent.exists():
         os.makedirs(repo_root.parent)
 
     running_on_ci = os.environ.get("CI") or os.environ.get("GITHUB_ACTION")
+    if running_on_ci:
+        logging.info("Setting up git credentials for CI")
+        subprocess.check_call(["git", "config", "credential.helper", "store", "--file", credentials_file])
+        with open(os.path.expanduser(credentials_file), "w") as f:
+            f.write(f"{remote_url}\nusername=oauth2\npassword={ic_repo_push_token}\n")
+    else:
+        logging.info("Running locally, using default git credentials of the current user")
 
     # Since its always a new temp directory here its safe to blindly clone
     subprocess.check_call(["git", "clone", "--depth=50", remote_url, repo_root])
