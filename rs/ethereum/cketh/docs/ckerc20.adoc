@@ -190,7 +190,7 @@ dfx canister --network ic call minter get_minter_info
 ----
 ====
 
-.Deposit of Sepolia USDC -> ckSepoliaUSDC
+.Deposit of USDC -> ckUSDC
 ====
 To make things more concrete, we consider a deposit of USDC, whose contract is available at link:https://etherscan.io/token/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48[0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48], involving the following steps:
 
