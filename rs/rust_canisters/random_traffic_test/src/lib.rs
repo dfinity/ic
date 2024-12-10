@@ -35,14 +35,16 @@ impl Default for Config {
 }
 
 impl Config {
-    /// Convenience constructor that sanity checks input.
+    /// Convenience constructor that sanity checks input. After passing the checks, the canister
+    /// should run as intended.
     ///
     /// Note:
-    /// - `reply_bytes` are checked since there is a hard cutoff after which we cannot
-    ///   generate a response; this will effectively trap the canister.
-    /// - `call_bytes` is not checked since for payloads outside the legal range, the system
-    ///   can just generate a reject response. And also there are oversized requests for calls
-    ///   on the same subnet so there isn't a universal upper limit.
+    /// - `reply_bytes` are used to determine the size of the payload in a reply. This must
+    ///   be checked against the maximum payload size because a payload exceeding this limit
+    ///   will trap the canister.
+    /// - 'call_bytes' are used to determine the size of the payload in a call. This is not
+    ///   checked because sending a payload exceeding the limit will trigger a rejection rather
+    ///   than trapping the canister. This is a possible use-case for tests.
     pub fn try_new(
         receivers: Vec<CanisterId>,
         call_bytes: RangeInclusive<u32>,

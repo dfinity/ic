@@ -221,8 +221,8 @@ fn update_record(response: &api::call::CallResult<Vec<u8>>, index: u32) {
     }
 }
 
-/// Generates `MAX_CALLS_PER_HEARTBEAT` calls as futures. The futures are awaited one by one such
-/// that the records can be updated without awaiting all calls at once.
+/// Generates `MAX_CALLS_PER_HEARTBEAT` calls as futures. The records are updated whenever a
+/// reply comes in, i.e. not only after all of them have completed.
 #[heartbeat]
 async fn heartbeat() {
     let (mut futures, mut record_indices) = (Vec::new(), Vec::new());
