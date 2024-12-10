@@ -121,7 +121,7 @@ system_test_nns(
     },
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     tags = [
-        "long_running",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
