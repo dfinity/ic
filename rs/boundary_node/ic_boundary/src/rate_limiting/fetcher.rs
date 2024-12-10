@@ -1,23 +1,14 @@
-use std::{path::PathBuf, sync::Arc, time::SystemTime};
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::{anyhow, Context as _, Error};
 use async_trait::async_trait;
-use candid::Decode;
+use candid::{Decode, Encode};
 use ic_canister_client::Agent;
 use ic_types::CanisterId;
-use rate_limits_api::{v1::RateLimitRule, GetConfigResponse};
+use rate_limits_api::{v1::RateLimitRule, GetConfigResponse, Version};
 use tokio::fs;
 
 const SCHEMA_VERSION: u64 = 1;
-
-fn nonce() -> Vec<u8> {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos()
-        .to_le_bytes()
-        .to_vec()
-}
 
 #[async_trait]
 pub trait FetchesRules: Send + Sync {
@@ -56,12 +47,10 @@ pub struct CanisterConfigFetcher(pub Agent, pub CanisterId);
 impl FetchesConfig for CanisterConfigFetcher {
     async fn fetch_config(&self) -> Result<Vec<u8>, Error> {
         self.0
-            .execute_update(
-                &self.1,      // effective_canister_id
-                &self.1,      // canister_id
-                "get_config", // method
-                vec![],       // arguments
-                nonce(),      // nonce
+            .execute_query(
+                &self.1,                            // effective_canister_id
+                "get_config",                       // method
+                Encode!(&None::<Version>).unwrap(), // arguments
             )
             .await
             .map_err(|e| anyhow!("failed to fetch config from the canister: {e:#}"))?

@@ -126,6 +126,7 @@ impl Limiter {
             .fetch_rules()
             .await
             .context("unable to fetch rules")?;
+
         self.apply_rules(rules);
         Ok(())
     }
@@ -184,7 +185,10 @@ impl Limiter {
 #[async_trait]
 impl Run for Arc<Limiter> {
     async fn run(&mut self) -> Result<(), Error> {
-        self.refresh().await
+        if let Err(e) = self.refresh().await {
+            warn!("Ratelimiter: unable to refresh: {e:#}");
+        }
+        Ok(())
     }
 }
 
