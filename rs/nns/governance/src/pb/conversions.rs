@@ -3476,15 +3476,24 @@ impl From<pb::governance::governance_cached_metrics::NeuronSubsetMetrics>
     fn from(item: pb::governance::governance_cached_metrics::NeuronSubsetMetrics) -> Self {
         Self {
             count: item.count,
+
             total_staked_e8s: item.total_staked_e8s,
             total_staked_maturity_e8s_equivalent: item.total_staked_maturity_e8s_equivalent,
             total_maturity_e8s_equivalent: item.total_maturity_e8s_equivalent,
+
             total_voting_power: item.total_voting_power,
+            total_deciding_voting_power: item.total_deciding_voting_power,
+            total_potential_voting_power: item.total_potential_voting_power,
+
             count_buckets: item.count_buckets,
+
             staked_e8s_buckets: item.staked_e8s_buckets,
             staked_maturity_e8s_equivalent_buckets: item.staked_maturity_e8s_equivalent_buckets,
             maturity_e8s_equivalent_buckets: item.maturity_e8s_equivalent_buckets,
+
             voting_power_buckets: item.voting_power_buckets,
+            deciding_voting_power_buckets: item.deciding_voting_power_buckets,
+            potential_voting_power_buckets: item.potential_voting_power_buckets,
         }
     }
 }
@@ -3494,15 +3503,24 @@ impl From<pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics>
     fn from(item: pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics) -> Self {
         Self {
             count: item.count,
+
             total_staked_e8s: item.total_staked_e8s,
             total_staked_maturity_e8s_equivalent: item.total_staked_maturity_e8s_equivalent,
             total_maturity_e8s_equivalent: item.total_maturity_e8s_equivalent,
+
             total_voting_power: item.total_voting_power,
+            total_deciding_voting_power: item.total_deciding_voting_power,
+            total_potential_voting_power: item.total_potential_voting_power,
+
             count_buckets: item.count_buckets,
+
             staked_e8s_buckets: item.staked_e8s_buckets,
             staked_maturity_e8s_equivalent_buckets: item.staked_maturity_e8s_equivalent_buckets,
             maturity_e8s_equivalent_buckets: item.maturity_e8s_equivalent_buckets,
+
             voting_power_buckets: item.voting_power_buckets,
+            deciding_voting_power_buckets: item.deciding_voting_power_buckets,
+            potential_voting_power_buckets: item.potential_voting_power_buckets,
         }
     }
 }
