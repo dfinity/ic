@@ -1,5 +1,6 @@
 use anyhow::{anyhow, bail, Context, Result};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::universal_vm::DeployedUniversalVm;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
@@ -19,6 +20,8 @@ use serde_json::json;
 use std::env;
 
 const UNIVERSAL_VM_NAME: &str = "foundry";
+const DOCKER_NETWORK_NAME: &str = "ethereum";
+const FOUNDRY_PORT: u16 = 8545;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -29,7 +32,7 @@ fn main() -> Result<()> {
 }
 
 fn setup_with_system_and_application_subnets(env: TestEnv) {
-    foundry_config(env.clone());
+    setup_anvil(&env);
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
@@ -41,6 +44,32 @@ fn setup_with_system_and_application_subnets(env: TestEnv) {
         .for_each(|subnet| subnet.await_all_nodes_healthy().unwrap());
 }
 
+fn setup_anvil(env: &TestEnv) {
+    UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
+        .with_config_img(get_dependency_path(
+            env::var("CKETH_UVM_CONFIG_PATH").expect("CKETH_UVM_CONFIG_PATH not set"),
+        ))
+        .start(&env)
+        .expect("failed to setup universal VM");
+
+    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
+
+    println!(
+        "{}",
+        deployed_universal_vm
+            .block_on_bash_script(&format!(
+                r#"
+# Run nginx auto proxy
+docker load -i /config/foundry.tar
+docker network create {DOCKER_NETWORK_NAME}
+docker run --net {DOCKER_NETWORK_NAME} --detach --rm --name anvil -p {FOUNDRY_PORT}:{FOUNDRY_PORT} foundry:latest "anvil --host 0.0.0.0"
+docker logs anvil
+"#
+            ))
+            .unwrap()
+    );
+}
+
 fn ic_xc_cketh_test(env: TestEnv) {
     let logger = env.logger();
     let topology_snapshot = env.topology_snapshot();
@@ -48,7 +77,6 @@ fn ic_xc_cketh_test(env: TestEnv) {
     let docker_host_ip = docker_host.get_vm().unwrap().ipv6;
     let client = Client::new();
 
-    // create the zone if it doesn't exist yet
     let url = format!("http://[{:?}]:{:?}", docker_host_ip, 8545);
 
     block_on(async {
@@ -69,31 +97,22 @@ fn ic_xc_cketh_test(env: TestEnv) {
             json!({"jsonrpc":"2.0","id":1,"result":"0x0"})
         )
     });
-}
-
-fn foundry_config(env: TestEnv) {
-    UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_img(get_dependency_path(
-            env::var("CKETH_UVM_CONFIG_PATH").expect("CKETH_UVM_CONFIG_PATH not set"),
-        ))
-        .start(&env)
-        .expect("failed to setup universal VM");
-
-    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    let universal_vm = deployed_universal_vm.get_vm().unwrap();
-    let foundry_node_ipv6 = universal_vm.ipv6;
-
     println!(
         "{}",
-        deployed_universal_vm
-            .block_on_bash_script(&format!(
-                r#"
-# Run nginx auto proxy
-docker load -i /config/foundry.tar
-docker run --detach --rm --name foundry -p 8545:8545 foundry:latest "anvil --host 0.0.0.0"
-docker logs foundry
-"#
-            ))
-            .unwrap()
+        deploy_smart_contract(
+            &docker_host,
+            "EthDepositHelper.sol",
+            "CkEthDeposit",
+            "0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80"
+        )
     );
+}
+
+fn deploy_smart_contract(
+    foundry: &DeployedUniversalVm,
+    filename: &str,
+    contract_name: &str,
+    constructor_args: &str,
+) -> String {
+    foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} -it --rm -v /config/{filename}:/contracts/{filename} foundry "forge create --rpc-url http://anvil:{FOUNDRY_PORT} --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 /contracts/{filename}:{contract_name} --constructor-args {constructor_args}""#)).unwrap()
 }
