@@ -10,7 +10,6 @@ use crate::{
     HttpError, IngressFilterService,
 };
 use hyper::StatusCode;
-use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::UserError;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;

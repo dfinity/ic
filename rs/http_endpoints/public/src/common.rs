@@ -7,7 +7,6 @@ use http::{
 };
 use http_body_util::BodyExt;
 use hyper::{header, Response, StatusCode};
-use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_error_types::UserError;
 use ic_interfaces_registry::RegistryClient;
