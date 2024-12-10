@@ -204,13 +204,19 @@ fn setup_call(
 fn update_record(response: &api::call::CallResult<Vec<u8>>, index: u32) {
     // Updates the `Reply` at `index` in `RECORDS`.
     let set_reply_in_call_record = move |reply: Reply| {
-        RECORDS.with_borrow_mut(|records| records.get_mut(&index).unwrap().reply = Some(reply));
+        RECORDS.with_borrow_mut(|records| {
+            let record = records.get_mut(&index).unwrap();
+            assert!(record.reply.is_none(), "duplicate reply received");
+            record.reply = Some(reply);
+        });
     };
     match response {
         Err((_, msg)) if synchronous_rejection(msg) => {
             // Remove the record for synchronous rejections.
             SYNCHRONOUS_REJECTIONS_COUNT.set(SYNCHRONOUS_REJECTIONS_COUNT.get() + 1);
-            RECORDS.with_borrow_mut(|records| records.remove(&index).unwrap());
+            RECORDS.with_borrow_mut(|records| {
+                assert!(records.remove(&index).unwrap().reply.is_none())
+            });
         }
         Err((reject_code, msg)) => {
             set_reply_in_call_record(Reply::Reject(*reject_code as u32, msg.to_string()));

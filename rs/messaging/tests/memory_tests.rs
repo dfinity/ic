@@ -57,7 +57,7 @@ proptest! {
 /// For the second phase, the 'chatter' is disabled by putting a canister into `Stopping` state
 /// every 10 rounds. In addition to shutting down traffic altogether from that canister (including
 /// downstream calls) this will also induce a lot asychnronous rejections for requests. If any
-/// canister fails to reach `Stopped` state (i.e. no hanging calls), something went wrong in
+/// canister fails to reach `Stopped` state (i.e. no pending calls), something went wrong in
 /// message routing, most likely a bug connected to reject signals for requests.
 ///
 /// Checks that the guaranteed response message memory never exceeds the limit; that all calls eventually
@@ -73,7 +73,7 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
     // The number of rounds to execute while chatter is on.
     const CHATTER_PHASE_ROUND_COUNT: u64 = 30;
     // The maximum number of rounds to execute after chatter is turned off. It it takes more than
-    // this number of rounds until there are no more hanging calls, the test fails.
+    // this number of rounds until there are no more pending calls, the test fails.
     const SHUTDOWN_PHASE_MAX_ROUNDS: u64 = 300;
     // The amount of memory available for guaranteed response message memory on `local_env`.
     const LOCAL_MESSAGE_MEMORY_CAPACITY: u64 = 100 * MB;
@@ -163,14 +163,14 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
     // One extra tick to make sure everything is gc'ed.
     fixture.tick();
 
-    // Check the records agree on 'no hanging calls'.
+    // Check the records agree on 'no pending calls'.
     if fixture
         .canisters()
         .into_iter()
         .map(|canister| extract_metrics(&fixture.force_query_records(canister)))
-        .any(|metrics| metrics.hanging_calls != 0)
+        .any(|metrics| metrics.pending_calls != 0)
     {
-        return fixture.failed_with_reason("found hanging calls in the records");
+        return fixture.failed_with_reason("found pending calls in the records");
     }
 
     // After the fact, all memory is freed and back to 0.
@@ -190,9 +190,9 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
 /// signals for requests in the stream to the local_subnet. But since we migrated the `migrating_canister`
 /// to the remote subnet, the locally generated reject responses fail to induct and are rerouted into the
 /// stream to the remote subnet. The remote subnet eventually picks them up and inducts them into
-/// `migrating_canister` leaving no hanging calls after some more rounds.
+/// `migrating_canister` leaving no pending calls after some more rounds.
 ///
-/// If there are hanging calls after a threshold number of rounds, there is most likely a bug
+/// If there are pending calls after a threshold number of rounds, there is most likely a bug
 /// connected to reject signals for requests, specifically with the corresponding exceptions due to
 /// canister migration.
 #[test]
@@ -200,7 +200,7 @@ fn check_calls_conclude_with_migrating_canister() {
     // The number of rounds to execute while the migrating canister is making calls.
     const BUILDUP_PHASE_ROUND_COUNT: u64 = 10;
     // The maximum number of rounds to execute after chatter is turned off. It it takes more than
-    // this number of rounds until there are no more hanging calls, the test fails.
+    // this number of rounds until there are no more pending calls, the test fails.
     const SHUTDOWN_PHASE_MAX_ROUNDS: u64 = 300;
 
     let mut fixture = Fixture::new(FixtureConfig {
@@ -248,10 +248,10 @@ fn check_calls_conclude_with_migrating_canister() {
         assert!(counter < SHUTDOWN_PHASE_MAX_ROUNDS);
     }
 
-    // Check that the records agree on 'no hanging calls'.
+    // Check that the records agree on 'no pending calls'.
     assert_eq!(
         0,
-        extract_metrics(&fixture.force_query_records(migrating_canister)).hanging_calls
+        extract_metrics(&fixture.force_query_records(migrating_canister)).pending_calls
     );
 }
 

@@ -143,7 +143,7 @@ impl std::fmt::Debug for Record {
 /// Basic metrics extracted from the records.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Metrics {
-    pub hanging_calls: u32,
+    pub pending_calls: u32,
     pub calls_attempted: u32,
     pub downstream_calls_attempted: u32,
     pub calls_replied: u32,
@@ -174,7 +174,7 @@ pub fn extract_metrics(records: &BTreeMap<u32, Record>) -> Metrics {
                 metrics.rejected_bytes += record.sent_bytes;
             }
             None => {
-                metrics.hanging_calls += 1;
+                metrics.pending_calls += 1;
             }
         }
     }
