@@ -125,7 +125,7 @@ def main():
     if running_on_ci:
         logging.info("Setting up git credentials for CI")
         subprocess.check_call(["git", "config", "credential.helper", f"store --file {credentials_file}"])
-        with open(os.path.expanduser(credentials_file), "w") as f:
+        with open(os.path.expanduser(credentials_file), "w+") as f:
             f.write(f"{remote_url}\nusername=oauth2\npassword={ic_repo_push_token}\n")
     else:
         logging.info("Running locally, using default git credentials of the current user")
