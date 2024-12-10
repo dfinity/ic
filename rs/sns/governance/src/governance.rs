@@ -96,7 +96,7 @@ use ic_nervous_system_governance::maturity_modulation::{
 };
 use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
-use ic_nervous_system_string::format_timestamp_for_humans;
+use ic_nervous_system_timestamp::format_timestamp_for_humans;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
