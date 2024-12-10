@@ -34,7 +34,8 @@ async fn test_deploy_fresh_sns() {
         .collect();
 
     eprintln!("1. Prepare the world (use mainnet WASMs for all NNS and SNS canisters) ...");
-    let pocket_ic = pocket_ic_helpers::pocket_ic_for_sns_tests_with_mainnet_versions().await;
+    let (pocket_ic, _initial_sns_version) =
+        pocket_ic_helpers::pocket_ic_for_sns_tests_with_mainnet_versions().await;
 
     eprintln!("Install the test dapp ...");
     for dapp_canister_id in dapp_canister_ids.clone() {
