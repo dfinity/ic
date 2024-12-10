@@ -35,14 +35,19 @@ fn test_neuron_subset_metrics_pb_encode() {
     // Step 2: Call the code under test.
     let subject = NeuronSubsetMetricsPb {
         count: Some(42),
+
         total_staked_e8s: Some(43_000),
         total_staked_maturity_e8s_equivalent: Some(44_000_000),
         total_maturity_e8s_equivalent: Some(45_000_000_000),
+
         total_voting_power: Some(46_000_000_000_000),
+        total_deciding_voting_power: Some(47_000_000_000_000_000),
+        total_potential_voting_power: Some(717_568_738),
 
         count_buckets: hashmap! {
             3 => 3,
         },
+
         staked_e8s_buckets: hashmap! {
             4 => 40,
         },
@@ -52,9 +57,18 @@ fn test_neuron_subset_metrics_pb_encode() {
         maturity_e8s_equivalent_buckets: hashmap! {
             6 => 6_000,
         },
+
         voting_power_buckets: hashmap! {
             7 =>  70_000,
             8 => 800_000,
+        },
+        deciding_voting_power_buckets: hashmap! {
+            9 => 9_000_000,
+            10 => 110_000_000,
+        },
+        potential_voting_power_buckets: hashmap! {
+            11 => 12_000_000_000,
+            12 => 1_300_000_000_000,
         },
     };
     assert_is_ok!(subject.encode("smart", "has IQ > 120", &mut metrics_encoder));
@@ -69,6 +83,7 @@ fn test_neuron_subset_metrics_pb_encode() {
     let result = prometheus_parse::Scrape::parse(result).unwrap();
 
     assert_eq!(get_gauge(&result, "governance_smart_neurons_count"), 42.0);
+
     assert_eq!(
         get_gauge(&result, "governance_total_staked_e8s_smart"),
         43_000.0
@@ -84,9 +99,18 @@ fn test_neuron_subset_metrics_pb_encode() {
         get_gauge(&result, "governance_total_maturity_e8s_equivalent_smart"),
         45_000_000_000.0
     );
+
     assert_eq!(
         get_gauge(&result, "governance_total_voting_power_smart"),
         46_000_000_000_000.0
+    );
+    assert_eq!(
+        get_gauge(&result, "governance_total_deciding_voting_power_smart"),
+        47_000_000_000_000_000.0
+    );
+    assert_eq!(
+        get_gauge(&result, "governance_total_potential_voting_power_smart"),
+        717_568_738.0
     );
 
     assert_eq!(
@@ -111,6 +135,7 @@ fn test_neuron_subset_metrics_pb_encode() {
         ),
         hashmap! { "[36, 42)".to_string() => 6_000.0 },
     );
+
     assert_eq!(
         get_metric_broken_out_by_dissolve_delay(
             &result,
@@ -119,6 +144,26 @@ fn test_neuron_subset_metrics_pb_encode() {
         hashmap! {
             "[42, 48)".to_string() =>  70_000.0,
             "[48, 54)".to_string() => 800_000.0,
+        },
+    );
+    assert_eq!(
+        get_metric_broken_out_by_dissolve_delay(
+            &result,
+            "governance_smart_deciding_voting_power_buckets",
+        ),
+        hashmap! {
+            "[54, 60)".to_string() =>  9e6,
+            "[60, 66)".to_string() => 11e7,
+        },
+    );
+    assert_eq!(
+        get_metric_broken_out_by_dissolve_delay(
+            &result,
+            "governance_smart_potential_voting_power_buckets",
+        ),
+        hashmap! {
+            "[66, 72)".to_string() => 12e9,
+            "[72, 78)".to_string() => 13e11,
         },
     );
 }
