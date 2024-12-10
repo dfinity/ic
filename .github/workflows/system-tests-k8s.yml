@@ -7,11 +7,12 @@ name: System Tests K8s
 #   --field jobs="32"
 
 on:
-  schedule:
-    - cron: "0 3 * * *"
-  pull_request:
-    paths:
-      - '.github/workflows/system-tests-k8s.yml'
+  # XXX: temporarily disabling until we have kubevirt 1.4.0
+  # schedule:
+  #   - cron: "0 3 * * *"
+  # pull_request:
+  #   paths:
+  #     - '.github/workflows/system-tests-k8s.yml'
   workflow_dispatch:
     inputs:
       targets:

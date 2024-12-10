@@ -219,11 +219,9 @@ impl NeuronStore {
     ) {
         with_stable_neuron_store(|stable_neuron_store| {
             let neuron_sections = NeuronSections {
-                hot_keys: false,
-                recent_ballots: false,
-                followees: false,
+                // This is needed for `Neuron::visibility``
                 known_neuron_data: true,
-                transfer: false,
+                ..NeuronSections::NONE
             };
 
             for neuron in stable_neuron_store.range_neurons_sections(.., neuron_sections) {

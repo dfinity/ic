@@ -9,8 +9,9 @@ rust_library(
     crate_name = "rejoin_test_lib",
     deps = [
         "//rs/rust_canisters/canister_test",
-        "//rs/rust_canisters/dfn_json",
+        "//rs/rust_canisters/dfn_candid",
         "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:candid",
         "@crate_index//:chrono",
         "@crate_index//:futures",
         "@crate_index//:slog",

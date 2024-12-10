@@ -2181,11 +2181,6 @@ pub mod sns {
 
         // Generate a bunch of SNS token transactions.
         for i in 0..NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE {
-            let mut archives = ledger::archives(pocket_ic, sns_ledger_canister_id).await;
-            if let Some(archive) = archives.pop() {
-                return PrincipalId::from(archive.canister_id);
-            }
-
             let user_principal_id = PrincipalId::new_user_test_id(i);
             let direct_participant_swap_account = Account {
                 owner: user_principal_id.0,
@@ -2207,7 +2202,14 @@ pub mod sns {
             .await
             .unwrap();
         }
-        panic!("Failed to spawn an Archive canister.")
+
+        let mut archives = ledger::archives(pocket_ic, sns_ledger_canister_id).await;
+
+        let Some(archive) = archives.pop() else {
+            panic!("Failed to spawn an Archive canister.")
+        };
+
+        PrincipalId::from(archive.canister_id)
     }
 
     pub mod root {
