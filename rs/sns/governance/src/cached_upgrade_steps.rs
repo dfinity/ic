@@ -283,6 +283,9 @@ impl CachedUpgradeSteps {
         &self.current_version == version || self.subsequent_versions.contains(version)
     }
 
+    /// Returns whether `left` is strictly before `right` in `self.into_iter()` in the `Ok` result.
+    ///
+    /// Returns `Err` if at least one of the versions `left` and `right` are not in `self`.
     pub fn contains_in_order(&self, left: &Version, right: &Version) -> Result<bool, String> {
         if !self.contains(left) {
             return Err(format!("{:?} does not contain {:?}", self, left));
