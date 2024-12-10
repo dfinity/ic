@@ -1,9 +1,61 @@
 use crate::state;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::BTreeMap;
+use std::io::Error;
+use std::time::Duration;
 
 thread_local! {
     pub static GET_UTXOS_CLIENT_CALLS: Cell<u64> = Cell::default();
     pub static GET_UTXOS_MINTER_CALLS: Cell<u64> = Cell::default();
+    pub static UPDATE_CALL_LATENCY: RefCell<BTreeMap<usize,LatencyHistogram>> = RefCell::default();
+}
+
+const LATENCY_HISTOGRAM_NUM_BUCKETS: usize = 11;
+const LATENCY_HISTOGRAM_BUCKET_SIZE_MS: u64 = 500;
+
+#[derive(Default, Clone, Copy)]
+pub struct LatencyHistogram {
+    latency_buckets: [u64; LATENCY_HISTOGRAM_NUM_BUCKETS],
+    latency_sum: u64,
+}
+
+impl LatencyHistogram {
+    pub fn observe_latency(&mut self, latency: Duration) {
+        let latency = latency.as_nanos() as u64;
+        let bucket_index = ((latency / (LATENCY_HISTOGRAM_BUCKET_SIZE_MS * 1_000)) as usize)
+            .min(LATENCY_HISTOGRAM_NUM_BUCKETS - 1);
+        self.latency_buckets[bucket_index] += 1;
+        self.latency_sum += latency;
+    }
+
+    /// Returns an iterator over the histogram buckets as tuples containing the bucket upper bound
+    /// (inclusive), and the count of observed values within the bucket.
+    fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
+        self.bucket_inclusive_upper_bounds()
+            .zip(self.latency_buckets.iter().cloned())
+            .map(|(k, v)| (k, v as f64))
+    }
+
+    fn sum(&self) -> u64 {
+        self.latency_sum
+    }
+
+    fn bucket_inclusive_upper_bounds(&self) -> impl Iterator<Item = f64> {
+        (1..LATENCY_HISTOGRAM_NUM_BUCKETS)
+            .map(|bucket| (bucket as u64) * LATENCY_HISTOGRAM_BUCKET_SIZE_MS)
+            .map(|upper_bound| upper_bound as f64)
+            .chain(std::iter::once(f64::INFINITY))
+    }
+}
+
+pub fn observe_latency(num_utxos: usize, start_ns: u64, end_ns: u64) {
+    let duration = Duration::from_nanos(end_ns.saturating_sub(start_ns));
+    UPDATE_CALL_LATENCY.with_borrow_mut(|metrics| {
+        metrics
+            .entry(num_utxos)
+            .or_default()
+            .observe_latency(duration)
+    });
 }
 
 pub fn encode_metrics(
@@ -145,14 +197,8 @@ pub fn encode_metrics(
             "ckbtc_minter_get_utxos_calls",
             "Number of get_utxos calls the minter issued, labeled by source.",
         )?
-        .value(
-            &[("source", "client")],
-            GET_UTXOS_CLIENT_CALLS.with(|cell| cell.get()) as f64,
-        )?
-        .value(
-            &[("source", "minter")],
-            GET_UTXOS_MINTER_CALLS.with(|cell| cell.get()) as f64,
-        )?;
+        .value(&[("source", "client")], GET_UTXOS_CLIENT_CALLS.get() as f64)?
+        .value(&[("source", "minter")], GET_UTXOS_MINTER_CALLS.get() as f64)?;
 
     metrics.encode_gauge(
         "ckbtc_minter_btc_balance",
@@ -219,6 +265,22 @@ pub fn encode_metrics(
         state::read_state(|s| s.quarantined_utxos().count()) as f64,
         "Total number of suspended UTXOs due to being marked as tainted.",
     )?;
+
+    let mut histogram_vec = metrics.histogram_vec(
+        "ckbtc_minter_update_calls_latency",
+        "The latency of ckBTC minter `update_balance` calls in milliseconds.",
+    )?;
+
+    UPDATE_CALL_LATENCY.with_borrow(|histograms| -> Result<(), Error> {
+        for (num_new_utxos, histogram) in histograms {
+            histogram_vec = histogram_vec.histogram(
+                &[("num_new_utxos", &num_new_utxos.to_string())],
+                histogram.iter(),
+                histogram.sum() as f64,
+            )?;
+        }
+        Ok(())
+    })?;
 
     Ok(())
 }

@@ -22,6 +22,7 @@ use super::get_btc_address::init_ecdsa_public_key;
 use crate::{
     guard::{balance_update_guard, GuardError},
     management::{get_utxos, CallError, CallSource},
+    metrics::observe_latency,
     state,
     tx::{DisplayAmount, DisplayOutpoint},
     updates::get_btc_address,
@@ -148,9 +149,12 @@ pub async fn update_balance<R: CanisterRuntime>(
         ic_cdk::trap("cannot update minter's balance");
     }
 
+    // Record start time of method execution for metrics
+    let start_time = runtime.time();
+
     // When the minter is in the mode using a whitelist we only want a certain
     // set of principal to be able to mint. But we also want those principals
-    // to mint at any desired address. Therefore the check below is on "caller".
+    // to mint at any desired address. Therefore, the check below is on "caller".
     state::read_state(|s| s.mode.is_deposit_available_for(&caller))
         .map_err(UpdateBalanceError::TemporarilyUnavailable)?;
 
@@ -227,6 +231,8 @@ pub async fn update_balance<R: CanisterRuntime>(
             .collect();
 
         let current_confirmations = pending_utxos.iter().map(|u| u.confirmations).max();
+
+        observe_latency(0, start_time, runtime.time());
 
         return Err(UpdateBalanceError::NoNewUtxos {
             current_confirmations,
@@ -317,6 +323,9 @@ pub async fn update_balance<R: CanisterRuntime>(
     }
 
     schedule_now(TaskType::ProcessLogic, runtime);
+
+    observe_latency(utxo_statuses.len(), start_time, runtime.time());
+
     Ok(utxo_statuses)
 }
 
