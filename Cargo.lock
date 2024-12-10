@@ -10183,6 +10183,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-timestamp"
+version = "0.0.1"
+dependencies = [
+ "time",
+]
+
+[[package]]
 name = "ic-networking-subnet-update-workload"
 version = "0.9.0"
 dependencies = [
@@ -11924,6 +11931,7 @@ dependencies = [
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
+ "ic-nervous-system-timestamp",
  "ic-nns-constants",
  "ic-protobuf",
  "ic-sns-governance",
@@ -11956,7 +11964,6 @@ dependencies = [
  "strum",
  "strum_macros",
  "tempfile",
- "time",
  "tokio",
  "tokio-test",
 ]
