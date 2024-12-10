@@ -3,7 +3,7 @@ use core::cmp::Ordering;
 use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
 use dfn_core::{
-    api::{call_with_cleanup, caller},
+    api::{call_with_cleanup, caller, now},
     over, over_async, over_init, over_may_reject, stable,
 };
 use dfn_protobuf::protobuf;
@@ -22,7 +22,7 @@ use ic_management_canister_types::{
     CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, Method,
     IC_00,
 };
-use ic_nervous_system_common::NNS_DAPP_BACKEND_CANISTER_ID;
+use ic_nervous_system_common::{NNS_DAPP_BACKEND_CANISTER_ID, ONE_YEAR_SECONDS};
 use ic_nervous_system_governance::maturity_modulation::{
     MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
@@ -71,6 +71,16 @@ const MAX_MEMO_LENGTH: usize = 32;
 /// Calls to create_canister get rejected outright if they have obviously too few cycles attached.
 /// This is the minimum amount needed for creating a canister as of October 2023.
 const CREATE_CANISTER_MIN_CYCLES: u64 = 100_000_000_000;
+
+// At this time, 50e15 cycles_limit was too small, so we increased it by 10x. To
+// minimize the need to manually update this again later, we assume Moore's Law
+// will continue to hold, and "repeg" cycles_limit every time the canister is
+// upgraded (in post_upgrade), and also when freshly installed.
+//
+// Value: 2024-12-10 midnight UTC.
+const CYCLES_EPOCH_TIMESTAMP_SECONDS: u64 = 1733788800;
+// Equivalently, 500_000 Tcycles.
+const CYCLES_BASELINE: u128 = 500e15 as u128;
 
 thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
@@ -292,6 +302,24 @@ impl State {
         Ok(state)
     }
 
+    pub fn repeg_to_moores_law(&mut self, now: SystemTime) {
+        let cycles_epoch = SystemTime::UNIX_EPOCH
+            .checked_add(std::time::Duration::from_secs(CYCLES_EPOCH_TIMESTAMP_SECONDS))
+            .unwrap();
+        let years_since_cycles_epoch =
+            now.duration_since(cycles_epoch)
+                .unwrap()
+                .as_secs()
+                as f64
+                / (ONE_YEAR_SECONDS as f64);
+        let inflation_factor = f64::powf(2.0, years_since_cycles_epoch / 2.0);
+        let new_cycles_limit_floor = Cycles::new((inflation_factor * CYCLES_BASELINE as f64) as u128);
+        let new_cycles_limit = self.cycles_limit.max(new_cycles_limit_floor);
+
+        println!("[cycles] old vs new cycles_limit: {} vs. {}", self.cycles_limit, new_cycles_limit);
+        self.cycles_limit = new_cycles_limit;
+    }
+
     // Keep the size of blocks_notified map not larger than max_history.
     // Purges at most MAX_NOTIFY_PURGE entries.
     fn purge_old_notifications(&mut self, max_history: usize) {
@@ -335,7 +363,7 @@ impl Default for State {
                 ICP_XDR_CONVERSION_RATE_CACHE_SIZE
             ]),
             cycles_per_xdr: DEFAULT_CYCLES_PER_XDR.into(),
-            cycles_limit: 50_000_000_000_000_000u128.into(), // == 50 Pcycles/hour
+            cycles_limit: Cycles::from(CYCLES_BASELINE),
             limiter: limiter::Limiter::new(resolution, max_age),
             total_cycles_minted: Cycles::zero(),
             blocks_notified: BTreeMap::new(),
@@ -400,6 +428,8 @@ fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
         if args.cycles_ledger_canister_id.is_some() {
             state.cycles_ledger_canister_id = args.cycles_ledger_canister_id;
         }
+
+        state.repeg_to_moores_law(now());
     });
 }
 
@@ -2273,6 +2303,7 @@ fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
         }
         new_state.cycles_ledger_canister_id = args.cycles_ledger_canister_id;
     }
+    new_state.repeg_to_moores_law(now());
 
     STATE.with(|state| state.replace(Some(new_state)));
 }
@@ -2404,6 +2435,7 @@ fn get_subnet_selection(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_nervous_system_common::ONE_DAY_SECONDS;
     use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
     use rand::Rng;
     use std::str::FromStr;
@@ -3120,5 +3152,55 @@ mod tests {
             CandidSource::File(old_interface.as_path()),
         )
         .expect("The CMC canister interface is not compatible with the cmc.did file");
+    }
+
+    #[test]
+    fn test_repeg_to_moores_law() {
+        let mut state = State::default();
+
+        let now = SystemTime::UNIX_EPOCH
+            .checked_add(Duration::from_secs(1733788800))
+            .unwrap();
+        state.repeg_to_moores_law(now);
+        assert_eq!(state.cycles_limit, Cycles::new(500e15 as u128));
+
+        // Moore's Law is increasing
+        let mut previous_cycles_limit = Cycles::new(500e15 as u128);
+        for days in [1, 2, 5, 10, 20, 50, 100, 200] {
+            let now = SystemTime::UNIX_EPOCH
+                .checked_add(Duration::from_secs(1733788800 + days * ONE_DAY_SECONDS))
+                .unwrap();
+            state.repeg_to_moores_law(now);
+
+            assert!(
+                state.cycles_limit > previous_cycles_limit,
+                "{} vs. {}",
+                state.cycles_limit, previous_cycles_limit,
+            );
+
+            previous_cycles_limit = state.cycles_limit;
+        }
+
+        // At this time, pegging to Moore's Law means cycles_limit should be
+        // double what it was at the cycles epoch. That is, it should be 2 *
+        // 500e15 cycles.
+        let two_years_after_cycles_epoch = SystemTime::UNIX_EPOCH
+            .checked_add(Duration::from_secs(1733788800 + 2 * ONE_YEAR_SECONDS))
+            .unwrap();
+        state.repeg_to_moores_law(two_years_after_cycles_epoch);
+        assert_eq!(
+            state.cycles_limit,
+            Cycles::new((2.0 * 500e15) as u128),
+        );
+
+        // At 6 years, that's three doublings, so 8x.
+        let six_years_after_cycles_epoch = SystemTime::UNIX_EPOCH
+            .checked_add(Duration::from_secs(1733788800 + 6 * ONE_YEAR_SECONDS))
+            .unwrap();
+        state.repeg_to_moores_law(six_years_after_cycles_epoch);
+        assert_eq!(
+            state.cycles_limit,
+            Cycles::new((8.0 * 500e15) as u128),
+        );
     }
 }
