@@ -27,11 +27,14 @@ jobs:
           fetch-depth: 1
           token: ${{ steps.app-token.outputs.token }}
 
+      - name: Install the gh cli
+        uses: ksivamuthu/actions-setup-gh-cli@<VERSION>
+        with:
+          version: 2.53.0
+
       - name: Update IC versions file
         run: |
           set -eEuxo pipefail
 
-          which gh
-
-          PUSH_TO_IC=${{ steps.app-token.outputs.token }} CI=1 time bazel run --config=ci //ci/src/mainnet_revisions:mainnet_revisions
+          PATH=$PATH:$(dirname $(which gh)) PUSH_TO_IC=${{ steps.app-token.outputs.token }} CI=1 time bazel run --config=ci //ci/src/mainnet_revisions:mainnet_revisions
         shell: bash
