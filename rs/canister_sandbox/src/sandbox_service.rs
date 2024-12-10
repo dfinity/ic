@@ -11,6 +11,8 @@ pub trait SandboxService: Send + Sync {
     fn open_wasm_serialized(&self, req: OpenWasmSerializedRequest)
         -> Call<OpenWasmSerializedReply>;
 
+    fn open_wasm_via_file(&self, req: OpenWasmViaFileRequest) -> Call<OpenWasmSerializedReply>;
+
     /// Close the indicated canister Wasm code object. Code cannot be
     /// used anymore.
     fn close_wasm(&self, req: CloseWasmRequest) -> Call<CloseWasmReply>;
@@ -43,6 +45,11 @@ pub trait SandboxService: Send + Sync {
         &self,
         req: CreateExecutionStateSerializedRequest,
     ) -> Call<CreateExecutionStateSerializedReply>;
+
+    fn create_execution_state_via_file(
+        &self,
+        req: CreateExecutionStateViaFileRequest,
+    ) -> Call<CreateExecutionStateSerializedReply>;
 }
 
 impl<Svc: SandboxService + Send + Sync> DemuxServer<Request, Reply> for Svc {
@@ -53,6 +60,9 @@ impl<Svc: SandboxService + Send + Sync> DemuxServer<Request, Reply> for Svc {
             Request::Terminate(req) => Call::new_wrap(self.terminate(req), Reply::Terminate),
             Request::OpenWasmSerialized(req) => {
                 Call::new_wrap(self.open_wasm_serialized(req), Reply::OpenWasmSerialized)
+            }
+            Request::OpenWasmViaFile(req) => {
+                Call::new_wrap(self.open_wasm_via_file(req), Reply::OpenWasmSerialized)
             }
             Request::CloseWasm(req) => Call::new_wrap(self.close_wasm(req), Reply::CloseWasm),
             Request::OpenMemory(req) => Call::new_wrap(self.open_memory(req), Reply::OpenMemory),
@@ -68,6 +78,10 @@ impl<Svc: SandboxService + Send + Sync> DemuxServer<Request, Reply> for Svc {
             }
             Request::CreateExecutionStateSerialized(req) => Call::new_wrap(
                 self.create_execution_state_serialized(req),
+                Reply::CreateExecutionStateSerialized,
+            ),
+            Request::CreateExecutionStateViaFile(req) => Call::new_wrap(
+                self.create_execution_state_via_file(req),
                 Reply::CreateExecutionStateSerialized,
             ),
         }

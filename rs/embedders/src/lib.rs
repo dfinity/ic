@@ -15,7 +15,9 @@ use ic_system_api::{
 };
 use ic_types::{methods::FuncRef, NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
-pub use serialized_module::{OnDiskSerializedModule, SerializedModule, SerializedModuleBytes};
+pub use serialized_module::{
+    InitialStateData, OnDiskSerializedModule, SerializedModule, SerializedModuleBytes,
+};
 pub use wasmtime_embedder::{WasmtimeEmbedder, WasmtimeMemoryCreator};
 
 /// The minimal required guard region for correctness is 2GiB. We use 8GiB as a
