@@ -45,13 +45,6 @@ pub fn empty_fake_registry() -> Arc<dyn RegistryClient> {
     )))
 }
 
-pub fn temp_crypto_component_with_fake_registry(node_id: NodeId) -> TempCryptoComponent {
-    TempCryptoComponent::builder()
-        .with_registry(empty_fake_registry())
-        .with_node_id(node_id)
-        .build()
-}
-
 fn empty_ni_dkg_csp_dealing() -> CspNiDkgDealing {
     ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing(0)
 }
