@@ -16,8 +16,8 @@ Previous BTC Checker proposal: https://dashboard.internetcomputer.org/proposal/1
 
 ## Motivation
 
-The previous upgrade proposal failed due to a upgrade compatibility problem.
-This fixes it by reinstalling the Bitcoin Checker canister using a wasm hash is the same as in the previous upgrade proposal.
+The previous upgrade proposal failed due to an upgrade compatibility problem.
+This fixes it by reinstalling the Bitcoin Checker canister using the same wasm hash as in the previous upgrade proposal.
 
 ## Install args
 
