@@ -176,11 +176,13 @@ rust_test(
         ":pocket-ic-server",
         "//rs/registry/canister:registry-canister",
         "@ii_dev_canister//file",
+        "@mozilla_root_ca_store//file",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
         "II_WASM": "$(rootpath @ii_dev_canister//file)",
+        "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
     tags = [
         "cpu:8",
