@@ -543,7 +543,7 @@ impl TryFrom<pb::Summary> for Summary {
 pub enum Payload {
     /// DKG Summary payload
     Summary(Summary),
-    /// DKG Dealings payload
+    /// DKG Data payload
     Data(DkgDataPayload),
 }
 
@@ -560,8 +560,8 @@ pub enum CompletedVetKey {
     Unreported(ConsensusResponse),
 }
 
-/// Dealings contains dealing messages and the height at which this DKG interval
-/// started
+/// Data payloads contain dealing messages, the height at which this DKG interval
+/// started, and newly completed VetKey agreements.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DkgDataPayload {
@@ -602,12 +602,12 @@ impl TryFrom<pb::DkgDataPayload> for DkgDataPayload {
 }
 
 impl DkgDataPayload {
-    /// Return an empty DealingsPayload using the given start_height.
+    /// Return an empty DataPayload using the given start_height.
     pub fn new_empty(start_height: Height) -> Self {
         Self::new(start_height, vec![])
     }
 
-    /// Return an new DealingsPayload.
+    /// Return an new DataPayload.
     pub fn new(start_height: Height, messages: DealingMessages) -> Self {
         Self {
             start_height,
