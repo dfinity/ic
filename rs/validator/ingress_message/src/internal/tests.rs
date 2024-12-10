@@ -1,6 +1,6 @@
 mod root_of_trust {
     use crate::internal::{
-        nns_root_public_key, ConstantRootOfTrustProvider, StandaloneIngressSigVerifier,
+        nns_root_public_key, ConstantRootOfTrustProvider,
     };
     use crate::AuthenticationError::InvalidCanisterSignature;
     use crate::{
@@ -19,7 +19,6 @@ mod root_of_trust {
         all_authentication_schemes, canister_signature_with_hard_coded_root_of_trust,
         hard_coded_root_of_trust, DirectAuthenticationScheme, HttpRequestBuilder,
     };
-    use std::sync::Arc;
 
     #[test]
     fn should_retrieve_root_of_trust() {
