@@ -644,10 +644,7 @@ impl Step for UploadAndRestartStep {
             // then simply `mv` the new state to the upload directory. No
             // rsync is needed, and thus no checkpoint copying.
             let backup_path = format!("{}/{}", self.work_dir.display(), OLD_IC_STATE);
-            info!(
-                self.logger,
-                "Moving original state into {}...", backup_path
-            );
+            info!(self.logger, "Moving original state into {}...", backup_path);
             let mut cmd_backup_state = Command::new("sudo");
             cmd_backup_state.arg("mv");
             cmd_backup_state.arg(ic_state_path);
