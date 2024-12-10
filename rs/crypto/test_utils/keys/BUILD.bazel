@@ -19,7 +19,6 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_test_utils_keys",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
