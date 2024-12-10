@@ -2419,7 +2419,6 @@ impl Governance {
             if include_empty_neurons_readable_by_caller {
                 self.get_neuron_ids_by_principal(&caller)
             } else {
-                // TODO profile this to compare
                 self.neuron_store
                     .get_non_empty_neuron_ids_readable_by_caller(caller)
             }
