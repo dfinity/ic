@@ -19,7 +19,7 @@ metadata:
     tnet.internetcomputer.org/name: {tnet}
   name: {name}
 spec:
-  runStrategy: {running}
+  running: {running}
   template:
     metadata:
       annotations:
