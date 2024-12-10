@@ -77,6 +77,7 @@ pub const IC_STATE_EXCLUDES: &[&str] = &[
 ];
 pub const IC_STATE: &str = "ic_state";
 pub const NEW_IC_STATE: &str = "new_ic_state";
+pub const OLD_IC_STATE: &str = "old_ic_state";
 pub const IC_REGISTRY_LOCAL_STORE: &str = "ic_registry_local_store";
 pub const CHECKPOINTS: &str = "checkpoints";
 pub const ADMIN: &str = "admin";

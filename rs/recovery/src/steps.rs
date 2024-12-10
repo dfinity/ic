@@ -10,7 +10,7 @@ use crate::{
     util::{block_on, parse_hex_str},
     Recovery, UploadMethod, ADMIN, CHECKPOINTS, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH,
     IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES,
-    NEW_IC_STATE, READONLY,
+    NEW_IC_STATE, OLD_IC_STATE, READONLY,
 };
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
 use ic_base_types::{CanisterId, NodeId, PrincipalId};
@@ -590,7 +590,7 @@ impl Step for UploadAndRestartStep {
         let upload_dir = format!("{}/{}", IC_DATA_PATH, NEW_IC_STATE);
         let ic_state_path = format!("{}/{}", IC_DATA_PATH, IC_STATE);
         let cmd_replace_state =
-            Self::get_state_replacement_command(ic_state_path, upload_dir.clone());
+            Self::get_state_replacement_command(ic_state_path.clone(), upload_dir.clone());
         let src = format!("{}/", self.data_src.display());
 
         // Decide: remote or local recovery
@@ -640,8 +640,21 @@ impl Step for UploadAndRestartStep {
             info!(self.logger, "Restarting replica...");
             ssh_helper.ssh(cmd_replace_state)?;
         } else {
-            // For local recoveries we simply `mv` state to the upload directory.
-            // No rsync is needed, and thus no checkpoint copying.
+            // For local recoveries we first backup the original state, and
+            // then simply `mv` state to the upload directory. No rsync is
+            // needed, and thus no checkpoint copying.
+            let backup_path = format!("{}/{}", self.work_dir.display(), OLD_IC_STATE);
+            info!(
+                self.logger,
+                "Backing up original state into {}...", backup_path
+            );
+            let mut cmd_backup_state = Command::new("sudo");
+            cmd_backup_state.arg("cp");
+            cmd_backup_state.arg("-r");
+            cmd_backup_state.arg(ic_state_path);
+            cmd_backup_state.arg(backup_path);
+            exec_cmd(&mut cmd_backup_state)?;
+
             info!(self.logger, "Moving state locally...");
             let mut mv_to_target = Command::new("sudo");
             mv_to_target.arg("mv");
