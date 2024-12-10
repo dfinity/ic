@@ -115,6 +115,21 @@ fn ic_xc_cketh_test(env: TestEnv) {
         ),
         minter_address
     );
+
+    let erc20_deposit_helper_contract_address = deploy_smart_contract(
+        &docker_host,
+        "ERC20DepositHelper.sol",
+        "CkErc20Deposit",
+        minter_address,
+    );
+    assert_eq!(
+        call_smart_contract(
+            &docker_host,
+            &erc20_deposit_helper_contract_address,
+            "getMinterAddress()(address)"
+        ),
+        minter_address
+    );
 }
 
 fn deploy_smart_contract(
