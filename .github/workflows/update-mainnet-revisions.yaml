@@ -31,5 +31,5 @@ jobs:
         run: |
           set -eEuxo pipefail
 
-          time bazel run --config=ci //ci/src/mainnet_revisions:mainnet_revisions
+          time bazel run --config=ci //ci/src/mainnet_revisions:mainnet_revisions --action_env=PUSH_TO_IC=${{ steps.app-token.outputs.token }}
         shell: bash
