@@ -50,7 +50,7 @@ Please feel free to reach out by leaving a comment in this link:https://forum.df
    │                                          │       get_events                                          │
    │                                          │<──────────────────────────────────────────────────────────│
    │                                          │                                                           │
-   │                                          │ReceivedEthOrErc20(0x, user, amount, principal, subaccount)│
+   │                                          │ReceivedEthOrErc20(`0x`, user, amount, principal, subaccount)│
    │                                          │──────────────────────────────────────────────────────────>│
    │                                          │                                                           │
    │                         mint (amount, principal, subaccount)                                         │
@@ -77,7 +77,7 @@ dfx identity get-principal
 .Address of the helper smart contract
 ====
 The address of the helper smart contract may change in the future when the minter is upgraded.
-Please verify the address of the helper contract **before** any important transfer by checking the address specified in the field `deposit_with_subaccount_helper_contract_address` in the response of `get_minter_info`, which can be queried as follows
+Please verify the address of the helper contract **before** any important transfer by comparing it to the address specified in the field `deposit_with_subaccount_helper_contract_address` in the response of `get_minter_info`, which can be queried as follows
 
 [source,shell]
 ----
@@ -110,7 +110,7 @@ Call the link:https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e
 
 . The amount of ETH being deposited.
 . The IC principal encoded as a `bytes32`.
-. The IC ledger subaccount (use `0x` for the default subaccount), which is a 32-byte array, encoded as an hexadecimal string and prefixed by `0x`. The IC principal together with the IC ledger subaccount uniquely identify an IC ledger account to which the amount of ckETH should be minted.
+. The IC ledger subaccount (use `0x` for the default subaccount), which is a 32-byte array, encoded as a hexadecimal string and prefixed by `0x`. The IC principal together with the IC ledger subaccount uniquely identify an IC ledger account to which the amount of ckETH should be minted.
 
 [WARNING]
 ====

@@ -164,7 +164,7 @@ The ERC-20 -> ckERC-20 flow involves the following steps:
 .. The ERC-20 smart contract address. This identifies the ERC-20 token being deposited.
 .. The amount of ERC-20 tokens being deposited.
 .. The IC principal encoded as a `bytes32`.
-.. The IC ledger subaccount (use `0x` for the default subaccount), which is a 32-byte array, encoded as an hexadecimal string and prefixed by `0x`. The IC principal together with the IC ledger subaccount uniquely identify an IC ledger account to which the amount of ckERC-20 should be minted.
+.. The IC ledger subaccount (use `0x` for the default subaccount), which is a 32-byte array, encoded as a hexadecimal string and prefixed by `0x`. The IC principal together with the IC ledger subaccount uniquely identify an IC ledger account to which the amount of ckERC-20 should be minted.
 . The helper smart contract does the following steps within the *same* Ethereum transaction
 .. Call `transferFrom` on the ERC-20 smart contract to transfer the given amount of ERC-20 tokens from the user’s address to the minter’s address. (This requires that the smart contract’s address was previously approved as in step 2).
 .. Emits the `ReceivedEthOrErc20(address,address,uint,bytes32,bytes32)` event
