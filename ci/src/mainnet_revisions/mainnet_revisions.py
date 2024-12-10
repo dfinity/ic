@@ -112,26 +112,13 @@ def main():
 
     ic_repo_push_token = os.environ.get("PUSH_TO_IC", "ENV_VAR_NOT_SET")
     repo = "dfinity/ic"
-    remote_url = f"https://oauth2:{ic_repo_push_token}@github.com/{repo}.git"
 
-    repo_root_dir = tempfile.TemporaryDirectory()
-    repo_root = pathlib.Path(repo_root_dir.name)
-    credentials_file = repo_root / ".git" / ".git_credentials"
+    repo_root = pathlib.Path(os.environ.get("BUILD_WORKING_DIRECTORY", "NOT_PRESENT"))
 
     if not repo_root.parent.exists():
-        os.makedirs(repo_root.parent)
-
-    # Since its always a new temp directory here its safe to blindly clone
-    subprocess.check_call(["git", "clone", "--depth=50", remote_url, repo_root])
+        raise Exception ("Expected dir %s to exist", repo_root.name)
 
     running_on_ci = os.environ.get("CI") or os.environ.get("GITHUB_ACTION")
-    if running_on_ci:
-        logging.info("Setting up git credentials for CI")
-        subprocess.check_call(["git", "config", "credential.helper", f"store --file {credentials_file}"])
-        with open(os.path.expanduser(credentials_file), "w+") as f:
-            f.write(f"{remote_url}\nusername=oauth2\npassword={ic_repo_push_token}\n")
-    else:
-        logging.info("Running locally, using default git credentials of the current user")
 
     branch = "ic-mainnet-revisions"
     if subprocess.call(["git", "checkout", branch], cwd=repo_root) == 0:
@@ -184,8 +171,6 @@ def main():
                 cwd=repo_root,
                 env=gh_env,
             )
-
-    repo_root_dir.cleanup()
 
 if __name__ == "__main__":
     main()
