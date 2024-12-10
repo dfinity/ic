@@ -1,4 +1,5 @@
-#!/bin/sh -eu
+#!/usr/bin/env bash
+set -ue
 ##
 ## Top-level script to run all execution and embedder benchmarks.
 ## Usage:
@@ -17,26 +18,31 @@ run() {
     local i="${1}"
     local name="${2}"
     local bench="${3}"
+    # File with best (min) results.
     local min_file="${4}"
     local filter="${5:-}"
 
-    repeated_file="${min_file%.*}.repeated"
-    repeated=$(cat "${repeated_file}" 2>/dev/null || echo "-1")
-    [ "${repeated}" -eq "-1" ] && quick="yes" || quick="no"
-    [ -f "${min_file}" ] || repeated="-1"
-    if [ "${repeated}" -lt "${i}" ]; then
-        echo "==> Running ${name} benchmarks ($((repeated + 1)) of ${REPEAT})"
+    # Counter file tracks the number of benchmark executions so far.
+    counter_file="${min_file%.*}.counter"
+    counter=$(cat "${counter_file}" 2>/dev/null || echo "-1")
+    # Quickly execute the benchmarks initially to identify any broken ones.
+    [ "${counter}" -eq "-1" ] && quick="yes" || quick="no"
+    [ -f "${min_file}" ] || counter="-1"
+    # Execute benchmark if needed.
+    if [ "${counter}" -lt "${i}" ]; then
+        echo "==> Running ${name} benchmarks ($((counter + 1)) of ${REPEAT})"
         QUICK="${quick}" BENCH="${bench}" MIN_FILE="${min_file}" FILTER="${filter}" \
             "${RUN_BENCHMARK}"
-        echo "$((repeated + 1))" >"${repeated_file}"
+        echo "$((counter + 1))" >"${counter_file}"
     fi
-    if [ "${repeated}" -lt "${i}" -o "${i}" = "${REPEAT}" ]; then
+    # Summarize results if the benchmark was executed or if it's the final iteration.
+    if [ "${counter}" -lt "${i}" -o "${i}" = "${REPEAT}" ]; then
         echo "==> Summarizing ${name} results:"
         NAME="${name}" MIN_FILE="${min_file}" "${SUMMARIZE_RESULTS}"
     fi
 }
 
-for i in $(seq 0 ${REPEAT}); do
+for i in $(seq 0 "${REPEAT}"); do
     run "${i}" "Embedders Compilation" \
         "//rs/embedders:compilation_bench" "EMBEDDERS_COMPILATION.min"
     run "${i}" "Embedders Heap" \

@@ -1,4 +1,5 @@
-#!/bin/sh -eu
+#!/usr/bin/env bash
+set -ue
 ##
 ## Helper script to summarize the results in the `MIN_FILE`
 ## comparing them to the `BASELINE_DIR` results.
@@ -43,8 +44,8 @@ baseline_commit=$(git rev-list --abbrev-commit -1 HEAD "${BASELINE_FILE}" | head
 min_commit=$(git rev-list --abbrev-commit -1 HEAD | head -c 9)
 diff=$((diff = (total_new - total_baseline) * 100 * 10 / total_baseline))
 diff=$(echo "${diff}" | awk '{ print $0^2 <= (2 * 10)^2 ? 0 : $0 / 10 }')
-total_new_s=$((total_new / 1000 / 1000))
-printf "    = ${baseline_commit}..${min_commit}: ${NAME}: total time: ${total_new_s} s "
+total_new_ms=$((total_new / 1000 / 1000))
+printf "    = ${baseline_commit}..${min_commit}: ${NAME}: total time: ${total_new_ms} ms "
 case "${diff}" in
     0) echo "(no change)" ;;
     -*) echo "(improved by ${diff}%)" ;;

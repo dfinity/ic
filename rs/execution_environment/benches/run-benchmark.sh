@@ -1,4 +1,5 @@
-#!/bin/sh -eu
+#!/usr/bin/env bash
+set -ue
 ##
 ## Helper script to run the specified `BENCH`
 ## and store the best (min) results in the `MIN_FILE`.
@@ -31,7 +32,7 @@ bash -c "set -o pipefail; \
     )
 
 if ! [ -s "${MIN_FILE}" ]; then
-    echo "    Setting a new baseline in ${MIN_FILE}"
+    echo "    Storing results in ${MIN_FILE}"
     cat "${LOG_FILE}" | rg "^test .* bench:" >"${MIN_FILE}" || echo "    No results (quick run?)"
 else
     echo "    Merging ${LOG_FILE} into ${MIN_FILE}"
@@ -46,7 +47,7 @@ else
         min_result=$(echo "${min_bench}" | sed -E 's/.*bench: +([0-9]+) ns.*/\1/')
 
         if [ -z "${min_result}" ] || [ "${new_result}" -lt "${min_result}" ]; then
-            echo "    - improved ${name} time: $((new_result / 1000)) ms"
+            echo "    - improved ${name} time: $((new_result / 1000)) µs"
             min_bench="${new_bench}"
         fi
         echo "${min_bench}" >>"${TMP_FILE}"
