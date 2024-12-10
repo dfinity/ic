@@ -10,8 +10,8 @@ thread_local! {
     pub static UPDATE_CALL_LATENCY: RefCell<BTreeMap<usize,LatencyHistogram>> = RefCell::default();
 }
 
-const LATENCY_HISTOGRAM_NUM_BUCKETS: usize = 11;
-const LATENCY_HISTOGRAM_BUCKET_SIZE_MS: u64 = 500;
+pub(crate) const LATENCY_HISTOGRAM_NUM_BUCKETS: usize = 11;
+pub(crate) const LATENCY_HISTOGRAM_BUCKET_SIZE_MS: u64 = 500;
 
 #[derive(Default, Clone, Copy)]
 pub struct LatencyHistogram {
@@ -21,22 +21,24 @@ pub struct LatencyHistogram {
 
 impl LatencyHistogram {
     pub fn observe_latency(&mut self, latency: Duration) {
-        let latency = latency.as_nanos() as u64;
-        let bucket_index = ((latency / (LATENCY_HISTOGRAM_BUCKET_SIZE_MS * 1_000)) as usize)
-            .min(LATENCY_HISTOGRAM_NUM_BUCKETS - 1);
+        let latency_ms = latency.as_millis() as u64;
+        // Subtract 1ms when determining the bucket to enforce that the upper bounds are inclusive
+        let bucket_index = (LATENCY_HISTOGRAM_NUM_BUCKETS - 1)
+            .min((latency_ms.saturating_sub(1) / LATENCY_HISTOGRAM_BUCKET_SIZE_MS) as usize);
         self.latency_buckets[bucket_index] += 1;
-        self.latency_sum += latency;
+        self.latency_sum += latency_ms;
     }
 
     /// Returns an iterator over the histogram buckets as tuples containing the bucket upper bound
     /// (inclusive), and the count of observed values within the bucket.
-    fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
         self.bucket_inclusive_upper_bounds()
             .zip(self.latency_buckets.iter().cloned())
             .map(|(k, v)| (k, v as f64))
     }
 
-    fn sum(&self) -> u64 {
+    /// Returns the sum of all observed latencies in milliseconds.
+    pub(crate) fn sum(&self) -> u64 {
         self.latency_sum
     }
 

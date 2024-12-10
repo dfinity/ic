@@ -426,11 +426,11 @@ fn test_no_new_utxos() {
     ckbtc
         .check_minter_metrics()
         .assert_contains_metric_matching(
-            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="0",le="\+Inf"\} 1 \d+"#,
+            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="0",le="(\d+|\+Inf)"\} 1 \d+"#,
         ) // exactly 1 match for an update call with no new UTXOs
-        .assert_contains_metric_matching(
-            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="1",le="\+Inf"\} 0 \d+"#,
-        ); // exactly 0 matches for an update call with new UTXOs
+        .assert_does_not_contain_metric_matching(
+            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="1",le="(\d+|\+Inf)"\} \d+ \d+"#,
+        ); // no metrics for update call with new UTXOs
 }
 
 #[test]
@@ -493,10 +493,10 @@ fn update_balance_should_return_correct_confirmations() {
     ckbtc
         .check_minter_metrics()
         .assert_contains_metric_matching(
-            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="0",le="\+Inf"\} 1 \d+"#,
+            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="0",le="(\d+|\+Inf)"\} 1 \d+"#,
         ) // exactly 1 match for an update call with no new UTXOs
         .assert_contains_metric_matching(
-            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="1",le="\+Inf"\} 1 \d+"#,
+            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="1",le="(\d+|\+Inf)"\} 1 \d+"#,
         ); // exactly 1 match for an update call with new UTXOs
 }
 
