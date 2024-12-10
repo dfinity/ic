@@ -17,7 +17,10 @@ use rate_limits_api::v1::{Action, RateLimitRule, RequestType as RequestTypeRule}
 use ratelimit::Ratelimiter;
 use tracing::warn;
 
-use super::fetcher::{CanisterConfigFetcher, CanisterFetcher, FetchesRules, FileFetcher};
+use super::fetcher::{
+    CanisterConfigFetcherQuery, CanisterConfigFetcherUpdate, CanisterFetcher, FetchesConfig,
+    FetchesRules, FileFetcher,
+};
 
 use crate::{
     core::Run,
@@ -58,17 +61,25 @@ pub struct Limiter {
 impl Limiter {
     pub fn new_from_file(path: PathBuf) -> Self {
         let fetcher = Arc::new(FileFetcher(path));
-
-        Self {
-            fetcher,
-            buckets: ArcSwap::new(Arc::new(vec![])),
-        }
+        Self::new_with_fetcher(fetcher)
     }
 
-    pub fn new_from_canister(canister_id: CanisterId, agent: Agent) -> Self {
-        let config_fetcher = CanisterConfigFetcher(agent, canister_id);
-        let fetcher = Arc::new(CanisterFetcher(Arc::new(config_fetcher)));
+    pub fn new_from_canister_query(canister_id: CanisterId, agent: Agent) -> Self {
+        let config_fetcher = CanisterConfigFetcherQuery(agent, canister_id);
+        Self::new_with_config_fetcher(Arc::new(config_fetcher))
+    }
 
+    pub fn new_from_canister_update(canister_id: CanisterId, agent: Agent) -> Self {
+        let config_fetcher = CanisterConfigFetcherUpdate(agent, canister_id);
+        Self::new_with_config_fetcher(Arc::new(config_fetcher))
+    }
+
+    fn new_with_config_fetcher(config_fetcher: Arc<dyn FetchesConfig>) -> Self {
+        let fetcher = Arc::new(CanisterFetcher(config_fetcher));
+        Self::new_with_fetcher(fetcher)
+    }
+
+    fn new_with_fetcher(fetcher: Arc<dyn FetchesRules>) -> Self {
         Self {
             fetcher,
             buckets: ArcSwap::new(Arc::new(vec![])),
