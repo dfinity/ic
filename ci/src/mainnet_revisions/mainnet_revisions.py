@@ -147,7 +147,7 @@ def main():
         logging.info("Creating/updating a MR that updates the saved NNS subnet revision")
         subprocess.check_call(["git", "add", SAVED_VERSIONS_PATH], cwd=repo_root)
         subprocess.check_call(
-            ["git", "commit", "-c", "user.name=CI Automation", "-c", "user.email=infra+github-automation@dfinity.org" ,"-m", "chore: Update Mainnet IC revisions file", SAVED_VERSIONS_PATH],
+            ["git", "-c", "user.name=CI Automation", "-c", "user.email=infra+github-automation@dfinity.org", "commit", "-m", "chore: Update Mainnet IC revisions file", SAVED_VERSIONS_PATH],
             cwd=repo_root,
         )
         subprocess.check_call(
