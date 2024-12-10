@@ -1,8 +1,8 @@
-# MAC Address
+# Deterministic IPs
 
 Each IC-OS node must have a unique but deterministic MAC address derived from its BMC MAC address, deployment type (mainnet vs testnet), and variant type (SetupOS, HostOS, GuestOS, BoundaryGuestOS). This MAC address is then utilized to generate the node’s network configuration. To solve this, a schema has been devised.
 
-## Schema
+## MAC Address Schema
 
 - **The first 8-bits:**
   - IPv4 interfaces: 4a

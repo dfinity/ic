@@ -2207,7 +2207,7 @@ dependencies = [
 
 [[package]]
 name = "cloner-canister-types"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "futures",
@@ -5271,7 +5271,7 @@ dependencies = [
 
 [[package]]
 name = "ic-adapter-metrics-server"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "futures",
  "ic-adapter-metrics-service",
@@ -5285,7 +5285,7 @@ dependencies = [
 
 [[package]]
 name = "ic-adapter-metrics-service"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "prost 0.13.3",
  "prost-build 0.13.3",
@@ -5464,7 +5464,7 @@ dependencies = [
 
 [[package]]
 name = "ic-artifact-downloader"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -5787,6 +5787,7 @@ dependencies = [
  "nix 0.24.3",
  "prometheus",
  "rand 0.8.5",
+ "rate-limits-api",
  "ratelimit",
  "rcgen",
  "regex",
@@ -6094,7 +6095,7 @@ dependencies = [
 
 [[package]]
 name = "ic-btc-validation"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "bitcoin 0.28.2",
  "csv",
@@ -6672,7 +6673,7 @@ dependencies = [
 
 [[package]]
 name = "ic-cketh-minter"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "askama",
  "assert_matches",
@@ -6854,7 +6855,7 @@ dependencies = [
 
 [[package]]
 name = "ic-consensus-manager"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -7095,7 +7096,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-iccsa"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-basic-sig-iccsa",
 ]
@@ -7109,7 +7110,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-internal-basic-sig-cose"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "hex",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -7618,7 +7619,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-node-key-generation"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
@@ -7674,7 +7675,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-prng"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-crypto-sha2",
  "ic-types",
@@ -8088,7 +8089,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-utils-ni-dkg"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-config",
@@ -8176,7 +8177,7 @@ dependencies = [
 
 [[package]]
 name = "ic-dashboard"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "tokio",
@@ -8424,7 +8425,7 @@ dependencies = [
 
 [[package]]
 name = "ic-exhaustive-derive"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8644,7 +8645,7 @@ dependencies = [
 
 [[package]]
 name = "ic-https-outcalls-adapter"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "async-stream",
  "byte-unit",
@@ -8684,7 +8685,7 @@ dependencies = [
 
 [[package]]
 name = "ic-https-outcalls-adapter-client"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "futures",
@@ -8749,7 +8750,7 @@ dependencies = [
 
 [[package]]
 name = "ic-https-outcalls-service"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "prost 0.13.3",
  "tonic",
@@ -9012,7 +9013,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc1-benchmark-worker"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -9182,7 +9183,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc1-tokens-u256"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
@@ -9200,7 +9201,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc1-tokens-u64"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
@@ -9447,7 +9448,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ledger-suite-orchestrator"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "askama",
  "assert_matches",
@@ -9659,7 +9660,7 @@ dependencies = [
 
 [[package]]
 name = "ic-memory-transport"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -10091,6 +10092,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-long-message"
+version = "0.0.1"
+dependencies = [
+ "candid",
+ "canister-test",
+ "dfn_candid",
+ "ic-cdk 0.16.0",
+ "ic-cdk-timers",
+ "ic-config",
+ "ic-nervous-system-temporary",
+ "ic-nns-test-utils",
+ "ic-registry-subnet-type",
+ "ic-state-machine-tests",
+ "ic-types",
+ "serde",
+]
+
+[[package]]
 name = "ic-nervous-system-proto"
 version = "0.9.0"
 dependencies = [
@@ -10298,6 +10317,7 @@ dependencies = [
  "ic-nervous-system-common-test-utils",
  "ic-nervous-system-governance",
  "ic-nervous-system-linear-map",
+ "ic-nervous-system-long-message",
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
@@ -10757,7 +10777,7 @@ dependencies = [
 
 [[package]]
 name = "ic-p2p-test-utils"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -10804,7 +10824,7 @@ dependencies = [
 
 [[package]]
 name = "ic-peer-manager"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-interfaces",
@@ -10932,7 +10952,7 @@ dependencies = [
 
 [[package]]
 name = "ic-quic-transport"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -10986,7 +11006,7 @@ dependencies = [
 
 [[package]]
 name = "ic-recovery"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "clap 4.5.20",
@@ -11262,7 +11282,7 @@ dependencies = [
 
 [[package]]
 name = "ic-registry-replicator"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "clap 4.5.20",
  "ic-config",
@@ -12549,7 +12569,7 @@ dependencies = [
 
 [[package]]
 name = "ic-state-sync-manager"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "axum",
  "bytes",
@@ -12606,7 +12626,7 @@ dependencies = [
 
 [[package]]
 name = "ic-subnet-splitting"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "clap 4.5.20",
  "hex",
@@ -13403,14 +13423,14 @@ version = "0.9.0"
 
 [[package]]
 name = "ic-validate-eq"
-version = "0.0.0"
+version = "0.9.0"
 dependencies = [
  "ic-validate-eq-derive",
 ]
 
 [[package]]
 name = "ic-validate-eq-derive"
-version = "0.0.0"
+version = "0.9.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -13971,7 +13991,7 @@ dependencies = [
 
 [[package]]
 name = "icp-config"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "clap 4.5.20",
  "eyre",
@@ -15320,7 +15340,7 @@ checksum = "4d873d7c67ce09b42110d801813efbc9364414e356be9935700d368351657487"
 
 [[package]]
 name = "local_key"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "pin-project-lite",
 ]
@@ -18177,10 +18197,15 @@ name = "rate-limits-api"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "humantime",
+ "ic-bn-lib",
+ "indoc",
  "regex",
  "serde",
  "serde_bytes",
  "serde_json",
+ "serde_regex",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -21029,7 +21054,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tla_instrumentation"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "candid",
  "local_key",
@@ -21041,7 +21066,7 @@ dependencies = [
 
 [[package]]
 name = "tla_instrumentation_proc_macros"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "proc-macro2",
  "quote",

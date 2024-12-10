@@ -172,7 +172,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
     let deployment_environment = deployment_environment.unwrap_or(DeploymentEnvironment::Testnet);
 
     let logging = Logging {
-        elasticsearch_hosts: elasticsearch_hosts.unwrap_or_else(|| "".to_string()),
+        elasticsearch_hosts,
         elasticsearch_tags,
     };
 
