@@ -1,12 +1,14 @@
 use super::*;
 use assert_matches::assert_matches;
 use candid_parser::utils::{service_equal, CandidSource};
-use ic_sns_governance::pb::v1::{
-    governance::{Version, Versions},
-    upgrade_journal_entry::{Event, UpgradeStepsRefreshed},
-    DisburseMaturityInProgress, Neuron, UpgradeJournal, UpgradeJournalEntry,
+use ic_sns_governance_api::pb::{
+    v1 as api,
+    v1::{
+        governance::{Version, Versions},
+        upgrade_journal_entry::{Event, UpgradeStepsRefreshed},
+        DisburseMaturityInProgress, Neuron, UpgradeJournal, UpgradeJournalEntry,
+    },
 };
-use ic_sns_governance_api::pb::v1 as api;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use std::collections::HashSet;
