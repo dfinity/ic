@@ -372,6 +372,7 @@ dependencies = [
  "candid",
  "ic-canister-client",
  "ic-types",
+ "prometheus",
  "rand 0.8.5",
  "rsa",
  "thiserror 2.0.3",
