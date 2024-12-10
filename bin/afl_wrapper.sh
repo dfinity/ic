@@ -94,6 +94,14 @@ function afl_env() {
         /usr/local/bin/afl-fuzz -t +20000 $@
 }
 
+# Usage: stderr_file 42
+# OUTPUT_DIR will always be set
+stderr_file() {
+    FILEPATH="$OUTPUT_DIR/stderr$1.txt"
+    touch "$FILEPATH"
+    echo $FILEPATH
+}
+
 # To run multiple fuzzers in parallel, use the AFL_PARALLEL env variable
 # export AFL_PARALLEL=4
 # Make sure you have enough cores, as each job occupies a core.
@@ -101,7 +109,7 @@ function afl_env() {
 if [[ ! -z "$AFL_PARALLEL" ]]; then
     trap cleanup EXIT
     # master fuzzer
-    afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P exploit -p explore -M fuzzer1 ${@:2} -- $1 </dev/null &>/dev/null &
+    AFL_DRIVER_STDERR_DUPLICATE_FILENAME=$(stderr_file 1) afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P exploit -p explore -M fuzzer1 ${@:2} -- $1 </dev/null &>/dev/null &
 
     for i in $(seq 2 $AFL_PARALLEL); do
         probability=$((100 * $i / $AFL_PARALLEL))
@@ -150,7 +158,7 @@ if [[ ! -z "$AFL_PARALLEL" ]]; then
             strategy="explore"
         fi
 
-        afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P $strategy -p $power_schedule -S fuzzer$i ${@:2} -- $1 </dev/null &>/dev/null &
+        AFL_DRIVER_STDERR_DUPLICATE_FILENAME=$(stderr_file $i) afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P $strategy -p $power_schedule -S fuzzer$i ${@:2} -- $1 </dev/null &>/dev/null &
     done
 
     watch -n 5 --color "afl-whatsup -s -d $OUTPUT_DIR"
@@ -158,5 +166,5 @@ else
     # if AFL_PARALLEL is not set
     # run a single instance
     # single instance will mimic the master fuzzer
-    afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P exploit -p explore ${@:2} -- $1
+    AFL_DRIVER_STDERR_DUPLICATE_FILENAME=$(stderr_file 1) afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P exploit -p explore ${@:2} -- $1
 fi
