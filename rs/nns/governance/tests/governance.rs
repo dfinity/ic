@@ -484,7 +484,7 @@ fn test_single_neuron_proposal_new() {
                                 ),
                             ),
                         ),
-                        GovernanceCachedMetricsChange::StillLosingVotingPowerNeuronSubsetMetrics(
+                        GovernanceCachedMetricsChange::DecliningVotingPowerNeuronSubsetMetrics(
                             comparable::OptionChange::Different(
                                 None,
                                 Some(
@@ -14196,7 +14196,7 @@ async fn test_metrics() {
         total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
         non_self_authenticating_controller_neuron_subset_metrics: None,
         public_neuron_subset_metrics: None,
-        still_losing_voting_power_neuron_subset_metrics: None,
+        declining_voting_power_neuron_subset_metrics: None,
         fully_lost_voting_power_neuron_subset_metrics: None,
     };
 
@@ -14217,7 +14217,7 @@ async fn test_metrics() {
             total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
             non_self_authenticating_controller_neuron_subset_metrics: None,
             public_neuron_subset_metrics: None,
-            still_losing_voting_power_neuron_subset_metrics: None,
+            declining_voting_power_neuron_subset_metrics: None,
             fully_lost_voting_power_neuron_subset_metrics: None,
 
             ..actual_metrics
@@ -14237,7 +14237,7 @@ async fn test_metrics() {
             total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
             non_self_authenticating_controller_neuron_subset_metrics: None,
             public_neuron_subset_metrics: None,
-            still_losing_voting_power_neuron_subset_metrics: None,
+            declining_voting_power_neuron_subset_metrics: None,
             fully_lost_voting_power_neuron_subset_metrics: None,
 
             ..actual_metrics
@@ -14294,7 +14294,7 @@ async fn test_metrics() {
         total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
         non_self_authenticating_controller_neuron_subset_metrics: None,
         public_neuron_subset_metrics: None,
-        still_losing_voting_power_neuron_subset_metrics: None,
+        declining_voting_power_neuron_subset_metrics: None,
         fully_lost_voting_power_neuron_subset_metrics: None,
     };
     let metrics = gov.get_metrics().expect("Error while querying metrics.");
@@ -14306,7 +14306,7 @@ async fn test_metrics() {
             total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
             non_self_authenticating_controller_neuron_subset_metrics: None,
             public_neuron_subset_metrics: None,
-            still_losing_voting_power_neuron_subset_metrics: None,
+            declining_voting_power_neuron_subset_metrics: None,
             fully_lost_voting_power_neuron_subset_metrics: None,
 
             ..metrics

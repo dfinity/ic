@@ -707,7 +707,7 @@ pub fn encode_metrics(
             total_staked_e8s_non_self_authenticating_controller: _,
             non_self_authenticating_controller_neuron_subset_metrics,
             public_neuron_subset_metrics,
-            still_losing_voting_power_neuron_subset_metrics,
+            declining_voting_power_neuron_subset_metrics,
             fully_lost_voting_power_neuron_subset_metrics,
         } = metrics;
 
@@ -943,11 +943,11 @@ pub fn encode_metrics(
             public_neuron_subset_metrics.encode("public", "have visibility set to public", w)?;
         }
 
-        if let Some(still_losing_voting_power_neuron_subset_metrics) =
-            still_losing_voting_power_neuron_subset_metrics
+        if let Some(declining_voting_power_neuron_subset_metrics) =
+            declining_voting_power_neuron_subset_metrics
         {
-            still_losing_voting_power_neuron_subset_metrics.encode(
-                "still_losing_voting_power",
+            declining_voting_power_neuron_subset_metrics.encode(
+                "declining_voting_power",
                 "have deciding voting power < potential voting power (but still positive) due \
                  to not refreshing recently enough.",
                 w,

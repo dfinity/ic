@@ -8133,7 +8133,7 @@ impl Governance {
             not_dissolving_neurons_e8s_buckets_ect,
             non_self_authenticating_controller_neuron_subset_metrics,
             public_neuron_subset_metrics,
-            still_losing_voting_power_neuron_subset_metrics,
+            declining_voting_power_neuron_subset_metrics,
             fully_lost_voting_power_neuron_subset_metrics,
         } = self.neuron_store.compute_neuron_metrics(
             neuron_minimum_stake_e8s,
@@ -8151,8 +8151,8 @@ impl Governance {
         );
         let public_neuron_subset_metrics =
             Some(NeuronSubsetMetricsPb::from(public_neuron_subset_metrics));
-        let still_losing_voting_power_neuron_subset_metrics = Some(NeuronSubsetMetricsPb::from(
-            still_losing_voting_power_neuron_subset_metrics,
+        let declining_voting_power_neuron_subset_metrics = Some(NeuronSubsetMetricsPb::from(
+            declining_voting_power_neuron_subset_metrics,
         ));
         let fully_lost_voting_power_neuron_subset_metrics = Some(NeuronSubsetMetricsPb::from(
             fully_lost_voting_power_neuron_subset_metrics,
@@ -8199,7 +8199,7 @@ impl Governance {
 
             non_self_authenticating_controller_neuron_subset_metrics,
             public_neuron_subset_metrics,
-            still_losing_voting_power_neuron_subset_metrics,
+            declining_voting_power_neuron_subset_metrics,
             fully_lost_voting_power_neuron_subset_metrics,
         }
     }

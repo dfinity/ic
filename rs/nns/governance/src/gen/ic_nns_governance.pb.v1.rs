@@ -3604,7 +3604,7 @@ pub mod governance {
         pub public_neuron_subset_metrics:
             ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
         #[prost(message, optional, tag = "40")]
-        pub still_losing_voting_power_neuron_subset_metrics:
+        pub declining_voting_power_neuron_subset_metrics:
             ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
         #[prost(message, optional, tag = "41")]
         pub fully_lost_voting_power_neuron_subset_metrics:

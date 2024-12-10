@@ -286,7 +286,7 @@ fn test_compute_metrics() {
         // Some garbage values, because this test was written before this feature.
         non_self_authenticating_controller_neuron_subset_metrics: NeuronSubsetMetrics::default(),
         public_neuron_subset_metrics: NeuronSubsetMetrics::default(),
-        still_losing_voting_power_neuron_subset_metrics: NeuronSubsetMetrics::default(),
+        declining_voting_power_neuron_subset_metrics: NeuronSubsetMetrics::default(),
         fully_lost_voting_power_neuron_subset_metrics: NeuronSubsetMetrics::default(),
     };
     assert_eq!(
@@ -295,7 +295,7 @@ fn test_compute_metrics() {
             non_self_authenticating_controller_neuron_subset_metrics: NeuronSubsetMetrics::default(
             ),
             public_neuron_subset_metrics: NeuronSubsetMetrics::default(),
-            still_losing_voting_power_neuron_subset_metrics: NeuronSubsetMetrics::default(),
+            declining_voting_power_neuron_subset_metrics: NeuronSubsetMetrics::default(),
             fully_lost_voting_power_neuron_subset_metrics: NeuronSubsetMetrics::default(),
 
             ..metrics
@@ -801,7 +801,7 @@ fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
     // Step 2: Call code under test.
 
     let NeuronMetrics {
-        still_losing_voting_power_neuron_subset_metrics,
+        declining_voting_power_neuron_subset_metrics,
         fully_lost_voting_power_neuron_subset_metrics,
         ..
     } = neuron_store.compute_neuron_metrics(E8, &VotingPowerEconomics::DEFAULT, now_seconds);
@@ -809,7 +809,7 @@ fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
     // Step 3: Inspect results.
 
     assert_eq!(
-        still_losing_voting_power_neuron_subset_metrics,
+        declining_voting_power_neuron_subset_metrics,
         NeuronSubsetMetrics {
             count: 1,
 
