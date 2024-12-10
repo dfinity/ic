@@ -24,7 +24,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 50
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Install the gh cli
