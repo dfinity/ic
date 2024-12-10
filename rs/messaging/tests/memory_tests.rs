@@ -497,7 +497,7 @@ impl Fixture {
         &self,
         canister: CanisterId,
     ) -> Result<BTreeMap<u32, CanisterRecord>, UserError> {
-        let dummy_msg = candid::Encode!(&0_u32).unwrap();
+        let dummy_msg = candid::Encode!().unwrap();
         let reply = self
             .get_env(&canister)
             .query(canister, "records", dummy_msg)?;
