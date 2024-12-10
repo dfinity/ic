@@ -80,7 +80,7 @@ function assemble_config_media() {
     if [[ "${use_nns_public_key,,}" == "true" ]]; then
         cmd+=(--nns_public_key "/boot/config/nns_public_key.pem")
     fi
-    if [ -f "$use_node_operator_private_key" ]; then
+    if [[ "${use_node_operator_private_key,,}" == "true" ]]; then
         cmd+=(--node_operator_private_key "/boot/config/node_operator_private_key.pem")
     fi
     if [[ "${use_ssh_authorized_keys,,}" == "true" ]]; then
