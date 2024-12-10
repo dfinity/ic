@@ -8090,6 +8090,13 @@ impl Governance {
 
     /// Iterate over all neurons and compute `GovernanceCachedMetrics`
     pub fn compute_cached_metrics(&self, now: u64, icp_supply: Tokens) -> GovernanceCachedMetrics {
+        let network_economics = self.economics();
+        let neuron_minimum_stake_e8s = network_economics.neuron_minimum_stake_e8s;
+        let voting_power_economics = network_economics
+            .voting_power_economics
+            .as_ref()
+            .unwrap_or(&VotingPowerEconomics::DEFAULT);
+
         let NeuronMetrics {
             dissolving_neurons_count,
             dissolving_neurons_e8s_buckets,
@@ -8126,9 +8133,11 @@ impl Governance {
             not_dissolving_neurons_e8s_buckets_ect,
             non_self_authenticating_controller_neuron_subset_metrics,
             public_neuron_subset_metrics,
-        } = self
-            .neuron_store
-            .compute_neuron_metrics(now, self.economics().neuron_minimum_stake_e8s);
+        } = self.neuron_store.compute_neuron_metrics(
+            neuron_minimum_stake_e8s,
+            voting_power_economics,
+            now,
+        );
 
         let total_staked_e8s_non_self_authenticating_controller =
             Some(non_self_authenticating_controller_neuron_subset_metrics.total_staked_e8s);
@@ -8202,12 +8211,16 @@ impl From<NeuronSubsetMetrics> for NeuronSubsetMetricsPb {
             total_staked_maturity_e8s_equivalent,
             total_maturity_e8s_equivalent,
             total_voting_power,
+            total_deciding_voting_power,
+            total_potential_voting_power,
 
             count_buckets,
             staked_e8s_buckets,
             staked_maturity_e8s_equivalent_buckets,
             maturity_e8s_equivalent_buckets,
             voting_power_buckets,
+            deciding_voting_power_buckets,
+            potential_voting_power_buckets,
         } = src;
 
         let count = Some(count);
@@ -8215,6 +8228,8 @@ impl From<NeuronSubsetMetrics> for NeuronSubsetMetricsPb {
         let total_staked_maturity_e8s_equivalent = Some(total_staked_maturity_e8s_equivalent);
         let total_maturity_e8s_equivalent = Some(total_maturity_e8s_equivalent);
         let total_voting_power = Some(total_voting_power);
+        let total_deciding_voting_power = Some(total_deciding_voting_power);
+        let total_potential_voting_power = Some(total_potential_voting_power);
 
         NeuronSubsetMetricsPb {
             count,
@@ -8222,12 +8237,16 @@ impl From<NeuronSubsetMetrics> for NeuronSubsetMetricsPb {
             total_staked_maturity_e8s_equivalent,
             total_maturity_e8s_equivalent,
             total_voting_power,
+            total_deciding_voting_power,
+            total_potential_voting_power,
 
             count_buckets,
             staked_e8s_buckets,
             staked_maturity_e8s_equivalent_buckets,
             maturity_e8s_equivalent_buckets,
             voting_power_buckets,
+            deciding_voting_power_buckets,
+            potential_voting_power_buckets,
         }
     }
 }
