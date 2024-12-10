@@ -110,7 +110,8 @@ pub async fn test_sns_deployment(
     nns_canisters_to_upgrade: Vec<CanisterId>, // should use constants from nns/constants to make this easy to track
     sns_canisters_to_upgrade: Vec<SnsCanisterType>,
 ) {
-    let pocket_ic = pocket_ic_helpers::pocket_ic_for_sns_tests_with_mainnet_versions().await;
+    let (pocket_ic, _initial_sns_version) =
+        pocket_ic_helpers::pocket_ic_for_sns_tests_with_mainnet_versions().await;
 
     let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
         .with_governance_parameters_neuron_minimum_dissolve_delay_to_vote(ONE_MONTH_SECONDS * 6)
