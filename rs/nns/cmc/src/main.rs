@@ -304,19 +304,21 @@ impl State {
 
     pub fn repeg_to_moores_law(&mut self, now: SystemTime) {
         let cycles_epoch = SystemTime::UNIX_EPOCH
-            .checked_add(std::time::Duration::from_secs(CYCLES_EPOCH_TIMESTAMP_SECONDS))
+            .checked_add(std::time::Duration::from_secs(
+                CYCLES_EPOCH_TIMESTAMP_SECONDS,
+            ))
             .unwrap();
         let years_since_cycles_epoch =
-            now.duration_since(cycles_epoch)
-                .unwrap()
-                .as_secs()
-                as f64
-                / (ONE_YEAR_SECONDS as f64);
+            now.duration_since(cycles_epoch).unwrap().as_secs() as f64 / (ONE_YEAR_SECONDS as f64);
         let inflation_factor = f64::powf(2.0, years_since_cycles_epoch / 2.0);
-        let new_cycles_limit_floor = Cycles::new((inflation_factor * CYCLES_BASELINE as f64) as u128);
+        let new_cycles_limit_floor =
+            Cycles::new((inflation_factor * CYCLES_BASELINE as f64) as u128);
         let new_cycles_limit = self.cycles_limit.max(new_cycles_limit_floor);
 
-        println!("[cycles] old vs new cycles_limit: {} vs. {}", self.cycles_limit, new_cycles_limit);
+        println!(
+            "[cycles] old vs new cycles_limit: {} vs. {}",
+            self.cycles_limit, new_cycles_limit
+        );
         self.cycles_limit = new_cycles_limit;
     }
 
@@ -3175,7 +3177,8 @@ mod tests {
             assert!(
                 state.cycles_limit > previous_cycles_limit,
                 "{} vs. {}",
-                state.cycles_limit, previous_cycles_limit,
+                state.cycles_limit,
+                previous_cycles_limit,
             );
 
             previous_cycles_limit = state.cycles_limit;
@@ -3188,19 +3191,13 @@ mod tests {
             .checked_add(Duration::from_secs(1733788800 + 2 * ONE_YEAR_SECONDS))
             .unwrap();
         state.repeg_to_moores_law(two_years_after_cycles_epoch);
-        assert_eq!(
-            state.cycles_limit,
-            Cycles::new((2.0 * 500e15) as u128),
-        );
+        assert_eq!(state.cycles_limit, Cycles::new((2.0 * 500e15) as u128),);
 
         // At 6 years, that's three doublings, so 8x.
         let six_years_after_cycles_epoch = SystemTime::UNIX_EPOCH
             .checked_add(Duration::from_secs(1733788800 + 6 * ONE_YEAR_SECONDS))
             .unwrap();
         state.repeg_to_moores_law(six_years_after_cycles_epoch);
-        assert_eq!(
-            state.cycles_limit,
-            Cycles::new((8.0 * 500e15) as u128),
-        );
+        assert_eq!(state.cycles_limit, Cycles::new((8.0 * 500e15) as u128),);
     }
 }
