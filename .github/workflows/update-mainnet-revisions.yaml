@@ -25,10 +25,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Update IC versions file
         run: |
           set -eEuxo pipefail
 
-          time bazel run //ci/src/mainnet_revisions:mainnet_revisions --action_env=PUSH_TO_IC=${{ steps.app-token.outputs.token }}
+          time bazel run //ci/src/mainnet_revisions:mainnet_revisions
         shell: bash
