@@ -2,8 +2,7 @@ use super::*;
 use assert_matches::assert_matches;
 use ic_crypto_standalone_sig_verifier::ed25519_public_key_to_der;
 use ic_crypto_test_utils_root_of_trust::MockRootOfTrustProvider;
-use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
-use ic_test_utilities_types::ids::{canister_test_id, message_test_id, node_test_id};
+use ic_test_utilities_types::ids::{canister_test_id, message_test_id};
 use ic_types::{
     messages::{Delegation, SignedDelegation, UserSignature},
     time::UNIX_EPOCH,
@@ -12,7 +11,6 @@ use std::time::Duration;
 
 #[test]
 fn plain_authentication_correct_signature_passes() {
-    let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
     let message_id = message_test_id(1);
 
     let pubkey_base64 = "SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=";
@@ -29,7 +27,6 @@ fn plain_authentication_correct_signature_passes() {
     };
 
     assert!(validate_signature(
-        &sig_verifier,
         &message_id,
         &user_signature,
         UNIX_EPOCH,
@@ -45,7 +42,6 @@ fn plain_authentication_correct_signature_passes() {
     };
 
     assert!(validate_signature(
-        &sig_verifier,
         &message_id,
         &user_signature,
         UNIX_EPOCH,
@@ -56,7 +52,6 @@ fn plain_authentication_correct_signature_passes() {
 
 #[test]
 fn plain_authentication_incorrect_signature_passes() {
-    let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
     let message_id = message_test_id(1);
 
     let pubkey_base64 = "SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=";
@@ -74,7 +69,6 @@ fn plain_authentication_incorrect_signature_passes() {
 
     assert_matches!(
         validate_signature(
-            &sig_verifier,
             &message_id,
             &user_signature,
             UNIX_EPOCH,
@@ -86,7 +80,6 @@ fn plain_authentication_incorrect_signature_passes() {
 
 #[test]
 fn plain_authentication_with_one_delegation() {
-    let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
     let message_id = message_test_id(1);
 
     // In this scenario we have two keypairs:
@@ -129,7 +122,6 @@ fn plain_authentication_with_one_delegation() {
 
     assert_eq!(
         validate_signature(
-            &sig_verifier,
             &message_id,
             &user_signature,
             UNIX_EPOCH,
@@ -142,7 +134,6 @@ fn plain_authentication_with_one_delegation() {
     // delegation would've expired.
     assert_matches!(
         validate_signature(
-            &sig_verifier,
             &message_id,
             &user_signature,
             UNIX_EPOCH + Duration::from_secs(1),
@@ -154,7 +145,6 @@ fn plain_authentication_with_one_delegation() {
 
 #[test]
 fn plain_authentication_with_one_scoped_delegation() {
-    let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
     let message_id = message_test_id(1);
 
     // In this scenario we have two keypairs:
@@ -197,7 +187,6 @@ fn plain_authentication_with_one_scoped_delegation() {
 
     assert_matches!(
         validate_signature(
-            &sig_verifier,
             &message_id,
             &user_signature,
             UNIX_EPOCH,
@@ -209,7 +198,6 @@ fn plain_authentication_with_one_scoped_delegation() {
 
 #[test]
 fn plain_authentication_with_multiple_delegations() {
-    let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
     let message_id = message_test_id(1);
 
     // In this scenario we have four keypairs:
@@ -298,7 +286,6 @@ fn plain_authentication_with_multiple_delegations() {
     // Should pass at time 0.
     assert_matches!(
         validate_signature(
-            &sig_verifier,
             &message_id,
             &user_signature,
             UNIX_EPOCH,
@@ -308,7 +295,6 @@ fn plain_authentication_with_multiple_delegations() {
     );
     assert_matches!(
         validate_signature(
-            &sig_verifier,
             &message_id,
             &user_signature,
             UNIX_EPOCH + Duration::from_secs(2),
@@ -320,7 +306,6 @@ fn plain_authentication_with_multiple_delegations() {
     // Should expire after > 2 seconds
     assert_matches!(
         validate_signature(
-            &sig_verifier,
             &message_id,
             &user_signature,
             UNIX_EPOCH + Duration::from_secs(3),
@@ -332,7 +317,6 @@ fn plain_authentication_with_multiple_delegations() {
 
 #[test]
 fn plain_authentication_with_malformed_delegation() {
-    let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
     let message_id = message_test_id(1);
 
     let pubkey_base64 = "SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=";
@@ -354,7 +338,6 @@ fn plain_authentication_with_malformed_delegation() {
 
     assert_matches!(
         validate_signature(
-            &sig_verifier,
             &message_id,
             &user_signature,
             UNIX_EPOCH,
@@ -366,7 +349,6 @@ fn plain_authentication_with_malformed_delegation() {
 
 #[test]
 fn plain_authentication_with_invalid_delegation() {
-    let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
     let message_id = message_test_id(1);
 
     // In this scenario we have two keypairs:
@@ -404,7 +386,6 @@ fn plain_authentication_with_invalid_delegation() {
 
     assert_matches!(
         validate_signature(
-            &sig_verifier,
             &message_id,
             &user_signature,
             UNIX_EPOCH,
@@ -416,7 +397,6 @@ fn plain_authentication_with_invalid_delegation() {
 
 #[test]
 fn validate_signature_webauthn() {
-    let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
     let message_id = message_test_id(13);
 
     let pubkey_hex = "305e300c060a2b0601040183b8430101034e00a5010203262001215820b487d183dc4806058eb31a29bedefd7bcca987b77a381a3684871d8449c183942258202a122cc711a80453678c3032de4b6fff2c86342e82d1e7adb617c4165c43ce5e";
@@ -432,7 +412,6 @@ fn validate_signature_webauthn() {
 
     assert_eq!(
         validate_signature(
-            &sig_verifier,
             &message_id,
             &user_signature,
             UNIX_EPOCH,
@@ -444,7 +423,6 @@ fn validate_signature_webauthn() {
 
 #[test]
 fn validate_signature_webauthn_with_delegations() {
-    let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
     let message_id = message_test_id(13);
 
     // PK with the following corresponding secret key:
@@ -469,7 +447,6 @@ fn validate_signature_webauthn_with_delegations() {
 
     assert_eq!(
         validate_signature(
-            &sig_verifier,
             &message_id,
             &user_signature,
             UNIX_EPOCH,

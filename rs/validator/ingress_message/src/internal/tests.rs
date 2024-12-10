@@ -110,9 +110,7 @@ mod root_of_trust {
         IngressMessageVerifier {
             root_of_trust_provider,
             time_source: TimeProvider::Constant(current_time),
-            validator: ic_validator::HttpRequestVerifierImpl::new(Arc::new(
-                StandaloneIngressSigVerifier,
-            )),
+            validator: ic_validator::HttpRequestVerifierImpl,
         }
     }
 }

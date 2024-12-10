@@ -5,7 +5,6 @@ use ic_types::crypto::{BasicSigOf, CanisterSigOf, CryptoResult, Signable, UserPu
 use ic_types::messages::{HttpRequest, HttpRequestContent};
 use ic_types::Time;
 use std::convert::Infallible;
-use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
@@ -82,9 +81,7 @@ impl IngressMessageVerifier<ConstantRootOfTrustProvider> {
         IngressMessageVerifier {
             root_of_trust_provider: ConstantRootOfTrustProvider::new(root_of_trust),
             time_source,
-            validator: ic_validator::HttpRequestVerifierImpl::new(Arc::new(
-                StandaloneIngressSigVerifier,
-            )),
+            validator: ic_validator::HttpRequestVerifierImpl,
         }
     }
 

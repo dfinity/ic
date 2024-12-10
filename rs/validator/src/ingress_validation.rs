@@ -1,12 +1,10 @@
 use crate::webauthn::validate_webauthn_sig;
-use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_standalone_sig_verifier::{user_public_key_from_bytes, KeyBytesContentType};
 use ic_crypto_tree_hash::Path;
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
 use ic_types::{
     crypto::{
-        threshold_sig::RootOfTrustProvider, AlgorithmId, CanisterSig, CanisterSigOf, CryptoError,
-        Signable, UserPublicKey,
+        threshold_sig::RootOfTrustProvider, AlgorithmId, CryptoError, Signable, UserPublicKey,
     },
     messages::{
         Authentication, Delegation, HasCanisterId, HttpRequest, HttpRequestContent, MessageId,
@@ -17,7 +15,6 @@ use ic_types::{
 use std::{
     collections::{BTreeSet, HashSet},
     convert::TryFrom,
-    sync::Arc,
 };
 use thiserror::Error;
 use AuthenticationError::*;
@@ -91,15 +88,7 @@ pub trait HttpRequestVerifier<C, R>: Send + Sync {
     ) -> Result<CanisterIdSet, RequestValidationError>;
 }
 
-pub struct HttpRequestVerifierImpl {
-    validator: Arc<dyn IngressSigVerifier + Send + Sync>,
-}
-
-impl HttpRequestVerifierImpl {
-    pub fn new(validator: Arc<dyn IngressSigVerifier + Send + Sync>) -> Self {
-        Self { validator }
-    }
-}
+pub struct HttpRequestVerifierImpl;
 
 impl<R> HttpRequestVerifier<SignedIngressContent, R> for HttpRequestVerifierImpl
 where
@@ -113,12 +102,8 @@ where
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
         validate_ingress_expiry(request, current_time)?;
-        let delegation_targets = validate_request_content(
-            request,
-            self.validator.as_ref(),
-            current_time,
-            root_of_trust_provider,
-        )?;
+        let delegation_targets =
+            validate_request_content(request, current_time, root_of_trust_provider)?;
         validate_request_target(request, &delegation_targets)?;
         Ok(delegation_targets)
     }
@@ -138,12 +123,8 @@ where
         if !request.sender().get().is_anonymous() {
             validate_ingress_expiry(request, current_time)?;
         }
-        let delegation_targets = validate_request_content(
-            request,
-            self.validator.as_ref(),
-            current_time,
-            root_of_trust_provider,
-        )?;
+        let delegation_targets =
+            validate_request_content(request, current_time, root_of_trust_provider)?;
         validate_request_target(request, &delegation_targets)?;
         Ok(delegation_targets)
     }
@@ -164,12 +145,7 @@ where
         if !request.sender().get().is_anonymous() {
             validate_ingress_expiry(request, current_time)?;
         }
-        validate_request_content(
-            request,
-            self.validator.as_ref(),
-            current_time,
-            root_of_trust_provider,
-        )
+        validate_request_content(request, current_time, root_of_trust_provider)
     }
 }
 
@@ -193,7 +169,6 @@ fn validate_paths_width_and_depth(paths: &[Path]) -> Result<(), RequestValidatio
 
 fn validate_request_content<C: HttpRequestContent, R: RootOfTrustProvider>(
     request: &HttpRequest<C>,
-    ingress_signature_verifier: &dyn IngressSigVerifier,
     current_time: Time,
     root_of_trust_provider: &R,
 ) -> Result<CanisterIdSet, RequestValidationError>
@@ -202,7 +177,6 @@ where
 {
     validate_nonce(request)?;
     validate_user_id_and_signature(
-        ingress_signature_verifier,
         &request.sender(),
         &request.id(),
         match request.authentication() {
@@ -508,7 +482,6 @@ fn validate_user_id(sender_pubkey: &[u8], id: &UserId) -> Result<(), RequestVali
 
 // Verifies that the message is properly signed.
 fn validate_signature<R: RootOfTrustProvider>(
-    validator: &dyn IngressSigVerifier,
     message_id: &MessageId,
     signature: &UserSignature,
     current_time: Time,
@@ -523,7 +496,6 @@ where
     let signed_delegations = signature.sender_delegation.as_ref().unwrap_or(&empty_vec);
 
     let (pubkey, targets) = validate_delegations(
-        validator,
         signed_delegations.as_slice(),
         signature.signer_pubkey.clone(),
         root_of_trust_provider,
@@ -556,15 +528,28 @@ where
             Ok(targets)
         }
         KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
-            let canister_sig = CanisterSigOf::from(CanisterSig(signature.signature.clone()));
             let root_of_trust = root_of_trust_provider
                 .root_of_trust()
                 .map_err(|e| InvalidCanisterSignature(e.to_string()))
                 .map_err(InvalidSignature)?;
-            validator
-                .verify_canister_sig(&canister_sig, message_id, &pk, &root_of_trust)
-                .map_err(|e| InvalidCanisterSignature(e.to_string()))
-                .map_err(InvalidSignature)?;
+
+            use ic_types::crypto::AlgorithmId;
+            if pk.algorithm_id != AlgorithmId::IcCanisterSignature {
+                return Err(InvalidSignature(
+                    AuthenticationError::InvalidCanisterSignature(format!(
+                        "Expected {:?}",
+                        AlgorithmId::IcCanisterSignature
+                    )),
+                ));
+            }
+            ic_crypto_standalone_sig_verifier::verify_canister_sig(
+                &message_id.as_signed_bytes(),
+                &signature.signature,
+                &pk.key,
+                &root_of_trust,
+            )
+            .map_err(|e| InvalidCanisterSignature(e.to_string()))
+            .map_err(InvalidSignature)?;
             Ok(targets)
         }
         KeyBytesContentType::RsaSha256PublicKeyDer => {
@@ -584,7 +569,6 @@ where
 // If the delegations are valid, returns the public key used to sign the
 // request as well as the set of canister IDs that the public key is valid for.
 fn validate_delegations<R: RootOfTrustProvider>(
-    validator: &dyn IngressSigVerifier,
     signed_delegations: &[SignedDelegation],
     mut pubkey: Vec<u8>,
     root_of_trust_provider: &R,
@@ -601,14 +585,9 @@ where
         let delegation = sd.delegation();
         let signature = sd.signature();
 
-        let new_targets = validate_delegation(
-            validator,
-            signature,
-            delegation,
-            &pubkey,
-            root_of_trust_provider,
-        )
-        .map_err(InvalidDelegation)?;
+        let new_targets =
+            validate_delegation(signature, delegation, &pubkey, root_of_trust_provider)
+                .map_err(InvalidDelegation)?;
         // Restrict the canister targets to the ones specified in the delegation.
         targets = targets.intersect(new_targets);
         pubkey = delegation.pubkey().to_vec();
@@ -654,7 +633,6 @@ fn ensure_delegations_does_not_contain_too_many_targets(
 }
 
 fn validate_delegation<R: RootOfTrustProvider>(
-    validator: &dyn IngressSigVerifier,
     signature: &[u8],
     delegation: &Delegation,
     pubkey: &[u8],
@@ -684,13 +662,24 @@ where
             .map_err(InvalidBasicSignature)?;
         }
         KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
-            let canister_sig = CanisterSigOf::from(CanisterSig(signature.to_vec()));
             let root_of_trust = root_of_trust_provider
                 .root_of_trust()
                 .map_err(|e| InvalidCanisterSignature(e.to_string()))?;
-            validator
-                .verify_canister_sig(&canister_sig, delegation, &pk, &root_of_trust)
-                .map_err(|e| InvalidCanisterSignature(e.to_string()))?;
+
+            use ic_types::crypto::AlgorithmId;
+            if pk.algorithm_id != AlgorithmId::IcCanisterSignature {
+                return Err(AuthenticationError::InvalidCanisterSignature(format!(
+                    "Expected {:?}",
+                    AlgorithmId::IcCanisterSignature
+                )));
+            }
+            ic_crypto_standalone_sig_verifier::verify_canister_sig(
+                &delegation.as_signed_bytes(),
+                signature,
+                &pk.key,
+                &root_of_trust,
+            )
+            .map_err(|e| InvalidCanisterSignature(e.to_string()))?;
         }
     }
 
@@ -704,7 +693,6 @@ where
 
 // Verifies correct user and signature.
 fn validate_user_id_and_signature<R: RootOfTrustProvider>(
-    ingress_signature_verifier: &dyn IngressSigVerifier,
     sender: &UserId,
     message_id: &MessageId,
     signature: Option<&UserSignature>,
@@ -727,13 +715,7 @@ where
             } else {
                 let sender_pubkey = &signature.signer_pubkey;
                 validate_user_id(sender_pubkey, sender).and_then(|()| {
-                    validate_signature(
-                        ingress_signature_verifier,
-                        message_id,
-                        signature,
-                        current_time,
-                        root_of_trust_provider,
-                    )
+                    validate_signature(message_id, signature, current_time, root_of_trust_provider)
                 })
             }
         }
