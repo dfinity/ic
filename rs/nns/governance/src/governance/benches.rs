@@ -546,7 +546,7 @@ fn list_neurons_benchmark() -> BenchResult {
     let request = ListNeurons {
         neuron_ids: vec![],
         include_neurons_readable_by_caller: true,
-        include_empty_neurons_readable_by_caller: Some(true),
+        include_empty_neurons_readable_by_caller: Some(false),
         include_public_neurons_in_full_neurons: None,
     };
 
