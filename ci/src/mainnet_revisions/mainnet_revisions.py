@@ -129,12 +129,8 @@ def main():
     else:
         logging.info("Running locally, using default git credentials of the current user")
 
-    if repo_root.exists():
-        subprocess.check_call(["git", "fetch", "origin", "--force"], cwd=repo_root)
-        subprocess.check_call(["git", "checkout", "master"], cwd=repo_root)
-        subprocess.check_call(["git", "reset", "--hard", "origin/master"], cwd=repo_root)
-    else:
-        subprocess.check_call(["git", "clone", "--depth=50", remote_url, repo_root])
+    # Since its always a new temp directory here its safe to blindly clone
+    subprocess.check_call(["git", "clone", "--depth=50", remote_url, repo_root])
 
     branch = "ic-mainnet-revisions"
     if subprocess.call(["git", "checkout", branch], cwd=repo_root) == 0:

@@ -4,10 +4,10 @@ package(default_visibility = ["//visibility:public"])
 
 py_binary(
     name = "mainnet_revisions",
-    srcs = ["mainnet_revisions.py"],
     testonly = True,
+    srcs = ["mainnet_revisions.py"],
     data = ["//rs/registry/admin:ic-admin"],
     env = {
-        "IC_ADMIN_PATH": "$(location //rs/registry/admin:ic-admin)"
-    }
+        "IC_ADMIN_PATH": "$(location //rs/registry/admin:ic-admin)",
+    },
 )
