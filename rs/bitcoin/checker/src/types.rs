@@ -132,9 +132,10 @@ impl fmt::Display for BtcNetwork {
     }
 }
 
-#[derive(CandidType, Debug, Deserialize, Serialize)]
+#[derive(CandidType, Debug, Default, Deserialize, Serialize)]
 pub struct UpgradeArg {
     pub check_mode: Option<CheckMode>,
+    pub num_subnet_nodes: Option<u16>,
 }
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]
