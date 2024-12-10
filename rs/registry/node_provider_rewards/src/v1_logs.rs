@@ -63,10 +63,7 @@ impl fmt::Display for Operation {
                 return write!(
                     f,
                     "{}",
-                    Operation::format_values(
-                        &values.iter().map(|v| round_dp_4(v)).collect_vec(),
-                        "sum"
-                    )
+                    Operation::format_values(&values.iter().map(round_dp_4).collect_vec(), "sum")
                 )
             }
             Operation::SumOps(operations) => {
@@ -76,10 +73,7 @@ impl fmt::Display for Operation {
                 return write!(
                     f,
                     "{}",
-                    Operation::format_values(
-                        &values.iter().map(|v| round_dp_4(v)).collect_vec(),
-                        "avg"
-                    )
+                    Operation::format_values(&values.iter().map(round_dp_4).collect_vec(), "avg")
                 )
             }
             Operation::Subtract(o1, o2) => ("-", o1, o2),
@@ -210,7 +204,7 @@ impl fmt::Display for LogEntry {
                 write!(
                     f,
                     "Idiosyncratic daily failure rates : {}",
-                    failure_rates.iter().map(|dec| dec).join(",")
+                    failure_rates.iter().join(",")
                 )
             }
             LogEntry::RewardsReductionPercent {

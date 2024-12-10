@@ -91,13 +91,7 @@ fn nodes_idiosyncratic_fr(
         for metrics in daily_metrics {
             let systematic_fr = subnets_systematic_fr
                 .get(&(metrics.subnet_assigned, metrics.ts))
-                .expect(
-                    format!(
-                        "Systematic failure rate not found for subnet: {} and ts: {}",
-                        metrics.subnet_assigned, metrics.ts
-                    )
-                    .as_str(),
-                );
+                .expect("Systematic failure rate not found");
             let fr = if metrics.failure_rate < *systematic_fr {
                 Decimal::ZERO
             } else {
@@ -159,7 +153,7 @@ fn node_provider_rewards(
             nodes_active_fr.push(avg_fr);
         }
     }
-    let unassigned_fr: Decimal = if nodes_active_fr.len() > 0 {
+    let unassigned_fr: Decimal = if !nodes_active_fr.is_empty() {
         logger.execute(
             "Unassigned days failure rate:",
             Operation::Avg(nodes_active_fr),
@@ -226,8 +220,7 @@ fn node_provider_rewards(
                 LogEntry::IdiosyncraticFailureRates(daily_idiosyncratic_fr.clone()),
             );
 
-            let multiplier_assigned = assigned_multiplier(logger, daily_idiosyncratic_fr);
-            multiplier_assigned
+            assigned_multiplier(logger, daily_idiosyncratic_fr)
         } else {
             logger.add_entry(LogLevel::Mid, LogEntry::NodeStatusUnassigned);
 
@@ -289,10 +282,10 @@ fn systematic_fr_per_subnet(
 
     let mut subnet_daily_failure_rates: HashMap<(PrincipalId, u64), Vec<Decimal>> = HashMap::new();
 
-    for (_, metrics) in daily_node_metrics {
+    for metrics in daily_node_metrics.values() {
         for metric in metrics {
             subnet_daily_failure_rates
-                .entry((metric.subnet_assigned.clone(), metric.ts))
+                .entry((metric.subnet_assigned, metric.ts))
                 .or_default()
                 .push(metric.failure_rate);
         }
