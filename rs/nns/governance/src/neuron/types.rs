@@ -1593,7 +1593,6 @@ pub struct NeuronBuilder {
     neuron_type: Option<i32>,
     visibility: Option<Visibility>,
     voting_power_refreshed_timestamp_seconds: u64,
-    recent_ballots_next_entry_index: Option<usize>,
 
     // Fields that don't exist when a neuron is first built. We allow them to be set in tests.
     #[cfg(test)]
