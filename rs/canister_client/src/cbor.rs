@@ -232,9 +232,6 @@ mod tests {
     use std::time::Duration;
     use tokio_test::assert_ok;
 
-    // The node id of the node that validates message signatures
-    const VALIDATOR_NODE_ID: u64 = 42;
-
     /// Create an HttpRequest with a non-anonymous user and then verify
     /// that `validate_message` manages to authenticate it.
     #[test]

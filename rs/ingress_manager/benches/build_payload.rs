@@ -99,9 +99,6 @@ where
     with_test_pool_config(|pool_config| {
         let metrics_registry = MetricsRegistry::new();
         const VALIDATOR_NODE_ID: u64 = 42;
-        let ingress_signature_crypto = Arc::new(temp_crypto_component_with_fake_registry(
-            node_test_id(VALIDATOR_NODE_ID),
-        ));
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
             node_test_id(VALIDATOR_NODE_ID),

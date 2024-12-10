@@ -1832,8 +1832,6 @@ mod tests {
                     }));
 
                 let metrics_registry = MetricsRegistry::new();
-                let ingress_signature_crypto =
-                    Arc::new(temp_crypto_component_with_fake_registry(node_id));
                 let cycles_account_manager = Arc::new(
                     CyclesAccountManagerBuilder::new()
                         .with_subnet_id(subnet_id)
