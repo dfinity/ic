@@ -266,7 +266,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 if let Some(method) = self.params.upload_method {
                     let node_ip = match method {
                         UploadMethod::Remote(ip) => ip,
-                        UploadMethod::Local => IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
+                        UploadMethod::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
                     };
                     Ok(Box::new(self.recovery.get_wait_for_cup_step(node_ip)))
                 } else {

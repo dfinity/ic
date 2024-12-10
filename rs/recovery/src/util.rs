@@ -10,8 +10,6 @@ use std::net::{IpAddr, Ipv6Addr};
 use std::{future::Future, path::Path, str::FromStr};
 use tokio::runtime::Runtime;
 
-pub const IPV6_LOOPBACK_ADDRESS: Ipv6Addr = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1);
-
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum UploadMethod {
     Local,
