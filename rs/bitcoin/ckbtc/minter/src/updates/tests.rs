@@ -203,6 +203,17 @@ mod update_balance {
             ],
         );
     }
+
+    #[tokio::test]
+    async fn should_observe_latency_metrics_with_no_new_utxos() {
+        // todo()
+    }
+
+    #[tokio::test]
+    async fn should_observe_latency_metrics_with_new_utxos() {
+        // todo()
+    }
+
     async fn test_suspended_utxo_last_time_checked_timestamp(utxo: Utxo, reason: SuspendedReason) {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();

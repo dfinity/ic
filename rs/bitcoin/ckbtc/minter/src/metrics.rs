@@ -1,26 +1,27 @@
 use crate::state;
 use std::cell::{Cell, RefCell};
+use std::collections::BTreeMap;
+use std::io::Error;
+use std::time::Duration;
 
 thread_local! {
     pub static GET_UTXOS_CLIENT_CALLS: Cell<u64> = Cell::default();
     pub static GET_UTXOS_MINTER_CALLS: Cell<u64> = Cell::default();
-    pub static UPDATE_CALL_LATENCY_WITH_NEW_UTXOS: RefCell<LatencyHistogram> = RefCell::default();
-    pub static UPDATE_CALL_LATENCY_WITH_NO_NEW_UTXOS: RefCell<LatencyHistogram> = RefCell::default();
+    pub static UPDATE_CALL_LATENCY: RefCell<BTreeMap<usize,LatencyHistogram>> = RefCell::default();
 }
 
 const LATENCY_HISTOGRAM_NUM_BUCKETS: usize = 11;
 const LATENCY_HISTOGRAM_BUCKET_SIZE_MS: u64 = 500;
-pub type Count = u64;
-pub type Latency = u64;
 
 #[derive(Default, Clone, Copy)]
 pub struct LatencyHistogram {
-    latency_buckets: [Count; LATENCY_HISTOGRAM_NUM_BUCKETS],
-    latency_sum: Latency,
+    latency_buckets: [u64; LATENCY_HISTOGRAM_NUM_BUCKETS],
+    latency_sum: u64,
 }
 
 impl LatencyHistogram {
-    pub fn observe_latency_ns(&mut self, latency: Latency) {
+    pub fn observe_latency(&mut self, latency: Duration) {
+        let latency = latency.as_nanos() as u64;
         let bucket_index = ((latency / (LATENCY_HISTOGRAM_BUCKET_SIZE_MS * 1_000)) as usize)
             .min(LATENCY_HISTOGRAM_NUM_BUCKETS - 1);
         self.latency_buckets[bucket_index] += 1;
@@ -45,6 +46,16 @@ impl LatencyHistogram {
             .map(|upper_bound| upper_bound as f64)
             .chain(std::iter::once(f64::INFINITY))
     }
+}
+
+pub fn observe_latency(num_utxos: usize, start_ns: u64, end_ns: u64) {
+    let duration = Duration::from_nanos(end_ns.saturating_sub(start_ns));
+    UPDATE_CALL_LATENCY.with_borrow_mut(|metrics| {
+        metrics
+            .entry(num_utxos)
+            .or_default()
+            .observe_latency(duration)
+    });
 }
 
 pub fn encode_metrics(
@@ -260,20 +271,15 @@ pub fn encode_metrics(
         "The latency of ckBTC minter `update_balance` calls in milliseconds.",
     )?;
 
-    histogram_vec = UPDATE_CALL_LATENCY_WITH_NEW_UTXOS.with_borrow(|histogram| {
-        histogram_vec.histogram(
-            &[("new_utxos", "yes")],
-            histogram.iter(),
-            histogram.sum() as f64,
-        )
-    })?;
-
-    UPDATE_CALL_LATENCY_WITH_NO_NEW_UTXOS.with_borrow(|histogram| {
-        histogram_vec.histogram(
-            &[("new_utxos", "no")],
-            histogram.iter(),
-            histogram.sum() as f64,
-        )
+    UPDATE_CALL_LATENCY.with_borrow(|histograms| -> Result<(), Error> {
+        for (num_new_utxos, histogram) in histograms {
+            histogram_vec = histogram_vec.histogram(
+                &[("num_new_utxos", &num_new_utxos.to_string())],
+                histogram.iter(),
+                histogram.sum() as f64,
+            )?;
+        }
+        Ok(())
     })?;
 
     Ok(())
