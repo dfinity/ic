@@ -113,6 +113,12 @@ pub struct NeuronInfo {
     /// after the UNIX epoch).
     #[prost(uint64, optional, tag = "13")]
     pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
+    /// See analogous field in Neuron.
+    #[prost(uint64, optional, tag = "14")]
+    pub deciding_voting_power: Option<u64>,
+    /// See analogous field in Neuron.
+    #[prost(uint64, optional, tag = "15")]
+    pub potential_voting_power: Option<u64>,
 }
 /// A transfer performed from some account to stake a new neuron.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -302,6 +308,63 @@ pub struct Neuron {
     /// Cf. \[Neuron::stop_dissolving\] and \[Neuron::start_dissolving\].
     #[prost(oneof = "neuron::DissolveState", tags = "9, 10")]
     pub dissolve_state: Option<neuron::DissolveState>,
+    /// The amount of "sway" this neuron has when voting on proposals.
+    ///
+    /// When a proposal is created, each eligible neuron gets a "blank" ballot. The
+    /// amount of voting power in that ballot is set to the neuron's deciding
+    /// voting power at the time of proposal creation. There are two ways that a
+    /// proposal can become decided:
+    ///
+    ///   1. Early: Either more than half of the total voting power in the ballots
+    ///   votes in favor (then the proposal is approved), or at least half of the
+    ///   votal voting power in the ballots votes against (then, the proposal is
+    ///   rejected).
+    ///
+    ///   2. The proposal's voting deadline is reached. At that point, if there is
+    ///   more voting power in favor than against, and at least 3% of the total
+    ///   voting power voted in favor, then the proposal is approved. Otherwise, it
+    ///   is rejected.
+    ///
+    /// If a neuron regularly refreshes its voting power, this has the same value
+    /// as potential_voting_power. Actions that cause a refresh are as follows:
+    ///
+    ///     1. voting directly (not via following)
+    ///     2. set following
+    ///     3. refresh voting power
+    ///
+    /// (All of these actions are performed via the manage_neuron method.)
+    ///
+    /// However, if a neuron has not refreshed in a "long" time, this will be less
+    /// than potential voting power. See VotingPowerEconomics. As a further result
+    /// of less deciding voting power, not only does it have less influence on the
+    /// outcome of proposals, the neuron receives less voting rewards (when it
+    /// votes indirectly via following).
+    ///
+    /// For details, see https://dashboard.internetcomputer.org/proposal/132411.
+    ///
+    /// Per NNS policy, this is opt. Nevertheless, it will never be null.
+    #[prost(uint64, optional, tag = "26")]
+    pub deciding_voting_power: Option<u64>,
+    /// The amount of "sway" this neuron can have if it refreshes its voting power
+    /// frequently enough.
+    ///
+    /// Unlike deciding_voting_power, this does NOT take refreshing into account.
+    /// Rather, this only takes three factors into account:
+    ///
+    ///     1. (Net) staked amount - This is the "base" of a neuron's voting power.
+    ///        This primarily consists of the neuron's ICP balance.
+    ///
+    ///     2. Age - Neurons with more age have more voting power (all else being
+    ///        equal).
+    ///
+    ///     3. Dissolve delay - Neurons with longer dissolve delay have more voting
+    ///        power (all else being equal). Neurons with a dissolve delay of less
+    ///        than six months are not eligible to vote. Therefore, such neurons
+    ///        are considered to have 0 voting power.
+    ///
+    /// Per NNS policy, this is opt. Nevertheless, it will never be null.
+    #[prost(uint64, optional, tag = "27")]
+    pub potential_voting_power: Option<u64>,
 }
 /// Nested message and enum types in `Neuron`.
 pub mod neuron {
@@ -647,6 +710,7 @@ pub mod proposal {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Empty {}
+
 /// All operations that modify the state of an existing neuron are
 /// represented by instances of `ManageNeuron`.
 ///
@@ -1017,6 +1081,8 @@ pub mod manage_neuron {
         #[prost(message, tag = "12")]
         NeuronId(NeuronId),
     }
+
+    // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -1047,6 +1113,7 @@ pub mod manage_neuron {
         StakeMaturity(StakeMaturity),
         #[prost(message, tag = "16")]
         RefreshVotingPower(RefreshVotingPower),
+        // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
     }
 }
 /// The response of the ManageNeuron command
@@ -1276,6 +1343,7 @@ pub struct ManageNeuronRequest {
     pub command: ::core::option::Option<ManageNeuronCommandRequest>,
 }
 
+// KEEP THIS IN SYNC WITH manage_neuron::Command!
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -1304,7 +1372,11 @@ pub enum ManageNeuronCommandRequest {
     Merge(manage_neuron::Merge),
     #[prost(message, tag = "15")]
     StakeMaturity(manage_neuron::StakeMaturity),
+    #[prost(message, tag = "16")]
+    RefreshVotingPower(manage_neuron::RefreshVotingPower),
+    // KEEP THIS IN SYNC WITH manage_neuron::Command!
 }
+
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[compare_default]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -1972,15 +2044,13 @@ pub struct ProposalInfo {
     #[prost(uint64, optional, tag = "21")]
     pub total_potential_voting_power: ::core::option::Option<u64>,
 }
+
 /// Network economics contains the parameters for several operations related
 /// to the economy of the network. When submitting a NetworkEconomics proposal
 /// default values (0) are considered unchanged, so a valid proposal only needs
 /// to set the parameters that it wishes to change.
 /// In other words, it's not possible to set any of the values of
 /// NetworkEconomics to 0.
-///
-/// NOTE: If adding a value to this proto, make sure there is a corresponding
-/// `if` in Governance::perform_action().
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -2034,7 +2104,47 @@ pub struct NetworkEconomics {
     /// Global Neurons' Fund participation thresholds.
     #[prost(message, optional, tag = "11")]
     pub neurons_fund_economics: Option<NeuronsFundEconomics>,
+
+    /// Parameters that affect the voting power of neurons.
+    #[prost(message, optional, tag = "12")]
+    pub voting_power_economics: ::core::option::Option<VotingPowerEconomics>,
 }
+
+/// Parameters that affect the voting power of neurons.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct VotingPowerEconomics {
+    /// If a neuron has not "refreshed" its voting power after this amount of time,
+    /// its deciding voting power starts decreasing linearly. See also
+    /// clear_following_after_seconds.
+    ///
+    /// For explanation of what "refresh" means in this context, see
+    /// <https://dashboard.internetcomputer.org/proposal/132411>
+    ///
+    /// Initially, set to 0.5 years. (The nominal length of a year is 365.25 days).
+    #[prost(uint64, optional, tag = "1")]
+    pub start_reducing_voting_power_after_seconds: ::core::option::Option<u64>,
+
+    /// After a neuron has experienced voting power reduction for this amount of
+    /// time, a couple of things happen:
+    ///
+    ///      1. Deciding voting power reaches 0.
+    ///
+    ///      2. Its following on topics other than NeuronManagement are cleared.
+    ///
+    /// Initially, set to 1/12 years.
+    #[prost(uint64, optional, tag = "2")]
+    pub clear_following_after_seconds: ::core::option::Option<u64>,
+}
+
 /// The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
 /// determine how much to contribute for a given direct participation amount. Note that the actual
 /// swap participation is in ICP, whereas these thresholds are specifid in XDR; the conversion rate

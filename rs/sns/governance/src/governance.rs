@@ -1,4 +1,3 @@
-use crate::cached_upgrade_steps::CachedUpgradeSteps;
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -21,8 +20,7 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, Command as InFlightCommand},
-                CachedUpgradeSteps as CachedUpgradeStepsPb, MaturityModulation,
-                NeuronInFlightCommand, PendingVersion, SnsMetadata, Version, Versions,
+                MaturityModulation, NeuronInFlightCommand, PendingVersion, SnsMetadata, Version,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -150,6 +148,8 @@ pub const MATURITY_DISBURSEMENT_DELAY_SECONDS: u64 = 7 * 24 * 3600;
 /// This is 7/8 of the maximum number of pages and corresponds to 3.5 GiB.
 pub const HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES: usize =
     MAX_HEAP_SIZE_IN_KIB / WASM32_PAGE_SIZE_IN_KIB * 7 / 8;
+
+pub const MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST: u64 = 100;
 
 /// Prefixes each log line for this canister.
 pub fn log_prefix() -> String {
@@ -433,20 +433,6 @@ impl GovernanceProto {
         result
     }
 
-    pub(crate) fn cached_upgrade_steps_or_err(&self) -> Result<CachedUpgradeSteps, String> {
-        let Some(cached_upgrade_steps) = &self.cached_upgrade_steps else {
-            return Err(
-                "Internal error: GovernanceProto.cached_upgrade_steps must be specified."
-                    .to_string(),
-            );
-        };
-
-        let cached_upgrade_steps = CachedUpgradeSteps::try_from(cached_upgrade_steps)
-            .map_err(|err| format!("Internal error: {}", err))?;
-
-        Ok(cached_upgrade_steps)
-    }
-
     pub fn deployed_version_or_err(&self) -> Result<Version, String> {
         if let Some(deployed_version) = &self.deployed_version {
             Ok(deployed_version.clone())
@@ -459,58 +445,6 @@ impl GovernanceProto {
     pub fn deployed_version_or_panic(&self) -> Version {
         self.deployed_version_or_err()
             .expect("GovernanceProto.deployed_version must be set.")
-    }
-
-    pub(crate) fn validate_new_target_version<V>(
-        &self,
-        new_target: Option<V>,
-    ) -> Result<
-        (
-            /* pending_upgrade_steps */ CachedUpgradeSteps,
-            /* valid_target_version */ Version,
-        ),
-        String,
-    >
-    where
-        Version: TryFrom<V>,
-        <Version as TryFrom<V>>::Error: ToString,
-    {
-        let deployed_version = self.deployed_version_or_err()?;
-
-        let cached_upgrade_steps = self.cached_upgrade_steps_or_err()?;
-
-        let upgrade_steps = cached_upgrade_steps.take_from(&deployed_version);
-        let upgrade_steps = match upgrade_steps {
-            Ok(upgrade_steps) if !upgrade_steps.is_empty() => upgrade_steps,
-            _ => {
-                return Err(format!(
-                    "The currently deployed SNS version is not in the cached_upgrade_steps. You may need to wait for the upgrade steps to be refreshed. \
-                    This shouldn't take more than {} seconds.", 
-                    UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS
-                ));
-            }
-        };
-
-        let new_target = if let Some(new_target) = new_target {
-            let new_target = Version::try_from(new_target).map_err(|err| err.to_string())?;
-            upgrade_steps.validate_new_target_version(&new_target)?;
-            new_target
-        } else {
-            upgrade_steps.last().clone()
-        };
-
-        if let Some(current_target_version) = &self.target_version {
-            let new_target_is_not_ahead_of_current_target =
-                upgrade_steps.contains_in_order(&new_target, current_target_version)?;
-            if new_target_is_not_ahead_of_current_target {
-                return Err(format!(
-                    "SNS target already set to {}.",
-                    current_target_version
-                ));
-            }
-        }
-
-        Ok((upgrade_steps, new_target))
     }
 
     /// Returns 0 if maturity modulation is disabled (per
@@ -3102,9 +3036,6 @@ impl Governance {
         &mut self,
         new_target: Version,
     ) -> Result<(), GovernanceError> {
-        // TODO[NNS1-3365]: Enable the AdvanceSnsTargetVersionFeature.
-        self.check_test_features_enabled();
-
         let (_, target_version) = self
             .proto
             .validate_new_target_version(Some(new_target))
@@ -4862,10 +4793,14 @@ impl Governance {
             }
 
             if self.should_refresh_cached_upgrade_steps() {
-                // We only want to refresh the cached_upgrade_steps every UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS
-                // seconds, so we first lock the refresh operation (which will automatically unlock after that interval)
-                self.temporarily_lock_refresh_cached_upgrade_steps();
-                self.refresh_cached_upgrade_steps().await;
+                match self.try_temporarily_lock_refresh_cached_upgrade_steps() {
+                    Err(err) => {
+                        log!(ERROR, "{}", err);
+                    }
+                    Ok(deployed_version) => {
+                        self.refresh_cached_upgrade_steps(deployed_version).await;
+                    }
+                }
             }
 
             self.initiate_upgrade_if_sns_behind_target_version().await;
@@ -4942,65 +4877,44 @@ impl Governance {
             return;
         };
 
+        let upgrade_steps = self.get_or_reset_upgrade_steps(&deployed_version);
+
         let Some(target_version) = self.proto.target_version.clone() else {
             return;
         };
 
-        let Some(CachedUpgradeStepsPb {
-            upgrade_steps: Some(Versions {
-                versions: upgrade_steps,
-            }),
-            ..
-        }) = &self.proto.cached_upgrade_steps
-        else {
-            log!(ERROR, "Cached upgrade steps set to None");
-            return;
-        };
-
-        // Find the current position of the deployed version
-        let Some(deployed_position) = upgrade_steps.iter().position(|v| v == &deployed_version)
-        else {
-            let human_readable = format!(
-                "Deployed version {} is not on the upgrade path {:?}",
-                deployed_version, upgrade_steps
-            );
-            log!(ERROR, "{}", human_readable);
-            self.invalidate_cached_upgrade_steps(human_readable);
-            return;
-        };
-
         // Find the target position of the target version
-        let Some(target_position) = upgrade_steps.iter().position(|v| v == &target_version) else {
+        if !upgrade_steps.contains(&target_version) {
             let message = format!(
                 "Target version {} is not on the upgrade path {:?}",
                 target_version, upgrade_steps
             );
-            log!(ERROR, "{}", message);
             self.invalidate_target_version(message);
             return;
         };
 
         // If the target version is the same as the deployed version, there is nothing to do.
-        if target_position == deployed_position {
+        if upgrade_steps.is_current(&target_version) {
             return;
         }
 
-        // If the target version is behind the deployed version, we should reset the target version, since otherwise
-        // people might be under the impression that we could go backwards.
-        if target_position < deployed_position {
-            let message = format!(
-                "Target version {} is behind the deployed version {}",
-                target_version, deployed_version
+        let Some(next_version) = upgrade_steps.next() else {
+            // This should be impossible because we already established that
+            // `target_version` ∈ `upgrade_steps` \ { `current_version` }.
+            // However, if this code path would be taken due to a bug, we would interpret
+            // the situation as "no more work."
+            log!(
+                ERROR,
+                "Taking a code path that was supposed to be impossible. \
+                 target_version = {:?}, upgrade_steps = {:?}.",
+                target_version,
+                upgrade_steps,
             );
-            self.invalidate_target_version(message);
             return;
-        }
-
-        // since `target_position > deployed_position`, `deployed_position + 1 < upgrade_steps.len()`
-        let next_version = upgrade_steps[deployed_position + 1].clone();
+        };
 
         let (canister_type, wasm_hash) =
-            match canister_type_and_wasm_hash_for_upgrade(&deployed_version, &next_version) {
+            match canister_type_and_wasm_hash_for_upgrade(&deployed_version, next_version) {
                 Ok((canister_type, wasm_hash)) => (canister_type, wasm_hash),
 
                 Err(err) => {
@@ -5033,25 +4947,6 @@ impl Governance {
             self.proto.pending_version = None;
             self.invalidate_target_version(message);
         }
-    }
-
-    /// Invalidates the cached upgrade steps.
-    fn invalidate_cached_upgrade_steps(&mut self, human_readable: String) {
-        self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset::new(
-            human_readable,
-            vec![],
-        ));
-        self.proto.cached_upgrade_steps = None;
-    }
-
-    /// Invalidates the cached upgrade steps.
-    fn invalidate_target_version(&mut self, reason: String) {
-        self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionReset::new(
-            self.proto.target_version.clone(),
-            None,
-            reason,
-        ));
-        self.proto.target_version = None;
     }
 
     fn release_upgrade_periodic_task_lock(&mut self) {
@@ -5639,10 +5534,7 @@ impl Governance {
                     self.env.now(),
                     running_version,
                 );
-                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset::new(
-                    message,
-                    vec![running_version.clone()],
-                ));
+                self.reset_cached_upgrade_steps(&running_version, message);
 
                 self.proto.deployed_version = Some(running_version.clone());
 
@@ -6041,3 +5933,6 @@ mod advance_target_sns_version_tests;
 
 #[cfg(test)]
 mod test_helpers;
+
+#[cfg(feature = "canbench-rs")]
+mod benches;

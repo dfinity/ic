@@ -71,7 +71,6 @@ pub enum CompletedSignature {
 /// Some of them can be used with the IDKG protocol, while others can not.
 /// The [`IDkgMasterPublicKeyId`] type indicates, that this key id can be used with a IDKG protocol.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgMasterPublicKeyId(MasterPublicKeyId);
 
 impl TryFrom<MasterPublicKeyId> for IDkgMasterPublicKeyId {
