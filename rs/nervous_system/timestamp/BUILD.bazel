@@ -24,7 +24,7 @@ LIB_SRCS = glob(
 rust_library(
     name = "timestamp",
     srcs = LIB_SRCS,
-    crate_name = "ic_nervous_system_string",
+    crate_name = "ic_nervous_system_timestamp",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.0.1",
     deps = DEPENDENCIES,
