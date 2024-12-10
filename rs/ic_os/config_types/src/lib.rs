@@ -186,10 +186,10 @@ impl FromStr for DeploymentEnvironment {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
 pub struct Logging {
     /// Space-separated lists of hosts to ship logs to.
-    pub elasticsearch_hosts: String,
+    pub elasticsearch_hosts: Option<String>,
     /// Space-separated list of tags to apply to exported log records.
     pub elasticsearch_tags: Option<String>,
 }
@@ -250,10 +250,7 @@ mod tests {
                 node_reward_type: Some(String::new()),
                 mgmt_mac: "00:00:00:00:00:00".parse()?,
                 deployment_environment: DeploymentEnvironment::Testnet,
-                logging: Logging {
-                    elasticsearch_hosts: String::new(),
-                    elasticsearch_tags: None,
-                },
+                logging: Logging::default(),
                 use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,

@@ -21,14 +21,14 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
+    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_btc_checker,
     install_ledger, install_minter, setup, subnet_sys,
     utils::{
         ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
         wait_for_finalization, wait_for_mempool_change, wait_for_signed_tx,
         wait_for_update_balance,
     },
-    BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL, TRANSFER_FEE,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, TEST_KEY_LOCAL, TRANSFER_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -57,14 +57,15 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
 
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
-        let mut kyt_canister = create_canister(&runtime).await;
+        let mut btc_checker_canister = create_canister(&runtime).await;
 
         let minting_user = minter_canister.canister_id().get();
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let kyt_id = install_kyt(&mut kyt_canister, &env).await;
+        let btc_checker_id = install_btc_checker(&mut btc_checker_canister, &env).await;
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
         // Here we put the max_time_in_queue to 0 because we want the minter to send request right away with no batching
-        let minter_id = install_minter(&mut minter_canister, ledger_id, &logger, 0, kyt_id).await;
+        let minter_id =
+            install_minter(&mut minter_canister, ledger_id, &logger, 0, btc_checker_id).await;
         let minter = Principal::from(minter_id.get());
         let ledger = Principal::from(ledger_id.get());
         activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
@@ -108,7 +109,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
 
         const BITCOIN_NETWORK_TRANSFER_FEE: u64 = 2820;
 
-        let transfer_amount = btc_to_wrap - BITCOIN_NETWORK_TRANSFER_FEE - KYT_FEE - TRANSFER_FEE;
+        let transfer_amount = btc_to_wrap - BITCOIN_NETWORK_TRANSFER_FEE - CHECK_FEE - TRANSFER_FEE;
 
         let transfer_result = ledger_agent
             .transfer(TransferArg {
