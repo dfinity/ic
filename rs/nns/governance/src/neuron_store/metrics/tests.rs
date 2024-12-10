@@ -813,11 +813,18 @@ fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
         NeuronSubsetMetrics {
             count: 1,
 
+            // Here, we are seeing a pretty good indicator that stale neuron
+            // detection is working, because there isn't a plausible alternative
+            // explanation for how these values can be achieved from the numbers
+            // that we fed into the stats compiler. Ofc, other fields also
+            // indicate that stale neuron detection works.
             total_staked_e8s: 200_000,
             total_staked_maturity_e8s_equivalent: 202_000,
             total_maturity_e8s_equivalent: 220_000,
 
-            // Voting power.
+            // Voting power. Here, we see "good" evidence that the "right"
+            // voting power (deciding vs. voting) is used to populate these
+            // fields.
             total_voting_power: stale_potential_voting_power,
             total_deciding_voting_power: stale_potential_voting_power / 2,
             total_potential_voting_power: stale_potential_voting_power,
@@ -845,6 +852,7 @@ fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
             voting_power_buckets: hashmap! {
                 16 => stale_potential_voting_power,
             },
+            // Ditto earlier comments about "right" voting power.
             deciding_voting_power_buckets: hashmap! {
                 16 => stale_potential_voting_power / 2,
             },
@@ -859,12 +867,16 @@ fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
         NeuronSubsetMetrics {
             count: 1,
 
+            // Similar to the previous assert, this indicates that expired
+            // neuron detection works.
             total_staked_e8s: 300_000_000,
             total_staked_maturity_e8s_equivalent: 303_000_000,
             total_maturity_e8s_equivalent: 330_000_000,
 
             // Voting power.
             total_voting_power: expired_potential_voting_power,
+            // Similar to the previous assert, this indicates that the "right"
+            // (deciding vs. potential) voting power is being used.
             total_deciding_voting_power: 0,
             total_potential_voting_power: expired_potential_voting_power,
 
@@ -891,6 +903,7 @@ fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
             voting_power_buckets: hashmap! {
                 16 => expired_potential_voting_power,
             },
+            // Ditto earlier comment about "right" voting power.
             deciding_voting_power_buckets: hashmap! {
                 16 => 0,
             },
