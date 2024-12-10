@@ -223,7 +223,12 @@ mod convert {
             (V::ExternRef(None), C(R::RefExtern(_))) => false,
             // `WastArgCore::RefExtern` always stores a `u32`.
             (V::ExternRef(Some(l)), C(R::RefExtern(Some(r)))) => {
-                let l = l.data(store).unwrap().downcast_ref::<u32>().unwrap();
+                let l = l
+                    .data(store)
+                    .expect("reference to be rooted")
+                    .unwrap()
+                    .downcast_ref::<u32>()
+                    .unwrap();
                 l == r
             }
             (V::ExternRef(l), C(R::RefNull(_))) => l.is_none(),
