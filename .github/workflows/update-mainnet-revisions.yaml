@@ -31,5 +31,5 @@ jobs:
         run: |
           set -eEuxo pipefail
 
-          time bazel run //ci/src/mainnet_revisions:mainnet_revisions
+          time bazel run --config=ci //ci/src/mainnet_revisions:mainnet_revisions
         shell: bash
