@@ -116,7 +116,6 @@ where
             ingress_hist_reader,
             ingress_pool.clone(),
             registry.clone(),
-            ingress_signature_crypto,
             metrics_registry,
             subnet_id,
             no_op_logger(),

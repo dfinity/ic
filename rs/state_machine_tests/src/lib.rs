@@ -1730,14 +1730,12 @@ impl StateMachine {
         let ingress_pool = Arc::new(RwLock::new(PocketIngressPool::new()));
         // We are not interested in ingress signature validation
         // and thus use `CryptoReturningOk`.
-        let ingress_verifier = Arc::new(CryptoReturningOk::default());
         let ingress_manager = Arc::new(IngressManager::new(
             time_source.clone(),
             consensus_time.clone(),
             Box::new(IngressHistoryReaderImpl::new(state_manager.clone())),
             ingress_pool.clone(),
             registry_client.clone(),
-            ingress_verifier.clone(),
             metrics_registry.clone(),
             subnet_id,
             replica_logger.clone(),

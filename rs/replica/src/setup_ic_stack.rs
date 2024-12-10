@@ -338,7 +338,6 @@ pub fn construct_ic_stack(
         Arc::clone(&crypto) as Arc<_>,
         registry,
         Arc::clone(&crypto) as Arc<_>,
-        Arc::clone(&crypto) as Arc<_>,
         node_id,
         subnet_id,
         root_subnet_id,

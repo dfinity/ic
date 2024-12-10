@@ -9,7 +9,6 @@ mod ingress_selector;
 #[cfg(test)]
 mod proptests;
 
-use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{
     consensus_pool::ConsensusTime, execution_environment::IngressHistoryReader,
@@ -158,7 +157,6 @@ impl IngressManager {
         ingress_hist_reader: Box<dyn IngressHistoryReader>,
         ingress_pool: Arc<RwLock<dyn IngressPool>>,
         registry_client: Arc<dyn RegistryClient>,
-        ingress_signature_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
         metrics_registry: MetricsRegistry,
         subnet_id: SubnetId,
         log: ReplicaLogger,
@@ -183,7 +181,7 @@ impl IngressManager {
 
             Arc::new(DisabledHttpRequestVerifier) as Arc<_>
         } else {
-            Arc::new(HttpRequestVerifierImpl::new(ingress_signature_crypto)) as Arc<_>
+            Arc::new(HttpRequestVerifierImpl) as Arc<_>
         };
         Self {
             time_source,
@@ -330,9 +328,6 @@ pub(crate) mod tests {
             with_test_pool_config(|mut pool_config| {
                 let metrics_registry = MetricsRegistry::new();
                 const VALIDATOR_NODE_ID: u64 = 42;
-                let ingress_signature_crypto = Arc::new(temp_crypto_component_with_fake_registry(
-                    node_test_id(VALIDATOR_NODE_ID),
-                ));
                 let cycles_account_manager = Arc::new(
                     CyclesAccountManagerBuilder::new()
                         .with_subnet_id(subnet_id)
@@ -356,7 +351,6 @@ pub(crate) mod tests {
                         ingress_hist_reader,
                         ingress_pool.clone(),
                         registry,
-                        ingress_signature_crypto,
                         metrics_registry,
                         subnet_id,
                         log,

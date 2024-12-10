@@ -288,7 +288,6 @@ pub fn start_server(
     query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
-    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     node_id: NodeId,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
@@ -326,7 +325,6 @@ pub fn start_server(
         node_id,
         subnet_id,
         registry_client.clone(),
-        ingress_verifier.clone(),
         ingress_filter.clone(),
         ingress_throttler.clone(),
         ingress_tx.clone(),
@@ -360,7 +358,6 @@ pub fn start_server(
         node_id,
         query_signer,
         registry_client.clone(),
-        ingress_verifier.clone(),
         delegation_from_nns.clone(),
         query_execution_service,
     )
@@ -372,7 +369,6 @@ pub fn start_server(
         log.clone(),
         state_reader.clone(),
         registry_client.clone(),
-        ingress_verifier,
         delegation_from_nns.clone(),
     )
     .with_health_status(health_status.clone())

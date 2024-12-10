@@ -276,7 +276,6 @@ fn start_consensus(
         ingress_history_reader,
         artifact_pools.ingress_pool.clone(),
         Arc::clone(&registry_client),
-        Arc::clone(&ingress_sig_crypto) as Arc<_>,
         metrics_registry.clone(),
         subnet_id,
         log.clone(),

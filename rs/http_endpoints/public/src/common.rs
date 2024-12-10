@@ -277,7 +277,6 @@ pub(crate) async fn get_latest_certified_state(
 }
 
 pub(crate) fn build_validator<T: HttpRequestContent>(
-    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     malicious_flags: Option<MaliciousFlags>,
 ) -> Arc<dyn HttpRequestVerifier<T, RegistryRootOfTrustProvider>>
 where
@@ -299,7 +298,7 @@ where
 
         Arc::new(DisabledHttpRequestVerifier) as Arc<_>
     } else {
-        Arc::new(HttpRequestVerifierImpl::new(ingress_verifier)) as Arc<_>
+        Arc::new(HttpRequestVerifierImpl) as Arc<_>
     }
 }
 

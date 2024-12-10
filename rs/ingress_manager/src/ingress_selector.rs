@@ -1853,7 +1853,6 @@ mod tests {
                     Box::new(ingress_hist_reader),
                     ingress_pool.clone(),
                     registry,
-                    ingress_signature_crypto,
                     metrics_registry,
                     subnet_id,
                     log,

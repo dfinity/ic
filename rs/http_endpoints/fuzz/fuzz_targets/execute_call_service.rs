@@ -195,13 +195,11 @@ fn new_call_service(
     #[allow(clippy::disallowed_methods)]
     let (ingress_tx, _ingress_rx) = tokio::sync::mpsc::unbounded_channel();
 
-    let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(1)));
     let call_handler = IngressValidatorBuilder::builder(
         log.clone(),
         node_test_id(1),
         subnet_test_id(1),
         Arc::clone(&mock_registry_client),
-        sig_verifier,
         Arc::new(Mutex::new(ingress_filter)),
         ingress_throttler,
         ingress_tx,
