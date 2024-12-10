@@ -1992,9 +1992,8 @@ fn test_check_upgrade_status_succeeds() {
                 event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
                     upgrade_journal_entry::UpgradeOutcome {
                         human_readable: Some(format!(
-                            "Upgrade marked successful at timestamp {} seconds, new {:?}",
-                            governance.env.now(),
-                            Version::from(next_version.clone()),
+                            "Upgrade marked successful at {}.",
+                            format_timestamp_for_humans(governance.env.now()),
                         )),
                         status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
                             Empty {}

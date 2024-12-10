@@ -96,6 +96,7 @@ use ic_nervous_system_governance::maturity_modulation::{
 };
 use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
+use ic_nervous_system_string::format_timestamp_for_humans;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
@@ -3014,9 +3015,9 @@ impl Governance {
 
             if self.env.now() > mark_failed_at_seconds {
                 let error = format!(
-                    "Upgrade marked as failed at timestamp {} seconds. \
-                    Did not find an upgrade in the ledger's canister_info recent_changes.",
-                    self.env.now(),
+                    "Upgrade marked as failed at {}. \
+                     Did not find an upgrade in the ledger's canister_info recent_changes.",
+                    format_timestamp_for_humans(self.env.now()),
                 );
                 return Err(GovernanceError::new_with_message(
                     ErrorType::External,
@@ -4750,10 +4751,11 @@ impl Governance {
             return false;
         }
         self.latest_gc_timestamp_seconds = self.env.now();
+
         log!(
             INFO,
-            "Running GC now at timestamp {} seconds",
-            self.latest_gc_timestamp_seconds
+            "Running GC now at {}.",
+            format_timestamp_for_humans(self.latest_gc_timestamp_seconds),
         );
 
         let max_proposals_to_keep_per_action = match self
@@ -5551,10 +5553,10 @@ impl Governance {
 
                 if self.env.now() > mark_failed_at {
                     let message = format!(
-                        "Upgrade marked as failed at {} seconds from unix epoch. \
+                        "Upgrade marked as failed at {}. \
                          Governance could not determine running version from root: {}. \
                          Setting upgrade to failed to unblock retry.",
-                        self.env.now(),
+                        format_timestamp_for_humans(self.env.now()),
                         err,
                     );
                     let status = upgrade_journal_entry::upgrade_outcome::Status::Timeout(Empty {});
@@ -5576,9 +5578,9 @@ impl Governance {
         let deployed_version = match self.proto.deployed_version.as_ref() {
             None => {
                 let message = format!(
-                    "SNS Governance had no recorded deployed_version at timestamp {} seconds. \
+                    "SNS Governance had no recorded deployed_version at {}. \
                      Setting it to currently running {:?} and attempting to proceed.",
-                    self.env.now(),
+                    format_timestamp_for_humans(self.env.now()),
                     running_version,
                 );
                 self.reset_cached_upgrade_steps(&running_version, message);
@@ -5598,9 +5600,9 @@ impl Governance {
         if let Err(errs) = expected_changes {
             if self.env.now() > mark_failed_at {
                 let message = format!(
-                    "Upgrade marked as failed at timestamp {} seconds. \
+                    "Upgrade marked as failed at {}. \
                      Running system version does not match expected state:\n- {:?}",
-                    self.env.now(),
+                    format_timestamp_for_humans(self.env.now()),
                     errs.join("- {}\n"),
                 );
                 let status = upgrade_journal_entry::upgrade_outcome::Status::Timeout(Empty {});
@@ -5614,9 +5616,8 @@ impl Governance {
         }
 
         let message = format!(
-            "Upgrade marked successful at timestamp {} seconds, new {:?}",
-            self.env.now(),
-            target_version,
+            "Upgrade marked successful at {}.",
+            format_timestamp_for_humans(self.env.now()),
         );
         let status = upgrade_journal_entry::upgrade_outcome::Status::Success(Empty {});
 
@@ -5703,10 +5704,11 @@ impl Governance {
 
         if now > pending_version.mark_failed_at_seconds {
             let message = format!(
-                "Upgrade marked as failed at {} seconds from UNIX epoch. \
+                "Upgrade marked as failed at {}. \
                 Governance upgrade was manually aborted by calling fail_stuck_upgrade_in_progress \
                 after mark_failed_at_seconds ({}). Setting upgrade to failed to unblock retry.",
-                now, pending_version.mark_failed_at_seconds
+                format_timestamp_for_humans(now),
+                pending_version.mark_failed_at_seconds,
             );
             let status = upgrade_journal_entry::upgrade_outcome::Status::ExternalFailure(Empty {});
 
