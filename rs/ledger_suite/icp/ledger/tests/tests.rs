@@ -1,4 +1,4 @@
-use candid::Principal;
+use candid::{CandidType, Principal};
 use candid::{Decode, Encode, Nat};
 use dfn_candid::CandidOne;
 use dfn_protobuf::ProtoBuf;
@@ -1718,6 +1718,69 @@ fn test_query_archived_blocks() {
 #[test]
 fn test_icrc21_standard() {
     ic_ledger_suite_state_machine_tests::test_icrc21_standard(ledger_wasm(), encode_init_args);
+}
+
+/// Arguments taken by the account_balance candid endpoint.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType)]
+struct AccountIdentifierBlob {
+    account: ByteBuf,
+}
+
+#[test]
+fn test_account_balance_non_standard_account_identifier_length() {
+    let env = StateMachine::new();
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister with the new init");
+
+    // account balance of account identifier of correct length
+    let p1 = PrincipalId::new_user_test_id(1);
+    let valid_account_identifier_bytes = ByteBuf::from(AccountIdentifier::from(p1.0).to_vec());
+    assert_eq!(valid_account_identifier_bytes.len(), 32);
+    let res = Decode!(
+        &env.execute_ingress(
+            canister_id,
+            "account_balance",
+            Encode!(&AccountIdentifierBlob {
+                account: valid_account_identifier_bytes
+            })
+            .unwrap()
+        )
+        .expect("failed to query blocks")
+        .bytes(),
+        Tokens
+    )
+    .expect("should successfully decode Tokens");
+    assert_eq!(res, Tokens::from_e8s(0));
+
+    // account balance of account identifier of zero length
+    match Decode!(
+        &env.execute_ingress(
+            canister_id,
+            "account_balance",
+            Encode!(&AccountIdentifierBlob {
+                account: ByteBuf::from(vec![0; 0])
+            })
+            .unwrap()
+        )
+        .expect("failed to query blocks")
+        .bytes(),
+        Tokens
+    ) {
+        Ok(tokens) => {
+            panic!("Expected an error, but got: {:?}", tokens);
+        }
+        Err(err) => {
+            println!("account_balance returned an error: {:?}", err);
+            assert!(err.to_string().contains(&hex::encode(
+                "Fail to decode argument 0 from table0 to record { account : blob }".as_bytes()
+            )));
+        }
+    }
 }
 
 mod metrics {
