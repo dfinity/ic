@@ -31,6 +31,7 @@ ALL_BINARIES = {
     "orchestrator": "//rs/orchestrator",
     "sandbox_launcher": "//rs/canister_sandbox:sandbox_launcher",
     "sns": "//rs/sns/cli:sns",
+    "sync-with-released-nervous-system-wasms": "//rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
     "sns-audit": "//rs/sns/audit:sns-audit",
     "state-tool": "//rs/state_tool:state-tool",
     "systemd-journal-gatewayd-shim": "//rs/boundary_node/systemd_journal_gatewayd_shim:systemd-journal-gatewayd-shim",

@@ -20397,7 +20397,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sync-with-released-nevous-system-wasms"
+name = "sync-with-released-nervous-system-wasms"
 version = "0.9.0"
 dependencies = [
  "anyhow",
