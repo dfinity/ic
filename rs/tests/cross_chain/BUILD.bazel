@@ -84,7 +84,7 @@ uvm_config_image(
     name = "cketh_uvm_config_image",
     srcs = [
         ":foundry.tar",
-        "//rs/ethereum/cketh/minter/EthDepositHelper.sol"
+        "//rs/ethereum/cketh/minter:helper_contracts"
     ],
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
