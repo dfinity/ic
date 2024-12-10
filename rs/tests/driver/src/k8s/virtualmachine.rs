@@ -19,7 +19,7 @@ metadata:
     tnet.internetcomputer.org/name: {tnet}
   name: {name}
 spec:
-  running: {running}
+  runStrategy: {running}
   template:
     metadata:
       annotations:
@@ -27,7 +27,6 @@ spec:
         "cni.projectcalico.org/ipAddrs": "[\"{ipv4}\", \"{ipv6}\"]"
       labels:
         kubevirt.io/vm: {name}
-        kubevirt.io/network: passt
     spec:
       domain:
         cpu:
@@ -46,7 +45,8 @@ spec:
                 bus: virtio
           interfaces:
           - name: default
-            passt: {}
+            binding:
+              name: passt
             ports:
             - port: 22
             - port: 8100
@@ -129,7 +129,6 @@ spec:
         "cni.projectcalico.org/ipAddrs": "[\"{ipv4}\", \"{ipv6}\"]"
       labels:
         kubevirt.io/vm: {name}
-        kubevirt.io/network: passt
     spec:
       domain:
         cpu:
@@ -149,7 +148,8 @@ spec:
               serial: "config"
           interfaces:
           - name: default
-            passt: {}
+            binding:
+              name: passt
             ports:
               - port: 22
               - port: 80
