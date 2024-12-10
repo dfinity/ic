@@ -414,15 +414,18 @@ pub(crate) async fn validate_and_render_action(
             validate_and_render_upgrade_sns_controlled_canister(upgrade)
         }
         Action::UpgradeSnsToNextVersion(upgrade_sns) => {
-            let current_version = governance_proto.deployed_version_or_panic();
-
-            validate_and_render_upgrade_sns_to_next_version(
-                upgrade_sns,
-                env,
-                root_canister_id,
-                current_version,
-            )
-            .await
+            match governance_proto.deployed_version_or_err() {
+                Ok(current_version) => {
+                    validate_and_render_upgrade_sns_to_next_version(
+                        upgrade_sns,
+                        env,
+                        root_canister_id,
+                        current_version,
+                    )
+                    .await
+                }
+                Err(err) => Err(err),
+            }
         }
         proposal::Action::AddGenericNervousSystemFunction(function_to_add) => {
             validate_and_render_add_generic_nervous_system_function(
