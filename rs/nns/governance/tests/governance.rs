@@ -484,6 +484,80 @@ fn test_single_neuron_proposal_new() {
                                 ),
                             ),
                         ),
+                        GovernanceCachedMetricsChange::StillLosingVotingPowerNeuronSubsetMetrics(
+                            comparable::OptionChange::Different(
+                                None,
+                                Some(
+                                    ic_nns_governance::pb::v1::governance::governance_cached_metrics::NeuronSubsetMetricsDesc {
+                                        count: Some(
+                                            0,
+                                        ),
+                                        total_staked_e8s: Some(
+                                            0,
+                                        ),
+                                        total_staked_maturity_e8s_equivalent: Some(
+                                            0,
+                                        ),
+                                        total_maturity_e8s_equivalent: Some(
+                                            0,
+                                        ),
+                                        total_voting_power: Some(
+                                            0,
+                                        ),
+                                        total_deciding_voting_power: Some(
+                                            0,
+                                        ),
+                                        total_potential_voting_power: Some(
+                                            0,
+                                        ),
+                                        count_buckets: btreemap! {},
+                                        staked_e8s_buckets: btreemap! {},
+                                        staked_maturity_e8s_equivalent_buckets: btreemap! {},
+                                        maturity_e8s_equivalent_buckets: btreemap! {},
+                                        voting_power_buckets: btreemap! {},
+                                        deciding_voting_power_buckets: btreemap! {},
+                                        potential_voting_power_buckets: btreemap! {},
+                                    },
+                                ),
+                            ),
+                        ),
+                        GovernanceCachedMetricsChange::DoneLosingVotingPowerNeuronSubsetMetrics(
+                            comparable::OptionChange::Different(
+                                None,
+                                Some(
+                                    ic_nns_governance::pb::v1::governance::governance_cached_metrics::NeuronSubsetMetricsDesc {
+                                        count: Some(
+                                            0,
+                                        ),
+                                        total_staked_e8s: Some(
+                                            0,
+                                        ),
+                                        total_staked_maturity_e8s_equivalent: Some(
+                                            0,
+                                        ),
+                                        total_maturity_e8s_equivalent: Some(
+                                            0,
+                                        ),
+                                        total_voting_power: Some(
+                                            0,
+                                        ),
+                                        total_deciding_voting_power: Some(
+                                            0,
+                                        ),
+                                        total_potential_voting_power: Some(
+                                            0,
+                                        ),
+                                        count_buckets: btreemap! {},
+                                        staked_e8s_buckets: btreemap! {},
+                                        staked_maturity_e8s_equivalent_buckets: btreemap! {},
+                                        maturity_e8s_equivalent_buckets: btreemap! {},
+                                        voting_power_buckets: btreemap! {},
+                                        deciding_voting_power_buckets: btreemap! {},
+                                        potential_voting_power_buckets: btreemap! {},
+                                    },
+                                ),
+                            ),
+                        ),
                     ]),
                 )),
                 GovernanceChange::CachedDailyMaturityModulationBasisPoints(
