@@ -38,7 +38,7 @@ use ic_nervous_system_common::{
     DEFAULT_TRANSFER_FEE, E8, ONE_DAY_SECONDS,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
-use ic_nervous_system_string::format_timestamp_for_humans;
+use ic_nervous_system_timestamp::format_timestamp_for_humans;
 use ic_protobuf::types::v1::CanisterInstallMode;
 use ic_sns_governance_proposals_amount_total_limit::{
     // TODO(NNS1-2982): Uncomment. mint_sns_tokens_7_day_total_upper_bound_tokens,
