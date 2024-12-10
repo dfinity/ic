@@ -245,9 +245,12 @@ impl DashboardTablePagination {
         let pages = (0..num_items)
             .step_by(page_size)
             .enumerate()
-            .map(|(index, offset)| DashboardTablePage { index, offset })
+            .map(|(index, offset)| DashboardTablePage {
+                index: index + 1,
+                offset,
+            })
             .collect();
-        let current_page_index = current_offset / page_size;
+        let current_page_index = current_offset / page_size + 1;
         Self {
             table_id: String::from(table_reference),
             page_offset_query_param: String::from(page_offset_query_param),
