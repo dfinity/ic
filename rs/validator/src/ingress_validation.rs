@@ -546,7 +546,7 @@ where
                 &message_id.as_signed_bytes(),
                 &signature.signature,
                 &pk.key,
-                &root_of_trust,
+                root_of_trust,
             )
             .map_err(|e| InvalidCanisterSignature(e.to_string()))
             .map_err(InvalidSignature)?;
@@ -677,7 +677,7 @@ where
                 &delegation.as_signed_bytes(),
                 signature,
                 &pk.key,
-                &root_of_trust,
+                root_of_trust,
             )
             .map_err(|e| InvalidCanisterSignature(e.to_string()))?;
         }
