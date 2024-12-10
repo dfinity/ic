@@ -221,7 +221,7 @@ impl PartialEq for Neuron {
                     voting_power_refreshed_timestamp_seconds,
 
                     visibility,
-                    recent_ballots_next_entry_index,
+                    recent_ballots_next_entry_index: *recent_ballots_next_entry_index,
                 }
             }
         }
