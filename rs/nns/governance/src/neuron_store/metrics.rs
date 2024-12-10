@@ -112,14 +112,14 @@ impl NeuronMetrics {
     ) {
         let seconds_since_voting_power_refreshed =
             now_seconds - neuron.voting_power_refreshed_timestamp_seconds();
-        let Some(seconds_losing_voting_power) =
-            seconds_since_voting_power_refreshed
+        let Some(seconds_losing_voting_power) = seconds_since_voting_power_refreshed
             .checked_sub(voting_power_economics.get_start_reducing_voting_power_after_seconds())
         else {
             return;
         };
 
-        if seconds_losing_voting_power < voting_power_economics.get_clear_following_after_seconds() {
+        if seconds_losing_voting_power < voting_power_economics.get_clear_following_after_seconds()
+        {
             self.still_losing_voting_power_neuron_subset_metrics
                 .increment(voting_power_economics, now_seconds, neuron);
         } else {

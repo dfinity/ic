@@ -756,7 +756,9 @@ fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
     .with_cached_neuron_stake_e8s(200_000)
     .with_staked_maturity_e8s_equivalent(202_000)
     .with_maturity_e8s_equivalent(220_000)
-    .with_voting_power_refreshed_timestamp_seconds(now_seconds - 6 * ONE_MONTH_SECONDS - ONE_MONTH_SECONDS / 2)
+    .with_voting_power_refreshed_timestamp_seconds(
+        now_seconds - 6 * ONE_MONTH_SECONDS - ONE_MONTH_SECONDS / 2,
+    )
     .build();
 
     let expired_neuron = NeuronBuilder::new(
@@ -775,8 +777,14 @@ fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
     let fresh_potential_voting_power = fresh_neuron.potential_voting_power(now_seconds);
     let stale_potential_voting_power = stale_neuron.potential_voting_power(now_seconds);
     let expired_potential_voting_power = expired_neuron.potential_voting_power(now_seconds);
-    assert_eq!(fresh_potential_voting_power, (total_bonus_multiplier * (100.0 + 101.0)) as u64);
-    assert_eq!(stale_potential_voting_power, (total_bonus_multiplier * (200.0e3 + 202.0e3)) as u64);
+    assert_eq!(
+        fresh_potential_voting_power,
+        (total_bonus_multiplier * (100.0 + 101.0)) as u64
+    );
+    assert_eq!(
+        stale_potential_voting_power,
+        (total_bonus_multiplier * (200.0e3 + 202.0e3)) as u64
+    );
     assert_eq!(
         expired_potential_voting_power,
         (total_bonus_multiplier * (300.0 + 303.0) * 1e6) as u64

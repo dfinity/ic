@@ -8151,10 +8151,12 @@ impl Governance {
         );
         let public_neuron_subset_metrics =
             Some(NeuronSubsetMetricsPb::from(public_neuron_subset_metrics));
-        let still_losing_voting_power_neuron_subset_metrics =
-            Some(NeuronSubsetMetricsPb::from(still_losing_voting_power_neuron_subset_metrics));
-        let done_losing_voting_power_neuron_subset_metrics =
-            Some(NeuronSubsetMetricsPb::from(done_losing_voting_power_neuron_subset_metrics));
+        let still_losing_voting_power_neuron_subset_metrics = Some(NeuronSubsetMetricsPb::from(
+            still_losing_voting_power_neuron_subset_metrics,
+        ));
+        let done_losing_voting_power_neuron_subset_metrics = Some(NeuronSubsetMetricsPb::from(
+            done_losing_voting_power_neuron_subset_metrics,
+        ));
 
         GovernanceCachedMetrics {
             timestamp_seconds: now,
