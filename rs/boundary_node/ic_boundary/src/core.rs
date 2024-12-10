@@ -238,13 +238,19 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let agent = if cli.rate_limiting.rate_limit_generic_canister_id.is_some()
         || cli.obs.obs_log_anonymization_canister_id.is_some()
     {
-        if cli.misc.crypto_config.is_none() || registry_client.is_none() {
-            return Err(anyhow!("Registry and crypto config are both required to use rate-limiting canister or anonymization salt canister"));
+        if cli.misc.crypto_config.is_some() && registry_client.is_none() {
+            return Err(anyhow!(
+                "IC-Agent: registry client is required when crypto-config is in use"
+            ));
+        }
+
+        if cli.misc.crypto_config.is_none() {
+            warn!("IC-Agent: crypto-config is missing, using anonymous principal");
         }
 
         let agent = create_agent(
-            cli.misc.crypto_config.clone().unwrap(),
-            registry_client.unwrap(),
+            cli.misc.crypto_config.clone(),
+            registry_client,
             cli.listen.listen_http_port_loopback,
         )
         .await?;
@@ -415,7 +421,10 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     runners.push(Box::new(metrics_runner));
 
     if let Some(v) = generic_limiter {
-        let runner = Box::new(WithThrottle(v, ThrottleParams::new(10 * SECOND)));
+        let runner = Box::new(WithThrottle(
+            v,
+            ThrottleParams::new(cli.rate_limiting.rate_limit_generic_poll_interval),
+        ));
         runners.push(runner);
     }
 
@@ -504,11 +513,10 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     Ok(())
 }
 
-async fn create_agent(
+async fn create_sender(
     crypto_config: CryptoConfig,
     registry_client: Arc<RegistryClientImpl>,
-    port: u16,
-) -> Result<Agent, Error> {
+) -> Result<Sender, Error> {
     let crypto_component = tokio::task::spawn_blocking({
         let registry_client = Arc::clone(&registry_client);
 
@@ -540,7 +548,7 @@ async fn create_agent(
     let node_id = derive_node_id(&public_key).expect("failed to derive node id");
 
     // Custom Signer
-    let sender = Sender::Node {
+    Ok(Sender::Node {
         pub_key: public_key.key_value,
         sign: Arc::new(move |msg: &MessageId| {
             #[allow(clippy::disallowed_methods)]
@@ -553,6 +561,18 @@ async fn create_agent(
 
             Ok(sig)
         }),
+    })
+}
+
+async fn create_agent(
+    crypto_config: Option<CryptoConfig>,
+    registry_client: Option<Arc<RegistryClientImpl>>,
+    port: u16,
+) -> Result<Agent, Error> {
+    let sender = if let (Some(v), Some(r)) = (crypto_config, registry_client) {
+        create_sender(v, r).await?
+    } else {
+        Sender::Anonymous
     };
 
     let agent = Agent::new(format!("http://127.0.0.1:{port}").parse()?, sender);
