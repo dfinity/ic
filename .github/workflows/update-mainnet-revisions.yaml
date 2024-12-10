@@ -7,12 +7,7 @@ on:
 
 jobs:
   update-ic-versions-file:
-    runs-on:
-      labels: dind-small
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+    runs-on: ubuntu-latest
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
@@ -27,14 +22,11 @@ jobs:
           fetch-depth: 1
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Install the gh cli
-        uses: ksivamuthu/actions-setup-gh-cli@v3
-        with:
-          version: 2.53.0
-
       - name: Update IC versions file
+        env:
+          PUSH_TO_IC: ${{ steps.app-token.outputs.token }}
         run: |
           set -eEuxo pipefail
 
-          PATH=$PATH:$(dirname $(which gh)) PUSH_TO_IC=${{ steps.app-token.outputs.token }} CI=1 time bazel run --config=ci //ci/src/mainnet_revisions:mainnet_revisions
+          time python ci/src/mainnet_revisions/mainnet_revisions.py
         shell: bash
