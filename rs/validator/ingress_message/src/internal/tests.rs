@@ -1,7 +1,5 @@
 mod root_of_trust {
-    use crate::internal::{
-        nns_root_public_key, ConstantRootOfTrustProvider,
-    };
+    use crate::internal::{nns_root_public_key, ConstantRootOfTrustProvider};
     use crate::AuthenticationError::InvalidCanisterSignature;
     use crate::{
         HttpRequestVerifier, IngressMessageVerifier, RequestValidationError, TimeProvider,
