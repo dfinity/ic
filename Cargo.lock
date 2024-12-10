@@ -8506,7 +8506,6 @@ dependencies = [
  "ic-certification 0.9.0",
  "ic-certification-test-utils",
  "ic-config",
- "ic-crypto-interfaces-sig-verification",
  "ic-crypto-temp-crypto",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
