@@ -3,6 +3,7 @@ name: Update IC versions file
 on:
   schedule:
     - cron: "10 * * * *"
+  push:
   workflow_dispatch:
 
 jobs:
