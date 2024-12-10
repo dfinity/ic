@@ -2,7 +2,6 @@
 import argparse
 import json
 import logging
-import os
 import pathlib
 import subprocess
 import sys
@@ -14,6 +13,7 @@ SAVED_VERSIONS_PATH = "testnet/mainnet_revisions.json"
 nns_subnet_id = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
 app_subnet_id = "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"
 PUBLIC_DASHBOARD_API = "https://ic-api.internetcomputer.org"
+
 
 def get_saved_versions(repo_root: pathlib.Path):
     """
@@ -61,25 +61,23 @@ def get_saved_app_subnet_version(repo_root: pathlib.Path):
     saved_versions = get_saved_versions(repo_root=repo_root)
     return saved_versions.get("subnets", {}).get(app_subnet_id, "")
 
+
 def get_subnet_replica_version(subnet_id: str) -> str:
     req = urllib.request.Request(
-        url=f"{PUBLIC_DASHBOARD_API}/api/v3/subnets/{subnet_id}",
-        headers={
-            "user-agent": "python"
-        }
+        url=f"{PUBLIC_DASHBOARD_API}/api/v3/subnets/{subnet_id}", headers={"user-agent": "python"}
     )
 
-    with urllib.request.urlopen(req, timeout = 30) as request:
+    with urllib.request.urlopen(req, timeout=30) as request:
         replica_versions = json.loads(request.read().decode())["replica_versions"]
-        latest_replica_version = sorted(replica_versions, key=lambda x: x["executed_timestamp_seconds"])[-1]["replica_version_id"]
+        latest_replica_version = sorted(replica_versions, key=lambda x: x["executed_timestamp_seconds"])[-1][
+            "replica_version_id"
+        ]
         return latest_replica_version
 
+
 def get_repo_root() -> str:
-    return subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        text=True,
-        stdout=subprocess.PIPE
-    ).stdout.strip()
+    return subprocess.run(["git", "rev-parse", "--show-toplevel"], text=True, stdout=subprocess.PIPE).stdout.strip()
+
 
 def main():
     """Do the main work."""
@@ -113,17 +111,12 @@ def main():
     repo_root = pathlib.Path(get_repo_root())
 
     if not repo_root.parent.exists():
-        raise Exception ("Expected dir %s to exist", repo_root.name)
+        raise Exception("Expected dir %s to exist", repo_root.name)
 
     branch = "ic-mainnet-revisions"
     subprocess.call(["git", "fetch", "origin", "master:master"], cwd=repo_root)
 
-    result = subprocess.run(
-        ["git", "status", "--porcelain"],
-            stdout=subprocess.PIPE,
-            text=True,
-            check=True
-        )
+    result = subprocess.run(["git", "status", "--porcelain"], stdout=subprocess.PIPE, text=True, check=True)
     if result.stdout.strip():
         logging.error("Found uncommited work! Commit and then proceed.")
         exit(2)
@@ -146,13 +139,20 @@ def main():
         logging.info("Creating/updating a MR that updates the saved NNS subnet revision")
         subprocess.check_call(["git", "add", SAVED_VERSIONS_PATH], cwd=repo_root)
         subprocess.check_call(
-            ["git", "-c", "user.name=CI Automation", "-c", "user.email=infra+github-automation@dfinity.org", "commit", "-m", "chore: Update Mainnet IC revisions file", SAVED_VERSIONS_PATH],
+            [
+                "git",
+                "-c",
+                "user.name=CI Automation",
+                "-c",
+                "user.email=infra+github-automation@dfinity.org",
+                "commit",
+                "-m",
+                "chore: Update Mainnet IC revisions file",
+                SAVED_VERSIONS_PATH,
+            ],
             cwd=repo_root,
         )
-        subprocess.check_call(
-            ["git", "push", "origin", branch, "-f"],
-            cwd=repo_root
-        )
+        subprocess.check_call(["git", "push", "origin", branch, "-f"], cwd=repo_root)
 
         if not subprocess.check_output(
             ["gh", "pr", "list", "--head", branch, "--repo", repo],
@@ -171,6 +171,7 @@ def main():
                 ],
                 cwd=repo_root,
             )
+
 
 if __name__ == "__main__":
     main()
