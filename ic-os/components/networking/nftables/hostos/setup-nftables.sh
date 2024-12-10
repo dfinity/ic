@@ -17,7 +17,7 @@ EOF
 }
 
 function read_config_variables() {
-    ipv6_prefix=$(get_config_value '.network_settings.prefix.')
+    ipv6_prefix=$(get_config_value '.network_settings.ipv6_config.Deterministic.prefix')
     IPV6_PREFIX="${ipv6_prefix:+${ipv6_prefix}::/64}" # Add suffix to prefix if found
     IPV6_PREFIX="${IPV6_PREFIX:-::1/128}"             # Default to loopback for easy templating
 }
