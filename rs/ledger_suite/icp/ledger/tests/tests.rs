@@ -1720,6 +1720,45 @@ fn test_icrc21_standard() {
     ic_ledger_suite_state_machine_tests::test_icrc21_standard(ledger_wasm(), encode_init_args);
 }
 
+#[test]
+fn test_query_blocks_large_length() {
+    let env = StateMachine::new();
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(ledger_wasm(), Encode!(&payload).unwrap(), None)
+        .expect("Unable to install the Ledger canister with the new init");
+
+    // query_blocks
+    match Decode!(
+        &env.execute_ingress(
+            canister_id,
+            "query_blocks",
+            Encode!(&GetBlocksArgs {
+                start: 0,
+                length: 10_000_000_000
+            })
+            .unwrap()
+        )
+        .expect("failed to query blocks")
+        .bytes(),
+        QueryBlocksResponse
+    ) {
+        Ok(query_blocks_response) => {
+            panic!("Expected an error, but got: {:?}", query_blocks_response);
+        }
+        Err(err) => {
+            println!("query_blocks returned an error: {:?}", err);
+            assert!(err.to_string().contains(&hex::encode(
+                "Fail to decode argument 0 from table0 to record { start : nat64; length : nat64 }"
+                    .as_bytes()
+            )));
+        }
+    }
+}
+
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;
