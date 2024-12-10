@@ -6,13 +6,14 @@ import os
 import pathlib
 import subprocess
 import sys
-import tempfile
+import urllib.request
 
 # from pylib.ic_deployment import IcDeployment
 
 SAVED_VERSIONS_PATH = "testnet/mainnet_revisions.json"
 nns_subnet_id = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
 app_subnet_id = "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"
+PUBLIC_DASHBOARD_API = "https://ic-api.internetcomputer.org"
 
 def get_saved_versions(repo_root: pathlib.Path):
     """
@@ -61,20 +62,17 @@ def get_saved_app_subnet_version(repo_root: pathlib.Path):
     return saved_versions.get("subnets", {}).get(app_subnet_id, "")
 
 def get_subnet_replica_version(subnet_id: str) -> str:
-    ic_admin_path = os.getenv("IC_ADMIN_PATH", "ic-admin")
-    output = subprocess.run(
-        [ic_admin_path, "--nns-urls", "https://ic0.app" ,"get-subnet", subnet_id],
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
+    req = urllib.request.Request(
+        url=f"{PUBLIC_DASHBOARD_API}/api/v3/subnets/{subnet_id}",
+        headers={
+            "user-agent": "python"
+        }
     )
 
-    if output.returncode != 0:
-        print("Failed to get subnet", subnet_id, "Error:", output.stderr)
-        exit(1)
-
-    response = json.loads(output.stdout)
-    return response["records"][0]["value"]["replica_version_id"]
+    with urllib.request.urlopen(req, timeout = 30) as request:
+        replica_versions = json.loads(request.read().decode())["replica_versions"]
+        latest_replica_version = sorted(replica_versions, key=lambda x: x["executed_timestamp_seconds"])[-1]["replica_version_id"]
+        return latest_replica_version
 
 def get_repo_root() -> str:
     return subprocess.run(
@@ -113,7 +111,7 @@ def main():
     ic_repo_push_token = os.environ.get("PUSH_TO_IC", "ENV_VAR_NOT_SET")
     repo = "dfinity/ic"
 
-    repo_root = pathlib.Path(os.environ.get("BUILD_WORKING_DIRECTORY", "NOT_PRESENT"))
+    repo_root = pathlib.Path(get_repo_root())
 
     if not repo_root.parent.exists():
         raise Exception ("Expected dir %s to exist", repo_root.name)
@@ -121,7 +119,18 @@ def main():
     running_on_ci = os.environ.get("CI") or os.environ.get("GITHUB_ACTION")
 
     branch = "ic-mainnet-revisions"
-    subprocess.call(["git", "fetch"], cwd=repo_root)
+    subprocess.call(["git", "fetch", "origin", "master:master"], cwd=repo_root)
+
+    result = subprocess.run(
+        ["git", "status", "--porcelain"],
+            stdout=subprocess.PIPE,
+            text=True,
+            check=True
+        )
+    if result.stdout.strip():
+        logging.error("Found uncommited work! Commit and then proceed.")
+        exit(2)
+
     if subprocess.call(["git", "checkout", branch], cwd=repo_root) == 0:
         # The branch already exists, update the existing MR
         logging.info("Found an already existing target branch")
