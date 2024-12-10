@@ -550,7 +550,7 @@ pub enum Payload {
 /// DealingMessages is a vector of DKG messages
 pub type DealingMessages = Vec<Message>;
 
-/// For completed VetKd keys, we differentiate between those
+/// For completed VetKeys, we differentiate between those
 /// that have already been reported and those that have not. This is
 /// to prevent keys from being reported more than once.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
