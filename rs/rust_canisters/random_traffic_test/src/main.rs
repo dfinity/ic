@@ -163,10 +163,10 @@ fn synchronous_rejections_count() -> u32 {
 /// that must updated (or removed) after awaiting the call. For each call, the call index is
 /// incremented by 1, such that successive calls have adjacent indices.
 fn setup_call(
+    receiver: CanisterId,
     call_tree_id: u32,
     call_depth: u32,
-) -> Option<(impl Future<Output = api::call::CallResult<Vec<u8>>>, u32)> {
-    let receiver = choose_receiver()?;
+) -> (impl Future<Output = api::call::CallResult<Vec<u8>>>, u32) {
     let msg = Message::new(
         call_tree_id,
         call_depth,
@@ -192,7 +192,7 @@ fn setup_call(
 
     let future = api::call::call_raw(receiver.into(), "handle_call", Encode!(&msg).unwrap(), 0);
 
-    Some((future, index))
+    (future, index)
 }
 
 /// Updates the record at `index` using the `response` to the corresponding call.
@@ -227,9 +227,10 @@ fn update_record(response: &api::call::CallResult<Vec<u8>>, index: u32) {
 async fn heartbeat() {
     let (mut futures, mut record_indices) = (Vec::new(), Vec::new());
     for _ in 0..MAX_CALLS_PER_HEARTBEAT.get() {
-        let Some((future, index)) = setup_call(next_call_tree_id(), 0) else {
+        let Some(receiver) = choose_receiver() else {
             return;
         };
+        let (future, index) = setup_call(receiver, next_call_tree_id(), 0);
         futures.push(future);
         record_indices.push(index);
     }
@@ -267,9 +268,10 @@ async fn handle_call(msg: Message) -> Vec<u8> {
     // - setting up a call fails.
     // - a downstream call is rejected for any reason.
     while should_make_downstream_call() {
-        let Some((future, record_index)) = setup_call(msg.call_tree_id, msg.call_depth + 1) else {
+        let Some(receiver) = choose_receiver() else {
             break;
         };
+        let (future, record_index) = setup_call(receiver, msg.call_tree_id, msg.call_depth + 1);
 
         let result = future.await;
         update_record(&result, record_index);
