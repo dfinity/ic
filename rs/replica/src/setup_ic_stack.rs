@@ -317,7 +317,6 @@ pub fn construct_ic_stack(
         // TODO(SCL-213)
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
-        Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
         execution_services.ingress_history_reader,
         cycles_account_manager,
