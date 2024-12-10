@@ -2614,13 +2614,18 @@ impl Governance {
 
         let root_canister_id = self.proto.root_canister_id_or_panic();
 
-        let deployed_version = get_running_version(&*self.env, root_canister_id).await?;
+        let new_deployed_version = get_running_version(&*self.env, root_canister_id).await?;
+
+        // Re-check that a reentrant call to this function did not yet update the state.
+        if let Some(deployed_version) = self.proto.deployed_version.clone() {
+            return Ok(deployed_version);
+        }
 
         self.proto
             .deployed_version
-            .replace(deployed_version.clone());
+            .replace(new_deployed_version.clone());
 
-        Ok(deployed_version)
+        Ok(new_deployed_version)
     }
 
     /// Return `Ok(true)` if the upgrade was completed successfully, return `Ok(false)` if an
