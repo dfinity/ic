@@ -5933,3 +5933,6 @@ mod advance_target_sns_version_tests;
 
 #[cfg(test)]
 mod test_helpers;
+
+#[cfg(feature = "canbench-rs")]
+mod benches;

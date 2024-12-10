@@ -86,8 +86,6 @@ dev-root-ca.crt
 cpp/**/infogetty
 cpp/**/infogetty.o
 cpp/**/network_info.o
-cpp/**/prestorecon
-cpp/**/prestorecon.o
 
 # Various build artifacts
 artifacts
