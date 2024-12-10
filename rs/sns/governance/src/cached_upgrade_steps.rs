@@ -1,16 +1,14 @@
-use crate::governance::Governance;
-use crate::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
-use crate::logs::ERROR;
-use crate::pb::v1::governance::CachedUpgradeSteps as CachedUpgradeStepsPb;
-use crate::pb::v1::governance::Version;
-use crate::pb::v1::governance::Versions;
-use crate::pb::v1::upgrade_journal_entry;
-use crate::pb::v1::Governance as GovernancePb;
-use crate::sns_upgrade::ListUpgradeStep;
-use crate::sns_upgrade::ListUpgradeStepsResponse;
-use crate::sns_upgrade::SnsCanisterType;
+use crate::{
+    governance::{Governance, UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS},
+    logs::ERROR,
+    pb::v1::{
+        governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Version, Versions},
+        upgrade_journal_entry, Governance as GovernancePb,
+    },
+    sns_upgrade::{ListUpgradeStep, ListUpgradeStepsResponse, SnsCanisterType},
+};
 use ic_canister_log::log;
-use ic_sns_governance_api::pb::v1::format_full_hash;
+use ic_sns_governance_api::format_full_hash;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct CachedUpgradeSteps {

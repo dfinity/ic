@@ -3709,3 +3709,15 @@ impl From<pb_api::ClaimSwapNeuronsError> for pb::ClaimSwapNeuronsError {
         }
     }
 }
+
+impl From<pb_api::RefreshCachedUpgradeStepsRequest> for pb::RefreshCachedUpgradeStepsRequest {
+    fn from(_: pb_api::RefreshCachedUpgradeStepsRequest) -> Self {
+        Self {}
+    }
+}
+
+impl From<pb::RefreshCachedUpgradeStepsResponse> for pb_api::RefreshCachedUpgradeStepsResponse {
+    fn from(_: pb::RefreshCachedUpgradeStepsResponse) -> Self {
+        Self {}
+    }
+}
