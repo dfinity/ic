@@ -1600,6 +1600,8 @@ pub struct NeuronBuilder {
     #[cfg(test)]
     recent_ballots: Vec<BallotInfo>,
     #[cfg(test)]
+    recent_ballots_next_entry_index: Option<usize>,
+    #[cfg(test)]
     transfer: Option<NeuronStakeTransfer>,
     #[cfg(test)]
     staked_maturity_e8s_equivalent: Option<u64>,
@@ -1639,6 +1641,8 @@ impl NeuronBuilder {
             neuron_fees_e8s: 0,
             #[cfg(test)]
             recent_ballots: Vec::new(),
+            #[cfg(test)]
+            recent_ballots_next_entry_index: Some(0),
             #[cfg(test)]
             transfer: None,
             #[cfg(test)]
@@ -1730,7 +1734,10 @@ impl NeuronBuilder {
 
     #[cfg(test)]
     pub fn with_recent_ballots(mut self, recent_ballots: Vec<BallotInfo>) -> Self {
+        let recent_ballots_next_entry_index =
+            Some(recent_ballots.len() % MAX_NEURON_RECENT_BALLOTS);
         self.recent_ballots = recent_ballots;
+        self.recent_ballots_next_entry_index = recent_ballots_next_entry_index;
         self
     }
 
@@ -1783,6 +1790,8 @@ impl NeuronBuilder {
             #[cfg(test)]
             recent_ballots,
             #[cfg(test)]
+            recent_ballots_next_entry_index,
+            #[cfg(test)]
             transfer,
             #[cfg(test)]
             staked_maturity_e8s_equivalent,
@@ -1804,6 +1813,8 @@ impl NeuronBuilder {
         #[cfg(not(test))]
         let recent_ballots = Vec::new();
         #[cfg(not(test))]
+        let recent_ballots_next_entry_index = Some(0);
+        #[cfg(not(test))]
         let transfer = None;
         #[cfg(not(test))]
         let staked_maturity_e8s_equivalent = None;
@@ -1822,6 +1833,7 @@ impl NeuronBuilder {
             spawn_at_timestamp_seconds,
             followees,
             recent_ballots,
+            recent_ballots_next_entry_index,
             kyc_verified,
             transfer,
             maturity_e8s_equivalent,
@@ -1833,7 +1845,6 @@ impl NeuronBuilder {
             neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds,
-            recent_ballots_next_entry_index: None,
         }
     }
 }

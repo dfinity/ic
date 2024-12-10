@@ -15,9 +15,13 @@ fn mock_txid(v: usize) -> Txid {
     Txid::from(bytes)
 }
 
+const TEST_SUBNET_NODES: u16 = 13;
+
 #[test]
 fn should_display_metadata() {
-    let config = Config::new_and_validate(BtcNetwork::Mainnet, CheckMode::Normal).unwrap();
+    let config =
+        Config::new_and_validate(BtcNetwork::Mainnet, CheckMode::Normal, TEST_SUBNET_NODES)
+            .unwrap();
     let outcall_capacity = 50;
     let cached_entries = 0;
     let oldest_entry_time = 0;
@@ -35,7 +39,7 @@ fn should_display_metadata() {
 
     DashboardAssert::assert_that(dashboard)
         .has_btc_network_in_title(config.btc_network())
-        .has_check_mode(config.check_mode())
+        .has_check_mode(config.check_mode)
         .has_outcall_capacity(outcall_capacity)
         .has_cached_entries(cached_entries)
         .has_oldest_entry_time(oldest_entry_time)
@@ -75,7 +79,8 @@ fn should_display_statuses() {
     });
 
     let dashboard = DashboardTemplate {
-        config: Config::new_and_validate(BtcNetwork::Mainnet, CheckMode::Normal).unwrap(),
+        config: Config::new_and_validate(BtcNetwork::Mainnet, CheckMode::Normal, TEST_SUBNET_NODES)
+            .unwrap(),
         outcall_capacity: 50,
         cached_entries: 6,
         tx_table_page_size: 10,
@@ -116,7 +121,8 @@ fn test_pagination() {
     use scraper::{Html, Selector};
 
     state::set_config(
-        state::Config::new_and_validate(BtcNetwork::Mainnet, CheckMode::Normal).unwrap(),
+        state::Config::new_and_validate(BtcNetwork::Mainnet, CheckMode::Normal, TEST_SUBNET_NODES)
+            .unwrap(),
     );
     let mock_transaction = TransactionCheckData::from_transaction(
         &BtcNetwork::Mainnet,
