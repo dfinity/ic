@@ -1600,7 +1600,7 @@ pub struct NeuronBuilder {
     neuron_fees_e8s: u64,
     #[cfg(any(test, feature = "canbench-rs"))]
     recent_ballots: Vec<BallotInfo>,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     recent_ballots_next_entry_index: Option<usize>,
     #[cfg(test)]
     transfer: Option<NeuronStakeTransfer>,
@@ -1636,14 +1636,13 @@ impl NeuronBuilder {
             joined_community_fund_timestamp_seconds: None,
             neuron_type: None,
             visibility: None,
-            recent_ballots_next_entry_index: None,
             voting_power_refreshed_timestamp_seconds: created_timestamp_seconds,
 
             #[cfg(test)]
             neuron_fees_e8s: 0,
             #[cfg(any(test, feature = "canbench-rs"))]
             recent_ballots: Vec::new(),
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             recent_ballots_next_entry_index: Some(0),
             #[cfg(test)]
             transfer: None,
