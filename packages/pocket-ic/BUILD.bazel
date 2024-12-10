@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "@crate_index//:backoff",
     "@crate_index//:base64",
     "@crate_index//:candid",
     "@crate_index//:hex",
@@ -69,7 +70,7 @@ rust_test(
 
 rust_test_suite(
     name = "test",
-    size = "small",
+    size = "medium",
     srcs = ["tests/tests.rs"],
     data = [
         "//packages/pocket-ic/test_canister:test_canister.wasm",
@@ -81,7 +82,10 @@ rust_test_suite(
     },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = ["cpu:8"],
+    tags = [
+        "cpu:16",
+        "test_macos",
+    ],
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )
 
@@ -97,6 +101,9 @@ rust_test_suite(
     },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "test_macos",
+    ],
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )
 
@@ -114,6 +121,9 @@ rust_test_suite(
     },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = ["cpu:16"],
+    tags = [
+        "cpu:16",
+        "test_macos",
+    ],
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )

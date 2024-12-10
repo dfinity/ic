@@ -59,13 +59,18 @@ else
 
     # We use bazel-remote as a CAS storage
     UPLOAD_URL="http://server.bazel-remote.svc.cluster.local:8080/cas"
-    echo "Using upload URL: '$UPLOAD_URL'" >&2
 
     # Upload the dep
     dep_upload_url="$UPLOAD_URL/$dep_sha256"
+    echo "Using upload URL: '$dep_upload_url'" >&2
+    curl_out=$(mktemp)
+    curl --silent --show-error --fail --retry 3 "$dep_upload_url" --upload-file "$dep_filename" -w '%{size_upload} %{time_total} %{speed_upload}\n' | tee "$curl_out" >&2
     # read & pretty print 3 metrics: upload size, upload time & upload speed
-    read -ra metrics < <(curl --silent --fail "$dep_upload_url" --upload-file "$dep_filename" -w '%{size_upload} %{time_total} %{speed_upload}')
-    echo "Uploaded $(numfmt --to=iec-i --suffix=B "${metrics[0]}") in ${metrics[1]}s ($(numfmt --to=iec-i --suffix=B "${metrics[2]}")/s)" >&2
+    if read -ra metrics <"$curl_out"; then
+        echo "Uploaded $(numfmt --to=iec-i --suffix=B "${metrics[0]}") in ${metrics[1]}s ($(numfmt --to=iec-i --suffix=B "${metrics[2]}")/s)" >&2
+    fi
+
+    rm "$curl_out"
 
     # Check that it was actually uploaded and can be served (this sometimes takes a minute)
     attempt=1

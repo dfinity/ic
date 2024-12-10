@@ -15,6 +15,7 @@ lazy_static! {
     /// The WASM of the Universal Canister.
     pub static ref UNIVERSAL_CANISTER_WASM: Vec<u8> = get_universal_canister_wasm();
     pub static ref UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] = get_universal_canister_wasm_sha256();
+    pub static ref UNIVERSAL_CANISTER_SERIALIZED_MODULE: Vec<u8> = get_universal_canister_serialized_module();
 }
 
 pub fn get_universal_canister_wasm() -> Vec<u8> {
@@ -26,6 +27,14 @@ pub fn get_universal_canister_wasm() -> Vec<u8> {
 
 pub fn get_universal_canister_wasm_sha256() -> [u8; 32] {
     ic_crypto_sha2::Sha256::hash(&UNIVERSAL_CANISTER_WASM)
+}
+
+pub fn get_universal_canister_serialized_module() -> Vec<u8> {
+    let serialized_module_path = std::env::var("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH")
+        .expect("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH not set");
+    std::fs::read(&serialized_module_path).unwrap_or_else(|e| {
+        panic!("Could not read serialized module from from {serialized_module_path:?}: {e:?}")
+    })
 }
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode

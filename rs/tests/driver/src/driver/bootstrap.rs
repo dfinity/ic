@@ -118,7 +118,7 @@ pub fn init_ic(
 
     // Note: NNS subnet should be selected from among the system subnets.
     // If there is no system subnet, fall back on choosing the first one.
-    let mut nns_subnet_idx = Some(0);
+    let mut nns_subnet_idx = None;
     // TopologyConfig is a structure provided by ic-prep. We translate from the
     // builder (InternetComputer) to TopologyConfig. While doing so, we allocate tcp
     // ports for the http handler, p2p and xnet. The corresponding sockets are
@@ -126,7 +126,7 @@ pub fn init_ic(
     // nodes.
     let mut ic_topology = TopologyConfig::default();
     for (subnet_idx, subnet) in ic.subnets.iter().enumerate() {
-        if subnet.subnet_type == SubnetType::System {
+        if subnet.subnet_type == SubnetType::System && nns_subnet_idx.is_none() {
             nns_subnet_idx = Some(subnet_idx as u64);
         }
         let subnet_index = subnet_idx as u64;
@@ -208,7 +208,7 @@ pub fn init_ic(
 
         /* generate_subnet_records= */
         true,
-        nns_subnet_idx,
+        Some(nns_subnet_idx.unwrap_or(0)),
         Some(ic_os_update_img_url),
         Some(ic_os_update_img_sha256),
         Some(whitelist),
@@ -665,6 +665,8 @@ fn configure_setupos_image(
         .arg(nns_url.to_string())
         .arg("--nns-public-key")
         .arg(nns_public_key)
+        .arg("--node-reward-type")
+        .arg("type3.1")
         .env(path_key, &new_path);
 
     if !admin_keys.is_empty() {

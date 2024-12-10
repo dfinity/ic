@@ -7,10 +7,7 @@ mod unix;
 pub use self::{
     hyper::ExecuteOnTokioRuntime,
     join_map::JoinMap,
-    unix::{
-        incoming_from_first_systemd_socket, incoming_from_nth_systemd_socket, incoming_from_path,
-        incoming_from_second_systemd_socket,
-    },
+    unix::{incoming_from_nth_systemd_socket, incoming_from_path},
 };
 
 /// Aborts the whole program with a core dump if a single thread panics.

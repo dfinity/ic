@@ -331,7 +331,7 @@ fn run_n_rounds_and_check_pubkeys(
 
         let mut found_keys = 0;
         for key_id in test_threshold_key_ids() {
-            if batch.idkg_subnet_public_keys.contains_key(&key_id) {
+            if batch.chain_key_subnet_public_keys.contains_key(&key_id) {
                 found_keys += 1
             }
         }

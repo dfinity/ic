@@ -38,7 +38,7 @@ url = { workspace = true }
 
 [[bin]]
 name = "ic-systest-tecdsa-performance-test"
-path = "tecdsa_performance_test.rs"
+path = "tecdsa_performance_test_template.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-add-nodes"

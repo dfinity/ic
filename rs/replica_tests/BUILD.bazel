@@ -81,7 +81,6 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_replica_tests",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -90,7 +89,6 @@ rust_test(
     name = "replica_tests_test",
     aliases = ALIASES,
     crate = ":replica_tests",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -101,7 +99,6 @@ rust_ic_test_suite(
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     data = DEV_DATA,
-    edition = "2021",
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":replica_tests"] + DEPENDENCIES + DEV_DEPENDENCIES,

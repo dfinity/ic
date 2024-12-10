@@ -3,7 +3,9 @@ use clap::{Args, Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
-use mac_address::mac_address::{get_ipmi_mac, FormattedMacAddress};
+use config::update_config::{update_guestos_config, update_hostos_config};
+use macaddr::MacAddr6;
+use network::resolve_mgmt_mac;
 use regex::Regex;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -11,7 +13,7 @@ use std::path::{Path, PathBuf};
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
-use config::types::*;
+use config_types::*;
 
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
@@ -54,6 +56,18 @@ pub enum Commands {
     },
     /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
+    /// Creates a GuestOSConfig object from existing guestos configuration files
+    UpdateGuestosConfig,
+    UpdateHostosConfig {
+        #[arg(long, default_value = config::DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH, value_name = "config.ini")]
+        config_ini_path: PathBuf,
+
+        #[arg(long, default_value = config::DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH, value_name = "deployment.json")]
+        deployment_json_path: PathBuf,
+
+        #[arg(long, default_value = config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
+        hostos_config_json_path: PathBuf,
+    },
 }
 
 #[derive(Parser)]
@@ -90,9 +104,9 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub node_reward_type: Option<String>,
     #[arg(long)]
-    pub mgmt_mac: Option<String>,
+    pub mgmt_mac: Option<MacAddr6>,
     #[arg(long)]
-    pub deployment_environment: Option<String>,
+    pub deployment_environment: Option<DeploymentEnvironment>,
     #[arg(long)]
     pub elasticsearch_hosts: Option<String>,
     #[arg(long)]
@@ -193,22 +207,7 @@ pub fn main() -> Result<()> {
             // get deployment.json variables
             let deployment_json_settings = get_deployment_settings(&deployment_json_path)?;
 
-            let logging = Logging {
-                elasticsearch_hosts: deployment_json_settings.logging.hosts.to_string(),
-                elasticsearch_tags: None,
-            };
-
-            let mgmt_mac = match deployment_json_settings.deployment.mgmt_mac {
-                Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
-                    println!(
-                        "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac
-                    );
-                    mgmt_mac
-                }
-                None => get_ipmi_mac()?,
-            };
+            let mgmt_mac = resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac)?;
 
             let node_reward_type = node_reward_type.expect("Node reward type is required.");
 
@@ -223,8 +222,8 @@ pub fn main() -> Result<()> {
             let icos_settings = ICOSSettings {
                 node_reward_type: Some(node_reward_type),
                 mgmt_mac,
-                deployment_environment: deployment_json_settings.deployment.name,
-                logging,
+                deployment_environment: deployment_json_settings.deployment.name.parse()?,
+                logging: Logging::default(),
                 use_nns_public_key,
                 nns_urls: deployment_json_settings.nns.url.clone(),
                 use_node_operator_private_key,
@@ -254,6 +253,7 @@ pub fn main() -> Result<()> {
                 hostos_settings,
                 guestos_settings,
             };
+            // SetupOSConfig is safe to log; it does not contain any secret material
             println!("SetupOSConfig: {:?}", setupos_config);
 
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
@@ -376,6 +376,19 @@ pub fn main() -> Result<()> {
 
             generate_testnet_config(args, clap_args.guestos_config_json_path)
         }
+        // TODO(NODE-1519): delete UpdateGuestosConfig and UpdateHostosConfig after moved to new config format
+        // Regenerate config.json on *every boot* in case the config structure changes between
+        // when we roll out the update-config service and when we roll out the 'config integration'
+        Some(Commands::UpdateGuestosConfig) => update_guestos_config(),
+        Some(Commands::UpdateHostosConfig {
+            config_ini_path,
+            deployment_json_path,
+            hostos_config_json_path,
+        }) => update_hostos_config(
+            &config_ini_path,
+            &deployment_json_path,
+            &hostos_config_json_path,
+        ),
         None => {
             println!("No command provided. Use --help for usage information.");
             Ok(())
