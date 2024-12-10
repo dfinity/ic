@@ -1758,7 +1758,7 @@ fn test_account_balance_non_standard_account_identifier_length() {
     assert_eq!(res, Tokens::from_e8s(0));
 
     // account balance of account identifier of zero length
-    match Decode!(
+    let res = Decode!(
         &env.execute_ingress(
             canister_id,
             "account_balance",
@@ -1770,17 +1770,9 @@ fn test_account_balance_non_standard_account_identifier_length() {
         .expect("failed to query blocks")
         .bytes(),
         Tokens
-    ) {
-        Ok(tokens) => {
-            panic!("Expected an error, but got: {:?}", tokens);
-        }
-        Err(err) => {
-            println!("account_balance returned an error: {:?}", err);
-            assert!(err.to_string().contains(&hex::encode(
-                "Fail to decode argument 0 from table0 to record { account : blob }".as_bytes()
-            )));
-        }
-    }
+    )
+    .expect("should successfully decode Tokens");
+    assert_eq!(res, Tokens::from_e8s(0));
 }
 
 mod metrics {

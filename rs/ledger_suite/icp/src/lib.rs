@@ -807,6 +807,26 @@ impl NotifyCanisterArgs {
 
 /// Arguments taken by the account_balance candid endpoint.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub struct AccountIdentifierByteBuf {
+    pub account: ByteBuf,
+}
+
+impl TryFrom<AccountIdentifierByteBuf> for BinaryAccountBalanceArgs {
+    type Error = String;
+
+    fn try_from(value: AccountIdentifierByteBuf) -> Result<Self, Self::Error> {
+        Ok(BinaryAccountBalanceArgs {
+            account: AccountIdBlob::try_from(value.account.as_slice()).map_err(|_| {
+                format!(
+                    "Invalid account identifier length (expected 32, got {})",
+                    value.account.len()
+                )
+            })?,
+        })
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct BinaryAccountBalanceArgs {
     pub account: AccountIdBlob,
 }
