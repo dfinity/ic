@@ -641,16 +641,15 @@ impl Step for UploadAndRestartStep {
             ssh_helper.ssh(cmd_replace_state)?;
         } else {
             // For local recoveries we first backup the original state, and
-            // then simply `mv` state to the upload directory. No rsync is
-            // needed, and thus no checkpoint copying.
+            // then simply `mv` the new state to the upload directory. No
+            // rsync is needed, and thus no checkpoint copying.
             let backup_path = format!("{}/{}", self.work_dir.display(), OLD_IC_STATE);
             info!(
                 self.logger,
-                "Backing up original state into {}...", backup_path
+                "Moving original state into {}...", backup_path
             );
             let mut cmd_backup_state = Command::new("sudo");
-            cmd_backup_state.arg("cp");
-            cmd_backup_state.arg("-r");
+            cmd_backup_state.arg("mv");
             cmd_backup_state.arg(ic_state_path);
             cmd_backup_state.arg(backup_path);
             exec_cmd(&mut cmd_backup_state)?;
