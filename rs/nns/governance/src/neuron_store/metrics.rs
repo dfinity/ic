@@ -111,7 +111,10 @@ impl NeuronMetrics {
         neuron: &Neuron,
     ) {
         let seconds_since_voting_power_refreshed =
-            now_seconds - neuron.voting_power_refreshed_timestamp_seconds();
+            // Here, we assume that the neuron was not refreshed in the future.
+            // This doesn't always hold in tests though, due to the difficulty
+            // of constructing realistic data/scenarios.
+            now_seconds.saturating_sub(neuron.voting_power_refreshed_timestamp_seconds());
         let Some(seconds_losing_voting_power) = seconds_since_voting_power_refreshed
             .checked_sub(voting_power_economics.get_start_reducing_voting_power_after_seconds())
         else {
