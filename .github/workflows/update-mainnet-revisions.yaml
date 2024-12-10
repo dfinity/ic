@@ -24,7 +24,7 @@ jobs:
 
       - name: Update IC versions file
         env:
-          PUSH_TO_IC: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -eEuxo pipefail
 

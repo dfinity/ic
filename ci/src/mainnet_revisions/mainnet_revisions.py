@@ -116,8 +116,6 @@ def main():
     if not repo_root.parent.exists():
         raise Exception ("Expected dir %s to exist", repo_root.name)
 
-    running_on_ci = os.environ.get("CI") or os.environ.get("GITHUB_ACTION")
-
     branch = "ic-mainnet-revisions"
     subprocess.call(["git", "fetch", "origin", "master:master"], cwd=repo_root)
 
@@ -148,24 +146,18 @@ def main():
     if SAVED_VERSIONS_PATH in git_modified_files:
         logging.info("Creating/updating a MR that updates the saved NNS subnet revision")
         subprocess.check_call(["git", "add", SAVED_VERSIONS_PATH], cwd=repo_root)
-        if running_on_ci:
-            subprocess.check_call(["git", "config", "user.email", "infra@dfinity.org"], cwd=repo_root)
-            subprocess.check_call(["git", "config", "user.name", "CI Automation"], cwd=repo_root)
         subprocess.check_call(
-            ["git", "commit", "-m", "chore: Update Mainnet IC revisions file", SAVED_VERSIONS_PATH],
+            ["git", "commit", "-c", "user.name=CI Automation", "-c", "user.email=infra+github-automation@dfinity.org" ,"-m", "chore: Update Mainnet IC revisions file", SAVED_VERSIONS_PATH],
             cwd=repo_root,
         )
         subprocess.check_call(
             ["git", "push", "origin", branch, "-f"],
             cwd=repo_root
         )
-        gh_env = os.environ.copy()
-        gh_env["GITHUB_TOKEN"] = ic_repo_push_token
 
         if not subprocess.check_output(
             ["gh", "pr", "list", "--head", branch, "--repo", repo],
             cwd=repo_root,
-            env=gh_env,
         ).decode("utf8"):
             subprocess.check_call(
                 [
@@ -179,7 +171,6 @@ def main():
                     "--fill",
                 ],
                 cwd=repo_root,
-                env=gh_env,
             )
 
 if __name__ == "__main__":
