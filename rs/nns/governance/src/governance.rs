@@ -8133,6 +8133,8 @@ impl Governance {
             not_dissolving_neurons_e8s_buckets_ect,
             non_self_authenticating_controller_neuron_subset_metrics,
             public_neuron_subset_metrics,
+            still_losing_voting_power_neuron_subset_metrics,
+            done_losing_voting_power_neuron_subset_metrics,
         } = self.neuron_store.compute_neuron_metrics(
             neuron_minimum_stake_e8s,
             voting_power_economics,
@@ -8149,6 +8151,10 @@ impl Governance {
         );
         let public_neuron_subset_metrics =
             Some(NeuronSubsetMetricsPb::from(public_neuron_subset_metrics));
+        let still_losing_voting_power_neuron_subset_metrics =
+            Some(NeuronSubsetMetricsPb::from(still_losing_voting_power_neuron_subset_metrics));
+        let done_losing_voting_power_neuron_subset_metrics =
+            Some(NeuronSubsetMetricsPb::from(done_losing_voting_power_neuron_subset_metrics));
 
         GovernanceCachedMetrics {
             timestamp_seconds: now,
@@ -8191,6 +8197,8 @@ impl Governance {
 
             non_self_authenticating_controller_neuron_subset_metrics,
             public_neuron_subset_metrics,
+            still_losing_voting_power_neuron_subset_metrics,
+            done_losing_voting_power_neuron_subset_metrics,
         }
     }
 
