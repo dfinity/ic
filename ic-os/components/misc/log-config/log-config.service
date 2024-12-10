@@ -1,5 +1,7 @@
 [Unit]
 Description=Log config partition
+After=update-hostos-config.service
+Wants=update-hostos-config.service
 
 [Service]
 Type=oneshot
