@@ -31,7 +31,7 @@ message CompletedVetKey {
 message DkgDataPayload {
   repeated DkgMessage dealings = 1;
   uint64 summary_height = 2;
-  repeated CompletedVetKey vetkd_key_agreements = 3;
+  repeated CompletedVetKey vet_key_agreements = 3;
 }
 
 message Summary {

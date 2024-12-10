@@ -415,7 +415,7 @@ pub struct DkgDataPayload {
     #[prost(uint64, tag = "2")]
     pub summary_height: u64,
     #[prost(message, repeated, tag = "3")]
-    pub vetkd_key_agreements: ::prost::alloc::vec::Vec<CompletedVetKey>,
+    pub vet_key_agreements: ::prost::alloc::vec::Vec<CompletedVetKey>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Summary {

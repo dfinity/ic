@@ -569,16 +569,16 @@ pub struct DkgDataPayload {
     pub start_height: Height,
     /// The dealing messages
     pub messages: DealingMessages,
-    /// Any VetKd key agreements completed by this payload
-    pub vetkd_key_agreements: BTreeMap<CallbackId, CompletedVetKey>,
+    /// Any VetKey agreements completed by this payload
+    pub vet_key_agreements: BTreeMap<CallbackId, CompletedVetKey>,
 }
 
 impl TryFrom<pb::DkgDataPayload> for DkgDataPayload {
     type Error = ProxyDecodeError;
 
     fn try_from(data_payload: pb::DkgDataPayload) -> Result<Self, Self::Error> {
-        let mut vetkd_key_agreements = BTreeMap::new();
-        for completed_vetkey in &data_payload.vetkd_key_agreements {
+        let mut vet_key_agreements = BTreeMap::new();
+        for completed_vetkey in &data_payload.vet_key_agreements {
             let callback_id = CallbackId::from(completed_vetkey.callback_id);
             let signature = if let Some(unreported) = &completed_vetkey.unreported {
                 let response = crate::batch::ConsensusResponse::try_from(unreported.clone())?;
@@ -586,7 +586,7 @@ impl TryFrom<pb::DkgDataPayload> for DkgDataPayload {
             } else {
                 CompletedVetKey::ReportedToExecution
             };
-            vetkd_key_agreements.insert(callback_id, signature);
+            vet_key_agreements.insert(callback_id, signature);
         }
 
         Ok(Self {
@@ -596,7 +596,7 @@ impl TryFrom<pb::DkgDataPayload> for DkgDataPayload {
                 .into_iter()
                 .map(Message::try_from)
                 .collect::<Result<_, _>>()?,
-            vetkd_key_agreements,
+            vet_key_agreements,
         })
     }
 }
@@ -612,7 +612,7 @@ impl DkgDataPayload {
         Self {
             start_height,
             messages,
-            vetkd_key_agreements: BTreeMap::new(),
+            vet_key_agreements: BTreeMap::new(),
         }
     }
 }
@@ -640,14 +640,14 @@ impl From<&Summary> for pb::DkgPayload {
 
 impl From<&DkgDataPayload> for pb::DkgPayload {
     fn from(data_payload: &DkgDataPayload) -> Self {
-        // vetkd_key_agreements
-        let mut vetkd_key_agreements = Vec::new();
-        for (callback_id, completed) in &data_payload.vetkd_key_agreements {
+        // vet_key_agreements
+        let mut vet_key_agreements = Vec::new();
+        for (callback_id, completed) in &data_payload.vet_key_agreements {
             let unreported = match completed {
                 CompletedVetKey::Unreported(response) => Some(response.into()),
                 CompletedVetKey::ReportedToExecution => None,
             };
-            vetkd_key_agreements.push(pb::CompletedVetKey {
+            vet_key_agreements.push(pb::CompletedVetKey {
                 callback_id: callback_id.get(),
                 unreported,
             });
@@ -663,7 +663,7 @@ impl From<&DkgDataPayload> for pb::DkgPayload {
                     .map(pb::DkgMessage::from)
                     .collect(),
                 summary_height: data_payload.start_height.get(),
-                vetkd_key_agreements,
+                vet_key_agreements,
             })),
         }
     }
