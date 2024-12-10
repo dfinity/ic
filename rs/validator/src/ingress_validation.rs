@@ -678,7 +678,7 @@ where
             ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key(
                 pk.algorithm_id,
                 &delegation.as_signed_bytes(),
-                &signature.to_vec(),
+                signature,
                 &pk.key,
             )
             .map_err(InvalidBasicSignature)?;
