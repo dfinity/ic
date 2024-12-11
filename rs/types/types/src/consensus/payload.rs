@@ -70,7 +70,10 @@ impl BlockPayload {
     pub fn is_empty(&self) -> bool {
         match self {
             BlockPayload::Data(data) => {
-                data.batch.is_empty() && data.dkg.messages.is_empty() && data.idkg.is_none()
+                data.batch.is_empty()
+                    && data.dkg.messages.is_empty()
+                    && data.idkg.is_none()
+                    && data.vetkd.is_none()
             }
             _ => false,
         }
