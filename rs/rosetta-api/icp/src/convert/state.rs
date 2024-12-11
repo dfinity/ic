@@ -3,8 +3,8 @@ use crate::models::seconds::Seconds;
 use crate::request::Request;
 use crate::request_types::{
     AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo,
-    PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake,
-    StakeMaturity, StartDissolve, StopDissolve,
+    PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey, SetDissolveTimestamp,
+    Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
 };
 use ic_types::PrincipalId;
 use icp_ledger::{Operation, Tokens, DEFAULT_TRANSFER_FEE};
@@ -382,6 +382,20 @@ impl State {
             controller,
             neuron_index,
         }));
+        Ok(())
+    }
+
+    pub fn refresh_voting_power(
+        &mut self,
+        account: icp_ledger::AccountIdentifier,
+        neuron_index: u64,
+    ) -> Result<(), ApiError> {
+        self.flush()?;
+        self.actions
+            .push(Request::RefreshVotingPower(RefreshVotingPower {
+                account,
+                neuron_index,
+            }));
         Ok(())
     }
 }

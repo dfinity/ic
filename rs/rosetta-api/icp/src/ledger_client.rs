@@ -5,6 +5,7 @@ mod handle_follow;
 mod handle_list_neurons;
 mod handle_merge_maturity;
 mod handle_neuron_info;
+mod handle_refresh_voting_power;
 mod handle_register_vote;
 mod handle_remove_hotkey;
 mod handle_send;
@@ -62,6 +63,7 @@ use crate::{
         handle_change_auto_stake_maturity::handle_change_auto_stake_maturity,
         handle_disburse::handle_disburse, handle_follow::handle_follow,
         handle_merge_maturity::handle_merge_maturity, handle_neuron_info::handle_neuron_info,
+        handle_refresh_voting_power::handle_refresh_voting_power,
         handle_register_vote::handle_register_vote, handle_remove_hotkey::handle_remove_hotkey,
         handle_send::handle_send, handle_set_dissolve_timestamp::handle_set_dissolve_timestamp,
         handle_spawn::handle_spawn, handle_stake::handle_stake,
@@ -852,6 +854,7 @@ impl LedgerClient {
             RequestType::Stake { .. } => handle_stake(bytes),
             RequestType::StartDissolve { .. } => handle_start_dissolve(bytes, request_type),
             RequestType::StopDissolve { .. } => handle_stop_dissolve(bytes, request_type),
+            RequestType::RefreshVotingPower { .. } => handle_refresh_voting_power(bytes),
         }
     }
 }

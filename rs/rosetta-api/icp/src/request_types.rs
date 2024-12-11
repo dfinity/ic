@@ -41,6 +41,7 @@ pub const STAKE_MATURITY: &str = "STAKE_MATURITY";
 pub const NEURON_INFO: &str = "NEURON_INFO";
 pub const LIST_NEURONS: &str = "LIST_NEURONS";
 pub const FOLLOW: &str = "FOLLOW";
+pub const REFRESH_VOTING_POWER: &str = "REFRESH_VOTING_POWER";
 
 /// `RequestType` contains all supported values of `Operation.type`.
 /// Extra information, such as `neuron_index` should only be included
@@ -102,6 +103,9 @@ pub enum RequestType {
         neuron_index: u64,
         controller: Option<PublicKeyOrPrincipal>,
     },
+    #[serde(rename = "REFRESH_VOTING_POWER")]
+    #[serde(alias = "RefreshVotingPower")]
+    RefreshVotingPower { neuron_index: u64 },
 }
 
 impl RequestType {
@@ -123,6 +127,7 @@ impl RequestType {
             RequestType::NeuronInfo { .. } => NEURON_INFO,
             RequestType::ListNeurons { .. } => LIST_NEURONS,
             RequestType::Follow { .. } => FOLLOW,
+            RequestType::RefreshVotingPower { .. } => REFRESH_VOTING_POWER,
         }
     }
 
@@ -374,6 +379,12 @@ pub struct Follow {
     pub followees: Vec<u64>,
     pub controller: Option<PrincipalId>,
     #[serde(default)]
+    pub neuron_index: u64,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct RefreshVotingPower {
+    pub account: icp_ledger::AccountIdentifier,
     pub neuron_index: u64,
 }
 
@@ -1417,6 +1428,33 @@ impl TransactionBuilder {
                     topic: *topic,
                     followees: followees.clone(),
                     controller: pkp_from_principal(controller),
+                    neuron_index: *neuron_index,
+                }
+                .try_into()?,
+            ),
+        });
+        Ok(())
+    }
+
+    pub fn refresh_voting_power(
+        &mut self,
+        refresh_voting_power: &RefreshVotingPower,
+    ) -> Result<(), ApiError> {
+        let RefreshVotingPower {
+            neuron_index,
+            account,
+        } = refresh_voting_power;
+        let operation_identifier = self.allocate_op_id();
+        self.ops.push(Operation {
+            operation_identifier,
+            type_: OperationType::RefreshVotingPower.to_string(),
+            status: None,
+            account: Some(to_model_account_identifier(account)),
+            amount: None,
+            related_operations: None,
+            coin_change: None,
+            metadata: Some(
+                NeuronIdentifierMetadata {
                     neuron_index: *neuron_index,
                 }
                 .try_into()?,
