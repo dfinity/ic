@@ -1211,31 +1211,10 @@ impl AllowancesData for StableAllowancesData {
         });
     }
 
-    fn insert_arrival(
-        &mut self,
-        _timestamp: TimeStamp,
-        _account_spender: (Self::AccountId, Self::AccountId),
-    ) {
-        // We do not store arrivals in stable structures.
-    }
-
-    fn remove_arrival(
-        &mut self,
-        _timestamp: TimeStamp,
-        _account_spender: (Self::AccountId, Self::AccountId),
-    ) {
-        // We do not store arrivals in stable structures.
-    }
-
     fn first_expiry(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
         let result = ALLOWANCES_EXPIRATIONS_MEMORY
             .with_borrow(|expirations| expirations.first_key_value().map(|kv| kv.0));
         result.map(|e| (e.timestamp, e.account_spender.into()))
-    }
-
-    fn oldest_arrivals(&self, _n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
-        // We do not store arrivals in stable structures.
-        vec![]
     }
 
     fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
@@ -1262,11 +1241,6 @@ impl AllowancesData for StableAllowancesData {
             .with_borrow(|expirations| expirations.len())
             .try_into()
             .unwrap()
-    }
-
-    fn len_arrivals(&self) -> usize {
-        // We do not store arrivals in stable structures.
-        0
     }
 
     fn clear_arrivals(&mut self) {
