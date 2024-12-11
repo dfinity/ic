@@ -28,14 +28,17 @@ fn plain_authentication_correct_signature_passes() {
         sender_delegation: None,
     };
 
-    assert!(validate_signature(
-        &sig_verifier,
-        &message_id,
-        &user_signature,
-        UNIX_EPOCH,
-        &MockRootOfTrustProvider::new()
-    )
-    .is_ok());
+    let v: HttpRequestVerifierImpl<SignedIngressContent, MockRootOfTrustProvider> =
+        HttpRequestVerifierImpl::new(Arc::new(sig_verifier) as Arc<_>);
+
+    assert!(v
+        .validate_signature(
+            &message_id,
+            &user_signature,
+            UNIX_EPOCH,
+            &MockRootOfTrustProvider::new()
+        )
+        .is_ok());
 
     // Same signature as above with empty delegations specified. Should also pass.
     let user_signature = UserSignature {
@@ -44,14 +47,14 @@ fn plain_authentication_correct_signature_passes() {
         sender_delegation: Some(Vec::new()),
     };
 
-    assert!(validate_signature(
-        &sig_verifier,
-        &message_id,
-        &user_signature,
-        UNIX_EPOCH,
-        &MockRootOfTrustProvider::new()
-    )
-    .is_ok());
+    assert!(v
+        .validate_signature(
+            &message_id,
+            &user_signature,
+            UNIX_EPOCH,
+            &MockRootOfTrustProvider::new()
+        )
+        .is_ok());
 }
 
 #[test]
@@ -72,9 +75,11 @@ fn plain_authentication_incorrect_signature_passes() {
         sender_delegation: None,
     };
 
+    let v: HttpRequestVerifierImpl<SignedIngressContent, MockRootOfTrustProvider> =
+        HttpRequestVerifierImpl::new(Arc::new(sig_verifier) as Arc<_>);
+
     assert_matches!(
-        validate_signature(
-            &sig_verifier,
+        v.validate_signature(
             &message_id,
             &user_signature,
             UNIX_EPOCH,
@@ -127,9 +132,10 @@ fn plain_authentication_with_one_delegation() {
         sender_delegation: Some(vec![signed_delegation]),
     };
 
+    let v: HttpRequestVerifierImpl<SignedIngressContent, MockRootOfTrustProvider> =
+        HttpRequestVerifierImpl::new(Arc::new(sig_verifier) as Arc<_>);
     assert_eq!(
-        validate_signature(
-            &sig_verifier,
+        v.validate_signature(
             &message_id,
             &user_signature,
             UNIX_EPOCH,
@@ -141,8 +147,7 @@ fn plain_authentication_with_one_delegation() {
     // Try verifying the signature in the future. It should fail because the
     // delegation would've expired.
     assert_matches!(
-        validate_signature(
-            &sig_verifier,
+        v.validate_signature(
             &message_id,
             &user_signature,
             UNIX_EPOCH + Duration::from_secs(1),
@@ -195,9 +200,10 @@ fn plain_authentication_with_one_scoped_delegation() {
         sender_delegation: Some(vec![signed_delegation]),
     };
 
+    let v: HttpRequestVerifierImpl<SignedIngressContent, MockRootOfTrustProvider> =
+        HttpRequestVerifierImpl::new(Arc::new(sig_verifier) as Arc<_>);
     assert_matches!(
-        validate_signature(
-            &sig_verifier,
+        v.validate_signature(
             &message_id,
             &user_signature,
             UNIX_EPOCH,
@@ -295,10 +301,11 @@ fn plain_authentication_with_multiple_delegations() {
         ]),
     };
 
+    let v: HttpRequestVerifierImpl<SignedIngressContent, MockRootOfTrustProvider> =
+        HttpRequestVerifierImpl::new(Arc::new(sig_verifier) as Arc<_>);
     // Should pass at time 0.
     assert_matches!(
-        validate_signature(
-            &sig_verifier,
+        v.validate_signature(
             &message_id,
             &user_signature,
             UNIX_EPOCH,
@@ -307,8 +314,7 @@ fn plain_authentication_with_multiple_delegations() {
         Ok(ids) if ids == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap()
     );
     assert_matches!(
-        validate_signature(
-            &sig_verifier,
+        v.validate_signature(
             &message_id,
             &user_signature,
             UNIX_EPOCH + Duration::from_secs(2),
@@ -319,8 +325,7 @@ fn plain_authentication_with_multiple_delegations() {
 
     // Should expire after > 2 seconds
     assert_matches!(
-        validate_signature(
-            &sig_verifier,
+        v.validate_signature(
             &message_id,
             &user_signature,
             UNIX_EPOCH + Duration::from_secs(3),
@@ -352,9 +357,10 @@ fn plain_authentication_with_malformed_delegation() {
         )]),
     };
 
+    let v: HttpRequestVerifierImpl<SignedIngressContent, MockRootOfTrustProvider> =
+        HttpRequestVerifierImpl::new(Arc::new(sig_verifier) as Arc<_>);
     assert_matches!(
-        validate_signature(
-            &sig_verifier,
+        v.validate_signature(
             &message_id,
             &user_signature,
             UNIX_EPOCH,
@@ -402,9 +408,10 @@ fn plain_authentication_with_invalid_delegation() {
         sender_delegation: Some(vec![signed_delegation]),
     };
 
+    let v: HttpRequestVerifierImpl<SignedIngressContent, MockRootOfTrustProvider> =
+        HttpRequestVerifierImpl::new(Arc::new(sig_verifier) as Arc<_>);
     assert_matches!(
-        validate_signature(
-            &sig_verifier,
+        v.validate_signature(
             &message_id,
             &user_signature,
             UNIX_EPOCH,
@@ -430,9 +437,10 @@ fn validate_signature_webauthn() {
         sender_delegation: None,
     };
 
+    let v: HttpRequestVerifierImpl<SignedIngressContent, MockRootOfTrustProvider> =
+        HttpRequestVerifierImpl::new(Arc::new(sig_verifier) as Arc<_>);
     assert_eq!(
-        validate_signature(
-            &sig_verifier,
+        v.validate_signature(
             &message_id,
             &user_signature,
             UNIX_EPOCH,
@@ -467,9 +475,10 @@ fn validate_signature_webauthn_with_delegations() {
         sender_delegation: Some(vec![SignedDelegation::new(delegation, delegation_sig)]),
     };
 
+    let v: HttpRequestVerifierImpl<SignedIngressContent, MockRootOfTrustProvider> =
+        HttpRequestVerifierImpl::new(Arc::new(sig_verifier) as Arc<_>);
     assert_eq!(
-        validate_signature(
-            &sig_verifier,
+        v.validate_signature(
             &message_id,
             &user_signature,
             UNIX_EPOCH,
