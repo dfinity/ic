@@ -10,6 +10,7 @@ use crate::{
     messages::CallbackId,
     ReplicaVersion,
 };
+use batch::ConsensusResponse;
 use ic_protobuf::types::v1 as pb;
 use serde_with::serde_as;
 use std::collections::BTreeMap;
@@ -542,15 +543,25 @@ impl TryFrom<pb::Summary> for Summary {
 pub enum Payload {
     /// DKG Summary payload
     Summary(Summary),
-    /// DKG Dealings payload
+    /// DKG Data payload
     Data(DkgDataPayload),
 }
 
 /// DealingMessages is a vector of DKG messages
 pub type DealingMessages = Vec<Message>;
 
-/// Dealings contains dealing messages and the height at which this DKG interval
-/// started
+/// For completed VetKeys, we differentiate between those
+/// that have already been reported and those that have not. This is
+/// to prevent keys from being reported more than once.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub enum CompletedVetKey {
+    ReportedToExecution,
+    Unreported(ConsensusResponse),
+}
+
+/// Data payloads contain dealing messages, the height at which this DKG interval
+/// started, and newly completed VetKey agreements.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DkgDataPayload {
@@ -558,12 +569,26 @@ pub struct DkgDataPayload {
     pub start_height: Height,
     /// The dealing messages
     pub messages: DealingMessages,
+    /// Any VetKey agreements completed by this payload
+    pub vet_key_agreements: BTreeMap<CallbackId, CompletedVetKey>,
 }
 
 impl TryFrom<pb::DkgDataPayload> for DkgDataPayload {
     type Error = ProxyDecodeError;
 
     fn try_from(data_payload: pb::DkgDataPayload) -> Result<Self, Self::Error> {
+        let mut vet_key_agreements = BTreeMap::new();
+        for completed_vetkey in &data_payload.vet_key_agreements {
+            let callback_id = CallbackId::from(completed_vetkey.callback_id);
+            let signature = if let Some(unreported) = &completed_vetkey.unreported {
+                let response = crate::batch::ConsensusResponse::try_from(unreported.clone())?;
+                CompletedVetKey::Unreported(response)
+            } else {
+                CompletedVetKey::ReportedToExecution
+            };
+            vet_key_agreements.insert(callback_id, signature);
+        }
+
         Ok(Self {
             start_height: Height::from(data_payload.summary_height),
             messages: data_payload
@@ -571,21 +596,23 @@ impl TryFrom<pb::DkgDataPayload> for DkgDataPayload {
                 .into_iter()
                 .map(Message::try_from)
                 .collect::<Result<_, _>>()?,
+            vet_key_agreements,
         })
     }
 }
 
 impl DkgDataPayload {
-    /// Return an empty DealingsPayload using the given start_height.
+    /// Return an empty DataPayload using the given start_height.
     pub fn new_empty(start_height: Height) -> Self {
         Self::new(start_height, vec![])
     }
 
-    /// Return an new DealingsPayload.
+    /// Return an new DataPayload.
     pub fn new(start_height: Height, messages: DealingMessages) -> Self {
         Self {
             start_height,
             messages,
+            vet_key_agreements: BTreeMap::new(),
         }
     }
 }
@@ -613,6 +640,19 @@ impl From<&Summary> for pb::DkgPayload {
 
 impl From<&DkgDataPayload> for pb::DkgPayload {
     fn from(data_payload: &DkgDataPayload) -> Self {
+        // vet_key_agreements
+        let mut vet_key_agreements = Vec::new();
+        for (callback_id, completed) in &data_payload.vet_key_agreements {
+            let unreported = match completed {
+                CompletedVetKey::Unreported(response) => Some(response.into()),
+                CompletedVetKey::ReportedToExecution => None,
+            };
+            vet_key_agreements.push(pb::CompletedVetKey {
+                callback_id: callback_id.get(),
+                unreported,
+            });
+        }
+
         Self {
             val: Some(pb::dkg_payload::Val::DataPayload(pb::DkgDataPayload {
                 // TODO do we need this clone
@@ -623,6 +663,7 @@ impl From<&DkgDataPayload> for pb::DkgPayload {
                     .map(pb::DkgMessage::from)
                     .collect(),
                 summary_height: data_payload.start_height.get(),
+                vet_key_agreements,
             })),
         }
     }
