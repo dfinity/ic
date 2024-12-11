@@ -97,7 +97,7 @@ pub fn extract_sns_canister_version(
 }
 
 /// Creates a new PocketIc instance with NNS and SNS and application subnet
-pub async fn pocket_ic_for_sns_tests_with_mainnet_versions() -> PocketIc {
+pub async fn pocket_ic_for_sns_tests_with_mainnet_versions() -> (PocketIc, SnsWasms) {
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_sns_subnet()
@@ -105,16 +105,25 @@ pub async fn pocket_ic_for_sns_tests_with_mainnet_versions() -> PocketIc {
         .await;
 
     // Install the (mainnet) NNS canisters.
-    let with_mainnet_nns_canisters = true;
-    install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]).await;
+    {
+        let with_mainnet_nns_canisters = true;
+        install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]).await;
+    }
 
     // Publish (mainnet) SNS Wasms to SNS-W.
-    let with_mainnet_sns_wasms = true;
-    add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_wasms)
-        .await
-        .unwrap();
+    let initial_sns_version = {
+        let with_mainnet_sns_canisters = true;
+        let deployed_sns_starting_info =
+            add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_canisters)
+                .await
+                .unwrap();
+        deployed_sns_starting_info
+            .into_iter()
+            .map(|(canister_type, (_, wasm))| (canister_type, wasm))
+            .collect::<BTreeMap<_, _>>()
+    };
 
-    pocket_ic
+    (pocket_ic, initial_sns_version)
 }
 
 pub async fn install_canister(
