@@ -6,7 +6,7 @@ use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_types::{ids::node_test_id, messages::RequestBuilder};
 use ic_types::{
-    consensus::dkg::DealingContent,
+    consensus::dkg::{DealingContent, DealingMessages},
     crypto::{
         threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTargetId, NiDkgTranscript},
         BasicSig,
@@ -71,7 +71,7 @@ pub(super) fn create_dealing(node_idx: u64, dkg_id: NiDkgId) -> BasicSigned<Deal
 }
 
 /// Extract the remote dkg transcripts from the current highest validated block
-pub(super) fn extract_remote_dkg_transcripts_from_highest_block(
+pub(super) fn extract_remote_dkgs_from_highest_block(
     pool: &TestConsensusPool,
 ) -> Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)> {
     let block: ic_types::consensus::Block = pool
@@ -98,4 +98,21 @@ pub(super) fn extract_remote_dkg_transcripts_from_highest_block(
             .transcripts_for_remote_subnets
     }
     .clone()
+}
+
+/// Extract the remote dkg transcripts from the current highest validated block
+pub(super) fn extract_dealings_from_highest_block(pool: &TestConsensusPool) -> DealingMessages {
+    let block: ic_types::consensus::Block = pool
+        .validated()
+        .block_proposal()
+        .get_highest()
+        .unwrap()
+        .content
+        .into_inner();
+
+    if block.payload.as_ref().is_summary() {
+        vec![]
+    } else {
+        block.payload.as_ref().as_data().dkg.messages.clone()
+    }
 }

@@ -637,7 +637,7 @@ mod tests {
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::HasVersion,
+        consensus::{Block, HasVersion},
         crypto::threshold_sig::ni_dkg::{
             NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
@@ -646,7 +646,7 @@ mod tests {
         PrincipalId, RegistryVersion, ReplicaVersion,
     };
     use std::{collections::BTreeSet, convert::TryFrom};
-    use test_utils::extract_remote_dkg_transcripts_from_highest_block;
+    use test_utils::{extract_dealings_from_highest_block, extract_remote_dkgs_from_highest_block};
 
     #[test]
     // In this test we test the creation of dealing payloads.
@@ -1826,70 +1826,68 @@ mod tests {
                 );
             };
 
-            // TODO: Advance the pool a bit and dealings in, check that no early remote transcripts exist
             // Put validated dealings into the dkg pool
-            dkg_pool.write().unwrap().apply(vec![
-                ChangeAction::AddToValidated(create_dealing(1, remote_dkg_ids[0].clone())),
-                ChangeAction::AddToValidated(create_dealing(2, remote_dkg_ids[0].clone())),
-                ChangeAction::AddToValidated(create_dealing(3, remote_dkg_ids[0].clone())),
-                ChangeAction::AddToValidated(create_dealing(4, remote_dkg_ids[0].clone())),
-                ChangeAction::AddToValidated(create_dealing(1, remote_dkg_ids[1].clone())),
-                ChangeAction::AddToValidated(create_dealing(2, remote_dkg_ids[1].clone())),
-                ChangeAction::AddToValidated(create_dealing(3, remote_dkg_ids[1].clone())),
-                ChangeAction::AddToValidated(create_dealing(4, remote_dkg_ids[1].clone())),
-            ]);
+            // dkg_pool.write().unwrap().apply(vec![
+            //     ChangeAction::AddToValidated(create_dealing(1, remote_dkg_ids[0].clone())),
+            //     ChangeAction::AddToValidated(create_dealing(2, remote_dkg_ids[0].clone())),
+            //     ChangeAction::AddToValidated(create_dealing(3, remote_dkg_ids[0].clone())),
+            //     ChangeAction::AddToValidated(create_dealing(4, remote_dkg_ids[0].clone())),
+            //     ChangeAction::AddToValidated(create_dealing(1, remote_dkg_ids[1].clone())),
+            //     ChangeAction::AddToValidated(create_dealing(2, remote_dkg_ids[1].clone())),
+            //     ChangeAction::AddToValidated(create_dealing(3, remote_dkg_ids[1].clone())),
+            //     ChangeAction::AddToValidated(create_dealing(4, remote_dkg_ids[1].clone())),
+            // ]);
 
-            for _ in 0..10 {
-                pool.advance_round_normal_operation();
-                assert_eq!(
-                    extract_remote_dkg_transcripts_from_highest_block(&pool).len(),
-                    0
-                );
-            }
+            // Put a dealing in the pool and check that it gets included
+            // Additionally check that there are no remote transcripts
+            dkg_pool
+                .write()
+                .unwrap()
+                .apply(vec![ChangeAction::AddToValidated(create_dealing(
+                    1,
+                    remote_dkg_ids[0].clone(),
+                ))]);
+            pool.advance_round_normal_operation();
+            assert_eq!(extract_dealings_from_highest_block(&pool).len(), 1);
+            assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
 
-            // TODO: Once sufficient dealings are in the pool, check that payload contains early remote transcripts
+            // For the next round, we put nothing into the pool
+            // Since there are no dealings, we will try to build a remote transcript
+            // This will fail, however, since we need two dealings (one high one low)
+            pool.advance_round_normal_operation();
+            assert_eq!(extract_dealings_from_highest_block(&pool).len(), 0);
+            assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
+
+            // Now we put the other dealing into the pool
+            // The payload buukder will include the dealing
+            dkg_pool
+                .write()
+                .unwrap()
+                .apply(vec![ChangeAction::AddToValidated(create_dealing(
+                    1,
+                    remote_dkg_ids[1].clone(),
+                ))]);
+            pool.advance_round_normal_operation();
+            assert_eq!(extract_dealings_from_highest_block(&pool).len(), 1);
+            assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
+
+            // Now sufficient dealings are in the pool, check that payload contains early remote transcripts
+            // NOTE: We only need one dealing each, since we are using `CryptoReturningOk`. We should consider
+            // using real crypto for these tests, to make them more realistic
+            pool.advance_round_normal_operation();
+            assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 2);
+
             // TODO: Check that the payload also validates
+            let block: Block = pool
+                .validated()
+                .block_proposal()
+                .get_highest()
+                .unwrap()
+                .content
+                .into_inner();
             // TODO: Advance the pool a bit further, check that the early remote transcripts are not generated multiple times
             // TODO: Advanve the pool until the next DKG interval and verify that it does not contain already sent remote transcripts
             todo!();
-
-            // Verify that the next summary block contains the transcripts and not the
-            // configs.
-            // pool.advance_round_normal_operation_n(dkg_interval_length + 1);
-            // let block: Block = pool
-            //     .validated()
-            //     .block_proposal()
-            //     .get_highest()
-            //     .unwrap()
-            //     .content
-            //     .into_inner();
-            // if block.payload.as_ref().is_summary() {
-            //     let dkg_summary = &block.payload.as_ref().as_summary().dkg;
-            //     assert_eq!(dkg_summary.configs.len(), 2);
-            //     assert_eq!(
-            //         dkg_summary
-            //             .configs
-            //             .keys()
-            //             .filter(|id| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
-            //             .count(),
-            //         0
-            //     );
-            //     assert_eq!(
-            //         dkg_summary
-            //             .transcripts_for_remote_subnets
-            //             .iter()
-            //             .filter(
-            //                 |(id, _, _)| id.target_subnet == NiDkgTargetSubnet::Remote(target_id)
-            //             )
-            //             .count(),
-            //         2
-            //     );
-            // } else {
-            //     panic!(
-            //         "block at height {} is not a summary block",
-            //         block.height.get()
-            //     );
-            // }
         });
     }
 
