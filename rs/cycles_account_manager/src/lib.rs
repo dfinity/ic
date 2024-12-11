@@ -1015,7 +1015,7 @@ impl CyclesAccountManager {
         canister_id: CanisterId,
         cycles_balance: &mut Cycles,
         amount_to_mint: Cycles,
-    ) -> Result<Cycles, CyclesAccountManagerError> {
+    ) -> Result<(), CyclesAccountManagerError> {
         if canister_id != CYCLES_MINTING_CANISTER_ID {
             let error_str = format!(
                 "ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}",
@@ -1023,10 +1023,8 @@ impl CyclesAccountManager {
             );
             Err(CyclesAccountManagerError::ContractViolation(error_str))
         } else {
-            let before_balance = *cycles_balance;
             *cycles_balance += amount_to_mint;
-            // equal to amount_to_mint, except when the addition saturated
-            Ok(*cycles_balance - before_balance)
+            Ok(())
         }
     }
 

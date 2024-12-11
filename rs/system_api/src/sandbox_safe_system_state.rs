@@ -881,7 +881,7 @@ impl SandboxSafeSystemState {
         self.update_balance_change(new_balance);
     }
 
-    pub(super) fn mint_cycles(&mut self, amount_to_mint: Cycles) -> HypervisorResult<Cycles> {
+    pub(super) fn mint_cycles(&mut self, amount_to_mint: Cycles) -> HypervisorResult<()> {
         let mut new_balance = self.cycles_balance();
         let result = self
             .cycles_account_manager

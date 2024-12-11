@@ -84,8 +84,6 @@ async fn test_deployment_swap_upgrade() {
 }
 
 /// Upgrade Tests
-
-#[ignore]
 #[tokio::test]
 async fn test_upgrade_swap() {
     test_sns_upgrade(vec![SnsCanisterType::Swap]).await;
