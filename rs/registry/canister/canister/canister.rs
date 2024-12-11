@@ -189,9 +189,9 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 fn get_changes_since() {
     fn main() -> Result<RegistryGetChangesSinceResponse, (Code, String)> {
         // Parse request.
-        let request = deserialize_get_changes_since_request(arg_data())
+        let (version, limit) = deserialize_get_changes_since_request(arg_data())
             .map_err(|err| (Code::MalformedMessage, err.to_string()))?;
-        let version = request;
+        let limit = limit.unwrap_or(MAX_VERSIONS_PER_QUERY as u32) as usize;
 
         // All requirements met. Proceed with "real work".
 
@@ -199,6 +199,7 @@ fn get_changes_since() {
 
         let max_versions = registry
             .count_fitting_deltas(version, MAX_REGISTRY_DELTAS_SIZE)
+            .min(limit)
             .min(MAX_VERSIONS_PER_QUERY);
 
         Ok(RegistryGetChangesSinceResponse {
@@ -238,9 +239,11 @@ fn get_certified_changes_since() {
             use ic_certified_map::{fork, labeled, labeled_hash};
             let latest_version = registry().latest_version();
             let from_version = EncodedVersion::from(req.version.saturating_add(1));
+            let limit = req.limit.unwrap_or(MAX_VERSIONS_PER_QUERY as u32) as usize;
 
             let max_versions = registry()
                 .count_fitting_deltas(req.version, MAX_REGISTRY_DELTAS_SIZE)
+                .min(limit)
                 .min(MAX_VERSIONS_PER_QUERY);
 
             let to_version = EncodedVersion::from(req.version.saturating_add(max_versions as u64));

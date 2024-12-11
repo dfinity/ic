@@ -92,11 +92,17 @@ pub struct RegistryDelta {
     pub values: ::prost::alloc::vec::Vec<RegistryValue>,
 }
 /// Message to retrieve all the changes from the registry
-/// since 'version'.
+/// since 'version' with optional 'limit' on the number of versions returned.
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct RegistryGetChangesSinceRequest {
     #[prost(uint64, tag = "1")]
     pub version: u64,
+    /// The limit of the number of versions returned in each page, in range
+    /// \[0, MAX_VERSIONS_PER_QUERY\].
+    /// If no value, or a value outside of this range is requested, MAX_VERSIONS_PER_QUERY will be
+    /// used.
+    #[prost(message, optional, tag = "2")]
+    pub limit: ::core::option::Option<u32>,
 }
 /// Message corresponding to the response from the registry
 /// canister to a get_latest_version() request.
