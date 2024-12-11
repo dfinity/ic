@@ -637,7 +637,7 @@ mod tests {
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::{Block, HasVersion},
+        consensus::{Block, HasHeight, HasVersion},
         crypto::threshold_sig::ni_dkg::{
             NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
@@ -645,6 +645,7 @@ mod tests {
         time::UNIX_EPOCH,
         PrincipalId, RegistryVersion, ReplicaVersion,
     };
+    use payload_validator::validate_payload;
     use std::{collections::BTreeSet, convert::TryFrom};
     use test_utils::{extract_dealings_from_highest_block, extract_remote_dkgs_from_highest_block};
 
@@ -1773,6 +1774,7 @@ mod tests {
                 registry,
                 state_manager,
                 dkg_pool,
+                crypto,
                 ..
             } = dependencies_with_subnet_records_with_raw_state_manager(
                 pool_config,
@@ -1787,7 +1789,7 @@ mod tests {
 
             let target_id = NiDkgTargetId::new([0u8; 32]);
             complement_state_manager_with_remote_dkg_requests(
-                state_manager,
+                state_manager.clone(),
                 registry.get_latest_version(),
                 vec![10, 11, 12, 13],
                 None,
@@ -1825,18 +1827,6 @@ mod tests {
                     block.height.get()
                 );
             };
-
-            // Put validated dealings into the dkg pool
-            // dkg_pool.write().unwrap().apply(vec![
-            //     ChangeAction::AddToValidated(create_dealing(1, remote_dkg_ids[0].clone())),
-            //     ChangeAction::AddToValidated(create_dealing(2, remote_dkg_ids[0].clone())),
-            //     ChangeAction::AddToValidated(create_dealing(3, remote_dkg_ids[0].clone())),
-            //     ChangeAction::AddToValidated(create_dealing(4, remote_dkg_ids[0].clone())),
-            //     ChangeAction::AddToValidated(create_dealing(1, remote_dkg_ids[1].clone())),
-            //     ChangeAction::AddToValidated(create_dealing(2, remote_dkg_ids[1].clone())),
-            //     ChangeAction::AddToValidated(create_dealing(3, remote_dkg_ids[1].clone())),
-            //     ChangeAction::AddToValidated(create_dealing(4, remote_dkg_ids[1].clone())),
-            // ]);
 
             // Put a dealing in the pool and check that it gets included
             // Additionally check that there are no remote transcripts
@@ -1877,7 +1867,7 @@ mod tests {
             pool.advance_round_normal_operation();
             assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 2);
 
-            // TODO: Check that the payload also validates
+            // Check that the payload also validates
             let block: Block = pool
                 .validated()
                 .block_proposal()
@@ -1885,8 +1875,36 @@ mod tests {
                 .unwrap()
                 .content
                 .into_inner();
+            let pool_reader = PoolReader::new(&pool);
+
+            let parent = &block.parent;
+            let height = block.height().decrement();
+            let parent = pool_reader
+                .get_notarized_block(parent, height)
+                .map(|block| block.into_inner())
+                .unwrap();
+
+            assert!(validate_payload(
+                subnet_test_id(0),
+                registry.as_ref(),
+                crypto.as_ref(),
+                &pool_reader,
+                &*dkg_pool.read().unwrap(),
+                parent,
+                &block.payload.as_ref(),
+                state_manager.as_ref(),
+                &block.context,
+                no_op_logger(),
+                &MetricsRegistry::new().int_counter_vec(
+                    "consensus_dkg_validator",
+                    "DKG validator counter",
+                    &["type"],
+                )
+            )
+            .is_ok());
+
             // TODO: Advance the pool a bit further, check that the early remote transcripts are not generated multiple times
-            // TODO: Advanve the pool until the next DKG interval and verify that it does not contain already sent remote transcripts
+            // TODO: Advance the pool until the next DKG interval and verify that it does not contain already sent remote transcripts
             todo!();
         });
     }
