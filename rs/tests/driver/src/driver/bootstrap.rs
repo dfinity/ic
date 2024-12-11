@@ -477,7 +477,7 @@ fn create_config_disk_image(
         config.nns_urls = Some(vec![format!("http://[{}]:8080", node.get_ip_addr())]);
     }
 
-    if let Some(malicious_behavior) = malicious_behavior {
+    if let Some(ref malicious_behavior) = malicious_behavior {
         info!(
             test_env.logger(),
             "Node with id={} has malicious behavior={:?}", node.node_id, malicious_behavior
@@ -495,7 +495,7 @@ fn create_config_disk_image(
         config.query_stats_epoch_length = Some(query_stats_epoch_length);
     }
 
-    if let Some(ipv4_config) = ipv4_config {
+    if let Some(ref ipv4_config) = ipv4_config {
         info!(
             test_env.logger(),
             "Node with id={} is IPv4-enabled: {:?}", node.node_id, ipv4_config
@@ -511,12 +511,12 @@ fn create_config_disk_image(
         config.generate_ic_boundary_tls_cert = Some(domain_name.to_string());
     }
 
-    if let Some(domain_name) = domain_name {
+    if let Some(ref domain_name) = domain_name {
         info!(
             test_env.logger(),
             "Node with id={} has domain_name {}", node.node_id, domain_name,
         );
-        config.domain_name = Some(domain_name);
+        config.domain_name = Some(domain_name.to_string());
     }
 
     let elasticsearch_hosts: Vec<String> = get_elasticsearch_hosts()?;
@@ -572,6 +572,58 @@ fn create_config_disk_image(
     if ssh_authorized_pub_keys_dir.exists() {
         cmd.arg("--accounts_ssh_authorized_keys")
             .arg(ssh_authorized_pub_keys_dir);
+    }
+
+    // TODO(NODE-1518): remove passing old config (only exists to pass *downgrade* CI tests)
+    if InfraProvider::read_attribute(test_env) == InfraProvider::K8s {
+        cmd.arg("--ipv6_address")
+            .arg(format!("{}/64", node.node_config.public_api.ip()))
+            .arg("--ipv6_gateway")
+            .arg("fe80::ecee:eeff:feee:eeee");
+    }
+    if let Some(node) = test_env
+        .topology_snapshot_by_name(ic_name)
+        .root_subnet()
+        .nodes()
+        .next()
+    {
+        cmd.arg("--nns_urls")
+            .arg(format!("http://[{}]:8080", node.get_ip_addr()));
+    }
+    if let Some(malicious_behavior) = malicious_behavior {
+        cmd.arg("--malicious_behavior")
+            .arg(serde_json::to_string(&malicious_behavior)?);
+    }
+    if let Some(query_stats_epoch_length) = query_stats_epoch_length {
+        cmd.arg("--query_stats_epoch_length")
+            .arg(format!("{}", query_stats_epoch_length));
+    }
+    if let Some(ipv4_config) = ipv4_config {
+        cmd.arg("--ipv4_address").arg(format!(
+            "{}/{:?}",
+            ipv4_config.ip_addr(),
+            ipv4_config.prefix_length()
+        ));
+        cmd.arg("--ipv4_gateway").arg(ipv4_config.gateway_ip_addr());
+    }
+    if let Some(domain_name) = &node.node_config.domain {
+        cmd.arg("--generate_ic_boundary_tls_cert").arg(domain_name);
+    }
+    if let Some(domain_name) = domain_name {
+        cmd.arg("--domain").arg(domain_name);
+    }
+    if !elasticsearch_hosts.is_empty() {
+        cmd.arg("--elasticsearch_hosts")
+            .arg(elasticsearch_hosts.join(" "));
+    }
+    if let Ok(arg) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
+        cmd.arg("--bitcoind_addr").arg(arg);
+    }
+    if let Ok(arg) = test_env.read_json_object::<String, _>(JAEGER_ADDR_PATH) {
+        cmd.arg("--jaeger_addr").arg(arg);
+    }
+    if let Ok(arg) = test_env.read_json_object::<String, _>(SOCKS_PROXY_PATH) {
+        cmd.arg("--socks_proxy").arg(arg);
     }
 
     let key = "PATH";
