@@ -97,7 +97,7 @@ jobs:
           To reproduce the artifacts of this release:
 
           ${CODE_BLOCK}
-          bazel build //rs/boundary_node/anonymization/backend:anonymization_backend
+          bazel build --config=local //rs/boundary_node/anonymization/backend:anonymization_backend
           ${CODE_BLOCK}
 
           ## Checksums
