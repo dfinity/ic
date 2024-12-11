@@ -10990,6 +10990,7 @@ dependencies = [
  "rustls 0.23.18",
  "slog",
  "socket2 0.5.7",
+ "static_assertions",
  "thiserror 2.0.3",
  "tokio",
  "tokio-metrics",
