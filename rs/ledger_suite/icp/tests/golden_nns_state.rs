@@ -19,7 +19,7 @@ use ic_nns_constants::{
     LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdentifier, Archives, Block, FeatureFlags, LedgerCanisterPayload, UpgradeArgs,
 };
@@ -294,14 +294,29 @@ impl Setup {
     pub fn upgrade_to_master(&self) {
         println!("Upgrading to master version");
         self.upgrade_index(&self.master_wasms.index);
-        self.upgrade_ledger(&self.master_wasms.ledger);
+        self.upgrade_ledger(&self.master_wasms.ledger)
+            .expect("should successfully upgrade ledger to new local version");
         self.upgrade_archive_canisters(&self.master_wasms.archive);
     }
 
     pub fn downgrade_to_mainnet(&self) {
         println!("Downgrading to mainnet version");
         self.upgrade_index(&self.mainnet_wasms.index);
-        self.upgrade_ledger(&self.mainnet_wasms.ledger);
+        match self.upgrade_ledger(&self.mainnet_wasms.ledger) {
+            Ok(_) => {
+                panic!("should fail to downgrade ledger to mainnet version");
+            }
+            Err(err) => {
+                // The ledger will still be running the master version, while the other canisters
+                // will be downgraded to the mainnet version. This is not an ideal situation, nor
+                // is it expected to happen in practice, but for the moment let's run the test to
+                // completion.
+                err.assert_contains(
+                    ErrorCode::CanisterCalledTrap,
+                    "Trying to downgrade from incompatible version",
+                );
+            }
+        }
         self.upgrade_archive_canisters(&self.mainnet_wasms.archive);
     }
 
@@ -355,19 +370,17 @@ impl Setup {
             .expect("should successfully upgrade index to new local version");
     }
 
-    fn upgrade_ledger(&self, wasm: &Wasm) {
+    fn upgrade_ledger(&self, wasm: &Wasm) -> Result<(), UserError> {
         let ledger_upgrade_args: LedgerCanisterPayload =
             LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
                 icrc1_minting_account: None,
                 feature_flags: Some(FeatureFlags { icrc2: true }),
             }));
 
-        self.state_machine
-            .upgrade_canister(
-                LEDGER_CANISTER_ID,
-                wasm.clone().bytes(),
-                Encode!(&ledger_upgrade_args).unwrap(),
-            )
-            .expect("should successfully upgrade ledger to new local version");
+        self.state_machine.upgrade_canister(
+            LEDGER_CANISTER_ID,
+            wasm.clone().bytes(),
+            Encode!(&ledger_upgrade_args).unwrap(),
+        )
     }
 }
