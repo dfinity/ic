@@ -139,12 +139,15 @@ pub fn mint_cycles_not_supported_on_application_subnet(env: TestEnv) {
 
 fn setup_ucan_and_try_mint128(node: IcNodeSnapshot) -> (AgentError, u128, u128, String) {
     let agent = node.build_default_agent();
-    let canister_id = node.get_last_canister_id_in_allocation_ranges();
+    let effective_canister_id = node.get_last_canister_id_in_allocation_ranges();
     block_on(async move {
-        let canister_id = UniversalCanister::new_with_cycles(&agent, canister_id, *INITIAL_CYCLES)
-            .await
-            .unwrap()
-            .canister_id();
+        let canister_id =
+            UniversalCanister::new_with_cycles(&agent, effective_canister_id, *INITIAL_CYCLES)
+                .await
+                .unwrap()
+                .canister_id();
+        // Check that 'canister_id' is not 'CYCLES_MINTING_CANISTER_ID'.
+        assert_ne!(canister_id, CYCLES_MINTING_CANISTER_ID.into());
         let before_balance = get_balance(&canister_id, &agent).await;
         let res = agent
             .update(&canister_id, "update")
@@ -166,8 +169,6 @@ fn setup_ucan_and_try_mint128(node: IcNodeSnapshot) -> (AgentError, u128, u128, 
 pub fn mint_cycles128_supported_only_on_cycles_minting_canister(env: TestEnv) {
     let nns_node = env.get_first_healthy_nns_node_snapshot();
     let canister_id = nns_node.get_last_canister_id_in_allocation_ranges();
-    // Check that 'canister_id' is not 'CYCLES_MINTING_CANISTER_ID'.
-    assert_ne!(canister_id, CYCLES_MINTING_CANISTER_ID.into());
     let (res, before_balance, after_balance, canister_id) = setup_ucan_and_try_mint128(nns_node);
     assert_eq!(
         res,
