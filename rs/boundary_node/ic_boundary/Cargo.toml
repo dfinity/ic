@@ -70,6 +70,7 @@ nix = { workspace = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
 ratelimit = "0.9.1"
+rate-limits-api = { path = "../rate_limits/api" }
 rcgen = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }

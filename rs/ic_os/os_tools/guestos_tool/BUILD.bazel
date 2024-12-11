@@ -25,7 +25,6 @@ rust_binary(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "guestos_tool",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = [
         "@platforms//os:linux",

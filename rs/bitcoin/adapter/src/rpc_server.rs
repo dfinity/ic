@@ -5,7 +5,7 @@ use crate::{
     GetSuccessorsHandler, TransactionManagerRequest,
 };
 use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
-use ic_async_utils::{incoming_from_first_systemd_socket, incoming_from_path};
+use ic_async_utils::{incoming_from_nth_systemd_socket, incoming_from_path};
 use ic_btc_service::{
     btc_service_server::{BtcService, BtcServiceServer},
     BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
@@ -150,7 +150,7 @@ pub fn start_grpc_server(
             });
         }
         IncomingSource::Systemd => {
-            let incoming = unsafe { incoming_from_first_systemd_socket() };
+            let incoming = unsafe { incoming_from_nth_systemd_socket(1) };
             let server_fut = Server::builder()
                 .add_service(BtcServiceServer::new(btc_adapter_impl))
                 // SAFETY: The process is managed by systemd and is configured to start with at least one socket.
