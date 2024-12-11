@@ -7,6 +7,9 @@ use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Debug;
 
+#[cfg(test)]
+mod tests;
+
 /// Performs addition that returns `None` instead of wrapping around on
 /// overflow.
 ///
