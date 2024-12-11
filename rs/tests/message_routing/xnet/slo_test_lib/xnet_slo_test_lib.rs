@@ -28,7 +28,7 @@ use canister_test::{Canister, Runtime};
 use dfn_candid::candid;
 use futures::future::join_all;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet, VmResources};
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -67,6 +67,7 @@ pub struct Config {
     canisters_per_subnet: usize,
     canister_to_subnet_rate: usize,
     timeout_seconds: u32,
+    vm_resources: Option<VmResources>,
     with_prometheus: bool,
 }
 
@@ -117,8 +118,14 @@ impl Config {
             canisters_per_subnet,
             canister_to_subnet_rate,
             timeout_seconds: 0,
+            vm_resources: None,
             with_prometheus: false,
         }
+    }
+
+    pub fn with_vm_resources(mut self, resources: VmResources) -> Self {
+        self.vm_resources = Some(resources);
+        self
     }
 
     pub fn with_prometheus(self) -> Self {
@@ -152,8 +159,12 @@ impl Config {
 
 // Generic setup
 fn setup(env: TestEnv, config: Config) {
+    let mut ic = InternetComputer::new();
+    if let Some(resources) = config.vm_resources {
+        ic = ic.with_default_vm_resources(resources);
+    }
     (0..config.subnets)
-        .fold(InternetComputer::new(), |ic, _idx| {
+        .fold(ic, |ic, _idx| {
             ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_per_subnet))
         })
         .setup_and_start(&env)

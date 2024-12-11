@@ -200,19 +200,6 @@ async fn fanout() {
                 padding: vec![0; payload_size.saturating_sub(16)],
             };
 
-            // <<<<<<< HEAD
-            //             let err_code = api::call_raw(
-            //                 api::CanisterId::try_from(canister.clone()).unwrap(),
-            //                 "handle_request",
-            //                 &msg[..],
-            //                 on_reply,
-            //                 on_reject,
-            //                 None,
-            //                 std::ptr::null_mut(),
-            //                 api::Funds::zero(),
-            //                 timeout_seconds,
-            //             );
-            // =======
             let res = Call::new(canister, "handle_request")
                 .with_args((payload,))
                 .change_timeout(timeout_seconds)
@@ -261,7 +248,7 @@ fn handle_request(req: Request) -> Reply {
         METRICS.with(|m| m.borrow_mut().seq_errors += 1);
     }
 
-    let payload_size = PAYLOAD_SIZE.with(|p| *p.borrow()) as usize;
+    let payload_size = RESPONSE_PAYLOAD_SIZE.with(|p| *p.borrow()) as usize;
     Reply {
         time_nanos: req.time_nanos,
         padding: vec![0; payload_size.saturating_sub(8)],
