@@ -2285,7 +2285,7 @@ fn verify_error_and_no_effect(mut test: ExecutionTest) {
     let canister_id = test.universal_canister().unwrap();
     let initial_cycles = test.canister_state(canister_id).system_state.balance();
     let payload = wasm()
-        .mint_cycles128(Cycles::from(10_000_000_000_u128)
+        .mint_cycles128(Cycles::from(10_000_000_000_u128))
         .reply_data_append()
         .reply()
         .build();
