@@ -2,10 +2,10 @@ use std::{path::PathBuf, sync::Arc, time::SystemTime};
 
 use anyhow::{anyhow, Context as _, Error};
 use async_trait::async_trait;
-use candid::Decode;
+use candid::{Decode, Encode};
 use ic_canister_client::Agent;
 use ic_types::CanisterId;
-use rate_limits_api::{v1::RateLimitRule, GetConfigResponse};
+use rate_limits_api::{v1::RateLimitRule, GetConfigResponse, Version};
 use tokio::fs;
 
 const SCHEMA_VERSION: u64 = 1;
@@ -50,18 +50,35 @@ impl FetchesRules for FileFetcher {
     }
 }
 
-pub struct CanisterConfigFetcher(pub Agent, pub CanisterId);
+pub struct CanisterConfigFetcherQuery(pub Agent, pub CanisterId);
 
 #[async_trait]
-impl FetchesConfig for CanisterConfigFetcher {
+impl FetchesConfig for CanisterConfigFetcherQuery {
+    async fn fetch_config(&self) -> Result<Vec<u8>, Error> {
+        self.0
+            .execute_query(
+                &self.1,                            // canister_id
+                "get_config",                       // method
+                Encode!(&None::<Version>).unwrap(), // arguments
+            )
+            .await
+            .map_err(|e| anyhow!("failed to fetch config from the canister: {e:#}"))?
+            .ok_or_else(|| anyhow!("got empty response from the canister"))
+    }
+}
+
+pub struct CanisterConfigFetcherUpdate(pub Agent, pub CanisterId);
+
+#[async_trait]
+impl FetchesConfig for CanisterConfigFetcherUpdate {
     async fn fetch_config(&self) -> Result<Vec<u8>, Error> {
         self.0
             .execute_update(
-                &self.1,      // effective_canister_id
-                &self.1,      // canister_id
-                "get_config", // method
-                vec![],       // arguments
-                nonce(),      // nonce
+                &self.1,                            // canister_id
+                &self.1,                            // effective_canister_id
+                "get_config",                       // method
+                Encode!(&None::<Version>).unwrap(), // arguments
+                nonce(),                            // nonce
             )
             .await
             .map_err(|e| anyhow!("failed to fetch config from the canister: {e:#}"))?

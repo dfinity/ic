@@ -252,6 +252,7 @@ pub struct RateLimiting {
     /// Allowed number of update calls per second per ip per boundary node. Panics if 0 is passed!
     #[clap(env, long)]
     pub rate_limit_per_second_per_ip: Option<u32>,
+
     /// Path to a generic rate-limiter rules, if the file does not exist - no rules are applied.
     /// File is checked every 10sec and is reloaded if the changes are detected.
     /// Expecting YAML list with objects that have at least one of
@@ -274,6 +275,10 @@ pub struct RateLimiting {
     /// If specified together with the file above - file takes precedence.
     #[clap(env, long)]
     pub rate_limit_generic_canister_id: Option<CanisterId>,
+
+    /// How frequently to poll for rules (from file or canister)
+    #[clap(env, long, default_value = "30s", value_parser = parse_duration)]
+    pub rate_limit_generic_poll_interval: Duration,
 }
 
 #[derive(Args)]
@@ -383,7 +388,8 @@ pub struct Misc {
     #[clap(env, long)]
     pub skip_replica_tls_verification: bool,
 
-    /// Configuration of the node's crypto-vault
+    /// Configuration of the node's crypto-vault to use with the IC agent.
+    /// If not specified - then the agent will use anonymous sender.
     #[clap(env, long, value_parser=parse_crypto_config)]
     pub crypto_config: Option<CryptoConfig>,
 }
