@@ -112,10 +112,6 @@ options may be specified:
   --socks_proxy url
     The URL of the socks proxy to use. To be used in
     systems tests only.
-
-  --generate_ic_boundary_tls_cert domain_name
-    Generate and inject a self-signed TLS certificate and key for ic-boundary
-    for the given domain name. To be used in system tests only.
 EOF
 }
 

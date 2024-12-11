@@ -606,9 +606,6 @@ fn create_config_disk_image(
         ));
         cmd.arg("--ipv4_gateway").arg(ipv4_config.gateway_ip_addr());
     }
-    if let Some(domain_name) = &node.node_config.domain {
-        cmd.arg("--generate_ic_boundary_tls_cert").arg(domain_name);
-    }
     if let Some(domain_name) = domain_name {
         cmd.arg("--domain").arg(domain_name);
     }
