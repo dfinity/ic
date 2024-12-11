@@ -476,7 +476,8 @@ impl Governance {
         true
     }
 
-    /// Refreshes the cached_upgrade_steps field
+    /// Attempts to refresh the cached_upgrade_steps field and (if this SNS wants automatic
+    /// deployment of upgrades), also the target_version.
     pub async fn refresh_cached_upgrade_steps(&mut self, deployed_version: Version) {
         let sns_governance_canister_id = self.env.canister_id().get();
 
@@ -494,6 +495,22 @@ impl Governance {
                 return;
             }
         };
+
+        if self.should_automatically_advance_target_version() {
+            let new_target = upgrade_steps.last().clone();
+
+            {
+                let new_target = Some(new_target.clone());
+                if self.proto.target_version != new_target {
+                    self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionSet::new(
+                        self.proto.target_version.clone(),
+                        new_target,
+                    ));
+                }
+            }
+
+            self.proto.target_version.replace(new_target);
+        }
 
         // This copy of the data would go to the upgrade journal for auditability.
         let versions = upgrade_steps.clone().into_iter().collect();

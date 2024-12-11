@@ -1050,6 +1050,9 @@ pub struct NervousSystemParameters {
     /// that the PB default (bool fields are false) and our application default
     /// (enabled) agree.
     pub maturity_modulation_disabled: Option<bool>,
+    /// Whether to automatically advance the SNS target version after a new upgrade is published
+    /// by the NNS. If not specified, defaults to false for backward compatibility.
+    pub automatically_advance_target_version: Option<bool>,
 }
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, Copy, PartialEq)]
 pub struct VotingRewardsParameters {

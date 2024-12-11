@@ -1085,6 +1085,10 @@ message NervousSystemParameters {
   // that the PB default (bool fields are false) and our application default
   // (enabled) agree.
   optional bool maturity_modulation_disabled = 22;
+
+  // Whether to automatically advance the SNS target version after a new upgrade is published
+  // by the NNS. If not specified, defaults to false for backward compatibility.
+  optional bool automatically_advance_target_version = 23;
 }
 
 message VotingRewardsParameters {
