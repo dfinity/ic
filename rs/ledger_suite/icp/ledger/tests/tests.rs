@@ -1718,8 +1718,14 @@ fn test_icrc21_standard() {
 #[test]
 fn test_query_blocks_large_length() {
     let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    for i in 0..MAX_BLOCKS_PER_REQUEST + 1 {
+        let user = PrincipalId::new_user_test_id(i as u64);
+        initial_balances.insert(Account::from(user.0).into(), Tokens::from_e8s(100_000));
+    }
     let payload = LedgerCanisterInitPayload::builder()
         .minting_account(MINTER.into())
+        .initial_values(initial_balances)
         .build()
         .unwrap();
     let canister_id = env
@@ -1733,7 +1739,8 @@ fn test_query_blocks_large_length() {
             "query_blocks",
             Encode!(&GetBlocksArgs {
                 start: 0,
-                length: 10_000_000_000
+                // If this is cast (in a wasm32 ledger) using `as usize`, it will overflow to 0u32.
+                length: (u32::MAX as u64) + 1
             })
             .unwrap()
         )
@@ -1742,7 +1749,13 @@ fn test_query_blocks_large_length() {
         QueryBlocksResponse
     )
     .expect("should successfully decode QueryBlocksResponse");
-    assert_eq!(res.chain_length, 0);
+    // Verify that we have more blocks in the ledger than can be returned in a single query.
+    assert_eq!(res.chain_length, (MAX_BLOCKS_PER_REQUEST + 1) as u64);
+    // Verify that the number of blocks in the response is limited to MAX_BLOCKS_PER_REQUEST, and
+    // that it is also larger than 0 (which would be the case if the length in the request was
+    // incorrectly cast to a wasm32 `usize` (`u32`)).
+    assert_eq!(res.blocks.len(), MAX_BLOCKS_PER_REQUEST);
+    assert!(MAX_BLOCKS_PER_REQUEST > 0);
 }
 
 mod metrics {
