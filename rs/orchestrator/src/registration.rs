@@ -66,7 +66,6 @@ pub(crate) struct NodeRegistration {
     key_handler: Arc<dyn NodeRegistrationCrypto>,
     local_store: Arc<dyn LocalStore>,
     signer: Box<dyn Signer>,
-    node_reward_type: Option<String>,
 }
 
 impl NodeRegistration {
@@ -92,7 +91,6 @@ impl NodeRegistration {
             Some(signer) => Box::new(signer),
             None => Box::new(Hsm),
         };
-        let node_reward_type = node_config.registration.node_reward_type.clone();
         Self {
             log,
             node_config,
@@ -102,7 +100,6 @@ impl NodeRegistration {
             key_handler,
             local_store,
             signer,
-            node_reward_type,
         }
     }
 
