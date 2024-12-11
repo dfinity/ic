@@ -49,7 +49,6 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_node_key_generation",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -58,7 +57,6 @@ rust_test(
     name = "node_key_generation_test",
     aliases = ALIASES,
     crate = ":node_key_generation",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -67,7 +65,6 @@ rust_test_suite(
     name = "node_key_generation_integration",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":node_key_generation"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
