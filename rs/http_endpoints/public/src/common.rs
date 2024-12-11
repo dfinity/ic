@@ -7,7 +7,6 @@ use http::{
 };
 use http_body_util::BodyExt;
 use hyper::{header, Response, StatusCode};
-use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_error_types::UserError;
 use ic_interfaces_registry::RegistryClient;
@@ -277,7 +276,6 @@ pub(crate) async fn get_latest_certified_state(
 }
 
 pub(crate) fn build_validator<T: HttpRequestContent>(
-    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     malicious_flags: Option<MaliciousFlags>,
 ) -> Arc<dyn HttpRequestVerifier<T, RegistryRootOfTrustProvider>>
 where
@@ -299,7 +297,7 @@ where
 
         Arc::new(DisabledHttpRequestVerifier) as Arc<_>
     } else {
-        Arc::new(HttpRequestVerifierImpl::new(ingress_verifier)) as Arc<_>
+        Arc::new(HttpRequestVerifierImpl) as Arc<_>
     }
 }
 
