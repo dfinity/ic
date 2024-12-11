@@ -8,8 +8,9 @@ use crate::{
     replay_helper,
     ssh_helper::SshHelper,
     util::{block_on, parse_hex_str},
-    Recovery, ADMIN, CHECKPOINTS, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_DATA_PATH,
-    IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES, NEW_IC_STATE, READONLY,
+    Recovery, UploadMethod, ADMIN, CHECKPOINTS, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH,
+    IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES,
+    NEW_IC_STATE, OLD_IC_STATE, READONLY,
 };
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
 use ic_base_types::{CanisterId, NodeId, PrincipalId};
@@ -509,7 +510,7 @@ impl Step for ValidateReplayStep {
 
 pub struct UploadAndRestartStep {
     pub logger: Logger,
-    pub node_ip: IpAddr,
+    pub upload_method: UploadMethod,
     pub work_dir: PathBuf,
     pub data_src: PathBuf,
     pub require_confirmation: bool,
@@ -517,85 +518,8 @@ pub struct UploadAndRestartStep {
     pub check_ic_replay_height: bool,
 }
 
-impl Step for UploadAndRestartStep {
-    fn descr(&self) -> String {
-        format!(
-            "Stopping replica {}, uploading and replacing state from {}, set access rights, \
-            restart replica.",
-            self.node_ip,
-            self.data_src.display()
-        )
-    }
-
-    fn exec(&self) -> RecoveryResult<()> {
-        let account = ADMIN;
-        let ssh_helper = SshHelper::new(
-            self.logger.clone(),
-            account.to_string(),
-            self.node_ip,
-            self.require_confirmation,
-            self.key_file.clone(),
-        );
-
-        let checkpoint_path = self.data_src.join(CHECKPOINTS);
-        let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
-
-        let [max_checkpoint] = checkpoints.as_slice() else {
-            return Err(RecoveryError::invalid_output_error(
-                "Found multiple checkpoints in upload directory",
-            ));
-        };
-
-        if self.check_ic_replay_height {
-            let replay_height =
-                replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?
-                    .height;
-
-            if parse_hex_str(max_checkpoint)? != replay_height.get() {
-                return Err(RecoveryError::invalid_output_error(format!(
-                    "Latest checkpoint height ({}) doesn't match replay output ({})",
-                    max_checkpoint, replay_height
-                )));
-            }
-        }
-
-        let ic_checkpoints_path = format!("{}/{}", IC_DATA_PATH, IC_CHECKPOINTS_PATH);
-        // upload directory to create
-        let upload_dir = format!("{}/{}", IC_DATA_PATH, NEW_IC_STATE);
-        // path of highest checkpoint on upload node
-        let copy_from = format!(
-            "{}/$(ls {} | sort | tail -1)",
-            ic_checkpoints_path, ic_checkpoints_path
-        );
-        // path and name of checkpoint after replay
-        let copy_to = format!("{}/{}/{}", upload_dir, CHECKPOINTS, max_checkpoint);
-        let cp = format!("sudo cp -r {} {}", copy_from, copy_to);
-
-        info!(
-            self.logger,
-            "Creating remote directory and copying previous checkpoint..."
-        );
-        if let Some(res) = ssh_helper.ssh(format!(
-            "sudo mkdir -p {}/{}; {}; sudo chown -R {} {};",
-            upload_dir, CHECKPOINTS, cp, account, upload_dir
-        ))? {
-            info!(self.logger, "{}", res);
-        }
-
-        let target = format!("{}@[{}]:{}/", account, self.node_ip, upload_dir);
-        let src = format!("{}/", self.data_src.display());
-        info!(self.logger, "Uploading state...");
-        rsync(
-            &self.logger,
-            IC_STATE_EXCLUDES.to_vec(),
-            &src,
-            &target,
-            self.require_confirmation,
-            self.key_file.as_ref(),
-        )?;
-
-        let ic_state_path = format!("{}/{}", IC_DATA_PATH, IC_STATE);
-        info!(self.logger, "Restarting replica...");
+impl UploadAndRestartStep {
+    fn get_state_replacement_command(ic_state_path: String, upload_dir: String) -> String {
         let mut replace_state = String::new();
         replace_state.push_str("sudo systemctl stop ic-replica;");
         replace_state.push_str(&format!(
@@ -622,8 +546,120 @@ impl Step for UploadAndRestartStep {
         replace_state.push_str("(sudo systemctl restart setup-permissions || true);");
         replace_state.push_str("sudo systemctl start ic-replica;");
         replace_state.push_str("sudo systemctl status ic-replica;");
+        replace_state
+    }
+}
+impl Step for UploadAndRestartStep {
+    fn descr(&self) -> String {
+        let replica = match self.upload_method {
+            UploadMethod::Remote(ip) => &format!("replica {ip}"),
+            UploadMethod::Local => "local replica",
+        };
+        format!(
+            "Stopping {replica}, uploading and replacing state from {}, set access \
+            rights, restart replica.",
+            self.data_src.display()
+        )
+    }
 
-        ssh_helper.ssh(replace_state)?;
+    fn exec(&self) -> RecoveryResult<()> {
+        let account = ADMIN;
+        let checkpoint_path = self.data_src.join(CHECKPOINTS);
+        let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
+
+        let [max_checkpoint] = checkpoints.as_slice() else {
+            return Err(RecoveryError::invalid_output_error(
+                "Found multiple checkpoints in upload directory",
+            ));
+        };
+
+        if self.check_ic_replay_height {
+            let replay_height =
+                replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?
+                    .height;
+
+            if parse_hex_str(max_checkpoint)? != replay_height.get() {
+                return Err(RecoveryError::invalid_output_error(format!(
+                    "Latest checkpoint height ({}) doesn't match replay output ({})",
+                    max_checkpoint, replay_height
+                )));
+            }
+        }
+
+        // Upload directory to create
+        let upload_dir = format!("{}/{}", IC_DATA_PATH, NEW_IC_STATE);
+        let ic_state_path = format!("{}/{}", IC_DATA_PATH, IC_STATE);
+        let cmd_replace_state =
+            Self::get_state_replacement_command(ic_state_path.clone(), upload_dir.clone());
+        let src = format!("{}/", self.data_src.display());
+
+        // Decide: remote or local recovery
+        if let UploadMethod::Remote(node_ip) = self.upload_method {
+            // For remote recoveries, we copy the source directory via rsync.
+            // To improve rsync times, we copy the latest checkpoint to the
+            // upload directory.
+
+            let ic_checkpoints_path = format!("{}/{}", IC_DATA_PATH, IC_CHECKPOINTS_PATH);
+            // path of highest checkpoint on upload node
+            let copy_from = format!(
+                "{}/$(ls {} | sort | tail -1)",
+                ic_checkpoints_path, ic_checkpoints_path
+            );
+            // path and name of checkpoint after replay
+            let copy_to = format!("{}/{}/{}", upload_dir, CHECKPOINTS, max_checkpoint);
+            let cp = format!("sudo cp -r {} {}", copy_from, copy_to);
+            let cmd_create_and_copy_checkpoint_dir = format!(
+                "sudo mkdir -p {}/{}; {}; sudo chown -R {} {};",
+                upload_dir, CHECKPOINTS, cp, account, upload_dir
+            );
+
+            let ssh_helper = SshHelper::new(
+                self.logger.clone(),
+                account.to_string(),
+                node_ip,
+                self.require_confirmation,
+                self.key_file.clone(),
+            );
+            info!(
+                self.logger,
+                "Creating remote directory and copying previous checkpoint..."
+            );
+            if let Some(res) = ssh_helper.ssh(cmd_create_and_copy_checkpoint_dir)? {
+                info!(self.logger, "{}", res);
+            }
+            let target = format!("{}@[{}]:{}/", account, node_ip, upload_dir);
+            info!(self.logger, "Uploading state...");
+            rsync(
+                &self.logger,
+                IC_STATE_EXCLUDES.to_vec(),
+                &src,
+                &target,
+                self.require_confirmation,
+                self.key_file.as_ref(),
+            )?;
+            info!(self.logger, "Restarting replica...");
+            ssh_helper.ssh(cmd_replace_state)?;
+        } else {
+            // For local recoveries we first backup the original state, and
+            // then simply `mv` the new state to the upload directory. No
+            // rsync is needed, and thus no checkpoint copying.
+            let backup_path = format!("{}/{}", self.work_dir.display(), OLD_IC_STATE);
+            info!(self.logger, "Moving original state into {}...", backup_path);
+            let mut cmd_backup_state = Command::new("sudo");
+            cmd_backup_state.arg("mv");
+            cmd_backup_state.arg(ic_state_path);
+            cmd_backup_state.arg(backup_path);
+            exec_cmd(&mut cmd_backup_state)?;
+
+            info!(self.logger, "Moving state locally...");
+            let mut mv_to_target = Command::new("sudo");
+            mv_to_target.arg("mv");
+            mv_to_target.arg(src);
+            mv_to_target.arg(upload_dir);
+            exec_cmd(&mut mv_to_target)?;
+            info!(self.logger, "Restarting replica...");
+            exec_cmd(Command::new("bash").arg("-c").arg(cmd_replace_state))?;
+        }
         Ok(())
     }
 }
