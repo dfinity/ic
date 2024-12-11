@@ -36,9 +36,20 @@ impl fmt::Debug for VetKdArgs {
 impl_display_using_debug!(VetKdArgs);
 
 #[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
+pub struct VetKdEncryptedKeyShareContent(#[serde(with = "serde_bytes")] pub Vec<u8>);
+
+impl std::fmt::Debug for VetKdEncryptedKeyShareContent {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.debug_tuple("VetKdEncryptedKeyShareContent")
+            .field(&HexEncoding::from(&self.0))
+            .finish()
+    }
+}
+impl_display_using_debug!(VetKdEncryptedKeyShareContent);
+
+#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct VetKdEncryptedKeyShare {
-    #[serde(with = "serde_bytes")]
-    pub encrypted_key_share: Vec<u8>,
+    pub encrypted_key_share: VetKdEncryptedKeyShareContent,
     /// Node's Ed25519 signature for optimized variant
     #[serde(with = "serde_bytes")]
     pub node_signature: Vec<u8>,
@@ -47,10 +58,7 @@ pub struct VetKdEncryptedKeyShare {
 impl std::fmt::Debug for VetKdEncryptedKeyShare {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("VetKdEncryptedKeyShare")
-            .field(
-                "encrypted_key_share",
-                &HexEncoding::from(&self.encrypted_key_share),
-            )
+            .field("encrypted_key_share", &self.encrypted_key_share)
             .field("node_signature", &HexEncoding::from(&self.node_signature))
             .finish()
     }
