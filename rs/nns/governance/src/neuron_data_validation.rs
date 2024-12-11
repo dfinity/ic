@@ -1,4 +1,5 @@
 use crate::{
+    is_active_neurons_in_stable_memory_enabled,
     neuron::Neuron,
     neuron_store::NeuronStore,
     pb::v1::Topic,
@@ -224,9 +225,11 @@ impl ValidationInProgress {
             KnownNeuronIndexValidator,
         >::new()));
 
-        tasks.push_back(Box::new(StableNeuronStoreValidator::new(
-            INACTIVE_NEURON_VALIDATION_CHUNK_SIZE,
-        )));
+        if !is_active_neurons_in_stable_memory_enabled() {
+            tasks.push_back(Box::new(StableNeuronStoreValidator::new(
+                INACTIVE_NEURON_VALIDATION_CHUNK_SIZE,
+            )));
+        }
 
         Self {
             started_time_seconds: now,
@@ -675,10 +678,10 @@ mod tests {
     use maplit::{btreemap, hashmap};
 
     use crate::{
-        is_active_neurons_in_stable_memory_enabled,
         neuron::{DissolveStateAndAge, NeuronBuilder},
         pb::v1::{neuron::Followees, KnownNeuronData},
         storage::{with_stable_neuron_indexes_mut, with_stable_neuron_store_mut},
+        temporarily_disable_active_neurons_in_stable_memory,
     };
 
     thread_local! {
@@ -986,6 +989,8 @@ mod tests {
 
     #[test]
     fn test_validator_invalid_issues_active_neuron_in_stable() {
+        let _t = temporarily_disable_active_neurons_in_stable_memory();
+
         // Step 1: Cause an issue with active neuron in stable storage.
         // Step 1.1 First create it as an inactive neuron so it can be added to stable storage.
         let inactive_neuron = next_test_neuron()
@@ -1019,21 +1024,16 @@ mod tests {
         // data missing from indexes, and 2 issues for cardinality mismatches for subaccount and
         // known neuron, since those are checked for exact matches.
         let issue_groups = summary.current_issues_summary.unwrap().issue_groups;
-
-        if is_active_neurons_in_stable_memory_enabled() {
-            assert_eq!(issue_groups.len(), 0);
-        } else {
-            assert_eq!(issue_groups.len(), 1);
-            assert!(
-                issue_groups
-                    .iter()
-                    .any(|issue_group| issue_group.issues_count == 1
-                        && issue_group.example_issues[0]
-                            == ValidationIssue::ActiveNeuronInStableStorage(inactive_neuron.id())),
-                "{:?}",
-                issue_groups
-            );
-        }
+        assert_eq!(issue_groups.len(), 1);
+        assert!(
+            issue_groups
+                .iter()
+                .any(|issue_group| issue_group.issues_count == 1
+                    && issue_group.example_issues[0]
+                        == ValidationIssue::ActiveNeuronInStableStorage(inactive_neuron.id())),
+            "{:?}",
+            issue_groups
+        );
 
         // Step 4: check that previous issues is empty and no running validation.
         assert_eq!(summary.previous_issues_summary, None);
@@ -1047,11 +1047,7 @@ mod tests {
         let summary = validator.summary();
         assert_eq!(
             summary.previous_issues_summary.unwrap().issue_groups.len(),
-            if is_active_neurons_in_stable_memory_enabled() {
-                0
-            } else {
-                1
-            }
+            1
         );
         assert_eq!(summary.current_validation_started_time_seconds, Some(now));
     }
