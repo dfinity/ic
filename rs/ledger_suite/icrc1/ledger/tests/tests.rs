@@ -425,15 +425,6 @@ fn test_transfer_from_burn() {
 }
 
 #[test]
-fn test_approval_trimming() {
-    ic_ledger_suite_state_machine_tests::test_approval_trimming(
-        ledger_wasm(),
-        encode_init_args,
-        false,
-    );
-}
-
-#[test]
 fn test_archive_controllers() {
     ic_ledger_suite_state_machine_tests::test_archive_controllers(ledger_wasm());
 }
@@ -489,7 +480,6 @@ fn icrc1_test_upgrade_serialization_from_mainnet() {
         init_args,
         upgrade_args,
         minter,
-        true,
         true,
     );
 }
@@ -548,6 +538,7 @@ fn icrc1_test_stable_migration_endpoints_disabled_from_mainnet() {
         ledger_mainnet_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
+        vec![],
     );
 }
 

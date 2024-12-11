@@ -26,7 +26,6 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     compile_data = [
         "//ic-os/components:ic/generate-ic-config/ic.json5.template",
-        "src/ledger_tests/transaction_ledger_correctness.wasm",
     ],
     crate_name = "ic_tests",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -241,11 +240,6 @@ uvm_config_image(
 exports_files([
     "create-universal-vm-config-image.sh",
 ])
-
-filegroup(
-    name = "grafana_dashboards",
-    srcs = glob(["dashboards/**/*"]),
-)
 
 symlink_dir(
     name = "recovery/binaries",
