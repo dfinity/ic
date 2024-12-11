@@ -179,6 +179,7 @@ rust_test(
         "@mozilla_root_ca_store//file",
     ],
     env = {
+        "RUST_TEST_THREADS": "2",
         "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
         "II_WASM": "$(rootpath @ii_dev_canister//file)",
