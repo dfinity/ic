@@ -42,7 +42,7 @@ jobs:
       - name: build
         run: |
           TARGET='//rs/boundary_node/anonymization/backend:anonymization_backend'
-          bazel build ${TARGET}
+          bazel build --config=ci ${TARGET}
 
           OUTPUT='bazel-bin/rs/boundary_node/anonymization/backend/anonymization_backend.wasm.gz'
           mv ${OUTPUT} anonymization_backend.wasm.gz
