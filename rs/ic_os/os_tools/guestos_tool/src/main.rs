@@ -25,7 +25,7 @@ pub enum Commands {
         systemd_network_dir: String,
 
         #[arg(long, default_value = config::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "FILE")]
-        /// network.conf input file
+        /// config.json input file
         config_object: PathBuf,
     },
     /// Regenerate systemd network configuration files, optionally incorporating specified IPv4 configuration parameters, and then restart the systemd network.
@@ -35,7 +35,7 @@ pub enum Commands {
         systemd_network_dir: String,
 
         #[arg(long, default_value = config::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "FILE")]
-        /// network.conf input file
+        /// config.json input file
         config_object: PathBuf,
 
         #[arg(long, value_name = "IPV4_ADDRESS")]
