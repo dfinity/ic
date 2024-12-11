@@ -180,7 +180,6 @@
 //! Completed pre-signatures are delivered to the deterministic state machnine,
 //! where they are matched with incoming signature requests.
 
-use crate::bouncer_metrics::BouncerMetrics;
 use crate::idkg::complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl};
 use crate::idkg::metrics::{
     timed_call, IDkgClientMetrics, CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
@@ -188,7 +187,7 @@ use crate::idkg::metrics::{
 use crate::idkg::pre_signer::{IDkgPreSigner, IDkgPreSignerImpl};
 use crate::idkg::signer::{ThresholdSigner, ThresholdSignerImpl};
 use crate::idkg::utils::IDkgBlockReaderImpl;
-
+use ic_consensus_utils::bouncer_metrics::BouncerMetrics;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::RoundRobin;
 use ic_interfaces::{

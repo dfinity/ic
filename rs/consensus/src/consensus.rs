@@ -23,7 +23,6 @@ pub mod validator;
 mod proptests;
 
 use crate::{
-    bouncer_metrics::BouncerMetrics,
     consensus::{
         block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker, finalizer::Finalizer,
         metrics::ConsensusMetrics, notary::Notary, payload_builder::PayloadBuilderImpl,
@@ -34,8 +33,8 @@ use crate::{
     dkg::dkg_key_manager::DkgKeyManager,
 };
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, get_notarization_delay_settings, membership::Membership,
-    pool_reader::PoolReader, RoundRobin,
+    bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto, get_notarization_delay_settings,
+    membership::Membership, pool_reader::PoolReader, RoundRobin,
 };
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,

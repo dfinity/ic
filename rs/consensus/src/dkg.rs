@@ -3,7 +3,6 @@
 //! crate.
 
 use crate::{
-    bouncer_metrics::BouncerMetrics,
     consensus::check_protocol_version,
     idkg::{
         make_bootstrap_summary,
@@ -12,7 +11,7 @@ use crate::{
     },
 };
 use dkg_key_manager::DkgKeyManager;
-use ic_consensus_utils::crypto::ConsensusCrypto;
+use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     crypto::ErrorReproducibility,

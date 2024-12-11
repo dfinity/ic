@@ -6925,6 +6925,7 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-logger",
  "ic-management-canister-types",
+ "ic-metrics",
  "ic-protobuf",
  "ic-registry-client-helpers",
  "ic-replicated-state",
@@ -6934,6 +6935,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
+ "prometheus",
  "rand 0.8.5",
  "slog",
 ]
