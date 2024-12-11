@@ -10,6 +10,7 @@ use crate::consensus::idkg::{
     PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, ReshareOfMaskedParams,
     ReshareOfUnmaskedParams, UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
+use crate::consensus::vetkd::CompletedVetKey;
 use crate::consensus::{
     Block, BlockPayload, CatchUpShareContent, ConsensusMessageHashable, Payload, SummaryPayload,
 };
@@ -28,6 +29,7 @@ use crate::crypto::{
     CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, CryptoHashable,
     IndividualMultiSig, IndividualMultiSigOf, Signed, ThresholdSigShare, ThresholdSigShareOf,
 };
+use crate::messages::CallbackId;
 use crate::signature::{
     BasicSignature, BasicSignatureBatch, MultiSignature, MultiSignatureShare, ThresholdSignature,
     ThresholdSignatureShare,
@@ -1010,6 +1012,7 @@ impl HasId<SubnetId> for CertifiedStreamSlice {}
 impl HasId<NiDkgTargetId> for u32 {}
 impl HasId<PreSigId> for PreSignatureInCreation {}
 impl HasId<PreSigId> for PreSignatureRef {}
+impl HasId<CallbackId> for CompletedVetKey {}
 
 #[cfg(test)]
 mod tests {

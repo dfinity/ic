@@ -30,6 +30,7 @@ pub mod hashed;
 pub mod idkg;
 mod payload;
 pub mod thunk;
+pub mod vetkd;
 
 pub use catchup::*;
 use hashed::Hashed;
@@ -1296,6 +1297,7 @@ impl From<&Block> for pb::Block {
             canister_http_payload_bytes,
             query_stats_payload_bytes,
             idkg_payload,
+            vetkd_payload,
         ) = if payload.is_summary() {
             (
                 pb::DkgPayload::from(&payload.as_summary().dkg),
@@ -1305,6 +1307,11 @@ impl From<&Block> for pb::Block {
                 vec![],
                 vec![],
                 payload.as_summary().idkg.as_ref().map(|idkg| idkg.into()),
+                payload
+                    .as_summary()
+                    .vetkd
+                    .as_ref()
+                    .map(|vetkd| vetkd.into()),
             )
         } else {
             let batch = &payload.as_data().batch;
@@ -1316,6 +1323,7 @@ impl From<&Block> for pb::Block {
                 batch.canister_http.clone(),
                 batch.query_stats.clone(),
                 payload.as_data().idkg.as_ref().map(|idkg| idkg.into()),
+                payload.as_data().vetkd.as_ref().map(|vetkd| vetkd.into()),
             )
         };
         Self {
@@ -1333,6 +1341,7 @@ impl From<&Block> for pb::Block {
             canister_http_payload_bytes,
             query_stats_payload_bytes,
             idkg_payload,
+            vetkd_payload,
             payload_hash: block.payload.get_hash().clone().get().0,
         }
     }
@@ -1386,7 +1395,17 @@ impl TryFrom<pb::Block> for Block {
                     .map(|idkg| idkg.try_into())
                     .transpose()?;
 
-                BlockPayload::Summary(SummaryPayload { dkg: summary, idkg })
+                let vetkd = block
+                    .vetkd_payload
+                    .as_ref()
+                    .map(|vetkd| vetkd.try_into())
+                    .transpose()?;
+
+                BlockPayload::Summary(SummaryPayload {
+                    dkg: summary,
+                    idkg,
+                    vetkd,
+                })
             }
             dkg::Payload::Data(dkg) => {
                 let idkg = block
@@ -1395,7 +1414,18 @@ impl TryFrom<pb::Block> for Block {
                     .map(|idkg| idkg.try_into())
                     .transpose()?;
 
-                BlockPayload::Data(DataPayload { batch, dkg, idkg })
+                let vetkd = block
+                    .vetkd_payload
+                    .as_ref()
+                    .map(|vetkd| vetkd.try_into())
+                    .transpose()?;
+
+                BlockPayload::Data(DataPayload {
+                    batch,
+                    dkg,
+                    idkg,
+                    vetkd,
+                })
             }
         };
         Ok(Block {

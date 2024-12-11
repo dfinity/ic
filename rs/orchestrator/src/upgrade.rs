@@ -991,6 +991,7 @@ mod tests {
                 BlockPayload::Summary(SummaryPayload {
                     dkg: ic_types::consensus::dkg::Summary::fake(),
                     idkg: Some(idkg),
+                    vetkd: None,
                 }),
             ),
             h,

@@ -464,6 +464,7 @@ mod tests {
                 BlockPayload::Summary(SummaryPayload {
                     dkg,
                     idkg: Some(idkg),
+                    vetkd: None,
                 }),
             );
             proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());

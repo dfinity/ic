@@ -146,6 +146,7 @@ fn wrap_batch_payload(height: u64, payload: BatchPayload) -> Payload {
             batch: payload,
             dkg: DkgDataPayload::new_empty(Height::from(height)),
             idkg: None,
+            vetkd: None,
         }),
     )
 }

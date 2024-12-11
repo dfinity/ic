@@ -1034,11 +1034,13 @@ impl PoolArtifact for ConsensusMessage {
                     PayloadType::Summary => BlockPayload::Summary(SummaryPayload {
                         dkg: dkg::Summary::default(),
                         idkg: None,
+                        vetkd: None,
                     }),
                     PayloadType::Data => BlockPayload::Data(DataPayload {
                         batch: BatchPayload::default(),
                         dkg: DkgDataPayload::new_empty(start_height),
                         idkg: None,
+                        vetkd: None,
                     }),
                 }),
             );

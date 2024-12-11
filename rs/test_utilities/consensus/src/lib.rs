@@ -153,6 +153,7 @@ pub fn make_genesis(summary: dkg::Summary) -> CatchUpPackage {
             BlockPayload::Summary(SummaryPayload {
                 dkg: summary,
                 idkg: None,
+                vetkd: None,
             }),
         ),
         height,

@@ -662,23 +662,6 @@ pub struct IDkgPayload {
     pub pre_signatures_in_creation: ::prost::alloc::vec::Vec<PreSignatureInProgress>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ConsensusResponse {
-    #[prost(uint64, tag = "3")]
-    pub callback: u64,
-    #[prost(oneof = "consensus_response::Payload", tags = "5, 6")]
-    pub payload: ::core::option::Option<consensus_response::Payload>,
-}
-/// Nested message and enum types in `ConsensusResponse`.
-pub mod consensus_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Payload {
-        #[prost(bytes, tag = "5")]
-        Data(::prost::alloc::vec::Vec<u8>),
-        #[prost(message, tag = "6")]
-        Reject(super::super::super::state::queues::v1::RejectContext),
-    }
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MasterKeyTranscript {
     #[prost(message, optional, tag = "2")]
     pub current: ::core::option::Option<UnmaskedTranscriptWithAttributes>,
@@ -713,7 +696,8 @@ pub struct XnetReshareAgreement {
     #[prost(message, optional, tag = "1")]
     pub request: ::core::option::Option<IDkgReshareRequest>,
     #[prost(message, optional, tag = "4")]
-    pub initial_dealings: ::core::option::Option<ConsensusResponse>,
+    pub initial_dealings:
+        ::core::option::Option<super::super::state::queues::v1::ConsensusResponse>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct RequestId {
@@ -893,7 +877,7 @@ pub struct PreSignatureTranscriptRef {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CompletedSignature {
     #[prost(message, optional, tag = "3")]
-    pub unreported: ::core::option::Option<ConsensusResponse>,
+    pub unreported: ::core::option::Option<super::super::state::queues::v1::ConsensusResponse>,
     #[prost(bytes = "vec", tag = "4")]
     pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
 }
@@ -1282,6 +1266,8 @@ pub struct Block {
     pub ingress_payload: ::core::option::Option<IngressPayload>,
     #[prost(message, optional, tag = "10")]
     pub xnet_payload: ::core::option::Option<XNetPayload>,
+    #[prost(bytes = "vec", tag = "11")]
+    pub payload_hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "12")]
     pub self_validating_payload: ::core::option::Option<SelfValidatingPayload>,
     #[prost(message, optional, tag = "13")]
@@ -1290,8 +1276,8 @@ pub struct Block {
     pub canister_http_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "16")]
     pub query_stats_payload_bytes: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "11")]
-    pub payload_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "17")]
+    pub vetkd_payload: ::core::option::Option<VetKdPayload>,
 }
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1489,6 +1475,18 @@ pub struct XNetPayload {
 pub struct QueryStatsPayload {
     #[prost(message, repeated, tag = "2")]
     pub canister_stats: ::prost::alloc::vec::Vec<CanisterQueryStats>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CompletedVetKey {
+    #[prost(uint64, tag = "1")]
+    pub callback_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub unreported: ::core::option::Option<super::super::state::queues::v1::ConsensusResponse>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct VetKdPayload {
+    #[prost(message, repeated, tag = "1")]
+    pub vet_key_agreements: ::prost::alloc::vec::Vec<CompletedVetKey>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterQueryStats {
