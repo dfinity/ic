@@ -168,7 +168,6 @@ fn setup_ucan_and_try_mint128(node: IcNodeSnapshot) -> (AgentError, u128, u128, 
 
 pub fn mint_cycles128_supported_only_on_cycles_minting_canister(env: TestEnv) {
     let nns_node = env.get_first_healthy_nns_node_snapshot();
-    let canister_id = nns_node.get_last_canister_id_in_allocation_ranges();
     let (res, before_balance, after_balance, canister_id) = setup_ucan_and_try_mint128(nns_node);
     assert_eq!(
         res,
