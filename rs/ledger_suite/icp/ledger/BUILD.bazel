@@ -102,6 +102,7 @@ rust_test(
 
 rust_ic_test(
     name = "ledger_canister_test",
+    timeout = "long",
     srcs = ["tests/tests.rs"],
     data = [
         ":ledger-canister-wasm",
