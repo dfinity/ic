@@ -19,10 +19,10 @@ use ic_nns_constants::{
     LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
+use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdentifier, Archives, Block, FeatureFlags, LedgerCanisterPayload, UpgradeArgs,
 };
-use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use std::time::Instant;
 
 const INDEX_CANISTER_ID: CanisterId =
