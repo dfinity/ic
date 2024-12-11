@@ -2,13 +2,10 @@
 //! component into the consensus algorithm that is implemented within this
 //! crate.
 
-use crate::{
-    consensus::check_protocol_version,
-    idkg::{
-        make_bootstrap_summary,
-        payload_builder::make_bootstrap_summary_with_initial_dealings,
-        utils::{get_idkg_chain_key_config_if_enabled, inspect_idkg_chain_key_initializations},
-    },
+use crate::idkg::{
+    make_bootstrap_summary,
+    payload_builder::make_bootstrap_summary_with_initial_dealings,
+    utils::{get_idkg_chain_key_config_if_enabled, inspect_idkg_chain_key_initializations},
 };
 use dkg_key_manager::DkgKeyManager;
 use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
@@ -39,7 +36,7 @@ use ic_types::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
     signature::ThresholdSignature,
-    Height, NodeId, RegistryVersion, SubnetId, Time,
+    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId, Time,
 };
 pub(crate) use payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason};
 use phantom_newtype::Id;
@@ -214,7 +211,7 @@ impl DkgImpl {
             return Mutations::new();
         };
 
-        if check_protocol_version(&message.content.version).is_err() {
+        if message.content.version != ReplicaVersion::default() {
             return Mutations::from(ChangeAction::RemoveFromUnvalidated((*message).clone()));
         }
 
