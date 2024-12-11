@@ -79,6 +79,7 @@ mod tests {
                 batch: BatchPayload::default(),
                 dkg: DkgDataPayload::new_empty(Height::from(0)),
                 idkg: None,
+                vetkd: None,
             }),
         );
         let vec = serde_cbor::ser::to_vec(&payload_0).unwrap();
@@ -105,6 +106,7 @@ mod tests {
                 batch: batch_payload_0,
                 dkg: DkgDataPayload::new_empty(Height::new(0)),
                 idkg: None,
+                vetkd: None,
             }),
         );
         let vec = serde_cbor::ser::to_vec(&payload_0).unwrap();

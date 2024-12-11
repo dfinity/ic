@@ -67,6 +67,7 @@ pub(crate) fn fake_block_proposal_with_ingresses(
                 },
                 dkg: DkgDataPayload::new_empty(Height::from(0)),
                 idkg: None,
+                vetkd: None,
             }),
         ),
         parent.as_ref().height.increment(),

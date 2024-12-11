@@ -1,7 +1,7 @@
 //! Defines consensus payload types.
 use crate::{
     batch::BatchPayload,
-    consensus::{dkg, hashed::Hashed, idkg, thunk::Thunk},
+    consensus::{dkg, hashed::Hashed, idkg, thunk::Thunk, vetkd},
     crypto::CryptoHashOf,
     *,
 };
@@ -19,6 +19,7 @@ pub struct DataPayload {
     pub batch: BatchPayload,
     pub dkg: dkg::DkgDataPayload,
     pub idkg: idkg::Payload,
+    pub vetkd: vetkd::Payload,
 }
 
 /// The payload of a summary block.
@@ -27,6 +28,7 @@ pub struct DataPayload {
 pub struct SummaryPayload {
     pub dkg: dkg::Summary,
     pub idkg: idkg::Summary,
+    pub vetkd: vetkd::Summary,
 }
 
 impl SummaryPayload {
@@ -118,6 +120,14 @@ impl BlockPayload {
         match self {
             BlockPayload::Data(data) => data.idkg.as_ref(),
             BlockPayload::Summary(data) => data.idkg.as_ref(),
+        }
+    }
+
+    /// Returns a reference to VetKdPayload if it exists.
+    pub fn as_vetkd(&self) -> Option<&vetkd::VetKdPayload> {
+        match self {
+            BlockPayload::Data(data) => data.vetkd.as_ref(),
+            BlockPayload::Summary(data) => data.vetkd.as_ref(),
         }
     }
 
@@ -234,21 +244,5 @@ impl Payload {
 impl AsRef<BlockPayload> for Payload {
     fn as_ref(&self) -> &BlockPayload {
         self.payload.get_value().as_ref()
-    }
-}
-
-impl From<dkg::Payload> for BlockPayload {
-    fn from(payload: dkg::Payload) -> BlockPayload {
-        match payload {
-            dkg::Payload::Summary(summary) => BlockPayload::Summary(SummaryPayload {
-                dkg: summary,
-                idkg: None,
-            }),
-            dkg::Payload::Data(dkg) => BlockPayload::Data(DataPayload {
-                batch: BatchPayload::default(),
-                dkg,
-                idkg: idkg::Payload::default(),
-            }),
-        }
     }
 }

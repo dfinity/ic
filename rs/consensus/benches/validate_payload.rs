@@ -279,6 +279,7 @@ fn add_past_blocks(
                 },
                 dkg: DkgDataPayload::new_empty(block.payload.as_ref().dkg_interval_start_height()),
                 idkg: None,
+                vetkd: None,
             }),
         );
 
@@ -356,6 +357,7 @@ fn validate_payload_benchmark(criterion: &mut Criterion) {
                             tip.payload.as_ref().dkg_interval_start_height(),
                         ),
                         idkg: None,
+                        vetkd: None,
                     }),
                 );
 

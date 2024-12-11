@@ -533,6 +533,7 @@ mod tests {
                     batch: BatchPayload::default(),
                     dkg: DkgDataPayload::new(Height::from(0), parent_dealings),
                     idkg: idkg::Payload::default(),
+                    vetkd: None,
                 }),
             );
 
@@ -546,6 +547,7 @@ mod tests {
                 batch: BatchPayload::default(),
                 dkg: DkgDataPayload::new(Height::from(0), dealings_to_validate),
                 idkg: idkg::Payload::default(),
+                vetkd: None,
             });
 
             let result = validate_payload(

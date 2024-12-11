@@ -904,6 +904,7 @@ mod tests {
                 BlockPayload::Summary(SummaryPayload {
                     dkg: ic_types::consensus::dkg::Summary::fake(),
                     idkg: idkg_payload,
+                    vetkd: None,
                 }),
             ),
             Height::from(123),

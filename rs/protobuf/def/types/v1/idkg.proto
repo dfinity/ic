@@ -20,15 +20,6 @@ message IDkgPayload {
   repeated PreSignatureInProgress pre_signatures_in_creation = 15;
 }
 
-message ConsensusResponse {
-  reserved 1, 2, 4, 7, 8;
-  uint64 callback = 3;
-  oneof payload {
-    bytes data = 5;
-    state.queues.v1.RejectContext reject = 6;
-  }
-}
-
 message MasterKeyTranscript {
   reserved 1;
   UnmaskedTranscriptWithAttributes current = 2;
@@ -55,7 +46,7 @@ message XnetReshareAgreement {
   reserved 2, 3;
   reserved "response";
   IDkgReshareRequest request = 1;
-  ConsensusResponse initial_dealings = 4;
+  state.queues.v1.ConsensusResponse initial_dealings = 4;
 }
 
 message RequestId {
@@ -180,7 +171,7 @@ message PreSignatureTranscriptRef {
 message CompletedSignature {
   reserved 1;
   reserved 2;
-  ConsensusResponse unreported = 3;
+  state.queues.v1.ConsensusResponse unreported = 3;
   bytes pseudo_random_id = 4;
 }
 

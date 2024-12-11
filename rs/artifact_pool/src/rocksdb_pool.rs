@@ -433,6 +433,7 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
                                         batch: BatchPayload::default(),
                                         dkg: DkgDataPayload::new_empty(start_height),
                                         idkg: None,
+                                        vetkd: None,
                                     })
                                 }),
                             );

@@ -2218,6 +2218,7 @@ pub mod test {
                 BlockPayload::Summary(SummaryPayload {
                     dkg,
                     idkg: Some(idkg),
+                    vetkd: None,
                 }),
             );
             proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
@@ -3475,6 +3476,7 @@ pub mod test {
                 },
                 dkg: DkgDataPayload::new_empty(Height::new(0)),
                 idkg: None,
+                vetkd: None,
             }),
         );
         block.signature.signer = correct_signer;
@@ -3489,6 +3491,7 @@ pub mod test {
                 },
                 dkg: DkgDataPayload::new_empty(Height::new(0)),
                 idkg: None,
+                vetkd: None,
             }),
         );
         block.update_content();

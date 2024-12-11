@@ -765,6 +765,7 @@ mod tests {
                 BTreeMap::new(),
             ),
             idkg: Some(idkg_summary),
+            vetkd: None,
         })
     }
 
@@ -786,6 +787,7 @@ mod tests {
             batch: BatchPayload::default(),
             dkg: DkgDataPayload::new_empty(dkg_interval_start_height),
             idkg: Some(idkg_payload),
+            vetkd: None,
         })
     }
 
@@ -1308,6 +1310,7 @@ mod tests {
                 batch: BatchPayload::default(),
                 dkg: DkgDataPayload::new_empty(summary_height),
                 idkg: Some(data_payload),
+                vetkd: None,
             });
             let parent_block = add_block(
                 parent_block_payload,
@@ -1573,6 +1576,7 @@ mod tests {
                 batch: BatchPayload::default(),
                 dkg: DkgDataPayload::new_empty(summary_height),
                 idkg: Some(data_payload),
+                vetkd: None,
             });
             let parent_block = add_block(
                 parent_block_payload,
@@ -1647,6 +1651,7 @@ mod tests {
             let pl = BlockPayload::Summary(SummaryPayload {
                 dkg: Summary::fake(),
                 idkg: Some(summary.clone()),
+                vetkd: None,
             });
             let b = Block::new(
                 CryptoHashOf::from(CryptoHash(Vec::new())),

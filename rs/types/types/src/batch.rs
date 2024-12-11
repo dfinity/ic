@@ -29,7 +29,7 @@ use ic_btc_replica_types::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::MasterPublicKeyId;
-use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
+use ic_protobuf::{proxy::ProxyDecodeError, state::queues::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},

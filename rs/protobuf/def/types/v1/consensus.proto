@@ -6,6 +6,7 @@ package types.v1;
 import "bitcoin/v1/bitcoin.proto";
 import "messaging/xnet/v1/certification.proto";
 import "messaging/xnet/v1/certified_stream_slice.proto";
+import "state/queues/v1/queues.proto";
 import "types/v1/artifact.proto";
 import "types/v1/dkg.proto";
 import "types/v1/idkg.proto";
@@ -62,12 +63,13 @@ message Block {
   // Payloads
   IngressPayload ingress_payload = 9;
   XNetPayload xnet_payload = 10;
+  bytes payload_hash = 11;
   SelfValidatingPayload self_validating_payload = 12;
   IDkgPayload idkg_payload = 13;
   reserved 14;
   bytes canister_http_payload_bytes = 15;
   bytes query_stats_payload_bytes = 16;
-  bytes payload_hash = 11;
+  VetKdPayload vetkd_payload = 17;
 }
 
 message ConsensusMessage {
@@ -188,6 +190,15 @@ message XNetPayload {
 message QueryStatsPayload {
   reserved 1;
   repeated CanisterQueryStats canister_stats = 2;
+}
+
+message CompletedVetKey {
+  uint64 callback_id = 1;
+  state.queues.v1.ConsensusResponse unreported = 2;
+}
+
+message VetKdPayload {
+  repeated CompletedVetKey vet_key_agreements = 1;
 }
 
 message CanisterQueryStats {

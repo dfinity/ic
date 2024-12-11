@@ -522,6 +522,7 @@ pub fn make_registry_cup_from_cup_contents(
             BlockPayload::Summary(SummaryPayload {
                 dkg: dkg_summary,
                 idkg: idkg_summary,
+                vetkd: None,
             }),
         ),
         height: cup_height,
