@@ -79,7 +79,7 @@ pub mod nonblocking;
 const EXPECTED_SERVER_VERSION: &str = "pocket-ic-server 7.0.0";
 
 // the default timeout of a PocketIC operation
-const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
+const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 60_000;
 
 const LOCALHOST: &str = "127.0.0.1";
 
