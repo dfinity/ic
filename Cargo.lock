@@ -10593,7 +10593,6 @@ dependencies = [
  "csv",
  "hex",
  "ic-base-types",
- "ic-ledger-canister-core",
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-nns-gtc",
