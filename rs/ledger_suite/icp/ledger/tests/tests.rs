@@ -1751,11 +1751,14 @@ fn test_query_blocks_large_length() {
     .expect("should successfully decode QueryBlocksResponse");
     // Verify that we have more blocks in the ledger than can be returned in a single query.
     assert_eq!(res.chain_length, (MAX_BLOCKS_PER_REQUEST + 1) as u64);
-    // Verify that the number of blocks in the response is limited to MAX_BLOCKS_PER_REQUEST, and
-    // that it is also larger than 0 (which would be the case if the length in the request was
-    // incorrectly cast to a wasm32 `usize` (`u32`)).
+    // Verify that the number of blocks in the response is limited to MAX_BLOCKS_PER_REQUEST.
     assert_eq!(res.blocks.len(), MAX_BLOCKS_PER_REQUEST);
-    assert!(MAX_BLOCKS_PER_REQUEST > 0);
+    // Also verify that the maximum number of blocks per request is larger than 0, in case the
+    // length `(u32::MAX as u64) + 1` in the request was incorrectly cast to a wasm32 `usize`
+    // (`u32`)).
+    if MAX_BLOCKS_PER_REQUEST == 0 {
+        panic!("MAX_BLOCKS_PER_REQUEST should be larger than 0");
+    }
 }
 
 mod metrics {
