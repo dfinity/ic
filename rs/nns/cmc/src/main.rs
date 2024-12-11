@@ -2406,8 +2406,9 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             "cmc_cycles_limit",
             state.cycles_limit.get() as f64,
             "The maximum amount of cycles that can be minted in the recent past. \
-             More precisely, if someone tries to mint N cycles, N + cmc_limiter_cycles \
-             > cmc_cycles_limit, then the request will be rejected.",
+             More precisely, if someone tries to mint N cycles, and \
+             N + cmc_limiter_cycles > cmc_cycles_limit, then the request will \
+             be rejected.",
         )?;
 
         Ok(())
