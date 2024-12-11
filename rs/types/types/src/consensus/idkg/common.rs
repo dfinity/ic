@@ -1106,8 +1106,10 @@ fn err_schnorr(err: ThresholdSchnorrSigInputsError) -> ThresholdSigInputsResult 
     Err(ThresholdSigInputsError::Schnorr(err))
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+// This warning is suppressed because Clippy incorrectly reports the size of the
+// `ThresholdEcdsaSigInputsRef` and `ThresholdSchnorrSigInputsRef` variants to be "at least 0 bytes".
 #[allow(clippy::large_enum_variant)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ThresholdSigInputsRef {
     Ecdsa(ThresholdEcdsaSigInputsRef),
     Schnorr(ThresholdSchnorrSigInputsRef),
@@ -1144,6 +1146,8 @@ impl ThresholdSigInputsRef {
     }
 }
 
+// This warning is suppressed because Clippy incorrectly reports the size of the
+// `ThresholdEcdsaSigInputs` and `ThresholdSchnorrSigInputs` variants to be "at least 0 bytes".
 #[allow(clippy::large_enum_variant)]
 pub enum ThresholdSigInputs {
     Ecdsa(ThresholdEcdsaSigInputs),
