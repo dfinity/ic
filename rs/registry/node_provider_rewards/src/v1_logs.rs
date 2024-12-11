@@ -270,8 +270,8 @@ impl RewardsLog {
             .iter()
             .map(|(log_level, entry)| match log_level {
                 LogLevel::High => format!("{}", entry),
-                LogLevel::Mid => format!("  - {}", entry),
-                LogLevel::Low => format!("      - {}", entry),
+                LogLevel::Mid => format!("    - {}", entry),
+                LogLevel::Low => format!("        - {}", entry),
             })
             .collect_vec()
     }
