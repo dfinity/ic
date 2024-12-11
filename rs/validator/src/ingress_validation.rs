@@ -59,10 +59,7 @@ const MAXIMUM_NUMBER_OF_PATHS: usize = 1_000;
 const MAXIMUM_NUMBER_OF_LABELS_PER_PATH: usize = 127;
 
 /// A trait for validating an `HttpRequest` with content `C`.
-pub trait HttpRequestVerifier<C: HttpRequestContent, R: RootOfTrustProvider>: Send + Sync
-where
-    R::Error: std::error::Error,
-{
+pub trait HttpRequestVerifier<C, R> {
     /// Validates the given request.
     /// If valid, returns the set of canister IDs that are *common* to all delegations.
     /// Otherwise, returns an error.
@@ -92,17 +89,34 @@ where
         current_time: Time,
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError>;
+}
+
+pub struct HttpRequestVerifierImpl<C, R> {
+    validator: Arc<dyn IngressSigVerifier + Send + Sync>,
+    phantom_data_c: std::marker::PhantomData<C>,
+    phantom_data_r: std::marker::PhantomData<R>,
+}
+
+impl<C: HttpRequestContent, R: RootOfTrustProvider> HttpRequestVerifierImpl<C, R>
+where
+    R::Error: std::error::Error,
+{
+    pub fn new(validator: Arc<dyn IngressSigVerifier + Send + Sync>) -> Self {
+        Self {
+            validator,
+            phantom_data_c: std::marker::PhantomData,
+            phantom_data_r: std::marker::PhantomData,
+        }
+    }
 
     fn validate_request_content(
         &self,
         request: &HttpRequest<C>,
-        ingress_signature_verifier: &dyn IngressSigVerifier,
         current_time: Time,
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
         validate_nonce(request)?;
         self.validate_user_id_and_signature(
-            ingress_signature_verifier,
             &request.sender(),
             &request.id(),
             match request.authentication() {
@@ -117,7 +131,6 @@ where
     // Verifies correct user and signature.
     fn validate_user_id_and_signature(
         &self,
-        ingress_signature_verifier: &dyn IngressSigVerifier,
         sender: &UserId,
         message_id: &MessageId,
         signature: Option<&UserSignature>,
@@ -137,8 +150,7 @@ where
                 } else {
                     let sender_pubkey = &signature.signer_pubkey;
                     validate_user_id(sender_pubkey, sender).and_then(|()| {
-                        validate_signature(
-                            ingress_signature_verifier,
+                        self.validate_signature(
                             message_id,
                             signature,
                             current_time,
@@ -149,19 +161,84 @@ where
             }
         }
     }
-}
 
-pub struct HttpRequestVerifierImpl {
-    validator: Arc<dyn IngressSigVerifier + Send + Sync>,
-}
+    // Verifies that the message is properly signed.
+    fn validate_signature(
+        &self,
+        message_id: &MessageId,
+        signature: &UserSignature,
+        current_time: Time,
+        root_of_trust_provider: &R,
+    ) -> Result<CanisterIdSet, RequestValidationError>
+    where
+        R::Error: std::error::Error,
+    {
+        validate_sender_delegation_length(&signature.sender_delegation)?;
+        validate_sender_delegation_expiry(&signature.sender_delegation, current_time)?;
+        let empty_vec = Vec::new();
+        let signed_delegations = signature.sender_delegation.as_ref().unwrap_or(&empty_vec);
 
-impl HttpRequestVerifierImpl {
-    pub fn new(validator: Arc<dyn IngressSigVerifier + Send + Sync>) -> Self {
-        Self { validator }
+        let (pubkey, targets) = validate_delegations(
+            self.validator.as_ref(),
+            signed_delegations.as_slice(),
+            signature.signer_pubkey.clone(),
+            root_of_trust_provider,
+        )?;
+
+        let (pk, pk_type) = user_public_key_from_bytes(&pubkey)
+            .map_err(InvalidPublicKey)
+            .map_err(InvalidSignature)?;
+
+        match pk_type {
+            KeyBytesContentType::EcdsaP256PublicKeyDerWrappedCose
+            | KeyBytesContentType::RsaSha256PublicKeyDerWrappedCose => {
+                let webauthn_sig = WebAuthnSignature::try_from(signature.signature.as_slice())
+                    .map_err(WebAuthnError)
+                    .map_err(InvalidSignature)?;
+                validate_webauthn_sig(self.validator.as_ref(), &webauthn_sig, message_id, &pk)
+                    .map_err(WebAuthnError)
+                    .map_err(InvalidSignature)?;
+                Ok(targets)
+            }
+            KeyBytesContentType::Ed25519PublicKeyDer
+            | KeyBytesContentType::EcdsaP256PublicKeyDer
+            | KeyBytesContentType::EcdsaSecp256k1PublicKeyDer => {
+                let basic_sig = BasicSigOf::from(BasicSig(signature.signature.clone()));
+                self.validator
+                    .verify_basic_sig_by_public_key(&basic_sig, message_id, &pk)
+                    .map_err(InvalidBasicSignature)
+                    .map_err(InvalidSignature)?;
+                Ok(targets)
+            }
+            KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
+                let canister_sig = CanisterSigOf::from(CanisterSig(signature.signature.clone()));
+                let root_of_trust = root_of_trust_provider
+                    .root_of_trust()
+                    .map_err(|e| InvalidCanisterSignature(e.to_string()))
+                    .map_err(InvalidSignature)?;
+                self.validator
+                    .verify_canister_sig(&canister_sig, message_id, &pk, &root_of_trust)
+                    .map_err(|e| InvalidCanisterSignature(e.to_string()))
+                    .map_err(InvalidSignature)?;
+                Ok(targets)
+            }
+            KeyBytesContentType::RsaSha256PublicKeyDer => {
+                Err(RequestValidationError::InvalidSignature(
+                    AuthenticationError::InvalidBasicSignature(
+                        CryptoError::AlgorithmNotSupported {
+                            algorithm: AlgorithmId::RsaSha256,
+                            reason: "RSA signatures are not allowed except in webauthn context"
+                                .to_owned(),
+                        },
+                    ),
+                ))
+            }
+        }
     }
 }
 
-impl<R> HttpRequestVerifier<SignedIngressContent, R> for HttpRequestVerifierImpl
+impl<R> HttpRequestVerifier<SignedIngressContent, R>
+    for HttpRequestVerifierImpl<SignedIngressContent, R>
 where
     R: RootOfTrustProvider,
     R::Error: std::error::Error,
@@ -173,18 +250,14 @@ where
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
         validate_ingress_expiry(request, current_time)?;
-        let delegation_targets = self.validate_request_content(
-            request,
-            self.validator.as_ref(),
-            current_time,
-            root_of_trust_provider,
-        )?;
+        let delegation_targets =
+            self.validate_request_content(request, current_time, root_of_trust_provider)?;
         validate_request_target(request, &delegation_targets)?;
         Ok(delegation_targets)
     }
 }
 
-impl<R> HttpRequestVerifier<Query, R> for HttpRequestVerifierImpl
+impl<R> HttpRequestVerifier<Query, R> for HttpRequestVerifierImpl<Query, R>
 where
     R: RootOfTrustProvider,
     R::Error: std::error::Error,
@@ -198,18 +271,14 @@ where
         if !request.sender().get().is_anonymous() {
             validate_ingress_expiry(request, current_time)?;
         }
-        let delegation_targets = self.validate_request_content(
-            request,
-            self.validator.as_ref(),
-            current_time,
-            root_of_trust_provider,
-        )?;
+        let delegation_targets =
+            self.validate_request_content(request, current_time, root_of_trust_provider)?;
         validate_request_target(request, &delegation_targets)?;
         Ok(delegation_targets)
     }
 }
 
-impl<R> HttpRequestVerifier<ReadState, R> for HttpRequestVerifierImpl
+impl<R> HttpRequestVerifier<ReadState, R> for HttpRequestVerifierImpl<ReadState, R>
 where
     R: RootOfTrustProvider,
     R::Error: std::error::Error,
@@ -224,12 +293,7 @@ where
         if !request.sender().get().is_anonymous() {
             validate_ingress_expiry(request, current_time)?;
         }
-        self.validate_request_content(
-            request,
-            self.validator.as_ref(),
-            current_time,
-            root_of_trust_provider,
-        )
+        self.validate_request_content(request, current_time, root_of_trust_provider)
     }
 }
 
@@ -540,77 +604,6 @@ fn validate_user_id(sender_pubkey: &[u8], id: &UserId) -> Result<(), RequestVali
         Ok(())
     } else {
         Err(UserIdDoesNotMatchPublicKey(*id, sender_pubkey.to_vec()))
-    }
-}
-
-// Verifies that the message is properly signed.
-fn validate_signature<R: RootOfTrustProvider>(
-    validator: &dyn IngressSigVerifier,
-    message_id: &MessageId,
-    signature: &UserSignature,
-    current_time: Time,
-    root_of_trust_provider: &R,
-) -> Result<CanisterIdSet, RequestValidationError>
-where
-    R::Error: std::error::Error,
-{
-    validate_sender_delegation_length(&signature.sender_delegation)?;
-    validate_sender_delegation_expiry(&signature.sender_delegation, current_time)?;
-    let empty_vec = Vec::new();
-    let signed_delegations = signature.sender_delegation.as_ref().unwrap_or(&empty_vec);
-
-    let (pubkey, targets) = validate_delegations(
-        validator,
-        signed_delegations.as_slice(),
-        signature.signer_pubkey.clone(),
-        root_of_trust_provider,
-    )?;
-
-    let (pk, pk_type) = user_public_key_from_bytes(&pubkey)
-        .map_err(InvalidPublicKey)
-        .map_err(InvalidSignature)?;
-
-    match pk_type {
-        KeyBytesContentType::EcdsaP256PublicKeyDerWrappedCose
-        | KeyBytesContentType::RsaSha256PublicKeyDerWrappedCose => {
-            let webauthn_sig = WebAuthnSignature::try_from(signature.signature.as_slice())
-                .map_err(WebAuthnError)
-                .map_err(InvalidSignature)?;
-            validate_webauthn_sig(validator, &webauthn_sig, message_id, &pk)
-                .map_err(WebAuthnError)
-                .map_err(InvalidSignature)?;
-            Ok(targets)
-        }
-        KeyBytesContentType::Ed25519PublicKeyDer
-        | KeyBytesContentType::EcdsaP256PublicKeyDer
-        | KeyBytesContentType::EcdsaSecp256k1PublicKeyDer => {
-            let basic_sig = BasicSigOf::from(BasicSig(signature.signature.clone()));
-            validator
-                .verify_basic_sig_by_public_key(&basic_sig, message_id, &pk)
-                .map_err(InvalidBasicSignature)
-                .map_err(InvalidSignature)?;
-            Ok(targets)
-        }
-        KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
-            let canister_sig = CanisterSigOf::from(CanisterSig(signature.signature.clone()));
-            let root_of_trust = root_of_trust_provider
-                .root_of_trust()
-                .map_err(|e| InvalidCanisterSignature(e.to_string()))
-                .map_err(InvalidSignature)?;
-            validator
-                .verify_canister_sig(&canister_sig, message_id, &pk, &root_of_trust)
-                .map_err(|e| InvalidCanisterSignature(e.to_string()))
-                .map_err(InvalidSignature)?;
-            Ok(targets)
-        }
-        KeyBytesContentType::RsaSha256PublicKeyDer => {
-            Err(RequestValidationError::InvalidSignature(
-                AuthenticationError::InvalidBasicSignature(CryptoError::AlgorithmNotSupported {
-                    algorithm: AlgorithmId::RsaSha256,
-                    reason: "RSA signatures are not allowed except in webauthn context".to_owned(),
-                }),
-            ))
-        }
     }
 }
 
