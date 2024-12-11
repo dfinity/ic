@@ -496,7 +496,9 @@ impl Governance {
             }
         };
 
-        if self.should_automatically_advance_target_version() {
+        if self.should_automatically_advance_target_version()
+            && upgrade_steps.has_pending_upgrades()
+        {
             let new_target = upgrade_steps.last().clone();
 
             {
