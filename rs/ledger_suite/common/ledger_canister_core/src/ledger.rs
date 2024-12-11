@@ -204,7 +204,6 @@ pub enum TransferError<Tokens> {
 const APPROVE_PRUNE_LIMIT: usize = 100;
 
 /// Adds a new block with the specified transaction to the ledger.
-/// Do not perform any balance trimming.
 pub fn apply_transaction<L>(
     ledger: &mut L,
     transaction: L::Transaction,

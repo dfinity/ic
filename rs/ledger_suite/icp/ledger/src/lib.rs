@@ -175,7 +175,7 @@ impl Default for LedgerState {
 /// We have the following ledger versions:
 ///   * 0 - the whole ledger state is stored on the heap.
 ///   * 1 - the allowances are stored in stable structures.
-/// * 2 - the balances are stored in stable structures.
+///   * 2 - the balances are stored in stable structures.
 #[cfg(not(feature = "next-ledger-version"))]
 pub const LEDGER_VERSION: u64 = 2;
 
