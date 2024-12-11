@@ -499,7 +499,6 @@ fn icrc1_test_upgrade_serialization_from_v2() {
         upgrade_args,
         minter,
         true,
-        true,
     );
 }
 
@@ -548,6 +547,7 @@ fn icrc1_test_stable_migration_endpoints_disabled_from_v2() {
         ledger_mainnet_v2_wasm(),
         ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
+        vec![],
     );
 }
 
