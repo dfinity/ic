@@ -22,6 +22,16 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+filegroup(
+    name = "helper_contracts",
+    srcs = [
+        "EthDepositHelper.sol",
+        "ERC20DepositHelper.sol",
+        "DepositHelperWithSubaccount.sol",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 rust_library(
     name = "minter",
     srcs = glob(
