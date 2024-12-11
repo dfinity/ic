@@ -103,7 +103,6 @@ fn nodes_idiosyncratic_fr(
             LogLevel::High,
             LogEntry::ActiveIdiosyncraticFailureRates {
                 node_id: *node_id,
-                daily_metrics: daily_metrics.clone(),
                 failure_rates: failure_rates.clone(),
             },
         );

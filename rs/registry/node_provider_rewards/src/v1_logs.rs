@@ -1,4 +1,3 @@
-use crate::v1_types::DailyNodeMetrics;
 use ic_base_types::PrincipalId;
 use itertools::Itertools;
 use rust_decimal::{prelude::Zero, Decimal};
@@ -106,7 +105,6 @@ pub enum LogEntry {
     },
     ActiveIdiosyncraticFailureRates {
         node_id: PrincipalId,
-        daily_metrics: Vec<DailyNodeMetrics>,
         failure_rates: Vec<Decimal>,
     },
     ComputeRewardsForNode {
@@ -170,13 +168,12 @@ impl fmt::Display for LogEntry {
             }
             LogEntry::ActiveIdiosyncraticFailureRates {
                 node_id,
-                daily_metrics,
                 failure_rates,
             } => {
                 write!(
                     f,
-                    "ActiveIdiosyncraticFailureRates | node_id={}, daily_metrics={:?}, failure_rates={}",
-                    node_id, daily_metrics, failure_rates.len()
+                    "ActiveIdiosyncraticFailureRates | node_id={}, failure_rates_discounted={:?}",
+                    node_id, failure_rates
                 )
             }
             LogEntry::ComputeRewardsForNode {
@@ -268,14 +265,14 @@ impl RewardsLog {
         result
     }
 
-    pub fn get_log(&self) -> String {
+    pub fn get_log(&self) -> Vec<String> {
         self.entries
             .iter()
             .map(|(log_level, entry)| match log_level {
-                LogLevel::High => format!("\x1b[1m{}\x1b[0m", entry),
+                LogLevel::High => format!("{}", entry),
                 LogLevel::Mid => format!("  - {}", entry),
                 LogLevel::Low => format!("      - {}", entry),
             })
-            .join("\n")
+            .collect_vec()
     }
 }
