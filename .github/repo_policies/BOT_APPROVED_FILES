@@ -8,4 +8,3 @@ ic-os/hostos/context/docker-base.prod
 ic-os/setupos/context/docker-base.dev
 ic-os/setupos/context/docker-base.prod
 testnet/mainnet_revisions.json
-mainnet-canisters.json
