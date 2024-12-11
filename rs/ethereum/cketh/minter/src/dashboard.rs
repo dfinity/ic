@@ -3,6 +3,7 @@ mod tests;
 
 use askama::Template;
 use candid::{Nat, Principal};
+use ic_canisters_http_types::HttpRequest;
 use ic_cketh_minter::endpoints::{EthTransaction, RetrieveEthStatus};
 use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedEvent};
@@ -22,6 +23,7 @@ use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
+use std::str::FromStr;
 
 mod filters {
     pub fn timestamp_to_datetime<T: std::fmt::Display>(timestamp: T) -> askama::Result<String> {
@@ -145,6 +147,120 @@ impl DashboardPendingDeposit {
     }
 }
 
+// Number of entries per page in dashboard tables (e.g. minted events, finalized transactions).
+const DEFAULT_PAGE_SIZE: usize = 100;
+
+#[derive(Default, Clone)]
+pub struct DashboardPagingParameters {
+    minted_events_start: usize,
+    finalized_transactions_start: usize,
+    reimbursed_transactions_start: usize,
+}
+
+impl DashboardPagingParameters {
+    pub(crate) fn from_query_params(
+        req: &HttpRequest,
+    ) -> Result<DashboardPagingParameters, String> {
+        fn parse_query_param(req: &HttpRequest, param_name: &str) -> Result<usize, String> {
+            Ok(match req.raw_query_param(param_name) {
+                Some(arg) => usize::from_str(arg)
+                    .map_err(|_| format!("failed to parse the '{}' parameter", param_name))?,
+                None => 0,
+            })
+        }
+
+        Ok(Self {
+            minted_events_start: parse_query_param(req, "minted_events_start")?,
+            finalized_transactions_start: parse_query_param(req, "finalized_transactions_start")?,
+            reimbursed_transactions_start: parse_query_param(req, "reimbursed_transactions_start")?,
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct DashboardPaginatedTable<T: Clone> {
+    current_page: Vec<T>,
+    pagination: DashboardTablePagination,
+}
+
+impl<T: Clone> DashboardPaginatedTable<T> {
+    pub fn from_items(
+        items: &[T],
+        current_page_offset: &usize,
+        page_size: usize,
+        num_cols: usize,
+        table_reference: &str,
+        page_offset_query_param: &str,
+    ) -> Self {
+        let current_page_offset = *current_page_offset;
+        Self {
+            current_page: items
+                .iter()
+                .skip(current_page_offset)
+                .take(page_size)
+                .cloned()
+                .collect(),
+            pagination: DashboardTablePagination::pagination(
+                items.len(),
+                current_page_offset,
+                page_size,
+                num_cols,
+                table_reference,
+                page_offset_query_param,
+            ),
+        }
+    }
+
+    pub fn has_more_than_one_page(&self) -> bool {
+        self.pagination.pages.len() > 1
+    }
+}
+
+#[derive(Clone)]
+pub struct DashboardTablePage {
+    index: usize,
+    offset: usize,
+}
+
+#[derive(Template)]
+#[template(path = "pagination.html")]
+#[derive(Clone)]
+pub struct DashboardTablePagination {
+    pub table_id: String,
+    pub table_width: usize,
+    pub page_offset_query_param: String,
+    pub current_page_index: usize,
+    pub pages: Vec<DashboardTablePage>,
+}
+
+impl DashboardTablePagination {
+    fn pagination(
+        num_items: usize,
+        current_offset: usize,
+        page_size: usize,
+        table_width: usize,
+        table_reference: &str,
+        page_offset_query_param: &str,
+    ) -> Self {
+        let pages = (0..num_items)
+            .step_by(page_size)
+            .enumerate()
+            .map(|(index, offset)| DashboardTablePage {
+                index: index + 1,
+                offset,
+            })
+            .collect();
+        let current_page_index = current_offset / page_size + 1;
+        Self {
+            table_id: String::from(table_reference),
+            page_offset_query_param: String::from(page_offset_query_param),
+            table_width,
+            current_page_index,
+            pages,
+        }
+    }
+}
+
 #[derive(Template)]
 #[template(path = "dashboard.html")]
 #[derive(Clone)]
@@ -168,10 +284,11 @@ pub struct DashboardTemplate {
     pub eth_balance: EthBalance,
     pub skipped_blocks: BTreeMap<String, BTreeSet<BlockNumber>>,
     pub supported_ckerc20_tokens: Vec<DashboardCkErc20Token>,
+    pub pagination_parameters: DashboardPagingParameters,
 }
 
 impl DashboardTemplate {
-    pub fn from_state(state: &State) -> Self {
+    pub fn from_state(state: &State, pagination_parameters: DashboardPagingParameters) -> Self {
         let mut minted_events: Vec<_> = state.minted_events.values().cloned().collect();
         minted_events.sort_unstable_by_key(|event| {
             let deposit_event = &event.deposit_event;
@@ -348,6 +465,7 @@ impl DashboardTemplate {
                 .map(|(contract_address, blocks)| (contract_address.to_string(), blocks.clone()))
                 .collect(),
             supported_ckerc20_tokens,
+            pagination_parameters,
         }
     }
 }
