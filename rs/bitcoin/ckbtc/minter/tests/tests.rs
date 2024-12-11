@@ -429,7 +429,7 @@ fn test_no_new_utxos() {
             r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="0",le="(\d+|\+Inf)"\} 1 \d+"#,
         ) // exactly 1 match for an update call with no new UTXOs
         .assert_does_not_contain_metric_matching(
-            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="1",le="(\d+|\+Inf)"\} \d+ \d+"#,
+            r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="1".*"#,
         ); // no metrics for update call with new UTXOs
 }
 

@@ -10,21 +10,24 @@ thread_local! {
     pub static UPDATE_CALL_LATENCY: RefCell<BTreeMap<usize,LatencyHistogram>> = RefCell::default();
 }
 
-pub(crate) const LATENCY_HISTOGRAM_NUM_BUCKETS: usize = 11;
-pub(crate) const LATENCY_HISTOGRAM_BUCKET_SIZE_MS: u64 = 500;
+pub(crate) const BUCKETS_MS: [u64; 7] = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 32_000];
 
 #[derive(Default, Clone, Copy)]
 pub struct LatencyHistogram {
-    latency_buckets: [u64; LATENCY_HISTOGRAM_NUM_BUCKETS],
+    latency_buckets: [u64; BUCKETS_MS.len() + 1],
     latency_sum: u64,
 }
 
 impl LatencyHistogram {
     pub fn observe_latency(&mut self, latency: Duration) {
         let latency_ms = latency.as_millis() as u64;
-        // Subtract 1ms when determining the bucket to enforce that the upper bounds are inclusive
-        let bucket_index = (LATENCY_HISTOGRAM_NUM_BUCKETS - 1)
-            .min((latency_ms.saturating_sub(1) / LATENCY_HISTOGRAM_BUCKET_SIZE_MS) as usize);
+        let bucket_index = BUCKETS_MS
+            .iter()
+            .enumerate()
+            .filter(|(_, bucket_upper_bound)| latency_ms <= **bucket_upper_bound)
+            .map(|(bucket_index, _)| bucket_index)
+            .next()
+            .unwrap_or(self.latency_buckets.len() - 1); // infinity bucket
         self.latency_buckets[bucket_index] += 1;
         self.latency_sum += latency_ms;
     }
@@ -32,7 +35,10 @@ impl LatencyHistogram {
     /// Returns an iterator over the histogram buckets as tuples containing the bucket upper bound
     /// (inclusive), and the count of observed values within the bucket.
     pub(crate) fn iter(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
-        self.bucket_inclusive_upper_bounds()
+        BUCKETS_MS
+            .iter()
+            .map(|bucket| *bucket as f64)
+            .chain(std::iter::once(f64::INFINITY))
             .zip(self.latency_buckets.iter().cloned())
             .map(|(k, v)| (k, v as f64))
     }
@@ -40,13 +46,6 @@ impl LatencyHistogram {
     /// Returns the sum of all observed latencies in milliseconds.
     pub(crate) fn sum(&self) -> u64 {
         self.latency_sum
-    }
-
-    fn bucket_inclusive_upper_bounds(&self) -> impl Iterator<Item = f64> {
-        (1..LATENCY_HISTOGRAM_NUM_BUCKETS)
-            .map(|bucket| (bucket as u64) * LATENCY_HISTOGRAM_BUCKET_SIZE_MS)
-            .map(|upper_bound| upper_bound as f64)
-            .chain(std::iter::once(f64::INFINITY))
     }
 }
 

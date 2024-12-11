@@ -224,10 +224,10 @@ mod update_balance {
             mock_time(
                 &mut runtime,
                 vec![
-                    NOW,
-                    NOW,
-                    NOW.saturating_add(latency),
-                    NOW.saturating_add(latency),
+                    NOW,                         // start time of `update_balance` method
+                    NOW,                         // time used to process UTXOs
+                    NOW.saturating_add(latency), // time used in `schedule_now` call at end of `update_balance`
+                    NOW.saturating_add(latency), // end time of `update_balance` method
                 ],
             );
 
@@ -236,7 +236,7 @@ mod update_balance {
 
         // update_balance calls with no new UTXOs.
         let no_new_utxo_latencies_ms =
-            [0, 100, 499, 500, 2_250, 3_000, 3_400, 3_500, 8_000, 10_000];
+            [0, 100, 499, 500, 2_250, 3_000, 3_400, 4_000, 8_000, 100_000];
         for millis in &no_new_utxo_latencies_ms {
             let result = update_balance_with_latency(Duration::from_millis(*millis), vec![]).await;
             assert!(matches!(result, Err(UpdateBalanceError::NoNewUtxos { .. })));
@@ -252,16 +252,13 @@ mod update_balance {
             histogram.iter().collect::<Vec<_>>(),
             vec![
                 (500., 4.),
-                (1000., 0.),
-                (1500., 0.),
-                (2000., 0.),
-                (2500., 1.),
-                (3000., 1.),
-                (3500., 2.),
-                (4000., 0.),
-                (4500., 0.),
-                (5000., 0.),
-                (f64::INFINITY, 2.)
+                (1_000., 0.),
+                (2_000., 0.),
+                (4_000., 4.),
+                (8_000., 1.),
+                (16_000., 0.),
+                (32_000., 0.),
+                (f64::INFINITY, 1.)
             ]
         );
         assert_eq!(
@@ -274,15 +271,12 @@ mod update_balance {
             histogram.iter().collect::<Vec<_>>(),
             vec![
                 (500., 1.),
-                (1000., 0.),
-                (1500., 0.),
-                (2000., 0.),
-                (2500., 0.),
-                (3000., 0.),
-                (3500., 0.),
-                (4000., 0.),
-                (4500., 0.),
-                (5000., 0.),
+                (1_000., 0.),
+                (2_000., 0.),
+                (4_000., 0.),
+                (8_000., 0.),
+                (16_000., 0.),
+                (32_000., 0.),
                 (f64::INFINITY, 0.)
             ]
         );
