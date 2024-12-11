@@ -6,7 +6,7 @@ use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
 use ic_types::{
     crypto::{
         threshold_sig::RootOfTrustProvider, AlgorithmId, BasicSig, BasicSigOf, CanisterSig,
-        CanisterSigOf, CryptoError, UserPublicKey,
+        CanisterSigOf, CryptoError,
     },
     messages::{
         Authentication, Delegation, HasCanisterId, HttpRequest, HttpRequestContent, MessageId,
@@ -59,7 +59,10 @@ const MAXIMUM_NUMBER_OF_PATHS: usize = 1_000;
 const MAXIMUM_NUMBER_OF_LABELS_PER_PATH: usize = 127;
 
 /// A trait for validating an `HttpRequest` with content `C`.
-pub trait HttpRequestVerifier<C, R>: Send + Sync {
+pub trait HttpRequestVerifier<C: HttpRequestContent, R: RootOfTrustProvider>: Send + Sync
+where
+    R::Error: std::error::Error,
+{
     /// Validates the given request.
     /// If valid, returns the set of canister IDs that are *common* to all delegations.
     /// Otherwise, returns an error.
@@ -89,6 +92,63 @@ pub trait HttpRequestVerifier<C, R>: Send + Sync {
         current_time: Time,
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError>;
+
+    fn validate_request_content(
+        &self,
+        request: &HttpRequest<C>,
+        ingress_signature_verifier: &dyn IngressSigVerifier,
+        current_time: Time,
+        root_of_trust_provider: &R,
+    ) -> Result<CanisterIdSet, RequestValidationError> {
+        validate_nonce(request)?;
+        self.validate_user_id_and_signature(
+            ingress_signature_verifier,
+            &request.sender(),
+            &request.id(),
+            match request.authentication() {
+                Authentication::Anonymous => None,
+                Authentication::Authenticated(signature) => Some(signature),
+            },
+            current_time,
+            root_of_trust_provider,
+        )
+    }
+
+    // Verifies correct user and signature.
+    fn validate_user_id_and_signature(
+        &self,
+        ingress_signature_verifier: &dyn IngressSigVerifier,
+        sender: &UserId,
+        message_id: &MessageId,
+        signature: Option<&UserSignature>,
+        current_time: Time,
+        root_of_trust_provider: &R,
+    ) -> Result<CanisterIdSet, RequestValidationError> {
+        match signature {
+            None => {
+                if sender.get().is_anonymous() {
+                    return Ok(CanisterIdSet::all());
+                }
+                Err(MissingSignature(*sender))
+            }
+            Some(signature) => {
+                if sender.get().is_anonymous() {
+                    Err(AnonymousSignatureNotAllowed)
+                } else {
+                    let sender_pubkey = &signature.signer_pubkey;
+                    validate_user_id(sender_pubkey, sender).and_then(|()| {
+                        validate_signature(
+                            ingress_signature_verifier,
+                            message_id,
+                            signature,
+                            current_time,
+                            root_of_trust_provider,
+                        )
+                    })
+                }
+            }
+        }
+    }
 }
 
 pub struct HttpRequestVerifierImpl {
@@ -113,7 +173,7 @@ where
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
         validate_ingress_expiry(request, current_time)?;
-        let delegation_targets = validate_request_content(
+        let delegation_targets = self.validate_request_content(
             request,
             self.validator.as_ref(),
             current_time,
@@ -138,7 +198,7 @@ where
         if !request.sender().get().is_anonymous() {
             validate_ingress_expiry(request, current_time)?;
         }
-        let delegation_targets = validate_request_content(
+        let delegation_targets = self.validate_request_content(
             request,
             self.validator.as_ref(),
             current_time,
@@ -164,7 +224,7 @@ where
         if !request.sender().get().is_anonymous() {
             validate_ingress_expiry(request, current_time)?;
         }
-        validate_request_content(
+        self.validate_request_content(
             request,
             self.validator.as_ref(),
             current_time,
@@ -189,29 +249,6 @@ fn validate_paths_width_and_depth(paths: &[Path]) -> Result<(), RequestValidatio
         }
     }
     Ok(())
-}
-
-fn validate_request_content<C: HttpRequestContent, R: RootOfTrustProvider>(
-    request: &HttpRequest<C>,
-    ingress_signature_verifier: &dyn IngressSigVerifier,
-    current_time: Time,
-    root_of_trust_provider: &R,
-) -> Result<CanisterIdSet, RequestValidationError>
-where
-    R::Error: std::error::Error,
-{
-    validate_nonce(request)?;
-    validate_user_id_and_signature(
-        ingress_signature_verifier,
-        &request.sender(),
-        &request.id(),
-        match request.authentication() {
-            Authentication::Anonymous => None,
-            Authentication::Authenticated(signature) => Some(signature),
-        },
-        current_time,
-        root_of_trust_provider,
-    )
 }
 
 fn validate_request_target<C: HasCanisterId>(
@@ -529,7 +566,9 @@ where
         root_of_trust_provider,
     )?;
 
-    let (pk, pk_type) = public_key_from_bytes(&pubkey).map_err(InvalidSignature)?;
+    let (pk, pk_type) = user_public_key_from_bytes(&pubkey)
+        .map_err(InvalidPublicKey)
+        .map_err(InvalidSignature)?;
 
     match pk_type {
         KeyBytesContentType::EcdsaP256PublicKeyDerWrappedCose
@@ -546,7 +585,9 @@ where
         | KeyBytesContentType::EcdsaP256PublicKeyDer
         | KeyBytesContentType::EcdsaSecp256k1PublicKeyDer => {
             let basic_sig = BasicSigOf::from(BasicSig(signature.signature.clone()));
-            validate_signature_plain(validator, message_id, &basic_sig, &pk)
+            validator
+                .verify_basic_sig_by_public_key(&basic_sig, message_id, &pk)
+                .map_err(InvalidBasicSignature)
                 .map_err(InvalidSignature)?;
             Ok(targets)
         }
@@ -571,17 +612,6 @@ where
             ))
         }
     }
-}
-
-fn validate_signature_plain(
-    validator: &dyn IngressSigVerifier,
-    message_id: &MessageId,
-    signature: &BasicSigOf<MessageId>,
-    pubkey: &UserPublicKey,
-) -> Result<(), AuthenticationError> {
-    validator
-        .verify_basic_sig_by_public_key(signature, message_id, pubkey)
-        .map_err(InvalidBasicSignature)
 }
 
 // Validate a chain of delegations.
@@ -669,7 +699,7 @@ fn validate_delegation<R: RootOfTrustProvider>(
 where
     R::Error: std::error::Error,
 {
-    let (pk, pk_type) = public_key_from_bytes(pubkey)?;
+    let (pk, pk_type) = user_public_key_from_bytes(pubkey).map_err(InvalidPublicKey)?;
 
     match pk_type {
         KeyBytesContentType::EcdsaP256PublicKeyDerWrappedCose
@@ -704,48 +734,4 @@ where
         Some(targets) => CanisterIdSet::try_from_iter(targets)
             .map_err(|e| DelegationTargetError(format!("{e}")))?,
     })
-}
-
-// Verifies correct user and signature.
-fn validate_user_id_and_signature<R: RootOfTrustProvider>(
-    ingress_signature_verifier: &dyn IngressSigVerifier,
-    sender: &UserId,
-    message_id: &MessageId,
-    signature: Option<&UserSignature>,
-    current_time: Time,
-    root_of_trust_provider: &R,
-) -> Result<CanisterIdSet, RequestValidationError>
-where
-    R::Error: std::error::Error,
-{
-    match signature {
-        None => {
-            if sender.get().is_anonymous() {
-                return Ok(CanisterIdSet::all());
-            }
-            Err(MissingSignature(*sender))
-        }
-        Some(signature) => {
-            if sender.get().is_anonymous() {
-                Err(AnonymousSignatureNotAllowed)
-            } else {
-                let sender_pubkey = &signature.signer_pubkey;
-                validate_user_id(sender_pubkey, sender).and_then(|()| {
-                    validate_signature(
-                        ingress_signature_verifier,
-                        message_id,
-                        signature,
-                        current_time,
-                        root_of_trust_provider,
-                    )
-                })
-            }
-        }
-    }
-}
-
-fn public_key_from_bytes(
-    pubkey: &[u8],
-) -> Result<(UserPublicKey, KeyBytesContentType), AuthenticationError> {
-    user_public_key_from_bytes(pubkey).map_err(InvalidPublicKey)
 }
