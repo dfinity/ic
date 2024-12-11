@@ -26,15 +26,6 @@ pub enum Commands {
         #[arg(long, default_value = config::DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH, value_name = "deployment.json")]
         deployment_json_path: PathBuf,
 
-        #[arg(long, default_value_t = true)]
-        use_nns_public_key: bool,
-
-        #[arg(long, default_value_t = false)]
-        use_ssh_authorized_keys: bool,
-
-        #[arg(long, default_value_t = true)]
-        use_node_operator_private_key: bool,
-
         #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         setupos_config_json_path: PathBuf,
     },
@@ -160,9 +151,6 @@ pub fn main() -> Result<()> {
         Some(Commands::CreateSetuposConfig {
             config_ini_path,
             deployment_json_path,
-            use_nns_public_key,
-            use_ssh_authorized_keys,
-            use_node_operator_private_key,
             setupos_config_json_path,
         }) => {
             // get config.ini settings
@@ -224,10 +212,11 @@ pub fn main() -> Result<()> {
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name.parse()?,
                 logging: Logging::default(),
-                use_nns_public_key,
+                use_nns_public_key: Path::new("/data/nns_public_key.pem").exists(),
                 nns_urls: deployment_json_settings.nns.url.clone(),
-                use_node_operator_private_key,
-                use_ssh_authorized_keys,
+                use_node_operator_private_key: Path::new("/config/node_operator_private_key.pem")
+                    .exists(),
+                use_ssh_authorized_keys: Path::new("/config/ssh_authorized_keys").exists(),
                 icos_dev_settings: ICOSDevSettings::default(),
             };
 
