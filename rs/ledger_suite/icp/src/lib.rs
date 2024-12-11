@@ -1096,7 +1096,7 @@ pub struct TipOfChainRes {
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetBlocksArgs {
     pub start: BlockIndex,
-    pub length: usize,
+    pub length: u64,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]

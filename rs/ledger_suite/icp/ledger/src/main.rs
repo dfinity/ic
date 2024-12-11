@@ -1321,10 +1321,10 @@ fn iter_blocks_() {
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
     over(protobuf, |GetBlocksArgs { start, length }| {
-        let length = std::cmp::min(length, max_blocks_per_request(&caller()));
+        let length = std::cmp::min(length, max_blocks_per_request(&caller()) as u64);
         let blockchain = &LEDGER.read().unwrap().blockchain;
         let start_offset = blockchain.num_archived_blocks();
-        icp_ledger::get_blocks(&blockchain.blocks, start_offset, start, length)
+        icp_ledger::get_blocks(&blockchain.blocks, start_offset, start, length as usize)
     });
 }
 
@@ -1336,7 +1336,7 @@ fn icrc1_supported_standards_candid() {
 #[candid_method(query, rename = "query_blocks")]
 fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksResponse {
     let ledger = LEDGER.read().unwrap();
-    let locations = block_locations(&*ledger, start, length);
+    let locations = block_locations(&*ledger, start, length.min(usize::MAX as u64) as usize);
 
     let local_blocks =
         range_utils::take(&locations.local_blocks, max_blocks_per_request(&caller()));
@@ -1556,7 +1556,7 @@ fn query_encoded_blocks(
     GetBlocksArgs { start, length }: GetBlocksArgs,
 ) -> QueryEncodedBlocksResponse {
     let ledger = LEDGER.read().unwrap();
-    let locations = block_locations(&*ledger, start, length);
+    let locations = block_locations(&*ledger, start, length.min(usize::MAX as u64) as usize);
 
     let local_blocks =
         range_utils::take(&locations.local_blocks, max_blocks_per_request(&caller()));

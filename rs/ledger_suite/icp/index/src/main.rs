@@ -252,7 +252,7 @@ async fn get_blocks_from_ledger(start: u64) -> Result<QueryEncodedBlocksResponse
     let ledger_id = with_state(|state| state.ledger_id);
     let req = GetBlocksArgs {
         start,
-        length: DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+        length: DEFAULT_MAX_BLOCKS_PER_RESPONSE as u64,
     };
     let (res,): (QueryEncodedBlocksResponse,) =
         ic_cdk::call(ledger_id, "query_encoded_blocks", (req,))
@@ -266,7 +266,7 @@ async fn get_blocks_from_archive(
 ) -> Result<Vec<EncodedBlock>, String> {
     let req = GetBlocksArgs {
         start: block_range.start,
-        length: block_range.length as usize,
+        length: block_range.length,
     };
     let (blocks_res,): (GetEncodedBlocksResult,) = ic_cdk::call(
         block_range.callback.canister_id,

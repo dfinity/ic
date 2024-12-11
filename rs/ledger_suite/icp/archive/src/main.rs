@@ -177,7 +177,10 @@ fn get_blocks_() {
         let archive_state = ARCHIVE_STATE.read().unwrap();
         let blocks = &archive_state.blocks;
         let from_offset = archive_state.block_height_offset;
-        let length = length.min(icp_ledger::max_blocks_per_request(&caller()));
+        let length = length
+            .min(usize::MAX as u64)
+            .min(icp_ledger::max_blocks_per_request(&caller()) as u64)
+            as usize;
         icp_ledger::get_blocks(blocks, from_offset, start, length)
     });
 }
@@ -185,7 +188,7 @@ fn get_blocks_() {
 #[candid_method(query, rename = "get_blocks")]
 fn get_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetBlocksResult {
     Ok(BlockRange {
-        blocks: read_encoded_blocks(start, length)?
+        blocks: read_encoded_blocks(start, length.min(usize::MAX as u64) as usize)?
             .into_iter()
             .map(|b| CandidBlock::from(Block::decode(b).expect("failed to decode a block")))
             .collect::<Vec<CandidBlock>>(),
@@ -275,7 +278,7 @@ fn http_request() {
 
 #[candid_method(query, rename = "get_encoded_blocks")]
 fn get_encoded_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetEncodedBlocksResult {
-    read_encoded_blocks(start, length)
+    read_encoded_blocks(start, length.min(usize::MAX as u64) as usize)
 }
 
 fn read_encoded_blocks(start: u64, length: usize) -> Result<Vec<EncodedBlock>, GetBlocksError> {
