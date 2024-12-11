@@ -266,3 +266,27 @@ sns_quill(name = "sns_quill")
 load("//bazel:idl2json.bzl", "idl_to_json")
 
 idl_to_json(name = "idl2json")
+
+# Use libsystemd from the host environment
+# Ideally this is pulled hermetically, but as this is only used by infogetty
+# within IC images, we have less compatibility to worry about, and packaging it
+# this way is easier.
+new_local_repository(
+    name = "libsystemd",
+    build_file_content = """
+cc_import(
+    name = "libsystemd-internal",
+    hdrs = glob(["include/systemd/*.h"]),
+    interface_library = "lib/x86_64-linux-gnu/libsystemd.so",
+    system_provided = True,
+    visibility = ["//visibility:private"],
+)
+# Use an extra cc_library to hide the depth of the include folder
+cc_library(
+    name = "libsystemd",
+    includes = ["include"],
+    deps = ["libsystemd-internal"],
+    visibility = ["//visibility:public"],
+)""",
+    path = "/usr",
+)
