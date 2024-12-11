@@ -33,12 +33,12 @@ use ic_stable_structures::writer::{BufferedWriter, Writer};
 use icp_ledger::IcpAllowanceArgs;
 use icp_ledger::{
     max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
-    AccountIdentifier, ArchiveInfo, ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives,
-    BinaryAccountBalanceArgs, Block, BlockArg, BlockRes, CandidBlock, Decimals, FeatureFlags,
-    GetBlocksArgs, InitArgs, IterBlocksArgs, LedgerCanisterPayload, Memo, Name, Operation,
-    PaymentError, QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol,
-    TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
-    TransferFeeArgs, MEMO_SIZE_BYTES,
+    AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo, ArchivedBlocksRange,
+    ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, BlockRes,
+    CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs, IterBlocksArgs,
+    LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
+    QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
+    Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -1212,11 +1212,16 @@ fn account_balance_() {
 }
 
 #[candid_method(query, rename = "account_balance")]
-fn account_balance_candid_(arg: BinaryAccountBalanceArgs) -> Tokens {
-    let account = AccountIdentifier::from_address(arg.account).unwrap_or_else(|e| {
-        trap_with(&format!("Invalid account identifier: {}", e));
-    });
-    account_balance(account)
+fn account_balance_candid_(arg: AccountIdentifierByteBuf) -> Tokens {
+    match BinaryAccountBalanceArgs::try_from(arg) {
+        Ok(arg) => {
+            let account = AccountIdentifier::from_address(arg.account).unwrap_or_else(|e| {
+                trap_with(&format!("Invalid account identifier: {}", e));
+            });
+            account_balance(account)
+        }
+        Err(_) => Tokens::ZERO,
+    }
 }
 
 #[export_name = "canister_query account_balance"]
