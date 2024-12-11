@@ -67,6 +67,7 @@ use pocket_ic::{
 };
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
+use std::ops::Range;
 use std::{collections::BTreeMap, fmt::Write, time::Duration};
 
 pub const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
@@ -705,13 +706,14 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
     );
 }
 
-/// Gradually advances time by up to `timeout_seconds` seconds, observing the state using
-/// the provided `observe` function after each (evenly-timed) tick.
+/// First, advances time by `expected_event_interval_seconds.start` seconds.
+/// Then, gradually advances time by up to the length of the interval `expected_event_interval_seconds`,
+/// observing the state using the provided `observe` function after each (evenly-timed) tick.
 /// - If the observed state matches the `expected` state, it returns `Ok(())`.
 /// - If the timeout is reached, it returns an error with the last observation.
 ///
-/// The frequency of ticks is 1 per second for small values of `timeout_seconds`, and gradually
-/// lower for larger `timeout_seconds` to guarantee at most 500 ticks.
+/// The frequency of ticks is 1 per second for small intervals of `expected_event_interval_seconds`, and gradually
+/// lower for larger intervals to guarantee at most 500 ticks.
 ///
 /// Example:
 /// ```
@@ -733,7 +735,7 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
 /// ```
 pub async fn await_with_timeout<'a, T, F, Fut>(
     pocket_ic: &'a PocketIc,
-    timeout_seconds: u64,
+    expected_event_interval_seconds: Range<u64>,
     observe: F,
     expected: &T,
 ) -> Result<(), String>
@@ -742,6 +744,13 @@ where
     F: Fn(&'a PocketIc) -> Fut,
     Fut: std::future::Future<Output = T>,
 {
+    assert!(expected_event_interval_seconds.start < expected_event_interval_seconds.end, "expected_event_interval_seconds.start must be less than expected_event_interval_seconds.end");
+    let timeout_seconds =
+        expected_event_interval_seconds.end - expected_event_interval_seconds.start;
+    pocket_ic
+        .advance_time(Duration::from_secs(expected_event_interval_seconds.start))
+        .await;
+
     let mut counter = 0;
     let num_ticks = timeout_seconds.min(500);
     let seconds_per_tick = (timeout_seconds as f64 / num_ticks as f64).ceil() as u64;
@@ -1346,8 +1355,13 @@ pub mod sns {
         use assert_matches::assert_matches;
         use ic_crypto_sha2::Sha256;
         use ic_nervous_system_agent::sns::governance::GovernanceCanister;
+        use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
         use ic_sns_governance::pb::v1::get_neuron_response;
         use pocket_ic::ErrorCode;
+
+        pub const EXPECTED_UPGRADE_DURATION_MAX_SECONDS: u64 = 1000;
+        pub const EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS: u64 =
+            UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS + 10;
 
         /// Manage an SNS neuron, e.g., to make an SNS Governance proposal.
         async fn manage_neuron(

@@ -1,4 +1,9 @@
-use ic_nervous_system_integration_tests::pocket_ic_helpers::{await_with_timeout, sns};
+use ic_nervous_system_integration_tests::pocket_ic_helpers::{
+    await_with_timeout, sns,
+    sns::governance::{
+        EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
+    },
+};
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
@@ -82,7 +87,7 @@ async fn test_get_upgrade_journal() {
     // Step 1.1: wait for the upgrade steps to be refreshed.
     await_with_timeout(
         &pocket_ic,
-        UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
+        UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS..EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
         |pocket_ic| async {
             sns::governance::get_upgrade_journal(pocket_ic, sns.governance.canister_id)
                 .await
@@ -134,7 +139,7 @@ async fn test_get_upgrade_journal() {
     // Step 2.1: wait for the upgrade steps to be refreshed.
     await_with_timeout(
         &pocket_ic,
-        UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
+        UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS..EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
         |pocket_ic| async {
             sns::governance::get_upgrade_journal(pocket_ic, sns.governance.canister_id)
                 .await
@@ -195,7 +200,7 @@ async fn test_get_upgrade_journal() {
 
     await_with_timeout(
         &pocket_ic,
-        UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
+        0..EXPECTED_UPGRADE_DURATION_MAX_SECONDS,
         |pocket_ic| async {
             sns::governance::get_upgrade_journal(pocket_ic, sns.governance.canister_id)
                 .await
