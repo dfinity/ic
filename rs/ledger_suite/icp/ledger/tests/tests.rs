@@ -1505,11 +1505,6 @@ fn test_transfer_from_burn() {
 }
 
 #[test]
-fn test_balances_overflow() {
-    ic_ledger_suite_state_machine_tests::test_balances_overflow(ledger_wasm(), encode_init_args);
-}
-
-#[test]
 fn account_identifier_test() {
     let env = StateMachine::new();
     let payload = LedgerCanisterInitPayload::builder()

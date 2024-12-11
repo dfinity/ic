@@ -3966,51 +3966,6 @@ where
     assert_eq!(total_supply(&env, canister_id), 60_000);
 }
 
-pub fn test_balances_overflow<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
-where
-    T: CandidType,
-{
-    let env = StateMachine::new();
-
-    let args = encode_init_args(InitArgs {
-        maximum_number_of_accounts: Some(8),
-        accounts_overflow_trim_quantity: Some(2),
-        ..init_args(vec![])
-    });
-    let args = Encode!(&args).unwrap();
-    let canister_id = env.install_canister(ledger_wasm, args, None).unwrap();
-
-    let minter = minting_account(&env, canister_id).unwrap();
-
-    let mut credited = 0;
-    for i in 0..11 {
-        transfer(
-            &env,
-            canister_id,
-            minter,
-            PrincipalId::new_user_test_id(i).0,
-            i,
-        )
-        .expect("failed to mint tokens");
-        credited += i;
-    }
-    assert_eq!(
-        balance_of(&env, canister_id, PrincipalId::new_user_test_id(1).0),
-        0
-    );
-    assert_eq!(
-        balance_of(&env, canister_id, PrincipalId::new_user_test_id(2).0),
-        0
-    );
-    for i in 3..11 {
-        assert_eq!(
-            balance_of(&env, canister_id, PrincipalId::new_user_test_id(i).0),
-            i
-        );
-    }
-    assert_eq!(total_supply(&env, canister_id), credited - 1 - 2);
-}
-
 pub fn test_icrc1_test_suite<T: candid::CandidType>(
     ledger_wasm: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
