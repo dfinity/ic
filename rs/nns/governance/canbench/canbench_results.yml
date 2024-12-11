@@ -109,13 +109,13 @@ benches:
     scopes: {}
   neuron_data_validation_heap:
     total:
-      instructions: 531626627
+      instructions: 531626630
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   neuron_data_validation_stable:
     total:
-      instructions: 667651110
+      instructions: 588485678
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
