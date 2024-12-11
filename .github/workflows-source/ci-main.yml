@@ -35,12 +35,12 @@ anchors:
     image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
   dind-large-setup: &dind-large-setup
     runs-on:
-      labels: dind-large
+      labels: dind-small
     container:
       <<: *image
       options: >-
         -e NODE_NAME
-        --privileged --cgroupns host
+        --privileged --cgroupns host  --network host
         -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
   dind-small-setup: &dind-small-setup
