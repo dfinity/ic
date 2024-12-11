@@ -612,7 +612,10 @@ fn bootstrap_idkg_summary(
 
 #[cfg(test)]
 mod tests {
-    use super::{test_utils::complement_state_manager_with_remote_dkg_requests, *};
+    use super::{
+        test_utils::{complement_state_manager_with_remote_dkg_requests, create_dealing},
+        *,
+    };
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{
         dependencies, dependencies_with_subnet_params,
@@ -634,7 +637,7 @@ mod tests {
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::HasVersion,
+        consensus::{Block, HasHeight, HasVersion},
         crypto::threshold_sig::ni_dkg::{
             NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
@@ -642,7 +645,9 @@ mod tests {
         time::UNIX_EPOCH,
         PrincipalId, RegistryVersion, ReplicaVersion,
     };
+    use payload_validator::validate_payload;
     use std::{collections::BTreeSet, convert::TryFrom};
+    use test_utils::{extract_dealings_from_highest_block, extract_remote_dkgs_from_highest_block};
 
     #[test]
     // In this test we test the creation of dealing payloads.
@@ -1489,7 +1494,7 @@ mod tests {
                                 dependencies.state_manager.clone(),
                                 dependencies.registry.get_latest_version(),
                                 vec![],
-                                Some(1),
+                                Some(100),
                                 None,
                             );
 
@@ -1754,7 +1759,158 @@ mod tests {
                     block.height.get()
                 );
             }
-        })
+        });
+    }
+
+    #[test]
+    fn test_early_remote_dkg_transcripts() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let node_ids = (1..4).into_iter().map(node_test_id).collect::<Vec<_>>();
+            let dkg_interval_length = 99;
+            let subnet_id = subnet_test_id(0);
+
+            let Dependencies {
+                mut pool,
+                registry,
+                state_manager,
+                dkg_pool,
+                crypto,
+                ..
+            } = dependencies_with_subnet_records_with_raw_state_manager(
+                pool_config,
+                subnet_id,
+                vec![(
+                    10,
+                    SubnetRecordBuilder::from(&node_ids)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .build(),
+                )],
+            );
+
+            let target_id = NiDkgTargetId::new([0u8; 32]);
+            complement_state_manager_with_remote_dkg_requests(
+                state_manager.clone(),
+                registry.get_latest_version(),
+                vec![10, 11, 12, 13],
+                None,
+                Some(target_id),
+            );
+
+            // Verify that the next summary block contains the configs and no transcripts.
+            // This also extracts the DKG ids
+            pool.advance_round_normal_operation_n(dkg_interval_length + 1);
+            let block: Block = pool
+                .validated()
+                .block_proposal()
+                .get_highest()
+                .unwrap()
+                .content
+                .into_inner();
+            let remote_dkg_ids = if block.payload.as_ref().is_summary() {
+                let dkg_summary = &block.payload.as_ref().as_summary().dkg;
+                assert!(dkg_summary.transcripts_for_remote_subnets.is_empty());
+                assert_eq!(dkg_summary.configs.len(), 4);
+
+                let remote_dkg_ids = dkg_summary
+                    .configs
+                    .iter()
+                    .filter(|(id, _)| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
+                    .map(|(id, _)| id)
+                    .cloned()
+                    .collect::<Vec<_>>();
+                assert_eq!(remote_dkg_ids.len(), 2);
+
+                remote_dkg_ids
+            } else {
+                panic!(
+                    "block at height {} is not a summary block",
+                    block.height.get()
+                );
+            };
+
+            // Put a dealing in the pool and check that it gets included
+            // Additionally check that there are no remote transcripts
+            dkg_pool
+                .write()
+                .unwrap()
+                .apply(vec![ChangeAction::AddToValidated(create_dealing(
+                    1,
+                    remote_dkg_ids[0].clone(),
+                ))]);
+            pool.advance_round_normal_operation();
+            assert_eq!(extract_dealings_from_highest_block(&pool).len(), 1);
+            assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
+
+            // For the next round, we put nothing into the pool
+            // Since there are no dealings, we will try to build a remote transcript
+            // This will fail, however, since we need two dealings (one high one low)
+            pool.advance_round_normal_operation();
+            assert_eq!(extract_dealings_from_highest_block(&pool).len(), 0);
+            assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
+
+            // Now we put the other dealing into the pool
+            // The payload buukder will include the dealing
+            dkg_pool
+                .write()
+                .unwrap()
+                .apply(vec![ChangeAction::AddToValidated(create_dealing(
+                    1,
+                    remote_dkg_ids[1].clone(),
+                ))]);
+            pool.advance_round_normal_operation();
+            assert_eq!(extract_dealings_from_highest_block(&pool).len(), 1);
+            assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
+
+            // Now sufficient dealings are in the pool, check that payload contains early remote transcripts
+            // NOTE: We only need one dealing each, since we are using `CryptoReturningOk`. We should consider
+            // using real crypto for these tests, to make them more realistic
+            pool.advance_round_normal_operation();
+            assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 2);
+
+            // Check that the payload also validates
+            let block: Block = pool
+                .validated()
+                .block_proposal()
+                .get_highest()
+                .unwrap()
+                .content
+                .into_inner();
+            let pool_reader = PoolReader::new(&pool);
+
+            let parent = &block.parent;
+            let height = block.height().decrement();
+            let parent = pool_reader
+                .get_notarized_block(parent, height)
+                .map(|block| block.into_inner())
+                .unwrap();
+
+            assert!(validate_payload(
+                subnet_test_id(0),
+                registry.as_ref(),
+                crypto.as_ref(),
+                &pool_reader,
+                &*dkg_pool.read().unwrap(),
+                parent,
+                &block.payload.as_ref(),
+                state_manager.as_ref(),
+                &block.context,
+                no_op_logger(),
+                &MetricsRegistry::new().int_counter_vec(
+                    "consensus_dkg_validator",
+                    "DKG validator counter",
+                    &["type"],
+                )
+            )
+            .is_ok());
+
+            // Advance the pool a until the next DKG, check that the early remote transcripts are not generated multiple times
+            // including that they are not included in the summary
+            for _ in 0..100 {
+                pool.advance_round_normal_operation();
+                assert_eq!(extract_dealings_from_highest_block(&pool).len(), 0);
+                assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
+            }
+        });
     }
 
     /*

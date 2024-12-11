@@ -1,9 +1,20 @@
+use ic_interfaces::consensus_pool::ConsensusPool;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     SetupInitialDkgContext, SubnetCallContext,
 };
+use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_types::{ids::node_test_id, messages::RequestBuilder};
-use ic_types::{crypto::threshold_sig::ni_dkg::NiDkgTargetId, Height, RegistryVersion};
+use ic_types::{
+    consensus::dkg::{DealingContent, DealingMessages},
+    crypto::{
+        threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTargetId, NiDkgTranscript},
+        BasicSig,
+    },
+    messages::CallbackId,
+    signature::{BasicSignature, BasicSigned},
+    Height, RegistryVersion, ReplicaVersion,
+};
 use std::sync::Arc;
 
 pub(super) fn complement_state_manager_with_remote_dkg_requests(
@@ -39,5 +50,69 @@ pub(super) fn complement_state_manager_with_remote_dkg_requests(
             )));
     if let Some(times) = times {
         expectation.times(times);
+    }
+}
+
+/// Create a dealing from the node `node_idx`
+pub(super) fn create_dealing(node_idx: u64, dkg_id: NiDkgId) -> BasicSigned<DealingContent> {
+    let node_id = node_test_id(node_idx);
+
+    BasicSigned {
+        content: DealingContent {
+            version: ReplicaVersion::default(),
+            dealing: NiDkgDealing::dummy_dealing_for_tests(node_idx as u8),
+            dkg_id,
+        },
+        signature: BasicSignature {
+            signature: BasicSig(vec![]).into(),
+            signer: node_id,
+        },
+    }
+}
+
+/// Extract the remote dkg transcripts from the current highest validated block
+pub(super) fn extract_remote_dkgs_from_highest_block(
+    pool: &TestConsensusPool,
+) -> Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)> {
+    let block: ic_types::consensus::Block = pool
+        .validated()
+        .block_proposal()
+        .get_highest()
+        .unwrap()
+        .content
+        .into_inner();
+
+    if block.payload.as_ref().is_summary() {
+        &block
+            .payload
+            .as_ref()
+            .as_summary()
+            .dkg
+            .transcripts_for_remote_subnets
+    } else {
+        &block
+            .payload
+            .as_ref()
+            .as_data()
+            .dkg
+            .transcripts_for_remote_subnets
+    }
+    .clone()
+}
+
+/// Extract the dealings from the current highest validated block
+pub(super) fn extract_dealings_from_highest_block(pool: &TestConsensusPool) -> DealingMessages {
+    let block: ic_types::consensus::Block = pool
+        .validated()
+        .block_proposal()
+        .get_highest()
+        .unwrap()
+        .content
+        .into_inner();
+
+    if block.payload.as_ref().is_summary() {
+        vec![]
+    } else {
+        block.payload.as_ref().as_data().dkg.messages.clone()
     }
 }

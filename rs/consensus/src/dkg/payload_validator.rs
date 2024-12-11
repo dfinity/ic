@@ -1,5 +1,4 @@
-use std::collections::HashSet;
-
+use self::payload_builder::create_early_remote_transcripts;
 use super::{payload_builder, utils, PayloadCreationError};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{
@@ -8,6 +7,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
+use ic_logger::{info, ReplicaLogger};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -23,6 +23,7 @@ use ic_types::{
     Height, NodeId, SubnetId,
 };
 use prometheus::IntCounterVec;
+use std::collections::HashSet;
 
 /// Reasons for why a dkg payload might be invalid.
 // The `Debug` implementation is ignored during the dead code analysis and we are getting a `field
@@ -47,6 +48,8 @@ pub(crate) enum InvalidDkgPayloadReason {
         limit: usize,
         actual: usize,
     },
+    /// The early transcripts that were included with this payload where invalid
+    InvalidTranscripts,
 }
 
 /// Possible failures which could occur while validating a dkg payload. They don't imply that the
@@ -122,8 +125,10 @@ pub(crate) fn validate_payload(
     payload: &BlockPayload,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     validation_context: &ValidationContext,
+    logger: ReplicaLogger,
     metrics: &IntCounterVec,
 ) -> ValidationResult<PayloadValidationError> {
+    dbg!("Validate payload is called");
     let current_height = parent.height.increment();
     let registry_version = pool_reader
         .registry_version(current_height)
@@ -155,7 +160,7 @@ pub(crate) fn validate_payload(
                 registry_version,
                 state_manager,
                 validation_context,
-                ic_logger::replica_logger::no_op_logger(),
+                logger,
             )?;
             if summary_payload.dkg != expected_summary {
                 return Err(InvalidDkgPayloadReason::MismatchedDkgSummary(
@@ -190,6 +195,9 @@ pub(crate) fn validate_payload(
                 &data_payload.dkg,
                 max_dealings_per_block,
                 &parent,
+                state_manager,
+                validation_context,
+                logger,
                 metrics,
             )
         }
@@ -205,8 +213,13 @@ fn validate_dealings_payload(
     dealings: &DkgDataPayload,
     max_dealings_per_payload: usize,
     parent: &Block,
+    state_manager: &dyn StateManager<State = ReplicatedState>,
+    validation_context: &ValidationContext,
+    logger: ReplicaLogger,
     metrics: &IntCounterVec,
 ) -> ValidationResult<PayloadValidationError> {
+    dbg!("Verifying dealings");
+
     if dealings.start_height != parent.payload.as_ref().dkg_interval_start_height() {
         return Err(InvalidDkgPayloadReason::DkgStartHeightDoesNotMatchParentBlock.into());
     }
@@ -268,6 +281,43 @@ fn validate_dealings_payload(
         crypto.verify_dealing(config, message.signature.signer, &message.content.dealing)?;
     }
 
+    // TODO: Remove this
+    info!(
+        logger,
+        "This payload contains {} early remote DKG transcripts in regular block payload!!",
+        dealings.transcripts_for_remote_subnets.len()
+    );
+    dbg!(dealings.transcripts_for_remote_subnets.len());
+    // If we have early transcripts, we compare them
+    if !dealings.transcripts_for_remote_subnets.is_empty() {
+        // TODO: We should actually compare the  contents of the vectors
+        let expected_transcripts = create_early_remote_transcripts(
+            pool_reader,
+            crypto,
+            parent,
+            1,
+            last_summary,
+            state_manager,
+            validation_context,
+            logger.clone(),
+        );
+
+        if dealings.transcripts_for_remote_subnets != expected_transcripts {
+            info!(
+                logger,
+                "Failed to validate {} early remote DKG transcripts in regular block payload",
+                dealings.transcripts_for_remote_subnets.len()
+            );
+            return Err(InvalidDkgPayloadReason::InvalidTranscripts.into());
+        }
+
+        info!(
+            logger,
+            "Validated {} early remote DKG transcripts in regular block payload",
+            dealings.transcripts_for_remote_subnets.len()
+        );
+    }
+
     Ok(())
 }
 
@@ -275,6 +325,7 @@ fn validate_dealings_payload(
 mod tests {
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_registry::SubnetRecordBuilder;
@@ -342,6 +393,7 @@ mod tests {
                 block_payload,
                 state_manager.as_ref(),
                 &context,
+                no_op_logger(),
                 &mock_metrics(),
             )
             .is_ok());
@@ -363,6 +415,7 @@ mod tests {
                 summary,
                 state_manager.as_ref(),
                 &context,
+                no_op_logger(),
                 &mock_metrics(),
             )
             .is_ok());
@@ -558,6 +611,7 @@ mod tests {
                 &block_payload,
                 state_manager.as_ref(),
                 &context,
+                no_op_logger(),
                 &mock_metrics(),
             );
 

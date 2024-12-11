@@ -6,7 +6,7 @@ use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_registry_client_helpers::{
     crypto::{initial_ni_dkg_transcript_from_registry_record, DkgTranscripts},
@@ -15,7 +15,10 @@ use ic_registry_client_helpers::{
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
-    consensus::{dkg, dkg::Summary, get_faults_tolerated, Block},
+    consensus::{
+        dkg::{self, DealingMessages, DkgDataPayload, Summary},
+        get_faults_tolerated, Block,
+    },
     crypto::{
         threshold_sig::ni_dkg::{
             config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
@@ -73,7 +76,7 @@ pub fn create_payload(
     if last_dkg_summary.get_next_start_height() == height {
         // Since `height` corresponds to the start of a new DKG interval, we create a
         // new summary.
-        return create_summary_payload(
+        create_summary_payload(
             subnet_id,
             registry_client,
             crypto,
@@ -85,16 +88,42 @@ pub fn create_payload(
             validation_context,
             logger,
         )
-        .map(dkg::Payload::Summary);
+        .map(dkg::Payload::Summary)
+    } else {
+        // If the height is not a start height, create a payload with new dealings.
+        create_data_payload(
+            pool_reader,
+            parent,
+            dkg_pool,
+            crypto,
+            last_dkg_summary,
+            max_dealings_per_block,
+            &last_summary_block,
+            state_manager,
+            validation_context,
+            logger,
+        )
+        .map(dkg::Payload::Data)
     }
+}
 
-    // If the height is not a start height, create a payload with new dealings.
-
+fn create_data_payload(
+    pool_reader: &PoolReader<'_>,
+    parent: &Block,
+    dkg_pool: Arc<RwLock<dyn DkgPool>>,
+    crypto: &dyn ConsensusCrypto,
+    last_dkg_summary: &Summary,
+    max_dealings_per_block: usize,
+    last_summary_block: &Block,
+    state_manager: &dyn StateManager<State = ReplicatedState>,
+    validation_context: &ValidationContext,
+    logger: ReplicaLogger,
+) -> Result<DkgDataPayload, PayloadCreationError> {
     // Get all dealer ids from the chain.
     let dealers_from_chain = utils::get_dealers_from_chain(pool_reader, parent);
     // Filter from the validated pool all dealings whose dealer has no dealing on
     // the chain yet.
-    let new_validated_dealings = dkg_pool
+    let new_validated_dealings: DealingMessages = dkg_pool
         .read()
         .expect("Couldn't lock DKG pool for reading.")
         .get_validated()
@@ -107,10 +136,146 @@ pub fn create_payload(
         .take(max_dealings_per_block)
         .cloned()
         .collect();
-    Ok(dkg::Payload::Data(dkg::DkgDataPayload::new(
+
+    dbg!(new_validated_dealings.len());
+
+    // If we have dealings in the payload, we will not try to make transcripts as well
+    if !new_validated_dealings.is_empty() {
+        return Ok(DkgDataPayload::new(
+            last_summary_block.height,
+            new_validated_dealings,
+        ));
+    }
+
+    let remote_dkg_transcripts = create_early_remote_transcripts(
+        pool_reader,
+        crypto,
+        parent,
+        1,
+        last_dkg_summary,
+        state_manager,
+        validation_context,
+        logger.clone(),
+    );
+
+    if !remote_dkg_transcripts.is_empty() {
+        info!(
+            logger,
+            "Including {} early remote DKG transcripts in regular block payload",
+            remote_dkg_transcripts.len()
+        );
+    }
+    dbg!(remote_dkg_transcripts.len());
+
+    // Try to include remote transcripts
+    Ok(DkgDataPayload::new_with_remote_dkg_transcripts(
         last_summary_block.height,
-        new_validated_dealings,
-    )))
+        remote_dkg_transcripts,
+    ))
+}
+
+pub(crate) fn create_early_remote_transcripts(
+    pool_reader: &PoolReader<'_>,
+    crypto: &dyn ConsensusCrypto,
+    parent: &Block,
+    num_transcripts: usize,
+    last_dkg_summary: &Summary,
+    state_manager: &dyn StateManager<State = ReplicatedState>,
+    validation_context: &ValidationContext,
+    logger: ReplicaLogger,
+) -> Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)> {
+    // If we cannot access the state manager, we don't return an error.
+    // This is because the early remote transcripts are an optimization.
+    // If we don't return any transcripts here, the protocol will continue anyway
+    // and return the transcripts (or their errors) in the summary block
+    let Ok(state) = state_manager.get_state_at(validation_context.certified_height) else {
+        return vec![];
+    };
+
+    //  Since this function is relatively expensive, we simply return, if there are no outstanding DKG constexts
+    if number_of_contexts(state.get_ref()) == 0 {
+        return vec![];
+    }
+
+    // Get all dealings that have not been used in a transcript already
+    let all_dealings = utils::get_dkg_dealings(pool_reader, parent, true);
+
+    // Collect map of the dealings remote target_ids to the dkg_ids
+    let mut remote_contexts: BTreeMap<NiDkgTargetId, Vec<NiDkgId>> = BTreeMap::new();
+    for (target_id, dkg_id) in
+        all_dealings
+            .iter()
+            .filter_map(|(dkg_id, _)| match dkg_id.target_subnet {
+                NiDkgTargetSubnet::Local => None,
+                NiDkgTargetSubnet::Remote(target_id) => Some((target_id, dkg_id)),
+            })
+    {
+        let entry = remote_contexts.entry(target_id).or_default();
+        entry.push(dkg_id.clone());
+    }
+
+    let mut selected_transcripts = vec![];
+    for (_, dkg_ids) in remote_contexts {
+        // For each target_id, try to build the necessary (dkg_id, callback_id transcript) triple
+        let mut transcripts = dkg_ids
+            .iter()
+            // Lookup the config from the summary
+            .filter_map(|dkg_id| {
+                last_dkg_summary
+                    .configs
+                    .get(dkg_id)
+                    .map(|config| (dkg_id, config))
+            })
+            // Lookup the callback id
+            .filter_map(|(dkg_id, config)| {
+                get_callback_id_from_id(state.get_ref(), dkg_id)
+                    .map(|callback_id| (dkg_id, callback_id, config))
+            })
+            // Generate the transcripts. We just skip errors, they will
+            // be handled in the summary block, if we fail to create an early transcript
+            .filter_map(|(dkg_id, callback_id, config)| {
+                match create_transcript(crypto, config, &all_dealings, &logger) {
+                    Ok(transcript) => {
+                        Some((dkg_id.clone(), callback_id, Ok::<_, String>(transcript)))
+                    }
+                    Err(_) => None,
+                }
+            })
+            .collect::<Vec<_>>();
+
+        // For inital DKG transcripts, we need a pair of values while for VetKD we need a single config
+        // Here we do some matching, to check that we have the right number of configs
+        match transcripts.len() {
+            1 => {
+                // TODO: With vetkd, we need to check that these have a HighTresholdForMasterPublicKeyId tag
+                // Sould we also check that the keys exists?
+                continue;
+            }
+            // If we have two transcripts for the same ID, we check that it is one low and one high threshold transcript
+            // Note: We do not really need to check whether there is an actual context, since this will happen later when we map
+            // the transcripts to callback ids
+            2 => {
+                let tags = transcripts
+                    .iter()
+                    .map(|(dkg_id, _, _)| dkg_id.dkg_tag.clone())
+                    .collect::<BTreeSet<_>>();
+                let expected_tags = TAGS.iter().cloned().collect::<BTreeSet<_>>();
+
+                if tags != expected_tags {
+                    continue;
+                }
+            }
+            // Other combinations are not supported
+            _ => continue,
+        }
+
+        selected_transcripts.append(&mut transcripts);
+        if selected_transcripts.len() >= num_transcripts {
+            break;
+        }
+    }
+
+    selected_transcripts
 }
 
 /// Creates a summary payload for the given parent and registry_version.
@@ -151,11 +316,15 @@ pub(super) fn create_summary_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Result<dkg::Summary, PayloadCreationError> {
-    let all_dealings = utils::get_dkg_dealings(pool_reader, parent);
+    dbg!("Creating summary payload");
+    let all_dealings = utils::get_dkg_dealings(pool_reader, parent, true);
+    dbg!(&all_dealings.len());
     let mut transcripts_for_remote_subnets = BTreeMap::new();
     let mut next_transcripts = BTreeMap::new();
     // Try to create transcripts from the last round.
     for (dkg_id, config) in last_summary.configs.iter() {
+        // TODO: Filter out configs that no longer have a matching context
+
         match create_transcript(crypto, config, &all_dealings, &logger) {
             Ok(transcript) => {
                 let previous_value_found = if dkg_id.target_subnet == NiDkgTargetSubnet::Local {
@@ -188,6 +357,7 @@ pub(super) fn create_summary_payload(
 
     let height = parent.height.increment();
 
+    dbg!(transcripts_for_remote_subnets.len());
     let (mut configs, transcripts_for_remote_subnets, initial_dkg_attempts) =
         compute_remote_dkg_data(
             subnet_id,
@@ -204,6 +374,7 @@ pub(super) fn create_summary_payload(
             &last_summary.initial_dkg_attempts,
             &logger,
         )?;
+    dbg!(transcripts_for_remote_subnets.len());
 
     let interval_length = last_summary.next_interval_length;
     let next_interval_length = get_dkg_interval_length(
@@ -263,6 +434,8 @@ fn create_transcript(
     let no_dealings = BTreeMap::new();
     let dealings = all_dealings.get(config.dkg_id()).unwrap_or(&no_dealings);
 
+    // TODO: We need to check that we are not erroring on insufficient dealings here
+
     ic_interfaces::crypto::NiDkgAlgorithm::create_transcript(crypto, config, dealings)
 }
 
@@ -308,6 +481,7 @@ fn compute_remote_dkg_data(
         let mut expected_configs = Vec::new();
         for config in low_high_threshold_configs {
             let dkg_id = config.dkg_id();
+
             // Check if we have a transcript in the previous summary for this config, and
             // if we do, move it to the new summary.
             if let Some((id, transcript)) = previous_transcripts
@@ -316,10 +490,11 @@ fn compute_remote_dkg_data(
             {
                 new_transcripts.insert(id.clone(), transcript.clone());
             }
-            // If not, we check if we computed a transcript for this config in the last round. And
+
+            // We check if we computed a transcript for this config in the last round. And
             // if not, we move the config into the new summary so that we try again in
             // the next round.
-            else if !new_transcripts
+            if !new_transcripts
                 .iter()
                 .any(|(id, _)| eq_sans_height(id, dkg_id))
             {
@@ -548,10 +723,10 @@ fn get_dkg_interval_length(
         })
 }
 
-// Reads the SubnetCallContext and attempts to create DKG configs for new
-// subnets for the next round. An Ok return value contains:
-// * configs grouped by subnet (low and high threshold configs per subnet)
-// * errors produced while generating the configs.
+/// Reads the SubnetCallContext and attempts to create DKG configs for new
+/// subnets for the next round. An Ok return value contains:
+/// * configs grouped by subnet (low and high threshold configs per subnet)
+/// * errors produced while generating the configs.
 #[allow(clippy::type_complexity)]
 fn process_subnet_call_context(
     this_subnet_id: SubnetId,
@@ -631,9 +806,9 @@ fn get_node_list(
         .collect())
 }
 
-// Compares two DKG ids without considering the start block heights. This
-// function is only used for DKGs for other subnets, as the start block height
-// is not used to differentiate two DKGs for the same subnet.
+/// Compares two DKG ids without considering the start block heights. This
+/// function is only used for DKGs for other subnets, as the start block height
+/// is not used to differentiate two DKGs for the same subnet.
 fn eq_sans_height(dkg_id1: &NiDkgId, dkg_id2: &NiDkgId) -> bool {
     dkg_id1.dealer_subnet == dkg_id2.dealer_subnet
         && dkg_id1.dkg_tag == dkg_id2.dkg_tag
@@ -645,41 +820,51 @@ fn add_callback_ids_to_transcript_results(
     state: &ReplicatedState,
     log: &ReplicaLogger,
 ) -> Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)> {
-    let setup_initial_dkg_contexts = &state
-        .metadata
-        .subnet_call_context_manager
-        .setup_initial_dkg_contexts;
-
     new_transcripts
         .into_iter()
         .filter_map(|(id, result)| {
-            if let Some(callback_id) = setup_initial_dkg_contexts
-                .iter()
-                .filter_map(|(callback_id, context)| {
-                    if NiDkgTargetSubnet::Remote(context.target_id) == id.target_subnet {
-                        Some(*callback_id)
-                    } else {
-                        None
-                    }
-                })
-                .last()
-            {
-                Some((id, callback_id, result))
-            } else {
+            let triple = get_callback_id_from_id(state, &id).map(|callback_id| (id.clone(), callback_id, result));
+            if triple.is_none() {
                 error!(
                     log,
                     "Unable to find callback id associated with remote dkg id {}, this should not happen",
                     id
                 );
-                None
             }
+            triple
         })
         .collect()
 }
 
-// This function is called for each entry on the SubnetCallContext. It returns
-// either the created high and low configs for the entry or returns two errors
-// identified by the NiDkgId.
+fn get_callback_id_from_id(state: &ReplicatedState, id: &NiDkgId) -> Option<CallbackId> {
+    let setup_initial_dkg_contexts = &state
+        .metadata
+        .subnet_call_context_manager
+        .setup_initial_dkg_contexts;
+
+    setup_initial_dkg_contexts
+        .iter()
+        .filter_map(|(callback_id, context)| {
+            if NiDkgTargetSubnet::Remote(context.target_id) == id.target_subnet {
+                Some(*callback_id)
+            } else {
+                None
+            }
+        })
+        .last()
+}
+
+fn number_of_contexts(state: &ReplicatedState) -> usize {
+    state
+        .metadata
+        .subnet_call_context_manager
+        .setup_initial_dkg_contexts
+        .len()
+}
+
+/// This function is called for each entry on the SubnetCallContext. It returns
+/// either the created high and low configs for the entry or returns two errors
+/// identified by the NiDkgId.
 fn create_remote_dkg_configs(
     start_block_height: Height,
     dealer_subnet: SubnetId,
