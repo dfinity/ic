@@ -52,8 +52,8 @@ while read min_bench; do
 done <"${MIN_FILE}"
 
 # Produce a summary.
-baseline_commit=$(git rev-list --abbrev-commit -1 HEAD "${BASELINE_FILE}" | head -c 9)
-min_commit=$(git rev-list --abbrev-commit -1 HEAD | head -c 9)
+baseline_commit=$(git rev-list --abbrev-commit -1 HEAD "${BASELINE_FILE}")
+min_commit=$(git rev-list --abbrev-commit -1 HEAD)
 total_diff=$(echo_diff "${total_baseline_ns}" "${total_new_ns}")
 printf "= ${baseline_commit}..${min_commit}: ${NAME} total time: $((total_new_ns / 1000 / 1000)) ms "
 case "${total_diff}" in
