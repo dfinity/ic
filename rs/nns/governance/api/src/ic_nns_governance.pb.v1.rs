@@ -3038,6 +3038,12 @@ pub mod governance {
             Option<governance_cached_metrics::NeuronSubsetMetrics>,
         #[prost(message, optional, tag = "39")]
         pub public_neuron_subset_metrics: Option<governance_cached_metrics::NeuronSubsetMetrics>,
+        #[prost(message, optional, tag = "40")]
+        pub declining_voting_power_neuron_subset_metrics:
+            ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
+        #[prost(message, optional, tag = "41")]
+        pub fully_lost_voting_power_neuron_subset_metrics:
+            ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
     }
     /// Nested message and enum types in `GovernanceCachedMetrics`.
     pub mod governance_cached_metrics {
@@ -3054,27 +3060,46 @@ pub mod governance {
             /// example, count = count_buckets.values().sum().
             #[prost(uint64, optional, tag = "1")]
             pub count: Option<u64>,
+
             #[prost(uint64, optional, tag = "2")]
             pub total_staked_e8s: Option<u64>,
             #[prost(uint64, optional, tag = "3")]
             pub total_staked_maturity_e8s_equivalent: Option<u64>,
             #[prost(uint64, optional, tag = "4")]
             pub total_maturity_e8s_equivalent: Option<u64>,
+
+            /// Deprecated. Use one of the following instead.
             #[prost(uint64, optional, tag = "5")]
             pub total_voting_power: Option<u64>,
+            /// Used to decide proposals. If all neurons refresh their voting
+            /// power/following frequently enough, this will be equal to potential
+            /// voting power. If not, this will be less.
+            #[prost(uint64, optional, tag = "11")]
+            pub total_deciding_voting_power: ::core::option::Option<u64>,
+            /// Used for voting rewards.
+            #[prost(uint64, optional, tag = "12")]
+            pub total_potential_voting_power: ::core::option::Option<u64>,
+
             /// These fields are keyed by floor(dissolve delay / 0.5 years). These are
             /// analogous to the (singular) fields above. Here, the usual definition of
             /// year for the IC is used: exactly 365.25 days.
             #[prost(map = "uint64, uint64", tag = "6")]
             pub count_buckets: ::std::collections::HashMap<u64, u64>,
+
             #[prost(map = "uint64, uint64", tag = "7")]
             pub staked_e8s_buckets: ::std::collections::HashMap<u64, u64>,
             #[prost(map = "uint64, uint64", tag = "8")]
             pub staked_maturity_e8s_equivalent_buckets: ::std::collections::HashMap<u64, u64>,
             #[prost(map = "uint64, uint64", tag = "9")]
             pub maturity_e8s_equivalent_buckets: ::std::collections::HashMap<u64, u64>,
+
+            /// Deprecated. Use one of the following instead.
             #[prost(map = "uint64, uint64", tag = "10")]
             pub voting_power_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "13")]
+            pub deciding_voting_power_buckets: ::std::collections::HashMap<u64, u64>,
+            #[prost(map = "uint64, uint64", tag = "14")]
+            pub potential_voting_power_buckets: ::std::collections::HashMap<u64, u64>,
         }
     }
     /// Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)

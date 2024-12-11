@@ -6,7 +6,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 system_test_nns(
     name = "rosetta_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["experimental_system_test_colocation"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
@@ -16,7 +15,25 @@ system_test_nns(
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/canister_client",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/nns/test_utils",
+        "//rs/registry/subnet_type",
+        "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils",
+        "//rs/rosetta-api/icp/test_utils",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/test_utilities/identity",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:lazy_static",
+        "@crate_index//:slog",
+        "@crate_index//:url",
+    ],
 )
 
 system_test_nns(

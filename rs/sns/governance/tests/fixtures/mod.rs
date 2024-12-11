@@ -9,10 +9,9 @@ use ic_sns_governance::{
     governance::{Governance, ValidGovernanceProto},
     pb::v1::{
         get_neuron_response, get_proposal_response,
-        governance::{MaturityModulation, Mode, SnsMetadata},
-        manage_neuron,
+        governance::{MaturityModulation, Mode, SnsMetadata, Version},
         manage_neuron::{
-            AddNeuronPermissions, MergeMaturity, RegisterVote, RemoveNeuronPermissions,
+            self, AddNeuronPermissions, MergeMaturity, RegisterVote, RemoveNeuronPermissions,
         },
         manage_neuron_response::{
             self, AddNeuronPermissionsResponse, FollowResponse, MergeMaturityResponse,
@@ -430,6 +429,13 @@ impl GovernanceCanisterFixture {
             .lock()
             .unwrap()
             .now += delta_seconds;
+        self
+    }
+
+    /// Ensures that SNS upgrade features are not going to produce any external calls that are
+    /// orthogonal to this test scenario, as they would require setting up mock responses.
+    pub fn temporarily_disable_sns_upgrades(&mut self) -> &mut Self {
+        assert!(self.governance.acquire_upgrade_periodic_task_lock());
         self
     }
 
@@ -854,6 +860,7 @@ impl Default for GovernanceCanisterFixtureBuilder {
                     current_basis_points: Some(0),
                     updated_at_timestamp_seconds: Some(1),
                 }),
+                deployed_version: Some(Version::default()),
                 ..Default::default()
             },
             sns_ledger_transforms: Vec::default(),
