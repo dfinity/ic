@@ -60,7 +60,7 @@ output.elasticsearch:
 
   # Optional data stream or index name. The default is "filebeat-%{[agent.version]}".
   # In case you modify this pattern you must update setup.template.name and setup.template.pattern accordingly.
-  index: "ic-logs-%{+yyyy.MM.dd}"
+  index: "testnet-ic-logs-%{+yyyy-MM-dd}"
 
   # Optional ingest pipeline. By default no pipeline will be used.
   #pipeline: ""
@@ -85,13 +85,13 @@ output.console:
 
 setup:
   template:
-    name: ic-logs
-    pattern: ic-logs-%{+yyyy.MM.dd}
+    name: testnet-ic-logs
+    pattern: testnet-ic-logs-%{+yyyy-MM-dd}
     settings:
       index:
         codec: best_compression
         number_of_replicas: 1
-        number_of_shards: 6
+        number_of_shards: 3
 
 # ====================== Index Lifecycle Management (ILM) ======================
 

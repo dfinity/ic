@@ -66,6 +66,8 @@ impl From<pb::NeuronInfo> for pb_api::NeuronInfo {
             neuron_type: item.neuron_type,
             visibility: item.visibility,
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
+            deciding_voting_power: item.deciding_voting_power,
+            potential_voting_power: item.potential_voting_power,
         }
     }
 }
@@ -85,6 +87,8 @@ impl From<pb_api::NeuronInfo> for pb::NeuronInfo {
             neuron_type: item.neuron_type,
             visibility: item.visibility,
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
+            deciding_voting_power: item.deciding_voting_power,
+            potential_voting_power: item.potential_voting_power,
         }
     }
 }
@@ -146,6 +150,8 @@ impl From<pb::Neuron> for pb_api::Neuron {
             dissolve_state: item.dissolve_state.map(|x| x.into()),
             visibility: item.visibility,
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
+            deciding_voting_power: item.deciding_voting_power,
+            potential_voting_power: item.potential_voting_power,
         }
     }
 }
@@ -181,6 +187,8 @@ impl From<pb_api::Neuron> for pb::Neuron {
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
             // This field is internal only and should not be read from API types.
             recent_ballots_next_entry_index: None,
+            deciding_voting_power: item.deciding_voting_power,
+            potential_voting_power: item.potential_voting_power,
         }
     }
 }
@@ -1301,6 +1309,9 @@ impl From<pb_api::ManageNeuronCommandRequest> for pb::manage_neuron::Command {
             pb_api::ManageNeuronCommandRequest::StakeMaturity(v) => {
                 pb::manage_neuron::Command::StakeMaturity(v.into())
             }
+            pb_api::ManageNeuronCommandRequest::RefreshVotingPower(v) => {
+                pb::manage_neuron::Command::RefreshVotingPower(v.into())
+            }
         }
     }
 }
@@ -2397,9 +2408,11 @@ impl From<pb::NetworkEconomics> for pb_api::NetworkEconomics {
             transaction_fee_e8s: item.transaction_fee_e8s,
             max_proposals_to_keep_per_topic: item.max_proposals_to_keep_per_topic,
             neurons_fund_economics: item.neurons_fund_economics.map(|x| x.into()),
+            voting_power_economics: item.voting_power_economics.map(|x| x.into()),
         }
     }
 }
+
 impl From<pb_api::NetworkEconomics> for pb::NetworkEconomics {
     fn from(item: pb_api::NetworkEconomics) -> Self {
         Self {
@@ -2412,6 +2425,27 @@ impl From<pb_api::NetworkEconomics> for pb::NetworkEconomics {
             transaction_fee_e8s: item.transaction_fee_e8s,
             max_proposals_to_keep_per_topic: item.max_proposals_to_keep_per_topic,
             neurons_fund_economics: item.neurons_fund_economics.map(|x| x.into()),
+            voting_power_economics: item.voting_power_economics.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb_api::VotingPowerEconomics> for pb::VotingPowerEconomics {
+    fn from(item: pb_api::VotingPowerEconomics) -> Self {
+        Self {
+            start_reducing_voting_power_after_seconds: item
+                .start_reducing_voting_power_after_seconds,
+            clear_following_after_seconds: item.clear_following_after_seconds,
+        }
+    }
+}
+
+impl From<pb::VotingPowerEconomics> for pb_api::VotingPowerEconomics {
+    fn from(item: pb::VotingPowerEconomics) -> Self {
+        Self {
+            start_reducing_voting_power_after_seconds: item
+                .start_reducing_voting_power_after_seconds,
+            clear_following_after_seconds: item.clear_following_after_seconds,
         }
     }
 }
@@ -3375,6 +3409,12 @@ impl From<pb::governance::GovernanceCachedMetrics> for pb_api::governance::Gover
                 .non_self_authenticating_controller_neuron_subset_metrics
                 .map(|x| x.into()),
             public_neuron_subset_metrics: item.public_neuron_subset_metrics.map(|x| x.into()),
+            declining_voting_power_neuron_subset_metrics: item
+                .declining_voting_power_neuron_subset_metrics
+                .map(|x| x.into()),
+            fully_lost_voting_power_neuron_subset_metrics: item
+                .fully_lost_voting_power_neuron_subset_metrics
+                .map(|x| x.into()),
         }
     }
 }
@@ -3432,6 +3472,12 @@ impl From<pb_api::governance::GovernanceCachedMetrics> for pb::governance::Gover
                 .non_self_authenticating_controller_neuron_subset_metrics
                 .map(|x| x.into()),
             public_neuron_subset_metrics: item.public_neuron_subset_metrics.map(|x| x.into()),
+            declining_voting_power_neuron_subset_metrics: item
+                .declining_voting_power_neuron_subset_metrics
+                .map(|x| x.into()),
+            fully_lost_voting_power_neuron_subset_metrics: item
+                .fully_lost_voting_power_neuron_subset_metrics
+                .map(|x| x.into()),
         }
     }
 }
@@ -3442,15 +3488,24 @@ impl From<pb::governance::governance_cached_metrics::NeuronSubsetMetrics>
     fn from(item: pb::governance::governance_cached_metrics::NeuronSubsetMetrics) -> Self {
         Self {
             count: item.count,
+
             total_staked_e8s: item.total_staked_e8s,
             total_staked_maturity_e8s_equivalent: item.total_staked_maturity_e8s_equivalent,
             total_maturity_e8s_equivalent: item.total_maturity_e8s_equivalent,
+
             total_voting_power: item.total_voting_power,
+            total_deciding_voting_power: item.total_deciding_voting_power,
+            total_potential_voting_power: item.total_potential_voting_power,
+
             count_buckets: item.count_buckets,
+
             staked_e8s_buckets: item.staked_e8s_buckets,
             staked_maturity_e8s_equivalent_buckets: item.staked_maturity_e8s_equivalent_buckets,
             maturity_e8s_equivalent_buckets: item.maturity_e8s_equivalent_buckets,
+
             voting_power_buckets: item.voting_power_buckets,
+            deciding_voting_power_buckets: item.deciding_voting_power_buckets,
+            potential_voting_power_buckets: item.potential_voting_power_buckets,
         }
     }
 }
@@ -3460,15 +3515,24 @@ impl From<pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics>
     fn from(item: pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics) -> Self {
         Self {
             count: item.count,
+
             total_staked_e8s: item.total_staked_e8s,
             total_staked_maturity_e8s_equivalent: item.total_staked_maturity_e8s_equivalent,
             total_maturity_e8s_equivalent: item.total_maturity_e8s_equivalent,
+
             total_voting_power: item.total_voting_power,
+            total_deciding_voting_power: item.total_deciding_voting_power,
+            total_potential_voting_power: item.total_potential_voting_power,
+
             count_buckets: item.count_buckets,
+
             staked_e8s_buckets: item.staked_e8s_buckets,
             staked_maturity_e8s_equivalent_buckets: item.staked_maturity_e8s_equivalent_buckets,
             maturity_e8s_equivalent_buckets: item.maturity_e8s_equivalent_buckets,
+
             voting_power_buckets: item.voting_power_buckets,
+            deciding_voting_power_buckets: item.deciding_voting_power_buckets,
+            potential_voting_power_buckets: item.potential_voting_power_buckets,
         }
     }
 }

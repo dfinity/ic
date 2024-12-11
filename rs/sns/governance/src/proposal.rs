@@ -38,6 +38,7 @@ use ic_nervous_system_common::{
     DEFAULT_TRANSFER_FEE, E8, ONE_DAY_SECONDS,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
+use ic_nervous_system_timestamp::format_timestamp_for_humans;
 use ic_protobuf::types::v1::CanisterInstallMode;
 use ic_sns_governance_proposals_amount_total_limit::{
     // TODO(NNS1-2982): Uncomment. mint_sns_tokens_7_day_total_upper_bound_tokens,
@@ -413,15 +414,18 @@ pub(crate) async fn validate_and_render_action(
             validate_and_render_upgrade_sns_controlled_canister(upgrade)
         }
         Action::UpgradeSnsToNextVersion(upgrade_sns) => {
-            let current_version = governance_proto.deployed_version_or_panic();
-
-            validate_and_render_upgrade_sns_to_next_version(
-                upgrade_sns,
-                env,
-                root_canister_id,
-                current_version,
-            )
-            .await
+            match governance_proto.deployed_version_or_err() {
+                Ok(current_version) => {
+                    validate_and_render_upgrade_sns_to_next_version(
+                        upgrade_sns,
+                        env,
+                        root_canister_id,
+                        current_version,
+                    )
+                    .await
+                }
+                Err(err) => Err(err),
+            }
         }
         proposal::Action::AddGenericNervousSystemFunction(function_to_add) => {
             validate_and_render_add_generic_nervous_system_function(
@@ -1068,30 +1072,26 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     const RAW_WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
     // see https://ic-interface-spec.netlify.app/#canister-module-format
     const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
-    // Minimum length of raw WASM is 8 bytes (4 magic bytes and 4 bytes encoding version).
-    // Minimum length of gzipped WASM is 10 bytes (2 magic bytes, 1 byte encoding compression method, and 7 additional gzip header bytes).
-    const MIN_WASM_LEN: usize = 8;
-    if let Err(err) = validate_len(
-        "new_canister_wasm",
-        new_canister_wasm,
-        MIN_WASM_LEN,
-        usize::MAX,
-    ) {
-        defects.push(err);
-    } else if new_canister_wasm[..4] != RAW_WASM_HEADER[..]
-        && new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
+
+    if new_canister_wasm.len() < 4
+        || new_canister_wasm[..4] != RAW_WASM_HEADER[..]
+            && new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
     {
         defects.push("new_canister_wasm lacks the magic value in its header.".into());
     }
 
-    if new_canister_wasm.len()
-        + canister_upgrade_arg
+    if new_canister_wasm.len().saturating_add(
+        canister_upgrade_arg
             .as_ref()
             .map(|arg| arg.len())
-            .unwrap_or_default()
-        >= MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
+            .unwrap_or_default(),
+    ) >= MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
     {
-        defects.push(format!("the maximum canister WASM and argument size for UpgradeSnsControlledCanister is {} bytes.", MAX_INSTALL_CODE_WASM_AND_ARG_SIZE));
+        defects.push(format!(
+            "the maximum canister WASM and argument size \
+             for UpgradeSnsControlledCanister is {} bytes.",
+            MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
+        ));
     }
 
     // Generate final report.
@@ -1737,7 +1737,10 @@ fn validate_and_render_advance_sns_target_version_proposal(
     let (upgrade_steps, target_version) = governance_proto
         .validate_new_target_version(advance_sns_target_version.new_target.clone())?;
 
-    let valid_timestamp_seconds = upgrade_steps.approximate_time_of_validity_timestamp_seconds();
+    let time_of_validity = {
+        let timestamp_seconds = upgrade_steps.approximate_time_of_validity_timestamp_seconds();
+        format_timestamp_for_humans(timestamp_seconds)
+    };
 
     let current_target_versions_render =
         render_two_versions_as_markdown_table(upgrade_steps.current(), &target_version);
@@ -1753,9 +1756,8 @@ fn validate_and_render_advance_sns_target_version_proposal(
          ### Upgrade steps\n\n\
          {upgrade_steps}\n\n\
          ### Monitoring the upgrade process\n\n\
-         Please note: the upgrade steps above (valid around timestamp {valid_timestamp_seconds} \
-         seconds) might change during this proposal's voting period. Such changes are unlikely and \
-         are subject to NNS community's approval.\n\n\
+         Please note: the upgrade steps mentioned above (valid around {time_of_validity}) \
+         might change during this proposal's voting period.\n\n\
          The **upgrade journal** provides up-to-date information on this SNS's upgrade process:\n\n\
          {upgrade_journal_url_render}"
     );

@@ -3,8 +3,7 @@
 ///
 /// Existing socket systemd configurations can be found
 /// in *.socket files.
-use async_stream::__private::AsyncStream;
-use futures::TryFutureExt;
+use futures::{Stream, TryFutureExt};
 use std::{
     os::unix::io::FromRawFd,
     pin::Pin,
@@ -20,7 +19,7 @@ const FIRST_SOCKET_FD: i32 = 3;
 /// for serving inter-process communication requests.
 pub fn incoming_from_path<P: AsRef<std::path::Path>>(
     path: P,
-) -> AsyncStream<Result<UnixStream, std::io::Error>, impl futures::Future<Output = ()>> {
+) -> impl Stream<Item = Result<UnixStream, std::io::Error>> {
     let uds = tokio::net::UnixListener::bind(path).expect("Failed to bind path.");
     async_stream::stream! {
         loop {
@@ -46,39 +45,18 @@ unsafe fn listener_from_systemd_socket(socket_fds: i32) -> tokio::net::UnixListe
         .expect("Failed to convert UnixListener into Tokio equivalent")
 }
 
-/// incoming_from_first_systemd_socket() takes the first FD(3) passed by systemd. It does not check if
-/// more FDs are passed to the process.
-///
-/// # Safety
-/// To ensure safety caller needs to ensure that the FD(3) exists and only consumed once.
-pub unsafe fn incoming_from_first_systemd_socket(
-) -> AsyncStream<Result<UnixStream, std::io::Error>, impl futures::Future<Output = ()>> {
-    incoming_from_nth_systemd_socket(1)
-}
-
-/// incoming_from_second_systemd_socket() takes the second FD(4) passed by systemd. It does not check if
-/// more FDs are passed to the process.
-///
-/// # Safety
-///  To ensure safety caller needs to ensure that the FD(4) exists and only consumed once.
-pub unsafe fn incoming_from_second_systemd_socket(
-) -> AsyncStream<Result<UnixStream, std::io::Error>, impl futures::Future<Output = ()>> {
-    incoming_from_nth_systemd_socket(2)
-}
-
 /// # Safety
 ///  To ensure safety caller needs to ensure that the FD for Socket(n) exists and only consumed once.
 /// See <https://www.freedesktop.org/software/systemd/man/sd_listen_fds.html>
 /// First socket would correspond to socket_num = 1, second = 2, so on.
 pub unsafe fn incoming_from_nth_systemd_socket(
     socket_num: i32,
-) -> AsyncStream<Result<UnixStream, std::io::Error>, impl futures::Future<Output = ()>> {
+) -> impl Stream<Item = Result<UnixStream, std::io::Error>> {
     let socket_fd = FIRST_SOCKET_FD + socket_num - 1;
     let uds = listener_from_systemd_socket(socket_fd);
     async_stream::stream! {
         loop {
             let item = uds.accept().map_ok(|(st, _)| UnixStream(st)).await;
-
             yield item;
         }
     }

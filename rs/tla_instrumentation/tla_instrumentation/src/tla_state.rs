@@ -1,5 +1,5 @@
 use crate::tla_value::{TlaValue, ToTla};
-use crate::SourceLocation;
+use crate::{Diff, SourceLocation};
 use candid::CandidType;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -48,11 +48,17 @@ impl VarAssignment {
 Possible causes:
 1. A local variable is set both after the last await and in default_locals.
    This is the most likely cause if the stack trace includes tla_log_method_return.
-2. A local variable of the same name is set in multiple functions in the call stack."#,
+2. A local variable of the same name is set in multiple functions in the call stack.
+States are:
+{:?}
+and
+{:?}"#,
             self.0
                 .keys()
                 .collect::<BTreeSet<_>>()
-                .intersection(&other.0.keys().collect::<BTreeSet<_>>())
+                .intersection(&other.0.keys().collect::<BTreeSet<_>>()),
+            self,
+            other
         );
         let mut new_locals = self.0.clone();
         new_locals.extend(other.0);
@@ -60,7 +66,7 @@ Possible causes:
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq, Eq, Hash)]
 pub struct GlobalState(pub VarAssignment);
 
 impl GlobalState {
@@ -100,7 +106,7 @@ impl std::fmt::Debug for GlobalState {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Label(String);
 
 impl Label {
@@ -176,6 +182,32 @@ pub struct ResolvedStatePair {
     pub end: GlobalState,
     pub start_source_location: SourceLocation,
     pub end_source_location: SourceLocation,
+}
+
+impl ResolvedStatePair {
+    /// Returns a list of fields that differ between the start and end states
+    /// The difference is fine-grained, so if a field is a (potentially nested) record or a function,
+    /// the difference lists just the fields that differ (respectively, the argument/value pairs that differ)
+    pub fn diff(&self) -> Vec<(String, Diff)> {
+        let mut diff = vec![];
+        let start = &self.start.0;
+        let end = &self.end.0;
+        for (key, value) in start.0.iter() {
+            if let Some(end_value) = end.0.get(key) {
+                if let Some(d) = value.diff(end_value) {
+                    diff.push((key.clone(), d));
+                }
+            } else {
+                diff.push((key.clone(), Diff::Other(Some(value.clone()), None)));
+            }
+        }
+        for (key, value) in end.0.iter() {
+            if !start.0.contains_key(key) {
+                diff.push((key.clone(), Diff::Other(None, Some(value.clone()))));
+            }
+        }
+        diff
+    }
 }
 
 fn resolve_local_variable(name: &str, value: &TlaValue, process_id: &str) -> VarAssignment {

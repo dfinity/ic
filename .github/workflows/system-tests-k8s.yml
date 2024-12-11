@@ -7,11 +7,12 @@ name: System Tests K8s
 #   --field jobs="32"
 
 on:
-  schedule:
-    - cron: "0 3 * * *"
-  pull_request:
-    paths:
-      - '.github/workflows/system-tests-k8s.yml'
+  # XXX: temporarily disabling until we have kubevirt 1.4.0
+  # schedule:
+  #   - cron: "0 3 * * *"
+  # pull_request:
+  #   paths:
+  #     - '.github/workflows/system-tests-k8s.yml'
   workflow_dispatch:
     inputs:
       targets:
@@ -35,7 +36,6 @@ env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_JOB_NAME: ${{ github.job }}
-  CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_RUN_ID: ${{ github.run_id }}
@@ -49,7 +49,7 @@ jobs:
       group: ln1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:3cc80d1a2d5789b69f6a7f170280bb3763a54acce299430903f59718f904f273
+      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
       options: >-
         -e NODE_NAME -e KUBECONFIG
         --privileged --cgroupns host
@@ -104,7 +104,7 @@ jobs:
       group: ln1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:3cc80d1a2d5789b69f6a7f170280bb3763a54acce299430903f59718f904f273
+      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
       options: >-
         -e NODE_NAME -e KUBECONFIG
         --privileged --cgroupns host

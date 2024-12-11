@@ -288,6 +288,24 @@ where
         Ok(())
     }
 
+    /// Updates the main part of an existing neuron.
+    pub fn with_main_part_mut<R>(
+        &mut self,
+        neuron_id: NeuronId,
+        f: impl FnOnce(&mut AbridgedNeuron) -> R,
+    ) -> Result<R, NeuronStoreError> {
+        let mut main_neuron_part = self
+            .main
+            .get(&neuron_id)
+            // Deal with no entry by blaming it on the caller.
+            .ok_or_else(|| NeuronStoreError::not_found(neuron_id))?;
+
+        let result = f(&mut main_neuron_part);
+        self.main.insert(neuron_id, main_neuron_part);
+
+        Ok(result)
+    }
+
     /// Changes an existing entry.
     ///
     /// If the entry does not already exist, returns a NotFound Err.
