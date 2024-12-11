@@ -103,6 +103,8 @@ impl SubnetPairProxy {
             network_topology,
             canister_to_subnet_rate,
             payload_size_bytes,
+            response_payload_size_bytes: 0,
+            deadline_seconds: 0,
         })
     }
 
