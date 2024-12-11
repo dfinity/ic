@@ -86,7 +86,7 @@ impl QuicTransportMetrics {
             ),
             peers_removed_total: metrics_registry.int_counter(
                 "quic_transport_peers_removed_total",
-                "Peers removed because from the peer map.",
+                "Peers removed from the peer map.",
             ),
             inbound_connection_total: metrics_registry.int_counter(
                 "quic_transport_inbound_connection_total",
