@@ -57,8 +57,9 @@ use icrc_ledger_types::{
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
 use ledger_canister::{
-    clear_stable_allowance_data, is_ready, ledger_state, set_ledger_state, Ledger, LedgerField,
-    LedgerState, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY,
+    clear_stable_allowance_data, is_ready, ledger_state, panic_if_not_ready, set_ledger_state,
+    Ledger, LedgerField, LedgerState, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES,
+    UPGRADES_MEMORY,
 };
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
@@ -959,6 +960,7 @@ impl LedgerAccess for Access {
 /// Canister endpoints
 #[export_name = "canister_update send_pb"]
 fn send_() {
+    panic_if_not_ready();
     over_async(
         protobuf,
         |SendArgs {
@@ -978,6 +980,7 @@ fn send_() {
 
 #[candid_method(update, rename = "send_dfx")]
 async fn send_dfx(arg: SendArgs) -> BlockIndex {
+    panic_if_not_ready();
     transfer_candid(TransferArgs::from(arg))
         .await
         .unwrap_or_else(|e| {
@@ -992,6 +995,7 @@ async fn send_dfx(arg: SendArgs) -> BlockIndex {
 /// I STRONGLY recommend that you use "send_pb" instead.
 #[export_name = "canister_update send_dfx"]
 fn send_dfx_() {
+    panic_if_not_ready();
     over_async(candid_one, send_dfx);
 }
 
@@ -1026,6 +1030,7 @@ fn notify_() {
 
 #[candid_method(update, rename = "transfer")]
 async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
+    panic_if_not_ready();
     let to_account = AccountIdentifier::from_address(arg.to).unwrap_or_else(|e| {
         trap_with(&format!("Invalid account identifier: {}", e));
     });
@@ -1044,6 +1049,7 @@ async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError>
 async fn icrc1_transfer(
     arg: TransferArg,
 ) -> Result<Nat, icrc_ledger_types::icrc1::transfer::TransferError> {
+    panic_if_not_ready();
     let from_account = Account {
         owner: Principal::from(caller()),
         subaccount: arg.from_subaccount,
@@ -1072,11 +1078,13 @@ async fn icrc1_transfer(
 
 #[export_name = "canister_update transfer"]
 fn transfer() {
+    panic_if_not_ready();
     over_async_may_reject(candid_one, |arg| async { Ok(transfer_candid(arg).await) })
 }
 
 #[export_name = "canister_update icrc1_transfer"]
 fn icrc1_transfer_candid() {
+    panic_if_not_ready();
     over_async_may_reject(candid_one, |arg: TransferArg| async {
         if !LEDGER.read().unwrap().can_send(&caller()) {
             return Err("Anonymous principal cannot hold tokens on the ledger.".to_string());
@@ -1088,6 +1096,7 @@ fn icrc1_transfer_candid() {
 
 #[candid_method(update, rename = "icrc2_transfer_from")]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
+    panic_if_not_ready();
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
         trap_with("ICRC-2 features are not enabled on the ledger.");
     }
@@ -1119,6 +1128,7 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
 
 #[export_name = "canister_update icrc2_transfer_from"]
 fn icrc2_transfer_from_candid() {
+    panic_if_not_ready();
     over_async_may_reject(candid_one, |arg: TransferFromArgs| async {
         if !LEDGER.read().unwrap().can_send(&caller()) {
             return Err("Anonymous principal cannot transfer tokens on the ledger.".to_string());
@@ -1584,6 +1594,7 @@ fn query_encoded_blocks_() {
 
 #[candid_method(update, rename = "icrc2_approve")]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+    panic_if_not_ready();
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
         trap_with("ICRC-2 features are not enabled on the ledger.");
     }
@@ -1677,6 +1688,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
 
 #[export_name = "canister_update icrc2_approve"]
 fn icrc2_approve_candid() {
+    panic_if_not_ready();
     over_async_may_reject(candid_one, |arg: ApproveArgs| async {
         if !LEDGER.read().unwrap().can_send(&caller()) {
             return Err(
