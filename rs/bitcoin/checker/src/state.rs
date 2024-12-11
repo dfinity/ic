@@ -286,7 +286,7 @@ pub struct Config {
     pub num_subnet_nodes: u16,
 }
 
-pub(crate) fn default_num_subnet_nodes() -> u16 {
+fn default_num_subnet_nodes() -> u16 {
     34
 }
 
