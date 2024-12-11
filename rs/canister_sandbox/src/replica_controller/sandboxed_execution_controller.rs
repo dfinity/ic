@@ -42,7 +42,6 @@ use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::path::PathBuf;
 use std::process::ExitStatus;
-use std::sync::mpsc::Receiver;
 use std::sync::Weak;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -672,15 +671,10 @@ pub struct SandboxedExecutionController {
     launcher_service: Box<dyn LauncherService>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    stop_monitoring_thread: std::sync::mpsc::Sender<bool>,
 }
 
 impl Drop for SandboxedExecutionController {
     fn drop(&mut self) {
-        // Ignore the result because even if it fails, there is not much that
-        // can be done.
-        let _ = self.stop_monitoring_thread.send(true);
-
         // Evict all the sandbox processes.
         let mut guard = self.backends.lock().unwrap();
         evict_sandbox_processes(
@@ -1121,7 +1115,6 @@ impl SandboxedExecutionController {
         let metrics_copy = Arc::clone(&metrics);
         let state_reader_copy = Arc::clone(&state_reader);
         let logger_copy = logger.clone();
-        let (tx, rx) = std::sync::mpsc::channel();
 
         std::thread::spawn(move || {
             SandboxedExecutionController::monitor_and_evict_sandbox_processes(
@@ -1130,7 +1123,6 @@ impl SandboxedExecutionController {
                 metrics_copy,
                 max_sandbox_count,
                 max_sandbox_idle_time,
-                rx,
                 state_reader_copy,
             );
         });
@@ -1166,7 +1158,6 @@ impl SandboxedExecutionController {
             metrics,
             launcher_service,
             fd_factory: Arc::clone(&fd_factory),
-            stop_monitoring_thread: tx,
             state_reader: Arc::clone(&state_reader),
         })
     }
@@ -1181,7 +1172,6 @@ impl SandboxedExecutionController {
         metrics: Arc<SandboxedExecutionMetrics>,
         max_sandbox_count: usize,
         max_sandbox_idle_time: Duration,
-        stop_request: Receiver<bool>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) {
         loop {
@@ -1298,9 +1288,7 @@ impl SandboxedExecutionController {
             // based on the time measured to perform the collection and e.g.
             // ensure that we are 99% idle instead of using a static duration
             // here.
-            if let Ok(true) = stop_request.recv_timeout(SANDBOX_PROCESS_UPDATE_INTERVAL) {
-                break;
-            }
+            std::thread::sleep(SANDBOX_PROCESS_UPDATE_INTERVAL);
         }
     }
 
