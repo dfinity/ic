@@ -455,6 +455,7 @@ pub async fn upgrade_btc_checker(
 ) -> CanisterId {
     let upgrade_arg = CheckArg::UpgradeArg(Some(CheckerUpgradeArg {
         check_mode: Some(mode),
+        ..CheckerUpgradeArg::default()
     }));
 
     btc_checker_canister

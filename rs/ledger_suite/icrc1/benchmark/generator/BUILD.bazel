@@ -34,7 +34,6 @@ rust_library(
     name = "generator",
     srcs = glob(["src/**"]),
     crate_name = "ic_icrc1_benchmark_generator",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -43,7 +42,6 @@ rust_canister(
     name = "icrc1_benchmark_generator",
     srcs = ["src/main.rs"],
     crate_name = "ic_icrc1_benchmark_generator_canister",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":generator.did",
     deps = [":generator"] + DEPENDENCIES,

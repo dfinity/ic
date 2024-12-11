@@ -59,6 +59,7 @@ ic-nervous-system-lock = { path = "../../nervous_system/lock" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
+ic-nervous-system-timestamp = { path = "../../nervous_system/timestamp" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-sns-governance-api = { path = "./api" }
 ic-sns-governance-proposal-criticality = { path = "./proposal_criticality" }
@@ -80,7 +81,6 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-time = { workspace = true }
 canbench-rs = { version = "0.1.7", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
