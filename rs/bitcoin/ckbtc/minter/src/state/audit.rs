@@ -7,7 +7,7 @@ use super::{
 use crate::state::invariants::CheckInvariantsImpl;
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit};
 use crate::storage::record_event;
-use crate::ReimbursementReason;
+use crate::{ReimbursementReason, Timestamp};
 use candid::Principal;
 use ic_btc_interface::{Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
@@ -23,7 +23,7 @@ pub fn accept_retrieve_btc_request(state: &mut CkBtcMinterState, request: Retrie
             .or_insert(vec![request.block_index]);
     }
     if let Some(kyt_provider) = request.kyt_provider {
-        *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;
+        *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.check_fee;
     }
 }
 
@@ -79,12 +79,12 @@ pub fn mark_utxo_checked(state: &mut CkBtcMinterState, utxo: Utxo, account: Acco
     state.mark_utxo_checked_v2(utxo, &account);
 }
 
-pub fn quarantine_utxo(state: &mut CkBtcMinterState, utxo: Utxo, account: Account) {
-    discard_utxo(state, utxo, account, SuspendedReason::Quarantined);
+pub fn quarantine_utxo(state: &mut CkBtcMinterState, utxo: Utxo, account: Account, now: Timestamp) {
+    discard_utxo(state, utxo, account, SuspendedReason::Quarantined, now);
 }
 
-pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo, account: Account) {
-    discard_utxo(state, utxo, account, SuspendedReason::ValueTooSmall);
+pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo, account: Account, now: Timestamp) {
+    discard_utxo(state, utxo, account, SuspendedReason::ValueTooSmall, now);
 }
 
 fn discard_utxo(
@@ -92,10 +92,11 @@ fn discard_utxo(
     utxo: Utxo,
     account: Account,
     reason: SuspendedReason,
+    now: Timestamp,
 ) {
     // ignored UTXOs are periodically re-evaluated and should not trigger
     // an event if they are still ignored.
-    if state.suspend_utxo(utxo.clone(), account, reason) {
+    if state.suspend_utxo(utxo.clone(), account, reason, now) {
         record_event(&Event::SuspendedUtxo {
             utxo,
             account,

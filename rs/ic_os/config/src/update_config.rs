@@ -34,7 +34,6 @@ pub fn update_guestos_config() -> Result<()> {
         let network_settings = network_config_result.network_settings;
         let hostname = network_config_result.hostname.clone();
 
-        let logging = read_filebeat_conf(config_dir)?;
         let nns_urls = read_nns_conf(config_dir)?;
 
         let use_nns_public_key = state_root.join("nns_public_key.pem").exists();
@@ -49,7 +48,7 @@ pub fn update_guestos_config() -> Result<()> {
             node_reward_type: None,
             mgmt_mac,
             deployment_environment,
-            logging,
+            logging: Logging::default(),
             use_nns_public_key,
             nns_urls,
             use_node_operator_private_key,
@@ -142,36 +141,6 @@ fn read_network_conf(config_dir: &Path) -> Result<NetworkConfigResult> {
 struct NetworkConfigResult {
     network_settings: NetworkSettings,
     hostname: Option<String>,
-}
-
-fn read_filebeat_conf(config_dir: &Path) -> Result<Logging> {
-    let filebeat_conf_path = config_dir.join("filebeat.conf");
-    let conf_map = match read_conf_file(&filebeat_conf_path) {
-        Ok(map) => map,
-        Err(_) => {
-            // Set default values if filebeat.conf doesn't exist
-            return Ok(Logging {
-                elasticsearch_hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 \
-                                       elasticsearch-node-1.mercury.dfinity.systems:443 \
-                                       elasticsearch-node-2.mercury.dfinity.systems:443 \
-                                       elasticsearch-node-3.mercury.dfinity.systems:443"
-                    .to_string(),
-                elasticsearch_tags: None,
-            });
-        }
-    };
-
-    let elasticsearch_hosts = conf_map
-        .get("elasticsearch_hosts")
-        .cloned()
-        .unwrap_or_default();
-
-    let elasticsearch_tags = conf_map.get("elasticsearch_tags").cloned();
-
-    Ok(Logging {
-        elasticsearch_hosts,
-        elasticsearch_tags,
-    })
 }
 
 fn read_nns_conf(config_dir: &Path) -> Result<Vec<Url>> {
@@ -318,11 +287,6 @@ pub fn update_hostos_config(
 
         let deployment_json_settings = get_deployment_settings(deployment_json_path)?;
 
-        let logging = Logging {
-            elasticsearch_hosts: deployment_json_settings.logging.hosts.to_string(),
-            elasticsearch_tags: None,
-        };
-
         let mgmt_mac = resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac)?;
 
         let use_nns_public_key = Path::new("/boot/config/nns_public_key.pem").exists();
@@ -334,7 +298,7 @@ pub fn update_hostos_config(
             node_reward_type,
             mgmt_mac,
             deployment_environment: deployment_json_settings.deployment.name.parse()?,
-            logging,
+            logging: Logging::default(),
             use_nns_public_key,
             nns_urls: deployment_json_settings.nns.url.clone(),
             use_node_operator_private_key,
@@ -459,43 +423,6 @@ mod tests {
         );
 
         assert_eq!(result.hostname, Some("guest-001122334455".to_string()));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_read_filebeat_conf_existing_file() -> Result<()> {
-        let dir = tempdir()?;
-        let filebeat_conf_path = dir.path().join("filebeat.conf");
-        let mut file = fs::File::create(&filebeat_conf_path)?;
-        writeln!(file, "elasticsearch_hosts=host1:9200,host2:9200")?;
-        writeln!(file, "elasticsearch_tags=tag1,tag2")?;
-
-        let logging = read_filebeat_conf(dir.path())?;
-
-        assert_eq!(
-            logging.elasticsearch_hosts,
-            "host1:9200,host2:9200".to_string()
-        );
-        assert_eq!(logging.elasticsearch_tags, Some("tag1,tag2".to_string()));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_read_filebeat_conf_missing_file() -> Result<()> {
-        let dir = tempdir()?;
-        let logging = read_filebeat_conf(dir.path())?;
-
-        assert_eq!(
-            logging.elasticsearch_hosts,
-            "elasticsearch-node-0.mercury.dfinity.systems:443 \
-            elasticsearch-node-1.mercury.dfinity.systems:443 \
-            elasticsearch-node-2.mercury.dfinity.systems:443 \
-            elasticsearch-node-3.mercury.dfinity.systems:443"
-                .to_string()
-        );
-        assert_eq!(logging.elasticsearch_tags, None);
 
         Ok(())
     }

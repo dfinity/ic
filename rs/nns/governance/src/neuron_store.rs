@@ -8,7 +8,7 @@ use crate::{
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
         governance_error::ErrorType,
-        GovernanceError, Neuron as NeuronProto, Topic,
+        GovernanceError, Neuron as NeuronProto, Topic, VotingPowerEconomics,
     },
     storage::{
         neuron_indexes::{CorruptedNeuronIndexes, NeuronIndex},
@@ -17,6 +17,7 @@ use crate::{
         with_stable_neuron_store_mut,
     },
     use_stable_memory_following_index, Clock, IcClock,
+    CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS,
 };
 use dyn_clone::DynClone;
 use ic_base_types::PrincipalId;
@@ -411,7 +412,12 @@ impl NeuronStore {
         (
             self.heap_neurons
                 .into_iter()
-                .map(|(id, neuron)| (id, neuron.into_proto(now_seconds)))
+                .map(|(id, neuron)| {
+                    (
+                        id,
+                        neuron.into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
+                    )
+                })
                 .collect(),
             heap_topic_followee_index_to_proto(self.topic_followee_index),
         )
@@ -460,13 +466,25 @@ impl NeuronStore {
         let mut stable_neurons = with_stable_neuron_store(|stable_store| {
             stable_store
                 .range_neurons(..)
-                .map(|neuron| (neuron.id().id, neuron.into_proto(now_seconds)))
+                .map(|neuron| {
+                    (
+                        neuron.id().id,
+                        neuron.into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
+                    )
+                })
                 .collect::<BTreeMap<u64, NeuronProto>>()
         });
         let heap_neurons = self
             .heap_neurons
             .iter()
-            .map(|(id, neuron)| (*id, neuron.clone().into_proto(now_seconds)))
+            .map(|(id, neuron)| {
+                (
+                    *id,
+                    neuron
+                        .clone()
+                        .into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
+                )
+            })
             .collect::<BTreeMap<u64, NeuronProto>>();
 
         stable_neurons.extend(heap_neurons);
@@ -916,19 +934,6 @@ impl NeuronStore {
         self.heap_neurons.range(range).map(|(_, neuron)| neuron)
     }
 
-    /// Internal - map over neurons after filtering
-    fn filter_map_active_neurons<R>(
-        &self,
-        filter: impl Fn(&Neuron) -> bool,
-        f: impl Fn(&Neuron) -> R,
-    ) -> Vec<R> {
-        self.with_active_neurons_iter(|iter| {
-            iter.filter(|n| filter(n.as_ref()))
-                .map(|n| f(n.as_ref()))
-                .collect()
-        })
-    }
-
     fn is_active_neurons_fund_neuron(neuron: &Neuron, now: u64) -> bool {
         !neuron.is_inactive(now) && neuron.is_a_neurons_fund_member()
     }
@@ -936,17 +941,22 @@ impl NeuronStore {
     /// List all neuron ids that are in the Neurons' Fund.
     pub fn list_active_neurons_fund_neurons(&self) -> Vec<NeuronsFundNeuron> {
         let now = self.now();
-        self.filter_map_active_neurons(
-            |n| Self::is_active_neurons_fund_neuron(n, now),
-            |n| NeuronsFundNeuron {
-                id: n.id(),
-                controller: n.controller(),
-                hotkeys: pick_most_important_hotkeys(&n.hot_keys),
-                maturity_equivalent_icp_e8s: n.maturity_e8s_equivalent,
+        self.with_active_neurons_iter_sections(
+            |iter| {
+                iter.filter(|neuron| Self::is_active_neurons_fund_neuron(neuron, now))
+                    .map(|neuron| NeuronsFundNeuron {
+                        id: neuron.id(),
+                        controller: neuron.controller(),
+                        hotkeys: pick_most_important_hotkeys(&neuron.hot_keys),
+                        maturity_equivalent_icp_e8s: neuron.maturity_e8s_equivalent,
+                    })
+                    .collect()
+            },
+            NeuronSections {
+                hot_keys: true,
+                ..NeuronSections::NONE
             },
         )
-        .into_iter()
-        .collect()
     }
 
     /// List all neuron ids whose neurons have staked maturity greater than 0.
@@ -980,6 +990,7 @@ impl NeuronStore {
 
     pub fn create_ballots_for_standard_proposal(
         &self,
+        voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
     ) -> (
         HashMap<u64, Ballot>,
@@ -998,7 +1009,7 @@ impl NeuronStore {
                 return;
             }
 
-            let voting_power = neuron.deciding_voting_power(now_seconds);
+            let voting_power = neuron.deciding_voting_power(voting_power_economics, now_seconds);
             deciding_voting_power += voting_power as u128;
             potential_voting_power += neuron.potential_voting_power(now_seconds) as u128;
             ballots.insert(
@@ -1369,14 +1380,42 @@ impl NeuronStore {
 ///
 /// Returns where the scan should pick up from next time. I.e. the return value
 /// should be passed via start next time.
-#[allow(unused)] // This line will be removed soon...
 pub fn prune_some_following(
+    voting_power_economics: &VotingPowerEconomics,
     neuron_store: &mut NeuronStore,
-    mut next: Bound<NeuronId>,
-    mut carry_on: impl FnMut() -> bool,
+    next: Bound<NeuronId>,
+    carry_on: impl FnMut() -> bool,
 ) -> Bound<NeuronId> {
     let now_seconds = neuron_store.now();
 
+    if next == Bound::Unbounded {
+        CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS.with(
+            |start_timestamp_seconds| {
+                start_timestamp_seconds.set(now_seconds);
+            },
+        );
+    }
+
+    groom_some_neurons(
+        neuron_store,
+        |neuron| {
+            neuron.prune_following(voting_power_economics, now_seconds);
+        },
+        next,
+        carry_on,
+    )
+}
+
+pub fn groom_some_neurons(
+    neuron_store: &mut NeuronStore,
+    mut touch_neuron: impl FnMut(&mut Neuron),
+    mut next: Bound<NeuronId>,
+    mut carry_on: impl FnMut() -> bool,
+) -> Bound<NeuronId> {
+    // Here, do-while semantics is used, rather than while. I.e. carry_on is
+    // only called at the end of the loop, not the beginnin. This results in the
+    // nice property that (when there are more neurons), this ALWAYS makes SOME
+    // progress.
     loop {
         // Which neuron do we operate on next?
         let current_neuron_id = neuron_store.first_neuron_id(next);
@@ -1395,9 +1434,7 @@ pub fn prune_some_following(
         next = Bound::Excluded(current_neuron_id);
 
         let result = neuron_store.with_neuron_mut(&current_neuron_id, |neuron| {
-            // This is where the "real work" takes place. Everything else is to
-            // keep the scan going.
-            neuron.prune_following(now_seconds);
+            touch_neuron(neuron);
         });
 
         // Log if somehow with_neuron_mut returns Err. This should not be
@@ -1405,8 +1442,8 @@ pub fn prune_some_following(
         // this line to be reached.
         if let Err(err) = result {
             println!(
-                "{}ERROR: Unable to find neuron {} while pruning following.",
-                LOG_PREFIX, current_neuron_id.id,
+                "{}ERROR: Unable to find neuron {} while pruning following: {:?}",
+                LOG_PREFIX, current_neuron_id.id, err,
             );
         }
 
@@ -1414,6 +1451,19 @@ pub fn prune_some_following(
             return next;
         }
     }
+}
+
+pub fn backfill_some_voting_power_refreshed_timestamps(
+    neuron_store: &mut NeuronStore,
+    next: Bound<NeuronId>,
+    carry_on: impl FnMut() -> bool,
+) -> Bound<NeuronId> {
+    groom_some_neurons(
+        neuron_store,
+        |neuron| neuron.backfill_voting_power_refreshed_timestamp(),
+        next,
+        carry_on,
+    )
 }
 
 /// Number of entries for each neuron indexes (in stable storage)

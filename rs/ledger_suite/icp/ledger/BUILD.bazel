@@ -111,6 +111,7 @@ rust_test(
 
 rust_ic_test(
     name = "ledger_canister_test",
+    timeout = "long",
     srcs = ["tests/tests.rs"],
     data = [
         ":ledger-canister-wasm",
@@ -129,6 +130,7 @@ rust_ic_test(
         "LEDGER_CANISTER_LOW_LIMITS_WASM_PATH": "$(rootpath :ledger-canister-wasm-low-limits)",
     },
     flaky = True,
+    tags = ["cpu:4"],
     deps = [
         # Keep sorted.
         ":ledger",
