@@ -29,6 +29,7 @@ prost = { workspace = true }
 quinn = { workspace = true }
 rustls = { workspace = true }
 slog = { workspace = true }
+static_assertions = { workspace = true }
 socket2 = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
