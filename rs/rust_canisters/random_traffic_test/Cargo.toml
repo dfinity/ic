@@ -10,7 +10,7 @@ path = "src/main.rs"
 [dependencies]
 candid = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-cdk = { workspace = true }
+ic-cdk = { git = "https://github.com/dfinity/cdk-rs", branch = "next" }
 ic-cdk-macros = { workspace = true }
 ic-error-types = { path = "../../types/error_types" }
 ic-types = { path = "../../types/types" }

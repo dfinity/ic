@@ -1,5 +1,5 @@
 {
-  "checksum": "b344eca479cfedf88abc9bad22dc5e3b5058749d7e97869732d8137396906468",
+  "checksum": "ebfd73515305a638602b4e5933b89a112d86920807987c76358925713748b777",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18669,6 +18669,11 @@
               "target": "ic_cdk"
             },
             {
+              "id": "ic-cdk 0.18.0-alpha.1",
+              "target": "ic_cdk",
+              "alias": "ic_cdk_next"
+            },
+            {
               "id": "ic-cdk-timers 0.11.0",
               "target": "ic_cdk_timers"
             },
@@ -31497,6 +31502,77 @@
       ],
       "license_file": "LICENSE"
     },
+    "ic-cdk 0.18.0-alpha.1": {
+      "name": "ic-cdk",
+      "version": "0.18.0-alpha.1",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/cdk-rs.git",
+          "commitish": {
+            "Rev": "605abcade44d8fa4888c564c6fab5c715d1c33c8"
+          },
+          "strip_prefix": "ic-cdk"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_cdk",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.10",
+              "target": "candid"
+            },
+            {
+              "id": "ic0 0.24.0-alpha.1",
+              "target": "ic0"
+            },
+            {
+              "id": "serde 1.0.214",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ic-cdk-macros 0.18.0-alpha.1",
+              "target": "ic_cdk_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.18.0-alpha.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "ic-cdk-macros 0.8.4": {
       "name": "ic-cdk-macros",
       "version": "0.8.4",
@@ -31825,6 +31901,76 @@
         },
         "edition": "2021",
         "version": "0.17.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-cdk-macros 0.18.0-alpha.1": {
+      "name": "ic-cdk-macros",
+      "version": "0.18.0-alpha.1",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/cdk-rs.git",
+          "commitish": {
+            "Rev": "605abcade44d8fa4888c564c6fab5c715d1c33c8"
+          },
+          "strip_prefix": "ic-cdk-macros"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ic_cdk_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.10",
+              "target": "candid"
+            },
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "serde 1.0.214",
+              "target": "serde"
+            },
+            {
+              "id": "serde_tokenstream 0.2.1",
+              "target": "serde_tokenstream"
+            },
+            {
+              "id": "syn 2.0.87",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.18.0-alpha.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -33219,6 +33365,47 @@
         ],
         "edition": "2021",
         "version": "0.23.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic0 0.24.0-alpha.1": {
+      "name": "ic0",
+      "version": "0.24.0-alpha.1",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/cdk-rs.git",
+          "commitish": {
+            "Rev": "605abcade44d8fa4888c564c6fab5c715d1c33c8"
+          },
+          "strip_prefix": "ic0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic0",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic0",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "0.24.0-alpha.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -87622,6 +87809,7 @@
     "ic-canister-sig-creation 1.0.1",
     "ic-cbor 2.6.0",
     "ic-cdk 0.16.0",
+    "ic-cdk 0.18.0-alpha.1",
     "ic-cdk-macros 0.9.0",
     "ic-cdk-timers 0.11.0",
     "ic-certificate-verification 2.6.0",
