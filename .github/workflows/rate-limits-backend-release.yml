@@ -1,4 +1,4 @@
-name: anonymization-backend-release
+name: rate-limits-release
 
 on:
   workflow_dispatch:
@@ -14,7 +14,7 @@ on:
         type: string
 
       tag:
-        description: 'Tag for the release (required format `anonymization-backend-*`)'
+        description: 'Tag for the release (required format `rate-limits-*`)'
         required: false
         type: string
 
@@ -22,12 +22,12 @@ permissions:
   contents: write
 
 env:
-  NAME: anonymization-backend
+  NAME: rate-limits
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   build-and-release:
-    name: Build and release the anonymization backend canister
+    name: Build and release the rate-limits backend canister
 
     runs-on:
       group: zh1
@@ -44,14 +44,14 @@ jobs:
       - name: build
         shell: bash
         run: |
-          TARGET='//rs/boundary_node/anonymization/backend:anonymization_backend'
+          TARGET='//rs/boundary_node/rate_limits:rate_limit_canister'
           bazel build --config=ci ${TARGET}
 
-          OUTPUT='bazel-bin/rs/boundary_node/anonymization/backend/anonymization_backend.wasm.gz'
-          mv ${OUTPUT} anonymization_backend.wasm.gz
+          OUTPUT='bazel-bin/rs/boundary_node/rate_limits/rate_limit_canister.wasm.gz'
+          mv ${OUTPUT} rate_limit_canister.wasm.gz
 
           ARTIFACTS=(
-            anonymization_backend.wasm.gz
+            rate_limit_canister.wasm.gz
           )
 
           echo "ARTIFACTS=${ARTIFACTS[@]}" >> "${GITHUB_ENV}"
@@ -98,7 +98,7 @@ jobs:
           To reproduce the artifacts of this release:
 
           ${CODE_BLOCK}
-          bazel build --config=local //rs/boundary_node/anonymization/backend:anonymization_backend
+          bazel build --config=local //rs/boundary_node/rate_limits:rate_limit_canister
           ${CODE_BLOCK}
 
           ## Checksums
