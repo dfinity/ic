@@ -4,13 +4,14 @@
 
 use crate::{
     bouncer_metrics::BouncerMetrics,
-    consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager},
+    consensus::check_protocol_version,
     idkg::{
         make_bootstrap_summary,
         payload_builder::make_bootstrap_summary_with_initial_dealings,
         utils::{get_idkg_chain_key_config_if_enabled, inspect_idkg_chain_key_initializations},
     },
 };
+use dkg_key_manager::DkgKeyManager;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
@@ -50,8 +51,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+pub mod dkg_key_manager;
 pub(crate) mod payload_builder;
 pub(crate) mod payload_validator;
+
 #[cfg(test)]
 mod test_utils;
 mod utils;
