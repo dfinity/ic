@@ -6,48 +6,69 @@ set -ue
 ##
 
 DEPENDENCIES="awk rg sed"
-which ${DEPENDENCIES} >/dev/null || (echo "Error checking dependencies: ${DEPENDENCIES}" && exit 1)
+which ${DEPENDENCIES} >/dev/null || (echo "Error checking dependencies: ${DEPENDENCIES}" >&2 && exit 1)
 
 printf "    %-12s := %s\n" \
     "MIN_FILE" "${MIN_FILE:=${0##*/}.min}" \
-    "BASELINE_DIR" "${BASELINE_DIR:=${0%/*}/baseline}"
+    "BASELINE_DIR" "${BASELINE_DIR:=${0%/*}/baseline}" >&2
 
 NAME="${NAME:-${MIN_FILE%.*}}"
+TMP_FILE="${TMP_FILE:-${MIN_FILE%.*}.tmp}"
 
 if [ ! -s "${MIN_FILE}" ]; then
-    echo "    No results to summarize in ${MIN_FILE} (quick run?)" && exit 0
+    echo "    No results to summarize in ${MIN_FILE} (quick run?)" >&2 && exit 0
 fi
-[ -d "${BASELINE_DIR}" ] || (echo "Error accessing directory: ${BASELINE_DIR}" && exit 1)
-
 BASELINE_FILE="${BASELINE_DIR}/${MIN_FILE##*/}"
 if [ ! -s "${BASELINE_FILE}" ]; then
-    echo "No baseline found: ${BASELINE_FILE}" && exit 0
+    echo "    No baseline found in ${BASELINE_FILE}" >&2 && exit 0
 fi
 
-total_baseline="0"
-total_new="0"
+echo_diff() {
+    diff=$(((${2} - ${1}) * 100 * 10 / ${1}))
+    awk "BEGIN { print (${diff})^2 <= (2 * 10)^2 ? 0 : ${diff} / 10 }"
+}
+
+# Compare the `MIN_FILE` to `BASELINE_FILE`.
+total_baseline_ns="0"
+total_new_ns="0"
+rm -f "${TMP_FILE}"
+# Example content:
+#   test update/wasm64/baseline/empty loop ... bench:     2720243 ns/iter (+/- 48904)
 while read min_bench; do
-    name=$(echo "${min_bench}" | sed -E 's/^test (.+) ... bench:.*/\1/')
-    new_result=$(echo "${min_bench}" | sed -E 's/.*bench: +([0-9]+) ns.*/\1/')
+    name="${min_bench#test }"
+    name="${name% ... bench:*}"
+    new_result_ns="${min_bench#* ... bench: }"
+    new_result_ns="${new_result_ns% ns/iter*}"
 
-    baseline_bench=$(rg -F " ${name} " "${BASELINE_FILE}" || true)
-    matches=$(echo "${baseline_bench}" | wc -l)
-    [ "${matches}" -le 1 ] || (echo "Error matching ${name} times in ${BASELINE_FILE}" && exit 1)
-    baseline_result=$(echo "${baseline_bench}" | sed -E 's/.*bench: +([0-9]+) ns.*/\1/')
+    baseline_bench=$(rg -F "test ${name} ... bench:" "${BASELINE_FILE}" || true)
+    baseline_result_ns="${baseline_bench#* ... bench: }"
+    baseline_result_ns="${baseline_result_ns% ns/iter*}"
 
-    if [ -n "${new_result}" -a -n "${baseline_result}" ]; then
-        total_baseline=$((total_baseline + baseline_result))
-        total_new=$((total_new + new_result))
+    if [ -n "${new_result_ns}" -a -n "${baseline_result_ns}" ]; then
+        total_baseline_ns=$((total_baseline_ns + baseline_result_ns))
+        total_new_ns=$((total_new_ns + new_result_ns))
+        echo "$(echo_diff "${baseline_result_ns}" "${new_result_ns}") ${name}" >>"${TMP_FILE}"
     fi
 done <"${MIN_FILE}"
+
+# Produce a summary.
 baseline_commit=$(git rev-list --abbrev-commit -1 HEAD "${BASELINE_FILE}" | head -c 9)
 min_commit=$(git rev-list --abbrev-commit -1 HEAD | head -c 9)
-diff=$((diff = (total_new - total_baseline) * 100 * 10 / total_baseline))
-diff=$(echo "${diff}" | awk '{ print $0^2 <= (2 * 10)^2 ? 0 : $0 / 10 }')
-total_new_ms=$((total_new / 1000 / 1000))
-printf "    = ${baseline_commit}..${min_commit}: ${NAME}: total time: ${total_new_ms} ms "
-case "${diff}" in
+total_diff=$(echo_diff "${total_baseline_ns}" "${total_new_ns}")
+printf "= ${baseline_commit}..${min_commit}: ${NAME} total time: $((total_new_ns / 1000 / 1000)) ms "
+case "${total_diff}" in
     0) echo "(no change)" ;;
-    -*) echo "(improved by ${diff}%)" ;;
-    *) echo "(regressed by ${diff}%)" ;;
+    -*) echo "(improved by ${total_diff}%)" ;;
+    *) echo "(regressed by ${total_diff}%)" ;;
 esac
+
+# Produce top regressed/improved details.
+if [ "${total_diff}" != "0" ]; then
+    cat "${TMP_FILE}" | sort -rn | rg '^[1-9]' | head -5 | while read diff name; do
+        echo "+ ${name} time regressed by ${diff}%"
+    done
+    cat "${TMP_FILE}" | sort -n | rg '^-' | head -5 | while read diff name; do
+        echo "- ${name} time improved by ${diff}%"
+    done
+fi
+# rm -f "${TMP_FILE}"

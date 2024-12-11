@@ -3,16 +3,20 @@ set -ue
 ##
 ## Top-level script to run all execution and embedder benchmarks.
 ## Usage:
-##     ./rs/execution_environment/benches/run-all-benchmarks.sh
+##     ./rs/execution_environment/benches/run-all-benchmarks.sh | tee summary.txt
+##
+## The best (minimum) results are located in the `*.min`` files in the current directory.
+## These should be manually copied to `rs/execution_environment/benches/baseline/`.
+## A summary of the results is printed to the standard output.
 ##
 
 printf "%-12s := %s\n" \
-    "REPEAT" "${REPEAT:=9}"
+    "REPEAT" "${REPEAT:=9}" >&2
 
 RUN_BENCHMARK="${0%/*}/run-benchmark.sh"
-[ -x "${RUN_BENCHMARK}" ] || (echo "Error accessing script: ${RUN_BENCHMARK}" && exit 1)
+[ -x "${RUN_BENCHMARK}" ] || (echo "Error accessing script: ${RUN_BENCHMARK}" >&2 && exit 1)
 SUMMARIZE_RESULTS="${0%/*}/summarize-results.sh"
-[ -x "${SUMMARIZE_RESULTS}" ] || (echo "Error accessing script: ${SUMMARIZE_RESULTS}" && exit 1)
+[ -x "${SUMMARIZE_RESULTS}" ] || (echo "Error accessing script: ${SUMMARIZE_RESULTS}" >&2 && exit 1)
 
 run() {
     local i="${1}"
@@ -30,14 +34,14 @@ run() {
     [ -f "${min_file}" ] || counter="-1"
     # Execute benchmark if needed.
     if [ "${counter}" -lt "${i}" ]; then
-        echo "==> Running ${name} benchmarks ($((counter + 1)) of ${REPEAT})"
+        echo "==> Running ${name} benchmarks ($((counter + 1)) of ${REPEAT})" >&2
         QUICK="${quick}" BENCH="${bench}" MIN_FILE="${min_file}" FILTER="${filter}" \
             "${RUN_BENCHMARK}"
         echo "$((counter + 1))" >"${counter_file}"
     fi
     # Summarize results if the benchmark was executed or if it's the final iteration.
     if [ "${counter}" -lt "${i}" -o "${i}" = "${REPEAT}" ]; then
-        echo "==> Summarizing ${name} results:"
+        echo "==> Summarizing ${name} results:" >&2
         NAME="${name}" MIN_FILE="${min_file}" "${SUMMARIZE_RESULTS}"
     fi
 }
