@@ -35,7 +35,9 @@ pub struct Config {
     /// Examples include "type3.1" or "type1", corresponding to entries in the node reward table in the NNS.
     /// The value must match a community-approved value in the NNS.
     /// If not provided, the NNS will attempt to assign a value based on the operator's reward configuration.
-    /// If the reward configuration in the NNS is ambiguous, the NNS will return an error.
+    /// If the reward configuration in the NNS is ambiguous (has more than 1 value), node registration
+    /// is expected to fail since it's unclear which rewards should be assigned to the node.
+    /// If there is no reward table configured in the NNS, the value of this field is ignored during registration.
     pub node_reward_type: Option<String>,
 }
 
