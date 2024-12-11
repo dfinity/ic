@@ -1723,7 +1723,6 @@ pub struct Governance {
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
-    use serde::ser::SerializeStruct;
 
     /// The commands that require a neuron lock.
     #[derive(

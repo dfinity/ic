@@ -136,8 +136,6 @@ fn test_upgrade_journal() {
         }],
     };
 
-    let journal = api::UpgradeJournal::from(journal);
-
     // Currently, the `/journal` Http endpoint serves the entries directly, rather than the whole
     // journal object.
     let http_response = serve_journal(&journal.entries);
