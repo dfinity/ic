@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fs::File, os::fd::FromRawFd, sync::Arc};
 
 /// This module provides the RPC "glue" code to expose the API
 /// functionality of the sandbox towards the controller. There is no
@@ -39,6 +39,20 @@ impl SandboxService for SandboxServer {
         let result = self
             .manager
             .open_wasm_serialized(req.wasm_id, &req.serialized_module)
+            .map(|_| ());
+        rpc::Call::new_resolved(Ok(OpenWasmSerializedReply(result)))
+    }
+
+    fn open_wasm_via_file(
+        &self,
+        req: OpenWasmViaFileRequest,
+    ) -> rpc::Call<OpenWasmSerializedReply> {
+        let result = self
+            .manager
+            // SAFETY: The IPC guarantees we get valid file descriptors.
+            .open_wasm_via_file(req.wasm_id, unsafe {
+                File::from_raw_fd(req.serialized_module)
+            })
             .map(|_| ());
         rpc::Call::new_resolved(Ok(OpenWasmSerializedReply(result)))
     }
@@ -100,6 +114,23 @@ impl SandboxService for SandboxServer {
         let result = self.manager.create_execution_state_serialized(
             req.wasm_id,
             req.serialized_module,
+            req.wasm_page_map,
+            req.next_wasm_memory_id,
+            req.canister_id,
+            req.stable_memory_page_map,
+        );
+        rpc::Call::new_resolved(Ok(CreateExecutionStateSerializedReply(result)))
+    }
+
+    fn create_execution_state_via_file(
+        &self,
+        req: CreateExecutionStateViaFileRequest,
+    ) -> rpc::Call<CreateExecutionStateSerializedReply> {
+        let result = self.manager.create_execution_state_via_file(
+            req.wasm_id,
+            // SAFETY: The IPC guarantees that we get valid file descriptors.
+            unsafe { File::from_raw_fd(req.bytes) },
+            unsafe { File::from_raw_fd(req.initial_state_data) },
             req.wasm_page_map,
             req.next_wasm_memory_id,
             req.canister_id,

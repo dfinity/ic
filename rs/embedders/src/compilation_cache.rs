@@ -1,7 +1,10 @@
 use std::{
     collections::BTreeSet,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
 };
 
 use tempfile::TempDir;
@@ -28,6 +31,8 @@ pub enum CompilationCache {
         dir: TempDir,
         /// Map from wasm hash to an open fd with the serialized Module result.
         cache: Mutex<LruCache<WasmHash, HypervisorResult<Arc<OnDiskSerializedModule>>>>,
+        /// Atomic counter to deduplicate files in the case of concurrent compilations of the same module.
+        counter: AtomicU64,
     },
 }
 
@@ -70,12 +75,18 @@ impl CompilationCache {
                     .push(WasmHash::from(canister_module), Ok(serialized_module));
                 StoredCompilation::Memory(copy)
             }
-            Self::Disk { dir, cache, .. } => {
+            Self::Disk {
+                dir,
+                cache,
+                counter,
+                ..
+            } => {
                 let hash = WasmHash::from(canister_module);
+                let id = counter.fetch_add(1, Ordering::SeqCst);
                 let mut bytes_path: PathBuf = dir.path().into();
-                bytes_path.push(format!("{}.module_bytes", hash));
+                bytes_path.push(format!("{}-{}.module_bytes", hash, id));
                 let mut initial_state_path: PathBuf = dir.path().into();
-                initial_state_path.push(format!("{}.initial_data", hash));
+                initial_state_path.push(format!("{}-{}.initial_data", hash, id));
 
                 let on_disk = Arc::new(OnDiskSerializedModule::from_serialized_module(
                     serialized_module,
@@ -173,4 +184,31 @@ impl StoredCompilation {
             Self::Disk(module) => module.initial_state_data().data_segments,
         }
     }
+}
+
+/// Check that multiple threads compiling the same wasm won't interfere with
+/// each other if they all try to insert in the cache at the same time.
+#[test]
+fn concurrent_insertions() {
+    let cache = CompilationCache::new(NumBytes::from(30 * 1024 * 1024));
+    let wasm = wat::parse_str("(module)").unwrap();
+    let canister_module = CanisterModule::new(wasm.clone());
+    let binary = ic_wasm_types::BinaryEncodedWasm::new(wasm.clone());
+    let config = ic_config::embedders::Config::default();
+    let embedder = crate::WasmtimeEmbedder::new(config, ic_logger::no_op_logger());
+    let (_, result) = crate::wasm_utils::compile(&embedder, &binary);
+    let serialized_module = result.unwrap().1;
+
+    std::thread::scope(|s| {
+        let mut threads = vec![];
+        for _ in 0..100 {
+            let serialized_module = serialized_module.clone();
+            threads.push(s.spawn(|| {
+                let _ = cache.insert_ok(&canister_module, serialized_module);
+            }));
+        }
+        for t in threads {
+            t.join().unwrap();
+        }
+    })
 }
