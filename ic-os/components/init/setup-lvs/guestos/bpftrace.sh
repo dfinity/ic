@@ -1,6 +1,7 @@
 #!/bin/bash
 echo "Starting bpftrace..."
-bpftrace --unsafe -e '
+ls -la /var/lib/ic/backup/
+nohup bpftrace --unsafe -e '
 config = {
     perf_rb_pages=4096;
     log_size=100000000
@@ -13,4 +14,4 @@ kprobe:do_fchownat {
     time("%H:%M:%S: "); 
     printf("PID:%d %s \"%s\" to %d:%d\n", pid, comm, str(arg1), arg2, arg3); 
 }
-' -o /tmp/lol.log
+' -o /tmp/lol.log &

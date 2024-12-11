@@ -100,4 +100,5 @@ permissive pcscd_t;
 type bpftrace_t;
 type bpftrace_exec_t;
 init_daemon_domain(bpftrace_t, bpftrace_exec_t)
+ic_rw_data(bpftrace_t)
 permissive bpftrace_t;

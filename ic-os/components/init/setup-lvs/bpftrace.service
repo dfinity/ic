@@ -2,6 +2,9 @@
 Description=Run BPFTrace Script
 After=setup-lvs.service
 Requires=setup-lvs.service
+Before=setup-shared-backup.service
+Before=setup-shared-crypto.service
+Before=setup-shared-data.service
 
 [Service]
 Type=simple
