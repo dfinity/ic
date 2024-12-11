@@ -3733,7 +3733,7 @@ fn threshold_signature_agreements_metric_is_updated() {
     let master_schnorr_key_id = MasterPublicKeyId::Schnorr(schnorr_key_id.clone());
     let mut test = SchedulerTestBuilder::new()
         .with_replica_version(ReplicaVersion::default())
-        .with_idkg_keys(vec![
+        .with_chain_keys(vec![
             master_ecdsa_key_id.clone(),
             master_schnorr_key_id.clone(),
         ])
@@ -3759,7 +3759,7 @@ fn threshold_signature_agreements_metric_is_updated() {
         message: vec![1; 128],
         derivation_path: DerivationPath::new(Vec::new()),
         key_id: schnorr_key_id,
-        taproot_tree_root: None,
+        aux: None,
     })
     .unwrap();
 
@@ -3914,7 +3914,7 @@ fn threshold_signature_agreements_metric_is_updated() {
 fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
     let key_id = make_ecdsa_key_id(0);
     let mut test = SchedulerTestBuilder::new()
-        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
+        .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
 
     let fee = test.ecdsa_signature_fee();
@@ -5690,7 +5690,7 @@ fn inject_ecdsa_signing_request(test: &mut SchedulerTest, key_id: &EcdsaKeyId) {
 fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
     let key_id = make_ecdsa_key_id(0);
     let mut test = SchedulerTestBuilder::new()
-        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
+        .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
 
     inject_ecdsa_signing_request(&mut test, &key_id);
@@ -5716,7 +5716,7 @@ fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
 fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     let key_id = make_ecdsa_key_id(0);
     let mut test = SchedulerTestBuilder::new()
-        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
+        .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     let pre_sig_id = PreSigId(0);
     let pre_sig_ids = BTreeSet::from_iter([pre_sig_id]);
@@ -5779,7 +5779,7 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
 fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     let key_ids: Vec<_> = (0..3).map(make_ecdsa_key_id).collect();
     let mut test = SchedulerTestBuilder::new()
-        .with_idkg_keys(
+        .with_chain_keys(
             key_ids
                 .iter()
                 .cloned()

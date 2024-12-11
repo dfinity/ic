@@ -117,7 +117,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
             nodes: BTreeSet::new(),
             subnet_type: SubnetType::Application,
             subnet_features: SubnetFeatures::default(),
-            idkg_keys_held: BTreeSet::new(),
+            chain_keys_held: BTreeSet::new(),
         },
     );
 

@@ -136,7 +136,7 @@ mod event {
         #[serde(rename = "checked_utxo_v2")]
         CheckedUtxoV2 { utxo: Utxo, account: Account },
 
-        /// Indicates that the given UTXO's value is too small to pay for a KYT check.
+        /// Indicates that the given UTXO's value is too small to pay for a Bitcoin check.
         #[serde(rename = "ignored_utxo")]
         #[deprecated(note = "Use SuspendedUtxo")]
         IgnoredUtxo { utxo: Utxo },
@@ -164,6 +164,7 @@ mod event {
 
         /// Indicates that the KYT check for the specified address failed.
         #[serde(rename = "retrieve_btc_kyt_failed")]
+        #[deprecated]
         RetrieveBtcKytFailed {
             /// The owner of the address.
             owner: Principal,
@@ -212,6 +213,7 @@ pub enum ReplayLogError {
 }
 
 /// Reconstructs the minter state from an event log.
+#[allow(deprecated)]
 pub fn replay<I: CheckInvariants>(
     mut events: impl Iterator<Item = Event>,
 ) -> Result<CkBtcMinterState, ReplayLogError> {
@@ -229,19 +231,19 @@ pub fn replay<I: CheckInvariants>(
     // Because `kyt_principal` was previously used as a default
     // substitute for `kyt_provider` during kyt_fee accounting,
     // we need to keep track of this value so that `distribute_kyt_fee`
-    // knows when to skip giving fees to `kyt_principal`.
-    let mut previous_kyt_principal = None;
+    // knows when to skip giving fees to `btc_checker_principal`.
+    let mut kyt_principal = None;
     for event in events {
         match event {
             Event::Init(args) => {
                 if args.kyt_principal.is_some() {
-                    previous_kyt_principal = args.kyt_principal.map(Principal::from);
+                    kyt_principal = args.kyt_principal.map(Principal::from);
                 }
                 state.reinit(args);
             }
             Event::Upgrade(args) => {
                 if args.kyt_principal.is_some() {
-                    previous_kyt_principal = args.kyt_principal.map(Principal::from);
+                    kyt_principal = args.kyt_principal.map(Principal::from);
                 }
                 state.upgrade(args);
             }
@@ -367,14 +369,14 @@ pub fn replay<I: CheckInvariants>(
                 account,
                 reason,
             } => {
-                state.suspended_utxos.insert(account, utxo, reason);
+                state.suspended_utxos.insert(account, utxo, reason, None);
             }
             Event::DistributedKytFee {
                 kyt_provider,
                 amount,
                 ..
             } => {
-                if Some(kyt_provider) != previous_kyt_principal {
+                if Some(kyt_provider) != kyt_principal {
                     if let Err(Overdraft(overdraft)) =
                         state.distribute_kyt_fee(kyt_provider, amount)
                     {
@@ -382,8 +384,9 @@ pub fn replay<I: CheckInvariants>(
                     }
                 }
             }
+            #[allow(deprecated)]
             Event::RetrieveBtcKytFailed { kyt_provider, .. } => {
-                *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;
+                *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.check_fee;
             }
             Event::ScheduleDepositReimbursement {
                 account,

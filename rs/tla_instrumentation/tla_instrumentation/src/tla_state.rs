@@ -1,5 +1,5 @@
 use crate::tla_value::{TlaValue, ToTla};
-use crate::SourceLocation;
+use crate::{Diff, SourceLocation};
 use candid::CandidType;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -182,6 +182,32 @@ pub struct ResolvedStatePair {
     pub end: GlobalState,
     pub start_source_location: SourceLocation,
     pub end_source_location: SourceLocation,
+}
+
+impl ResolvedStatePair {
+    /// Returns a list of fields that differ between the start and end states
+    /// The difference is fine-grained, so if a field is a (potentially nested) record or a function,
+    /// the difference lists just the fields that differ (respectively, the argument/value pairs that differ)
+    pub fn diff(&self) -> Vec<(String, Diff)> {
+        let mut diff = vec![];
+        let start = &self.start.0;
+        let end = &self.end.0;
+        for (key, value) in start.0.iter() {
+            if let Some(end_value) = end.0.get(key) {
+                if let Some(d) = value.diff(end_value) {
+                    diff.push((key.clone(), d));
+                }
+            } else {
+                diff.push((key.clone(), Diff::Other(Some(value.clone()), None)));
+            }
+        }
+        for (key, value) in end.0.iter() {
+            if !start.0.contains_key(key) {
+                diff.push((key.clone(), Diff::Other(None, Some(value.clone()))));
+            }
+        }
+        diff
+    }
 }
 
 fn resolve_local_variable(name: &str, value: &TlaValue, process_id: &str) -> VarAssignment {

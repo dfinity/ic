@@ -27,6 +27,7 @@ component_files = {
     Label("ic/ic-btc-adapter/ic-btc-testnet-adapter.socket"): "/etc/systemd/system/ic-btc-testnet-adapter.socket",
     Label("ic/setup-permissions/setup-permissions.sh"): "/opt/ic/bin/setup-permissions.sh",
     Label("ic/setup-permissions/setup-permissions.service"): "/etc/systemd/system/setup-permissions.service",
+    Label("ic/setup-permissions/erestorecon.sh"): "/opt/ic/bin/erestorecon.sh",
     Label("ic/share/ark.pem"): "/opt/ic/share/ark.pem",
     Label("ic/ic-crypto-csp/ic-crypto-csp.service"): "/etc/systemd/system/ic-crypto-csp.service",
     Label("ic/ic-crypto-csp/ic-crypto-csp.socket"): "/etc/systemd/system/ic-crypto-csp.socket",
@@ -160,4 +161,7 @@ component_files = {
 
     # fstrim
     Label("fstrim/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
+
+    # TODO(NODE-1519): delete update-config.service after switch to new icos config
+    Label("misc/update-config/update-guestos-config.service"): "/etc/systemd/system/update-config.service",
 }

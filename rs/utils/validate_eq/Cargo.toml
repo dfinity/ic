@@ -1,6 +1,10 @@
 [package]
-edition = "2021"
 name = "ic-validate-eq"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [lib]
 name = "ic_validate_eq"

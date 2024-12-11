@@ -728,7 +728,7 @@ impl PocketIc {
                             algorithm,
                             name: name.to_string(),
                         };
-                        builder = builder.with_idkg_key(MasterPublicKeyId::Schnorr(key_id));
+                        builder = builder.with_chain_key(MasterPublicKeyId::Schnorr(key_id));
                     }
                 }
 
@@ -737,7 +737,7 @@ impl PocketIc {
                         curve: EcdsaCurve::Secp256k1,
                         name: name.to_string(),
                     };
-                    builder = builder.with_idkg_key(MasterPublicKeyId::Ecdsa(key_id));
+                    builder = builder.with_chain_key(MasterPublicKeyId::Ecdsa(key_id));
                 }
             }
 
