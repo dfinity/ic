@@ -66,6 +66,7 @@ pub(crate) struct NodeRegistration {
     key_handler: Arc<dyn NodeRegistrationCrypto>,
     local_store: Arc<dyn LocalStore>,
     signer: Box<dyn Signer>,
+    node_reward_type: Option<String>,
 }
 
 impl NodeRegistration {
@@ -91,6 +92,7 @@ impl NodeRegistration {
             Some(signer) => Box::new(signer),
             None => Box::new(Hsm),
         };
+        let node_reward_type = node_config.registration.node_reward_type.clone();
         Self {
             log,
             node_config,
@@ -100,6 +102,7 @@ impl NodeRegistration {
             key_handler,
             local_store,
             signer,
+            node_reward_type,
         }
     }
 
@@ -219,10 +222,9 @@ impl NodeRegistration {
             .expect("Invalid IPv4 configuration"),
             domain: process_domain_name(&self.log, &self.node_config.domain)
                 .expect("Domain name is invalid"),
-            // Unused section follows
-            p2p_flow_endpoints: Default::default(),
-            prometheus_metrics_endpoint: Default::default(),
-            node_reward_type: None,
+            node_reward_type: self.node_config.registration.node_reward_type.clone(),
+            p2p_flow_endpoints: Default::default(), // unused section
+            prometheus_metrics_endpoint: Default::default(), // unused section
         }
     }
 
