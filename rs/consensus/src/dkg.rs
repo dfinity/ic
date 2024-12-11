@@ -1903,9 +1903,13 @@ mod tests {
             )
             .is_ok());
 
-            // TODO: Advance the pool a bit further, check that the early remote transcripts are not generated multiple times
-            // TODO: Advance the pool until the next DKG interval and verify that it does not contain already sent remote transcripts
-            todo!();
+            // Advance the pool a until the next DKG, check that the early remote transcripts are not generated multiple times
+            // including that they are not included in the summary
+            for _ in 0..100 {
+                pool.advance_round_normal_operation();
+                assert_eq!(extract_dealings_from_highest_block(&pool).len(), 0);
+                assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
+            }
         });
     }
 

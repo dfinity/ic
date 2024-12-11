@@ -316,11 +316,15 @@ pub(super) fn create_summary_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Result<dkg::Summary, PayloadCreationError> {
-    let all_dealings = utils::get_dkg_dealings(pool_reader, parent, false);
+    dbg!("Creating summary payload");
+    let all_dealings = utils::get_dkg_dealings(pool_reader, parent, true);
+    dbg!(&all_dealings.len());
     let mut transcripts_for_remote_subnets = BTreeMap::new();
     let mut next_transcripts = BTreeMap::new();
     // Try to create transcripts from the last round.
     for (dkg_id, config) in last_summary.configs.iter() {
+        // TODO: Filter out configs that no longer have a matching context
+
         match create_transcript(crypto, config, &all_dealings, &logger) {
             Ok(transcript) => {
                 let previous_value_found = if dkg_id.target_subnet == NiDkgTargetSubnet::Local {
@@ -353,6 +357,7 @@ pub(super) fn create_summary_payload(
 
     let height = parent.height.increment();
 
+    dbg!(transcripts_for_remote_subnets.len());
     let (mut configs, transcripts_for_remote_subnets, initial_dkg_attempts) =
         compute_remote_dkg_data(
             subnet_id,
@@ -369,6 +374,7 @@ pub(super) fn create_summary_payload(
             &last_summary.initial_dkg_attempts,
             &logger,
         )?;
+    dbg!(transcripts_for_remote_subnets.len());
 
     let interval_length = last_summary.next_interval_length;
     let next_interval_length = get_dkg_interval_length(
@@ -427,6 +433,8 @@ fn create_transcript(
 ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
     let no_dealings = BTreeMap::new();
     let dealings = all_dealings.get(config.dkg_id()).unwrap_or(&no_dealings);
+
+    // TODO: We need to check that we are not erroring on insufficient dealings here
 
     ic_interfaces::crypto::NiDkgAlgorithm::create_transcript(crypto, config, dealings)
 }

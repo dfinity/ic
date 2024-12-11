@@ -100,7 +100,7 @@ pub(super) fn extract_remote_dkgs_from_highest_block(
     .clone()
 }
 
-/// Extract the remote dkg transcripts from the current highest validated block
+/// Extract the dealings from the current highest validated block
 pub(super) fn extract_dealings_from_highest_block(pool: &TestConsensusPool) -> DealingMessages {
     let block: ic_types::consensus::Block = pool
         .validated()
