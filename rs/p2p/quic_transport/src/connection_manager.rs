@@ -84,8 +84,8 @@ const CONNECT_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
 // There should be least two probes before timing out a connection.
 const_assert!(KEEP_ALIVE_INTERVAL.as_nanos() < IDLE_TIMEOUT.as_nanos());
-// The application level timeout should be significantly bigger than the QUIC idle timeout.
-const_assert!(IDLE_TIMEOUT.as_nanos() < CONNECT_TIMEOUT.as_nanos());
+// The application level timeout should at least as big as the QUIC idle timeout.
+const_assert!(IDLE_TIMEOUT.as_nanos() <= CONNECT_TIMEOUT.as_nanos());
 // The waiting time before re-trying to connect should be no less than the IDLE_TIMEOUT.
 const_assert!(IDLE_TIMEOUT.as_nanos() <= CONNECT_RETRY_BACKOFF.as_nanos());
 
