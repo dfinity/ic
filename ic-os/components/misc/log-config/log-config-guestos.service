@@ -2,8 +2,8 @@
 Description=Log config partition
 After=bootstrap-ic-node.service
 Requires=bootstrap-ic-node.service
-After=update-guestos-config.service
-Wants=update-guestos-config.service
+After=update-config.service
+Wants=update-config.service
 
 [Service]
 Type=oneshot

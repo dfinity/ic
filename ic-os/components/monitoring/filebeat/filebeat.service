@@ -7,8 +7,8 @@ After=network-online.target
 # state files and may also be needed to obtain network config.
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
-After=update-guestos-config.service
-Wants=update-guestos-config.service
+After=update-config.service
+Wants=update-config.service
 # We must wait for var to be mounted over before interacting with it
 After=var.mount
 Wants=var.mount

@@ -3,8 +3,8 @@ Description=Set up hostname
 Before=systemd-networkd.service
 DefaultDependencies=no
 After=bootstrap-ic-node.service
-After=update-guestos-config.service
-Wants=update-guestos-config.service
+After=update-config.service
+Wants=update-config.service
 
 [Install]
 WantedBy=multi-user.target
