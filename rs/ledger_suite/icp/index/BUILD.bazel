@@ -50,7 +50,6 @@ rust_library(
         exclude = ["src/main.rs"],
     ),
     crate_name = "ic_icp_index",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -60,7 +59,6 @@ rust_canister(
     srcs = ["src/main.rs"],
     compile_data = [":index.did"],
     crate_name = "ic_icp_index_canister",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     rustc_env = {
         "INDEX_DID_PATH": "$(location :index.did)",
@@ -96,7 +94,6 @@ rust_ic_test(
         "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
         "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
     ],
-    edition = "2018",
     env = {
         "RUST_TEST_THREADS": "4",
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/index",
@@ -105,5 +102,6 @@ rust_ic_test(
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     },
     flaky = True,
+    tags = ["cpu:4"],
     deps = [":ic-icp-index"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

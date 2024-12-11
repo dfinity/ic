@@ -416,6 +416,12 @@ fn test_single_neuron_proposal_new() {
                                         total_voting_power: Some(
                                             1,
                                         ),
+                                        total_deciding_voting_power: Some(
+                                            1,
+                                        ),
+                                        total_potential_voting_power: Some(
+                                            1,
+                                        ),
                                         count_buckets: btreemap! {
                                             1 => 1,
                                         },
@@ -429,6 +435,12 @@ fn test_single_neuron_proposal_new() {
                                             1 => 0,
                                         },
                                         voting_power_buckets: btreemap! {
+                                            1 => 1,
+                                        },
+                                        deciding_voting_power_buckets: btreemap! {
+                                            1 => 1,
+                                        },
+                                        potential_voting_power_buckets: btreemap! {
                                             1 => 1,
                                         },
                                     },
@@ -455,11 +467,93 @@ fn test_single_neuron_proposal_new() {
                                         total_voting_power: Some(
                                             0,
                                         ),
+                                        total_deciding_voting_power: Some(
+                                            0,
+                                        ),
+                                        total_potential_voting_power: Some(
+                                            0,
+                                        ),
                                         count_buckets: btreemap! {},
                                         staked_e8s_buckets: btreemap! {},
                                         staked_maturity_e8s_equivalent_buckets: btreemap! {},
                                         maturity_e8s_equivalent_buckets: btreemap! {},
                                         voting_power_buckets: btreemap! {},
+                                        deciding_voting_power_buckets: btreemap! {},
+                                        potential_voting_power_buckets: btreemap! {},
+                                    },
+                                ),
+                            ),
+                        ),
+                        GovernanceCachedMetricsChange::DecliningVotingPowerNeuronSubsetMetrics(
+                            comparable::OptionChange::Different(
+                                None,
+                                Some(
+                                    ic_nns_governance::pb::v1::governance::governance_cached_metrics::NeuronSubsetMetricsDesc {
+                                        count: Some(
+                                            0,
+                                        ),
+                                        total_staked_e8s: Some(
+                                            0,
+                                        ),
+                                        total_staked_maturity_e8s_equivalent: Some(
+                                            0,
+                                        ),
+                                        total_maturity_e8s_equivalent: Some(
+                                            0,
+                                        ),
+                                        total_voting_power: Some(
+                                            0,
+                                        ),
+                                        total_deciding_voting_power: Some(
+                                            0,
+                                        ),
+                                        total_potential_voting_power: Some(
+                                            0,
+                                        ),
+                                        count_buckets: btreemap! {},
+                                        staked_e8s_buckets: btreemap! {},
+                                        staked_maturity_e8s_equivalent_buckets: btreemap! {},
+                                        maturity_e8s_equivalent_buckets: btreemap! {},
+                                        voting_power_buckets: btreemap! {},
+                                        deciding_voting_power_buckets: btreemap! {},
+                                        potential_voting_power_buckets: btreemap! {},
+                                    },
+                                ),
+                            ),
+                        ),
+                        GovernanceCachedMetricsChange::FullyLostVotingPowerNeuronSubsetMetrics(
+                            comparable::OptionChange::Different(
+                                None,
+                                Some(
+                                    ic_nns_governance::pb::v1::governance::governance_cached_metrics::NeuronSubsetMetricsDesc {
+                                        count: Some(
+                                            0,
+                                        ),
+                                        total_staked_e8s: Some(
+                                            0,
+                                        ),
+                                        total_staked_maturity_e8s_equivalent: Some(
+                                            0,
+                                        ),
+                                        total_maturity_e8s_equivalent: Some(
+                                            0,
+                                        ),
+                                        total_voting_power: Some(
+                                            0,
+                                        ),
+                                        total_deciding_voting_power: Some(
+                                            0,
+                                        ),
+                                        total_potential_voting_power: Some(
+                                            0,
+                                        ),
+                                        count_buckets: btreemap! {},
+                                        staked_e8s_buckets: btreemap! {},
+                                        staked_maturity_e8s_equivalent_buckets: btreemap! {},
+                                        maturity_e8s_equivalent_buckets: btreemap! {},
+                                        voting_power_buckets: btreemap! {},
+                                        deciding_voting_power_buckets: btreemap! {},
+                                        potential_voting_power_buckets: btreemap! {},
                                     },
                                 ),
                             ),
@@ -4546,6 +4640,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
             deciding_voting_power: Some(expected_voting_power),
             potential_voting_power: Some(expected_voting_power),
+            recent_ballots_next_entry_index: Some(0),
             ..Default::default()
         }
     );
@@ -14101,6 +14196,8 @@ async fn test_metrics() {
         total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
         non_self_authenticating_controller_neuron_subset_metrics: None,
         public_neuron_subset_metrics: None,
+        declining_voting_power_neuron_subset_metrics: None,
+        fully_lost_voting_power_neuron_subset_metrics: None,
     };
 
     let driver = fake::FakeDriver::default().at(60 * 60 * 24 * 30);
@@ -14120,6 +14217,8 @@ async fn test_metrics() {
             total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
             non_self_authenticating_controller_neuron_subset_metrics: None,
             public_neuron_subset_metrics: None,
+            declining_voting_power_neuron_subset_metrics: None,
+            fully_lost_voting_power_neuron_subset_metrics: None,
 
             ..actual_metrics
         },
@@ -14138,6 +14237,8 @@ async fn test_metrics() {
             total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
             non_self_authenticating_controller_neuron_subset_metrics: None,
             public_neuron_subset_metrics: None,
+            declining_voting_power_neuron_subset_metrics: None,
+            fully_lost_voting_power_neuron_subset_metrics: None,
 
             ..actual_metrics
         },
@@ -14193,6 +14294,8 @@ async fn test_metrics() {
         total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
         non_self_authenticating_controller_neuron_subset_metrics: None,
         public_neuron_subset_metrics: None,
+        declining_voting_power_neuron_subset_metrics: None,
+        fully_lost_voting_power_neuron_subset_metrics: None,
     };
     let metrics = gov.get_metrics().expect("Error while querying metrics.");
     assert_eq!(
@@ -14203,6 +14306,8 @@ async fn test_metrics() {
             total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
             non_self_authenticating_controller_neuron_subset_metrics: None,
             public_neuron_subset_metrics: None,
+            declining_voting_power_neuron_subset_metrics: None,
+            fully_lost_voting_power_neuron_subset_metrics: None,
 
             ..metrics
         },

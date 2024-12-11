@@ -1,51 +1,68 @@
+use candid::{Decode, Encode};
 use canister_test::*;
+use ic_management_canister_types::CanisterSettingsArgsBuilder;
+use ic_state_machine_tests::StateMachine;
 
 #[test]
 fn test_statesync_test_canisters() {
-    local_test_e(|r| async move {
-        let proj = Project::new();
+    let env = StateMachine::new();
 
-        println!("Start installing statesync test canister");
-        let canister = proj
-            .cargo_bin("statesync-test-canister", &[])
-            .install(&r)
-            .with_memory_allocation(8 * 1024 * 1024 * 1024) // 8GiB
-            .bytes(Vec::new())
-            .await?;
-        println!("Installed statesync test canister");
+    let features = [];
+    let wasm = Project::cargo_bin_maybe_from_env("statesync-test-canister", &features);
+    let canister_id = env
+        .install_canister(
+            wasm.bytes(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_memory_allocation(8 * 1024 * 1024 * 1024)
+                    .build(),
+            ),
+        )
+        .expect("Failed to install canister");
 
-        let mut res: Result<u8, String> = canister
-            .query_("read_state", dfn_json::json, 0_usize)
-            .await
-            .unwrap();
-        assert_eq!(
-            res,
-            Ok(0),
-            "Queried first element of state vector, should have been 0, was {:?}",
-            res
-        );
+    let result = env
+        .query(canister_id, "read_state", Encode!(&0usize).unwrap())
+        .unwrap();
+    let res = assert_reply(result);
+    let val = Decode!(&res, Result<u8, String>).unwrap();
+    assert_eq!(
+        val,
+        Ok(0),
+        "Queried first element of state vector, should have been 0, was {:?}",
+        res
+    );
 
-        res = canister
-            .update_("change_state", dfn_json::json, 33_u32)
-            .await
-            .unwrap();
-        assert_eq!(
-            res,
-            Ok(1),
-            "Changed state for the first time, result should have been 1, was {:?}",
-            res
-        );
+    let result = env
+        .execute_ingress(canister_id, "change_state", Encode!(&33u32).unwrap())
+        .unwrap();
+    let res = assert_reply(result);
+    let val = Decode!(&res, Result<u64, String>).unwrap();
+    assert_eq!(
+        val,
+        Ok(1),
+        "Changed state for the first time, result should have been 1, was {:?}",
+        res
+    );
 
-        res = canister
-            .query_("read_state", dfn_json::json, 0_usize)
-            .await
-            .unwrap();
-        assert_eq!(
-            res,
-            Ok(119),
-            "Queried 0th element of state vector, should be 20 for seed 33, was {:?}",
-            res
-        );
-        Ok(())
-    })
+    let result = env
+        .query(canister_id, "read_state", Encode!(&0usize).unwrap())
+        .unwrap();
+    let res = assert_reply(result);
+    let val = Decode!(&res, Result<u8, String>).unwrap();
+    assert_eq!(
+        val,
+        Ok(119),
+        "Queried 0th element of state vector, should be 20 for seed 33, was {:?}",
+        res
+    );
+}
+
+fn assert_reply(res: WasmResult) -> Vec<u8> {
+    match res {
+        WasmResult::Reply(res) => res,
+        WasmResult::Reject(_) => {
+            unreachable!("Unexpected reject, should have been a reply");
+        }
+    }
 }

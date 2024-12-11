@@ -2045,6 +2045,7 @@ fn test_retrieve_btc_with_approval_fail() {
             btc_checker_wasm(),
             Encode!(&CheckArg::UpgradeArg(Some(CheckerUpgradeArg {
                 check_mode: Some(CheckMode::RejectAll),
+                ..CheckerUpgradeArg::default()
             })))
             .unwrap(),
         )
