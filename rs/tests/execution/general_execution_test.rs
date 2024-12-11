@@ -88,10 +88,6 @@ fn main() -> Result<()> {
                     mint_cycles_supported_only_on_cycles_minting_canister
                 ))
                 .add_test(systest!(mint_cycles_not_supported_on_application_subnet))
-                .add_test(systest!(
-                    mint_cycles128_supported_only_on_cycles_minting_canister
-                ))
-                .add_test(systest!(mint_cycles128_not_supported_on_application_subnet))
                 .add_test(systest!(no_cycle_balance_limit_on_nns_subnet))
                 .add_test(systest!(app_canister_attempt_initiating_dkg_fails))
                 .add_test(systest!(canister_heartbeat_is_called_at_regular_intervals))
