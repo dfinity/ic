@@ -639,14 +639,14 @@ mod tests {
                 nodes: BTreeSet::new(),
                 subnet_type: SubnetType::Application,
                 subnet_features: SubnetFeatures::default(),
-                idkg_keys_held: BTreeSet::new(),
+                chain_keys_held: BTreeSet::new(),
             },
             subnet_test_id(1) => SubnetTopology {
                 public_key: vec![5, 6, 7, 8],
                 nodes: BTreeSet::new(),
                 subnet_type: SubnetType::Application,
                 subnet_features: SubnetFeatures::default(),
-                idkg_keys_held: BTreeSet::new(),
+                chain_keys_held: BTreeSet::new(),
             }
         };
         fn id_range(from: u64, to: u64) -> CanisterIdRange {

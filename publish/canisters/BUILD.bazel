@@ -13,7 +13,7 @@ CANISTERS = {
     "genesis-token-canister.wasm.gz": "//rs/nns/gtc:genesis-token-canister",
     "governance-canister.wasm.gz": "//rs/nns/governance:governance-canister",
     "governance-canister_test.wasm.gz": "//rs/nns/governance:governance-canister-test",
-    "ic-btc-kyt.wasm.gz": "//rs/bitcoin/kyt:btc_kyt_canister",
+    "ic-btc-checker.wasm.gz": "//rs/bitcoin/checker:btc_checker_canister",
     "ic-ckbtc-minter.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter",
     "ic-ckbtc-minter_debug.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
     "ic-ckbtc-kyt.wasm.gz": "//rs/bitcoin/ckbtc/kyt:kyt_canister",
@@ -70,7 +70,7 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
 
     # -- XC team --
     # Size when constraint addded: 447_593 bytes
-    "ic-btc-kyt.wasm.gz": "6",
+    "ic-btc-checker.wasm.gz": "6",
     # Size when constraint addded: 696_633 bytes
     "ic-ckbtc-minter.wasm.gz": "8",
     # Size when constraint addded: 1_230_630 bytes

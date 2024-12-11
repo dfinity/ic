@@ -283,6 +283,9 @@ impl CachedUpgradeSteps {
         &self.current_version == version || self.subsequent_versions.contains(version)
     }
 
+    /// Returns whether `left` is before or equal to `right` in `self`, in the `Ok` result.
+    ///
+    /// Returns `Err` if at least one of the versions `left` or `right` are not in `self`.
     pub fn contains_in_order(&self, left: &Version, right: &Version) -> Result<bool, String> {
         if !self.contains(left) {
             return Err(format!("{:?} does not contain {:?}", self, left));
@@ -361,6 +364,8 @@ impl CachedUpgradeSteps {
         self.response_timestamp_seconds
     }
 
+    /// Returns `Ok` if `new_target` is in `self` but different from `self.current()`.
+    /// Otherwise, returns `Err`.
     pub fn validate_new_target_version(&self, new_target: &Version) -> Result<(), String> {
         if !self.contains(new_target) {
             return Err("new_target_version must be among the upgrade steps.".to_string());

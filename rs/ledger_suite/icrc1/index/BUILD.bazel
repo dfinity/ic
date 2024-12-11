@@ -35,7 +35,6 @@ rust_library(
         exclude = ["src/main.rs"],
     ),
     crate_name = "ic_icrc1_index",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
         "//rs/rust_canisters/canister_profiler",
@@ -47,7 +46,6 @@ rust_canister(
     srcs = ["src/main.rs"],
     compile_data = ["index.did"],
     crate_name = "ic_icrc1_index_canister",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     rustc_env = {
         "INDEX_DID_PATH": "$(execpath :index.did)",
@@ -87,7 +85,6 @@ rust_ic_test(
         ":index_canister.wasm",
         "//rs/ledger_suite/icrc1/ledger:ledger_canister.wasm",
     ],
-    edition = "2018",
     env = {
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/index",
         "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath :index_canister.wasm)",
