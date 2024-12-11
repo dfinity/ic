@@ -219,14 +219,14 @@ where
     L: LedgerData,
     L::BalancesStore: InspectableBalancesStore,
 {
-    let result = apply_transaction_no_prunning(ledger, transaction, now, effective_fee);
+    let result = apply_transaction_no_trimming(ledger, transaction, now, effective_fee);
     trim_balances(ledger, now);
     result
 }
 
 /// Adds a new block with the specified transaction to the ledger.
 /// Do not perform any balance trimming.
-pub fn apply_transaction_no_prunning<L>(
+pub fn apply_transaction_no_trimming<L>(
     ledger: &mut L,
     transaction: L::Transaction,
     now: TimeStamp,
