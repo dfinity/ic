@@ -88,6 +88,7 @@ rust_test(
 
 rust_ic_test(
     name = "ic_icp_index_test",
+    timeout = "long",
     srcs = ["tests/tests.rs"],
     data = [
         ":ic-icp-index-canister.wasm",
