@@ -79,6 +79,11 @@ jobs:
             RELEASE_TAG="${{ env.NAME }}-${COMMIT_SHORT}"
           fi
 
+          if [[ ! "${RELEASE_TAG}" =~ "^${{ env.NAME }}" ]]; then
+            echo "ERROR: Required tag prefix: ${{ env.NAME }}"
+            exit 1
+          fi
+
           git tag ${RELEASE_TAG}
           git push origin tag ${RELEASE_TAG}
 
