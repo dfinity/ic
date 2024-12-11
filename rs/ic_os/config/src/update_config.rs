@@ -35,6 +35,7 @@ pub fn update_guestos_config() -> Result<()> {
         let hostname = network_config_result.hostname.clone();
 
         let nns_urls = read_nns_conf(config_dir)?;
+        let node_reward_type = read_reward_conf(config_dir)?;
 
         let use_nns_public_key = state_root.join("nns_public_key.pem").exists();
         let use_node_operator_private_key =
@@ -45,7 +46,7 @@ pub fn update_guestos_config() -> Result<()> {
         let deployment_environment = DeploymentEnvironment::Mainnet;
 
         let icos_settings = ICOSSettings {
-            node_reward_type: None,
+            node_reward_type,
             mgmt_mac,
             deployment_environment,
             logging: Logging::default(),
@@ -172,6 +173,15 @@ fn read_nns_conf(config_dir: &Path) -> Result<Vec<Url>> {
     }
 
     Ok(nns_urls)
+}
+
+fn read_reward_conf(config_dir: &Path) -> Result<Option<String>> {
+    let reward_conf_path = config_dir.join("reward.conf");
+    let conf_map = read_conf_file(&reward_conf_path)?;
+
+    let node_reward_type = conf_map.get("node_reward_type").cloned();
+
+    Ok(node_reward_type)
 }
 
 fn derive_mgmt_mac_from_hostname(hostname: Option<&str>) -> Result<MacAddr6> {
