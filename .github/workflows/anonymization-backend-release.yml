@@ -13,13 +13,8 @@ on:
         required: true
         type: string
 
-      ref:
-        description: 'Commit to base the release on (defaults to `HEAD`)'
-        required: false
-        type: string
-
       tag:
-        description: 'Tag for the release (defaults to `anonymization-backend-<COMMIT>`)'
+        description: 'Tag for the release (required format `anonymization-backend-*`)'
         required: false
         type: string
 
@@ -72,17 +67,9 @@ jobs:
 
       - name: tag
         run: |
-          REF='${{ inputs.ref }}'
-          if [[ -z "${REF}" ]]; then
-            REF='HEAD'
-          fi
-
-          COMMIT=$(git rev-parse ${REF})
-          git checkout ${COMMIT}
-
           RELEASE_TAG='${{ inputs.tag }}'
           if [[ -z "${RELEASE_TAG}" ]]; then
-            COMMIT_SHORT=$(git rev-parse --short ${COMMIT})
+            COMMIT_SHORT=$(git rev-parse --short HEAD)
             RELEASE_TAG="${{ env.NAME }}-${COMMIT_SHORT}"
           fi
 
