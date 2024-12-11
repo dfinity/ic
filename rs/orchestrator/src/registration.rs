@@ -220,8 +220,10 @@ impl NodeRegistration {
             domain: process_domain_name(&self.log, &self.node_config.domain)
                 .expect("Domain name is invalid"),
             node_reward_type: self.node_config.registration.node_reward_type.clone(),
-            p2p_flow_endpoints: Default::default(), // unused section
-            prometheus_metrics_endpoint: Default::default(), // unused section
+
+            // The following fields are unused.
+            p2p_flow_endpoints: Default::default(), // unused field
+            prometheus_metrics_endpoint: Default::default(), // unused field
         }
     }
 

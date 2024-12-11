@@ -23,13 +23,7 @@ impl Registry {
     ) -> Result<NodeProvidersMonthlyXdrRewards, String> {
         let mut rewards = NodeProvidersMonthlyXdrRewards::default();
 
-        let rewards_table_bytes = self
-            .get(NODE_REWARDS_TABLE_KEY.as_bytes(), self.latest_version())
-            .ok_or_else(|| "Node Rewards Table was not found in the Registry".to_string())?
-            .value
-            .clone();
-
-        let rewards_table = NodeRewardsTable::decode(rewards_table_bytes.as_slice()).unwrap();
+        let rewards_table = self.get_node_rewards_table()?;
 
         let node_operators =
             get_key_family::<NodeOperatorRecord>(self, NODE_OPERATOR_RECORD_KEY_PREFIX);
@@ -48,6 +42,29 @@ impl Registry {
         rewards.registry_version = Some(self.latest_version());
 
         Ok(rewards)
+    }
+
+    /// Return the node rewards table from the registry.
+    pub fn get_node_rewards_table(&self) -> Result<NodeRewardsTable, String> {
+        let rewards_table_bytes = self
+            .get(NODE_REWARDS_TABLE_KEY.as_bytes(), self.latest_version())
+            .ok_or_else(|| "Node Rewards Table was not found in the Registry".to_string())?
+            .value
+            .clone();
+
+        Ok(NodeRewardsTable::decode(rewards_table_bytes.as_slice()).unwrap())
+    }
+
+    /// Check if the Node Rewards Table is empty.
+    pub fn is_node_rewards_table_empty(&self) -> bool {
+        if self
+            .get(NODE_REWARDS_TABLE_KEY.as_bytes(), self.latest_version())
+            .is_none()
+        {
+            return true;
+        }
+        let rewards_table_bytes = self.get_node_rewards_table().unwrap();
+        rewards_table_bytes.table.is_empty()
     }
 }
 
