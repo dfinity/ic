@@ -28,6 +28,11 @@ pub struct AppState {
     pub metadata: Metadata,
 }
 
+pub struct MultiTokenAppState {
+    // A map from canister ids to their respective AppStates
+    pub token_states: HashMap<CanisterId, Arc<AppState>>,
+}
+
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Metadata {
     pub symbol: String,

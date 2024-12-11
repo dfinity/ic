@@ -54,11 +54,31 @@ enum NetworkType {
     Testnet,
 }
 
+#[derive(Clone, Debug)]
+struct TokenDef {
+   ledger_id: CanisterId,
+   // Below are optional, checked against online values if set.
+   icrc1_symbol: Option<String>,
+   icrc1_decimals: Option<u8>,
+}
+
+impl TokenDef {
+    fn are_metadata_args_set(&self) -> bool {
+        self.icrc1_symbol.is_some() && self.icrc1_decimals.is_some()
+    }
+}
+
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     #[arg(short, long)]
     ledger_id: CanisterId,
+
+    #[arg(short, long)]
+    multi_tokens: Vec<TokenDef>,
+
+    #[arg(short, long, default_value = "/data")]
+    multi_tokens_store_dir: PathBuf,
 
     /// The symbol of the ICRC-1 token.
     /// If set Rosetta will check the symbol against the ledger it connects to. If the symbol does not match, it will exit.
@@ -202,39 +222,41 @@ fn add_request_span() -> FnTraceLayer {
 }
 
 async fn load_metadata(
-    args: &Args,
+    token_def: &TokenDef,
     icrc1_agent: &Icrc1Agent,
     storage: &StorageClient,
+    is_offline: bool,
 ) -> anyhow::Result<Metadata> {
-    if args.offline {
+    if is_offline {
         let db_metadata_entries = storage.read_metadata()?;
+        let are_metadata_set = token_def.are_metadata_args_set();
         // If metadata is empty and the args are not set, bail out.
-        if db_metadata_entries.is_empty() && !args.are_metadata_args_set() {
+        if db_metadata_entries.is_empty() && !are_metadata_set {
             bail!("Metadata must be initialized by starting Rosetta in online mode first or by providing ICRC-1 metadata arguments.");
         }
 
         // If metadata is set in args and not entries are found in the database,
         // return the metadata from the args.
-        if args.are_metadata_args_set() && db_metadata_entries.is_empty() {
+        if are_metadata_set && db_metadata_entries.is_empty() {
             return Ok(Metadata::from_args(
-                args.icrc1_symbol.clone().unwrap(),
-                args.icrc1_decimals.unwrap(),
+                token_def.icrc1_symbol.clone().unwrap(),
+                token_def.icrc1_decimals.unwrap(),
             ));
         }
 
         // Populate a metadata object with the database entries.
         let db_metadata = Metadata::from_metadata_entries(&db_metadata_entries)?;
         // If the metadata args are not set, return using the db metadata.
-        if !args.are_metadata_args_set() {
+        if !are_metadata_set {
             return Ok(db_metadata);
         }
 
         // Extract the symbol and decimals from the arguments.
-        let symbol = args
+        let symbol = token_def
             .icrc1_symbol
             .clone()
             .context("ICRC-1 symbol should be provided in offline mode.")?;
-        let decimals = args
+        let decimals = token_def
             .icrc1_decimals
             .context("ICRC-1 decimals should be provided in offline mode.")?;
 
@@ -285,14 +307,19 @@ async fn main() -> Result<()> {
 
     let _guard = init_logs(args.log_level, &args.log_file)?;
 
-    let storage = Arc::new(match args.store_type {
-        StoreType::InMemory => StorageClient::new_in_memory()?,
-        StoreType::File => StorageClient::new_persistent(&args.store_file)?,
-    });
+    let token_app_states = MultiTokenAppState {
+        token_states: HashMap::new(),
+    };
 
-    let network_url = args.effective_network_url();
+    for token_def in args.multi_tokens.iter() {
+        let storage = Arc::new(match args.store_type {
+            StoreType::InMemory => StorageClient::new_in_memory()?,
+            StoreType::File => StorageClient::new_persistent(args.multi_tokens_store_dir.join(token_def.ledger_id.to_text())),
+        });
 
-    let ic_agent = Agent::builder()
+        let network_url = args.effective_network_url();
+
+        let ic_agent = Agent::builder()
         .with_identity(AnonymousIdentity)
         .with_transport(ReqwestTransport::create(
             Url::parse(&network_url)
@@ -300,67 +327,72 @@ async fn main() -> Result<()> {
         )?)
         .build()?;
 
-    // Only fetch root key if the network is not the mainnet
-    if !args.is_mainnet() {
-        debug!("Network type is not mainnet --> Trying to fetch root key");
-        ic_agent.fetch_root_key().await?;
-    }
-
-    debug!("Rosetta connects to : {}", network_url);
-
-    debug!(
-        "Network status is : {:?}",
-        ic_agent.status().await?.replica_health_status
-    );
-
-    let icrc1_agent = Arc::new(Icrc1Agent {
-        agent: ic_agent,
-        ledger_canister_id: args.ledger_id.into(),
-    });
-
-    let metadata = load_metadata(&args, &icrc1_agent, &storage).await?;
-    if let Some(token_symbol) = args.icrc1_symbol.clone() {
-        if metadata.symbol != token_symbol {
-            bail!(
-                "Provided symbol does not match symbol retrieved in online mode. Expected: {}, Got: {}",
-                metadata.symbol, token_symbol
-            );
-        }
-    }
-
-    info!(
-        "ICRC Rosetta is connected to the ICRC-1 ledger: {}",
-        args.ledger_id
-    );
-    info!(
-        "The token symbol of the ICRC-1 ledger is: {}",
-        metadata.symbol
-    );
-
-    let shared_state = Arc::new(AppState {
-        icrc1_agent: icrc1_agent.clone(),
-        ledger_id: args.ledger_id,
-        synched: Arc::new(Mutex::new(None)),
-        storage: storage.clone(),
-        archive_canister_ids: Arc::new(AsyncMutex::new(vec![])),
-        metadata,
-    });
-
-    if args.exit_on_sync {
-        if args.offline {
-            bail!("'exit-on-sync' and 'offline' parameters cannot be specified at the same time.");
+        // Only fetch root key if the network is not the mainnet
+        if !args.is_mainnet() {
+            debug!("Network type is not mainnet --> Trying to fetch root key");
+            ic_agent.fetch_root_key().await?;
         }
 
-        info!("Starting to sync blocks");
-        start_synching_blocks(
-            icrc1_agent.clone(),
-            storage.clone(),
-            *MAXIMUM_BLOCKS_PER_REQUEST,
-            Arc::new(AsyncMutex::new(vec![])),
-        )
-        .await?;
+        debug!("Rosetta connects to : {}", network_url);
 
-        process::exit(0);
+        debug!(
+            "Network status is : {:?}",
+            ic_agent.status().await?.replica_health_status
+        );
+
+        let icrc1_agent = Arc::new(Icrc1Agent {
+            agent: ic_agent,
+            ledger_canister_id: token_def.ledger_id,
+        });
+
+        let metadata = load_metadata(token_def, &icrc1_agent, &storage, args.offline).await?;
+        if token_def.icrc1_symbol.is_some() {
+            if metadata.symbol != token_def.icrc1_symbol.clone().unwrap() {
+                bail!(
+                    "Provided symbol does not match symbol retrieved in online mode. Expected: {}, Got: {}",
+                    metadata.symbol, token_def.icrc1_symbol.clone().unwrap()
+                );
+            }
+        }
+
+        info!(
+            "ICRC Rosetta is connected to the ICRC-1 ledger: {}",
+            token_def.ledger_id
+        );
+        info!(
+            "The token symbol of the ICRC-1 ledger is: {}",
+            metadata.symbol
+        );
+    
+        let shared_state = Arc::new(AppState {
+            icrc1_agent: icrc1_agent.clone(),
+            ledger_id: token_def.ledger_id,
+            synched: Arc::new(Mutex::new(None)),
+            storage: storage.clone(),
+            archive_canister_ids: Arc::new(AsyncMutex::new(vec![])),
+            metadata,
+        });
+
+        token_app_states
+            .token_states
+            .insert(token_def.ledger_id, shared_state.clone());
+
+            if args.exit_on_sync {
+                if args.offline {
+                    bail!("'exit-on-sync' and 'offline' parameters cannot be specified at the same time.");
+                }
+        
+                info!("Starting to sync blocks");
+                start_synching_blocks(
+                    icrc1_agent.clone(),
+                    storage.clone(),
+                    *MAXIMUM_BLOCKS_PER_REQUEST,
+                    Arc::new(AsyncMutex::new(vec![])),
+                )
+                .await?;
+        
+                process::exit(0);
+            }
     }
 
     let app = Router::new()
@@ -391,7 +423,7 @@ async fn main() -> Result<()> {
         // request extensions. Note that it should be added after the
         // Trace layer.
         .layer(RequestIdLayer)
-        .with_state(shared_state.clone());
+        .with_state(token_app_states.clone());
 
     let rosetta_url = format!("0.0.0.0:{}", args.get_port());
     let tcp_listener = TcpListener::bind(rosetta_url.clone()).await?;
