@@ -8,5 +8,6 @@
 mod bouncer_metrics;
 pub mod certification;
 pub mod consensus;
+pub mod cup_utils;
 pub mod dkg;
 pub mod idkg;
