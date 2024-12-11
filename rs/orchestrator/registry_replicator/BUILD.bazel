@@ -33,6 +33,7 @@ ALIASES = {}
 
 rust_library(
     name = "registry_replicator",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_registry_replicator",
     version = "0.1.0",
@@ -41,6 +42,7 @@ rust_library(
 
 rust_binary(
     name = "ic-registry-replicator",
+    testonly = True,
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
