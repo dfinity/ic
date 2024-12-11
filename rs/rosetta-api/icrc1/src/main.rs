@@ -7,10 +7,11 @@ use axum::{
     Router,
 };
 use clap::{Parser, ValueEnum};
+use futures;
 use ic_agent::{
     agent::http_transport::reqwest_transport::ReqwestTransport, identity::AnonymousIdentity, Agent,
 };
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc_rosetta::{
     common::constants::{BLOCK_SYNC_WAIT_SECS, MAX_BLOCK_SYNC_WAIT_SECS},
     common::storage::{storage_client::StorageClient, types::MetadataEntry},
@@ -19,11 +20,13 @@ use ic_icrc_rosetta::{
     ledger_blocks_synchronization::blocks_synchronizer::{
         start_synching_blocks, RecurrencyConfig, RecurrencyMode,
     },
-    AppState, Metadata,
+    AppState, Metadata, MultiTokenAppState,
 };
 use ic_sys::fs::write_string_using_tmp_file;
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use lazy_static::lazy_static;
+use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::{path::PathBuf, process, time::Duration};
 use tokio::{net::TcpListener, sync::Mutex as AsyncMutex};
@@ -56,11 +59,64 @@ enum NetworkType {
     Testnet,
 }
 
+#[derive(Clone, Debug)]
+struct TokenDef {
+    ledger_id: CanisterId,
+    // Below are optional, checked against online values if set.
+    icrc1_symbol: Option<String>,
+    icrc1_decimals: Option<u8>,
+}
+
+impl TokenDef {
+    fn from_string(token_description: &str) -> Result<Self> {
+        let parts: Vec<&str> = token_description.split(':').collect();
+        if parts.len() < 1 || parts.len() > 3 {
+            bail!("Invalid token description: {}", token_description);
+        }
+
+        let principal_id = PrincipalId::from_str(parts[0])
+            .context(format!("Failed to parse PrincipalId from {}", parts[0]))?;
+        let ledger_id = CanisterId::unchecked_from_principal(principal_id);
+
+        let icrc1_symbol = if parts.len() > 1 {
+            Some(parts[1].to_string())
+        } else {
+            None
+        };
+
+        let icrc1_decimals = if parts.len() > 2 {
+            Some(
+                parts[2]
+                    .parse()
+                    .context(format!("Failed to parse u8 from {}", parts[2]))?,
+            )
+        } else {
+            None
+        };
+
+        Ok(Self {
+            ledger_id,
+            icrc1_symbol,
+            icrc1_decimals,
+        })
+    }
+
+    fn are_metadata_args_set(&self) -> bool {
+        self.icrc1_symbol.is_some() && self.icrc1_decimals.is_some()
+    }
+}
+
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     #[arg(short, long)]
     ledger_id: CanisterId,
+
+    #[arg(long, value_delimiter = ',', num_args = 0..)]
+    multi_tokens: Vec<String>,
+
+    #[arg(long, default_value = "/data")]
+    multi_tokens_store_dir: PathBuf,
 
     /// The symbol of the ICRC-1 token.
     /// If set Rosetta will check the symbol against the ledger it connects to. If the symbol does not match, it will exit.
@@ -204,39 +260,41 @@ fn add_request_span() -> FnTraceLayer {
 }
 
 async fn load_metadata(
-    args: &Args,
+    token_def: &TokenDef,
     icrc1_agent: &Icrc1Agent,
     storage: &StorageClient,
+    is_offline: bool,
 ) -> anyhow::Result<Metadata> {
-    if args.offline {
+    if is_offline {
         let db_metadata_entries = storage.read_metadata()?;
+        let are_metadata_set = token_def.are_metadata_args_set();
         // If metadata is empty and the args are not set, bail out.
-        if db_metadata_entries.is_empty() && !args.are_metadata_args_set() {
+        if db_metadata_entries.is_empty() && !are_metadata_set {
             bail!("Metadata must be initialized by starting Rosetta in online mode first or by providing ICRC-1 metadata arguments.");
         }
 
         // If metadata is set in args and not entries are found in the database,
         // return the metadata from the args.
-        if args.are_metadata_args_set() && db_metadata_entries.is_empty() {
+        if are_metadata_set && db_metadata_entries.is_empty() {
             return Ok(Metadata::from_args(
-                args.icrc1_symbol.clone().unwrap(),
-                args.icrc1_decimals.unwrap(),
+                token_def.icrc1_symbol.clone().unwrap(),
+                token_def.icrc1_decimals.unwrap(),
             ));
         }
 
         // Populate a metadata object with the database entries.
         let db_metadata = Metadata::from_metadata_entries(&db_metadata_entries)?;
         // If the metadata args are not set, return using the db metadata.
-        if !args.are_metadata_args_set() {
+        if !are_metadata_set {
             return Ok(db_metadata);
         }
 
         // Extract the symbol and decimals from the arguments.
-        let symbol = args
+        let symbol = token_def
             .icrc1_symbol
             .clone()
             .context("ICRC-1 symbol should be provided in offline mode.")?;
-        let decimals = args
+        let decimals = token_def
             .icrc1_decimals
             .context("ICRC-1 decimals should be provided in offline mode.")?;
 
@@ -287,65 +345,86 @@ async fn main() -> Result<()> {
 
     let _guard = init_logs(args.log_level, &args.log_file)?;
 
-    let storage = Arc::new(match args.store_type {
-        StoreType::InMemory => StorageClient::new_in_memory()?,
-        StoreType::File => StorageClient::new_persistent(&args.store_file)?,
-    });
+    let token_defs: Vec<TokenDef> = args
+        .multi_tokens
+        .iter()
+        .map(|token_description| TokenDef::from_string(token_description))
+        .collect::<Result<Vec<TokenDef>>>()?;
 
-    let network_url = args.effective_network_url();
+    let mut token_states = HashMap::new();
 
-    let ic_agent = Agent::builder()
-        .with_identity(AnonymousIdentity)
-        .with_transport(ReqwestTransport::create(
-            Url::parse(&network_url)
-                .context(format!("Failed to parse URL {}", network_url.clone()))?,
-        )?)
-        .build()?;
+    for token_def in token_defs.iter() {
+        let storage = Arc::new(match args.store_type {
+            StoreType::InMemory => StorageClient::new_in_memory()?,
+            StoreType::File => {
+                let mut path = args.multi_tokens_store_dir.clone();
+                path.push(format!("{}.db", PrincipalId::from(token_def.ledger_id)));
+                StorageClient::new_persistent(&path).unwrap()
+            }
+        });
 
-    // Only fetch root key if the network is not the mainnet
-    if !args.is_mainnet() {
-        debug!("Network type is not mainnet --> Trying to fetch root key");
-        ic_agent.fetch_root_key().await?;
-    }
+        let network_url = args.effective_network_url();
 
-    debug!("Rosetta connects to : {}", network_url);
+        let ic_agent = Agent::builder()
+            .with_identity(AnonymousIdentity)
+            .with_transport(ReqwestTransport::create(
+                Url::parse(&network_url)
+                    .context(format!("Failed to parse URL {}", network_url.clone()))?,
+            )?)
+            .build()?;
 
-    debug!(
-        "Network status is : {:?}",
-        ic_agent.status().await?.replica_health_status
-    );
-
-    let icrc1_agent = Arc::new(Icrc1Agent {
-        agent: ic_agent,
-        ledger_canister_id: args.ledger_id.into(),
-    });
-
-    let metadata = load_metadata(&args, &icrc1_agent, &storage).await?;
-    if let Some(token_symbol) = args.icrc1_symbol.clone() {
-        if metadata.symbol != token_symbol {
-            bail!(
-                "Provided symbol does not match symbol retrieved in online mode. Expected: {}, Got: {}",
-                metadata.symbol, token_symbol
-            );
+        // Only fetch root key if the network is not the mainnet
+        if !args.is_mainnet() {
+            debug!("Network type is not mainnet --> Trying to fetch root key");
+            ic_agent.fetch_root_key().await?;
         }
+
+        debug!("Rosetta connects to : {}", network_url);
+
+        debug!(
+            "Network status is : {:?}",
+            ic_agent.status().await?.replica_health_status
+        );
+
+        let icrc1_agent = Arc::new(Icrc1Agent {
+            agent: ic_agent,
+            ledger_canister_id: token_def.ledger_id.into(),
+        });
+
+        let metadata = load_metadata(token_def, &icrc1_agent, &storage, args.offline).await?;
+        if token_def.icrc1_symbol.is_some() {
+            if metadata.symbol != token_def.icrc1_symbol.clone().unwrap() {
+                bail!(
+                    "Provided symbol does not match symbol retrieved in online mode. Expected: {}, Got: {}",
+                    metadata.symbol, token_def.icrc1_symbol.clone().unwrap()
+                );
+            }
+        }
+
+        info!(
+            "ICRC Rosetta is connected to the ICRC-1 ledger: {}",
+            token_def.ledger_id
+        );
+        info!(
+            "The token symbol of the ICRC-1 ledger is: {}",
+            metadata.symbol
+        );
+
+        let shared_state = Arc::new(AppState {
+            icrc1_agent: icrc1_agent.clone(),
+            ledger_id: token_def.ledger_id,
+            synched: Arc::new(Mutex::new(None)),
+            storage: storage.clone(),
+            archive_canister_ids: Arc::new(AsyncMutex::new(vec![])),
+            metadata,
+        });
+
+        token_states
+            .insert(token_def.ledger_id.to_string(), shared_state.clone());
     }
 
-    info!(
-        "ICRC Rosetta is connected to the ICRC-1 ledger: {}",
-        args.ledger_id
-    );
-    info!(
-        "The token symbol of the ICRC-1 ledger is: {}",
-        metadata.symbol
-    );
-
-    let shared_state = Arc::new(AppState {
-        icrc1_agent: icrc1_agent.clone(),
-        ledger_id: args.ledger_id,
-        synched: Arc::new(Mutex::new(None)),
-        storage: storage.clone(),
-        archive_canister_ids: Arc::new(AsyncMutex::new(vec![])),
-        metadata,
+    let token_app_states = Arc::new(MultiTokenAppState {
+        token_states: token_states.clone(),
     });
 
     if args.exit_on_sync {
@@ -354,15 +433,28 @@ async fn main() -> Result<()> {
         }
 
         info!("Starting to sync blocks");
-        start_synching_blocks(
-            icrc1_agent.clone(),
-            storage.clone(),
-            *MAXIMUM_BLOCKS_PER_REQUEST,
-            Arc::new(AsyncMutex::new(vec![])),
-            RecurrencyMode::OneShot,
-        )
-        .await?;
+        // Run start_synching_blocks for each shared state concurrently and blocks until all of them are finished.
+        let futures = token_app_states
+            .token_states
+            .values()
+            .map(|shared_state| async move {
+                start_synching_blocks(
+                    shared_state.icrc1_agent.clone(),
+                    shared_state.storage.clone(),
+                    *MAXIMUM_BLOCKS_PER_REQUEST,
+                    shared_state.archive_canister_ids.clone(),
+                    RecurrencyMode::OneShot,
+                )
+                .await
+            });
+        let results = futures::future::join_all(futures).await;
 
+        // If any sync fails, the process will exit with an error code.
+        for result in results {
+            if let Err(err) = result {
+                bail!("Failed to sync blocks: {}", err);
+            }
+        }
         process::exit(0);
     }
 
@@ -394,7 +486,7 @@ async fn main() -> Result<()> {
         // request extensions. Note that it should be added after the
         // Trace layer.
         .layer(RequestIdLayer)
-        .with_state(shared_state.clone());
+        .with_state(token_app_states.clone());
 
     let rosetta_url = format!("0.0.0.0:{}", args.get_port());
     let tcp_listener = TcpListener::bind(rosetta_url.clone()).await?;
@@ -407,30 +499,26 @@ async fn main() -> Result<()> {
     }
 
     if !args.offline {
-        tokio::task::spawn_blocking(move || {
-            let block_sync_storage = match args.store_type {
-                StoreType::InMemory => storage.clone(),
-                StoreType::File => {
-                    Arc::new(StorageClient::new_persistent(&args.store_file).unwrap())
-                }
-            };
-
-            tokio::runtime::Handle::current()
-                .block_on(async {
-                    start_synching_blocks(
-                        icrc1_agent.clone(),
-                        block_sync_storage,
-                        *MAXIMUM_BLOCKS_PER_REQUEST,
-                        shared_state.archive_canister_ids.clone(),
-                        RecurrencyMode::Recurrent(RecurrencyConfig {
-                            min_recurrency_wait: Duration::from_secs(BLOCK_SYNC_WAIT_SECS),
-                            max_recurrency_wait: Duration::from_secs(MAX_BLOCK_SYNC_WAIT_SECS),
-                            backoff_factor: 2,
-                        }),
-                    )
-                    .await
-                })
-                .unwrap();
+        let all_sync_tasks = token_app_states.token_states.values().map(|shared_state| {
+            let shared_state = Arc::clone(shared_state);
+            tokio::task::spawn_blocking(move || {
+                tokio::runtime::Handle::current()
+                    .block_on(async {
+                        start_synching_blocks(
+                            shared_state.icrc1_agent.clone(),
+                            shared_state.storage.clone(),
+                            *MAXIMUM_BLOCKS_PER_REQUEST,
+                            shared_state.archive_canister_ids.clone(),
+                            RecurrencyMode::Recurrent(RecurrencyConfig {
+                                min_recurrency_wait: Duration::from_secs(BLOCK_SYNC_WAIT_SECS),
+                                max_recurrency_wait: Duration::from_secs(MAX_BLOCK_SYNC_WAIT_SECS),
+                                backoff_factor: 2,
+                            }),
+                        )
+                        .await
+                    })
+                    .unwrap();
+            })
         });
     }
 

@@ -17,6 +17,7 @@ axum = { workspace = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
 clap = { workspace = true }
+futures = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }

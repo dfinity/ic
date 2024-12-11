@@ -6,7 +6,7 @@ use crate::{
         storage::storage_client::StorageClient,
         types::{ApproveMetadata, BlockMetadata, OperationType, TransactionMetadata},
     },
-    AppState,
+    AppState, MultiTokenAppState
 };
 use anyhow::{bail, Context};
 use candid::Nat;
@@ -20,11 +20,22 @@ use rosetta_core::{
 use serde_bytes::ByteBuf;
 use std::fmt::Write;
 use std::time::Duration;
+use ic_base_types::{CanisterId, PrincipalId};
+use std::sync::Arc;
 
-pub fn verify_network_id(
+pub fn get_state_from_network_id(
     network_identifier: &NetworkIdentifier,
-    state: &AppState,
-) -> anyhow::Result<()> {
+    multitoken_state: &MultiTokenAppState,
+) -> anyhow::Result<Arc<AppState>> {
+
+    let state = match multitoken_state.token_states.get(network_identifier.network.as_str()) {
+        Some(state) => state.clone(),
+        None => bail!(
+            "Network Identifier {} not being tracked",
+            network_identifier.blockchain
+        ),
+    };
+
     let expected = &NetworkIdentifier::new(
         DEFAULT_BLOCKCHAIN.to_owned(),
         state.icrc1_agent.ledger_canister_id.to_string(),
@@ -37,7 +48,7 @@ pub fn verify_network_id(
             network_identifier
         )
     }
-    Ok(())
+    Ok(state.clone())
 }
 
 pub fn convert_timestamp_to_millis(timestamp_nanos: u64) -> anyhow::Result<u64> {

@@ -29,12 +29,14 @@ use rosetta_core::response_types::SearchTransactionsResponse;
 use rosetta_core::{identifiers::*, miscellaneous::Version, objects::*, response_types::*};
 use strum::IntoEnumIterator;
 
-pub fn network_list(ledger_id: &Principal) -> NetworkListResponse {
+pub fn network_list(ledger_ids: &[Principal]) -> NetworkListResponse {
     NetworkListResponse {
-        network_identifiers: vec![NetworkIdentifier::new(
-            DEFAULT_BLOCKCHAIN.to_owned(),
-            ledger_id.to_string(),
-        )],
+        network_identifiers: ledger_ids
+            .iter()
+            .map(|ledger_id| {
+                NetworkIdentifier::new(DEFAULT_BLOCKCHAIN.to_owned(), ledger_id.to_string())
+            })
+            .collect(),
     }
 }
 

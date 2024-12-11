@@ -29,6 +29,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:clap",  # no clap because feature derive
+    "@crate_index//:futures",
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
     "@crate_index//:indicatif",
@@ -65,7 +66,6 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/icrc1/client:ic-icrc-rosetta-client",
     "//rs/rosetta-api/icrc1/runner:ic-icrc-rosetta-runner",
     "//rs/test_utilities/load_wasm",
-    "@crate_index//:futures",
     "@crate_index//:ic-utils",
     "@crate_index//:once_cell",
 ]
