@@ -13,7 +13,6 @@ use ic_interfaces::{
     dkg::{ChangeAction, DkgPool, Mutations},
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
 };
-use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::{
     buckets::{decimal_buckets, linear_buckets},
@@ -25,8 +24,7 @@ use ic_types::{
         threshold_sig::ni_dkg::{config::NiDkgConfig, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         Signed,
     },
-    signature::ThresholdSignature,
-    Height, NodeId, RegistryVersion, SubnetId, Time,
+    Height, NodeId,
 };
 pub(crate) use payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason};
 use prometheus::Histogram;
@@ -420,7 +418,7 @@ mod tests {
         consensus_pool::ConsensusPool,
         p2p::consensus::{MutablePool, UnvalidatedArtifact},
     };
-    use ic_interfaces_registry::RegistryVersionedRecord;
+    use ic_interfaces_registry::RegistryClient;
     use ic_metrics::MetricsRegistry;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::crypto::CryptoReturningOk;
@@ -428,10 +426,10 @@ mod tests {
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
+        consensus::{Block, BlockPayload},
         crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTargetId, NiDkgTargetSubnet},
-        registry::RegistryClientError,
         time::UNIX_EPOCH,
-        PrincipalId, RegistryVersion, ReplicaVersion,
+        RegistryVersion, ReplicaVersion,
     };
     use std::{collections::BTreeSet, convert::TryFrom};
 
@@ -1850,64 +1848,6 @@ mod tests {
                 assert_eq!(next_transcript.dkg_id.start_block_height, Height::from(15));
             }
         });
-    }
-
-    /// `RegistryClient` implementation that allows to provide a custom function
-    /// to provide a `get_versioned_value`.
-    struct MockRegistryClient<F>
-    where
-        F: Fn(&str, RegistryVersion) -> Option<Vec<u8>>,
-    {
-        latest_registry_version: RegistryVersion,
-        get_versioned_value_fun: F,
-    }
-
-    impl<F> MockRegistryClient<F>
-    where
-        F: Fn(&str, RegistryVersion) -> Option<Vec<u8>>,
-    {
-        fn new(latest_registry_version: RegistryVersion, get_versioned_value_fun: F) -> Self {
-            Self {
-                latest_registry_version,
-                get_versioned_value_fun,
-            }
-        }
-    }
-
-    impl<F> RegistryClient for MockRegistryClient<F>
-    where
-        F: Fn(&str, RegistryVersion) -> Option<Vec<u8>> + Send + Sync,
-    {
-        fn get_versioned_value(
-            &self,
-            key: &str,
-            version: RegistryVersion,
-        ) -> ic_interfaces_registry::RegistryClientVersionedResult<Vec<u8>> {
-            let value = (self.get_versioned_value_fun)(key, version);
-            Ok(RegistryVersionedRecord {
-                key: key.to_string(),
-                version,
-                value,
-            })
-        }
-
-        // Not needed for this test
-        fn get_key_family(
-            &self,
-            _: &str,
-            _: RegistryVersion,
-        ) -> Result<Vec<String>, RegistryClientError> {
-            Ok(vec![])
-        }
-
-        fn get_latest_version(&self) -> RegistryVersion {
-            self.latest_registry_version
-        }
-
-        // Not needed for this test
-        fn get_version_timestamp(&self, _: RegistryVersion) -> Option<Time> {
-            None
-        }
     }
 
     fn new_dkg_key_manager(

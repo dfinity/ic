@@ -1,4 +1,4 @@
-//! TODO
+//! This module contains functions for constructing CUPs from summaries
 
 use crate::{
     dkg::payload_builder::get_dkg_summary_from_cup_contents,
@@ -8,7 +8,6 @@ use crate::{
         utils::{get_idkg_chain_key_config_if_enabled, inspect_idkg_chain_key_initializations},
     },
 };
-use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
@@ -20,12 +19,11 @@ use ic_types::{
         Payload, RandomBeaconContent, Rank, SummaryPayload,
     },
     crypto::{
-        crypto_hash,
-        threshold_sig::ni_dkg::{config::NiDkgConfig, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
+        crypto_hash, threshold_sig::ni_dkg::NiDkgTag, CombinedThresholdSig, CombinedThresholdSigOf,
+        CryptoHash, Signed,
     },
     signature::ThresholdSignature,
-    Height, NodeId, RegistryVersion, SubnetId, Time,
+    Height, RegistryVersion, SubnetId, Time,
 };
 use phantom_newtype::Id;
 
@@ -220,6 +218,19 @@ fn bootstrap_idkg_summary(
 
 #[cfg(test)]
 mod tests {
+    use crate::cup_utils::make_registry_cup;
+    use ic_crypto_test_utils_ni_dkg::dummy_initial_dkg_transcript;
+    use ic_interfaces_registry::{RegistryClient, RegistryVersionedRecord};
+    use ic_logger::no_op_logger;
+    use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetRecord};
+    use ic_types::{
+        consensus::HasVersion,
+        crypto::{threshold_sig::ni_dkg::NiDkgTag, CryptoHash},
+        registry::RegistryClientError,
+        Height, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, Time,
+    };
+    use ic_types_test_utils::ids::subnet_test_id;
+
     #[test]
     fn test_make_registry_cup() {
         let registry_client = MockRegistryClient::new(RegistryVersion::from(12345), |key, _| {
@@ -285,5 +296,63 @@ mod tests {
             &ReplicaVersion::try_from("TestID").unwrap()
         );
         assert_eq!(result.signature.signer.dealer_subnet, subnet_test_id(0));
+    }
+
+    /// `RegistryClient` implementation that allows to provide a custom function
+    /// to provide a `get_versioned_value`.
+    struct MockRegistryClient<F>
+    where
+        F: Fn(&str, RegistryVersion) -> Option<Vec<u8>>,
+    {
+        latest_registry_version: RegistryVersion,
+        get_versioned_value_fun: F,
+    }
+
+    impl<F> MockRegistryClient<F>
+    where
+        F: Fn(&str, RegistryVersion) -> Option<Vec<u8>>,
+    {
+        fn new(latest_registry_version: RegistryVersion, get_versioned_value_fun: F) -> Self {
+            Self {
+                latest_registry_version,
+                get_versioned_value_fun,
+            }
+        }
+    }
+
+    impl<F> RegistryClient for MockRegistryClient<F>
+    where
+        F: Fn(&str, RegistryVersion) -> Option<Vec<u8>> + Send + Sync,
+    {
+        fn get_versioned_value(
+            &self,
+            key: &str,
+            version: RegistryVersion,
+        ) -> ic_interfaces_registry::RegistryClientVersionedResult<Vec<u8>> {
+            let value = (self.get_versioned_value_fun)(key, version);
+            Ok(RegistryVersionedRecord {
+                key: key.to_string(),
+                version,
+                value,
+            })
+        }
+
+        // Not needed for this test
+        fn get_key_family(
+            &self,
+            _: &str,
+            _: RegistryVersion,
+        ) -> Result<Vec<String>, RegistryClientError> {
+            Ok(vec![])
+        }
+
+        fn get_latest_version(&self) -> RegistryVersion {
+            self.latest_registry_version
+        }
+
+        // Not needed for this test
+        fn get_version_timestamp(&self, _: RegistryVersion) -> Option<Time> {
+            None
+        }
     }
 }
