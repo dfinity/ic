@@ -10183,6 +10183,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-timestamp"
+version = "0.0.1"
+dependencies = [
+ "time",
+]
+
+[[package]]
 name = "ic-networking-subnet-update-workload"
 version = "0.9.0"
 dependencies = [
@@ -11924,6 +11931,7 @@ dependencies = [
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
+ "ic-nervous-system-timestamp",
  "ic-nns-constants",
  "ic-protobuf",
  "ic-sns-governance",
@@ -11956,7 +11964,6 @@ dependencies = [
  "strum",
  "strum_macros",
  "tempfile",
- "time",
  "tokio",
  "tokio-test",
 ]
@@ -18160,8 +18167,10 @@ name = "random-traffic-test"
 version = "0.9.0"
 dependencies = [
  "candid",
- "dfn_core",
+ "futures",
  "ic-base-types",
+ "ic-cdk 0.16.0",
+ "ic-cdk-macros 0.9.0",
  "ic-error-types",
  "ic-types",
  "rand 0.8.5",
@@ -18484,9 +18493,10 @@ dependencies = [
 name = "rejoin-test-lib"
 version = "0.9.0"
 dependencies = [
+ "candid",
  "canister-test",
  "chrono",
- "dfn_json",
+ "dfn_candid",
  "futures",
  "ic-system-test-driver",
  "slog",
@@ -20181,10 +20191,12 @@ dependencies = [
 name = "statesync-test"
 version = "0.9.0"
 dependencies = [
+ "candid",
  "canister-test",
- "dfn_core",
- "dfn_json",
- "dfn_macro",
+ "ic-cdk 0.16.0",
+ "ic-cdk-macros 0.9.0",
+ "ic-management-canister-types",
+ "ic-state-machine-tests",
  "ic-test-utilities",
  "ic-types",
  "lazy_static",
