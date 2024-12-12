@@ -225,7 +225,7 @@ mod update_balance {
                 &mut runtime,
                 vec![
                     NOW,                         // start time of `update_balance` method
-                    NOW,                         // time used to process UTXOs
+                    NOW,                         // time used to triage processable UTXOs
                     NOW.saturating_add(latency), // time used in `schedule_now` call at end of `update_balance`
                     NOW.saturating_add(latency), // end time of `update_balance` method
                 ],
