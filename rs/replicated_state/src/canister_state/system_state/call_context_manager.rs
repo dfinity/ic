@@ -17,6 +17,7 @@ use ic_types::{
     user_id_into_protobuf, user_id_try_from_protobuf, CanisterId, Cycles, Funds, NumInstructions,
     PrincipalId, Time, UserId,
 };
+use im::OrdMap;
 use serde::{Deserialize, Serialize};
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
@@ -277,8 +278,8 @@ impl CallContextManagerStats {
     ///
     /// Time complexity: `O(n)`.
     pub(crate) fn calculate_stats(
-        call_contexts: &BTreeMap<CallContextId, CallContext>,
-        callbacks: &BTreeMap<CallbackId, Arc<Callback>>,
+        call_contexts: &OrdMap<CallContextId, CallContext>,
+        callbacks: &OrdMap<CallbackId, Arc<Callback>>,
     ) -> CallContextManagerStats {
         let unresponded_canister_update_call_contexts = call_contexts
             .values()
@@ -418,11 +419,11 @@ pub struct CallContextManager {
     next_callback_id: u64,
 
     /// Call contexts (including deleted ones) that still have open callbacks.
-    call_contexts: BTreeMap<CallContextId, CallContext>,
+    call_contexts: OrdMap<CallContextId, CallContext>,
 
     /// Callbacks still awaiting response, plus the callback of the currently
     /// paused or aborted DTS response execution, if any.
-    callbacks: BTreeMap<CallbackId, Arc<Callback>>,
+    callbacks: OrdMap<CallbackId, Arc<Callback>>,
 
     /// Callback deadline priority queue. Holds all not-yet-expired best-effort
     /// callbacks, ordered by deadline. `CallbackIds` break ties, ensuring
@@ -575,7 +576,7 @@ impl CallContextManager {
 
     /// Returns the currently open `CallContexts` maintained by this
     /// `CallContextManager`.
-    pub fn call_contexts(&self) -> &BTreeMap<CallContextId, CallContext> {
+    pub fn call_contexts(&self) -> &OrdMap<CallContextId, CallContext> {
         &self.call_contexts
     }
 
@@ -605,7 +606,7 @@ impl CallContextManager {
     }
 
     /// Returns the `Callback`s maintained by this `CallContextManager`.
-    pub fn callbacks(&self) -> &BTreeMap<CallbackId, Arc<Callback>> {
+    pub fn callbacks(&self) -> &OrdMap<CallbackId, Arc<Callback>> {
         &self.callbacks
     }
 
@@ -972,7 +973,9 @@ impl CallContextManager {
     ) -> Vec<R> {
         let mut reject_responses = Vec::new();
 
-        for call_context in self.call_contexts.values_mut() {
+        let ids: Vec<_> = self.call_contexts.keys().cloned().collect();
+        for id in ids {
+            let call_context = self.call_contexts.get_mut(&id).unwrap();
             if !call_context.has_responded() {
                 // Generate a reject response.
                 if let Some(response) = reject(call_context) {
@@ -1089,13 +1092,16 @@ impl TryFrom<pb::CallContextManager> for CallContextManager {
                 Ok((callback.deadline, callback_id))
             })
             .collect::<Result<_, ProxyDecodeError>>()?;
-        let stats = CallContextManagerStats::calculate_stats(&call_contexts, &callbacks);
+        let stats = CallContextManagerStats::calculate_stats(
+            &OrdMap::from(call_contexts.clone()),
+            &OrdMap::from(callbacks.clone()),
+        );
 
         let ccm = Self {
             next_call_context_id: value.next_call_context_id,
             next_callback_id: value.next_callback_id,
-            call_contexts,
-            callbacks,
+            call_contexts: OrdMap::from(call_contexts),
+            callbacks: OrdMap::from(callbacks),
             unexpired_callbacks,
             stats,
         };
@@ -1109,7 +1115,7 @@ impl TryFrom<pb::CallContextManager> for CallContextManager {
 ///
 /// Time complexity: `O(n)`.
 fn calculate_callback_deadlines(
-    callbacks: &BTreeMap<CallbackId, Arc<Callback>>,
+    callbacks: &OrdMap<CallbackId, Arc<Callback>>,
 ) -> BTreeSet<(CoarseTime, CallbackId)> {
     callbacks
         .iter()
