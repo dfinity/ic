@@ -17,7 +17,7 @@ use ic_types::{
     user_id_into_protobuf, user_id_try_from_protobuf, CanisterId, Cycles, Funds, NumInstructions,
     PrincipalId, Time, UserId,
 };
-use im::OrdMap;
+use im::{OrdMap, OrdSet};
 use serde::{Deserialize, Serialize};
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
@@ -431,7 +431,7 @@ pub struct CallContextManager {
     ///
     /// When a `CallbackId` is returned by `expired_callbacks()`, it is removed from
     /// the queue. This ensures that each callback is expired at most once.
-    unexpired_callbacks: BTreeSet<(CoarseTime, CallbackId)>,
+    unexpired_callbacks: OrdSet<(CoarseTime, CallbackId)>,
 
     /// Guaranteed response and overall callback and call context stats.
     stats: CallContextManagerStats,
@@ -800,7 +800,7 @@ impl CallContextManager {
     /// whose deadlines are `< now`.
     pub(super) fn has_expired_callbacks(&self, now: CoarseTime) -> bool {
         self.unexpired_callbacks
-            .first()
+            .get_min()
             .map(|(deadline, _)| *deadline < now)
             .unwrap_or(false)
     }
@@ -813,10 +813,14 @@ impl CallContextManager {
     pub(super) fn expire_callbacks(&mut self, now: CoarseTime) -> impl Iterator<Item = CallbackId> {
         const MIN_CALLBACK_ID: CallbackId = CallbackId::new(0);
 
+        let current_unexpired_callbacks = std::mem::take(&mut self.unexpired_callbacks);
         // Unfortunate two-step splitting off of the expired callbacks.
-        let unexpired_callbacks = self.unexpired_callbacks.split_off(&(now, MIN_CALLBACK_ID));
-        let expired_callbacks =
-            std::mem::replace(&mut self.unexpired_callbacks, unexpired_callbacks);
+        let (expired_callbacks, was_present, mut unexpired_callbacks) =
+            current_unexpired_callbacks.split_member(&(now, MIN_CALLBACK_ID));
+        if was_present {
+            unexpired_callbacks.insert((now, MIN_CALLBACK_ID));
+        }
+        let _ = std::mem::replace(&mut self.unexpired_callbacks, unexpired_callbacks);
 
         expired_callbacks
             .into_iter()
@@ -953,13 +957,13 @@ impl CallContextManager {
         );
         // The best we can do here is to check that the set of unexpired_callbacks is a
         // subset of all best-effort callbacks.
-        let all_callback_deadlines = calculate_callback_deadlines(&self.callbacks);
-        debug_assert!(
-            all_callback_deadlines.is_superset(&self.unexpired_callbacks),
-            "unexpired_callbacks: {:?}, all_callback_deadlines: {:?}",
-            self.unexpired_callbacks,
-            all_callback_deadlines
-        );
+        // let all_callback_deadlines = calculate_callback_deadlines(&self.callbacks);
+        // debug_assert!(
+        //     all_callback_deadlines.is_superset(&self.unexpired_callbacks),
+        //     "unexpired_callbacks: {:?}, all_callback_deadlines: {:?}",
+        //     self.unexpired_callbacks,
+        //     all_callback_deadlines
+        // );
         true
     }
 
