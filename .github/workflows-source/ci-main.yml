@@ -35,7 +35,7 @@ anchors:
     image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
   dind-large-setup: &dind-large-setup
     runs-on:
-      labels: dind-small
+      labels: dind-test
     container:
       <<: *image
       options: >-
@@ -94,9 +94,6 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     <<: *dind-large-setup
-    runs-on:
-      group: zh1
-      labels: dind-large
     env:
       AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
