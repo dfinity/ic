@@ -53,10 +53,9 @@ mod transaction_store;
 mod get_successors_handler;
 
 use crate::{
-    get_successors_handler::GetSuccessorsHandler, router::start_main_event_loop,
-    rpc_server::start_grpc_server, stream::StreamEvent,
+    blockchainstate::BlockchainState, get_successors_handler::GetSuccessorsHandler,
+    router::start_main_event_loop, rpc_server::start_grpc_server, stream::StreamEvent,
 };
-pub use blockchainstate::BlockchainState;
 
 /// This struct is used to represent commands given to the adapter in order to interact
 /// with BTC nodes.
