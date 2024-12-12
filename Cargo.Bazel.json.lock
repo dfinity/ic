@@ -1,5 +1,5 @@
 {
-  "checksum": "29d9eb9638ae5b2ea5fb6ba946dd58ada211de04dcb3f3b78ade255f40de683a",
+  "checksum": "8f66fc14a7fbc3ec5fcbf78895cbfaddc257972df36e30b586ab8f141fedb435",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7653,6 +7653,60 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "bitmaps 2.1.0": {
+      "name": "bitmaps",
+      "version": "2.1.0",
+      "package_url": "https://github.com/bodil/bitmaps",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bitmaps/2.1.0/download",
+          "sha256": "031043d04099746d8db04daf1fa424b2bc8bd69d92b25962dcde24da39ab64a2"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bitmaps",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bitmaps",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "typenum 1.17.0",
+              "target": "typenum"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "2.1.0"
+      },
+      "license": "MPL-2.0+",
+      "license_ids": [
+        "MPL-2.0"
+      ],
+      "license_file": null
     },
     "bitvec 1.0.1": {
       "name": "bitvec",
@@ -18760,6 +18814,10 @@
             {
               "id": "idna 1.0.3",
               "target": "idna"
+            },
+            {
+              "id": "im 15.1.0",
+              "target": "im"
             },
             {
               "id": "indexmap 2.2.6",
@@ -34723,6 +34781,102 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "im 15.1.0": {
+      "name": "im",
+      "version": "15.1.0",
+      "package_url": "https://github.com/bodil/im-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/im/15.1.0/download",
+          "sha256": "d0acd33ff0285af998aaf9b57342af478078f53492322fafc47450e09397e0e9"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "im",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "im",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bitmaps 2.1.0",
+              "target": "bitmaps"
+            },
+            {
+              "id": "im 15.1.0",
+              "target": "build_script_build"
+            },
+            {
+              "id": "rand_core 0.6.4",
+              "target": "rand_core"
+            },
+            {
+              "id": "rand_xoshiro 0.6.0",
+              "target": "rand_xoshiro"
+            },
+            {
+              "id": "sized-chunks 0.6.5",
+              "target": "sized_chunks"
+            },
+            {
+              "id": "typenum 1.17.0",
+              "target": "typenum"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "15.1.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "version_check 0.9.4",
+              "target": "version_check"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MPL-2.0+",
+      "license_ids": [
+        "MPL-2.0"
+      ],
+      "license_file": null
     },
     "impl-codec 0.6.0": {
       "name": "impl-codec",
@@ -54394,12 +54548,6 @@
                 "target": "libc"
               }
             ],
-            "aarch64-pc-windows-msvc": [
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
             "aarch64-unknown-linux-gnu": [
               {
                 "id": "libc 0.2.158",
@@ -54448,12 +54596,6 @@
                 "target": "libc"
               }
             ],
-            "i686-pc-windows-msvc": [
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
             "i686-unknown-freebsd": [
               {
                 "id": "libc 0.2.158",
@@ -54497,12 +54639,6 @@
               }
             ],
             "x86_64-linux-android": [
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
-            "x86_64-pc-windows-msvc": [
               {
                 "id": "libc 0.2.158",
                 "target": "libc"
@@ -55347,6 +55483,54 @@
         },
         "edition": "2018",
         "version": "0.3.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "rand_xoshiro 0.6.0": {
+      "name": "rand_xoshiro",
+      "version": "0.6.0",
+      "package_url": "https://github.com/rust-random/rngs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rand_xoshiro/0.6.0/download",
+          "sha256": "6f97cdb2a36ed4183de61b2f824cc45c9f1037f28afe0a322e9fff4c108b5aaa"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rand_xoshiro",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rand_xoshiro",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "rand_core 0.6.4",
+              "target": "rand_core"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.6.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -61473,11 +61657,6 @@
               "time",
               "use-libc-auxv"
             ],
-            "aarch64-pc-windows-msvc": [
-              "default",
-              "termios",
-              "use-libc-auxv"
-            ],
             "aarch64-unknown-linux-gnu": [
               "default",
               "event",
@@ -61568,11 +61747,6 @@
               "process",
               "termios",
               "time",
-              "use-libc-auxv"
-            ],
-            "i686-pc-windows-msvc": [
-              "default",
-              "termios",
               "use-libc-auxv"
             ],
             "i686-unknown-freebsd": [
@@ -61687,11 +61861,6 @@
               "process",
               "termios",
               "time",
-              "use-libc-auxv"
-            ],
-            "x86_64-pc-windows-msvc": [
-              "default",
-              "termios",
               "use-libc-auxv"
             ],
             "x86_64-unknown-freebsd": [
@@ -61809,46 +61978,9 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
-            "aarch64-unknown-linux-gnu": [
-              {
-                "id": "errno 0.3.8",
-                "target": "errno",
-                "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
-            "aarch64-unknown-nixos-gnu": [
-              {
-                "id": "errno 0.3.8",
-                "target": "errno",
-                "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
               }
             ],
             "aarch64-unknown-nto-qnx710": [
-              {
-                "id": "errno 0.3.8",
-                "target": "errno",
-                "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
-            "arm-unknown-linux-gnueabi": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -61931,24 +62063,9 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
               }
             ],
             "i686-unknown-freebsd": [
-              {
-                "id": "errno 0.3.8",
-                "target": "errno",
-                "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
-            "i686-unknown-linux-gnu": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -62096,35 +62213,9 @@
                 "id": "errno 0.3.8",
                 "target": "errno",
                 "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
               }
             ],
             "x86_64-unknown-freebsd": [
-              {
-                "id": "errno 0.3.8",
-                "target": "errno",
-                "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
-            "x86_64-unknown-linux-gnu": [
-              {
-                "id": "errno 0.3.8",
-                "target": "errno",
-                "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.158",
-                "target": "libc"
-              }
-            ],
-            "x86_64-unknown-nixos-gnu": [
               {
                 "id": "errno 0.3.8",
                 "target": "errno",
@@ -67660,6 +67751,64 @@
       "license_ids": [
         "Apache-2.0",
         "MIT"
+      ],
+      "license_file": null
+    },
+    "sized-chunks 0.6.5": {
+      "name": "sized-chunks",
+      "version": "0.6.5",
+      "package_url": "https://github.com/bodil/sized-chunks",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/sized-chunks/0.6.5/download",
+          "sha256": "16d69225bde7a69b235da73377861095455d298f2b970996eec25ddbb42b3d1e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "sized_chunks",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "sized_chunks",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitmaps 2.1.0",
+              "target": "bitmaps"
+            },
+            {
+              "id": "typenum 1.17.0",
+              "target": "typenum"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.6.5"
+      },
+      "license": "MPL-2.0+",
+      "license_ids": [
+        "MPL-2.0"
       ],
       "license_file": null
     },
@@ -87944,6 +88093,7 @@
     "icrc1-test-env 0.1.1",
     "icrc1-test-suite 0.1.1",
     "idna 1.0.3",
+    "im 15.1.0",
     "indexmap 2.2.6",
     "indicatif 0.17.5",
     "indoc 1.0.9",

@@ -676,6 +676,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "idna": crate.spec(
                 version = "^1.0.2",
             ),
+            "im": crate.spec(
+                version = "^15.1.0",
+            ),
             "indexmap": crate.spec(
                 version = "^2.2.6",
             ),

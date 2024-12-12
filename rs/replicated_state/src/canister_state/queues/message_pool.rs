@@ -8,6 +8,7 @@ use ic_types::time::CoarseTime;
 use ic_types::{CountBytes, Time};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
+use im::OrdMap;
 use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
 use std::ops::{AddAssign, SubAssign};
@@ -326,8 +327,9 @@ impl TryFrom<pb_queues::canister_queues::CallbackReference> for CallbackReferenc
 #[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub(super) struct MessagePool {
     /// Pool contents.
-    #[validate_eq(CompareWithValidateEq)]
-    messages: BTreeMap<Id, RequestOrResponse>,
+    // #[validate_eq(CompareWithValidateEq)]
+    #[validate_eq(Ignore)]
+    messages: OrdMap<Id, RequestOrResponse>,
 
     /// Records the (implicit) deadlines of all the outbound guaranteed response
     /// requests (only).
@@ -661,7 +663,7 @@ impl MessagePool {
     /// `debug_assert!()` checks.
     ///
     /// Time complexity: `O(n)`.
-    fn calculate_message_stats(messages: &BTreeMap<Id, RequestOrResponse>) -> MessageStats {
+    fn calculate_message_stats(messages: &OrdMap<Id, RequestOrResponse>) -> MessageStats {
         let mut stats = MessageStats::default();
         for (id, msg) in messages.iter() {
             stats += MessageStats::stats_delta(msg, id.context());
@@ -754,7 +756,7 @@ impl MessagePool {
     /// Time complexity: `O(n * log(n))`.
     #[allow(clippy::type_complexity)]
     fn calculate_priority_queues(
-        messages: &BTreeMap<Id, RequestOrResponse>,
+        messages: &OrdMap<Id, RequestOrResponse>,
         outbound_guaranteed_request_deadlines: &BTreeMap<Id, CoarseTime>,
     ) -> (BTreeSet<(CoarseTime, Id)>, BTreeSet<(usize, Id)>) {
         let mut expected_deadline_queue = BTreeSet::new();
@@ -821,7 +823,7 @@ impl TryFrom<pb_queues::MessagePool> for MessagePool {
     fn try_from(item: pb_queues::MessagePool) -> Result<Self, Self::Error> {
         let message_count = item.messages.len();
 
-        let messages: BTreeMap<_, _> = item
+        let messages: BTreeMap<Id, RequestOrResponse> = item
             .messages
             .into_iter()
             .map(|entry| {
@@ -830,6 +832,7 @@ impl TryFrom<pb_queues::MessagePool> for MessagePool {
                 Ok((id, message))
             })
             .collect::<Result<_, Self::Error>>()?;
+        let messages: OrdMap<Id, RequestOrResponse> = OrdMap::from(messages);
         if messages.len() != message_count {
             return Err(ProxyDecodeError::Other("Duplicate Id".to_string()));
         }
