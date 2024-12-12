@@ -6664,6 +6664,7 @@ dependencies = [
  "mockall",
  "num-traits",
  "proptest",
+ "regex",
  "ripemd",
  "scopeguard",
  "serde",
