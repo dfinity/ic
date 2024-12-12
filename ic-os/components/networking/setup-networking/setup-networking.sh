@@ -67,6 +67,7 @@ function select_fastest_interface() {
                 BEST_IFACE="$IFACE"
                 echo "New best interface: $BEST_IFACE at $BEST_SPEED Mb/s"
             fi
+        fi
     done
 
     if [ -z "$BEST_IFACE" ]; then
