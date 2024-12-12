@@ -66,7 +66,10 @@ jobs:
           BRANCH="ic-nervous-system-wasms"
           FILE="mainnet-canisters.json"
 
-          python ci/src/revisions/git_lib.py --repo-root $REPO_ROOT sync-and-checkout --branch $BRANCH --main-branch master
+          # Cache the git_lib.py so it doesn't change between branch changes
+          cp ci/src/revisions/git_lib.py /tmp/git_lib.py
+
+          python /tmp/git_lib.py --repo-root $REPO_ROOT sync-and-checkout --branch $BRANCH --main-branch master
           bazel run //rs/nervous_system/tools/sync-with-released-nervous-system-wasms
-          python ci/src/revisions/git_lib.py --repo-root $REPO_ROOT commit-and-create-pr --branch $BRANCH --file $FILE
+          python /tmp/git_lib.py --repo-root $REPO_ROOT commit-and-create-pr --branch $BRANCH --file $FILE
         shell: bash
