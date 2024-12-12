@@ -846,7 +846,8 @@ impl StreamHandlerImpl {
                                 if response.deadline != NO_DEADLINE
                                     && matches!(
                                         err,
-                                        StateError::CanisterNotFound(_) | StateError::CanisterStopped(_)
+                                        StateError::CanisterNotFound(_)
+                                            | StateError::CanisterStopped(_)
                                     ) =>
                             {
                                 // These are expected edge cases for best effort responses;
