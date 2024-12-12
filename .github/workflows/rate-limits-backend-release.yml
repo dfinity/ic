@@ -13,11 +13,6 @@ on:
         required: true
         type: string
 
-      tag:
-        description: 'Tag for the release (required format `rate-limits-*`)'
-        required: false
-        type: string
-
 permissions:
   contents: write
 
@@ -50,18 +45,23 @@ jobs:
           OUTPUT='bazel-bin/rs/boundary_node/rate_limits/rate_limit_canister.wasm.gz'
           mv ${OUTPUT} rate_limit_canister.wasm.gz
 
+      - name: artifacts
+        shell: bash
+        run: |
           ARTIFACTS=(
             rate_limit_canister.wasm.gz
           )
 
-          echo "ARTIFACTS=${ARTIFACTS[@]}" >> "${GITHUB_ENV}"
+          echo "ARTIFACTS<<EOF"                                >> $GITHUB_ENV
+          for ARTIFACT in ${ARTIFACTS[@]}; do echo ${ARTIFACT} >> $GITHUB_ENV; done
+          echo "EOF"                                           >> $GITHUB_ENV
 
       - name: checksums
         shell: bash
         run: |
           CHECKSUMS=$(mktemp)
 
-          for ARTIFACT in ${ARTIFACTS[@]}; do
+          for ARTIFACT in ${ARTIFACTS}; do
               shasum -a256 ${ARTIFACT} >> ${CHECKSUMS}
           done
 
@@ -70,19 +70,8 @@ jobs:
       - name: tag
         shell: bash
         run: |
-          RELEASE_TAG='${{ inputs.tag }}'
-          if [[ -z "${RELEASE_TAG}" ]]; then
-            COMMIT_SHORT=$(git rev-parse --short HEAD)
-            RELEASE_TAG="${{ env.NAME }}-${COMMIT_SHORT}"
-          fi
-
-          if [[ ! "${RELEASE_TAG}" =~ ^${{ env.NAME }} ]]; then
-            echo "ERROR: Required tag prefix: ${{ env.NAME }}"
-            exit 1
-          fi
-
-          git tag ${RELEASE_TAG}
-          git push origin tag ${RELEASE_TAG}
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          RELEASE_TAG="${{ env.NAME }}-${COMMIT_SHORT}"
 
           echo "RELEASE_TAG=${RELEASE_TAG}" >> "${GITHUB_ENV}"
 
@@ -114,11 +103,10 @@ jobs:
           echo "NOTES=${NOTES}" >> "${GITHUB_ENV}"
 
       - name: release
-        shell: bash
-        run: |
-          gh release create \
-            ${RELEASE_TAG} ${ARTIFACTS[@]} \
-                --title '${{ inputs.title }}' \
-                --verify-tag \
-                --latest=false \
-                --notes-file ${NOTES}
+        uses: softprops/action-gh-release@7b4da11513bf3f43f9999e90eabced41ab8bb048
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ inputs.title }}
+          make_latest: false
+          body_path: ${{ env.NOTES }}
+          files: ${{ env.ARTIFACTS }}
