@@ -38,7 +38,6 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
-    crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     xnet_payload_builder::FakeXNetPayloadBuilder,
@@ -122,9 +121,6 @@ where
 
         let subnet_id = subnet_test_id(0);
         const VALIDATOR_NODE_ID: u64 = 42;
-        let ingress_signature_crypto = Arc::new(temp_crypto_component_with_fake_registry(
-            node_test_id(VALIDATOR_NODE_ID),
-        ));
         let mut state_manager = MockStateManager::new();
         state_manager.expect_get_state_at().return_const(Ok(
             ic_interfaces_state_manager::Labeled::new(
@@ -151,7 +147,6 @@ where
             Box::new(ingress_hist_reader),
             ingress_pool,
             registry_client.clone(),
-            ingress_signature_crypto,
             metrics_registry.clone(),
             subnet_id,
             no_op_logger(),

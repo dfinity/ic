@@ -30,7 +30,7 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::{
-    artifact_pool_config::with_test_pool_config, crypto::temp_crypto_component_with_fake_registry,
+    artifact_pool_config::with_test_pool_config,
     cycles_account_manager::CyclesAccountManagerBuilder,
 };
 use ic_test_utilities_registry::test_subnet_record;
@@ -99,9 +99,6 @@ where
     with_test_pool_config(|pool_config| {
         let metrics_registry = MetricsRegistry::new();
         const VALIDATOR_NODE_ID: u64 = 42;
-        let ingress_signature_crypto = Arc::new(temp_crypto_component_with_fake_registry(
-            node_test_id(VALIDATOR_NODE_ID),
-        ));
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
             node_test_id(VALIDATOR_NODE_ID),
@@ -116,7 +113,6 @@ where
             ingress_hist_reader,
             ingress_pool.clone(),
             registry.clone(),
-            ingress_signature_crypto,
             metrics_registry,
             subnet_id,
             no_op_logger(),

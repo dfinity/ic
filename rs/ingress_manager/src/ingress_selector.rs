@@ -654,7 +654,6 @@ mod tests {
     use ic_replicated_state::CanisterState;
     use ic_test_utilities::{
         artifact_pool_config::with_test_pool_config,
-        crypto::temp_crypto_component_with_fake_registry,
         cycles_account_manager::CyclesAccountManagerBuilder,
     };
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -1832,8 +1831,6 @@ mod tests {
                     }));
 
                 let metrics_registry = MetricsRegistry::new();
-                let ingress_signature_crypto =
-                    Arc::new(temp_crypto_component_with_fake_registry(node_id));
                 let cycles_account_manager = Arc::new(
                     CyclesAccountManagerBuilder::new()
                         .with_subnet_id(subnet_id)
@@ -1853,7 +1850,6 @@ mod tests {
                     Box::new(ingress_hist_reader),
                     ingress_pool.clone(),
                     registry,
-                    ingress_signature_crypto,
                     metrics_registry,
                     subnet_id,
                     log,

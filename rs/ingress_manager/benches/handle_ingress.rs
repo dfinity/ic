@@ -35,10 +35,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_snapshots::CanisterSnapshots, CanisterQueues, ReplicatedState, SystemMetadata,
 };
-use ic_test_utilities::{
-    crypto::temp_crypto_component_with_fake_registry,
-    cycles_account_manager::CyclesAccountManagerBuilder,
-};
+use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_registry::test_subnet_record;
 use ic_test_utilities_state::{MockIngressHistory, ReplicatedStateBuilder};
 use ic_test_utilities_time::FastForwardTimeSource;
@@ -206,9 +203,6 @@ where
                 .returning(move || Some(time_source_cl.get_relative_time()));
 
             let subnet_id = subnet_test_id(0);
-            let ingress_signature_crypto = Arc::new(temp_crypto_component_with_fake_registry(
-                node_test_id(VALIDATOR_NODE_ID),
-            ));
             let mut state_manager = MockStateManager::new();
             state_manager
                 .expect_get_state_at()
@@ -233,7 +227,6 @@ where
                 Box::new(ingress_hist_reader),
                 ingress_pool,
                 setup_registry(subnet_id, runtime.handle().clone()),
-                ingress_signature_crypto,
                 metrics_registry,
                 subnet_id,
                 log.clone(),

@@ -1,7 +1,6 @@
 use criterion::measurement::Measurement;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
 
-use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces::crypto::{BasicSigVerifier, BasicSigner, KeyManager};
@@ -11,7 +10,8 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::{
-    AlgorithmId, BasicSig, BasicSigOf, KeyPurpose, SignableMock, UserPublicKey, DOMAIN_IC_REQUEST,
+    AlgorithmId, BasicSig, BasicSigOf, KeyPurpose, Signable, SignableMock, UserPublicKey,
+    DOMAIN_IC_REQUEST,
 };
 use ic_types::{NodeId, RegistryVersion};
 use ic_types_test_utils::ids::{NODE_1, NODE_2};
@@ -51,7 +51,7 @@ fn crypto_basicsig_ed25519(criterion: &mut Criterion) {
                 &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
 
             if vault_type == VaultType::default() {
-                crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
+                crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng);
                 crypto_ed25519_basicsig_verify(group, msg_size, rng, vault_type);
             }
 
@@ -67,7 +67,7 @@ fn crypto_basicsig_p256(criterion: &mut Criterion) {
 
     for msg_size in MSG_SIZES {
         let group = &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
-        crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
+        crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng);
     }
 }
 
@@ -78,7 +78,7 @@ fn crypto_basicsig_secp256k1(criterion: &mut Criterion) {
 
     for msg_size in MSG_SIZES {
         let group = &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
-        crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
+        crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng);
     }
 }
 
@@ -89,7 +89,7 @@ fn crypto_basicsig_rsasha256(criterion: &mut Criterion) {
 
     for msg_size in MSG_SIZES {
         let group = &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
-        crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
+        crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng);
     }
 }
 
@@ -144,18 +144,21 @@ fn crypto_basicsig_verifybypubkey<M: Measurement, R: Rng + CryptoRng>(
     algorithm_id: AlgorithmId,
     msg_size: usize,
     rng: &mut R,
-    vault_type: VaultType,
 ) {
-    let (temp_crypto, _registry_data, _registry) = temp_crypto(NODE_1, rng, vault_type);
-
     let msg = random_signable_message_of_size(msg_size, rng);
     let (signature, public_key) = signature_from_random_keypair(&msg, algorithm_id, rng);
 
     group.bench_function("verifybypubkey", |bench| {
         bench.iter(|| {
-            assert!(temp_crypto
-                .verify_basic_sig_by_public_key(&signature, &msg, &public_key,)
-                .is_ok());
+            assert!(
+                ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key(
+                    public_key.algorithm_id,
+                    &msg.as_signed_bytes(),
+                    &signature.get_ref().0,
+                    &public_key.key
+                )
+                .is_ok()
+            );
         })
     });
 }

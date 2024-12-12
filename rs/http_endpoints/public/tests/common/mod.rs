@@ -39,7 +39,7 @@ use ic_replicated_state::{
     canister_snapshots::CanisterSnapshots, CanisterQueues, NetworkTopology, ReplicatedState,
     SystemMetadata,
 };
-use ic_test_utilities::crypto::{temp_crypto_component_with_fake_registry, CryptoReturningOk};
+use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
@@ -464,7 +464,6 @@ impl HttpEndpointBuilder {
         let nns_subnet_id = subnet_test_id(1);
         let node_id = node_test_id(1);
 
-        let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
 
         #[allow(clippy::disallowed_methods)]
@@ -484,7 +483,6 @@ impl HttpEndpointBuilder {
             crypto as Arc<_>,
             self.registry_client,
             self.tls_config,
-            sig_verifier,
             node_id,
             subnet_id,
             nns_subnet_id,

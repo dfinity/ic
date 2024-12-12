@@ -13,7 +13,6 @@ use axum::{
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::StatusCode;
-use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
@@ -53,7 +52,6 @@ pub struct CanisterReadStateServiceBuilder {
     malicious_flags: Option<MaliciousFlags>,
     delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
 }
 
@@ -68,7 +66,6 @@ impl CanisterReadStateServiceBuilder {
         log: ReplicaLogger,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         registry_client: Arc<dyn RegistryClient>,
-        ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
         delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     ) -> Self {
         Self {
@@ -77,7 +74,6 @@ impl CanisterReadStateServiceBuilder {
             malicious_flags: None,
             delegation_from_nns,
             state_reader,
-            ingress_verifier,
             registry_client,
         }
     }
@@ -103,7 +99,7 @@ impl CanisterReadStateServiceBuilder {
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
             delegation_from_nns: self.delegation_from_nns,
             state_reader: self.state_reader,
-            validator: build_validator(self.ingress_verifier, self.malicious_flags),
+            validator: build_validator(self.malicious_flags),
             registry_client: self.registry_client,
         };
         Router::new().route(
