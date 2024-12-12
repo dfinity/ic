@@ -209,9 +209,9 @@ thread_local! {
 
     static ARE_SET_VISIBILITY_PROPOSALS_ENABLED: Cell<bool> = const { Cell::new(true) };
 
-    static ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED: Cell<bool> = const { Cell::new(true) };
 
-    static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(true) };
 }
 
 thread_local! {
