@@ -75,7 +75,6 @@ pub mod test {
     // This function tests using a invalid JSON file.
     #[test]
     fn test_cli_get_config_bad_json() {
-        panic!("");
         let json = r#"{asdf"#;
 
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
