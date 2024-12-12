@@ -62,11 +62,9 @@ use std::ops::DerefMut;
 use std::time::Duration;
 
 const TRANSACTION_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
-const MAX_ACCOUNTS: usize = 28_000_000;
 /// The maximum number of transactions the ledger should return for a single
 /// get_transactions request.
 const MAX_TRANSACTIONS_PER_REQUEST: usize = 2_000;
-const ACCOUNTS_OVERFLOW_TRIM_QUANTITY: usize = 100_000;
 const MAX_TRANSACTIONS_IN_WINDOW: usize = 3_000_000;
 const MAX_TRANSACTIONS_TO_PURGE: usize = 100_000;
 #[allow(dead_code)]
@@ -577,21 +575,15 @@ pub struct Ledger {
     #[serde(default)]
     feature_flags: FeatureFlags,
 
-    #[serde(default = "default_maximum_number_of_accounts")]
+    // DEPRECATED
+    #[serde(default)]
     maximum_number_of_accounts: usize,
-    #[serde(default = "default_accounts_overflow_trim_quantity")]
+    // DEPRECATED
+    #[serde(default)]
     accounts_overflow_trim_quantity: usize,
 
     #[serde(default = "default_ledger_version")]
     pub ledger_version: u64,
-}
-
-fn default_maximum_number_of_accounts() -> usize {
-    MAX_ACCOUNTS
-}
-
-fn default_accounts_overflow_trim_quantity() -> usize {
-    ACCOUNTS_OVERFLOW_TRIM_QUANTITY
 }
 
 fn default_ledger_version() -> u64 {
@@ -672,8 +664,8 @@ impl Ledger {
                 .collect(),
             max_memo_length: max_memo_length.unwrap_or(DEFAULT_MAX_MEMO_LENGTH),
             feature_flags: feature_flags.unwrap_or_default(),
-            maximum_number_of_accounts: MAX_ACCOUNTS,
-            accounts_overflow_trim_quantity: ACCOUNTS_OVERFLOW_TRIM_QUANTITY,
+            maximum_number_of_accounts: 0,
+            accounts_overflow_trim_quantity: 0,
             ledger_version: LEDGER_VERSION,
         };
 
