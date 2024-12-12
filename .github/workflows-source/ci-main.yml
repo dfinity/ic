@@ -260,9 +260,6 @@ jobs:
     name: Build IC
     <<: *dind-large-setup
     # keep options from dind-large-setup but run on dind-small-setup
-    runs-on:
-      group: ch1
-      labels: dind-small
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - <<: *checkout
