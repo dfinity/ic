@@ -78,6 +78,7 @@ rust_test_suite(
         "@mozilla_root_ca_store//file",
     ],
     env = {
+        "RUST_TEST_THREADS": "2",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm)",

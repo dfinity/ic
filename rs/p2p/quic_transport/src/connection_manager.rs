@@ -48,6 +48,7 @@ use quinn::{
 };
 use rustls::pki_types::CertificateDer;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use static_assertions::const_assert;
 use thiserror::Error;
 use tokio::{runtime::Handle, select, task::JoinSet};
 use tokio_util::{sync::CancellationToken, time::DelayQueue};
@@ -79,7 +80,14 @@ const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(1);
 /// that were not explicitly closed. I.e replica crash
 const IDLE_TIMEOUT: Duration = Duration::from_secs(5);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-const CONNECT_RETRY_BACKOFF: Duration = Duration::from_secs(3);
+const CONNECT_RETRY_BACKOFF: Duration = Duration::from_secs(5);
+
+// There should be least two probes before timing out a connection.
+const_assert!(KEEP_ALIVE_INTERVAL.as_nanos() < IDLE_TIMEOUT.as_nanos());
+// The application level timeout should no less than the QUIC idle timeout.
+const_assert!(IDLE_TIMEOUT.as_nanos() <= CONNECT_TIMEOUT.as_nanos());
+// The waiting time before re-trying to connect should be no less than the IDLE_TIMEOUT.
+const_assert!(IDLE_TIMEOUT.as_nanos() <= CONNECT_RETRY_BACKOFF.as_nanos());
 
 /// Connection manager is responsible for making sure that
 /// there always exists a healthy connection to each peer

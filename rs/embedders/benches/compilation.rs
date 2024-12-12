@@ -13,7 +13,7 @@ fn generate_binaries() -> Vec<(String, NumInstructions, BinaryEncodedWasm)> {
     let mut result = vec![
         (
             "simple".to_string(),
-            NumInstructions::from(180_000),
+            NumInstructions::from(522_000),
             BinaryEncodedWasm::new(
                 wat::parse_str(
                     r#"
@@ -31,7 +31,7 @@ fn generate_binaries() -> Vec<(String, NumInstructions, BinaryEncodedWasm)> {
         ),
         (
             "empty".to_string(),
-            NumInstructions::from(90_000),
+            NumInstructions::from(432_000),
             BinaryEncodedWasm::new(
                 wat::parse_str(
                     r#"
@@ -50,7 +50,7 @@ fn generate_binaries() -> Vec<(String, NumInstructions, BinaryEncodedWasm)> {
     many_adds.push_str("))");
     result.push((
         "many_adds".to_string(),
-        NumInstructions::from(1_200_162_000),
+        NumInstructions::from(1_200_504_000),
         BinaryEncodedWasm::new(wat::parse_str(many_adds).expect("Failed to convert wat to wasm")),
     ));
 
@@ -61,7 +61,7 @@ fn generate_binaries() -> Vec<(String, NumInstructions, BinaryEncodedWasm)> {
     many_funcs.push(')');
     result.push((
         "many_funcs".to_string(),
-        NumInstructions::from(3_300_090_000),
+        NumInstructions::from(3_300_432_000),
         BinaryEncodedWasm::new(wat::parse_str(many_funcs).expect("Failed to convert wat to wasm")),
     ));
 
@@ -71,7 +71,7 @@ fn generate_binaries() -> Vec<(String, NumInstructions, BinaryEncodedWasm)> {
 
     result.push((
         "real_world_wasm".to_string(),
-        NumInstructions::from(12_187_254_000),
+        NumInstructions::from(12_569_958_000),
         real_world_wasm,
     ));
 
@@ -92,13 +92,17 @@ fn wasm_compilation(c: &mut Criterion) {
         let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
 
         group.bench_with_input(
-            BenchmarkId::from_parameter(name),
+            BenchmarkId::from_parameter(name.clone()),
             &(embedder, comp_cost, wasm),
             |b, (embedder, comp_cost, wasm)| {
                 b.iter_with_large_drop(|| {
                     let (c, r) = compile(embedder, wasm);
                     let r = r.expect("Failed to compile canister wasm");
-                    assert_eq!(*comp_cost, r.1.compilation_cost);
+                    assert_eq!(
+                        *comp_cost, r.1.compilation_cost,
+                        "update the reference compilation cost for '{name}' to {}",
+                        r.1.compilation_cost
+                    );
                     (c, r)
                 })
             },
@@ -124,7 +128,11 @@ fn wasm_deserialization(c: &mut Criterion) {
         let (_, serialized_module) = compile(&embedder, &wasm)
             .1
             .expect("Failed to compile canister wasm");
-        assert_eq!(comp_cost, serialized_module.compilation_cost);
+        assert_eq!(
+            comp_cost, serialized_module.compilation_cost,
+            "update the reference compilation cost for '{name}' to {}",
+            serialized_module.compilation_cost
+        );
         let serialized_module_bytes = serialized_module.bytes;
 
         group.bench_with_input(
@@ -158,14 +166,18 @@ fn wasm_validation_instrumentation(c: &mut Criterion) {
         let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
 
         group.bench_with_input(
-            BenchmarkId::from_parameter(name),
+            BenchmarkId::from_parameter(&name),
             &(embedder, comp_cost, wasm),
             |b, (embedder, comp_cost, wasm)| {
                 b.iter_with_large_drop(|| {
                     let (_, instrumentation_output) =
                         validate_and_instrument_for_testing(embedder, wasm)
                             .expect("Failed to validate and instrument canister wasm");
-                    assert_eq!(*comp_cost, instrumentation_output.compilation_cost);
+                    assert_eq!(
+                        *comp_cost, instrumentation_output.compilation_cost,
+                        "update the reference compilation cost for '{name}' to {}",
+                        instrumentation_output.compilation_cost
+                    );
                 })
             },
         );

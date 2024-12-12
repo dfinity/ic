@@ -1,7 +1,6 @@
 //! The HTTP adapter makes http calls to the outside on behalf of the replica
 //! This is part of the http calls from canister feature
 
-mod cli;
 /// Main module of HTTP adapter. Receives gRPC calls from replica and makes outgoing requests
 mod rpc_server;
 
@@ -11,7 +10,6 @@ mod config;
 /// Adapter metrics
 mod metrics;
 
-pub use cli::Cli;
 pub use config::{Config, IncomingSource};
 
 use futures::StreamExt;
