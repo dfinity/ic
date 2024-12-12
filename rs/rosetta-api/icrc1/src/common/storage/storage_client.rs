@@ -1,6 +1,6 @@
 use super::storage_operations;
 use crate::common::storage::types::{MetadataEntry, RosettaBlock};
-use anyhow::{bail, Result};
+use anyhow::Result;
 use candid::Nat;
 use icrc_ledger_types::icrc1::account::Account;
 use rusqlite::Connection;
@@ -221,11 +221,8 @@ impl StorageClient {
     }
 
     // Extracts the information from the transaction and blocks table and fills the account balance table with that information
-    // Throws an error if there are gaps in the transaction or blocks table.
+    // It's assumed that there are no gaps in the blockchain.
     pub fn update_account_balances(&self) -> anyhow::Result<()> {
-        if !self.get_blockchain_gaps()?.is_empty() {
-            bail!("Tried to update account balances but there exist gaps in the database.",);
-        }
         let mut open_connection = self.storage_connection.lock().unwrap();
         storage_operations::update_account_balances(&mut open_connection)
     }

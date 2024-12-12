@@ -16,20 +16,22 @@ use ic_icrc_rosetta::{
     common::storage::{storage_client::StorageClient, types::MetadataEntry},
     construction_api::endpoints::*,
     data_api::endpoints::*,
-    ledger_blocks_synchronization::blocks_synchronizer::start_synching_blocks,
+    ledger_blocks_synchronization::blocks_synchronizer::{
+        start_synching_blocks, RecurrencyConfig, RecurrencyMode,
+    },
     AppState, Metadata,
 };
 use ic_sys::fs::write_string_using_tmp_file;
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use lazy_static::lazy_static;
 use std::sync::{Arc, Mutex};
-use std::{path::PathBuf, process};
+use std::{path::PathBuf, process, time::Duration};
 use tokio::{net::TcpListener, sync::Mutex as AsyncMutex};
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
 use tower_http::trace::TraceLayer;
 use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::level_filters::LevelFilter;
-use tracing::{debug, error, error_span, info, Level, Span};
+use tracing::{debug, error_span, info, Level, Span};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -357,6 +359,7 @@ async fn main() -> Result<()> {
             storage.clone(),
             *MAXIMUM_BLOCKS_PER_REQUEST,
             Arc::new(AsyncMutex::new(vec![])),
+            RecurrencyMode::OneShot,
         )
         .await?;
 
@@ -405,8 +408,6 @@ async fn main() -> Result<()> {
 
     if !args.offline {
         tokio::task::spawn_blocking(move || {
-            let mut sync_wait_secs = BLOCK_SYNC_WAIT_SECS;
-
             let block_sync_storage = match args.store_type {
                 StoreType::InMemory => storage.clone(),
                 StoreType::File => {
@@ -414,27 +415,22 @@ async fn main() -> Result<()> {
                 }
             };
 
-            tokio::runtime::Handle::current().block_on(async {
-                loop {
-                    if let Err(e) = start_synching_blocks(
+            tokio::runtime::Handle::current()
+                .block_on(async {
+                    start_synching_blocks(
                         icrc1_agent.clone(),
-                        block_sync_storage.clone(),
+                        block_sync_storage,
                         *MAXIMUM_BLOCKS_PER_REQUEST,
-                        shared_state.clone().archive_canister_ids.clone(),
+                        shared_state.archive_canister_ids.clone(),
+                        RecurrencyMode::Recurrent(RecurrencyConfig {
+                            min_recurrency_wait: Duration::from_secs(BLOCK_SYNC_WAIT_SECS),
+                            max_recurrency_wait: Duration::from_secs(MAX_BLOCK_SYNC_WAIT_SECS),
+                            backoff_factor: 2,
+                        }),
                     )
                     .await
-                    {
-                        error!("Error while syncing blocks: {}", e);
-                        sync_wait_secs =
-                            std::cmp::min(sync_wait_secs * 2, MAX_BLOCK_SYNC_WAIT_SECS);
-                        info!("Retrying in {} seconds.", sync_wait_secs);
-                    } else {
-                        sync_wait_secs = BLOCK_SYNC_WAIT_SECS;
-                    }
-
-                    tokio::time::sleep(std::time::Duration::from_secs(sync_wait_secs)).await;
-                }
-            });
+                })
+                .unwrap();
         });
     }
 
