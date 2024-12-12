@@ -1,0 +1,7 @@
+load("@rules_python//python:defs.bzl", "py_binary")
+
+py_binary(
+    name = "wasm_revisions",
+    srcs = ["wasm_revisions.py"],
+    deps = [    ],
+)
