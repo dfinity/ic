@@ -122,7 +122,7 @@ trait ProcessBitcoinNetworkMessage {
 
 /// Commands sent back to the router in order perform actions on the blockchain state.
 #[derive(Debug)]
-pub enum BlockchainManagerRequest {
+pub(crate) enum BlockchainManagerRequest {
     /// Inform the adapter to enqueue the next block headers into the syncing queue.
     EnqueueNewBlocksToDownload(Vec<BlockHeader>),
     /// Inform the adapter to prune the following block hashes from the cache.
@@ -132,7 +132,7 @@ pub enum BlockchainManagerRequest {
 /// The transaction manager is owned by a single thread which listens on a channel
 /// for TransactionManagerRequest messages and executes the corresponding method.
 #[derive(Debug)]
-pub enum TransactionManagerRequest {
+pub(crate) enum TransactionManagerRequest {
     /// Command for executing send_transaction
     SendTransaction(Vec<u8>),
 }
