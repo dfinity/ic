@@ -131,7 +131,7 @@ if __name__ == "__main__":
         help="Commit and create a pull request against the repository"
     )
     parser_commit_and_create_pr.add_argument("--branch", help="Branch to checkout after syncing with main branch", type=str)
-    parser_commit_and_create_pr.add_argument("--file", help="Check if the file is modified before commiting", type=List[str], action="append", dest="files")
+    parser_commit_and_create_pr.add_argument("--file", help="Check if the file is modified before commiting", type=str, action="append", dest="files")
     parser_commit_and_create_pr.add_argument("--repo", help="Github repository, `<owner>/<repo>`", type=str, default="dfinity/ic")
     parser_commit_and_create_pr.set_defaults(func=run_commit_and_create_pr)
 
