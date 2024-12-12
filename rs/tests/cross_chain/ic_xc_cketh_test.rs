@@ -1,5 +1,8 @@
 use anyhow::{anyhow, bail, Context, Result};
+use candid::Encode;
 use canister_test::{Canister, Runtime, Wasm};
+use ic_cketh_minter::lifecycle::{init::InitArg as MinterInitArgs, MinterArg};
+use ic_icrc1_ledger::{ArchiveOptions, FeatureFlags, InitArgsBuilder, LedgerArgument};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::universal_vm::DeployedUniversalVm;
 use ic_system_test_driver::{
@@ -16,6 +19,7 @@ use ic_system_test_driver::{
     systest,
     util::{block_on, runtime_from_url},
 };
+use icrc_ledger_types::icrc1::account::Account;
 use reqwest::Client;
 use serde_json::json;
 use std::env;
@@ -113,7 +117,51 @@ fn ic_xc_cketh_test(env: TestEnv) {
     });
 
     block_on(async {
+        let mut minter_canister = create_canister(&application_subnet_runtime).await;
+        let minter = minter_canister.canister_id().get().0;
+
         let mut ledger_canister = create_canister(&application_subnet_runtime).await;
+        let ledger_init_args = LedgerArgument::Init(
+            // See proposal 126309
+            InitArgsBuilder::with_symbol_and_name("ckETH", "ckETH")
+                .with_minting_account(minter)
+                .with_transfer_fee(2_000_000_000_000_u64)
+                .with_feature_flags(FeatureFlags { icrc2: true })
+                .with_fee_collector_account(Account {
+                    owner: minter,
+                    subaccount: Some([
+                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        0, 0, 0, 0, 0, 0x0f, 0xee,
+                    ]),
+                })
+                .with_decimals(18)
+                .with_max_memo_length(80)
+                .with_archive_options(ArchiveOptions {
+                    trigger_threshold: 2_000,
+                    num_blocks_to_archive: 1_0000,
+                    node_max_memory_size_bytes: None,
+                    max_message_size_bytes: Some(3_221_225_472),
+                    controller_id: minter.into(),
+                    more_controller_ids: None,
+                    cycles_for_archive_creation: Some(100_000_000_000_000),
+                    max_transactions_per_response: None,
+                })
+                .build(),
+        );
+        let ledger_wasm =
+            Wasm::from_file(env::var("LEDGER_WASM_PATH").expect("LEDGER_WASM_PATH not set"));
+        ledger_wasm
+            .install_with_retries_onto_canister(
+                &mut ledger_canister,
+                Some(Encode!(&ledger_init_args).unwrap()),
+                None,
+            )
+            .await
+            .unwrap();
+
+        let mint_init_args = MinterArg::InitArg(MinterInitArgs {
+
+        });
     });
 
     let minter_address = "0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80";

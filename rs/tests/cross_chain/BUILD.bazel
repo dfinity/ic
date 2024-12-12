@@ -68,12 +68,16 @@ system_test_nns(
         ],
     deps = [
         # Keep sorted.
+        "//rs/ethereum/cketh/minter",
+        "//rs/ledger_suite/icrc1/ledger",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
+        "@crate_index//:candid",
         "@crate_index//:reqwest",
         "@crate_index//:serde_json",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
     ],
 )
 
