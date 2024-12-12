@@ -1560,6 +1560,7 @@ fn sig_verification_error() -> CryptoError {
         algorithm: AlgorithmId::ThresBls12_381,
         public_key_bytes: vec![],
         sig_bytes: vec![],
+        msg_hash: None,
         internal_error: "".to_string(),
     }
 }
