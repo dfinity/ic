@@ -1,7 +1,8 @@
 use anyhow::{anyhow, bail, Context, Result};
-use candid::Encode;
+use candid::{Encode, Nat};
 use canister_test::{Canister, Runtime, Wasm};
-use ic_cketh_minter::lifecycle::{init::InitArg as MinterInitArgs, MinterArg};
+use ic_cketh_minter::endpoints::CandidBlockTag;
+use ic_cketh_minter::lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg};
 use ic_icrc1_ledger::{ArchiveOptions, FeatureFlags, InitArgsBuilder, LedgerArgument};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::universal_vm::DeployedUniversalVm;
@@ -159,9 +160,27 @@ fn ic_xc_cketh_test(env: TestEnv) {
             .await
             .unwrap();
 
-        let mint_init_args = MinterArg::InitArg(MinterInitArgs {
-
+        let minter_init_args = MinterArg::InitArg(MinterInitArgs {
+            ethereum_network: EthereumNetwork::Mainnet,
+            ecdsa_key_name: "key_1".to_string(),
+            ethereum_contract_address: None,
+            ledger_id: ledger_canister.canister_id().get().0,
+            ethereum_block_height: CandidBlockTag::Finalized,
+            minimum_withdrawal_amount: Nat::from(30_000_000_000_000_000_u64),
+            next_transaction_nonce: Nat::from(0_u8),
+            last_scraped_block_number: Nat::from(0_u8),
         });
+        let minter_wasm = Wasm::from_file(
+            env::var("CKETH_MINTER_WASM_PATH").expect("CKETH_MINTER_WASM_PATH not set"),
+        );
+        minter_wasm
+            .install_with_retries_onto_canister(
+                &mut minter_canister,
+                Some(Encode!(&minter_init_args).unwrap()),
+                None,
+            )
+            .await
+            .unwrap();
     });
 
     let minter_address = "0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80";

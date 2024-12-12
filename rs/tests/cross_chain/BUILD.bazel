@@ -50,6 +50,7 @@ system_test_nns(
     name = "ic_xc_cketh_test",
     env = {
         "CKETH_UVM_CONFIG_PATH": "$(rootpath :cketh_uvm_config_image)",
+        "CKETH_MINTER_WASM_PATH": "$(rootpath //rs/ethereum/cketh/minter:cketh_minter.wasm.gz)",
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -64,6 +65,7 @@ system_test_nns(
         CANISTER_RUNTIME_DEPS + [
             # Keep sorted.
             ":cketh_uvm_config_image",
+            "//rs/ethereum/cketh/minter:cketh_minter.wasm.gz",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz"
         ],
     deps = [
