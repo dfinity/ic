@@ -1309,6 +1309,9 @@ impl From<pb_api::ManageNeuronCommandRequest> for pb::manage_neuron::Command {
             pb_api::ManageNeuronCommandRequest::StakeMaturity(v) => {
                 pb::manage_neuron::Command::StakeMaturity(v.into())
             }
+            pb_api::ManageNeuronCommandRequest::RefreshVotingPower(v) => {
+                pb::manage_neuron::Command::RefreshVotingPower(v.into())
+            }
         }
     }
 }
@@ -3406,6 +3409,12 @@ impl From<pb::governance::GovernanceCachedMetrics> for pb_api::governance::Gover
                 .non_self_authenticating_controller_neuron_subset_metrics
                 .map(|x| x.into()),
             public_neuron_subset_metrics: item.public_neuron_subset_metrics.map(|x| x.into()),
+            declining_voting_power_neuron_subset_metrics: item
+                .declining_voting_power_neuron_subset_metrics
+                .map(|x| x.into()),
+            fully_lost_voting_power_neuron_subset_metrics: item
+                .fully_lost_voting_power_neuron_subset_metrics
+                .map(|x| x.into()),
         }
     }
 }
@@ -3463,6 +3472,12 @@ impl From<pb_api::governance::GovernanceCachedMetrics> for pb::governance::Gover
                 .non_self_authenticating_controller_neuron_subset_metrics
                 .map(|x| x.into()),
             public_neuron_subset_metrics: item.public_neuron_subset_metrics.map(|x| x.into()),
+            declining_voting_power_neuron_subset_metrics: item
+                .declining_voting_power_neuron_subset_metrics
+                .map(|x| x.into()),
+            fully_lost_voting_power_neuron_subset_metrics: item
+                .fully_lost_voting_power_neuron_subset_metrics
+                .map(|x| x.into()),
         }
     }
 }
@@ -3473,15 +3488,24 @@ impl From<pb::governance::governance_cached_metrics::NeuronSubsetMetrics>
     fn from(item: pb::governance::governance_cached_metrics::NeuronSubsetMetrics) -> Self {
         Self {
             count: item.count,
+
             total_staked_e8s: item.total_staked_e8s,
             total_staked_maturity_e8s_equivalent: item.total_staked_maturity_e8s_equivalent,
             total_maturity_e8s_equivalent: item.total_maturity_e8s_equivalent,
+
             total_voting_power: item.total_voting_power,
+            total_deciding_voting_power: item.total_deciding_voting_power,
+            total_potential_voting_power: item.total_potential_voting_power,
+
             count_buckets: item.count_buckets,
+
             staked_e8s_buckets: item.staked_e8s_buckets,
             staked_maturity_e8s_equivalent_buckets: item.staked_maturity_e8s_equivalent_buckets,
             maturity_e8s_equivalent_buckets: item.maturity_e8s_equivalent_buckets,
+
             voting_power_buckets: item.voting_power_buckets,
+            deciding_voting_power_buckets: item.deciding_voting_power_buckets,
+            potential_voting_power_buckets: item.potential_voting_power_buckets,
         }
     }
 }
@@ -3491,15 +3515,24 @@ impl From<pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics>
     fn from(item: pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics) -> Self {
         Self {
             count: item.count,
+
             total_staked_e8s: item.total_staked_e8s,
             total_staked_maturity_e8s_equivalent: item.total_staked_maturity_e8s_equivalent,
             total_maturity_e8s_equivalent: item.total_maturity_e8s_equivalent,
+
             total_voting_power: item.total_voting_power,
+            total_deciding_voting_power: item.total_deciding_voting_power,
+            total_potential_voting_power: item.total_potential_voting_power,
+
             count_buckets: item.count_buckets,
+
             staked_e8s_buckets: item.staked_e8s_buckets,
             staked_maturity_e8s_equivalent_buckets: item.staked_maturity_e8s_equivalent_buckets,
             maturity_e8s_equivalent_buckets: item.maturity_e8s_equivalent_buckets,
+
             voting_power_buckets: item.voting_power_buckets,
+            deciding_voting_power_buckets: item.deciding_voting_power_buckets,
+            potential_voting_power_buckets: item.potential_voting_power_buckets,
         }
     }
 }

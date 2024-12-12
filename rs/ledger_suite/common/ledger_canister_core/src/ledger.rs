@@ -332,52 +332,6 @@ where
             .unwrap();
     }
 
-    // We estimate that an approval takes up twice as much space as a balance:
-    // balance = account + num_tokens
-    // approval = 2 * account + num_tokens + timestamp
-    let max_number_of_approvals =
-        (effective_max_number_of_accounts - ledger.balances().store.len()) / 2;
-
-    if ledger.approvals().len() > max_number_of_approvals {
-        let num_approvals_to_trim = ledger.approvals().len() - max_number_of_approvals;
-        // There might be some more expired approvals to prune.
-        ledger.approvals_mut().prune(now, num_approvals_to_trim);
-
-        if ledger.approvals().len() > max_number_of_approvals {
-            let approvals_to_trim = ledger
-                .approvals()
-                .select_approvals_to_trim(ledger.approvals().len() - max_number_of_approvals);
-
-            for approval in approvals_to_trim {
-                let approve_tx = L::Transaction::approve(
-                    approval.0,
-                    approval.1,
-                    L::Tokens::zero(),
-                    Some(now),
-                    Some(TRIMMED_MEMO),
-                );
-
-                approve_tx
-                    .apply(ledger, now, L::Tokens::zero())
-                    .expect("failed to reset approval to zero");
-
-                let parent_hash = ledger.blockchain().last_hash;
-                let fee_collector = ledger.fee_collector().cloned();
-
-                ledger
-                    .blockchain_mut()
-                    .add_block(L::Block::from_transaction(
-                        parent_hash,
-                        approve_tx,
-                        now,
-                        L::Tokens::zero(),
-                        fee_collector,
-                    ))
-                    .unwrap();
-            }
-        }
-    }
-
     Ok((height, ledger.blockchain().last_hash.unwrap()))
 }
 

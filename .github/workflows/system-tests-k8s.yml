@@ -29,7 +29,7 @@ env:
     github.event_name == 'workflow_dispatch' && github.event.inputs.targets ||
     '//rs/tests/nns:node_removal_from_registry_test' }}
   JOBS: |
-    ${{ github.event_name == 'schedule' && '20' ||
+    ${{ github.event_name == 'schedule' && '12' ||
     github.event_name == 'workflow_dispatch' && github.event.inputs.jobs ||
     '32' }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
