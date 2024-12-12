@@ -6,7 +6,7 @@ Before=setupos.service
 
 [Service]
 Type=oneshot
-ExecStart=/opt/ic/bin/setup-networking.sh SetupOS
+ExecStart=/opt/ic/bin/output-wrapper.sh /dev/ttyS0 /opt/ic/bin/setup-networking.sh SetupOS
 RemainAfterExit=yes
 
 [Install]
