@@ -8,7 +8,6 @@ on:
 jobs:
   update-ic-versions-file:
     runs-on: ubuntu-latest
-    needs: create-token
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
@@ -33,7 +32,6 @@ jobs:
         shell: bash
 
   update-nervous-system-wasms:
-    needs: create-token
     runs-on:
       labels: dind-small
     container:
