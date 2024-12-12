@@ -1425,32 +1425,32 @@ fn cmc_notify_top_up_rate_limited() {
         .build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
-    // First top-up should succeed since it's 300P - less than the 500P/hr limit.
+    // First top-up should succeed since it's 90P - less than the 150P/hr limit.
     let cycles = notify_top_up(
         &state_machine,
         GOVERNANCE_CANISTER_ID,
-        Tokens::new(3000, 0).unwrap(),
+        Tokens::new(900, 0).unwrap(),
     )
     .unwrap();
-    assert_eq!(cycles, Cycles::new(300e15 as u128));
+    assert_eq!(cycles, Cycles::new(90e15 as u128));
 
     // Second top-up should also succeed after 1 hour.
     state_machine.advance_time(Duration::from_secs(4000));
     let cycles = notify_top_up(
         &state_machine,
         GOVERNANCE_CANISTER_ID,
-        Tokens::new(3000, 0).unwrap(),
+        Tokens::new(900, 0).unwrap(),
     )
     .unwrap();
-    assert_eq!(cycles, Cycles::new(300e15 as u128));
+    assert_eq!(cycles, Cycles::new(90e15 as u128));
 
-    // Third top-up should fail since the rate limit is 500e15 cycles per hour, and less than an hour
-    // has passed.
+    // Third top-up should fail since the rate limit is 150e15 cycles per hour,
+    // and less than an hour has passed.
     state_machine.advance_time(Duration::from_secs(3000));
     let error = notify_top_up(
         &state_machine,
         GOVERNANCE_CANISTER_ID,
-        Tokens::new(3000, 0).unwrap(),
+        Tokens::new(900, 0).unwrap(),
     )
     .unwrap_err();
     assert_matches!(error, NotifyError::Refunded { reason, .. } if reason.contains("try again later"));

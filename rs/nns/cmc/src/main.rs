@@ -74,8 +74,8 @@ const CREATE_CANISTER_MIN_CYCLES: u64 = 100_000_000_000;
 
 /// Prior to 2024-12-10, we used 50e15, but legitimate users started running
 /// into this. At that time, prices had recently gone up, so we resolved to
-/// increase this by 10x.
-const DEFAULT_CYCLES_LIMIT: u128 = 500e15 as u128;
+/// increase this by 3x.
+const DEFAULT_CYCLES_LIMIT: u128 = 150e15 as u128;
 
 thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
