@@ -1,0 +1,22 @@
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    {IFACE}:
+      macaddress: {MAC_ADDRESS}
+      mtu: 1500
+      optional: true
+      networkd:
+        lldp: true
+  bridges:
+    br6:
+      interfaces: [{IFACE}]
+      addresses: [{IPV6_ADDR}]
+      gateway6: {IPV6_GATEWAY}
+      nameservers:
+        addresses: [2606:4700:4700::1111, 2606:4700:4700::1001, 2001:4860:4860::8888, 2001:4860:4860::8844]
+      parameters:
+        forward-delay: 0
+        stp: false
+      link-local: [ "ipv6" ]
+      ipv6-accept-ra: no
