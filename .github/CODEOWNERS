@@ -89,7 +89,6 @@ go_deps.bzl               @dfinity/idx
 # [Rust]
 /rs/                                                    @dfinity/ic-interface-owners
 /rs/artifact_pool/                                      @dfinity/consensus
-/rs/http_endpoints/async_utils/                                        @dfinity/networking
 /rs/backup/                                             @dfinity/consensus
 /rs/bitcoin/                                            @dfinity/ic-interface-owners
 /rs/bitcoin/adapter/                                    @dfinity/networking
