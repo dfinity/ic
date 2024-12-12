@@ -125,6 +125,7 @@ fn verify_certified_data(
             algorithm: AlgorithmId::IcCanisterSignature,
             public_key_bytes: pk.0.clone(),
             sig_bytes: sig.0.clone(),
+            msg_hash: Some(digest.to_vec()),
             internal_error: format!("certificate verification failed: {}", err),
         },
     })?;
@@ -159,6 +160,7 @@ fn lookup_path_in_tree(
                 algorithm: AlgorithmId::IcCanisterSignature,
                 public_key_bytes: pk.0.clone(),
                 sig_bytes: sig.0.clone(),
+                msg_hash: Some(msg_hash.to_vec()),
                 internal_error: format!(
                     "the signature tree doesn't contain sig/{}/{} path",
                     hex::encode(seed_hash),
@@ -171,6 +173,7 @@ fn lookup_path_in_tree(
             algorithm: AlgorithmId::IcCanisterSignature,
             public_key_bytes: pk.0.clone(),
             sig_bytes: sig.0.clone(),
+            msg_hash: Some(msg_hash.to_vec()),
             internal_error:
                 "The result of 'lookup_path' in the signature tree was not a leaf containing \"\""
                     .to_string(),

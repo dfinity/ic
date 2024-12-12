@@ -156,6 +156,7 @@ pub fn verify(
             algorithm: AlgorithmId::EcdsaSecp256k1,
             public_key_bytes: pk.0.to_vec(),
             sig_bytes: sig.0.to_vec(),
+            msg_hash: Some(msg.to_vec()),
             internal_error: "verification failed".to_string(),
         }),
     }

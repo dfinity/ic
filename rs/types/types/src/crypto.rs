@@ -341,6 +341,7 @@ pub enum CryptoError {
         algorithm: AlgorithmId,
         public_key_bytes: Vec<u8>,
         sig_bytes: Vec<u8>,
+        msg_hash: Option<Vec<u8>>,
         internal_error: String,
     },
     /// Pop could not be verified.
@@ -550,13 +551,15 @@ impl fmt::Debug for CryptoError {
                 algorithm,
                 public_key_bytes,
                 sig_bytes,
+                msg_hash,
                 internal_error,
             } => write!(
                 f,
-                "{:?} signature could not be verified: public key {}, signature {}, error: {}",
+                "{:?} signature could not be verified: public key {}, signature {}, message hash {} error: {}",
                 algorithm,
                 hex::encode(public_key_bytes),
                 hex::encode(sig_bytes),
+                if let Some(h) = msg_hash { hex::encode(h) } else { "unavailable".to_string() },
                 internal_error,
             ),
             CryptoError::PopVerification {

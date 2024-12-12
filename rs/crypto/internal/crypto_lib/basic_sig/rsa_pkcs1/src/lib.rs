@@ -173,6 +173,7 @@ impl RsaPublicKey {
                 algorithm: AlgorithmId::RsaSha256,
                 public_key_bytes: self.as_der().to_vec(),
                 sig_bytes: signature.to_vec(),
+                msg_hash: None,
                 internal_error: format!(
                     "Signature is {} bytes but public modulus only {}",
                     signature.len(),
@@ -187,6 +188,7 @@ impl RsaPublicKey {
                 algorithm: AlgorithmId::RsaSha256,
                 public_key_bytes: self.as_der().to_vec(),
                 sig_bytes: signature.to_vec(),
+                msg_hash: None,
                 internal_error: "Signature is larger than public modulus".to_string(),
             });
         }
@@ -202,6 +204,7 @@ impl RsaPublicKey {
                 algorithm: AlgorithmId::RsaSha256,
                 public_key_bytes: self.as_der().to_vec(),
                 sig_bytes: signature.to_vec(),
+                msg_hash: Some(digest.to_vec()),
                 internal_error: format!("{:?}", e),
             }),
         }

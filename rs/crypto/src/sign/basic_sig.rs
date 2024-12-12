@@ -100,6 +100,7 @@ impl BasicSigVerifierInternal {
                 algorithm: AlgorithmId::Ed25519,
                 public_key_bytes: vec![],
                 sig_bytes: vec![],
+                msg_hash: None,
                 internal_error: e.to_string(),
             }
         })

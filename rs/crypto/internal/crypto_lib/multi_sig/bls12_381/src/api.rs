@@ -115,6 +115,7 @@ pub fn verify_individual(
             algorithm: AlgorithmId::MultiBls12_381,
             public_key_bytes: public_key_bytes.0.to_vec(),
             sig_bytes: signature_bytes.0.to_vec(),
+            msg_hash: Some(message.to_vec()),
             internal_error: "Verification of individual contribution to multisignature failed"
                 .to_string(),
         })
@@ -149,6 +150,7 @@ pub fn verify_combined(
             algorithm: AlgorithmId::MultiBls12_381,
             public_key_bytes: Vec::new(),
             sig_bytes: signature.0.to_vec(),
+            msg_hash: Some(message.to_vec()),
             internal_error: "Verification of multisignature failed".to_string(),
         })
     }

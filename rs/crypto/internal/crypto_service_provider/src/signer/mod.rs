@@ -116,6 +116,7 @@ impl CspSigner for Csp {
                 algorithm: algorithm_id,
                 public_key_bytes: signer.as_ref().to_vec(),
                 sig_bytes: sig.as_ref().to_vec(),
+                msg_hash: None,
                 internal_error: "Unsupported types".to_string(),
             }),
         }
@@ -193,6 +194,7 @@ impl CspSigner for Csp {
                             algorithm: algorithm_id,
                             public_key_bytes: signer.as_ref().to_vec(),
                             sig_bytes: signature.0.to_vec(),
+                            msg_hash: Some(msg.to_vec()),
                             internal_error: "Public key not of type MultiBls12_381".to_string(),
                         }),
                     })

@@ -239,6 +239,7 @@ pub(crate) fn verify_individual_sig(
             algorithm: AlgorithmId::ThresBls12_381,
             public_key_bytes: PublicKeyBytes::from(public_key).0.to_vec(),
             sig_bytes: IndividualSignatureBytes::from(signature).0.to_vec(),
+            msg_hash: Some(message.to_vec()),
             internal_error: "Invalid individual threshold signature".to_string(),
         }),
     }
@@ -260,6 +261,7 @@ pub(crate) fn verify_combined_sig(
             algorithm: AlgorithmId::ThresBls12_381,
             public_key_bytes: PublicKeyBytes::from(public_key).0.to_vec(),
             sig_bytes: CombinedSignatureBytes::from(signature).0.to_vec(),
+            msg_hash: Some(message.to_vec()),
             internal_error: "Invalid combined threshold signature".to_string(),
         }),
     }
