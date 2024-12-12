@@ -74,7 +74,7 @@ def get_subnet_replica_version(subnet_id: str) -> str:
         return latest_replica_version
 
 
-def work(repo_root: pathlib.Path, logger: logging.Logger):
+def update_mainnet_revisions_file(repo_root: pathlib.Path, logger: logging.Logger):
     current_nns_version = get_subnet_replica_version(nns_subnet_id)
     logger.info("Current NNS subnet (%s) revision: %s", nns_subnet_id, current_nns_version)
     current_app_subnet_version = get_subnet_replica_version(app_subnet_id)
@@ -97,7 +97,7 @@ def main():
     branch = "ic-mainnet-revisions"
 
     git_lib.sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
-    work(repo_root, logger)
+    update_mainnet_revisions_file(repo_root, logger)
     git_lib.commit_and_create_pr(repo, repo_root, branch, [SAVED_VERSIONS_PATH], logger)
 
 

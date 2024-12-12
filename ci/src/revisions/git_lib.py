@@ -121,7 +121,7 @@ def run_commit_and_create_pr(args, logger):
     commit_and_create_pr(repo, repo_root, branch, files, logger)
 
 
-if __name__ == "__main__":
+def main():
     parser = init_helpful_parser()
     parser.add_argument(
         "--repo-root", help="Root of the repository", default=pathlib.Path("."), type=pathlib.Path, dest="repo_root"
@@ -161,3 +161,7 @@ if __name__ == "__main__":
         args.func(args, logger)
     else:
         parser.print_help()
+
+
+if __name__ == "__main__":
+    main()
