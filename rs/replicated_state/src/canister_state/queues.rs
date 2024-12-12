@@ -726,7 +726,7 @@ impl CanisterQueues {
         &mut self,
         msg: RequestOrResponse,
         input_queue_type: InputQueueType,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         let sender = msg.sender();
         let input_queue = match msg {
             RequestOrResponse::Request(_) => {
@@ -762,7 +762,7 @@ impl CanisterQueues {
                                 ));
                             } else {
                                 // But it's OK for a best-effort response. Silently drop it.
-                                return Ok(());
+                                return Ok(false);
                             }
                         }
                         queue
@@ -785,7 +785,7 @@ impl CanisterQueues {
                             debug_assert!(self
                                 .callbacks_with_enqueued_response
                                 .contains(&response.originator_reply_callback));
-                            return Ok(());
+                            return Ok(false);
                         }
                     }
                 }
@@ -807,7 +807,7 @@ impl CanisterQueues {
 
         debug_assert_eq!(Ok(()), self.test_invariants());
         debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
-        Ok(())
+        Ok(true)
     }
 
     /// Enqueues a "deadline expired" compact response for the given best-effort
@@ -1102,7 +1102,7 @@ impl CanisterQueues {
         request: Request,
         reject_context: RejectContext,
         subnet_ids: &[PrincipalId],
-    ) -> Result<(), StateError> {
+    ) -> Result<bool, StateError> {
         assert!(
             request.receiver == IC_00 || subnet_ids.contains(&request.receiver.get()),
             "reject_subnet_output_request can only be used to reject management canister requests"
@@ -2056,7 +2056,7 @@ pub mod testing {
             &mut self,
             msg: RequestOrResponse,
             input_queue_type: InputQueueType,
-        ) -> Result<(), (StateError, RequestOrResponse)>;
+        ) -> Result<bool, (StateError, RequestOrResponse)>;
 
         /// Publicly exposes the local sender input_schedule.
         fn local_sender_schedule(&self) -> &VecDeque<CanisterId>;
@@ -2089,7 +2089,7 @@ pub mod testing {
             &mut self,
             msg: RequestOrResponse,
             input_queue_type: InputQueueType,
-        ) -> Result<(), (StateError, RequestOrResponse)> {
+        ) -> Result<bool, (StateError, RequestOrResponse)> {
             self.push_input(msg, input_queue_type)
         }
 

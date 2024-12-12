@@ -49,7 +49,7 @@ impl CanisterQueuesFixture {
         }
     }
 
-    fn push_input_request(&mut self) -> Result<(), (StateError, RequestOrResponse)> {
+    fn push_input_request(&mut self) -> Result<bool, (StateError, RequestOrResponse)> {
         self.queues.push_input(
             RequestBuilder::default()
                 .sender(self.other)
@@ -60,7 +60,7 @@ impl CanisterQueuesFixture {
         )
     }
 
-    fn push_input_response(&mut self) -> Result<(), (StateError, RequestOrResponse)> {
+    fn push_input_response(&mut self) -> Result<bool, (StateError, RequestOrResponse)> {
         self.last_callback_id += 1;
         self.queues.push_input(
             ResponseBuilder::default()
@@ -141,7 +141,7 @@ impl CanisterQueuesFixture {
 
 fn push_requests(queues: &mut CanisterQueues, input_type: InputQueueType, requests: &Vec<Request>) {
     for req in requests {
-        queues.push_input(req.clone().into(), input_type).unwrap()
+        assert!(queues.push_input(req.clone().into(), input_type).unwrap());
     }
 }
 
@@ -773,7 +773,7 @@ impl CanisterQueuesMultiFixture {
         &mut self,
         other: CanisterId,
         input_queue_type: InputQueueType,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         self.push_input_request_with_deadline(other, NO_DEADLINE, input_queue_type)
     }
 
@@ -782,7 +782,7 @@ impl CanisterQueuesMultiFixture {
         other: CanisterId,
         deadline: CoarseTime,
         input_queue_type: InputQueueType,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         self.queues.push_input(
             RequestBuilder::default()
                 .sender(other)
@@ -798,7 +798,7 @@ impl CanisterQueuesMultiFixture {
         &mut self,
         other: CanisterId,
         input_queue_type: InputQueueType,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         self.last_callback_id += 1;
         self.queues.push_input(
             ResponseBuilder::default()
@@ -815,7 +815,7 @@ impl CanisterQueuesMultiFixture {
         &mut self,
         other: CanisterId,
         input_queue_type: InputQueueType,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         self.push_output_request(other)
             .map_err(|(se, req)| (se, (*req).clone().into()))?;
         self.pop_output()

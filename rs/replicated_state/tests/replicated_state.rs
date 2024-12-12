@@ -123,7 +123,7 @@ impl ReplicatedStateFixture {
     fn push_input(
         &mut self,
         msg: RequestOrResponse,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         self.state
             .push_input(msg, &mut SUBNET_AVAILABLE_MEMORY.clone())
     }

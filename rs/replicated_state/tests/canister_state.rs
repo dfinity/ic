@@ -78,7 +78,7 @@ impl CanisterFixture {
     fn push_input(
         &mut self,
         msg: RequestOrResponse,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         let mut subnet_available_memory = i64::MAX / 2;
         self.canister_state.push_input(
             msg,
@@ -275,7 +275,7 @@ fn validate_response_fails_with_mismatching_deadline() {
     fn try_push_input(
         callback_deadline: CoarseTime,
         response_deadline: CoarseTime,
-    ) -> Result<(), StateError> {
+    ) -> Result<bool, StateError> {
         let mut fixture = CanisterFixture::running();
 
         // Register a callback with the given `callback_deadline`.
@@ -305,8 +305,8 @@ fn validate_response_fails_with_mismatching_deadline() {
     }
 
     // Can enqueue response with matching deadline.
-    assert_eq!(Ok(()), try_push_input(NO_DEADLINE, NO_DEADLINE));
-    assert_eq!(Ok(()), try_push_input(DEADLINE_1, DEADLINE_1));
+    assert_eq!(Ok(true), try_push_input(NO_DEADLINE, NO_DEADLINE));
+    assert_eq!(Ok(true), try_push_input(DEADLINE_1, DEADLINE_1));
 
     // But enqueuing mismatching deadlines (best-effort vs guaranteed response; or
     //different best-effort deadlines) fails.

@@ -1980,7 +1980,7 @@ fn check_stream_handler_generated_reject_signal_queue_full() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             let mut callback_id = 2;
-            while let Ok(()) = state.push_input(
+            while let Ok(true) = state.push_input(
                 Request(*LOCAL_CANISTER, *LOCAL_CANISTER)
                     .build_with(CallbackId::new(callback_id), 0),
                 &mut (i64::MAX / 2),
@@ -2115,7 +2115,7 @@ fn legacy_check_stream_handler_generated_reject_response_queue_full() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             let mut callback_id = 2;
-            while let Ok(()) = state.push_input(
+            while let Ok(true) = state.push_input(
                 Request(*LOCAL_CANISTER, *LOCAL_CANISTER)
                     .build_with(CallbackId::new(callback_id), 0),
                 &mut (i64::MAX / 2),

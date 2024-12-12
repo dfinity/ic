@@ -235,6 +235,7 @@ impl StreamBuilderImpl {
                     response
                 );
                 self.metrics.critical_error_induct_response_failed.inc();
+                false
             });
     }
 

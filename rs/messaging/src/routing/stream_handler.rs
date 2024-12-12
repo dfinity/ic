@@ -809,10 +809,13 @@ impl StreamHandlerImpl {
             Some(host_subnet) if host_subnet == self.subnet_id => {
                 match state.push_input(msg, available_guaranteed_response_memory) {
                     // Message successfully inducted, all done.
-                    Ok(()) => {
+                    Ok(true) => {
                         self.observe_inducted_message_status(msg_type, LABEL_VALUE_SUCCESS);
                         self.observe_inducted_payload_size(payload_size);
                     }
+
+                    // Message silently dropped, all done.
+                    Ok(false) => {}
 
                     // Message not inducted.
                     Err((err, msg)) => {

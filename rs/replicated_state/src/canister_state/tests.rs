@@ -130,7 +130,7 @@ impl CanisterStateFixture {
         msg: RequestOrResponse,
         subnet_type: SubnetType,
         input_queue_type: InputQueueType,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         self.canister_state.push_input(
             msg,
             &mut SUBNET_AVAILABLE_MEMORY.clone(),
@@ -403,7 +403,7 @@ fn canister_state_push_input_best_effort_response_duplicate_of_paused_response()
 
     // Enqueuing a duplicate response should fail silently.
     assert_eq!(
-        Ok(()),
+        Ok(false),
         fixture.push_input(
             response.clone(),
             SubnetType::Application,

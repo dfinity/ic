@@ -754,7 +754,7 @@ impl ReplicatedState {
         &mut self,
         msg: RequestOrResponse,
         subnet_available_memory: &mut i64,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         let own_subnet_type = self.metadata.own_subnet_type;
         let sender = msg.sender();
         let input_queue_type = if sender.get_ref() == self.metadata.own_subnet_id.get_ref()

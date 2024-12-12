@@ -130,7 +130,7 @@ impl SystemStateFixture {
         &mut self,
         msg: RequestOrResponse,
         input_queue_type: InputQueueType,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         self.system_state
             .queues_mut()
             .push_input(msg, input_queue_type)
