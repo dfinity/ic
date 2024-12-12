@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::hash::Hash;
 
-use super::messages::CallbackId;
+use crate::messages::CallbackId;
 
 /// For completed VetKeys, we differentiate between those
 /// that have already been reported and those that have not. This is

@@ -1,15 +1,27 @@
 //! Defines types used internally by consensus components.
+use crate::artifact::{IdentifiableArtifact, PbArtifact};
+use crate::crypto::{
+    crypto_hash, BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CombinedThresholdSig,
+    CombinedThresholdSigOf, CryptoHash, CryptoHashOf, IndividualMultiSig, IndividualMultiSigOf,
+    Signed, SignedBytesWithoutDomainSeparator, ThresholdSigShare, ThresholdSigShareOf,
+};
 use crate::{
     artifact::ConsensusMessageId,
     batch::{BatchPayload, ValidationContext},
     crypto::threshold_sig::ni_dkg::NiDkgId,
-    crypto::*,
+    node_id_into_protobuf, node_id_try_from_option,
     replica_version::ReplicaVersion,
-    signature::*,
-    *,
+    signature::{
+        BasicSignature, MultiSignature, MultiSignatureShare, ThresholdSignature,
+        ThresholdSignatureShare,
+    },
+    CountBytes, Height, Time,
 };
-use ic_base_types::subnet_id_try_from_option;
 use ic_base_types::PrincipalIdError;
+use ic_base_types::{
+    subnet_id_into_protobuf, subnet_id_try_from_option, NodeId, PrincipalId, RegistryVersion,
+    SubnetId,
+};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::types::v1::{self as pb, consensus_message::Msg};
@@ -35,8 +47,6 @@ pub mod vetkd;
 pub use catchup::*;
 use hashed::Hashed;
 pub use payload::{BlockPayload, DataPayload, Payload, PayloadType, SummaryPayload};
-
-use self::artifact::{IdentifiableArtifact, PbArtifact};
 
 /// Abstract messages with height attribute
 pub trait HasHeight {
