@@ -1992,9 +1992,8 @@ fn test_check_upgrade_status_succeeds() {
                 event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
                     upgrade_journal_entry::UpgradeOutcome {
                         human_readable: Some(format!(
-                            "Upgrade marked successful at timestamp {} seconds, new {:?}",
-                            governance.env.now(),
-                            Version::from(next_version.clone()),
+                            "Upgrade marked successful at {}.",
+                            format_timestamp_for_humans(governance.env.now()),
                         )),
                         status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
                             Empty {}
@@ -2294,10 +2293,10 @@ fn test_check_upgrade_fails_if_canister_summary_errs_and_past_mark_failed_at_tim
         GovernanceError::new_with_message(
             ErrorType::External,
             format!(
-                "Upgrade marked as failed at {} seconds from unix epoch. \
-            Governance could not determine running version from root: Root had no status. \
-            Setting upgrade to failed to unblock retry.",
-                now
+                "Upgrade marked as failed at {}. \
+                 Governance could not determine running version from root: Root had no status. \
+                 Setting upgrade to failed to unblock retry.",
+                format_timestamp_for_humans(now),
             )
         )
     );

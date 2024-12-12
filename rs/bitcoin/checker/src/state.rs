@@ -278,11 +278,16 @@ impl Drop for FetchGuard {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Config {
     btc_network: BtcNetwork,
     pub check_mode: CheckMode,
+    #[serde(default = "default_num_subnet_nodes")]
     pub num_subnet_nodes: u16,
+}
+
+pub(crate) fn default_num_subnet_nodes() -> u16 {
+    34
 }
 
 impl Config {

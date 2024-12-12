@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
+    "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:rsa",
     "@crate_index//:thiserror",

@@ -33,10 +33,11 @@ async fn test_deploy_fresh_sns() {
         .map(|canister| CanisterId::unchecked_from_principal(canister.id.unwrap()))
         .collect();
 
-    // 1. Prepare the world (use mainnet WASMs for all NNS and SNS canisters).
-    let pocket_ic = pocket_ic_helpers::pocket_ic_for_sns_tests_with_mainnet_versions().await;
+    eprintln!("1. Prepare the world (use mainnet WASMs for all NNS and SNS canisters) ...");
+    let (pocket_ic, _initial_sns_version) =
+        pocket_ic_helpers::pocket_ic_for_sns_tests_with_mainnet_versions().await;
 
-    // Install the test dapp.
+    eprintln!("Install the test dapp ...");
     for dapp_canister_id in dapp_canister_ids.clone() {
         install_canister(
             &pocket_ic,
@@ -49,13 +50,12 @@ async fn test_deploy_fresh_sns() {
         .await;
     }
 
-    // Step 1. Upgrade NNS Governance and SNS-W to the latest version.
-
+    eprintln!("Step 1. Upgrade NNS Governance and SNS-W to the latest version ...");
     upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, GOVERNANCE_CANISTER_ID).await;
 
     upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, SNS_WASM_CANISTER_ID).await;
 
-    // Test upgrading SNS Ledger via proposals. First, add all the WASMs to SNS-W.
+    eprintln!("Test upgrading SNS Ledger via proposals. First, add all the WASMs to SNS-W ...");
     {
         let wasm = build_index_ng_sns_wasm();
         let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
@@ -76,7 +76,7 @@ async fn test_deploy_fresh_sns() {
     // --- Run code under test ---
     // ---------------------------
 
-    // Deploy an SNS instance via proposal.
+    eprintln!("Deploy an SNS instance via proposal ...");
     let sns_instance_label = "1";
     let (sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
         &pocket_ic,
@@ -85,7 +85,7 @@ async fn test_deploy_fresh_sns() {
     )
     .await;
 
-    // Testing the Archive canister requires that it can be spawned.
+    eprintln!("Testing the Archive canister requires that it can be spawned ...");
     sns::ensure_archive_canister_is_spawned_or_panic(
         &pocket_ic,
         sns.governance.canister_id,
