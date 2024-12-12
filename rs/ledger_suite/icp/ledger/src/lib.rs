@@ -194,11 +194,9 @@ pub struct Ledger {
     #[serde(default)]
     stable_approvals: AllowanceTable<StableAllowancesData>,
     pub blockchain: Blockchain<dfn_runtime::DfnRuntime, IcpLedgerArchiveWasm>,
-    // DEPRECETAD, UNUSED: A cap on the maximum number of accounts.
+    // DEPRECATED
     pub maximum_number_of_accounts: usize,
-    // DEPRECETAD, UNUSED:
-    // When maximum number of accounts is exceeded, a specified number of
-    // accounts with lowest balances are removed.
+    // DEPRECATED
     accounts_overflow_trim_quantity: usize,
     pub minting_account_id: Option<AccountIdentifier>,
     pub icrc1_minting_account: Option<Account>,
