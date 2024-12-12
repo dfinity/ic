@@ -1,6 +1,5 @@
 [Unit]
 Description=SetupOS config process
-Before=generate-network-config.service
 Before=setupos.service
 
 [Service]
