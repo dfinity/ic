@@ -281,7 +281,7 @@
                         <td class="numeric">{{ event.mint_block_index }}</td>
                     </tr>
                     {% endfor %}
-                    {% if table.has_more_than_one_page() %}}{{ table.pagination|safe }}{% endif %}
+                    {% if table.has_more_than_one_page() %}{{ table.pagination|safe }}{% endif %}
                 </tbody>
             </table>
             {% endif %}
@@ -389,7 +389,7 @@
                     <td>{{ tx.status }}</td>
                 </tr>
                 {% endfor %}
-                {% if table.has_more_than_one_page() %}}{{ table.pagination|safe }}{% endif %}
+                {% if table.has_more_than_one_page() %}{{ table.pagination|safe }}{% endif %}
                 </tbody>
             </table>
             {% endif %}
@@ -431,7 +431,7 @@
                     </tr>
                     {% endmatch %}
                     {% endfor %}
-                    {% if table.has_more_than_one_page() %}}{{ table.pagination|safe }}{% endif %}
+                    {% if table.has_more_than_one_page() %}{{ table.pagination|safe }}{% endif %}
                 </tbody>
             </table>
             {% endif %}

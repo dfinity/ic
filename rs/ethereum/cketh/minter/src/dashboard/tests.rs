@@ -1013,12 +1013,25 @@ fn should_display_minted_events_pagination() {
         DashboardTemplate::from_state(&state, paging_parameters)
     };
 
+    // Events are displayed in order of decreasing index. Page 2 should have events 200 to 101.
     DashboardAssert::assert_that(dashboard)
         .has_minted_events(
             1,
             &vec![
                 "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2",
-                "200", // Events are displayed in order of decreasing index. Page 2 should have events 200 to 101.
+                "200",
+                "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
+                "ckETH",
+                "10_000_000_000_000_000",
+                "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae",
+                "1",
+            ],
+        )
+        .has_minted_events(
+            100,
+            &vec![
+                "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2",
+                "101",
                 "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
                 "ckETH",
                 "10_000_000_000_000_000",
@@ -1084,17 +1097,31 @@ fn should_display_finalized_transactions_pagination() {
         DashboardTemplate::from_state(&state, paging_parameters)
     };
 
+    // Transactions are displayed in order of decreasing index. Page 2 should have transactions 200 to 101.
     DashboardAssert::assert_that(dashboard)
         .has_finalized_transactions(
             1,
             &vec![
-                "200", // Transactions are displayed in order of decreasing index. Page 2 should have transactions 200 to 101.
+                "200",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
                 "ckSepoliaETH",
                 "1_058_000_000_000_000",
                 "21_000_000_000_000",
                 "4190269",
                 "0x399ba1d76e66175b7fd092050c77b036e0297d36c96d6e06a25c6205b8168774",
+                "Success",
+            ],
+        )
+        .has_finalized_transactions(
+            100,
+            &vec![
+                "101",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckSepoliaETH",
+                "1_058_000_000_000_000",
+                "21_000_000_000_000",
+                "4190269",
+                "0x5a7f0423ddcbaf9429bdc18e793fa8b61f56357fb34452eae15e9396d1becd40",
                 "Success",
             ],
         )
@@ -1135,15 +1162,27 @@ fn should_display_reimbursed_transactions_pagination() {
         DashboardTemplate::from_state(&state, paging_parameters)
     };
 
+    // Transactions are displayed in order of decreasing index. Page 2 should have transactions 200 to 101.
     DashboardAssert::assert_that(dashboard)
         .has_reimbursed_transactions(
             1,
             &vec![
-                "200", // Transactions are displayed in order of decreasing index. Page 2 should have transactions 200 to 101.
+                "200",
                 "123",
                 "ckSepoliaETH",
                 "1_058_000_000_000_000",
                 "0x399ba1d76e66175b7fd092050c77b036e0297d36c96d6e06a25c6205b8168774",
+                "Reimbursed",
+            ],
+        )
+        .has_reimbursed_transactions(
+            100,
+            &vec![
+                "101",
+                "123",
+                "ckSepoliaETH",
+                "1_058_000_000_000_000",
+                "0x5a7f0423ddcbaf9429bdc18e793fa8b61f56357fb34452eae15e9396d1becd40",
                 "Reimbursed",
             ],
         )
