@@ -30,9 +30,15 @@ function read_variables() {
             "ipv6_prefix") IPV6_GATEWAY="${value}" ;;
         esac
     done <"${CONFIG}"
+
+    if [ -z "$IPV6_GATEWAY" ]; then
+        echo "No IPv6 gateway found in $CONFIG."
+        exit 1
+    fi
 }
 
 function generate_addresses() {
+    echo "Generating MAC and IPv6 addresses..."
     if [ "$NODE_TYPE" = "SetupOS" ]; then
         MAC_ADDR=$(/opt/ic/bin/setupos_tool generate-mac-address --node-type SetupOS)
         IPV6_ADDR=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type SetupOS)
@@ -45,19 +51,22 @@ function generate_addresses() {
 }
 
 function select_fastest_interface() {
+    echo "Selecting the fastest interface..."
     INTERFACES=$(ip -o link show | awk -F': ' '{print $2}' | grep -v '^lo$')
     BEST_IFACE=""
     BEST_SPEED=0
 
     for IFACE in $INTERFACES; do
+        echo "Checking interface: $IFACE"
         if ip -6 addr show dev "$IFACE" 2>/dev/null | grep -q "inet6 fe80::"; then
             SPEED_STR=$(ethtool "$IFACE" 2>/dev/null | grep "Speed:" || true)
             SPEED=$(echo "$SPEED_STR" | grep -oP '\d+' || echo 0)
+            echo "Interface $IFACE speed: ${SPEED:-0} Mb/s"
             if [ "${SPEED:-0}" -gt "$BEST_SPEED" ]; then
                 BEST_SPEED=$SPEED
                 BEST_IFACE="$IFACE"
+                echo "New best interface: $BEST_IFACE at $BEST_SPEED Mb/s"
             fi
-        fi
     done
 
     if [ -z "$BEST_IFACE" ]; then
@@ -68,6 +77,7 @@ function select_fastest_interface() {
 }
 
 function configure_netplan() {
+    echo "Configuring netplan..."
     local NETPLAN_TEMPLATE="/opt/ic/share/99-setup.yaml.template"
     local NETPLAN_OUTPUT="/etc/netplan/99-setup.yaml"
 
