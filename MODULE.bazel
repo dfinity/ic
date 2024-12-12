@@ -768,7 +768,7 @@ cc_library(
 )
 
 http_archive(
-    name = "bitcoin_core_linux",
+    name = "bitcoin_core_linux_x86",
     build_file_content = """
 package(default_visibility = ["//visibility:public"])
 filegroup(

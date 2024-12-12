@@ -105,7 +105,7 @@ alias(
     actual = select({
         "@bazel_tools//src/conditions:darwin_arm64": "@bitcoin_core_darwin_arm64//:bitcoind",
         "@bazel_tools//src/conditions:darwin_x86_64": "@bitcoin_core_darwin_x86//:bitcoind",
-        "@bazel_tools//src/conditions:linux_x86_64": "@bitcoin_core_linux//:bitcoind",
+        "@bazel_tools//src/conditions:linux_x86_64": "@bitcoin_core_linux_x86//:bitcoind",
     }),
 )
 
