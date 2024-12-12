@@ -2759,7 +2759,7 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
         send_approval(&env, canister_id, account.owner, &approve_args).expect("approval failed");
     }
 
-    for i in 2..30 {
+    for i in 2..40 {
         let to = Account::from(PrincipalId::new_user_test_id(i).0);
         transfer(&env, canister_id, account, to, 100).expect("failed to transfer funds");
     }
