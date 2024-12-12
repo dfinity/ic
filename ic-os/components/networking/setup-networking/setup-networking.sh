@@ -40,6 +40,8 @@ function generate_addresses() {
         MAC_ADDR=$(/opt/ic/bin/hostos_tool generate-mac-address --node-type HostOS)
         IPV6_ADDR=$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type HostOS)
     fi
+    echo "Generated MAC address: $MAC_ADDR"
+    echo "Generated IPv6 address: $IPV6_ADDR"
 }
 
 function select_fastest_interface() {
