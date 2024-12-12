@@ -24,9 +24,13 @@ impl LatencyHistogram {
         let bucket_index = BUCKETS_MS
             .iter()
             .enumerate()
-            .filter(|(_, bucket_upper_bound)| latency_ms <= **bucket_upper_bound)
-            .map(|(bucket_index, _)| bucket_index)
-            .next()
+            .find_map(|(bucket_index, bucket_upper_bound)| {
+                if latency_ms <= **bucket_upper_bound {
+                    Some(bucket_index)
+                } else {
+                    None
+                }
+            })
             .unwrap_or(self.latency_buckets.len() - 1); // infinity bucket
         self.latency_buckets[bucket_index] += 1;
         self.latency_sum += latency_ms;
