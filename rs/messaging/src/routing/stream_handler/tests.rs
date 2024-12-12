@@ -1945,8 +1945,7 @@ fn check_stream_handler_generated_reject_signal_canister_stopped() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             state
-                .canister_states
-                .get_mut(&LOCAL_CANISTER)
+                .canister_state_mut(&LOCAL_CANISTER)
                 .unwrap()
                 .system_state
                 .set_status(CanisterStatus::Stopped);
@@ -1961,8 +1960,7 @@ fn check_stream_handler_generated_reject_signal_canister_stopping() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             state
-                .canister_states
-                .get_mut(&LOCAL_CANISTER)
+                .canister_state_mut(&LOCAL_CANISTER)
                 .unwrap()
                 .system_state
                 .set_status(CanisterStatus::Stopping {
@@ -2017,8 +2015,8 @@ fn check_stream_handler_generated_reject_signal_canister_migrating() {
     );
 }
 
-/// Tests inducting a response multiple times does not raise a critical error
-/// - after inducting it once already
+/// Tests inducting a best-effort response multiple times does not raise a critical error
+/// - after inducting it once already.
 /// - with the addressed canister in `Stopped` state.
 /// - with the addressed canister removed from the replicated state.
 #[test]
@@ -2038,8 +2036,7 @@ fn inducting_duplicate_best_effort_responses_does_not_raise_a_critical_error() {
                 assert_eq!(
                     1,
                     state
-                        .canister_states
-                        .get(&LOCAL_CANISTER)
+                        .canister_state(&LOCAL_CANISTER)
                         .unwrap()
                         .system_state
                         .queues()
@@ -2068,8 +2065,7 @@ fn inducting_duplicate_best_effort_responses_does_not_raise_a_critical_error() {
             // Set the `LOCAL_CANISTER` to stopped and push the cloned response onto the
             // loopback stream.
             state
-                .canister_states
-                .get_mut(&LOCAL_CANISTER)
+                .canister_state_mut(&LOCAL_CANISTER)
                 .unwrap()
                 .system_state
                 .set_status(CanisterStatus::Stopped);
@@ -2157,15 +2153,10 @@ fn legacy_check_stream_handler_generated_reject_response_canister_stopped() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             state
-                .canister_states
-                .get_mut(&LOCAL_CANISTER)
+                .canister_state_mut(&LOCAL_CANISTER)
                 .unwrap()
-                .system_state = SystemState::new_stopped_for_testing(
-                *LOCAL_CANISTER,
-                PrincipalId::default(),
-                Cycles::new(u128::MAX / 2),
-                NumSeconds::from(0),
-            );
+                .system_state
+                .set_status(CanisterStatus::Stopped);
         },
         RejectReason::CanisterStopped,
     );
@@ -2178,8 +2169,7 @@ fn legacy_check_stream_handler_generated_reject_response_canister_stopping() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             state
-                .canister_states
-                .get_mut(&LOCAL_CANISTER)
+                .canister_state_mut(&LOCAL_CANISTER)
                 .unwrap()
                 .system_state = SystemState::new_stopping_for_testing(
                 *LOCAL_CANISTER,
