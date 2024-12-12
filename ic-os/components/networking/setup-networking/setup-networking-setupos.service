@@ -1,7 +1,5 @@
 [Unit]
 Description=Setup networking configuration for SetupOS
-Wants=network-online.target
-After=network.target network-online.target
 Before=setupos.service
 
 [Service]
