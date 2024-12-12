@@ -80,7 +80,10 @@ rust_library(
 
 rust_binary(
     name = "ic-https-outcalls-adapter",
-    srcs = glob(["src/**"]),
+    srcs = [
+        "src/cli.rs",
+        "src/main.rs",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES,
     visibility = [
         "//ic-os/guestos:__subpackages__",
@@ -98,7 +101,10 @@ rust_binary(
 rust_binary(
     name = "ic-outcalls-adapter-with-http",
     testonly = True,
-    srcs = glob(["src/**"]),
+    srcs = [
+        "src/cli.rs",
+        "src/main.rs",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES,
     visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES + [
