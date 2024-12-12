@@ -7,7 +7,9 @@ use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
     BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
 use ic_ledger_suite_state_machine_tests::metrics::{parse_metric, retrieve_metrics};
-use ic_ledger_suite_state_machine_tests::{generate_transactions, TransactionGenerationParameters};
+use ic_ledger_suite_state_machine_tests::{
+    generate_transactions, wait_ledger_ready, TransactionGenerationParameters,
+};
 use ic_ledger_test_utils::state_machine_helpers::index::{
     get_all_blocks, wait_until_sync_is_completed,
 };
@@ -308,6 +310,9 @@ impl Setup {
         self.upgrade_index(&self.master_wasms.index);
         self.upgrade_ledger(&self.master_wasms.ledger)
             .expect("should successfully upgrade ledger to new local version");
+        if expect_migration == ExpectMigration::Yes {
+            wait_ledger_ready(&self.state_machine, LEDGER_CANISTER_ID, 100);
+        }
         self.check_ledger_metrics(expect_migration);
         self.upgrade_archive_canisters(&self.master_wasms.archive);
     }
@@ -330,6 +335,7 @@ impl Setup {
                 );
             }
         }
+        self.check_ledger_metrics(ExpectMigration::No);
         self.upgrade_archive_canisters(&self.mainnet_wasms.archive);
     }
 
@@ -364,21 +370,18 @@ impl Setup {
                 "Migration steps ({}) should be greater than 0",
                 migration_steps
             );
-            let upgrade_instructions = parse_metric(
-                &self.state_machine,
-                LEDGER_CANISTER_ID,
-                "ledger_total_upgrade_instructions_consumed",
-            );
-            // For now, only check number of upgrade instructions for migration, since due to a
-            // bug some old ledgers may report wild numbers coming from parsing a `u64` from
-            // uninitialized memory.
-            assert!(
-                upgrade_instructions < CANISTER_UPGRADE_INSTRUCTION_LIMIT,
-                "Upgrade instructions ({}) should be less than the instruction limit ({})",
-                upgrade_instructions,
-                CANISTER_UPGRADE_INSTRUCTION_LIMIT
-            );
         }
+        let upgrade_instructions = parse_metric(
+            &self.state_machine,
+            LEDGER_CANISTER_ID,
+            "ledger_total_upgrade_instructions_consumed",
+        );
+        assert!(
+            upgrade_instructions < CANISTER_UPGRADE_INSTRUCTION_LIMIT,
+            "Upgrade instructions ({}) should be less than the instruction limit ({})",
+            upgrade_instructions,
+            CANISTER_UPGRADE_INSTRUCTION_LIMIT
+        );
     }
 
     fn list_archives(&self) -> Archives {
