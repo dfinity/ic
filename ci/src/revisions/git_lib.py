@@ -3,7 +3,7 @@ import pathlib
 import logging
 import argparse
 import sys
-from typing import Callable, List
+from typing import List
 
 class HelpfulParser(argparse.ArgumentParser):
     """An argparse parser that prints usage on any error."""
@@ -94,3 +94,51 @@ def commit_and_create_pr(repo: str, repo_root: pathlib.Path, branch: str, check_
                 ],
                 cwd=repo_root,
             )
+
+def run_sync_main_branch_and_checkout_branch(args, logger):
+    repo_root = args.repo_root
+    branch = args.branch
+    main_branch = args.main_branch
+    sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
+
+def run_commit_and_create_pr(args, logger):
+    repo = args.repo
+    repo_root = args.repo_root
+    branch = args.branch
+    files = args.files
+    commit_and_create_pr(repo, repo_root, branch, files, logger)
+
+if __name__ == "__main__":
+    parser = init_helpful_parser()
+    parser.add_argument("--repo-root", help="Root of the repository", default=pathlib.Path("."), type=pathlib.Path, dest="repo_root")
+
+    subparsers = parser.add_subparsers(
+        title="subcommands",
+        description="valid commands",
+        help="sub-command help"
+    )
+
+    parser_sync_main_branch_and_checkout_branch = subparsers.add_parser(
+        "sync-and-checkout",
+        help="Sync with the main branch and checkout a different branch"
+    )
+    parser_sync_main_branch_and_checkout_branch.add_argument("--branch", help="Branch to checkout after syncing with main branch", type=str)
+    parser_sync_main_branch_and_checkout_branch.add_argument("--main-branch", help="Main branch of the repository", type=str, default="master", dest="main_branch")
+    parser_sync_main_branch_and_checkout_branch.set_defaults(func=run_sync_main_branch_and_checkout_branch)
+
+    parser_commit_and_create_pr = subparsers.add_parser(
+        "commit-and-create-pr",
+        help="Commit and create a pull request against the repository"
+    )
+    parser_commit_and_create_pr.add_argument("--branch", help="Branch to checkout after syncing with main branch", type=str)
+    parser_commit_and_create_pr.add_argument("--file", help="Check if the file is modified before commiting", type=List[str], action="append", dest="files")
+    parser_commit_and_create_pr.add_argument("--repo", help="Github repository, `<owner>/<repo>`", type=str, default="dfinity/ic")
+    parser_commit_and_create_pr.set_defaults(func=run_commit_and_create_pr)
+
+    args = parser.parse_args()
+    logger = get_logger(logging.DEBUG if args.verbose else logging.INFO)
+
+    if hasattr(args, "func"):
+        args.func(args, logger)
+    else:
+        parser.print_help()
