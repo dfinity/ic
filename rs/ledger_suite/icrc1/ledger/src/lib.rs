@@ -786,14 +786,6 @@ impl LedgerData for Ledger {
         MAX_TRANSACTIONS_TO_PURGE
     }
 
-    fn max_number_of_accounts(&self) -> usize {
-        self.maximum_number_of_accounts
-    }
-
-    fn accounts_overflow_trim_quantity(&self) -> usize {
-        self.accounts_overflow_trim_quantity
-    }
-
     fn token_name(&self) -> &str {
         &self.token_name
     }

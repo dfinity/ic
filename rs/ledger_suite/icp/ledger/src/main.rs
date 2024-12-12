@@ -113,8 +113,6 @@ fn init(
     token_symbol: Option<String>,
     token_name: Option<String>,
     feature_flags: Option<FeatureFlags>,
-    maximum_number_of_accounts: Option<usize>,
-    accounts_overflow_trim_quantity: Option<usize>,
 ) {
     print(format!(
         "[ledger] init(): minting account is {}",
@@ -131,8 +129,6 @@ fn init(
         token_symbol,
         token_name,
         feature_flags,
-        maximum_number_of_accounts,
-        accounts_overflow_trim_quantity,
     );
     match max_message_size_bytes {
         None => {
@@ -712,8 +708,6 @@ fn canister_init(arg: LedgerCanisterPayload) {
             arg.token_symbol,
             arg.token_name,
             arg.feature_flags,
-            arg.maximum_number_of_accounts,
-            arg.accounts_overflow_trim_quantity,
         ),
         LedgerCanisterPayload::Upgrade(_) => {
             trap_with("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
@@ -745,8 +739,6 @@ fn main() {
                         arg.token_symbol,
                         arg.token_name,
                         arg.feature_flags,
-                        arg.maximum_number_of_accounts,
-                        arg.accounts_overflow_trim_quantity,
                     ),
                     Err(old_err) =>
                     trap_with(&format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))

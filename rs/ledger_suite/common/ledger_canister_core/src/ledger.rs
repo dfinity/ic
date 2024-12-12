@@ -154,13 +154,6 @@ pub trait LedgerData: LedgerContext {
     /// The maximum number of transactions that we attempt to purge in one go.
     fn max_transactions_to_purge(&self) -> usize;
 
-    /// The maximum size of the balances map.
-    fn max_number_of_accounts(&self) -> usize;
-
-    /// How many accounts with lowest balances to purge when the number of accounts exceeds
-    /// [LedgerData::max_number_of_accounts].
-    fn accounts_overflow_trim_quantity(&self) -> usize;
-
     // Token configuration
 
     /// Token name (e.g., Bitcoin).

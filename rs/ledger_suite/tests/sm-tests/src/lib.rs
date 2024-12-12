@@ -101,8 +101,6 @@ pub struct InitArgs {
     pub metadata: Vec<(String, Value)>,
     pub archive_options: ArchiveOptions,
     pub feature_flags: Option<FeatureFlags>,
-    pub maximum_number_of_accounts: Option<u64>,
-    pub accounts_overflow_trim_quantity: Option<u64>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType)]
@@ -119,7 +117,6 @@ pub struct UpgradeArgs {
     pub transfer_fee: Option<Nat>,
     pub change_fee_collector: Option<ChangeFeeCollector>,
     pub feature_flags: Option<FeatureFlags>,
-    pub accounts_overflow_trim_quantity: Option<u64>,
     pub change_archive_options: Option<ChangeArchiveOptions>,
 }
 
@@ -894,8 +891,6 @@ fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
             max_transactions_per_response: None,
         },
         feature_flags: Some(FeatureFlags { icrc2: true }),
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
     }
 }
 
@@ -1666,8 +1661,6 @@ pub fn test_archive_controllers(ledger_wasm: Vec<u8>) {
                 max_transactions_per_response: None,
             },
             feature_flags: args.feature_flags,
-            maximum_number_of_accounts: args.maximum_number_of_accounts,
-            accounts_overflow_trim_quantity: args.accounts_overflow_trim_quantity,
         })
     }
 
@@ -1696,8 +1689,6 @@ pub fn test_archive_no_additional_controllers(ledger_wasm: Vec<u8>) {
                 max_transactions_per_response: None,
             },
             feature_flags: args.feature_flags,
-            maximum_number_of_accounts: args.maximum_number_of_accounts,
-            accounts_overflow_trim_quantity: args.accounts_overflow_trim_quantity,
         })
     }
 
@@ -1731,8 +1722,6 @@ pub fn test_archive_duplicate_controllers(ledger_wasm: Vec<u8>) {
                 max_transactions_per_response: None,
             },
             feature_flags: args.feature_flags,
-            maximum_number_of_accounts: args.maximum_number_of_accounts,
-            accounts_overflow_trim_quantity: args.accounts_overflow_trim_quantity,
         })
     }
     let p100 = PrincipalId::new_user_test_id(100);

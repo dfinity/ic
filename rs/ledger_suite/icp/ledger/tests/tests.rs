@@ -98,8 +98,6 @@ fn encode_init_args(
         .transfer_fee(Tokens::try_from(args.transfer_fee).unwrap())
         .token_symbol_and_name(&args.token_symbol, &args.token_name)
         .feature_flags(FeatureFlags { icrc2: true })
-        .maximum_number_of_accounts(args.maximum_number_of_accounts)
-        .accounts_overflow_trim_quantity(args.accounts_overflow_trim_quantity)
         .build()
         .unwrap()
 }
@@ -521,8 +519,6 @@ fn check_old_init() {
         token_symbol: Some("ICP".into()),
         token_name: Some("Internet Computer".into()),
         feature_flags: None,
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
     })
     .unwrap();
     env.install_canister(ledger_wasm(), old_init, None)

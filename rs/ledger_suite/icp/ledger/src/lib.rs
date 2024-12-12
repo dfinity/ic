@@ -194,8 +194,9 @@ pub struct Ledger {
     #[serde(default)]
     stable_approvals: AllowanceTable<StableAllowancesData>,
     pub blockchain: Blockchain<dfn_runtime::DfnRuntime, IcpLedgerArchiveWasm>,
-    // A cap on the maximum number of accounts.
+    // DEPRECETAD, UNUSED: A cap on the maximum number of accounts.
     pub maximum_number_of_accounts: usize,
+    // DEPRECETAD, UNUSED:
     // When maximum number of accounts is exceeded, a specified number of
     // accounts with lowest balances are removed.
     accounts_overflow_trim_quantity: usize,
@@ -287,14 +288,6 @@ impl LedgerData for Ledger {
         Self::MAX_TRANSACTIONS_TO_PURGE
     }
 
-    fn max_number_of_accounts(&self) -> usize {
-        self.maximum_number_of_accounts
-    }
-
-    fn accounts_overflow_trim_quantity(&self) -> usize {
-        self.accounts_overflow_trim_quantity
-    }
-
     fn token_name(&self) -> &str {
         &self.token_name
     }
@@ -346,8 +339,8 @@ impl Default for Ledger {
             stable_approvals: Default::default(),
             balances: LedgerBalances::default(),
             blockchain: Blockchain::default(),
-            maximum_number_of_accounts: 28_000_000,
-            accounts_overflow_trim_quantity: 100_000,
+            maximum_number_of_accounts: 0,
+            accounts_overflow_trim_quantity: 0,
             minting_account_id: None,
             icrc1_minting_account: None,
             blocks_notified: IntMap::new(),
@@ -463,8 +456,6 @@ impl Ledger {
         token_symbol: Option<String>,
         token_name: Option<String>,
         feature_flags: Option<FeatureFlags>,
-        maximum_number_of_accounts: Option<usize>,
-        accounts_overflow_trim_quantity: Option<usize>,
     ) {
         self.token_symbol = token_symbol.unwrap_or_else(|| "ICP".to_string());
         self.token_name = token_name.unwrap_or_else(|| "Internet Computer".to_string());
@@ -491,12 +482,6 @@ impl Ledger {
         }
         if let Some(feature_flags) = feature_flags {
             self.feature_flags = feature_flags;
-        }
-        if let Some(maximum_number_of_accounts) = maximum_number_of_accounts {
-            self.maximum_number_of_accounts = maximum_number_of_accounts;
-        }
-        if let Some(accounts_overflow_trim_quantity) = accounts_overflow_trim_quantity {
-            self.accounts_overflow_trim_quantity = accounts_overflow_trim_quantity;
         }
     }
 
