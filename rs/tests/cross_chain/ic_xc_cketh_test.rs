@@ -1,11 +1,21 @@
 use anyhow::{anyhow, bail, Context, Result};
 use candid::{Encode, Nat};
 use canister_test::{Canister, Runtime, Wasm};
+use dfn_candid::candid;
 use ic_cketh_minter::endpoints::CandidBlockTag;
 use ic_cketh_minter::lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg};
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
+use ic_consensus_threshold_sig_system_test_utils::{
+    enable_chain_key_signing, get_public_key_and_test_signature, make_ecdsa_key_id, make_key,
+    make_key_ids_for_all_schemes,
+};
+use ic_ethereum_types::Address;
 use ic_icrc1_ledger::{ArchiveOptions, FeatureFlags, InitArgsBuilder, LedgerArgument};
+use ic_management_canister_types::MasterPublicKeyId;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::universal_vm::DeployedUniversalVm;
+use ic_system_test_driver::util::MessageCanister;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
@@ -44,6 +54,10 @@ fn setup_with_system_and_application_subnets(env: TestEnv) {
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
+    install_nns_with_customizations_and_check_progress(
+        env.topology_snapshot(),
+        NnsCustomizations::default(),
+    );
 
     env.topology_snapshot()
         .subnets()
@@ -80,11 +94,37 @@ docker logs anvil
 fn ic_xc_cketh_test(env: TestEnv) {
     let logger = env.logger();
     let topology_snapshot = env.topology_snapshot();
+    let nns_subnet = topology_snapshot.root_subnet();
+    let application_subnet = topology_snapshot
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .expect("missing application subnet");
+
+    let system_subnet_runtime = {
+        let nns_node = nns_subnet.nodes().next().unwrap();
+        runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id())
+    };
+    let governance_canister = Canister::new(&system_subnet_runtime, GOVERNANCE_CANISTER_ID);
+
+    let ecdsa_key_id = make_key("some_key");
+    let key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
+    block_on(async {
+        enable_chain_key_signing(
+            &governance_canister,
+            application_subnet.subnet_id,
+            vec![key_id.clone()],
+            &logger,
+        )
+        .await;
+        let app_node = application_subnet.nodes().next().unwrap();
+        let app_agent = app_node.build_default_agent_async().await;
+        let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
+        get_public_key_and_test_signature(&key_id, &msg_can, false, &logger)
+            .await
+            .expect("Should successfully create and verify the signature");
+    });
+
     let application_subnet_runtime = {
-        let application_subnet = topology_snapshot
-            .subnets()
-            .find(|s| s.subnet_type() == SubnetType::Application)
-            .expect("missing application subnet");
         let application_node = application_subnet.nodes().next().unwrap();
         runtime_from_url(
             application_node.get_public_url(),
@@ -117,11 +157,12 @@ fn ic_xc_cketh_test(env: TestEnv) {
         )
     });
 
-    block_on(async {
+    let (cketh_ledger, minter) = block_on(async {
         let mut minter_canister = create_canister(&application_subnet_runtime).await;
         let minter = minter_canister.canister_id().get().0;
 
-        let mut ledger_canister = create_canister(&application_subnet_runtime).await;
+        let mut cketh_ledger_canister = create_canister(&application_subnet_runtime).await;
+        let ledger_id = cketh_ledger_canister.canister_id().get().0;
         let ledger_init_args = LedgerArgument::Init(
             // See proposal 126309
             InitArgsBuilder::with_symbol_and_name("ckETH", "ckETH")
@@ -153,18 +194,21 @@ fn ic_xc_cketh_test(env: TestEnv) {
             Wasm::from_file(env::var("LEDGER_WASM_PATH").expect("LEDGER_WASM_PATH not set"));
         ledger_wasm
             .install_with_retries_onto_canister(
-                &mut ledger_canister,
+                &mut cketh_ledger_canister,
                 Some(Encode!(&ledger_init_args).unwrap()),
                 None,
             )
             .await
             .unwrap();
+        let cketh_ledger_canister = LedgerCanister {
+            canister: cketh_ledger_canister,
+        };
 
         let minter_init_args = MinterArg::InitArg(MinterInitArgs {
             ethereum_network: EthereumNetwork::Mainnet,
-            ecdsa_key_name: "key_1".to_string(),
+            ecdsa_key_name: ecdsa_key_id.name,
             ethereum_contract_address: None,
-            ledger_id: ledger_canister.canister_id().get().0,
+            ledger_id,
             ethereum_block_height: CandidBlockTag::Finalized,
             minimum_withdrawal_amount: Nat::from(30_000_000_000_000_000_u64),
             next_transaction_nonce: Nat::from(0_u8),
@@ -173,6 +217,7 @@ fn ic_xc_cketh_test(env: TestEnv) {
         let minter_wasm = Wasm::from_file(
             env::var("CKETH_MINTER_WASM_PATH").expect("CKETH_MINTER_WASM_PATH not set"),
         );
+        let minter_wasm_hash = minter_wasm.sha256_hash();
         minter_wasm
             .install_with_retries_onto_canister(
                 &mut minter_canister,
@@ -181,15 +226,28 @@ fn ic_xc_cketh_test(env: TestEnv) {
             )
             .await
             .unwrap();
+        // status_of_nns_controlled_canister_satisfy(&logger, &minter_canister, |status| {
+        //     status.status == CanisterStatusType::Running
+        //         && status.module_hash.as_deref() == Some(minter_wasm_hash.as_ref())
+        // })
+        // .await;
+
+        let minter_canister = CkEthMinterCanister {
+            canister: minter_canister,
+        };
+
+        (cketh_ledger_canister, minter_canister)
     });
 
-    let minter_address = "0xb25eA1D493B49a1DeD42aC5B1208cC618f9A9B80";
+    let minter_address: Address = block_on(async { minter.minter_address().await })
+        .parse()
+        .unwrap();
 
     let eth_deposit_helper_contract_address = deploy_smart_contract(
         &docker_host,
         "EthDepositHelper.sol",
         "CkEthDeposit",
-        minter_address,
+        &minter_address.to_string(),
     );
     assert_eq!(
         call_smart_contract(
@@ -197,14 +255,14 @@ fn ic_xc_cketh_test(env: TestEnv) {
             &eth_deposit_helper_contract_address,
             "getMinterAddress()(address)"
         ),
-        minter_address
+        minter_address.to_string()
     );
 
     let erc20_deposit_helper_contract_address = deploy_smart_contract(
         &docker_host,
         "ERC20DepositHelper.sol",
         "CkErc20Deposit",
-        minter_address,
+        &minter_address.to_string(),
     );
     assert_eq!(
         call_smart_contract(
@@ -212,7 +270,7 @@ fn ic_xc_cketh_test(env: TestEnv) {
             &erc20_deposit_helper_contract_address,
             "getMinterAddress()(address)"
         ),
-        minter_address
+        minter_address.to_string()
     );
 }
 
@@ -244,4 +302,67 @@ pub async fn create_canister(runtime: &Runtime) -> Canister<'_> {
         .create_canister_max_cycles_with_retries()
         .await
         .expect("Unable to create canister")
+}
+
+// async fn status_of_nns_controlled_canister_satisfy<P: Fn(&CanisterStatusResult) -> bool>(
+//     logger: &slog::Logger,
+//     target_canister: &Canister<'_>,
+//     predicate: P,
+// ) {
+//     use dfn_candid::candid;
+//
+//     ic_system_test_driver::retry_with_msg_async!(
+//         format!(
+//             "calling canister_status of {} to check if it satisfies the predicate",
+//             target_canister.canister_id()
+//         ),
+//         logger,
+//         Duration::from_secs(60),
+//         Duration::from_secs(1),
+//         || async {
+//             let status: CanisterStatusResult = target_canister
+//                 .update_("canister_status", candid, (target_canister.as_record(),))
+//                 .await
+//                 .map_err(|e| anyhow!(e))?;
+//             info!(
+//                 logger,
+//                 "Canister status of {}: {:?}",
+//                 target_canister.canister_id(),
+//                 status
+//             );
+//             if predicate(&status) {
+//                 Ok(())
+//             } else {
+//                 bail!(
+//                     "Status of {} did not satisfy predicate",
+//                     target_canister.canister_id()
+//                 )
+//             }
+//         }
+//     )
+//     .await
+//     .unwrap_or_else(|e| {
+//         panic!(
+//             "Canister status of {} did not satisfy predicate: {}",
+//             target_canister.canister_id(),
+//             e
+//         )
+//     });
+// }
+
+struct LedgerCanister<'a> {
+    canister: Canister<'a>,
+}
+
+struct CkEthMinterCanister<'a> {
+    canister: Canister<'a>,
+}
+
+impl<'a> CkEthMinterCanister<'a> {
+    async fn minter_address(&self) -> String {
+        self.canister
+            .update_("minter_address", candid, ())
+            .await
+            .unwrap()
+    }
 }

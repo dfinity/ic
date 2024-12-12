@@ -72,14 +72,20 @@ system_test_nns(
         # Keep sorted.
         "//rs/ethereum/cketh/minter",
         "//rs/ledger_suite/icrc1/ledger",
+        "//rs/nns/constants",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/management_canister_types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:reqwest",
         "@crate_index//:serde_json",
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/ic-ethereum-types"
     ],
 )
 
