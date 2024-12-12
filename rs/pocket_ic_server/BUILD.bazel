@@ -228,15 +228,18 @@ rust_test(
     aliases = {},
     data = [
         ":pocket-ic-server",
-        "@bitcoin_core//:bitcoind",
+        "//:bitcoind",
         "@bitcoin_example_canister//file",
         "@btc_canister//file",
+        "@mozilla_root_ca_store//file",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "BASIC_BITCOIN_WASM": "$(rootpath @bitcoin_example_canister//file)",
-        "BITCOIND_BIN": "$(rootpath @bitcoin_core//:bitcoind)",
+        "BITCOIND_BIN": "$(rootpath //:bitcoind)",
         "BTC_WASM": "$(rootpath @btc_canister//file)",
+        "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
+    tags = ["test_macos"],
     deps = TEST_DEPENDENCIES,
 )
