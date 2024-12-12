@@ -1,6 +1,6 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
-use ic_ckbtc_minter::state::eventlog::{replay, Event};
+use ic_ckbtc_minter::state::eventlog::{replay, Event, EventType};
 use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::state::{CkBtcMinterState, Network};
 use std::path::PathBuf;
@@ -60,7 +60,7 @@ fn should_replay_events_and_check_invariants() {
 async fn should_not_grow_number_of_useless_events() {
     for file in [GetEventsFile::Mainnet, GetEventsFile::Testnet] {
         let events = file.deserialize();
-        let received_utxo_to_minter_with_empty_utxos = Event::ReceivedUtxos {
+        let received_utxo_to_minter_with_empty_utxos = EventType::ReceivedUtxos {
             mint_txid: None,
             to_account: file.minter_canister_id().into(),
             utxos: vec![],
@@ -83,12 +83,15 @@ async fn should_not_grow_number_of_useless_events() {
         }
     }
 
-    fn assert_useless_events_eq(events: &[Event], expected_useless_event: &Event) -> Vec<usize> {
+    fn assert_useless_events_eq(
+        events: &[Event],
+        expected_useless_event: &EventType,
+    ) -> Vec<usize> {
         let mut indexes = Vec::new();
         for (index, event) in events.iter().enumerate() {
-            match &event {
-                Event::ReceivedUtxos { utxos, .. } if utxos.is_empty() => {
-                    assert_eq!(event, expected_useless_event);
+            match &event.payload {
+                EventType::ReceivedUtxos { utxos, .. } if utxos.is_empty() => {
+                    assert_eq!(&event.payload, expected_useless_event);
                     indexes.push(index);
                 }
                 _ => {}

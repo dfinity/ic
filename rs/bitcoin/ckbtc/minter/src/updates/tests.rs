@@ -1,6 +1,6 @@
 mod update_balance {
     use crate::metrics::LatencyHistogram;
-    use crate::state::{audit, eventlog::Event, mutate_state, read_state, SuspendedReason};
+    use crate::state::{audit, eventlog::EventType, mutate_state, read_state, SuspendedReason};
     use crate::test_fixtures::{
         ecdsa_public_key, get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
         mock::MockCanisterRuntime, quarantined_utxo, BTC_CHECKER_CANISTER_ID, DAY,
@@ -19,6 +19,8 @@ mod update_balance {
 
     #[tokio::test]
     async fn should_not_add_event_when_reevaluated_utxo_still_ignored() {
+        mock_constant_time(&mut MockCanisterRuntime::new(), NOW, 1);
+
         test_suspended_utxo_last_time_checked_timestamp(
             ignored_utxo(),
             SuspendedReason::ValueTooSmall,
@@ -31,16 +33,6 @@ mod update_balance {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
         let ignored_utxo = ignored_utxo();
-        mutate_state(|s| {
-            audit::ignore_utxo(
-                s,
-                ignored_utxo.clone(),
-                account,
-                NOW.checked_sub(DAY).unwrap(),
-            )
-        });
-        mutate_state(|s| s.check_fee = ignored_utxo.value - 1);
-        let events_before: Vec<_> = storage::events().collect();
 
         let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
@@ -51,6 +43,18 @@ mod update_balance {
             CheckTransactionResponse::Failed(vec![]),
         );
         mock_schedule_now_process_logic(&mut runtime);
+
+        mutate_state(|s| {
+            audit::ignore_utxo(
+                s,
+                ignored_utxo.clone(),
+                account,
+                NOW.checked_sub(DAY).unwrap(),
+                &runtime,
+            )
+        });
+        mutate_state(|s| s.check_fee = ignored_utxo.value - 1);
+        let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
 
         let result = update_balance(
             UpdateBalanceArgs {
@@ -64,7 +68,7 @@ mod update_balance {
         assert_eq!(result, Ok(vec![UtxoStatus::Tainted(ignored_utxo.clone())]));
         assert_has_new_events(
             &events_before,
-            &[Event::SuspendedUtxo {
+            &[EventType::SuspendedUtxo {
                 utxo: ignored_utxo.clone(),
                 account,
                 reason: SuspendedReason::Quarantined,
@@ -81,16 +85,6 @@ mod update_balance {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
         let ignored_utxo = ignored_utxo();
-        mutate_state(|s| {
-            audit::ignore_utxo(
-                s,
-                ignored_utxo.clone(),
-                account,
-                NOW.checked_sub(DAY).unwrap(),
-            )
-        });
-        mutate_state(|s| s.check_fee = ignored_utxo.value - 1);
-        let events_before: Vec<_> = storage::events().collect();
 
         let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![ignored_utxo.clone()]);
@@ -106,6 +100,18 @@ mod update_balance {
             .withf(move |amount, account_, _memo| amount == &1 && account_ == &account)
             .return_const(Ok(1));
         mock_schedule_now_process_logic(&mut runtime);
+
+        mutate_state(|s| {
+            audit::ignore_utxo(
+                s,
+                ignored_utxo.clone(),
+                account,
+                NOW.checked_sub(DAY).unwrap(),
+                &runtime,
+            )
+        });
+        mutate_state(|s| s.check_fee = ignored_utxo.value - 1);
+        let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
 
         let result = update_balance(
             UpdateBalanceArgs {
@@ -129,7 +135,7 @@ mod update_balance {
             &events_before,
             &[
                 checked_utxo_event(ignored_utxo.clone(), account),
-                Event::ReceivedUtxos {
+                EventType::ReceivedUtxos {
                     mint_txid: Some(1),
                     to_account: account,
                     utxos: vec![ignored_utxo],
@@ -140,6 +146,8 @@ mod update_balance {
 
     #[tokio::test]
     async fn should_not_add_event_when_reevaluated_utxo_still_tainted() {
+        mock_constant_time(&mut MockCanisterRuntime::new(), NOW, 1);
+
         test_suspended_utxo_last_time_checked_timestamp(
             quarantined_utxo(),
             SuspendedReason::Quarantined,
@@ -150,15 +158,12 @@ mod update_balance {
     #[tokio::test]
     async fn should_mint_reevaluated_tainted_utxo() {
         init_state_with_ecdsa_public_key();
+
         let account = ledger_account();
         let quarantined_utxo = quarantined_utxo();
         let utxo = quarantined_utxo.clone();
-        mutate_state(|s| {
-            audit::quarantine_utxo(s, utxo, account, NOW.checked_sub(DAY).unwrap());
-        });
         let check_fee = read_state(|s| s.check_fee);
         let minted_amount = quarantined_utxo.value - check_fee;
-        let events_before: Vec<_> = storage::events().collect();
 
         let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![quarantined_utxo.clone()]);
@@ -174,6 +179,12 @@ mod update_balance {
             .withf(move |amount, account_, _memo| amount == &minted_amount && account_ == &account)
             .return_const(Ok(1));
         mock_schedule_now_process_logic(&mut runtime);
+
+        mutate_state(|s| {
+            audit::quarantine_utxo(s, utxo, account, NOW.checked_sub(DAY).unwrap(), &runtime);
+        });
+        let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
+
         let result = update_balance(
             UpdateBalanceArgs {
                 owner: Some(account.owner),
@@ -196,7 +207,7 @@ mod update_balance {
             &events_before,
             &[
                 checked_utxo_event(quarantined_utxo.clone(), account),
-                Event::ReceivedUtxos {
+                EventType::ReceivedUtxos {
                     mint_txid: Some(1),
                     to_account: account,
                     utxos: vec![quarantined_utxo],
@@ -226,6 +237,7 @@ mod update_balance {
                 vec![
                     NOW,                         // start time of `update_balance` method
                     NOW,                         // time used to triage processable UTXOs
+                    NOW.saturating_add(latency), // event timestamp
                     NOW.saturating_add(latency), // time used in `schedule_now` call at end of `update_balance`
                     NOW.saturating_add(latency), // end time of `update_balance` method
                 ],
@@ -294,19 +306,6 @@ mod update_balance {
     async fn test_suspended_utxo_last_time_checked_timestamp(utxo: Utxo, reason: SuspendedReason) {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
-        match &reason {
-            SuspendedReason::ValueTooSmall => mutate_state(|s| {
-                audit::ignore_utxo(s, utxo.clone(), account, NOW.checked_sub(DAY).unwrap())
-            }),
-            SuspendedReason::Quarantined => mutate_state(|s| {
-                audit::quarantine_utxo(s, utxo.clone(), account, NOW.checked_sub(DAY).unwrap());
-            }),
-        };
-        let events_before: Vec<_> = storage::events().collect();
-        let update_balance_args = UpdateBalanceArgs {
-            owner: Some(account.owner),
-            subaccount: account.subaccount,
-        };
 
         let mut runtime = MockCanisterRuntime::new();
         mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
@@ -315,6 +314,32 @@ mod update_balance {
             NOW.checked_sub(Duration::from_secs(1)).unwrap(),
             4,
         );
+
+        match &reason {
+            SuspendedReason::ValueTooSmall => mutate_state(|s| {
+                audit::ignore_utxo(
+                    s,
+                    utxo.clone(),
+                    account,
+                    NOW.checked_sub(DAY).unwrap(),
+                    &runtime,
+                )
+            }),
+            SuspendedReason::Quarantined => mutate_state(|s| {
+                audit::quarantine_utxo(
+                    s,
+                    utxo.clone(),
+                    account,
+                    NOW.checked_sub(DAY).unwrap(),
+                    &runtime,
+                );
+            }),
+        };
+        let events_before: Vec<_> = storage::events().map(|event| event.payload).collect();
+        let update_balance_args = UpdateBalanceArgs {
+            owner: Some(account.owner),
+            subaccount: account.subaccount,
+        };
 
         let result = update_balance(update_balance_args.clone(), &runtime).await;
 
@@ -471,23 +496,23 @@ mod update_balance {
         expect_bitcoin_get_utxos_returning(runtime, utxos);
     }
 
-    fn assert_has_new_events(events_before: &[Event], expected_new_events: &[Event]) {
+    fn assert_has_new_events(events_before: &[EventType], expected_new_events: &[EventType]) {
         let expected_events = events_before
             .iter()
             .chain(expected_new_events.iter())
             .collect::<Vec<_>>();
-        let actual_events: Vec<_> = storage::events().collect();
+        let actual_events: Vec<_> = storage::events().map(|event| event.payload).collect();
         let actual_events_ref = actual_events.iter().collect::<Vec<_>>();
 
         assert_eq!(expected_events.as_slice(), actual_events_ref.as_slice());
     }
 
-    fn assert_has_no_new_events(events_before: &[Event]) {
+    fn assert_has_no_new_events(events_before: &[EventType]) {
         assert_has_new_events(events_before, &[]);
     }
 
-    fn checked_utxo_event(utxo: Utxo, account: Account) -> Event {
-        Event::CheckedUtxoV2 { utxo, account }
+    fn checked_utxo_event(utxo: Utxo, account: Account) -> EventType {
+        EventType::CheckedUtxoV2 { utxo, account }
     }
 
     fn suspended_utxo(utxo: &Utxo) -> Option<SuspendedReason> {

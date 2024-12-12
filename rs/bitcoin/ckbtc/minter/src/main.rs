@@ -8,6 +8,7 @@ use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
 use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
+use ic_ckbtc_minter::state::eventlog::Event;
 use ic_ckbtc_minter::state::{
     read_state, BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2,
 };
@@ -22,7 +23,7 @@ use ic_ckbtc_minter::updates::{
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
 use ic_ckbtc_minter::{
-    state::eventlog::{Event, GetEventsArg},
+    state::eventlog::{EventType, GetEventsArg},
     storage, {Log, LogEntry, Priority},
 };
 use ic_ckbtc_minter::{MinterInfo, IC_CANISTER_RUNTIME};
@@ -33,7 +34,7 @@ use std::str::FromStr;
 fn init(args: MinterArg) {
     match args {
         MinterArg::Init(args) => {
-            storage::record_event(&Event::Init(args.clone()));
+            storage::record_event(EventType::Init(args.clone()), &IC_CANISTER_RUNTIME);
             lifecycle::init::init(args);
             setup_tasks();
 
@@ -136,7 +137,7 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
             MinterArg::Init(_) => panic!("expected Option<UpgradeArgs> got InitArgs."),
         };
     }
-    lifecycle::upgrade::post_upgrade(upgrade_arg);
+    lifecycle::upgrade::post_upgrade(upgrade_arg, &IC_CANISTER_RUNTIME);
     setup_tasks();
 }
 

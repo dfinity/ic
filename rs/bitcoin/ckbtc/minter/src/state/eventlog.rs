@@ -7,7 +7,7 @@ use crate::state::{
 };
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit, ReimbursementReason};
 use candid::Principal;
-pub use event::Event;
+pub use event::EventType;
 use ic_btc_interface::{Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
@@ -28,7 +28,7 @@ mod event {
     use crate::state::SuspendedReason;
 
     #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
-    pub enum Event {
+    pub enum EventType {
         /// Indicates the minter initialization with the specified arguments.  Must be
         /// the first event in the event log.
         #[serde(rename = "init")]
@@ -204,6 +204,15 @@ mod event {
     }
 }
 
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
+pub struct Event {
+    /// The canister time at which the minter generated this event.
+    /// This field is optional for backwards compatibility with events recorded before it was added.
+    pub timestamp: Option<u64>,
+    /// The event type.
+    pub payload: EventType,
+}
+
 #[derive(Debug)]
 pub enum ReplayLogError {
     /// There are no events in the event log.
@@ -218,13 +227,15 @@ pub fn replay<I: CheckInvariants>(
     mut events: impl Iterator<Item = Event>,
 ) -> Result<CkBtcMinterState, ReplayLogError> {
     let mut state = match events.next() {
-        Some(Event::Init(args)) => CkBtcMinterState::from(args),
-        Some(evt) => {
-            return Err(ReplayLogError::InconsistentLog(format!(
-                "The first event is not Init: {:?}",
-                evt
-            )))
-        }
+        Some(event) => match event.payload {
+            EventType::Init(args) => CkBtcMinterState::from(args),
+            payload => {
+                return Err(ReplayLogError::InconsistentLog(format!(
+                    "The first event is not Init: {:?}",
+                    payload
+                )))
+            }
+        },
         None => return Err(ReplayLogError::EmptyLog),
     };
 
@@ -234,23 +245,23 @@ pub fn replay<I: CheckInvariants>(
     // knows when to skip giving fees to `btc_checker_principal`.
     let mut kyt_principal = None;
     for event in events {
-        match event {
-            Event::Init(args) => {
+        match event.payload {
+            EventType::Init(args) => {
                 if args.kyt_principal.is_some() {
                     kyt_principal = args.kyt_principal.map(Principal::from);
                 }
                 state.reinit(args);
             }
-            Event::Upgrade(args) => {
+            EventType::Upgrade(args) => {
                 if args.kyt_principal.is_some() {
                     kyt_principal = args.kyt_principal.map(Principal::from);
                 }
                 state.upgrade(args);
             }
-            Event::ReceivedUtxos {
+            EventType::ReceivedUtxos {
                 to_account, utxos, ..
             } => state.add_utxos::<I>(to_account, utxos),
-            Event::AcceptedRetrieveBtcRequest(req) => {
+            EventType::AcceptedRetrieveBtcRequest(req) => {
                 if let Some(account) = req.reimbursement_account {
                     state
                         .retrieve_btc_account_to_block_indices
@@ -260,7 +271,7 @@ pub fn replay<I: CheckInvariants>(
                 }
                 state.push_back_pending_request(req);
             }
-            Event::RemovedRetrieveBtcRequest { block_index } => {
+            EventType::RemovedRetrieveBtcRequest { block_index } => {
                 let request = state.remove_pending_request(block_index).ok_or_else(|| {
                     ReplayLogError::InconsistentLog(format!(
                         "Attempted to remove a non-pending retrieve_btc request {}",
@@ -273,7 +284,7 @@ pub fn replay<I: CheckInvariants>(
                     state: FinalizedStatus::AmountTooLow,
                 })
             }
-            Event::SentBtcTransaction {
+            EventType::SentBtcTransaction {
                 request_block_indices,
                 txid,
                 utxos,
@@ -303,7 +314,7 @@ pub fn replay<I: CheckInvariants>(
                     submitted_at,
                 });
             }
-            Event::ReplacedBtcTransaction {
+            EventType::ReplacedBtcTransaction {
                 old_txid,
                 new_txid,
                 change_output,
@@ -336,11 +347,11 @@ pub fn replay<I: CheckInvariants>(
                     },
                 );
             }
-            Event::ConfirmedBtcTransaction { txid } => {
+            EventType::ConfirmedBtcTransaction { txid } => {
                 state.finalize_transaction(&txid);
             }
             #[allow(deprecated)] //need to replay past events
-            Event::CheckedUtxo {
+            EventType::CheckedUtxo {
                 utxo,
                 uuid,
                 clean,
@@ -357,21 +368,21 @@ pub fn replay<I: CheckInvariants>(
                     state.discard_utxo_without_account(utxo, SuspendedReason::Quarantined);
                 }
             },
-            Event::CheckedUtxoV2 { utxo, account } => {
+            EventType::CheckedUtxoV2 { utxo, account } => {
                 state.mark_utxo_checked_v2(utxo, &account);
             }
             #[allow(deprecated)] //need to replay past events
-            Event::IgnoredUtxo { utxo } => {
+            EventType::IgnoredUtxo { utxo } => {
                 state.discard_utxo_without_account(utxo, SuspendedReason::ValueTooSmall);
             }
-            Event::SuspendedUtxo {
+            EventType::SuspendedUtxo {
                 utxo,
                 account,
                 reason,
             } => {
                 state.suspended_utxos.insert(account, utxo, reason, None);
             }
-            Event::DistributedKytFee {
+            EventType::DistributedKytFee {
                 kyt_provider,
                 amount,
                 ..
@@ -385,10 +396,10 @@ pub fn replay<I: CheckInvariants>(
                 }
             }
             #[allow(deprecated)]
-            Event::RetrieveBtcKytFailed { kyt_provider, .. } => {
+            EventType::RetrieveBtcKytFailed { kyt_provider, .. } => {
                 *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.check_fee;
             }
-            Event::ScheduleDepositReimbursement {
+            EventType::ScheduleDepositReimbursement {
                 account,
                 amount,
                 burn_block_index,
@@ -403,7 +414,7 @@ pub fn replay<I: CheckInvariants>(
                     },
                 );
             }
-            Event::ReimbursedFailedDeposit {
+            EventType::ReimbursedFailedDeposit {
                 burn_block_index,
                 mint_block_index,
             } => {

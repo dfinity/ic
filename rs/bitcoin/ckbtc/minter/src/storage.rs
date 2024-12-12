@@ -1,4 +1,5 @@
-use crate::state::eventlog::Event;
+use crate::state::eventlog::{Event, EventType};
+use crate::CanisterRuntime;
 use ic_stable_structures::{
     log::{Log as StableLog, NoSuchEntry},
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
@@ -68,6 +69,7 @@ fn encode_event(event: &Event) -> Vec<u8> {
 ///
 /// This function panics if the event decoding fails.
 fn decode_event(buf: &[u8]) -> Event {
+    // handle legacy format without timestamp
     ciborium::de::from_reader(buf).expect("failed to decode a minter event")
 }
 
@@ -85,12 +87,15 @@ pub fn count_events() -> u64 {
 }
 
 /// Records a new minter event.
-pub fn record_event(event: &Event) {
-    let bytes = encode_event(event);
+pub fn record_event<R: CanisterRuntime>(payload: EventType, runtime: &R) {
+    let bytes = encode_event(&Event {
+        timestamp: Some(runtime.time()),
+        payload,
+    });
     EVENTS.with(|events| {
         events
             .borrow()
             .append(&bytes)
-            .expect("failed to append an entry to the event log")
-    });
+            .expect("failed to append an entry to the event log");
+    })
 }
