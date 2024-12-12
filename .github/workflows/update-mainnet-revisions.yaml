@@ -63,6 +63,9 @@ jobs:
         run: |
           set -eEuxo pipefail
 
+          # Leftover from previous step of setting up gh cli
+          rm gh_tar
+
           REPO_ROOT=$(git rev-parse --show-toplevel)
           BRANCH="ic-nervous-system-wasms"
           FILE="mainnet-canisters.json"
