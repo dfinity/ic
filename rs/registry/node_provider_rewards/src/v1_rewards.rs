@@ -4,7 +4,7 @@ use itertools::Itertools;
 use num_traits::ToPrimitive;
 
 use crate::v1_logs::LogLevel;
-use crate::v1_types::TimestampNanos;
+use crate::v1_types::{NodeProviderComputationData, TimestampNanos};
 use crate::{
     v1_logs::{LogEntry, Operation, RewardsLog},
     v1_types::{
@@ -30,6 +30,7 @@ pub fn calculate_rewards(
 ) -> RewardsPerNodeProvider {
     let mut rewards_per_node_provider = HashMap::default();
     let mut rewards_log_per_node_provider = HashMap::default();
+    let mut rewards_data_per_node_provider = HashMap::default();
 
     let mut all_assigned_metrics = daily_node_metrics(subnet_metrics);
     let subnets_systematic_fr = systematic_fr_per_subnet(&all_assigned_metrics);
@@ -37,6 +38,9 @@ pub fn calculate_rewards(
 
     for (node_provider_id, node_provider_rewardables) in node_provider_rewardables {
         let mut logger = RewardsLog::default();
+        let mut computation_data = NodeProviderComputationData::default();
+        computation_data.node_provider_rewardables = node_provider_rewardables.clone();
+
         logger.add_entry(
             LogLevel::High,
             LogEntry::CalculateRewardsForNodeProvider(node_provider_id),
@@ -51,11 +55,14 @@ pub fn calculate_rewards(
                         .map(|daily_metrics| (node.node_id, daily_metrics))
                 })
                 .collect::<HashMap<PrincipalId, Vec<DailyNodeMetrics>>>();
+        computation_data.assigned_metrics = assigned_metrics.clone();
         let node_daily_fr =
             nodes_idiosyncratic_fr(&mut logger, &assigned_metrics, &subnets_systematic_fr);
+        computation_data.node_daily_fr = node_daily_fr.clone();
 
         let rewards = node_provider_rewards(
             &mut logger,
+            &mut computation_data,
             &node_provider_rewardables,
             node_daily_fr,
             days_in_period,
@@ -64,11 +71,13 @@ pub fn calculate_rewards(
 
         rewards_log_per_node_provider.insert(node_provider_id, logger);
         rewards_per_node_provider.insert(node_provider_id, rewards);
+        rewards_data_per_node_provider.insert(node_provider_id, computation_data);
     }
 
     RewardsPerNodeProvider {
         rewards_per_node_provider,
         rewards_log_per_node_provider,
+        rewards_data_per_node_provider,
     }
 }
 
@@ -78,7 +87,7 @@ pub fn calculate_rewards(
 /// failure rate of the subnet from the node's failure rate for each day.
 /// If the node's failure rate is less than the systematic failure rate, the idiosyncratic
 /// failure rate is set to zero.
-fn nodes_idiosyncratic_fr(
+pub fn nodes_idiosyncratic_fr(
     logger: &mut RewardsLog,
     assigned_metrics: &HashMap<PrincipalId, Vec<DailyNodeMetrics>>,
     subnets_systematic_fr: &HashMap<(PrincipalId, TimestampNanos), Decimal>,
@@ -111,8 +120,9 @@ fn nodes_idiosyncratic_fr(
     nodes_idiosyncratic_fr
 }
 
-fn node_provider_rewards(
+pub fn node_provider_rewards(
     logger: &mut RewardsLog,
+    computation_data: &mut NodeProviderComputationData,
     rewardables: &[RewardableNode],
     nodes_idiosyncratic_fr: HashMap<PrincipalId, Vec<Decimal>>,
     days_in_period: u64,
@@ -140,6 +150,7 @@ fn node_provider_rewards(
     }
     let region_nodetype_rewards: HashMap<RegionNodeTypeCategory, Decimal> =
         base_rewards_region_nodetype(logger, &region_node_type_rewardables, rewards_table);
+    computation_data.region_nodetype_rewards = region_nodetype_rewards.clone();
 
     // 1. Extrapolate the unassigned daily failure rate from the active nodes
     logger.add_entry(LogLevel::High, LogEntry::ComputeUnassignedFailureRate);
@@ -149,6 +160,9 @@ fn node_provider_rewards(
                 &format!("Avg. failure rate for node: {}", node.node_id),
                 Operation::Avg(fr.clone()),
             );
+            computation_data
+                .avg_assigned_failure_rate
+                .insert(node.node_id, avg_fr);
             nodes_active_fr.push(avg_fr);
         }
     }
@@ -160,6 +174,7 @@ fn node_provider_rewards(
     } else {
         dec!(1)
     };
+    computation_data.unassigned_fr = unassigned_fr;
 
     // 2. Compute rewards multiplier for fully unassigned nodes
     let rewards_reduction_unassigned = rewards_reduction_percent(logger, &unassigned_fr);
@@ -167,6 +182,8 @@ fn node_provider_rewards(
         "Reward multiplier fully unassigned nodes:",
         Operation::Subtract(dec!(1), rewards_reduction_unassigned),
     );
+
+    computation_data.multiplier_unassigned = multiplier_unassigned;
 
     // 3. reward the nodes of node provider
     let mut sorted_rewardables = rewardables.to_vec();
@@ -201,9 +218,15 @@ fn node_provider_rewards(
         );
 
         rewards_xdr_no_penalty_total.push(*rewards_xdr_no_penalty);
+        computation_data
+            .rewards_xdr_no_penalty_total
+            .insert(node.node_id, *rewards_xdr_no_penalty);
 
         // Node Providers with less than 4 machines are rewarded fully, independently of their performance
         if rewardable_nodes_count <= FULL_REWARDS_MACHINES_LIMIT {
+            computation_data
+                .rewards_xdr
+                .insert(node.node_id, *rewards_xdr_no_penalty);
             rewards_xdr_total.push(*rewards_xdr_no_penalty);
             continue;
         }
@@ -230,6 +253,9 @@ fn node_provider_rewards(
             "Rewards XDR for the node",
             Operation::Multiply(*rewards_xdr_no_penalty, reward_multiplier),
         );
+        computation_data
+            .rewards_xdr
+            .insert(node.node_id, rewards_xdr);
         rewards_xdr_total.push(rewards_xdr);
     }
 
@@ -252,7 +278,7 @@ fn node_provider_rewards(
     }
 }
 
-fn assigned_multiplier(logger: &mut RewardsLog, daily_failure_rate: Vec<Decimal>) -> Decimal {
+pub fn assigned_multiplier(logger: &mut RewardsLog, daily_failure_rate: Vec<Decimal>) -> Decimal {
     let average_fr = logger.execute("Failure rate average", Operation::Avg(daily_failure_rate));
     let rewards_reduction = rewards_reduction_percent(logger, &average_fr);
 
@@ -266,7 +292,7 @@ fn assigned_multiplier(logger: &mut RewardsLog, daily_failure_rate: Vec<Decimal>
 ///
 /// This function calculates the 75th percentile of failure rates for each subnet on a daily basis.
 /// This represents the systematic failure rate for all the nodes in the subnet for that day.
-fn systematic_fr_per_subnet(
+pub fn systematic_fr_per_subnet(
     daily_node_metrics: &HashMap<PrincipalId, Vec<DailyNodeMetrics>>,
 ) -> HashMap<(PrincipalId, TimestampNanos), Decimal> {
     fn percentile_75(mut values: Vec<Decimal>) -> Decimal {
@@ -296,7 +322,7 @@ fn systematic_fr_per_subnet(
         .collect()
 }
 
-fn daily_node_metrics(
+pub fn daily_node_metrics(
     subnets_metrics: HashMap<PrincipalId, Vec<NodeMetricsHistoryResponse>>,
 ) -> HashMap<PrincipalId, Vec<DailyNodeMetrics>> {
     let mut subnets_metrics = subnets_metrics
@@ -365,7 +391,7 @@ fn daily_node_metrics(
 /// - Above the `MAX_FAILURE_RATE`, maximum reduction in rewards applied.
 /// - Within the defined range (`MIN_FAILURE_RATE` to `MAX_FAILURE_RATE`),
 ///   the function calculates the reduction from the linear reduction function.
-fn rewards_reduction_percent(logger: &mut RewardsLog, failure_rate: &Decimal) -> Decimal {
+pub fn rewards_reduction_percent(logger: &mut RewardsLog, failure_rate: &Decimal) -> Decimal {
     if failure_rate < &MIN_FAILURE_RATE {
         logger.execute(
             &format!(
@@ -418,7 +444,7 @@ fn region_type3_key(region: String) -> RegionNodeTypeCategory {
     (region_key, "type3*".to_string())
 }
 
-fn base_rewards_region_nodetype(
+pub fn base_rewards_region_nodetype(
     logger: &mut RewardsLog,
     rewardable_nodes: &HashMap<RegionNodeTypeCategory, u32>,
     rewards_table: &NodeRewardsTable,
@@ -514,7 +540,7 @@ fn base_rewards_region_nodetype(
     region_nodetype_rewards
 }
 
-fn rewardables_by_node_provider(
+pub fn rewardables_by_node_provider(
     nodes: &[RewardableNode],
 ) -> HashMap<PrincipalId, Vec<RewardableNode>> {
     let mut node_provider_rewardables: HashMap<PrincipalId, Vec<RewardableNode>> =

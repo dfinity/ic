@@ -61,9 +61,22 @@ impl DailyNodeMetrics {
     }
 }
 
+#[derive(Default)]
+pub struct NodeProviderComputationData {
+    pub avg_assigned_failure_rate: HashMap<PrincipalId, Decimal>,
+    pub region_nodetype_rewards: HashMap<RegionNodeTypeCategory, Decimal>,
+    pub node_provider_rewardables: Vec<RewardableNode>,
+    pub assigned_metrics: HashMap<PrincipalId, Vec<DailyNodeMetrics>>,
+    pub node_daily_fr: HashMap<PrincipalId, Vec<Decimal>>,
+    pub unassigned_fr: Decimal,
+    pub multiplier_unassigned: Decimal,
+    pub rewards_xdr_no_penalty_total: HashMap<PrincipalId, Decimal>,
+    pub rewards_xdr: HashMap<PrincipalId, Decimal>,
+}
 pub struct RewardsPerNodeProvider {
     pub rewards_per_node_provider: HashMap<PrincipalId, Rewards>,
     pub rewards_log_per_node_provider: HashMap<PrincipalId, RewardsLog>,
+    pub rewards_data_per_node_provider: HashMap<PrincipalId, NodeProviderComputationData>,
 }
 
 #[derive(Debug, Clone)]
