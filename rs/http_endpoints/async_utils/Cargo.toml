@@ -1,5 +1,5 @@
 [package]
-name = "ic-async-utils"
+name = "ic-http-endpoints-async-utils"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/async_utils",
+    "//rs/http_endpoints/async_utils",
     "//rs/config",
     "//rs/crypto/tls_interfaces",
     "//rs/interfaces/certified_stream_store",

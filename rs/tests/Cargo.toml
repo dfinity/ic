@@ -30,7 +30,7 @@ flate2 = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 humantime = "2.0"
-ic-async-utils = { path = "../async_utils" }
+ic-async-utils = { path = "../http_endpoints/async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-canister-client = { path = "../canister_client" }

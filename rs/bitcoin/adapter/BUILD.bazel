@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:private"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/async_utils",
+    "//rs/http_endpoints/async_utils",
     "//rs/bitcoin/service",
     "//rs/bitcoin/validation",
     "//rs/config",

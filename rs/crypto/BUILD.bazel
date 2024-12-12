@@ -138,7 +138,7 @@ rust_binary(
     crate_name = "ic_crypto_csp",
     deps = [
         # Keep sorted.
-        "//rs/async_utils",
+        "//rs/http_endpoints/async_utils",
         "//rs/config",
         "//rs/crypto/internal/crypto_service_provider",
         "//rs/crypto/internal/logmon",
