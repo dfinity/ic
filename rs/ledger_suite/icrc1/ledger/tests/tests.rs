@@ -468,24 +468,15 @@ fn test_block_transformation() {
 
 #[test]
 fn icrc1_test_upgrade_serialization_from_mainnet() {
-    let minter = Arc::new(minter_identity());
-    let builder = LedgerInitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
-        .with_minting_account(minter.sender().unwrap())
-        .with_transfer_fee(FEE);
-    let init_args = Encode!(&LedgerArgument::Init(builder.build())).unwrap();
-    let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
-    ic_ledger_suite_state_machine_tests::test_upgrade_serialization::<Tokens>(
-        ledger_mainnet_wasm(),
-        ledger_wasm(),
-        init_args,
-        upgrade_args,
-        minter,
-        true,
-    );
+    icrc1_test_upgrade_serialization(ledger_mainnet_wasm());
 }
 
 #[test]
 fn icrc1_test_upgrade_serialization_from_v2() {
+    icrc1_test_upgrade_serialization(ledger_mainnet_v2_wasm());
+}
+
+fn icrc1_test_upgrade_serialization(ledger_mainnet_wasm: Vec<u8>) {
     let minter = Arc::new(minter_identity());
     let builder = LedgerInitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
         .with_minting_account(minter.sender().unwrap())
@@ -493,7 +484,7 @@ fn icrc1_test_upgrade_serialization_from_v2() {
     let init_args = Encode!(&LedgerArgument::Init(builder.build())).unwrap();
     let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
     ic_ledger_suite_state_machine_tests::test_upgrade_serialization::<Tokens>(
-        ledger_mainnet_v2_wasm(),
+        ledger_mainnet_wasm,
         ledger_wasm(),
         init_args,
         upgrade_args,
