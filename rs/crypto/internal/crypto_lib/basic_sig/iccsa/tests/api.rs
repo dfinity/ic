@@ -98,7 +98,7 @@ fn should_fail_to_verify_on_wrong_message() {
 
         let result = verify(wrong_msg, sig_bytes, canister_pk_bytes, &root_pk);
 
-        assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+        assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, msg_hash: _, internal_error})
             if internal_error.contains("the signature tree doesn't contain sig")
             && algorithm == AlgorithmId::IcCanisterSignature
         );
@@ -119,7 +119,7 @@ fn should_fail_to_verify_if_signature_certificate_verification_fails() {
 
         let result = verify(&msg, corrupted_sig, canister_pk_bytes, &root_pk);
 
-        assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+        assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, msg_hash: _, internal_error})
             if internal_error.contains("certificate verification failed")
             && algorithm == AlgorithmId::IcCanisterSignature
         );
@@ -135,7 +135,7 @@ fn should_fail_to_verify_on_wrong_pubkey() {
 
         let result = verify(&msg, sig_bytes, canister_pk_bytes, &root_pk);
 
-        assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+        assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, msg_hash: _, internal_error})
             if internal_error.contains("the signature tree doesn't contain sig")
             && algorithm == AlgorithmId::IcCanisterSignature
         );
@@ -172,7 +172,7 @@ fn should_fail_to_verify_on_invalid_root_pubkey() {
 
         println!("{:?}", result.clone().err());
 
-        assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+        assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, msg_hash: _, internal_error})
             if internal_error.contains("Invalid public key")
             && internal_error.contains("certificate verification failed")
             && algorithm == AlgorithmId::IcCanisterSignature
@@ -198,7 +198,7 @@ fn should_fail_to_verify_on_wrong_root_pubkey() {
 
         let result = verify(&msg, sig_bytes, canister_pk_bytes, &wrong_root_pk);
 
-        assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+        assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, msg_hash: _, internal_error})
             if internal_error.contains("Invalid combined threshold signature")
             && internal_error.contains("certificate verification failed")
             && algorithm == AlgorithmId::IcCanisterSignature
