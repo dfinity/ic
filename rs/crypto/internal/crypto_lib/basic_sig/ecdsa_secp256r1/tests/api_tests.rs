@@ -177,10 +177,11 @@ mod verify {
         invalid_signature.0[2] ^= 1;
 
         let result = verify(&invalid_signature, &msg, &pk);
-        assert_matches!(result, Err(CryptoError::SignatureVerification{algorithm, public_key_bytes, sig_bytes, internal_error: _})
+        assert_matches!(result, Err(CryptoError::SignatureVerification{algorithm, public_key_bytes, sig_bytes, msg_hash, internal_error: _})
                         if algorithm == AlgorithmId::EcdsaP256 &&
                         public_key_bytes == pk.0 &&
-                        sig_bytes == invalid_signature.0);
+                        sig_bytes == invalid_signature.0 &&
+                        msg_hash == Some(msg));
     }
 }
 
