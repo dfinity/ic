@@ -72,11 +72,6 @@ const MAX_MEMO_LENGTH: usize = 32;
 /// This is the minimum amount needed for creating a canister as of October 2023.
 const CREATE_CANISTER_MIN_CYCLES: u64 = 100_000_000_000;
 
-/// Prior to 2024-12-10, we used 50e15, but legitimate users started running
-/// into this. At that time, prices had recently gone up, so we resolved to
-/// increase this by 3x.
-const DEFAULT_CYCLES_LIMIT: u128 = 150e15 as u128;
-
 thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
     static LIMITER_REJECT_COUNT: Cell<u64> = const { Cell::new(0_u64) };
@@ -341,7 +336,7 @@ impl Default for State {
                 ICP_XDR_CONVERSION_RATE_CACHE_SIZE
             ]),
             cycles_per_xdr: DEFAULT_CYCLES_PER_XDR.into(),
-            cycles_limit: Cycles::from(DEFAULT_CYCLES_LIMIT),
+            cycles_limit: 50_000_000_000_000_000u128.into(), // == 50 Pcycles/hour
             limiter: limiter::Limiter::new(resolution, max_age),
             total_cycles_minted: Cycles::zero(),
             blocks_notified: BTreeMap::new(),
@@ -2283,9 +2278,6 @@ fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
         }
         new_state.cycles_ledger_canister_id = args.cycles_ledger_canister_id;
     }
-
-    // Delete after release.
-    new_state.cycles_limit = Cycles::new(DEFAULT_CYCLES_LIMIT);
 
     STATE.with(|state| state.replace(Some(new_state)));
 }

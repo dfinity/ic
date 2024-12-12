@@ -1413,44 +1413,41 @@ fn cmc_notify_top_up_invalid() {
 
 #[test]
 fn cmc_notify_top_up_rate_limited() {
-    let state_machine = state_machine_builder_for_nns_tests().build();
-
     let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
-    // The only requirement here is to have sufficient funds. Other than that,
-    // the precise number here does not matter.
-    let balance = Tokens::new(1e6 as u64, 0).unwrap();
+    let icpts = Tokens::new(1_000, 0).unwrap();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_test_neurons()
-        .with_ledger_account(account, balance)
+        .with_ledger_account(account, icpts)
         .build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
-    // First top-up should succeed since it's 90P - less than the 150P/hr limit.
+    // First top-up should succeed since it's 30P - less than the 50P/hr limit.
     let cycles = notify_top_up(
         &state_machine,
         GOVERNANCE_CANISTER_ID,
-        Tokens::new(900, 0).unwrap(),
+        Tokens::new(300, 0).unwrap(),
     )
     .unwrap();
-    assert_eq!(cycles, Cycles::new(90e15 as u128));
+    assert_eq!(cycles, Cycles::new(30_000_000_000_000_000u128));
 
     // Second top-up should also succeed after 1 hour.
     state_machine.advance_time(Duration::from_secs(4000));
     let cycles = notify_top_up(
         &state_machine,
         GOVERNANCE_CANISTER_ID,
-        Tokens::new(900, 0).unwrap(),
+        Tokens::new(300, 0).unwrap(),
     )
     .unwrap();
-    assert_eq!(cycles, Cycles::new(90e15 as u128));
+    assert_eq!(cycles, Cycles::new(30_000_000_000_000_000u128));
 
-    // Third top-up should fail since the rate limit is 150e15 cycles per hour,
-    // and less than an hour has passed.
+    // Third top-up should fail since the rate limit is 50P cycles per hour, and less than an hour
+    // has passed.
     state_machine.advance_time(Duration::from_secs(3000));
     let error = notify_top_up(
         &state_machine,
         GOVERNANCE_CANISTER_ID,
-        Tokens::new(900, 0).unwrap(),
+        Tokens::new(300, 0).unwrap(),
     )
     .unwrap_err();
     assert_matches!(error, NotifyError::Refunded { reason, .. } if reason.contains("try again later"));
