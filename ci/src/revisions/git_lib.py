@@ -57,8 +57,6 @@ def commit_and_create_pr(repo: str, repo_root: pathlib.Path, branch: str, check_
         logger.info("Creating/updating a MR that updates the saved NNS subnet revision")
         cmd = ["git", "add"] + paths_to_add
         logger.info("Running command '%s'", " ".join(cmd))
-        logger.error("Would commit nice job!")
-        exit(2)
         subprocess.check_call(cmd, cwd=repo_root)
         cmd = [
             "git",
