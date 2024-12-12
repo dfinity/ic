@@ -292,6 +292,11 @@ pub fn operations_to_requests(
                 };
                 state.follow(account, pid, neuron_index, topic, followees)?;
             }
+            OperationType::RefreshVotingPower => {
+                let NeuronIdentifierMetadata { neuron_index } = o.metadata.clone().try_into()?;
+                validate_neuron_management_op()?;
+                state.refresh_voting_power(account, neuron_index)?;
+            }
         }
     }
 

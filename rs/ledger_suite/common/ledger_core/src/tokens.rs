@@ -1,4 +1,5 @@
 use candid::{CandidType, Nat};
+use minicbor::{Decode, Encode};
 use num_traits::{Bounded, ToPrimitive};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fmt;
@@ -116,10 +117,13 @@ impl<T> TokensType for T where
     CandidType,
     Deserialize,
     Serialize,
+    Decode,
+    Encode,
 )]
 pub struct Tokens {
     /// Number of 10^-8 Tokens.
     /// Named because the equivalent part of a Bitcoin is called a Satoshi
+    #[n(0)]
     e8s: u64,
 }
 
