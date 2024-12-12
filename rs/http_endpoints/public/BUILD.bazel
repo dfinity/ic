@@ -12,13 +12,13 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/http_endpoints/async_utils",
     "//rs/certification",
     "//rs/config",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
+    "//rs/http_endpoints/async_utils",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
