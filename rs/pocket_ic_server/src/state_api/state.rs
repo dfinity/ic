@@ -538,13 +538,13 @@ pub(crate) struct HandlerState {
 impl HandlerState {
     fn new(
         http_gateway_client: HttpGatewayClient,
-        backend_client: reqwest::Client,
+        backend_client: Arc<dyn Client>,
         resolver: DomainResolver,
         replica_url: String,
     ) -> Self {
         Self {
             http_gateway_client,
-            backend_client: Arc::new(ReqwestClient::new(backend_client)),
+            backend_client,
             resolver,
             replica_url,
         }
@@ -777,10 +777,9 @@ impl ApiState {
         http_gateway_config: HttpGatewayConfig,
     ) -> Result<HttpGatewayInfo, String> {
         async fn proxy_handler(
-            State(replica_url): State<String>,
+            State((replica_url, client)): State<(String, Arc<dyn Client>)>,
             request: AxumRequest,
         ) -> Result<Response, ErrorCause> {
-            let client: Arc<dyn Client> = Arc::new(ReqwestClient::new(reqwest::Client::new()));
             let url = format!(
                 "{}{}",
                 replica_url,
@@ -850,9 +849,10 @@ impl ApiState {
                 .build()
                 .unwrap();
             let domain_resolver = DomainResolver::new(domains);
+            let backend_client = Arc::new(ReqwestClient::new(reqwest::Client::new()));
             let state_handler = Arc::new(HandlerState::new(
                 http_gateway_client,
-                reqwest::Client::new(),
+                backend_client.clone(),
                 domain_resolver,
                 replica_url.clone(),
             ));
@@ -879,7 +879,7 @@ impl ApiState {
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
                 .route("/status", get(proxy_handler))
-                .with_state(format!("{}/api/v2", replica_url))
+                .with_state((format!("{}/api/v2", replica_url), backend_client.clone()))
                 .fallback(|| async { (StatusCode::NOT_FOUND, "") });
             let router_api_v3 = Router::new()
                 .route(
@@ -887,7 +887,7 @@ impl ApiState {
                     post(proxy_handler)
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
-                .with_state(format!("{}/api/v3", replica_url))
+                .with_state((format!("{}/api/v3", replica_url), backend_client.clone()))
                 .fallback(|| async { (StatusCode::NOT_FOUND, "") });
             let router = Router::new()
                 .nest("/api/v2", router_api_v2)
@@ -908,7 +908,6 @@ impl ApiState {
                 )
                 .layer(DefaultBodyLimit::disable())
                 .layer(cors_layer())
-                .with_state(replica_url)
                 .into_make_service();
 
             match https_config {
