@@ -293,7 +293,7 @@ pub fn test(env: TestEnv) {
         assert_eq!(archived_blocks.blocks[1].hash(), last_block_hash);
         assert_eq!(Nat::from(1_u8), last_block_index);
 
-        let data_certificate = agent.get_data_certificate().await.unwrap();
+        let data_certificate = agent.icrc3_get_tip_certificate().await.unwrap();
 
         use LookupStatus::Found;
         let hash_tree: MixedHashTree = serde_cbor::from_slice(&data_certificate.hash_tree).unwrap();

@@ -15,6 +15,7 @@ use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
+use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResponse};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value, icrc3::blocks::BlockRange,
@@ -262,15 +263,13 @@ impl Icrc1Agent {
         )?)
     }
 
-    pub async fn get_data_certificate(
-        &self,
-    ) -> Result<icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate, Icrc1AgentError> {
+    pub async fn icrc3_get_tip_certificate(&self) -> Result<ICRC3DataCertificate, Icrc1AgentError> {
         Decode!(
             &self.query("icrc3_get_tip_certificate", &Encode!()?).await?,
-            Option<icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate>
+            Option<ICRC3DataCertificate>
         )?
         .ok_or(Icrc1AgentError::VerificationFailed(
-            "DataCertificate not found".to_string(),
+            "ICRC3DataCertificate not found".to_string(),
         ))
     }
 
@@ -316,10 +315,10 @@ impl Icrc1Agent {
     pub async fn get_certified_chain_tip(
         &self,
     ) -> Result<Option<(Hash, BlockIndex)>, Icrc1AgentError> {
-        let icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate {
+        let ICRC3DataCertificate {
             certificate,
             hash_tree,
-        } = self.get_data_certificate().await?;
+        } = self.icrc3_get_tip_certificate().await?;
         let certificate = match Certificate::from_cbor(certificate.as_slice()) {
             Ok(certificate) => certificate,
             Err(e) => {

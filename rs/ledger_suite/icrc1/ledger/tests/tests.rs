@@ -27,6 +27,7 @@ use icrc_ledger_types::icrc2::allowance::Allowance;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult, QueryArchiveFn};
+use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
 use icrc_ledger_types::icrc3::blocks::{
     ArchivedBlocks, BlockWithId, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
 };
@@ -1258,7 +1259,7 @@ fn test_icrc3_upgrade() {
         )
         .unwrap()
         .bytes(),
-        Option<icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate>
+        Option<ICRC3DataCertificate>
     )
     .unwrap()
     .unwrap();
@@ -1292,7 +1293,7 @@ fn test_icrc3_upgrade() {
         )
         .unwrap()
         .bytes(),
-        Option<icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate>
+        Option<ICRC3DataCertificate>
     )
     .unwrap()
     .unwrap();
