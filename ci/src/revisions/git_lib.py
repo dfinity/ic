@@ -27,27 +27,26 @@ def get_logger(level) -> logging.Logger:
 def get_repo_root() -> pathlib.Path:
     return pathlib.Path(subprocess.run(["git", "rev-parse", "--show-toplevel"], text=True, stdout=subprocess.PIPE).stdout.strip())
 
-def commit_and_create_pr(repo: str, repo_root: pathlib.Path, branch: str, callback: Callable[[], None], check_for_updates_in_paths: List[str], logger: logging.Logger):
+def sync_main_branch_and_checkout_branch(repo_root: pathlib.Path, main_branch: str, branch_to_checkout: str, logger: logging.Logger):
     if not repo_root.exists():
         raise Exception("Expected dir %s to exist", repo_root.name)
 
-    subprocess.call(["git", "fetch", "origin", "master:master"], cwd=repo_root)
+    subprocess.call(["git", "fetch", "origin", f"{main_branch}:{main_branch}"], cwd=repo_root)
 
     result = subprocess.run(["git", "status", "--porcelain"], stdout=subprocess.PIPE, text=True, check=True)
     if result.stdout.strip():
         logger.error("Found uncommited work! Commit and then proceed.")
         exit(2)
 
-    if subprocess.call(["git", "checkout", branch], cwd=repo_root) == 0:
+    if subprocess.call(["git", "checkout", branch_to_checkout], cwd=repo_root) == 0:
         # The branch already exists, update the existing MR
         logger.info("Found an already existing target branch")
     else:
-        subprocess.check_call(["git", "checkout", "-b", branch], cwd=repo_root)
-    subprocess.check_call(["git", "reset", "--hard", "origin/master"], cwd=repo_root)
+        subprocess.check_call(["git", "checkout", "-b", branch_to_checkout], cwd=repo_root)
+    subprocess.check_call(["git", "reset", "--hard", f"origin/{main_branch}"], cwd=repo_root)
 
-    # Do the work the user wants.
-    callback()
 
+def commit_and_create_pr(repo: str, repo_root: pathlib.Path, branch: str, check_for_updates_in_paths: List[str], logger: logging.Logger):
     git_modified_files = subprocess.check_output(["git", "ls-files", "--modified", "--others"], cwd=repo_root).decode(
         "utf8"
     )
@@ -55,11 +54,11 @@ def commit_and_create_pr(repo: str, repo_root: pathlib.Path, branch: str, callba
     paths_to_add = [path for path in check_for_updates_in_paths if path in git_modified_files]
 
     if len(paths_to_add) > 0:
-        logging.error("Would commit!")
-        exit(2)
         logger.info("Creating/updating a MR that updates the saved NNS subnet revision")
         cmd = ["git", "add"] + paths_to_add
         logger.info("Running command '%s'", " ".join(cmd))
+        logger.error("Would commit nice job!")
+        exit(2)
         subprocess.check_call(cmd, cwd=repo_root)
         cmd = [
             "git",

@@ -73,6 +73,16 @@ def get_subnet_replica_version(subnet_id: str) -> str:
         ]
         return latest_replica_version
 
+def work(repo_root: pathlib.Path, logger: logging.Logger):
+    current_nns_version = get_subnet_replica_version(nns_subnet_id)
+    logger.info("Current NNS subnet (%s) revision: %s", nns_subnet_id, current_nns_version)
+    current_app_subnet_version = get_subnet_replica_version(app_subnet_id)
+    logger.info("Current App subnet (%s) revision: %s", app_subnet_id, current_app_subnet_version)
+
+    update_saved_subnet_version(subnet=nns_subnet_id, version=current_nns_version, repo_root=repo_root)
+    update_saved_subnet_version(
+        subnet=app_subnet_id, version=current_app_subnet_version, repo_root=repo_root
+    )
 
 def main():
     """Do the main work."""
@@ -81,22 +91,14 @@ def main():
     args = parser.parse_args()
     logger = git_lib.get_logger(logging.DEBUG if args.verbose else logging.INFO)
 
-    def work():
-        current_nns_version = get_subnet_replica_version(nns_subnet_id)
-        logger.info("Current NNS subnet (%s) revision: %s", nns_subnet_id, current_nns_version)
-        current_app_subnet_version = get_subnet_replica_version(app_subnet_id)
-        logger.info("Current App subnet (%s) revision: %s", app_subnet_id, current_app_subnet_version)
-
-        update_saved_subnet_version(subnet=nns_subnet_id, version=current_nns_version, repo_root=pathlib.Path(repo_root))
-        update_saved_subnet_version(
-            subnet=app_subnet_id, version=current_app_subnet_version, repo_root=pathlib.Path(repo_root)
-        )
-
     repo = "dfinity/ic"
     repo_root = git_lib.get_repo_root()
+    main_branch = "master"
     branch = "ic-mainnet-revisions"
 
-    git_lib.commit_and_create_pr(repo, repo_root, branch, work, [SAVED_VERSIONS_PATH], logger)
+    git_lib.sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
+    work(repo_root, logger)
+    git_lib.commit_and_create_pr(repo, repo_root, branch, [SAVED_VERSIONS_PATH], logger)
 
 
 if __name__ == "__main__":
