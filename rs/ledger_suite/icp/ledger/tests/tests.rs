@@ -58,6 +58,14 @@ fn ledger_wasm_mainnet() -> Vec<u8> {
     std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap()
 }
 
+fn ledger_wasm_mainnet_v1() -> Vec<u8> {
+    std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_V1_WASM_PATH").unwrap()).unwrap()
+}
+
+fn ledger_wasm_mainnet_v2() -> Vec<u8> {
+    std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_V2_WASM_PATH").unwrap()).unwrap()
+}
+
 fn ledger_wasm_allowance_getter() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
@@ -1231,8 +1239,16 @@ fn test_block_transformation() {
 }
 
 #[test]
-fn test_upgrade_serialization() {
-    let ledger_wasm_mainnet = ledger_wasm_mainnet();
+fn test_upgrade_serialization_from_master() {
+    test_upgrade_serialization(ledger_wasm_mainnet());
+}
+
+#[test]
+fn test_upgrade_serialization_from_v2() {
+    test_upgrade_serialization(ledger_wasm_mainnet_v2());
+}
+
+fn test_upgrade_serialization(ledger_wasm_mainnet: Vec<u8>) {
     let ledger_wasm_current = ledger_wasm();
 
     let minter = Arc::new(minter_identity());
@@ -1337,6 +1353,15 @@ fn test_metrics_while_migrating() {
     ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
         ledger_wasm_mainnet(),
         ledger_wasm_low_instruction_limits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_upgrade_from_v1_not_possible() {
+    ic_ledger_suite_state_machine_tests::test_upgrade_from_v1_not_possible(
+        ledger_wasm_mainnet_v1(),
+        ledger_wasm(),
         encode_init_args,
     );
 }
