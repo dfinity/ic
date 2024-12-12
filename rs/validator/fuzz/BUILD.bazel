@@ -6,7 +6,6 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/types/types",
     "//rs/validator/http_request_arbitrary",
-    "//rs/validator/ingress_message",
     "@crate_index//:libfuzzer-sys",
 ]
 
