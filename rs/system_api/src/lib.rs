@@ -876,7 +876,7 @@ impl MemoryUsage {
                         sandbox_safe_system_state.check_on_low_wasm_memory_hook_condition(
                             None,
                             self.wasm_memory_limit,
-                            self.stable_memory_usage,
+                            self.current_usage,
                             self.wasm_memory_usage,
                         );
 
@@ -903,7 +903,7 @@ impl MemoryUsage {
                 sandbox_safe_system_state.check_on_low_wasm_memory_hook_condition(
                     Some(reserved_bytes),
                     self.wasm_memory_limit,
-                    self.stable_memory_usage,
+                    self.current_usage,
                     self.wasm_memory_usage,
                 );
                 Ok(())
