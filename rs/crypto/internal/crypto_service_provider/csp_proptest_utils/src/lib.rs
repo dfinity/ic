@@ -388,7 +388,7 @@ mod crypto_error {
         MalformedPublicKey => {algorithm in arb_algorithm_id(), key_bytes in proptest::option::of(vec(any::<u8>(), 0..100)), internal_error in ".*"},
         MalformedSignature => {algorithm in arb_algorithm_id(), sig_bytes in vec(any::<u8>(), 0..100), internal_error in ".*"},
         MalformedPop => {algorithm in arb_algorithm_id(), pop_bytes in vec(any::<u8>(), 0..100), internal_error in ".*"},
-        SignatureVerification => {algorithm in arb_algorithm_id(), public_key_bytes in vec(any::<u8>(), 0..100), sig_bytes in vec(any::<u8>(), 0..100), internal_error in ".*"},
+        SignatureVerification => {algorithm in arb_algorithm_id(), public_key_bytes in vec(any::<u8>(), 0..100), sig_bytes in vec(any::<u8>(), 0..100), msg_hash in proptest::option::of(vec(any::<u8>(), 0..32)), internal_error in ".*"},
         PopVerification => {algorithm in arb_algorithm_id(), public_key_bytes in vec(any::<u8>(), 0..100), pop_bytes in vec(any::<u8>(), 0..100), internal_error in ".*"},
         InconsistentAlgorithms => {algorithms in btree_set(arb_algorithm_id(), 0..10), key_purpose in arb_key_purpose(), registry_version in arb_registry_version()},
         AlgorithmNotSupported => {algorithm in arb_algorithm_id(), reason in ".*"},
