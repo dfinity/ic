@@ -41,7 +41,7 @@ use ic_management_canister_types::{
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
-    SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
+    SignWithSchnorrArgs, SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
     TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
     VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
 };
@@ -1212,9 +1212,11 @@ impl ExecutionEnvironment {
                                     ThresholdArguments::Schnorr(SchnorrArguments {
                                         key_id: args.key_id,
                                         message: Arc::new(args.message),
-                                        taproot_tree_root: args
-                                            .taproot_tree_root
-                                            .map(|v| Arc::new(v.into_vec())),
+                                        taproot_tree_root: args.aux.map(|v| match v {
+                                            SignWithSchnorrAux::Bip341(v) => {
+                                                Arc::new(v.merkle_root_hash.into_vec())
+                                            }
+                                        }),
                                     }),
                                     args.derivation_path.into_inner(),
                                     registry_settings
@@ -2750,9 +2752,9 @@ impl ExecutionEnvironment {
 
         let threshold_key = args.key_id();
 
-        // Check if signing is enabled.
+        // Check if the key is enabled.
         if !topology
-            .idkg_signing_subnets(&threshold_key)
+            .chain_key_enabled_subnets(&threshold_key)
             .contains(&state.metadata.own_subnet_id)
         {
             return Err(UserError::new(

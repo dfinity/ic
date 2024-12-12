@@ -10,7 +10,6 @@ DEPENDENCIES = [
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "@crate_index//:byte-unit",
-    "@crate_index//:clap",
     "@crate_index//:futures",
     "@crate_index//:http",
     "@crate_index//:http-body-util",
@@ -47,15 +46,17 @@ DEV_DEPENDENCIES = [
 
 MACRO_DEV_DEPENDENCIES = []
 
-ALIASES = {}
-
 rust_library(
     name = "adapter",
-    srcs = glob(["src/**"]),
-    aliases = ALIASES,
+    srcs = glob(
+        ["src/**"],
+        exclude = [
+            "src/main.rs",
+            "src/cli.rs",
+        ],
+    ),
     crate_name = "ic_https_outcalls_adapter",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.1.0",
     deps = DEPENDENCIES,
 )
 
@@ -63,20 +64,26 @@ rust_library(
 rust_library(
     name = "adapter_with_http",
     testonly = True,
-    srcs = glob(["src/**"]),
-    aliases = ALIASES,
+    srcs = glob(
+        ["src/**"],
+        exclude = [
+            "src/main.rs",
+            "src/cli.rs",
+        ],
+    ),
     crate_features = ["http"],
     crate_name = "ic_https_outcalls_adapter",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.1.0",
     visibility = ["//rs/pocket_ic_server:__subpackages__"],
     deps = DEPENDENCIES,
 )
 
 rust_binary(
     name = "ic-https-outcalls-adapter",
-    srcs = ["src/main.rs"],
-    aliases = ALIASES,
+    srcs = [
+        "src/cli.rs",
+        "src/main.rs",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES,
     visibility = [
         "//ic-os/guestos:__subpackages__",
@@ -85,6 +92,7 @@ rust_binary(
     deps = DEPENDENCIES + [
         ":adapter",
         "//rs/monitoring/adapter_metrics/server",
+        "@crate_index//:clap",
     ],
 )
 
@@ -93,20 +101,29 @@ rust_binary(
 rust_binary(
     name = "ic-outcalls-adapter-with-http",
     testonly = True,
-    srcs = ["src/main.rs"],
-    aliases = ALIASES,
+    srcs = [
+        "src/cli.rs",
+        "src/main.rs",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES,
     visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES + [
         ":adapter_with_http",
         "//rs/monitoring/adapter_metrics/server",
+        "@crate_index//:clap",
     ],
 )
 
 rust_test(
     name = "adapter_test",
-    aliases = ALIASES,
     crate = ":adapter",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "adapter_main_test",
+    crate = ":ic-https-outcalls-adapter",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -114,7 +131,6 @@ rust_test(
 rust_test_suite(
     name = "adapter_integration",
     srcs = glob(["tests/**/*.rs"]),
-    aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["requires-network"],
     deps = [":adapter"] + DEPENDENCIES + DEV_DEPENDENCIES,
@@ -123,7 +139,6 @@ rust_test_suite(
 rust_test_suite(
     name = "adapter_integration_with_http",
     srcs = glob(["tests/**/*.rs"]),
-    aliases = ALIASES,
     crate_features = ["http"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["requires-network"],

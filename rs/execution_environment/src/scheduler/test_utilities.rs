@@ -669,7 +669,7 @@ pub(crate) struct SchedulerTestBuilder {
     rate_limiting_of_heap_delta: bool,
     deterministic_time_slicing: bool,
     log: ReplicaLogger,
-    idkg_keys: Vec<MasterPublicKeyId>,
+    master_public_key_ids: Vec<MasterPublicKeyId>,
     metrics_registry: MetricsRegistry,
     round_summary: Option<ExecutionRoundSummary>,
     replica_version: ReplicaVersion,
@@ -696,7 +696,7 @@ impl Default for SchedulerTestBuilder {
             rate_limiting_of_heap_delta: false,
             deterministic_time_slicing: true,
             log: no_op_logger(),
-            idkg_keys: vec![],
+            master_public_key_ids: vec![],
             metrics_registry: MetricsRegistry::new(),
             round_summary: None,
             replica_version: ReplicaVersion::default(),
@@ -763,15 +763,18 @@ impl SchedulerTestBuilder {
         }
     }
 
-    pub fn with_idkg_key(self, idkg_key: MasterPublicKeyId) -> Self {
+    pub fn with_chain_key(self, key_id: MasterPublicKeyId) -> Self {
         Self {
-            idkg_keys: vec![idkg_key],
+            master_public_key_ids: vec![key_id],
             ..self
         }
     }
 
-    pub fn with_idkg_keys(self, idkg_keys: Vec<MasterPublicKeyId>) -> Self {
-        Self { idkg_keys, ..self }
+    pub fn with_chain_keys(self, master_public_key_ids: Vec<MasterPublicKeyId>) -> Self {
+        Self {
+            master_public_key_ids,
+            ..self
+        }
     }
 
     pub fn with_batch_time(self, batch_time: Time) -> Self {
@@ -816,23 +819,23 @@ impl SchedulerTestBuilder {
         state.metadata.batch_time = self.batch_time;
 
         let config = SubnetConfig::new(self.subnet_type).cycles_account_manager_config;
-        for idkg_key in &self.idkg_keys {
+        for key_id in &self.master_public_key_ids {
             state
                 .metadata
                 .network_topology
-                .idkg_signing_subnets
-                .insert(idkg_key.clone(), vec![self.own_subnet_id]);
+                .chain_key_enabled_subnets
+                .insert(key_id.clone(), vec![self.own_subnet_id]);
             state
                 .metadata
                 .network_topology
                 .subnets
                 .get_mut(&self.own_subnet_id)
                 .unwrap()
-                .idkg_keys_held
-                .insert(idkg_key.clone());
+                .chain_keys_held
+                .insert(key_id.clone());
 
             registry_settings.chain_key_settings.insert(
-                idkg_key.clone(),
+                key_id.clone(),
                 ChainKeySettings {
                     max_queue_size: 20,
                     pre_signatures_to_create_in_advance: 5,
@@ -840,7 +843,7 @@ impl SchedulerTestBuilder {
             );
         }
         let chain_key_subnet_public_keys: BTreeMap<_, _> = self
-            .idkg_keys
+            .master_public_key_ids
             .into_iter()
             .map(|key_id| {
                 (
