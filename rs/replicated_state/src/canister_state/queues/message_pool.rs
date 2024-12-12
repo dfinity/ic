@@ -8,7 +8,7 @@ use ic_types::time::CoarseTime;
 use ic_types::{CountBytes, Time};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use im::OrdMap;
+use im::{OrdMap, OrdSet};
 use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
 use std::ops::{AddAssign, SubAssign};
@@ -350,13 +350,13 @@ pub(super) struct MessagePool {
     /// by deadline.
     ///
     /// Message IDs break ties, ensuring deterministic ordering.
-    deadline_queue: BTreeSet<(CoarseTime, Id)>,
+    deadline_queue: OrdSet<(CoarseTime, Id)>,
 
     /// Load shedding priority queue. Holds all best-effort messages, ordered by
     /// size.
     ///
     /// Message IDs break ties, ensuring deterministic ordering.
-    size_queue: BTreeSet<(usize, Id)>,
+    size_queue: OrdSet<(usize, Id)>,
 
     /// A monotonically increasing counter used to generate unique message IDs.
     message_id_generator: u64,
@@ -555,7 +555,7 @@ impl MessagePool {
                     .remove(&id)
                     .unwrap();
                 let removed = self.deadline_queue.remove(&(deadline, id));
-                debug_assert!(removed);
+                debug_assert!(removed.is_some());
             }
 
             // All other guaranteed response messages do not expire.
@@ -567,7 +567,7 @@ impl MessagePool {
             // All other best-effort messages do expire.
             (_, BestEffort, _) => {
                 let removed = self.deadline_queue.remove(&(msg.deadline(), id));
-                debug_assert!(removed);
+                debug_assert!(removed.is_some());
             }
         }
     }
@@ -576,7 +576,7 @@ impl MessagePool {
     fn remove_from_size_queue(&mut self, id: Id, msg: &RequestOrResponse) {
         if id.class() == Class::BestEffort {
             let removed = self.size_queue.remove(&(msg.count_bytes(), id));
-            debug_assert!(removed);
+            debug_assert!(removed.is_some());
         }
     }
 
@@ -584,7 +584,7 @@ impl MessagePool {
     ///
     /// Time complexity: `O(log(self.len()))`.
     pub(super) fn has_expired_deadlines(&self, now: Time) -> bool {
-        if let Some((deadline, _)) = self.deadline_queue.first() {
+        if let Some((deadline, _)) = self.deadline_queue.get_min() {
             let now = CoarseTime::floor(now);
             if *deadline < now {
                 return true;
@@ -604,14 +604,18 @@ impl MessagePool {
         }
 
         let now = CoarseTime::floor(now);
-        if self.deadline_queue.first().unwrap().0 >= now {
+        if self.deadline_queue.get_min().unwrap().0 >= now {
             // No expired messages, bail out.
             return Vec::new();
         }
 
         // Split the deadline queue at `now`.
-        let mut temp = self.deadline_queue.split_off(&(now, Id::MIN));
-        std::mem::swap(&mut temp, &mut self.deadline_queue);
+        let dq = std::mem::take(&mut self.deadline_queue);
+        let (temp, was_present, mut unexpired) = dq.split_member(&(now, Id::MIN));
+        if was_present {
+            unexpired.insert((now, Id::MIN));
+        }
+        self.deadline_queue = unexpired;
 
         // Take and return all expired messages.
         let expired = temp
@@ -635,7 +639,7 @@ impl MessagePool {
     ///
     /// Time complexity: `O(log(self.len()))`.
     pub(super) fn shed_largest_message(&mut self) -> Option<(SomeReference, RequestOrResponse)> {
-        if let Some((_, id)) = self.size_queue.pop_last() {
+        if let Some((_, id)) = self.size_queue.remove_max() {
             debug_assert_eq!(Class::BestEffort, id.class());
 
             let msg = self.take_impl(id).unwrap();
@@ -699,6 +703,7 @@ impl MessagePool {
             &self.messages,
             &self.outbound_guaranteed_request_deadlines,
         );
+        let expected_deadline_queue = OrdSet::from(expected_deadline_queue);
         if self.deadline_queue != expected_deadline_queue {
             return Err(format!(
                 "Unexpected deadline queue: expected {:?}, actual {:?}",
@@ -758,7 +763,7 @@ impl MessagePool {
     fn calculate_priority_queues(
         messages: &OrdMap<Id, RequestOrResponse>,
         outbound_guaranteed_request_deadlines: &BTreeMap<Id, CoarseTime>,
-    ) -> (BTreeSet<(CoarseTime, Id)>, BTreeSet<(usize, Id)>) {
+    ) -> (OrdSet<(CoarseTime, Id)>, OrdSet<(usize, Id)>) {
         let mut expected_deadline_queue = BTreeSet::new();
         let mut expected_size_queue = BTreeSet::new();
         messages.iter().for_each(|(id, msg)| {
@@ -788,7 +793,10 @@ impl MessagePool {
                 }
             }
         });
-        (expected_deadline_queue, expected_size_queue)
+        (
+            OrdSet::from(expected_deadline_queue),
+            OrdSet::from(expected_size_queue),
+        )
     }
 }
 
