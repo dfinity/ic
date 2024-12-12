@@ -215,11 +215,10 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
     }
 
     info!(log, "Install universal canister");
-    let log2 = log.clone();
     let id = nns_node.effective_canister_id();
     let canister_id_hex: String = block_on({
         async move {
-            let canister = UniversalCanister::new_with_retries(&agent, id, &log2).await;
+            let canister = MessageCanister::new_with_retries(&agent, id).await;
             hex::encode(canister.canister_id().as_slice())
         }
     });
