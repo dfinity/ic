@@ -203,14 +203,6 @@ path = "testing_verification/replicable_mock_test.rs"
 name = "ic-systest-remote-replicable-mock-test"
 path = "testing_verification/remote_replicable_mock_test.rs"
 
-[[bin]]
-name = "ic-xc-ledger-suite-orchestrator"
-path = "cross_chain/ic_xc_ledger_suite_orchestrator_test.rs"
-
-[[bin]]
-name = "ic_xc_cketh"
-path = "cross_chain/ic_xc_cketh_test.rs"
-
 # TODO: wait for clap upgrade in the workspace or downgrade clap
 # [[bin]]
 # name = "tnetctl"

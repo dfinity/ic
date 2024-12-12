@@ -379,6 +379,7 @@ members = [
     "rs/tests/consensus/tecdsa",
     "rs/tests/consensus/upgrade",
     "rs/tests/consensus/utils",
+    "rs/tests/cross_chain",
     "rs/tests/crypto",
     "rs/tests/driver",
     "rs/tests/execution",
