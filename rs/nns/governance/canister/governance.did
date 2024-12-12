@@ -123,8 +123,6 @@ type RefreshVotingPowerResponse = record {
 };
 
 // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
-//
-// Deprecated. Use ManageNeuronCommandRequest instead. It is equivalent.
 type Command = variant {
   Spawn : Spawn;
   Split : Split;
@@ -348,15 +346,18 @@ type GovernanceCachedMetrics = record {
   };
   dissolving_neurons_count_buckets : vec record { nat64; nat64 };
   dissolving_neurons_e8s_buckets_ect : vec record { nat64; float64 };
-  non_self_authenticating_controller_neuron_subset_metrics : opt NeuronSubsetMetrics;
   dissolving_neurons_count : nat64;
   dissolving_neurons_e8s_buckets : vec record { nat64; float64 };
   total_staked_maturity_e8s_equivalent_seed : nat64;
   community_fund_total_staked_e8s : nat64;
   not_dissolving_neurons_e8s_buckets_seed : vec record { nat64; float64 };
-  public_neuron_subset_metrics : opt NeuronSubsetMetrics;
   timestamp_seconds : nat64;
   seed_neuron_count : nat64;
+
+  non_self_authenticating_controller_neuron_subset_metrics : opt NeuronSubsetMetrics;
+  public_neuron_subset_metrics : opt NeuronSubsetMetrics;
+  declining_voting_power_neuron_subset_metrics : opt NeuronSubsetMetrics;
+  fully_lost_voting_power_neuron_subset_metrics : opt NeuronSubsetMetrics;
 };
 
 type GovernanceError = record {
@@ -495,10 +496,6 @@ type ManageNeuron = record {
 };
 
 // KEEP THIS IN SYNC WITH COMMAND!
-//
-// Command is deprecated, but people need time to migrate to this. Therefore, we
-// have not deleted Command yet. In the meantime, ManageNeuronCommandRequest
-// must be kept in sync with Command.
 type ManageNeuronCommandRequest = variant {
   Spawn : Spawn;
   Split : Split;
@@ -767,16 +764,25 @@ type NeuronStakeTransfer = record {
 };
 
 type NeuronSubsetMetrics = record {
-  total_maturity_e8s_equivalent : opt nat64;
-  maturity_e8s_equivalent_buckets : vec record { nat64; nat64 };
-  voting_power_buckets : vec record { nat64; nat64 };
-  total_staked_e8s : opt nat64;
   count : opt nat64;
+
+  total_staked_e8s : opt nat64;
+  total_maturity_e8s_equivalent : opt nat64;
   total_staked_maturity_e8s_equivalent : opt nat64;
-  staked_maturity_e8s_equivalent_buckets : vec record { nat64; nat64 };
-  staked_e8s_buckets : vec record { nat64; nat64 };
+
   total_voting_power : opt nat64;
+  total_deciding_voting_power : opt nat64;
+  total_potential_voting_power : opt nat64;
+
   count_buckets : vec record { nat64; nat64 };
+
+  staked_e8s_buckets : vec record { nat64; nat64 };
+  maturity_e8s_equivalent_buckets : vec record { nat64; nat64 };
+  staked_maturity_e8s_equivalent_buckets : vec record { nat64; nat64 };
+
+  voting_power_buckets : vec record { nat64; nat64 };
+  deciding_voting_power_buckets : vec record { nat64; nat64 };
+  potential_voting_power_buckets : vec record { nat64; nat64 };
 };
 
 type NeuronsFundAuditInfo = record {

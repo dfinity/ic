@@ -30,6 +30,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
+    "//rs/nervous_system/timestamp",
     "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/rust_canisters/canister_log",
@@ -62,7 +63,6 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:strum",
-    "@crate_index//:time",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -245,13 +245,27 @@ generated_files_check(
     ],
 )
 
-# Usage:
-# bazel run //rs/sns/governance:governance-canbench for benchmarking (the output shoudl look like `canbench/canbench_results.yml`).
-# bazel run //rs/sns/governance:governance-canbench_update for updating the results file (see `canbench/canbench_results.yml`).
-# bazel test //rs/sns/governance:governance_canbench_test for checking if the results file is up to date.
+# Usage
+# =====
+#
+# For benchmarking (see `canbench/canbench_results.yml`):
+# ```
+# bazel run //rs/sns/governance:governance-canbench
+# ```
+#
+# For updating the results file:
+# ```
+# bazel run //rs/sns/governance:governance-canbench_update
+# ```
+#
+# To run the test:
+# ```
+# bazel test //rs/sns/governance:governance_canbench_test
+# ```
+#
 # Currently, updating the results file is not automated, and there are no tests to avoid
-# regression. For now, we can use it as an example for benchmarking as part of an
-# investigation of potential performance issues, or when we make a change that can affect
+# regression. For now, we can use it as an example for benchmarking as part
+# of an investigation of potential performance issues, or when we make a change that can affect
 # the performance measured in this benchmark.
 rust_canbench(
     name = "governance-canbench",

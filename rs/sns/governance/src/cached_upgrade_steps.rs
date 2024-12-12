@@ -1,16 +1,14 @@
-use crate::governance::Governance;
-use crate::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
-use crate::logs::ERROR;
-use crate::pb::v1::governance::CachedUpgradeSteps as CachedUpgradeStepsPb;
-use crate::pb::v1::governance::Version;
-use crate::pb::v1::governance::Versions;
-use crate::pb::v1::upgrade_journal_entry;
-use crate::pb::v1::Governance as GovernancePb;
-use crate::sns_upgrade::ListUpgradeStep;
-use crate::sns_upgrade::ListUpgradeStepsResponse;
-use crate::sns_upgrade::SnsCanisterType;
+use crate::{
+    governance::{Governance, UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS},
+    logs::ERROR,
+    pb::v1::{
+        governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Version, Versions},
+        upgrade_journal_entry, Governance as GovernancePb,
+    },
+    sns_upgrade::{ListUpgradeStep, ListUpgradeStepsResponse, SnsCanisterType},
+};
 use ic_canister_log::log;
-use ic_sns_governance_api::pb::v1::format_full_hash;
+use ic_sns_governance_api::format_full_hash;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct CachedUpgradeSteps {
@@ -283,6 +281,9 @@ impl CachedUpgradeSteps {
         &self.current_version == version || self.subsequent_versions.contains(version)
     }
 
+    /// Returns whether `left` is before or equal to `right` in `self`, in the `Ok` result.
+    ///
+    /// Returns `Err` if at least one of the versions `left` or `right` are not in `self`.
     pub fn contains_in_order(&self, left: &Version, right: &Version) -> Result<bool, String> {
         if !self.contains(left) {
             return Err(format!("{:?} does not contain {:?}", self, left));
@@ -361,6 +362,8 @@ impl CachedUpgradeSteps {
         self.response_timestamp_seconds
     }
 
+    /// Returns `Ok` if `new_target` is in `self` but different from `self.current()`.
+    /// Otherwise, returns `Err`.
     pub fn validate_new_target_version(&self, new_target: &Version) -> Result<(), String> {
         if !self.contains(new_target) {
             return Err("new_target_version must be among the upgrade steps.".to_string());

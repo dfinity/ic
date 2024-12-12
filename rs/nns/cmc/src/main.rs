@@ -41,7 +41,7 @@ use on_wire::{FromWire, IntoWire, NewType};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{btree_map::Entry, BTreeMap, BTreeSet},
     convert::TryInto,
     thread::LocalKey,
@@ -72,8 +72,14 @@ const MAX_MEMO_LENGTH: usize = 32;
 /// This is the minimum amount needed for creating a canister as of October 2023.
 const CREATE_CANISTER_MIN_CYCLES: u64 = 100_000_000_000;
 
+/// Prior to 2024-12-10, we used 50e15, but legitimate users started running
+/// into this. At that time, prices had recently gone up, so we resolved to
+/// increase this by 3x.
+const DEFAULT_CYCLES_LIMIT: u128 = 150e15 as u128;
+
 thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
+    static LIMITER_REJECT_COUNT: Cell<u64> = const { Cell::new(0_u64) };
 }
 
 fn with_state<R>(f: impl FnOnce(&State) -> R) -> R {
@@ -335,7 +341,7 @@ impl Default for State {
                 ICP_XDR_CONVERSION_RATE_CACHE_SIZE
             ]),
             cycles_per_xdr: DEFAULT_CYCLES_PER_XDR.into(),
-            cycles_limit: 50_000_000_000_000_000u128.into(), // == 50 Pcycles/hour
+            cycles_limit: Cycles::from(DEFAULT_CYCLES_LIMIT),
             limiter: limiter::Limiter::new(resolution, max_age),
             total_cycles_minted: Cycles::zero(),
             blocks_notified: BTreeMap::new(),
@@ -2179,6 +2185,10 @@ fn ensure_balance(cycles: Cycles) -> Result<(), String> {
         let count = state.limiter.get_count();
 
         if count + cycles_to_mint > state.cycles_limit {
+            LIMITER_REJECT_COUNT.with(|count| {
+                count.set(count.get().saturating_add(1));
+            });
+
             return Err(format!(
                 "More than {} cycles have been minted in the last {} seconds, please try again later.",
                 state.cycles_limit,
@@ -2273,6 +2283,9 @@ fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
         }
         new_state.cycles_ledger_canister_id = args.cycles_ledger_canister_id;
     }
+
+    // Delete after release.
+    new_state.cycles_limit = Cycles::new(DEFAULT_CYCLES_LIMIT);
 
     STATE.with(|state| state.replace(Some(new_state)));
 }
@@ -2382,6 +2395,30 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             u8::from(state.update_exchange_rate_canister_state.as_ref().unwrap()) as f64,
             "The current state of the CMC calling the exchange rate canister.",
         )?;
+
+        w.encode_gauge(
+            "cmc_limiter_reject_count",
+            LIMITER_REJECT_COUNT.with(|count| count.get()) as f64,
+            "The number of times that the limiter has blocked a minting request \
+             (since the last upgrade of this canister, or when it was first \
+             installed).",
+        )?;
+        w.encode_gauge(
+            "cmc_limiter_cycles",
+            state.limiter.get_count().get() as f64,
+            "The amount of cycles minted in the recent past. If someone tries \
+             to mint N cycles, but N + the value of this metric exceeds \
+             cmc_cycles_limit, then the request will be rejected.",
+        )?;
+        w.encode_gauge(
+            "cmc_cycles_limit",
+            state.cycles_limit.get() as f64,
+            "The maximum amount of cycles that can be minted in the recent past. \
+             More precisely, if someone tries to mint N cycles, and \
+             N + cmc_limiter_cycles > cmc_cycles_limit, then the request will \
+             be rejected.",
+        )?;
+
         Ok(())
     })
 }
