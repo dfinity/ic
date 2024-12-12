@@ -25,7 +25,7 @@ impl LatencyHistogram {
             .iter()
             .enumerate()
             .find_map(|(bucket_index, bucket_upper_bound)| {
-                if latency_ms <= **bucket_upper_bound {
+                if latency_ms <= *bucket_upper_bound {
                     Some(bucket_index)
                 } else {
                     None
