@@ -8,6 +8,8 @@ on:
 jobs:
   create-token:
     runs-on: ubuntu-latest
+    outputs:
+      token: ${{ steps.token.outputs.token }}
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
