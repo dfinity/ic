@@ -672,6 +672,8 @@ pub struct SandboxedExecutionController {
     launcher_service: Box<dyn LauncherService>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    /// A channel to communicate with the `monitoring_and_evict` thread.
+    /// Send `true` to stop monitoring, `false` to trigger the monitoring.
     stop_monitoring_thread: std::sync::mpsc::Sender<bool>,
 }
 
