@@ -57,6 +57,7 @@ jobs:
           echo "ARTIFACTS=${ARTIFACTS[@]}" >> "${GITHUB_ENV}"
 
       - name: checksums
+        shell: bash
         run: |
           CHECKSUMS=$(mktemp)
 
@@ -67,6 +68,7 @@ jobs:
           echo "CHECKSUMS=${CHECKSUMS}" >> "${GITHUB_ENV}"
 
       - name: tag
+        shell: bash
         run: |
           RELEASE_TAG='${{ inputs.tag }}'
           if [[ -z "${RELEASE_TAG}" ]]; then
@@ -85,6 +87,7 @@ jobs:
           echo "RELEASE_TAG=${RELEASE_TAG}" >> "${GITHUB_ENV}"
 
       - name: release notes
+        shell: bash
         run: |
           NOTES=$(mktemp)
 
@@ -111,6 +114,7 @@ jobs:
           echo "NOTES=${NOTES}" >> "${GITHUB_ENV}"
 
       - name: release
+        shell: bash
         run: |
           gh release create \
             ${RELEASE_TAG} ${ARTIFACTS[@]} \
