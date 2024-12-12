@@ -140,7 +140,7 @@ pub(crate) enum TransactionManagerRequest {
 /// The type tracks when then adapter should become idle. The type is
 /// thread-safe.
 #[derive(Clone)]
-pub struct AdapterState {
+pub(crate) struct AdapterState {
     /// The field contains how long the adapter should wait before becoming idle.
     idle_seconds: u64,
 
