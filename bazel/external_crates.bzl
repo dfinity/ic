@@ -266,8 +266,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.6.3",
             ),
             "bitcoin": crate.spec(
-                #TODO(mihailjianu): upgrade to 0.32.5. here and in the cacrgo.toml.
-                version = "^0.32.4",
+                version = "^0.32.5",
                 features = [
                     "default",
                     "rand",
@@ -1116,14 +1115,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "scraper": crate.spec(
                 version = "^0.17.1",
             ),
-            #TODO(mihailjianu): add this back.
             "secp256k1": crate.spec(
                 version = "^0.29",
                 features = [
                     "global-context",
                     "rand-std",
-                    #TODO(mihailjianu): check if/why this is needed.
-                    #"serde",
                 ],
             ),
             "secp256k1-0-22": crate.spec(
@@ -1132,8 +1128,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = [
                     "global-context",
                     "rand-std",
-                    #TODO(mihailjianu): check if/why this is needed.
-                    #"serde",
                 ],
             ),
             "semver": crate.spec(

@@ -492,7 +492,6 @@ pub mod test {
 
         // Large messgage just below limit.
         let payload_large = RawNetworkMessage::new(
-            //TODO(mihailjianu): check byte order
            network.magic(),
            NetworkMessage::Alert(vec![0; MAX_RAW_MESSAGE_SIZE - 30])
         );
