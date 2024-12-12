@@ -519,34 +519,37 @@ pub struct UploadAndRestartStep {
 }
 
 impl UploadAndRestartStep {
-    fn get_state_replacement_command(ic_state_path: String, upload_dir: String) -> String {
-        let mut replace_state = String::new();
-        replace_state.push_str("sudo systemctl stop ic-replica;");
-        replace_state.push_str(&format!(
+    const CMD_STOP_REPLICA: &str = "sudo systemctl stop ic-replica;";
+    // Note that on older versions of IC-OS this service does not exist.
+    // So try this operation, but ignore possible failure if service
+    // does not exist on the affected version.
+    const CMD_RESTART_REPLICA: &str = "\
+        (sudo systemctl restart setup-permissions || true);\
+        sudo systemctl start ic-replica;\
+        sudo systemctl status ic-replica;";
+
+    /// Sets the right state permissions on `upload_dir`, by copying the
+    /// permissions of the original state path, removing executable permission
+    /// and giving read permissions for the state to group and others.
+    fn cmd_set_permissions(ic_state_path: &str, upload_dir: &str) -> String {
+        let mut set_permissions = String::new();
+        set_permissions.push_str(&format!(
             "sudo chmod -R --reference={} {};",
             ic_state_path, upload_dir
         ));
-        replace_state.push_str(&format!(
+        set_permissions.push_str(&format!(
             "sudo chown -R --reference={} {};",
             ic_state_path, upload_dir
         ));
-        replace_state.push_str(&format!("sudo rm -r {};", ic_state_path));
-        replace_state.push_str(&format!("sudo mv {} {};", upload_dir, ic_state_path));
-        replace_state.push_str(&format!(
+        set_permissions.push_str(&format!(
             r"sudo find {} -type f -exec chmod a-x {{}} \;;",
-            ic_state_path
+            upload_dir
         ));
-        replace_state.push_str(&format!(
+        set_permissions.push_str(&format!(
             r"sudo find {} -type f -exec chmod go+r {{}} \;;",
-            ic_state_path
+            upload_dir
         ));
-        // Note that on older versions of IC-OS this service does not exist.
-        // So try this operation, but ignore possible failure if service
-        // does not exist on the affected version.
-        replace_state.push_str("(sudo systemctl restart setup-permissions || true);");
-        replace_state.push_str("sudo systemctl start ic-replica;");
-        replace_state.push_str("sudo systemctl status ic-replica;");
-        replace_state
+        set_permissions
     }
 }
 impl Step for UploadAndRestartStep {
@@ -589,8 +592,7 @@ impl Step for UploadAndRestartStep {
         // Upload directory to create
         let upload_dir = format!("{}/{}", IC_DATA_PATH, NEW_IC_STATE);
         let ic_state_path = format!("{}/{}", IC_DATA_PATH, IC_STATE);
-        let cmd_replace_state =
-            Self::get_state_replacement_command(ic_state_path.clone(), upload_dir.clone());
+        let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &upload_dir);
         let src = format!("{}/", self.data_src.display());
 
         // Decide: remote or local recovery
@@ -637,9 +639,23 @@ impl Step for UploadAndRestartStep {
                 self.require_confirmation,
                 self.key_file.as_ref(),
             )?;
+
+            let cmd_replace_state = format!(
+                "sudo rm -r {}; sudo mv {} {};",
+                ic_state_path, upload_dir, ic_state_path
+            );
+
             info!(self.logger, "Restarting replica...");
+            ssh_helper.ssh(Self::CMD_STOP_REPLICA.to_string())?;
+            ssh_helper.ssh(cmd_set_permissions)?;
             ssh_helper.ssh(cmd_replace_state)?;
+            ssh_helper.ssh(Self::CMD_RESTART_REPLICA.to_string())?;
         } else {
+            info!(self.logger, "Stopping replica...");
+            exec_cmd(Command::new("bash").arg("-c").arg(Self::CMD_STOP_REPLICA))?;
+            info!(self.logger, "Setting file permissions...");
+            exec_cmd(Command::new("bash").arg("-c").arg(cmd_set_permissions))?;
+
             // For local recoveries we first backup the original state, and
             // then simply `mv` the new state to the upload directory. No
             // rsync is needed, and thus no checkpoint copying.
@@ -657,8 +673,13 @@ impl Step for UploadAndRestartStep {
             mv_to_target.arg(src);
             mv_to_target.arg(upload_dir);
             exec_cmd(&mut mv_to_target)?;
+
             info!(self.logger, "Restarting replica...");
-            exec_cmd(Command::new("bash").arg("-c").arg(cmd_replace_state))?;
+            exec_cmd(
+                Command::new("bash")
+                    .arg("-c")
+                    .arg(Self::CMD_RESTART_REPLICA),
+            )?;
         }
         Ok(())
     }
