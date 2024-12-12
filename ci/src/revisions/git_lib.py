@@ -35,6 +35,7 @@ def sync_main_branch_and_checkout_branch(repo_root: pathlib.Path, main_branch: s
 
     result = subprocess.run(["git", "status", "--porcelain"], stdout=subprocess.PIPE, text=True, check=True)
     if result.stdout.strip():
+        logger.warn("Uncommited work:\n%s", result.stdout.strip())
         logger.error("Found uncommited work! Commit and then proceed.")
         exit(2)
 
