@@ -69,7 +69,7 @@ function select_fastest_interface() {
 
 function configure_netplan() {
     local NETPLAN_TEMPLATE="/opt/ic/share/99-setup.yaml.template"
-    local NETPLAN_OUTPUT="/opt/ic/share/99-setup.yaml"
+    local NETPLAN_OUTPUT="/etc/netplan/99-setup.yaml"
 
     cp "$NETPLAN_TEMPLATE" "$NETPLAN_OUTPUT"
     sed -i "s|{IFACE}|$BEST_IFACE|g" "$NETPLAN_OUTPUT"
