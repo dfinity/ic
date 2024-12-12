@@ -200,8 +200,6 @@ fn serialize() {
         Some("ICP".into()),
         Some("icp".into()),
         None,
-        None,
-        None,
     );
 
     let txn = Transaction::new(
@@ -540,8 +538,6 @@ fn get_blocks_returns_correct_blocks() {
         Some("ICP".into()),
         Some("icp".into()),
         None,
-        None,
-        None,
     );
 
     for i in 0..10 {
@@ -604,8 +600,6 @@ fn test_purge() {
         None,
         Some("ICP".into()),
         Some("icp".into()),
-        None,
-        None,
         None,
     );
     let little_later = genesis + Duration::from_millis(1);
