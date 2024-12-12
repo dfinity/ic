@@ -74,6 +74,6 @@ jobs:
           cp ci/src/revisions/git_lib.py /tmp/git_lib.py
 
           python /tmp/git_lib.py --repo-root $REPO_ROOT sync-and-checkout --branch $BRANCH --main-branch master
-          bazel run //rs/nervous_system/tools/sync-with-released-nervous-system-wasms
+          bazel run --config=ci --repository_cache=/cache/bazel //rs/nervous_system/tools/sync-with-released-nervous-system-wasms
           python /tmp/git_lib.py --repo-root $REPO_ROOT commit-and-create-pr --branch $BRANCH --file $FILE
         shell: bash
