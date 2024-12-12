@@ -6,7 +6,7 @@ use cycles_minting_canister::{
     DEFAULT_CYCLES_PER_XDR,
 };
 use dfn_candid::{candid_one, CandidOne};
-use ic_canister_client::{HttpClient, Sender};
+use ic_canister_client::{Ed25519KeyPair, HttpClient, Sender};
 use ic_certification::verify_certified_data;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_crypto_tree_hash::MixedHashTree;
@@ -28,12 +28,12 @@ use ic_nns_test_utils::governance::{
     submit_external_update_proposal_allowing_error, upgrade_nns_canister_by_proposal,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::{
     driver::{
-        test_env::{HasIcPrepDir, TestEnv},
+        test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
         },
@@ -44,81 +44,103 @@ use ic_system_test_driver::{
     },
     util::{block_on, runtime_from_url},
 };
-use ic_types::Cycles;
+use ic_types::{Cycles, PrincipalId};
 use icp_ledger::{Operation, Tokens, DEFAULT_TRANSFER_FEE};
 use num_traits::ToPrimitive;
 use on_wire::IntoWire;
+use serde::{Deserialize, Serialize};
 use slog::info;
+
+const XDR_PERMYRIAD_PER_ICP: u64 = 5_000; // = 0.5 XDR/ICP
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test))
+        .add_test(systest!(creating_canister_no_subnets_test))
+        .add_parallel(
+            SystemTestSubGroup::new()
+                .add_test(systest!(icp_xdr_conversion_rate_test))
+                .add_test(systest!(test)),
+        )
         .execute_from_args()?;
     Ok(())
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct CmcInitialCyclesBalance {
+    cmc_initial_cycles_balance: u64,
+}
+
+impl TestEnvAttribute for CmcInitialCyclesBalance {
+    fn attribute_name() -> String {
+        "cmc_initial_cycles_balance".to_string()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ControllerUserAuth {
+    controller_user_keypair_pem: String,
+    controller_pid: PrincipalId,
+}
+
+impl TestEnvAttribute for ControllerUserAuth {
+    fn attribute_name() -> String {
+        "controller_user_auth".to_string()
+    }
+}
 pub fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
     env.topology_snapshot().subnets().for_each(|subnet| {
         subnet
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
-}
 
-pub fn test(env: TestEnv) {
-    let logger = env.logger();
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     NnsInstallationBuilder::new()
         .install(&nns_node, &env)
         .expect("Could not install NNS canisters");
-    let app_node = topology
-        .subnets()
-        .find(|s| s.subnet_type() == SubnetType::Application)
-        .unwrap()
-        .nodes()
-        .next()
-        .unwrap();
+
+    let cmc_canister_status: RootCanisterStatusResult = block_on(async move {
+        Canister::new(&nns, ROOT_CANISTER_ID)
+            .update_from_sender(
+                "canister_status",
+                candid_one,
+                CanisterIdRecord::from(CYCLES_MINTING_CANISTER_ID),
+                &Sender::Anonymous,
+            )
+            .await
+            .unwrap()
+    });
+    let cmc_initial_cycles_balance = CmcInitialCyclesBalance {
+        cmc_initial_cycles_balance: cmc_canister_status.cycles.0.to_u64().unwrap(),
+    };
+    cmc_initial_cycles_balance.write_attribute(&env);
+
+    let (controller_user_keypair, controller_pid) = make_user_ed25519(7);
+    let controller_user_keypair_pem = controller_user_keypair.to_pem();
+    let controller_user_auth = ControllerUserAuth {
+        controller_user_keypair_pem,
+        controller_pid,
+    };
+    controller_user_auth.write_attribute(&env);
+}
+
+pub fn icp_xdr_conversion_rate_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+
     block_on(async move {
-        let agent_client = HttpClient::new();
-        let tst = TestAgent::new(&nns_node.get_public_url(), &agent_client);
-        let user1 = UserHandle::new(
-            &nns_node.get_public_url(),
-            &agent_client,
-            &TEST_USER1_KEYPAIR,
-            LEDGER_CANISTER_ID,
-            CYCLES_MINTING_CANISTER_ID,
-        );
-        let user2 = UserHandle::new(
-            &nns_node.get_public_url(),
-            &agent_client,
-            &TEST_USER2_KEYPAIR,
-            LEDGER_CANISTER_ID,
-            CYCLES_MINTING_CANISTER_ID,
-        );
-
-        let (controller_user_keypair, controller_pid) = make_user_ed25519(7);
-        let controller_user = UserHandle::new(
-            &nns_node.get_public_url(),
-            &agent_client,
-            &controller_user_keypair,
-            LEDGER_CANISTER_ID,
-            CYCLES_MINTING_CANISTER_ID,
-        );
-
-        let xdr_permyriad_per_icp = 5_000; // = 0.5 XDR/ICP
-        let icpts_to_cycles = TokensToCycles {
-            xdr_permyriad_per_icp,
-            cycles_per_xdr: DEFAULT_CYCLES_PER_XDR.into(),
-        };
-
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -126,7 +148,7 @@ pub fn test(env: TestEnv) {
 
         // Set the XDR-to-cycles conversion rate.
         info!(logger, "setting CYCLES_PER_XDR");
-        update_xdr_per_icp(&nns, timestamp, xdr_permyriad_per_icp)
+        update_xdr_per_icp(&nns, timestamp, XDR_PERMYRIAD_PER_ICP)
             .await
             .unwrap();
 
@@ -165,22 +187,11 @@ pub fn test(env: TestEnv) {
             .await
             .unwrap();
 
-        let cmc_canister_status: RootCanisterStatusResult = Canister::new(&nns, ROOT_CANISTER_ID)
-            .update_from_sender(
-                "canister_status",
-                candid_one,
-                CanisterIdRecord::from(CYCLES_MINTING_CANISTER_ID),
-                &Sender::Anonymous,
-            )
-            .await
-            .unwrap();
-        let cmc_initial_cycles_balance = cmc_canister_status.cycles.0.to_u64().unwrap();
-
         let icp_xdr_conversion_rate = conversion_rate_response.data;
         // Check that the first call changed the value but not the second one
         assert_eq!(
             icp_xdr_conversion_rate.xdr_permyriad_per_icp,
-            xdr_permyriad_per_icp
+            XDR_PERMYRIAD_PER_ICP
         );
 
         let pk_bytes = env
@@ -205,7 +216,7 @@ pub fn test(env: TestEnv) {
 
         let proposal_payload = UpdateIcpXdrConversionRatePayload {
             timestamp_seconds: timestamp,
-            xdr_permyriad_per_icp: xdr_permyriad_per_icp + 1234,
+            xdr_permyriad_per_icp: XDR_PERMYRIAD_PER_ICP + 1234,
             ..Default::default()
         };
 
@@ -232,7 +243,38 @@ pub fn test(env: TestEnv) {
         // Check rate hasn't changed
         assert_eq!(
             icp_xdr_conversion_rate.xdr_permyriad_per_icp,
-            xdr_permyriad_per_icp
+            XDR_PERMYRIAD_PER_ICP
+        );
+    });
+}
+
+pub fn creating_canister_no_subnets_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+
+    let agent_client = HttpClient::new();
+
+    let controller_user_auth = ControllerUserAuth::read_attribute(&env);
+    let controller_user_keypair =
+        Ed25519KeyPair::from_pem(&controller_user_auth.controller_user_keypair_pem).unwrap();
+    let controller_user = UserHandle::new(
+        &nns_node.get_public_url(),
+        &agent_client,
+        &controller_user_keypair,
+        LEDGER_CANISTER_ID,
+        CYCLES_MINTING_CANISTER_ID,
+    );
+
+    block_on(async move {
+        let tst = TestAgent::new(&nns_node.get_public_url(), &agent_client);
+        let user1 = UserHandle::new(
+            &nns_node.get_public_url(),
+            &agent_client,
+            &TEST_USER1_KEYPAIR,
+            LEDGER_CANISTER_ID,
+            CYCLES_MINTING_CANISTER_ID,
         );
 
         /* The first attempt to create a canister should fail because we
@@ -287,6 +329,58 @@ pub fn test(env: TestEnv) {
             )
             .await;
         }
+    });
+}
+
+pub fn test(env: TestEnv) {
+    let logger = env.logger();
+
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+
+    let app_node = topology
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap()
+        .nodes()
+        .next()
+        .unwrap();
+
+    let agent_client: HttpClient = HttpClient::new();
+
+    let controller_user_auth = ControllerUserAuth::read_attribute(&env);
+    let controller_user_keypair =
+        Ed25519KeyPair::from_pem(&controller_user_auth.controller_user_keypair_pem).unwrap();
+    let controller_user = UserHandle::new(
+        &nns_node.get_public_url(),
+        &agent_client,
+        &controller_user_keypair,
+        LEDGER_CANISTER_ID,
+        CYCLES_MINTING_CANISTER_ID,
+    );
+
+    block_on(async move {
+        let icpts_to_cycles = TokensToCycles {
+            xdr_permyriad_per_icp: XDR_PERMYRIAD_PER_ICP,
+            cycles_per_xdr: DEFAULT_CYCLES_PER_XDR.into(),
+        };
+
+        let tst = TestAgent::new(&nns_node.get_public_url(), &agent_client);
+        let user1 = UserHandle::new(
+            &nns_node.get_public_url(),
+            &agent_client,
+            &TEST_USER1_KEYPAIR,
+            LEDGER_CANISTER_ID,
+            CYCLES_MINTING_CANISTER_ID,
+        );
+        let user2 = UserHandle::new(
+            &nns_node.get_public_url(),
+            &agent_client,
+            &TEST_USER2_KEYPAIR,
+            LEDGER_CANISTER_ID,
+            CYCLES_MINTING_CANISTER_ID,
+        );
 
         /* Register a subnet. */
         info!(logger, "registering subnets");
@@ -422,17 +516,17 @@ pub fn test(env: TestEnv) {
         let initial_amount = Tokens::new(10_000, 0).unwrap();
 
         let bh = user1
-            .pay_for_canister(initial_amount, None, &controller_pid)
+            .pay_for_canister(initial_amount, None, &controller_user_auth.controller_pid)
             .await;
         let new_canister_id = controller_user
-            .notify_canister_create_cmc(bh, None, &controller_pid, None, None)
+            .notify_canister_create_cmc(bh, None, &controller_user_auth.controller_pid, None, None)
             .await
             .unwrap();
 
         // second notify should return the success result together with canister id
         let tip = tst.get_tip().await.unwrap();
         let can_id = controller_user
-            .notify_canister_create_cmc(bh, None, &controller_pid, None, None)
+            .notify_canister_create_cmc(bh, None, &controller_user_auth.controller_pid, None, None)
             .await
             .unwrap();
         assert_eq!(new_canister_id, can_id);
@@ -458,7 +552,7 @@ pub fn test(env: TestEnv) {
 
         // notification through the ledger path should fail
         user1
-            .notify_canister_create_ledger(bh, None, &controller_pid)
+            .notify_canister_create_ledger(bh, None, &controller_user_auth.controller_pid)
             .await
             .unwrap_err();
 
@@ -557,7 +651,10 @@ pub fn test(env: TestEnv) {
                 .await
                 .unwrap();
 
-        assert_eq!(new_canister_status.controller(), controller_pid);
+        assert_eq!(
+            new_canister_status.controller(),
+            controller_user_auth.controller_pid
+        );
         let config = CyclesAccountManagerConfig::application_subnet();
         let fees = scale_cycles(
             config.canister_creation_fee
@@ -646,7 +743,10 @@ pub fn test(env: TestEnv) {
                     .await
                     .unwrap();
 
-            assert_eq!(new_canister_status.controller(), controller_pid);
+            assert_eq!(
+                new_canister_status.controller(),
+                controller_user_auth.controller_pid
+            );
             let config = CyclesAccountManagerConfig::application_subnet();
             let fees = scale_cycles(
                 config.canister_creation_fee
@@ -684,9 +784,13 @@ pub fn test(env: TestEnv) {
             .subnets()
             .filter_map(|s| (s.subnet_type() == SubnetType::System).then_some(s.subnet_id))
             .collect();
-        set_authorized_subnetwork_list(&nns, Some(controller_pid), system_subnet_ids)
-            .await
-            .unwrap();
+        set_authorized_subnetwork_list(
+            &nns,
+            Some(controller_user_auth.controller_pid),
+            system_subnet_ids,
+        )
+        .await
+        .unwrap();
 
         info!(logger, "creating NNS canister");
 
@@ -709,7 +813,10 @@ pub fn test(env: TestEnv) {
             .await
             .unwrap();
 
-        assert_eq!(new_canister_status.controller(), controller_pid);
+        assert_eq!(
+            new_canister_status.controller(),
+            controller_user_auth.controller_pid
+        );
         assert_eq!(
             new_canister_status.cycles(),
             icpts_to_cycles.to_cycles(nns_amount).get()
@@ -741,7 +848,10 @@ pub fn test(env: TestEnv) {
                 .await
                 .unwrap();
 
-            assert_eq!(new_canister_status.controller(), controller_pid);
+            assert_eq!(
+                new_canister_status.controller(),
+                controller_user_auth.controller_pid
+            );
             assert_eq!(
                 new_canister_status.cycles(),
                 icpts_to_cycles.to_cycles(nns_amount).get()
@@ -779,10 +889,16 @@ pub fn test(env: TestEnv) {
 
         info!(logger, "creating NNS canister (will fail)");
         let block = user1
-            .pay_for_canister(nns_amount, None, &controller_pid)
+            .pay_for_canister(nns_amount, None, &controller_user_auth.controller_pid)
             .await;
         let err = controller_user
-            .notify_canister_create_cmc(block, None, &controller_pid, None, None)
+            .notify_canister_create_cmc(
+                block,
+                None,
+                &controller_user_auth.controller_pid,
+                None,
+                None,
+            )
             .await
             .unwrap_err();
 
@@ -795,7 +911,7 @@ pub fn test(env: TestEnv) {
         // remove when ledger notify goes away
         {
             let err = user1
-                .notify_canister_create_ledger(block, None, &controller_pid)
+                .notify_canister_create_ledger(block, None, &controller_user_auth.controller_pid)
                 .await
                 .unwrap_err();
 
@@ -832,7 +948,13 @@ pub fn test(env: TestEnv) {
         info!(logger, "creating NNS canister");
 
         controller_user
-            .notify_canister_create_cmc(block, None, &controller_pid, None, None)
+            .notify_canister_create_cmc(
+                block,
+                None,
+                &controller_user_auth.controller_pid,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -914,6 +1036,9 @@ pub fn test(env: TestEnv) {
             .unwrap()
             .checked_add(&nns_amount)
             .unwrap();
+
+        let cmc_initial_cycles_balance =
+            CmcInitialCyclesBalance::read_attribute(&env).cmc_initial_cycles_balance;
 
         // Cycles are only minted when the amount needed exceeds the cycles balance of the CMC, so
         // the total amount of cylces is the sum of the minted cycles and the initial cycles
