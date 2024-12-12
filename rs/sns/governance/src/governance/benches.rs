@@ -9,7 +9,7 @@ fn bench_example() -> canbench_rs::BenchResult {
         }
     }
 
-    let a = 1000;
+    let a = std::hint::black_box(1000);
 
     // The argument to bench_fn is the code to benchmark.
     canbench_rs::bench_fn(|| example_function_to_benchmark(a))
