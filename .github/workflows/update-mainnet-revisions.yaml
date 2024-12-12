@@ -6,41 +6,26 @@ on:
   workflow_dispatch:
 
 jobs:
-  create-token:
-    runs-on: ubuntu-latest
-    outputs:
-      app-token: ${{ steps.app-token.outputs.app-token }}
-    steps:
-      - name: Create GitHub App Token
-        uses: actions/create-github-app-token@v1
-        id: generate-token
-        with:
-          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
-          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
-      - id: app-token
-        name: Writing token to job output
-        shell: bash
-        run: |
-          set -euo pipefail
-          TOKEN=${{ steps.generate-token.outputs.token }}
-          if [ -n "$TOKEN" ]; then
-            echo "Token set!"
-          fi
-          echo "app-token=$TOKEN" >> $GITHUB_OUTPUT
-
   update-ic-versions-file:
     runs-on: ubuntu-latest
     needs: create-token
     steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          token: ${{ needs.create-token.outputs.app-token }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Update IC versions file
         env:
-          GH_TOKEN: ${{ needs.create-token.outputs.app-token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -eEuxo pipefail
 
@@ -56,11 +41,18 @@ jobs:
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
+          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          token: ${{ needs.create-token.outputs.app-token }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Setup gh cli
         uses: ksivamuthu/actions-setup-gh-cli@v3
@@ -69,7 +61,7 @@ jobs:
 
       - name: Update Mainnet canisters file
         env:
-          GH_TOKEN: ${{ needs.create-token.outputs.app-token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -eEuxo pipefail
 
