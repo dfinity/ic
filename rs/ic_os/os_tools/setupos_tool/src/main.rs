@@ -25,6 +25,10 @@ pub enum Commands {
         #[arg(short, long, default_value_t = NodeType::SetupOS)]
         node_type: NodeType,
     },
+    GenerateMacAddress {
+        #[arg(short, long, default_value_t = NodeType::SetupOS)]
+        node_type: NodeType,
+    },
 }
 
 #[derive(Parser)]
@@ -105,6 +109,34 @@ pub fn main() -> Result<()> {
             );
             let ipv6_address = generated_mac.calculate_slaac(&network_info.ipv6_prefix)?;
             println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
+            Ok(())
+        }
+        Some(Commands::GenerateMacAddress { node_type }) => {
+            let config_map = config_map_from_path(Path::new(&opts.config)).context(format!(
+                "Failed to get config.ini settings for path: {}",
+                &opts.config
+            ))?;
+            eprintln!("Using config: {:?}", config_map);
+
+            let network_info = NetworkInfo::from_config_map(&config_map)?;
+            eprintln!("Network info config: {:?}", &network_info);
+
+            let deployment_settings = get_deployment_settings(Path::new(&opts.deployment_file))
+                .context(format!(
+                    "Failed to get deployment settings for file: {}",
+                    &opts.deployment_file
+                ))?;
+            eprintln!("Deployment config: {:?}", deployment_settings);
+
+            let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
+            let deployment_environment = deployment_settings.deployment.name.parse()?;
+            let generated_mac = calculate_deterministic_mac(
+                &mgmt_mac,
+                deployment_environment,
+                IpVariant::V6,
+                node_type,
+            );
+            println!("{}", generated_mac);
             Ok(())
         }
         None => Err(anyhow!(
