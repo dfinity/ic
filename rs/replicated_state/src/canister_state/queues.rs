@@ -10,6 +10,7 @@ use self::message_pool::{
     Context, InboundReference, Kind, MessagePool, OutboundReference, SomeReference,
 };
 use self::queue::{CanisterQueue, IngressQueue, InputQueue, OutputQueue};
+use crate::page_map::int_map::MutableIntMap;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{CanisterState, CheckpointLoadingMetrics, InputQueueType, InputSource, StateError};
 use ic_base_types::PrincipalId;
@@ -364,13 +365,13 @@ struct MessageStoreImpl {
     /// `CanisterInput::DeadlineExpired` by `peek_input()` / `pop_input()` (and
     /// "inflated" by `SystemState` into `SysUnknown` reject responses based on the
     /// callback).
-    expired_callbacks: BTreeMap<InboundReference, CallbackId>,
+    expired_callbacks: MutableIntMap<InboundReference, CallbackId>,
 
     /// Compact reject responses (`CallbackIds`) replacing best-effort responses
     /// that were shed. These are returned as `CanisterInput::ResponseDropped` by
     /// `peek_input()` / `pop_input()` (and "inflated" by `SystemState` into
     /// `SysUnknown` reject responses based on the callback).
-    shed_responses: BTreeMap<InboundReference, CallbackId>,
+    shed_responses: MutableIntMap<InboundReference, CallbackId>,
 }
 
 impl MessageStoreImpl {
@@ -1727,7 +1728,7 @@ fn input_queue_type_fn<'a>(
 impl From<&CanisterQueues> for pb_queues::CanisterQueues {
     fn from(item: &CanisterQueues) -> Self {
         fn callback_references_to_proto(
-            callback_references: &BTreeMap<message_pool::InboundReference, CallbackId>,
+            callback_references: &MutableIntMap<message_pool::InboundReference, CallbackId>,
         ) -> Vec<pb_queues::canister_queues::CallbackReference> {
             callback_references
                 .iter()
@@ -1776,7 +1777,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
 
         fn callback_references_try_from_proto(
             callback_references: Vec<pb_queues::canister_queues::CallbackReference>,
-        ) -> Result<BTreeMap<message_pool::InboundReference, CallbackId>, ProxyDecodeError>
+        ) -> Result<MutableIntMap<message_pool::InboundReference, CallbackId>, ProxyDecodeError>
         {
             callback_references
                 .into_iter()

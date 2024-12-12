@@ -1,4 +1,5 @@
 use super::CanisterInput;
+use crate::page_map::int_map::{AsInt, MutableIntMap};
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_types::messages::{
@@ -8,7 +9,7 @@ use ic_types::time::CoarseTime;
 use ic_types::{CountBytes, Time};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::marker::PhantomData;
 use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
@@ -131,6 +132,12 @@ impl Id {
     }
 }
 
+impl AsInt for Id {
+    fn as_int(&self) -> u64 {
+        self.0
+    }
+}
+
 /// A typed reference -- inbound (`CanisterInput`) or outbound
 /// (`RequestOrResponse`) -- to a message in the `MessagePool`.
 #[derive(Debug)]
@@ -211,6 +218,12 @@ impl<T> From<&Reference<T>> for Id {
 impl<T> From<Reference<T>> for Id {
     fn from(reference: Reference<T>) -> Id {
         Id(reference.0)
+    }
+}
+
+impl<T> AsInt for Reference<T> {
+    fn as_int(&self) -> u64 {
+        self.0
     }
 }
 
@@ -327,7 +340,7 @@ impl TryFrom<pb_queues::canister_queues::CallbackReference> for CallbackReferenc
 pub(super) struct MessagePool {
     /// Pool contents.
     #[validate_eq(CompareWithValidateEq)]
-    messages: BTreeMap<Id, RequestOrResponse>,
+    messages: MutableIntMap<Id, RequestOrResponse>,
 
     /// Records the (implicit) deadlines of all the outbound guaranteed response
     /// requests (only).
@@ -337,7 +350,7 @@ pub(super) struct MessagePool {
     ///    `outbound_guaranteed_request_deadlines.keys().collect() == messages.keys().filter(|id| (id.context(), id.class(), id.kind()) == (Context::Outbound, Class::GuaranteedResponse, Kind::Request)).collect()`
     ///  * The deadline matches the one recorded in `deadline_queue`:
     ///    `outbound_guaranteed_request_deadlines.iter().all(|(id, deadline)| deadline_queue.contains(&(deadline, id)))`
-    outbound_guaranteed_request_deadlines: BTreeMap<Id, CoarseTime>,
+    outbound_guaranteed_request_deadlines: MutableIntMap<Id, CoarseTime>,
 
     /// Running message stats for the pool.
     message_stats: MessageStats,
@@ -661,7 +674,7 @@ impl MessagePool {
     /// `debug_assert!()` checks.
     ///
     /// Time complexity: `O(n)`.
-    fn calculate_message_stats(messages: &BTreeMap<Id, RequestOrResponse>) -> MessageStats {
+    fn calculate_message_stats(messages: &MutableIntMap<Id, RequestOrResponse>) -> MessageStats {
         let mut stats = MessageStats::default();
         for (id, msg) in messages.iter() {
             stats += MessageStats::stats_delta(msg, id.context());
@@ -754,8 +767,8 @@ impl MessagePool {
     /// Time complexity: `O(n * log(n))`.
     #[allow(clippy::type_complexity)]
     fn calculate_priority_queues(
-        messages: &BTreeMap<Id, RequestOrResponse>,
-        outbound_guaranteed_request_deadlines: &BTreeMap<Id, CoarseTime>,
+        messages: &MutableIntMap<Id, RequestOrResponse>,
+        outbound_guaranteed_request_deadlines: &MutableIntMap<Id, CoarseTime>,
     ) -> (BTreeSet<(CoarseTime, Id)>, BTreeSet<(usize, Id)>) {
         let mut expected_deadline_queue = BTreeSet::new();
         let mut expected_size_queue = BTreeSet::new();
@@ -821,7 +834,7 @@ impl TryFrom<pb_queues::MessagePool> for MessagePool {
     fn try_from(item: pb_queues::MessagePool) -> Result<Self, Self::Error> {
         let message_count = item.messages.len();
 
-        let messages: BTreeMap<_, _> = item
+        let messages: MutableIntMap<_, _> = item
             .messages
             .into_iter()
             .map(|entry| {

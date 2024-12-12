@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::page_map::int_map::MutableIntMap;
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_management_canister_types::IC_00;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
@@ -277,8 +278,8 @@ impl CallContextManagerStats {
     ///
     /// Time complexity: `O(n)`.
     pub(crate) fn calculate_stats(
-        call_contexts: &BTreeMap<CallContextId, CallContext>,
-        callbacks: &BTreeMap<CallbackId, Arc<Callback>>,
+        call_contexts: &MutableIntMap<CallContextId, CallContext>,
+        callbacks: &MutableIntMap<CallbackId, Arc<Callback>>,
     ) -> CallContextManagerStats {
         let unresponded_canister_update_call_contexts = call_contexts
             .values()
@@ -322,7 +323,7 @@ impl CallContextManagerStats {
     /// Time complexity: `O(n)`.
     #[allow(dead_code)]
     pub(crate) fn calculate_unresponded_callbacks_per_respondent(
-        callbacks: &BTreeMap<CallbackId, Arc<Callback>>,
+        callbacks: &MutableIntMap<CallbackId, Arc<Callback>>,
         aborted_or_paused_response: Option<&Response>,
     ) -> BTreeMap<CanisterId, usize> {
         let mut callback_counts = callbacks.values().fold(
@@ -367,7 +368,7 @@ impl CallContextManagerStats {
     /// Time complexity: `O(n)`.
     #[allow(dead_code)]
     pub(crate) fn calculate_unresponded_call_contexts_per_originator(
-        call_contexts: &BTreeMap<CallContextId, CallContext>,
+        call_contexts: &MutableIntMap<CallContextId, CallContext>,
         aborted_or_paused_request: Option<&Request>,
     ) -> BTreeMap<CanisterId, usize> {
         let mut unresponded_canister_update_call_contexts = call_contexts
@@ -418,11 +419,11 @@ pub struct CallContextManager {
     next_callback_id: u64,
 
     /// Call contexts (including deleted ones) that still have open callbacks.
-    call_contexts: BTreeMap<CallContextId, CallContext>,
+    call_contexts: MutableIntMap<CallContextId, CallContext>,
 
     /// Callbacks still awaiting response, plus the callback of the currently
     /// paused or aborted DTS response execution, if any.
-    callbacks: BTreeMap<CallbackId, Arc<Callback>>,
+    callbacks: MutableIntMap<CallbackId, Arc<Callback>>,
 
     /// Callback deadline priority queue. Holds all not-yet-expired best-effort
     /// callbacks, ordered by deadline. `CallbackIds` break ties, ensuring
@@ -575,7 +576,7 @@ impl CallContextManager {
 
     /// Returns the currently open `CallContexts` maintained by this
     /// `CallContextManager`.
-    pub fn call_contexts(&self) -> &BTreeMap<CallContextId, CallContext> {
+    pub fn call_contexts(&self) -> &MutableIntMap<CallContextId, CallContext> {
         &self.call_contexts
     }
 
@@ -594,18 +595,21 @@ impl CallContextManager {
         call_context_id: CallContextId,
         cycles: Cycles,
     ) -> Result<&CallContext, &str> {
-        let call_context = self
+        let mut call_context = self
             .call_contexts
-            .get_mut(&call_context_id)
+            .remove(&call_context_id)
             .ok_or("Canister accepted cycles from invalid call context")?;
-        call_context
-            .withdraw_cycles(cycles)
-            .map_err(|_| "Canister accepted more cycles than available from call context")?;
-        Ok(call_context)
+        let res = call_context.withdraw_cycles(cycles);
+        self.call_contexts.insert(call_context_id, call_context);
+
+        match res {
+            Ok(()) => Ok(self.call_contexts.get(&call_context_id).unwrap()),
+            Err(()) => Err("Canister accepted more cycles than available from call context"),
+        }
     }
 
     /// Returns the `Callback`s maintained by this `CallContextManager`.
-    pub fn callbacks(&self) -> &BTreeMap<CallbackId, Arc<Callback>> {
+    pub fn callbacks(&self) -> &MutableIntMap<CallbackId, Arc<Callback>> {
         &self.callbacks
     }
 
@@ -642,9 +646,9 @@ impl CallContextManager {
             OutstandingCalls::No
         };
 
-        let context = self
+        let mut context = self
             .call_contexts
-            .get_mut(&call_context_id)
+            .remove(&call_context_id)
             .unwrap_or_else(|| panic!("no call context with ID={}", call_context_id));
         // Update call context `instructions_executed += instructions_used`
         context.instructions_executed = context
@@ -663,65 +667,56 @@ impl CallContextManager {
         let (action, call_context) = match (result, responded, outstanding_calls) {
             (Ok(None), Responded::No, OutstandingCalls::Yes)
             | (Err(_), Responded::No, OutstandingCalls::Yes) => {
+                self.call_contexts.insert(call_context_id, context);
                 (CallContextAction::NotYetResponded, None)
             }
 
             (Ok(None), Responded::Yes, OutstandingCalls::Yes)
             | (Err(_), Responded::Yes, OutstandingCalls::Yes) => {
+                self.call_contexts.insert(call_context_id, context);
                 (CallContextAction::AlreadyResponded, None)
             }
             (Ok(None), Responded::Yes, OutstandingCalls::No)
-            | (Err(_), Responded::Yes, OutstandingCalls::No) => (
-                CallContextAction::AlreadyResponded,
-                self.call_contexts.remove(&call_context_id),
-            ),
+            | (Err(_), Responded::Yes, OutstandingCalls::No) => {
+                (CallContextAction::AlreadyResponded, Some(context))
+            }
 
             (Ok(None), Responded::No, OutstandingCalls::No) => {
                 self.stats.on_call_context_response(&context.call_origin);
                 let refund = context.available_cycles;
-                (
-                    CallContextAction::NoResponse { refund },
-                    self.call_contexts.remove(&call_context_id),
-                )
+                (CallContextAction::NoResponse { refund }, Some(context))
             }
 
             (Ok(Some(WasmResult::Reply(payload))), Responded::No, OutstandingCalls::No) => {
                 self.stats.on_call_context_response(&context.call_origin);
                 let refund = context.available_cycles;
-                (
-                    CallContextAction::Reply { payload, refund },
-                    self.call_contexts.remove(&call_context_id),
-                )
+                (CallContextAction::Reply { payload, refund }, Some(context))
             }
             (Ok(Some(WasmResult::Reply(payload))), Responded::No, OutstandingCalls::Yes) => {
                 self.stats.on_call_context_response(&context.call_origin);
                 let refund = context.available_cycles;
                 context.mark_responded();
+                self.call_contexts.insert(call_context_id, context);
                 (CallContextAction::Reply { payload, refund }, None)
             }
 
             (Ok(Some(WasmResult::Reject(payload))), Responded::No, OutstandingCalls::No) => {
                 self.stats.on_call_context_response(&context.call_origin);
                 let refund = context.available_cycles;
-                (
-                    CallContextAction::Reject { payload, refund },
-                    self.call_contexts.remove(&call_context_id),
-                )
+                (CallContextAction::Reject { payload, refund }, Some(context))
             }
             (Ok(Some(WasmResult::Reject(payload))), Responded::No, OutstandingCalls::Yes) => {
                 self.stats.on_call_context_response(&context.call_origin);
                 let refund = context.available_cycles;
                 context.mark_responded();
+                self.call_contexts.insert(call_context_id, context);
                 (CallContextAction::Reject { payload, refund }, None)
             }
 
             (Err(error), Responded::No, OutstandingCalls::No) => {
                 self.stats.on_call_context_response(&context.call_origin);
                 let refund = context.available_cycles;
-                (
-                    CallContextAction::Fail { error, refund },
-                    self.call_contexts.remove(&call_context_id),
-                )
+                (CallContextAction::Fail { error, refund }, Some(context))
             }
 
             // The following can never happen since we handle at the SystemApi level if a canister
@@ -748,18 +743,17 @@ impl CallContextManager {
     // TODO: Remove, this is only used in tests.
     #[cfg(test)]
     fn mark_responded(&mut self, call_context_id: CallContextId) -> Result<(), String> {
-        let call_context = self
+        let mut call_context = self
             .call_contexts
-            .get_mut(&call_context_id)
+            .remove(&call_context_id)
             .ok_or(format!("Call context not found: {}", call_context_id))?;
-        if call_context.responded {
-            return Ok(());
+        if !call_context.responded {
+            call_context.mark_responded();
+
+            self.stats
+                .on_call_context_response(&call_context.call_origin);
         }
-
-        call_context.mark_responded();
-
-        self.stats
-            .on_call_context_response(&call_context.call_origin);
+        self.call_contexts.insert(call_context_id, call_context);
         debug_assert!(self.stats_ok());
 
         Ok(())
@@ -972,21 +966,26 @@ impl CallContextManager {
     ) -> Vec<R> {
         let mut reject_responses = Vec::new();
 
-        for call_context in self.call_contexts.values_mut() {
-            if !call_context.has_responded() {
-                // Generate a reject response.
-                if let Some(response) = reject(call_context) {
-                    reject_responses.push(response)
+        let call_contexts = std::mem::take(&mut self.call_contexts);
+        self.call_contexts = call_contexts
+            .into_iter()
+            .map(|(id, mut call_context)| {
+                if !call_context.has_responded() {
+                    // Generate a reject response.
+                    if let Some(response) = reject(&call_context) {
+                        reject_responses.push(response)
+                    }
+
+                    call_context.mark_responded();
+                    self.stats
+                        .on_call_context_response(&call_context.call_origin);
                 }
 
-                call_context.mark_responded();
-                self.stats
-                    .on_call_context_response(&call_context.call_origin);
-            }
-
-            // Mark the call context as deleted.
-            call_context.mark_deleted();
-        }
+                // Mark the call context as deleted.
+                call_context.mark_deleted();
+                (id, call_context)
+            })
+            .collect();
         debug_assert!(self.stats_ok());
 
         reject_responses
@@ -1050,8 +1049,8 @@ impl From<&CallContextManager> for pb::CallContextManager {
 impl TryFrom<pb::CallContextManager> for CallContextManager {
     type Error = ProxyDecodeError;
     fn try_from(value: pb::CallContextManager) -> Result<Self, Self::Error> {
-        let mut call_contexts = BTreeMap::<CallContextId, CallContext>::new();
-        let mut callbacks = BTreeMap::<CallbackId, Arc<Callback>>::new();
+        let mut call_contexts = MutableIntMap::<CallContextId, CallContext>::new();
+        let mut callbacks = MutableIntMap::<CallbackId, Arc<Callback>>::new();
         for pb::CallContextEntry {
             call_context_id,
             call_context,
@@ -1109,7 +1108,7 @@ impl TryFrom<pb::CallContextManager> for CallContextManager {
 ///
 /// Time complexity: `O(n)`.
 fn calculate_callback_deadlines(
-    callbacks: &BTreeMap<CallbackId, Arc<Callback>>,
+    callbacks: &MutableIntMap<CallbackId, Arc<Callback>>,
 ) -> BTreeSet<(CoarseTime, CallbackId)> {
     callbacks
         .iter()

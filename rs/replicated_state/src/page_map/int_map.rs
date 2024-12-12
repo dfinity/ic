@@ -3,17 +3,21 @@
 #[cfg(test)]
 mod test;
 
-use std::{cmp::Ordering, sync::Arc};
+use std::cmp::Ordering;
+use std::sync::Arc;
+
+use ic_validate_eq::ValidateEq;
+use phantom_newtype::Id;
 
 /// Big-endian patricia trees.
 #[derive(Clone, Debug, Default)]
-enum Tree<T> {
+enum Tree<K, V> {
     /// An empty tree.
     /// Allowing empty trees simplifies the code a bit.
     #[default]
     Empty,
     /// A key-value pair.
-    Leaf(u64, T),
+    Leaf(K, V),
     /// A binary fork.
     ///
     /// Invariants:
@@ -39,8 +43,8 @@ enum Tree<T> {
     Branch {
         prefix: u64,
         branching_bit: u8,
-        left: Arc<Tree<T>>,
-        right: Arc<Tree<T>>,
+        left: Arc<Tree<K, V>>,
+        right: Arc<Tree<K, V>>,
     },
 }
 
@@ -48,7 +52,7 @@ enum Tree<T> {
 ///
 /// Precondition: p0 ≠ p1
 #[inline]
-fn join<T>(p0: u64, t0: Arc<Tree<T>>, p1: u64, t1: Arc<Tree<T>>) -> Tree<T> {
+fn join<K, V>(p0: u64, t0: Arc<Tree<K, V>>, p1: u64, t1: Arc<Tree<K, V>>) -> Tree<K, V> {
     let b = branching_bit(p0, p1);
 
     if p0 & (1 << b) == 0 {
@@ -76,6 +80,15 @@ fn with_arc<T: Clone + Default>(mut p: Arc<T>, f: impl FnOnce(T) -> T) -> Arc<T>
     p
 }
 
+/// Modifies the contents of an Arc, creating a copy if necessary.
+#[inline]
+fn with_arc2<T: Clone + Default, V>(mut p: Arc<T>, f: impl FnOnce(T) -> (T, V)) -> (Arc<T>, V) {
+    let dst = Arc::make_mut(&mut p);
+    let v;
+    (*dst, v) = f(std::mem::take(dst));
+    (p, v)
+}
+
 /// Extracts a value from an Arc, cloning its content if necessary.
 #[inline]
 fn take_arc<T: Clone>(p: Arc<T>) -> T {
@@ -87,14 +100,33 @@ fn take_arc<T: Clone>(p: Arc<T>) -> T {
 
 /// The return type of the `bounds()` method.
 /// See the comments of the public `bounds()` method.
-pub(crate) type Bounds<'a, K, V> = (Option<(K, &'a V)>, Option<(K, &'a V)>);
+pub(crate) type Bounds<'a, K, V> = (Option<(&'a K, &'a V)>, Option<(&'a K, &'a V)>);
 
-impl<T: Clone> Tree<T> {
-    fn get(&self, key: u64) -> Option<&T> {
+pub trait AsInt {
+    fn as_int(&self) -> u64;
+}
+
+impl AsInt for u64 {
+    fn as_int(&self) -> u64 {
+        *self
+    }
+}
+
+impl<Entity> AsInt for Id<Entity, u64> {
+    fn as_int(&self) -> u64 {
+        self.get()
+    }
+}
+
+impl<K, V> Tree<K, V>
+where
+    K: AsInt,
+{
+    fn get(&self, key: &K) -> Option<&V> {
         match self {
             Tree::Empty => None,
             Tree::Leaf(k, v) => {
-                if key == *k {
+                if key.as_int() == k.as_int() {
                     Some(v)
                 } else {
                     None
@@ -106,9 +138,9 @@ impl<T: Clone> Tree<T> {
                 left,
                 right,
             } => {
-                if !matches_prefix(key, *prefix, *branching_bit) {
+                if !matches_prefix(key.as_int(), *prefix, *branching_bit) {
                     None
-                } else if key & (1 << branching_bit) == 0 {
+                } else if key.as_int() & (1 << branching_bit) == 0 {
                     (*left).get(key)
                 } else {
                     (*right).get(key)
@@ -116,26 +148,32 @@ impl<T: Clone> Tree<T> {
             }
         }
     }
+}
 
+impl<K, V> Tree<K, V>
+where
+    K: AsInt + Ord + Copy,
+    V: Clone,
+{
     /// See the comments of the public `bounds()` method.
-    fn bounds(&self, key: u64) -> Bounds<u64, T> {
+    fn bounds(&self, key: &K) -> Bounds<K, V> {
         match self {
             Tree::Empty => (None, None),
             Tree::Leaf(k, v) => match key.cmp(k) {
-                Ordering::Less => (None, Some((*k, v))),
-                Ordering::Equal => (Some((key, v)), Some((key, v))),
-                Ordering::Greater => (Some((*k, v)), None),
+                Ordering::Less => (None, Some((k, v))),
+                Ordering::Equal => (Some((k, v)), Some((k, v))),
+                Ordering::Greater => (Some((k, v)), None),
             },
             Tree::Branch {
                 prefix,
                 branching_bit,
                 left,
                 right,
-            } => match mask(key, *branching_bit).cmp(prefix) {
+            } => match mask(key.as_int(), *branching_bit).cmp(prefix) {
                 Ordering::Less => (None, (*left).min()),
                 Ordering::Greater => ((*right).max(), None),
                 Ordering::Equal => {
-                    if key & (1 << branching_bit) == 0 {
+                    if key.as_int() & (1 << branching_bit) == 0 {
                         let (start, end) = (*left).bounds(key);
                         if end.is_none() {
                             (start, (*right).min())
@@ -155,66 +193,21 @@ impl<T: Clone> Tree<T> {
         }
     }
 
-    // Returns the smallest key/value pair in the given tree.
-    // If the tree is empty, then it returns `None`.
-    fn min(&self) -> Option<(u64, &T)> {
-        let mut node = self;
-        loop {
-            match node {
-                Tree::Empty => {
-                    return None;
-                }
-                Tree::Leaf(k, v) => {
-                    return Some((*k, v));
-                }
-                Tree::Branch {
-                    prefix: _,
-                    branching_bit: _,
-                    left,
-                    right: _,
-                } => {
-                    node = left.as_ref();
-                }
-            }
-        }
-    }
-
-    // Returns the largest key/value pair in the given tree.
-    // If the tree is empty, then it returns `None`.
-    fn max(&self) -> Option<(u64, &T)> {
-        let mut node = self;
-        loop {
-            match node {
-                Tree::Empty => {
-                    return None;
-                }
-                Tree::Leaf(k, v) => {
-                    return Some((*k, v));
-                }
-                Tree::Branch {
-                    prefix: _,
-                    branching_bit: _,
-                    left: _,
-                    right,
-                } => {
-                    node = right.as_ref();
-                }
-            }
-        }
-    }
-
-    fn insert(self, key: u64, value: T) -> Self {
+    fn insert(self, key: K, value: V) -> (Self, Option<V>) {
         match self {
-            Tree::Empty => Tree::Leaf(key, value),
+            Tree::Empty => (Tree::Leaf(key, value), None),
             Tree::Leaf(k, v) => {
                 if k == key {
-                    Tree::Leaf(k, value)
+                    (Tree::Leaf(k, value), Some(v))
                 } else {
-                    join(
-                        key,
-                        Arc::new(Tree::Leaf(key, value)),
-                        k,
-                        Arc::new(Tree::Leaf(k, v)),
+                    (
+                        join(
+                            key.as_int(),
+                            Arc::new(Tree::Leaf(key, value)),
+                            k.as_int(),
+                            Arc::new(Tree::Leaf(k, v)),
+                        ),
+                        None,
                     )
                 }
             }
@@ -224,49 +217,105 @@ impl<T: Clone> Tree<T> {
                 left,
                 right,
             } => {
-                if matches_prefix(key, prefix, branching_bit) {
-                    if key & (1 << branching_bit) == 0 {
-                        Tree::Branch {
-                            prefix,
-                            branching_bit,
-                            left: with_arc(left, |l| l.insert(key, value)),
-                            right,
-                        }
+                if matches_prefix(key.as_int(), prefix, branching_bit) {
+                    if (&key).as_int() & (1 << branching_bit) == 0 {
+                        let (left, res) = with_arc2(left, |l| l.insert(key, value));
+                        (
+                            Tree::Branch {
+                                prefix,
+                                branching_bit,
+                                left,
+                                right,
+                            },
+                            res,
+                        )
                     } else {
-                        Tree::Branch {
-                            prefix,
-                            branching_bit,
-                            left,
-                            right: with_arc(right, |r| r.insert(key, value)),
-                        }
+                        let (right, res) = with_arc2(right, |r| r.insert(key, value));
+                        (
+                            Tree::Branch {
+                                prefix,
+                                branching_bit,
+                                left,
+                                right,
+                            },
+                            res,
+                        )
                     }
                 } else {
-                    join(
-                        key,
-                        Arc::new(Tree::Leaf(key, value)),
-                        prefix,
-                        Arc::new(Tree::Branch {
+                    (
+                        join(
+                            key.as_int(),
+                            Arc::new(Tree::Leaf(key, value)),
                             prefix,
-                            branching_bit,
-                            left,
-                            right,
-                        }),
+                            Arc::new(Tree::Branch {
+                                prefix,
+                                branching_bit,
+                                left,
+                                right,
+                            }),
+                        ),
+                        None,
                     )
                 }
             }
         }
     }
 
+    fn remove(self, key: &K) -> (Self, Option<V>) {
+        match self {
+            Tree::Empty => (Tree::Empty, None),
+            Tree::Leaf(k, v) if &k == key => (Tree::Empty, Some(v)),
+            Tree::Leaf(..) => (self, None),
+            Tree::Branch {
+                prefix,
+                branching_bit,
+                left,
+                right,
+            } if matches_prefix(key.as_int(), prefix, branching_bit) => {
+                if key.as_int() & (1 << branching_bit) == 0 {
+                    let (left, res) = take_arc(left).remove(key);
+                    match left {
+                        Tree::Empty => (take_arc(right), res),
+                        _ => (
+                            Tree::Branch {
+                                prefix,
+                                branching_bit,
+                                left: Arc::new(left),
+                                right,
+                            },
+                            res,
+                        ),
+                    }
+                } else {
+                    let (right, res) = take_arc(right).remove(key);
+                    match right {
+                        Tree::Empty => (take_arc(left), res),
+                        _ => (
+                            Tree::Branch {
+                                prefix,
+                                branching_bit,
+                                left,
+                                right: Arc::new(right),
+                            },
+                            res,
+                        ),
+                    }
+                }
+            }
+            Tree::Branch { .. } => (self, None),
+        }
+    }
+
     fn union(self, other: Self) -> Self {
         match (self, other) {
             (Tree::Empty, t) | (t, Tree::Empty) => t,
-            (Tree::Leaf(k, v), t) => t.insert(k, v),
+            (Tree::Leaf(k, v), t) => t.insert(k, v).0,
             (t, Tree::Leaf(k, v)) => {
-                if t.get(k).is_some() {
+                if t.get(&k).is_some() {
                     // In case of collision, retain the value in `self`.
                     t
                 } else {
-                    t.insert(k, v)
+                    t.insert(k, v).0
                 }
             }
             (
@@ -355,12 +404,62 @@ impl<T: Clone> Tree<T> {
             }
         }
     }
+}
 
+impl<K, V> Tree<K, V> {
     fn len(&self) -> usize {
         match self {
             Tree::Empty => 0,
             Tree::Leaf(_, _) => 1,
             Tree::Branch { left, right, .. } => left.len() + right.len(),
+        }
+    }
+
+    // Returns the smallest key/value pair in the given tree.
+    // If the tree is empty, then it returns `None`.
+    fn min(&self) -> Option<(&K, &V)> {
+        let mut node = self;
+        loop {
+            match node {
+                Tree::Empty => {
+                    return None;
+                }
+                Tree::Leaf(k, v) => {
+                    return Some((k, v));
+                }
+                Tree::Branch {
+                    prefix: _,
+                    branching_bit: _,
+                    left,
+                    right: _,
+                } => {
+                    node = left.as_ref();
+                }
+            }
+        }
+    }
+
+    // Returns the largest key/value pair in the given tree.
+    // If the tree is empty, then it returns `None`.
+    fn max(&self) -> Option<(&K, &V)> {
+        let mut node = self;
+        loop {
+            match node {
+                Tree::Empty => {
+                    return None;
+                }
+                Tree::Leaf(k, v) => {
+                    return Some((k, v));
+                }
+                Tree::Branch {
+                    prefix: _,
+                    branching_bit: _,
+                    left: _,
+                    right,
+                } => {
+                    node = right.as_ref();
+                }
+            }
         }
     }
 }
@@ -380,64 +479,40 @@ impl<T: Clone> Tree<T> {
 /// September 1998, pages 77-86,
 /// http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.37.5452
 #[derive(Clone, Debug)]
-pub struct IntMap<T>(Tree<T>);
+pub struct IntMap<K, V>(Tree<K, V>);
 
-impl<T> Default for IntMap<T> {
+impl<K, V> Default for IntMap<K, V> {
     fn default() -> Self {
         Self(Tree::Empty)
     }
 }
 
-impl<T: Clone> IntMap<T> {
+impl<K, V> IntMap<K, V> {
     /// Creates a new empty map.
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Looks up a value by integer key.
-    ///
-    /// Complexity: O(min(N, 64))
-    pub fn get(&self, key: u64) -> Option<&T> {
-        self.0.get(key)
-    }
-
-    // Returns `(lower, upper)` inclusive bounds for the given key such that:
-    // - `lower` is the largest key/value pair in the tree that is smaller or equal to the
-    //   given key. If such a key doesn't exist then, `lower = None`.
-    // - `upper` is the smallest key/value pair in the tree that is larger or equal to the
-    //   given key. If such a key doesn't exist then, `upper = None`.
-    //
-    // In all cases the following post-conditions hold:
-    // - lower.0 <= key <= upper.0,
-    // - for all i in [lower.0 + 1..upper.0 - 1]: self.get(i) == None,
-    // - lower == Some((k, v)) implies self.get(k) == v,
-    // - upper == Some((k, v)) implies self.get(k) == v,
-    //
-    // Complexity: O(min(N, 64))
-    pub fn bounds(&self, key: u64) -> Bounds<u64, T> {
-        self.0.bounds(key)
-    }
-
-    /// Inserts a new entry into this map.
-    ///
-    /// Complexity: O(min(N, 64))
-    pub fn insert(self, key: u64, value: T) -> Self {
-        Self(self.0.insert(key, value))
-    }
-
-    /// Unions two maps, preferring entries from self in case of a collision.
-    ///
-    /// Complexity: O(N + M)
-    pub fn union(self, other: Self) -> Self {
-        Self(self.0.union(other.0))
     }
 
     /// Returns an iterator over key-value pairs.
     /// The keys are guaranteed to be sorted.
     ///
     /// A full traversal requires O(N) operations.
-    pub fn iter(&self) -> IntMapIter<'_, T> {
+    pub fn iter(&self) -> IntMapIter<'_, K, V> {
         IntMapIter::new(&self.0)
+    }
+
+    /// Returns an iterator over the keys.
+    /// The keys are guaranteed to be sorted.
+    ///
+    /// A full traversal requires O(N) operations.
+    pub fn keys(&self) -> impl Iterator<Item = &K> {
+        IntMapIter::new(&self.0).map(|(k, _v)| k)
+    }
+
+    /// Returns the largest key in the given tree.
+    /// If the tree is empty, then it returns `None`.
+    pub fn max_key(&self) -> Option<&K> {
+        self.0.max().map(|(k, _v)| k)
     }
 
     /// Returns the number of entries in this map.
@@ -453,46 +528,337 @@ impl<T: Clone> IntMap<T> {
     pub fn is_empty(&self) -> bool {
         matches!(self.0, Tree::Empty)
     }
+}
 
-    /// Returns the largest key in the given tree.
-    /// If the tree is empty, then it returns `None`.
-    pub fn max_key(&self) -> Option<u64> {
-        self.0.max().map(|(k, _v)| k)
+impl<K, V> IntMap<K, V>
+where
+    K: AsInt + Ord + Copy,
+    V: Clone,
+{
+    /// Looks up a value by integer key.
+    ///
+    /// Complexity: O(min(N, 64))
+    pub fn get(&self, key: &K) -> Option<&V> {
+        self.0.get(key)
+    }
+
+    /// Returns `true` if the map contains a value for the specified key.
+    ///
+    /// Complexity: O(min(N, 64))
+    pub fn contains_key(&self, key: &K) -> bool {
+        self.0.get(key).is_some()
+    }
+
+    // Returns `(lower, upper)` inclusive bounds for the given key such that:
+    // - `lower` is the largest key/value pair in the tree that is smaller or equal to the
+    //   given key. If such a key doesn't exist then, `lower = None`.
+    // - `upper` is the smallest key/value pair in the tree that is larger or equal to the
+    //   given key. If such a key doesn't exist then, `upper = None`.
+    //
+    // In all cases the following post-conditions hold:
+    // - lower.0 <= key <= upper.0,
+    // - for all i in [lower.0 + 1..upper.0 - 1]: self.get(i) == None,
+    // - lower == Some((k, v)) implies self.get(k) == v,
+    // - upper == Some((k, v)) implies self.get(k) == v,
+    //
+    // Complexity: O(min(N, 64))
+    pub fn bounds(&self, key: &K) -> Bounds<K, V> {
+        self.0.bounds(key)
+    }
+
+    /// Inserts a new entry into this map.
+    ///
+    /// Complexity: O(min(N, 64))
+    pub fn insert(self, key: K, value: V) -> (Self, Option<V>) {
+        let (tree, res) = self.0.insert(key, value);
+        (Self(tree), res)
+    }
+
+    /// Removes the entry with the given key from this map.
+    ///
+    /// Complexity: O(min(N, 64))
+    pub fn remove(self, key: &K) -> (Self, Option<V>) {
+        let (tree, res) = self.0.remove(key);
+        (Self(tree), res)
+    }
+    // pub fn remove(&mut self, key: &K) -> Option<V> {
+    //     let tree = std::mem::take(&mut self.0);
+    //     let res;
+    //     (self.0, res) = tree.remove(key);
+    //     res
+    // }
+
+    /// Unions two maps, preferring entries from self in case of a collision.
+    ///
+    /// Complexity: O(N + M)
+    pub fn union(self, other: Self) -> Self {
+        Self(self.0.union(other.0))
     }
 }
 
-impl<T: Clone> std::iter::FromIterator<(u64, T)> for IntMap<T> {
+impl<K, V> std::iter::FromIterator<(K, V)> for IntMap<K, V>
+where
+    K: AsInt + Ord + Copy,
+    V: Clone,
+{
     fn from_iter<I>(iter: I) -> Self
     where
-        I: IntoIterator<Item = (u64, T)>,
+        I: IntoIterator<Item = (K, V)>,
     {
         let mut m = Self::new();
         for (k, v) in iter {
-            m = m.insert(k, v);
+            m = m.insert(k, v).0;
         }
         m
     }
 }
 
+impl<K: PartialEq, T: PartialEq> PartialEq for IntMap<K, T> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.len() != other.len() {
+            return false;
+        }
+        self.iter().zip(other.iter()).all(|(a, b)| a == b)
+    }
+}
+
+impl<K: Eq, T: Eq> Eq for IntMap<K, T> {}
+
+impl<K, V> ValidateEq for IntMap<K, V>
+where
+    K: PartialEq + std::fmt::Debug,
+    V: ValidateEq,
+{
+    fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
+        if self.len() != rhs.len() {
+            return Err(format!(
+                "Length divergence:\nlhs keys = {:#?}\nrhs keys = {:#?}",
+                self.keys().collect::<Vec<_>>(),
+                rhs.keys().collect::<Vec<_>>()
+            ));
+        }
+        for (l, r) in self.iter().zip(rhs.iter()) {
+            if l.0 != r.0 {
+                return Err(format!(
+                    "Key divergence:\nlhs = {:#?}\nrhs = {:#?}",
+                    l.0, r.0
+                ));
+            }
+            if let Err(err) = l.1.validate_eq(r.1) {
+                return Err(format!("key={:#?}.{}", l.0, err));
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct MutableIntMap<K, V>(Tree<K, V>);
+
+impl<K, V> Default for MutableIntMap<K, V> {
+    fn default() -> Self {
+        Self(Tree::Empty)
+    }
+}
+
+impl<K, V> MutableIntMap<K, V> {
+    /// Creates a new empty map.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Returns an iterator over key-value pairs.
+    /// The keys are guaranteed to be sorted.
+    ///
+    /// A full traversal requires O(N) operations.
+    pub fn iter(&self) -> IntMapIter<'_, K, V> {
+        IntMapIter::new(&self.0)
+    }
+
+    /// Returns an iterator over the keys.
+    /// The keys are guaranteed to be sorted.
+    ///
+    /// A full traversal requires O(N) operations.
+    pub fn keys(&self) -> impl Iterator<Item = &K> {
+        IntMapIter::new(&self.0).map(|(k, _v)| k)
+    }
+
+    /// Returns an iterator over the values, in order by key.
+    ///
+    /// A full traversal requires O(N) operations.
+    pub fn values(&self) -> impl Iterator<Item = &V> {
+        IntMapIter::new(&self.0).map(|(_k, v)| v)
+    }
+
+    /// Returns the largest key in the given tree.
+    /// If the tree is empty, then it returns `None`.
+    pub fn max_key(&self) -> Option<&K> {
+        self.0.max().map(|(k, _v)| k)
+    }
+
+    /// Returns the number of entries in this map.
+    ///
+    /// Complexity: O(N)
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns true if this map is empty.
+    ///
+    /// Complexity: O(1)
+    pub fn is_empty(&self) -> bool {
+        matches!(self.0, Tree::Empty)
+    }
+}
+
+impl<K, V> MutableIntMap<K, V>
+where
+    K: AsInt + Ord + Copy,
+    V: Clone,
+{
+    /// Looks up a value by integer key.
+    ///
+    /// Complexity: O(min(N, 64))
+    pub fn get(&self, key: &K) -> Option<&V> {
+        self.0.get(key)
+    }
+
+    /// Returns `true` if the map contains a value for the specified key.
+    ///
+    /// Complexity: O(min(N, 64))
+    pub fn contains_key(&self, key: &K) -> bool {
+        self.0.get(key).is_some()
+    }
+
+    // Returns `(lower, upper)` inclusive bounds for the given key such that:
+    // - `lower` is the largest key/value pair in the tree that is smaller or equal to the
+    //   given key. If such a key doesn't exist then, `lower = None`.
+    // - `upper` is the smallest key/value pair in the tree that is larger or equal to the
+    //   given key. If such a key doesn't exist then, `upper = None`.
+    //
+    // In all cases the following post-conditions hold:
+    // - lower.0 <= key <= upper.0,
+    // - for all i in [lower.0 + 1..upper.0 - 1]: self.get(i) == None,
+    // - lower == Some((k, v)) implies self.get(k) == v,
+    // - upper == Some((k, v)) implies self.get(k) == v,
+    //
+    // Complexity: O(min(N, 64))
+    pub fn bounds(&self, key: &K) -> Bounds<K, V> {
+        self.0.bounds(key)
+    }
+
+    /// Inserts a new entry into this map.
+    ///
+    /// Complexity: O(min(N, 64))
+    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+        let tree = std::mem::take(&mut self.0);
+        let res;
+        (self.0, res) = tree.insert(key, value);
+        res
+    }
+
+    /// Removes the entry with the given key from this map.
+    ///
+    /// Complexity: O(min(N, 64))
+    pub fn remove(&mut self, key: &K) -> Option<V> {
+        let tree = std::mem::take(&mut self.0);
+        let res;
+        (self.0, res) = tree.remove(key);
+        res
+    }
+
+    /// Unions two maps, preferring entries from self in case of a collision.
+    ///
+    /// Complexity: O(N + M)
+    pub fn union(&mut self, other: Self) {
+        let tree = std::mem::take(&mut self.0);
+        self.0 = tree.union(other.0)
+    }
+
+    /// Returns an iterator that consumes all key-value pairs.
+    /// The keys are guaranteed to be sorted.
+    ///
+    /// A full traversal requires O(N) operations.
+    pub fn into_iter(self) -> IntMapIntoIter<K, V> {
+        IntMapIntoIter::new(self.0)
+    }
+}
+
+impl<K, V> std::iter::FromIterator<(K, V)> for MutableIntMap<K, V>
+where
+    K: AsInt + Ord + Copy,
+    V: Clone,
+{
+    fn from_iter<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+    {
+        let mut m = Self::new();
+        for (k, v) in iter {
+            m.insert(k, v);
+        }
+        m
+    }
+}
+
+impl<K: PartialEq, T: PartialEq> PartialEq for MutableIntMap<K, T> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.len() != other.len() {
+            return false;
+        }
+        self.iter().zip(other.iter()).all(|(a, b)| a == b)
+    }
+}
+
+impl<K: Eq, T: Eq> Eq for MutableIntMap<K, T> {}
+
+impl<K, V> ValidateEq for MutableIntMap<K, V>
+where
+    K: PartialEq + std::fmt::Debug,
+    V: ValidateEq,
+{
+    fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
+        if self.len() != rhs.len() {
+            return Err(format!(
+                "Length divergence:\nlhs keys = {:#?}\nrhs keys = {:#?}",
+                self.keys().collect::<Vec<_>>(),
+                rhs.keys().collect::<Vec<_>>()
+            ));
+        }
+        for (l, r) in self.iter().zip(rhs.iter()) {
+            if l.0 != r.0 {
+                return Err(format!(
+                    "Key divergence:\nlhs = {:#?}\nrhs = {:#?}",
+                    l.0, r.0
+                ));
+            }
+            if let Err(err) = l.1.validate_eq(r.1) {
+                return Err(format!("key={:#?}.{}", l.0, err));
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Iterates over an IntMap, visiting keys in sorted order.
-pub struct IntMapIter<'a, T>(
+pub struct IntMapIter<'a, K, V>(
     /// The stack of subtrees we haven't visited yet.
     /// Trees in the back should be visited first.
-    Vec<&'a Tree<T>>,
+    Vec<&'a Tree<K, V>>,
 );
 
-impl<'a, T> IntMapIter<'a, T> {
-    fn new(root: &'a Tree<T>) -> Self {
+impl<'a, K, V> IntMapIter<'a, K, V> {
+    fn new(root: &'a Tree<K, V>) -> Self {
         Self(vec![root])
     }
 }
 
-impl<'a, T> std::iter::Iterator for IntMapIter<'a, T> {
-    type Item = (u64, &'a T);
+impl<'a, K, V> std::iter::Iterator for IntMapIter<'a, K, V> {
+    type Item = (&'a K, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut p = self.0.pop()?;
-        // Find the most-left subtree, pushing all the right nodes onto the
+        // Find the leftmost subtree, pushing all the right nodes onto the
         // stack.
         while let Tree::Branch { left, right, .. } = p {
             self.0.push(right);
@@ -500,7 +866,43 @@ impl<'a, T> std::iter::Iterator for IntMapIter<'a, T> {
         }
         match p {
             Tree::Empty => None,
-            Tree::Leaf(k, v) => Some((*k, v)),
+            Tree::Leaf(k, v) => Some((k, v)),
+            Tree::Branch { .. } => unreachable!(),
+        }
+    }
+}
+
+/// Iterates over an IntMap, visiting keys in sorted order.
+pub struct IntMapIntoIter<K, V>(
+    /// The stack of subtrees we haven't visited yet.
+    /// Trees in the back should be visited first.
+    Vec<Tree<K, V>>,
+);
+
+impl<K, V> IntMapIntoIter<K, V> {
+    fn new(root: Tree<K, V>) -> Self {
+        Self(vec![root])
+    }
+}
+
+impl<K, V> std::iter::Iterator for IntMapIntoIter<K, V>
+where
+    K: Copy,
+    V: Clone,
+{
+    type Item = (K, V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut p = self.0.pop()?;
+        // Find the leftmost subtree, pushing all the right nodes onto the
+        // stack.
+        while let Tree::Branch { left, right, .. } = p {
+            self.0.push(take_arc(right));
+            p = take_arc(left);
+        }
+        match p {
+            Tree::Empty => None,
+            Tree::Leaf(k, v) => Some((k, v)),
             Tree::Branch { .. } => unreachable!(),
         }
     }
