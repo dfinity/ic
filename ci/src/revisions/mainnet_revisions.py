@@ -73,6 +73,7 @@ def get_subnet_replica_version(subnet_id: str) -> str:
         ]
         return latest_replica_version
 
+
 def work(repo_root: pathlib.Path, logger: logging.Logger):
     current_nns_version = get_subnet_replica_version(nns_subnet_id)
     logger.info("Current NNS subnet (%s) revision: %s", nns_subnet_id, current_nns_version)
@@ -80,9 +81,8 @@ def work(repo_root: pathlib.Path, logger: logging.Logger):
     logger.info("Current App subnet (%s) revision: %s", app_subnet_id, current_app_subnet_version)
 
     update_saved_subnet_version(subnet=nns_subnet_id, version=current_nns_version, repo_root=repo_root)
-    update_saved_subnet_version(
-        subnet=app_subnet_id, version=current_app_subnet_version, repo_root=repo_root
-    )
+    update_saved_subnet_version(subnet=app_subnet_id, version=current_app_subnet_version, repo_root=repo_root)
+
 
 def main():
     """Do the main work."""
