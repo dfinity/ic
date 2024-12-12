@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
-        id: app-token
+        id: generate-token
         with:
           app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
           private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
@@ -22,7 +22,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "token=${{ needs.create-token.outputs.token }}" >> $GITHUB_OUTPUT
+          echo "token=${{ steps.generate-token.outputs.token }}" >> $GITHUB_OUTPUT
 
   update-ic-versions-file:
     runs-on: ubuntu-latest
