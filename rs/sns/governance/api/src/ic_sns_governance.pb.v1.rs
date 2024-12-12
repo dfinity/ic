@@ -1723,6 +1723,8 @@ pub struct Governance {
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
+    use crate::format_full_hash;
+    use serde::ser::SerializeStruct;
 
     /// The commands that require a neuron lock.
     #[derive(
@@ -1899,6 +1901,32 @@ pub mod governance {
         #[prost(string, optional, tag = "4")]
         pub description: ::core::option::Option<::prost::alloc::string::String>,
     }
+
+    impl serde::Serialize for Version {
+        fn serialize<S>(self: &Version, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            let mut version = serializer.serialize_struct("Version", 6)?;
+            version.serialize_field("root_wasm_hash", &format_full_hash(&self.root_wasm_hash))?;
+            version.serialize_field(
+                "governance_wasm_hash",
+                &format_full_hash(&self.governance_wasm_hash),
+            )?;
+            version.serialize_field("swap_wasm_hash", &format_full_hash(&self.swap_wasm_hash))?;
+            version.serialize_field("index_wasm_hash", &format_full_hash(&self.index_wasm_hash))?;
+            version.serialize_field(
+                "ledger_wasm_hash",
+                &format_full_hash(&self.ledger_wasm_hash),
+            )?;
+            version.serialize_field(
+                "archive_wasm_hash",
+                &format_full_hash(&self.archive_wasm_hash),
+            )?;
+            version.end()
+        }
+    }
+
     /// A version of the SNS defined by the WASM hashes of its canisters.
     #[derive(
         candid::CandidType,
@@ -1906,7 +1934,6 @@ pub mod governance {
         comparable::Comparable,
         Eq,
         std::hash::Hash,
-        serde::Serialize,
         Clone,
         PartialEq,
         ::prost::Message,
