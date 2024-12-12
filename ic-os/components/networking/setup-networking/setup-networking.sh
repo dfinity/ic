@@ -51,14 +51,25 @@ function generate_addresses() {
 }
 
 function select_fastest_interface() {
-    echo "Selecting the fastest interface..."
+    echo "Selecting the fastest interface with actual IPv6 connectivity..."
     INTERFACES=$(ip -o link show | awk -F': ' '{print $2}' | grep -v '^lo$')
     BEST_IFACE=""
     BEST_SPEED=0
 
     for IFACE in $INTERFACES; do
-        echo "Checking interface: $IFACE"
-        if ip -6 addr show dev "$IFACE" 2>/dev/null | grep -q "inet6 fe80::"; then
+        echo "Bringing up interface: $IFACE"
+        ip link set dev "$IFACE" up || true
+        sleep 2
+
+        echo "Assigning IPv6 address to $IFACE"
+        ip -6 addr add "${IPV6_ADDR}/64" dev "$IFACE"
+
+        # Give the system time to configure the address
+        sleep 2
+
+        echo "Testing IPv6 connectivity on $IFACE by pinging $IPV6_GATEWAY"
+        if ping6 -c 3 -I "$IFACE" "$IPV6_GATEWAY" >/dev/null 2>&1; then
+            echo "$IFACE can reach IPv6 gateway."
             SPEED_STR=$(ethtool "$IFACE" 2>/dev/null | grep "Speed:" || true)
             SPEED=$(echo "$SPEED_STR" | grep -oP '\d+' || echo 0)
             echo "Interface $IFACE speed: ${SPEED:-0} Mb/s"
@@ -67,7 +78,13 @@ function select_fastest_interface() {
                 BEST_IFACE="$IFACE"
                 echo "New best interface: $BEST_IFACE at $BEST_SPEED Mb/s"
             fi
+        else
+            echo "$IFACE cannot reach IPv6 gateway."
         fi
+
+        # Clean up the assigned IPv6 address before checking next interface
+        ip -6 addr flush dev "$IFACE"
+        ip link set dev "$IFACE" down
     done
 
     if [ -z "$BEST_IFACE" ]; then
@@ -75,6 +92,9 @@ function select_fastest_interface() {
         exit 1
     fi
     echo "Using fastest interface: $BEST_IFACE at ${BEST_SPEED}Mb/s"
+    # Bring the best interface back up
+    ip link set dev "$BEST_IFACE" up
+    ip -6 addr add "${IPV6_ADDR}/64" dev "$BEST_IFACE"
 }
 
 function configure_netplan() {
