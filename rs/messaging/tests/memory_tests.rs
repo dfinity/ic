@@ -27,6 +27,30 @@ const MB: u64 = KB * KB;
 
 const MAX_PAYLOAD_BYTES: u32 = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32;
 
+
+#[test]
+fn playground() {
+    let seeds = vec![0_u64; 3];
+    let max_payload_bytes = MAX_PAYLOAD_BYTES;
+    let calls_per_round = 1;
+    let reply_weight = 1;
+    let call_weight = 10;
+
+    if let Err((msg, mut dbg)) = check_guaranteed_response_message_memory_limits_are_respected_impl(
+        seeds.as_slice(),
+        max_payload_bytes,
+        calls_per_round as u32,
+        reply_weight as u32,
+        call_weight as u32,
+    ) {
+        let r = dbg.records.pop_first().unwrap().1;
+        assert!(false, "{:?}\n\n{}\n\n{:#?}", msg, r.len(), r);
+    } else {
+        unreachable!();
+    }
+}
+
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(1))]
     #[test]
@@ -71,7 +95,7 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
     call_weight: u32,
 ) -> Result<(), (String, DebugInfo)> {
     // The number of rounds to execute while chatter is on.
-    const CHATTER_PHASE_ROUND_COUNT: u64 = 30;
+    const CHATTER_PHASE_ROUND_COUNT: u64 = 300;
     // The maximum number of rounds to execute after chatter is turned off. It it takes more than
     // this number of rounds until there are no more pending calls, the test fails.
     const SHUTDOWN_PHASE_MAX_ROUNDS: u64 = 300;
@@ -88,6 +112,10 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
         remote_max_instructions_per_round: 100_000_000,
         remote_message_memory_capacity: REMOTE_MESSAGE_MEMORY_CAPACITY,
     });
+    //assert!(false, "{:?}", fixture.canisters());
+
+    let local_time = fixture.local_env.get_time();
+    let remote_time = fixture.remote_env.get_time();
 
     let config = CanisterConfig::try_new(
         fixture.canisters(),   // receivers
@@ -119,7 +147,16 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
             REMOTE_MESSAGE_MEMORY_CAPACITY,
         )?;
     }
-
+/*
+    return fixture.failed_with_reason(
+        format!("{:?} / {:?},   {:?} / {:?}",
+                local_time,
+                fixture.local_env.get_time(),
+                remote_time,
+                fixture.remote_env.get_time()
+        )
+    );
+*/
     // Shut down chatter by putting a canister into `Stopping` state every 10 ticks until they are
     // all `Stopping` or `Stopped`.
     for canister in fixture.canisters().into_iter() {
@@ -162,6 +199,15 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
 
     // One extra tick to make sure everything is gc'ed.
     fixture.tick();
+    
+    return fixture.failed_with_reason(
+        format!("{:?} / {:?},   {:?} / {:?}",
+                local_time,
+                fixture.local_env.get_time(),
+                remote_time,
+                fixture.remote_env.get_time()
+        )
+    );
 
     // Check the records agree on 'no pending calls'.
     if fixture
@@ -563,6 +609,7 @@ impl Fixture {
         } else {
             self.remote_env.tick();
         }
+        self.remote_env.advance_time(std::time::Duration::from_secs(1));
 
         if let Ok(xnet_payload) = self.remote_env.generate_xnet_payload(
             self.local_env.get_subnet_id(),
@@ -575,6 +622,7 @@ impl Fixture {
         } else {
             self.local_env.tick();
         }
+        self.local_env.advance_time(std::time::Duration::from_secs(1));
     }
 
     /// Migrates `canister` between `local_env` and `remote_env` (either direction).

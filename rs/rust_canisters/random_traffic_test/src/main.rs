@@ -1,7 +1,8 @@
 use candid::{CandidType, Encode};
 use futures::future::select_all;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_cdk::{api, caller, id};
+use ic_cdk::{api, caller, id, setup};
+use ic_cdk::api::call::{Call, ConfigurableCall, SendableCall};
 use ic_cdk_macros::{heartbeat, init, query, update};
 use rand::{
     distributions::{Distribution, WeightedIndex},
@@ -48,8 +49,8 @@ struct Message {
     call_tree_id: u32,
     /// The depth of the call starting from 0 and incrementing by 1 for each downstream call.
     call_depth: u32,
-    /// A payload of a certain size; it otherwise does not any contain information.
-    payload: Vec<u8>,
+    /// Optional padding, to bring the payload to the desired byte size.
+    padding: Vec<u8>,
 }
 
 impl Message {
@@ -59,13 +60,13 @@ impl Message {
         Self {
             call_tree_id,
             call_depth,
-            payload: vec![0_u8; bytes_count.saturating_sub(std::mem::size_of::<Self>())],
+            padding: vec![0_u8; bytes_count.saturating_sub(std::mem::size_of::<Self>())],
         }
     }
 
     /// Returns the number of bytes the message consists of.
     fn count_bytes(&self) -> usize {
-        std::mem::size_of::<Self>() + self.payload.len()
+        std::mem::size_of::<Self>() + self.padding.len()
     }
 }
 
@@ -176,21 +177,26 @@ fn setup_call(
     // Inserts a new call record at the next `index`.
     let index = next_call_index();
     RECORDS.with_borrow_mut(|records| {
-        records.insert(
-            index,
-            Record {
-                receiver,
-                caller: (call_depth > 0)
-                    .then_some(CanisterId::unchecked_from_principal(PrincipalId(caller()))),
-                call_tree_id,
-                call_depth,
-                sent_bytes: msg.count_bytes() as u32,
-                reply: None,
-            },
-        );
+        assert!(records
+            .insert(
+                index,
+                Record {
+                    receiver,
+                    caller: (call_depth > 0)
+                        .then_some(CanisterId::unchecked_from_principal(PrincipalId(caller()))),
+                    call_tree_id,
+                    call_depth,
+                    sent_bytes: msg.count_bytes() as u32,
+                    reply: None,
+                },
+            )
+            .is_none());
     });
 
-    let future = api::call::call_raw(receiver.into(), "handle_call", Encode!(&msg).unwrap(), 0);
+    let future = Call::new(receiver.into(), "handle_call")
+        .with_raw_args(Encode!(&msg).unwrap())
+        .change_timeout(100)
+        .call_raw();
 
     (future, index)
 }
@@ -305,4 +311,6 @@ fn initialize_hasher() {
     HASHER.with_borrow_mut(|hasher| hasher.write(id().as_slice()));
 }
 
-fn main() {}
+fn main() {
+    setup();
+}

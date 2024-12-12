@@ -843,15 +843,17 @@ impl StreamHandlerImpl {
                                 return Some((reason, msg));
                             }
                             RequestOrResponse::Response(response) => {
-                                // Critical error, responses should always be inducted successfully.
-                                error!(
-                                    self.log,
-                                    "{}: Inducting response failed: {}\n{:?}",
-                                    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
-                                    err,
-                                    response
-                                );
-                                self.metrics.critical_error_induct_response_failed.inc();
+                                if response.deadline == ic_types::messages::NO_DEADLINE {
+                                    // Critical error, responses should always be inducted successfully.
+                                    error!(
+                                        self.log,
+                                        "{}: Inducting response failed: {}\n{:?}",
+                                        CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+                                        err,
+                                        response
+                                    );
+                                    self.metrics.critical_error_induct_response_failed.inc();
+                                }
                             }
                         }
                     }
