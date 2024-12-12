@@ -17,7 +17,6 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     crate_name = "vsock_guest",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = [
         "@platforms//os:linux",
