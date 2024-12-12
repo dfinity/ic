@@ -559,6 +559,31 @@ impl RosettaClient {
         }])
     }
 
+    pub fn build_refresh_voting_power_operations(
+        signer_principal: Principal,
+        neuron_index: u64,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "REFRESH_VOTING_POWER".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                NeuronIdentifierMetadata { neuron_index }
+                    .try_into()
+                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
     pub async fn network_list(&self) -> anyhow::Result<NetworkListResponse> {
         self.call_endpoint("/network/list", &MetadataRequest { metadata: None })
             .await
@@ -1308,6 +1333,32 @@ impl RosettaClient {
             signer_keypair,
             network_identifier,
             list_neurons_operations,
+            None,
+            None,
+        )
+        .await
+    }
+
+    /// A neuron will lose its voting power over time when inactive
+    /// To refresh the voting power of a neuron, you can use this function
+    /// For reference see the proposal for periodic confirmation of following: https://dashboard.internetcomputer.org/proposal/132411
+    pub async fn refresh_voting_power<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        neuron_index: u64,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let refresh_voting_power_operations = RosettaClient::build_refresh_voting_power_operations(
+            signer_keypair.generate_principal_id()?.0,
+            neuron_index,
+        )?;
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            refresh_voting_power_operations,
             None,
             None,
         )

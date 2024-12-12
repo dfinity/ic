@@ -90,6 +90,8 @@ pub const CFG_TEMPLATE_BYTES: &[u8] =
 // Requests are multiplexed over H2 requests.
 pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
 
+pub const MAX_TCP_ERROR_RETRIES: usize = 5;
+
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
     ic_agent::identity::BasicIdentity::from_pem(IDENTITY_PEM.as_bytes())
         .expect("Invalid secret key.")
@@ -822,7 +824,9 @@ pub async fn agent_with_client_identity(
     client: reqwest::Client,
     identity: impl Identity + 'static,
 ) -> Result<Agent, AgentError> {
-    let transport = ReqwestTransport::create_with_client(url, client)?.with_use_call_v3_endpoint();
+    let transport = ReqwestTransport::create_with_client(url, client)?
+        .with_use_call_v3_endpoint()
+        .with_max_tcp_errors_retries(MAX_TCP_ERROR_RETRIES);
     let a = Agent::builder()
         .with_transport(transport)
         .with_identity(identity)
