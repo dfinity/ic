@@ -174,7 +174,11 @@ pub fn verify(
             algorithm: AlgorithmId::Ed25519,
             public_key_bytes: public_key.serialize_raw().to_vec(),
             sig_bytes: sig.0.to_vec(),
-            msg_hash: if msg.len() == 32 { Some(msg.to_vec()) } else { None },
+            msg_hash: if msg.len() == 32 {
+                Some(msg.to_vec())
+            } else {
+                None
+            },
             internal_error: e.to_string(),
         })
 }
