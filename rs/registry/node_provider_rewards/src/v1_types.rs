@@ -3,7 +3,6 @@ use ic_base_types::PrincipalId;
 use ic_management_canister_types::NodeMetricsHistoryResponse;
 use num_traits::FromPrimitive;
 use rust_decimal::Decimal;
-use serde::Deserialize;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -69,6 +68,7 @@ pub struct NodeProviderComputationData {
     pub node_provider_rewardables: Vec<RewardableNode>,
     pub assigned_metrics: HashMap<PrincipalId, Vec<DailyNodeMetrics>>,
     pub node_daily_fr: HashMap<PrincipalId, Vec<Decimal>>,
+    pub failure_rate_rewarding_period: HashMap<PrincipalId, Decimal>,
     pub unassigned_fr: Decimal,
     pub multiplier_unassigned: Decimal,
     pub rewards_xdr_no_penalty_total: HashMap<PrincipalId, Decimal>,

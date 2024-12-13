@@ -242,6 +242,14 @@ pub fn node_provider_rewards(
                 LogEntry::IdiosyncraticFailureRates(daily_idiosyncratic_fr.clone()),
             );
 
+            let failure_rate_rewarding_period = logger.execute(
+                "Failure rate rewarding period",
+                Operation::Avg(daily_idiosyncratic_fr.clone()),
+            );
+            computation_data
+                .failure_rate_rewarding_period
+                .insert(node.node_id, failure_rate_rewarding_period);
+
             assigned_multiplier(logger, daily_idiosyncratic_fr)
         } else {
             logger.add_entry(LogLevel::Mid, LogEntry::NodeStatusUnassigned);
