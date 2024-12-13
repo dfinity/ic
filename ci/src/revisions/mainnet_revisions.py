@@ -3,6 +3,7 @@ import json
 import logging
 import pathlib
 import urllib.request
+import argparse
 
 import git_lib
 
@@ -84,12 +85,22 @@ def update_mainnet_revisions_file(repo_root: pathlib.Path, logger: logging.Logge
     update_saved_subnet_version(subnet=app_subnet_id, version=current_app_subnet_version, repo_root=repo_root)
 
 
+def get_logger(level) -> logging.Logger:
+    FORMAT = "[%(asctime)s] %(levelname)-8s %(message)s"
+    logging.basicConfig(format=FORMAT, level=level)
+    return logging.getLogger("logger")
+
+
 def main():
     """Do the main work."""
 
-    parser = git_lib.init_helpful_parser()
+    parser = argparse.ArgumentParser(
+        prog="GitCiHelper",
+        description="Tool for automating git operations for CI"
+    )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose mode")
     args = parser.parse_args()
-    logger = git_lib.get_logger(logging.DEBUG if args.verbose else logging.INFO)
+    logger = get_logger(logging.DEBUG if args.verbose else logging.INFO)
 
     repo = "dfinity/ic"
     repo_root = git_lib.get_repo_root()
@@ -98,7 +109,7 @@ def main():
 
     git_lib.sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
     update_mainnet_revisions_file(repo_root, logger)
-    git_lib.commit_and_create_pr(repo, repo_root, branch, [SAVED_VERSIONS_PATH], logger)
+    git_lib.commit_and_create_pr(repo, repo_root, branch, [SAVED_VERSIONS_PATH], logger, "chore: Update Mainnet IC revisions file")
 
 
 if __name__ == "__main__":

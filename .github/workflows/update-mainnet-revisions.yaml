@@ -5,6 +5,10 @@ on:
     - cron: "10 * * * *"
   workflow_dispatch:
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   update-ic-versions-file:
     runs-on: ubuntu-latest
@@ -29,7 +33,6 @@ jobs:
           set -eEuxo pipefail
 
           time python ci/src/revisions/mainnet_revisions.py
-        shell: bash
 
   update-nervous-system-wasms:
     runs-on:
@@ -70,10 +73,9 @@ jobs:
           BRANCH="ic-nervous-system-wasms"
           FILE="mainnet-canisters.json"
 
-          # Cache the git_lib.py so it doesn't change between branch changes
-          cp ci/src/revisions/git_lib.py /tmp/git_lib.py
+          # Cache the git helpers so they dont't change between branch changes
+          cp -r ci/src/revisions /tmp
 
-          python /tmp/git_lib.py --repo-root $REPO_ROOT sync-and-checkout --branch $BRANCH --main-branch master
+          python /tmp/revisions/git_ci_helper.py --repo-root $REPO_ROOT --branch $BRANCH sync-and-checkout --main-branch master
           bazel run --config=ci --repository_cache=/cache/bazel //rs/nervous_system/tools/sync-with-released-nervous-system-wasms
-          python /tmp/git_lib.py --repo-root $REPO_ROOT commit-and-create-pr --branch $BRANCH --file $FILE
-        shell: bash
+          python /tmp/revisions/git_ci_helper.py --repo-root $REPO_ROOT --branch $BRANCH commit-and-create-pr --file $FILE --message "chore: Update `mainnet_canisters.json` file"
