@@ -26,9 +26,6 @@ RUNNER_DEPENDENCIES = [
     "@crate_index//:anyhow",
 ]
 
-MACRO_DEPENDENCIES = [
-]
-
 rust_library(
     name = "nested",
     testonly = True,
