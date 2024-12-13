@@ -10,7 +10,7 @@ use macaddr::MacAddr6;
 
 use crate::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use crate::deployment_json::get_deployment_settings;
-use crate::serialize_and_write_config;
+use crate::{deserialize_config, serialize_and_write_config};
 use config_types::*;
 use network::resolve_mgmt_mac;
 
@@ -25,6 +25,18 @@ pub fn update_guestos_config() -> Result<()> {
 
     let network_conf_path = config_dir.join("network.conf");
     let config_json_path = config_dir.join("config.json");
+
+    // If a config already exists and is Testnet, do not update.
+    if config_json_path.exists() {
+        if let Ok(existing_config) = deserialize_config::<GuestOSConfig, _>(&config_json_path) {
+            if existing_config.icos_settings.deployment_environment
+                == DeploymentEnvironment::Testnet
+            {
+                println!("A new GuestOSConfig already exists and the environment is Testnet. Skipping update.");
+                return Ok(());
+            }
+        }
+    }
 
     let old_config_exists = network_conf_path.exists();
 
@@ -185,19 +197,14 @@ fn read_reward_conf(config_dir: &Path) -> Result<Option<String>> {
 }
 
 fn derive_mgmt_mac_from_hostname(hostname: Option<&str>) -> Result<MacAddr6> {
-    if let Some(hostname) = hostname {
-        if let Some(unformatted_mac) = hostname.strip_prefix("guest-") {
-            unformatted_mac
-                .parse()
-                .map_err(|_| anyhow!("Unable to parse mac address: {}", unformatted_mac))
-        } else {
-            Err(anyhow::anyhow!(
-                "Hostname does not start with 'guest-': {}",
-                hostname
-            ))
-        }
+    if let Some(unformatted_mac) = hostname.and_then(|h| h.strip_prefix("guest-")) {
+        unformatted_mac
+            .parse()
+            .map_err(|_| anyhow!("Unable to parse mac address: {}", unformatted_mac))
     } else {
-        Err(anyhow::anyhow!("Hostname is not specified"))
+        "00:00:00:00:00:00"
+            .parse()
+            .map_err(|_| anyhow!("Unable to parse dummy mac address"))
     }
 }
 
@@ -253,6 +260,19 @@ pub fn update_hostos_config(
     deployment_json_path: &Path,
     hostos_config_json_path: &PathBuf,
 ) -> Result<()> {
+    // If a config already exists and is Testnet, do not update.
+    if hostos_config_json_path.exists() {
+        if let Ok(existing_config) = deserialize_config::<HostOSConfig, _>(&hostos_config_json_path)
+        {
+            if existing_config.icos_settings.deployment_environment
+                == DeploymentEnvironment::Testnet
+            {
+                println!("A new HostOSConfig already exists and the environment is Testnet. Skipping update.");
+                return Ok(());
+            }
+        }
+    }
+
     let old_config_exists = config_ini_path.exists();
 
     if old_config_exists {
@@ -366,19 +386,10 @@ mod tests {
         let mac = derive_mgmt_mac_from_hostname(hostname)?;
         assert_eq!(mac, expected_mac);
 
-        // Test with invalid hostname (wrong prefix)
-        let invalid_hostname = Some("host-001122334455");
-        let result = derive_mgmt_mac_from_hostname(invalid_hostname);
-        assert!(result.is_err());
-
-        // Test with invalid hostname (wrong length)
-        let invalid_hostname_length = Some("guest-00112233");
-        let result = derive_mgmt_mac_from_hostname(invalid_hostname_length);
-        assert!(result.is_err());
-
-        // Test with None
-        let result = derive_mgmt_mac_from_hostname(None);
-        assert!(result.is_err());
+        // Test empty hostname
+        let expected_mac: MacAddr6 = "00:00:00:00:00:00".parse().unwrap();
+        let mac = derive_mgmt_mac_from_hostname(None)?;
+        assert_eq!(mac, expected_mac);
 
         Ok(())
     }
