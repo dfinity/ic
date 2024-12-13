@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass, field
-from typing import Dict, Set, Tuple, List, Optional
+from typing import Dict, List, Optional, Set, Tuple
 
 from data_source.slack_findings_failover.parse_format import get_current_iso_timestamp, project_to_list_item
 from integration.slack.slack_block_kit_utils import (
@@ -22,7 +22,7 @@ class SlackScanResult:
     total_vulnerabilities: int = 0
     added_dependencies: Dict[Tuple[str, str, str, str], Set[str]] = field(default_factory=lambda: {})
     removed_dependencies: Dict[Tuple[str, str, str, str], Set[str]] = field(default_factory=lambda: {})
-    unrated_vulnerabilities_reminder: Dict[str,Tuple[Optional[str],Set[str]]] = field(default_factory=lambda: {})
+    unrated_vulnerabilities_reminder: Dict[str, Tuple[Optional[str], Set[str]]] = field(default_factory=lambda: {})
 
     def has_updates(self):
         return (

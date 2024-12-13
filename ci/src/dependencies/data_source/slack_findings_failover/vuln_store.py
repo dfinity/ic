@@ -150,7 +150,11 @@ class SlackVulnerabilityStore:
                                 send_reminder |= ra.wants_assessment_reminder
                                 risk_assessors.add(ra.name)
                 if send_reminder:
-                    permalink = self.slack_api_by_channel[event.channel_id].get_permalink(slack_vuln_info.msg_info_by_channel[event.channel_id].message_id)
-                    scan_result_by_channel[event.channel_id].add_unrated_vulnerabilities_reminder(slack_vuln_info.vulnerability.name, permalink, risk_assessors)
+                    permalink = self.slack_api_by_channel[event.channel_id].get_permalink(
+                        slack_vuln_info.msg_info_by_channel[event.channel_id].message_id
+                    )
+                    scan_result_by_channel[event.channel_id].add_unrated_vulnerabilities_reminder(
+                        slack_vuln_info.vulnerability.name, permalink, risk_assessors
+                    )
             else:
                 raise RuntimeError(f"event has unknown type: {event}")
