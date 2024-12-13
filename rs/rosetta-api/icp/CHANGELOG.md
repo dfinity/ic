@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Handle Errors that may occur while deserializing objects using serde_json
 ### Added
 - /call endpoint with the method 'query_block_range' to fetch multiple blocks at once
+- added functionality to refresh voting power on the governance canister
 ### Changed
 - [BREAKING CHANGE]: consolidate block and transaction tables into a single table
   The clients have to delete the old database and re-sync the Rosetta node from scratch. 
