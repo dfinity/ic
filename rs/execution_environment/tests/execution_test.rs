@@ -41,12 +41,11 @@ const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100 * T);
 ///  * "inc"       increment the counter
 ///  * "read"      read the counter value
 ///  * "persist"   copy the counter value to stable memory
-///  * "load"      restore the counter value from stable memory
+///  * "load"      restore the counter value from the stable memory
 ///  * "copy_to"   copy the counter value to the specified address on the heap
 ///  * "read_at"   read a 32-bit integer at the specified address on the heap
 ///  * "grow_page" grow stable memory by 1 page
 ///  * "grow_mem"  grow memory by the current counter value
-///  New line.
 const TEST_CANISTER: &str = r#"
 (module
     (import "ic0" "msg_arg_data_copy"
