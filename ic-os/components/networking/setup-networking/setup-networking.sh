@@ -57,6 +57,7 @@ function generate_addresses() {
 }
 
 function gather_interfaces_by_speed() {
+    echo "Gathering and sorting interfaces by speed..."
     INTERFACES=$(ip -o link show | awk -F': ' '{print $2}' | grep -v '^lo$')
     declare -A SPEED_MAP
 
@@ -71,6 +72,15 @@ function gather_interfaces_by_speed() {
         echo "${SPEED_MAP[$IFACE]} $IFACE"
     done | sort -nrk1 | awk '{print $2}')
 
+    if [ -z "$SORTED_INTERFACES" ]; then
+        echo "No interfaces found."
+        exit 1
+    fi
+
+    echo "Interfaces sorted by speed: $SORTED_INTERFACES"
+
+    INTERFACE_LIST=$(echo "$SORTED_INTERFACES" | paste -sd, -)
+
 }
 
 function configure_netplan() {
@@ -78,15 +88,7 @@ function configure_netplan() {
     local NETPLAN_TEMPLATE="/opt/ic/share/99-setup.yaml.template"
     local NETPLAN_OUTPUT="/run/netplan/99-setup.yaml"
 
-    echo "Gathering and sorting interfaces by speed..."
-    ALL_IFACES=$(gather_interfaces_by_speed)
-    if [ -z "$ALL_IFACES" ]; then
-        echo "No interfaces found."
-        exit 1
-    fi
-    echo "Interfaces sorted by speed: $ALL_IFACES"
-
-    INTERFACE_LIST=$(echo "$ALL_IFACES" | paste -sd, -)
+    
 
     mkdir -p /run/netplan
     cp "$NETPLAN_TEMPLATE" "$NETPLAN_OUTPUT"
@@ -113,6 +115,7 @@ function main() {
     parse_args "$@"
     read_variables
     generate_addresses
+    gather_interfaces_by_speed
     configure_netplan
     log_end "$(basename $0)"
 }

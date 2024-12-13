@@ -14,7 +14,10 @@ icos_build(
     tags = ["manual"],
     upgrades = False,
     upload_prefix = None,  # Do not upload locally built base images
-    visibility = ["//rs:ic-os-pkg"],
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
     vuln_scan = False,
 )
 
