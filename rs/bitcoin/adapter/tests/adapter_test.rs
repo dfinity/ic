@@ -1,10 +1,7 @@
 use bitcoin::{consensus::encode::deserialize, Address, Amount, Block, BlockHash};
 use bitcoincore_rpc::{bitcoincore_rpc_json::CreateRawTransactionInput, Auth, Client, RpcApi};
 use bitcoind::{BitcoinD, Conf, P2P};
-use ic_btc_adapter::{
-    config::{Config, IncomingSource},
-    start_server,
-};
+use ic_btc_adapter::{start_server, Config, IncomingSource};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_interface::Network;
 use ic_btc_replica_types::{

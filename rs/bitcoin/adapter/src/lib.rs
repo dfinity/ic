@@ -24,13 +24,11 @@ mod addressbook;
 mod blockchainmanager;
 /// This module contains the data structure for storing the current state of the Bitcoin ledger
 mod blockchainstate;
-/// This module contains command line arguments parser.
-pub mod cli;
 /// This module contains constants and types that are shared by many modules.
 mod common;
 /// This module contains the basic configuration struct used to start up an
 /// adapter instance.
-pub mod config;
+mod config;
 /// This module contains code that is used to manage a single connection to a
 /// BTC node.
 mod connection;
@@ -51,6 +49,8 @@ mod transaction_store;
 // For security reasons, it expects the returned blocks to be in a BFS order (for example, a
 // malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
+
+pub use config::{Config, IncomingSource};
 
 use crate::{
     blockchainstate::BlockchainState, get_successors_handler::GetSuccessorsHandler,
