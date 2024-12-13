@@ -173,6 +173,32 @@ impl CanisterHttp {
         }
     }
 
+    // Attemts to load socks the client from the cache. If not present, creates a new socks client and adds it to the cache.
+    fn get_socks_client(
+        &self,
+        address: &str,
+    ) -> Option<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>> {
+        let cache_guard = self.cache.upgradable_read();
+
+        if let Some(client) = cache_guard.get(address) {
+            Some(client.clone())
+        } else {
+            let mut cache_guard = RwLockUpgradableReadGuard::upgrade(cache_guard);
+            self.metrics.socks_cache_miss.inc();
+            self.maybe_add_socks_client_for_address(&mut cache_guard, address);
+            match cache_guard.get(address) {
+                Some(client) => Some(client.clone()),
+                None => {
+                    debug!(
+                        self.logger,
+                        "Failed to create SOCKS client for address: {}", address
+                    );
+                    None
+                }
+            }
+        }
+    }
+
     async fn https_outcall_socks_proxy(
         &self,
         socks_proxy_addrs: &[String],
@@ -193,31 +219,12 @@ impl CanisterHttp {
             }
             let next_socks_proxy_addr = socks_proxy_addr.clone();
 
-            let socks_client = {
-                let cache_guard = self.cache.upgradable_read();
+            let socks_client = self.get_socks_client(&next_socks_proxy_addr);
 
-                if let Some(client) = cache_guard.get(&next_socks_proxy_addr) {
-                    client.clone()
-                } else {
-                    let mut cache_guard = RwLockUpgradableReadGuard::upgrade(cache_guard);
-                    self.metrics.socks_cache_miss.inc();
-                    self.maybe_add_socks_client_for_address(
-                        &mut cache_guard,
-                        &next_socks_proxy_addr,
-                    );
-                    match cache_guard.get(&next_socks_proxy_addr) {
-                        Some(client) => client.clone(),
-                        None => {
-                            debug!(
-                                self.logger,
-                                "Failed to create SOCKS client for address: {}",
-                                next_socks_proxy_addr
-                            );
-                            continue;
-                        }
-                    }
-                }
-            };
+            if socks_client.is_none() {
+                continue;
+            }
+            let socks_client = socks_client.unwrap();
 
             match socks_client.request(request.clone()).await {
                 Ok(resp) => {
