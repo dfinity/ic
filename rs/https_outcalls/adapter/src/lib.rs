@@ -13,7 +13,7 @@ mod metrics;
 pub use config::{Config, IncomingSource};
 
 use futures::StreamExt;
-use ic_async_utils::{incoming_from_nth_systemd_socket, incoming_from_path};
+use ic_http_endpoints_async_utils::{incoming_from_nth_systemd_socket, incoming_from_path};
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
