@@ -1,6 +1,6 @@
 # https://hub.docker.com/_/ubuntu
-# noble-20240605
-FROM ubuntu@sha256:2e863c44b718727c860746568e1d54afd13b2fa71b160f5cd9058fc436217b30
+# focal-20240216
+FROM ubuntu@sha256:48c35f3de33487442af224ed4aabac19fd9bfbd91ee90e9471d412706b20ba73
 ENV TZ=UTC
 
 ARG PACKAGE_FILE=ci/container/files/packages.common
@@ -16,12 +16,14 @@ RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${b
 
 RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
+    curl -fsSL "https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/xUbuntu_20.04/Release.key" | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/devel_kubic_libcontainers_stable.gpg > /dev/null && \
+    echo 'deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/ /' | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list && \
     apt -yq update && \
     apt -yqq install --no-install-recommends docker-ce-cli podman containernetworking-plugins buildah zip fuse-overlayfs xtail
 
 # install afl & gsutils deps for bazel-fuzzers
 RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
-    echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-18 main" | tee -a /etc/apt/sources.list.d/llvm.list && \
+    echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-18 main" | tee -a /etc/apt/sources.list.d/llvm.list && \
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && \
     apt -yq update && \
@@ -47,14 +49,6 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-mark hold google-android-platform-tools-installer && \
     cd .. && \
     rm -rf e2fsdroid
-
-# Install an older libtinfo for rules_haskell
-RUN mkdir libtinfo && \
-    cd libtinfo && \
-    wget "http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb" && \
-    apt -yqq install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
-    cd .. && \
-    rm -rf libtinfo
 
 ARG mkcert_version=1.4.4
 ARG mkcert_sha=6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
@@ -99,9 +93,9 @@ RUN curl -sSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/
 
 # Add mold linker
 ARG MOLD_BIN="/usr/local/bin/mold"
-ARG MOLD_VERSION=2.31.0
+ARG MOLD_VERSION=2.4.1
 RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}/mold-${MOLD_VERSION}-$(uname -m)-linux.tar.gz" | tar -C /usr/local --strip-components=1 -xzf - && \
-    echo "557c1f19b575e42714771727afa6c4f7fa9b98e41c65f281f7d6cd8f9863a817  ${MOLD_BIN}" | shasum -a 256 -c - && \
+    echo "4d34b489a0810e71a937103f38e4b6c951abac36b5b60c58bc07b73efa7139cd  ${MOLD_BIN}" | shasum -a 256 -c - && \
     ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
 
 # Add IC SDK (dfx)
@@ -128,8 +122,10 @@ RUN . /opt/nvm/nvm.sh && \
     nvm install ${dependency_mgmt_default_node_version} && \
     nvm install ${dependency_mgmt_oisy_wallet_node_version}
 
-# Create user groups needed for github actions runner
-RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
+# Create user groups
+RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu && \
+    # needed for github actions runner \
+    groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 buildifier && \
     # CI before script requires sudo \
     echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
