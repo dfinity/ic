@@ -167,10 +167,6 @@ xnet-test = { path = "../rust_canisters/xnet_test" }
 ic-agent = { workspace = true }
 ic-utils = { workspace = true }
 
-[lib]
-name = "ic_tests"
-path = "src/lib.rs"
-
 [[bin]]
 name = "ic-colocate"
 path = "testing_verification/colocate_test.rs"
@@ -178,14 +174,6 @@ path = "testing_verification/colocate_test.rs"
 [[bin]]
 name = "ic-ii-delegation-test"
 path = "testing_verification/ii_delegation_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta"
-path = "financial_integrations/rosetta/rosetta_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta-neuron-follow-test"
-path = "financial_integrations/rosetta/rosetta_neuron_follow_test.rs"
 
 [[bin]]
 name = "test-driver-e2e-scenarios"

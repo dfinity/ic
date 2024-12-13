@@ -18805,6 +18805,77 @@ dependencies = [
 ]
 
 [[package]]
+name = "rosetta-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "assert-json-diff",
+ "canister-test",
+ "dfn_protobuf",
+ "ic-agent 0.37.1",
+ "ic-canister-client",
+ "ic-ledger-canister-blocks-synchronizer-test-utils",
+ "ic-ledger-core",
+ "ic-nns-common",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic-nns-test-utils",
+ "ic-registry-subnet-type",
+ "ic-rosetta-api",
+ "ic-rosetta-test-utils",
+ "ic-system-test-driver",
+ "ic-test-identity",
+ "ic-types",
+ "icp-ledger",
+ "lazy_static",
+ "rand 0.8.5",
+ "rosetta_test_lib",
+ "serde_json",
+ "slog",
+ "url",
+]
+
+[[package]]
+name = "rosetta_test_lib"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "assert-json-diff",
+ "candid",
+ "canister-test",
+ "dfn_protobuf",
+ "hex",
+ "ic-agent 0.37.1",
+ "ic-base-types",
+ "ic-canister-client",
+ "ic-canister-client-sender",
+ "ic-icrc1-test-utils",
+ "ic-ledger-canister-blocks-synchronizer-test-utils",
+ "ic-ledger-core",
+ "ic-nns-common",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic-nns-test-utils",
+ "ic-registry-subnet-type",
+ "ic-rosetta-api",
+ "ic-rosetta-test-utils",
+ "ic-system-test-driver",
+ "ic-types",
+ "icp-ledger",
+ "lazy_static",
+ "on_wire",
+ "prost 0.13.3",
+ "rand 0.8.5",
+ "reqwest 0.12.9",
+ "rosetta-core",
+ "serde",
+ "serde_json",
+ "slog",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "rsa"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"

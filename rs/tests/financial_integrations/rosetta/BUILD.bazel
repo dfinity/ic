@@ -1,47 +1,7 @@
 load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
-load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
-
-rust_library(
-    name = "rosetta_test_lib",
-    testonly = True,
-    srcs = glob(["rosetta_test_lib/*.rs"]),
-    crate_root = "rosetta_test_lib/mod.rs",
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    deps = [
-        "//rs/canister_client/sender",
-        "//rs/ledger_suite/common/ledger_core",
-        "//rs/ledger_suite/icp:icp_ledger",
-        "//rs/ledger_suite/icrc1/test_utils",
-        "//rs/nns/common",
-        "//rs/nns/constants",
-        "//rs/nns/governance/api",
-        "//rs/nns/test_utils",
-        "//rs/registry/subnet_type",
-        "//rs/rosetta-api/common/rosetta_core:rosetta-core",
-        "//rs/rosetta-api/icp:rosetta-api",
-        "//rs/rosetta-api/icp/test_utils",
-        "//rs/rust_canisters/canister_test",
-        "//rs/rust_canisters/dfn_protobuf",
-        "//rs/rust_canisters/on_wire",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/base_types",
-        "//rs/types/types",
-        "@crate_index//:candid",
-        "@crate_index//:hex",
-        "@crate_index//:ic-agent",
-        "@crate_index//:prost",
-        "@crate_index//:rand",
-        "@crate_index//:reqwest",
-        "@crate_index//:serde",
-        "@crate_index//:serde_json",
-        "@crate_index//:slog",
-        "@crate_index//:tokio",
-        "@crate_index//:url",
-    ],
-)
 
 system_test_nns(
     name = "rosetta_test",
@@ -94,13 +54,13 @@ system_test_nns(
             "@rosetta-cli//:rosetta-cli",
         ],
     deps = [
-        ":rosetta_test_lib",
         "//rs/ledger_suite/common/ledger_core",
         "//rs/nns/common",
         "//rs/nns/governance/api",
         "//rs/rosetta-api/icp:rosetta-api",
         "//rs/rosetta-api/icp/test_utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/financial_integrations/rosetta/rosetta_test_lib",
         "@crate_index//:anyhow",
         "@crate_index//:assert-json-diff",
         "@crate_index//:rand",
@@ -126,12 +86,12 @@ system_test_nns(
             "@rosetta-cli//:rosetta-cli",
         ],
     deps = [
-        ":rosetta_test_lib",
         "//rs/nns/common",
         "//rs/nns/governance/api",
         "//rs/rosetta-api/icp:rosetta-api",
         "//rs/rosetta-api/icp/test_utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/financial_integrations/rosetta/rosetta_test_lib",
         "@crate_index//:anyhow",
         "@crate_index//:ic-agent",
         "@crate_index//:rand",
