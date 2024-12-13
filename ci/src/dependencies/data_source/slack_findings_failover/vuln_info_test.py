@@ -164,7 +164,10 @@ def test_update_with_vuln_unchanged():
     svi = SlackVulnerabilityInfo(
         v,
         {sf1.id(): sf1},
-        {"c1": SlackVulnerabilityMessageInfo("c1", "msgid1", {"low-risk-psec"}), "c2": SlackVulnerabilityMessageInfo("c2", "msgid2", {"high-risk-psec"})},
+        {
+            "c1": SlackVulnerabilityMessageInfo("c1", "msgid1", {"low-risk-psec"}),
+            "c2": SlackVulnerabilityMessageInfo("c2", "msgid2", {"high-risk-psec"}),
+        },
     )
     f1 = Finding("repo", "scanner", Dependency("did", "dname", "dvers"), [v], [], ["proj1", "proj2"], [])
     vi = VulnerabilityInfo(v, {f1.id(): f1})

@@ -144,5 +144,5 @@ def test_handle_risk_unknown_event(slack_store, slack_vuln_info, slack_api, info
 
     slack_store.handle_events(events, scan_res, slack_vuln_info, info_by_project)
 
-    assert scan_res["c1"].unrated_vulnerabilities_reminder == {"vname":(TEST_SLACK_MSG_PERMALINK,{"risk_ass1"})}
-    assert scan_res["c2"].unrated_vulnerabilities_reminder == {"vname":(TEST_SLACK_MSG_PERMALINK,{"risk_ass2"})}
+    assert scan_res["c1"].unrated_vulnerabilities_reminder == {"vname": (TEST_SLACK_MSG_PERMALINK, {"risk_ass1"})}
+    assert scan_res["c2"].unrated_vulnerabilities_reminder == {"vname": (TEST_SLACK_MSG_PERMALINK, {"risk_ass2"})}
