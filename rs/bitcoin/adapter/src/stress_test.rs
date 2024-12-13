@@ -13,8 +13,6 @@ use tokio::{
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
 
-use ic_btc_adapter::{cli::Cli, config::IncomingSource};
-
 async fn setup_channel(uds_path: PathBuf) -> Channel {
     Endpoint::try_from("http://[::]:50051")
         .expect("failed to make endpoint")
@@ -38,13 +36,7 @@ async fn setup_client(uds_path: PathBuf) -> BtcServiceClient<Channel> {
 
 #[tokio::main]
 async fn main() {
-    let cli = Cli::parse();
-    let config = cli.get_config().expect("Error while reading config file.");
-    let uds_path = if let IncomingSource::Path(uds_path) = config.incoming_source {
-        uds_path
-    } else {
-        panic!("Cannot use systemd as a incoming source.");
-    };
+    let config = ic_btc_adapter::Config::default();
     let interval_sleep_ms = Duration::from_millis(1000);
     let request_timeout_ms = Duration::from_millis(50);
 
