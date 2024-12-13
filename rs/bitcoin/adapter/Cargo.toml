@@ -15,7 +15,7 @@ hex = { workspace = true }
 http = { workspace = true }
 hyper-util = { workspace = true }
 ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics/server" }
-ic-async-utils = { path = "../../http_endpoints/async_utils" }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-btc-service = { path = "../service" }
 ic-btc-validation = { path = "../validation" }
 ic-config = { path = "../../config" }
