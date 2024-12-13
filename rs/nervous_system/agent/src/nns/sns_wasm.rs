@@ -17,7 +17,7 @@ use crate::CallCanisters;
 
 pub async fn query_mainline_sns_upgrade_steps<C: CallCanisters>(
     agent: &C,
-) -> Result<ListUpgradeStepsResponse, C::Error> {
+) -> Result<ListUpgradeStepsResponse, C::CallError> {
     let request = ListUpgradeStepsRequest {
         limit: 0,
         sns_governance_canister_id: None,
@@ -29,7 +29,7 @@ pub async fn query_mainline_sns_upgrade_steps<C: CallCanisters>(
 /// Queries SNS-W to get the deployed SNSes. The returned SNSes are not guaranteed to be
 /// fully initialized (they may have ongoing or failed swaps). Archive canisters are not
 /// included in the response (as SNS-W doesn't know about them).
-pub async fn list_deployed_snses<C: CallCanisters>(agent: &C) -> Result<Vec<Sns>, C::Error> {
+pub async fn list_deployed_snses<C: CallCanisters>(agent: &C) -> Result<Vec<Sns>, C::CallError> {
     let response = agent
         .call(SNS_WASM_CANISTER_ID, ListDeployedSnsesRequest {})
         .await?;
