@@ -5,6 +5,8 @@ pub mod pocketic_impl;
 pub mod sns;
 
 use candid::{CandidType, Principal};
+use ic_management_canister_types::InstallCodeArgs;
+use ic_types::Cycles;
 use serde::de::DeserializeOwned;
 use std::fmt::Display;
 
@@ -41,10 +43,24 @@ impl<R: ic_nervous_system_clients::Request> Request for R {
 }
 
 pub trait CallCanisters: sealed::Sealed {
-    type Error: Display + Send + std::error::Error + 'static;
+    type CallError: Display + Send + std::error::Error + 'static;
+    type CreateCanisterError: Display + Send + std::error::Error + 'static;
+    type InstallWasmError: Display + Send + std::error::Error + 'static;
+
     fn call<R: Request>(
         &self,
         canister_id: impl Into<Principal> + Send,
         request: R,
-    ) -> impl std::future::Future<Output = Result<R::Response, Self::Error>> + Send;
+    ) -> impl std::future::Future<Output = Result<R::Response, Self::CallError>> + Send;
+
+    fn create_canister(
+        &self,
+        cycles: Cycles,
+        controllers: Vec<Principal>,
+    ) -> impl std::future::Future<Output = Result<Principal, Self::CreateCanisterError>> + Send;
+
+    fn install_wasm(
+        &self,
+        args: InstallCodeArgs,
+    ) -> impl std::future::Future<Output = Result<(), Self::InstallWasmError>> + Send;
 }
