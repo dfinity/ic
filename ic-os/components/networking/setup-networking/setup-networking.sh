@@ -6,8 +6,6 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
-source /opt/ic/bin/functions.sh
-
 CONFIG="${CONFIG:=/var/ic/config/config.ini}"
 
 function parse_args() {
@@ -19,6 +17,9 @@ function parse_args() {
     if [ "$NODE_TYPE" != "SetupOS" ] && [ "$NODE_TYPE" != "HostOS" ]; then
         echo "Invalid node type: $NODE_TYPE"
         exit 1
+    fi
+    if [ "$NODE_TYPE" = "HostOS" ]; then
+        CONFIG="/boot/config/config.ini"
     fi
 }
 
@@ -107,13 +108,11 @@ function configure_netplan() {
 }
 
 function main() {
-    log_start "$(basename $0)"
     parse_args "$@"
     read_variables
     generate_addresses
     gather_interfaces_by_speed
     configure_netplan
-    log_end "$(basename $0)"
 }
 
 main "$@"
