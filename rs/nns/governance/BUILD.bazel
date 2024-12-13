@@ -211,6 +211,7 @@ rust_canbench(
     # We would like to figure out why and fix it, but for now, we are reducing the optimization 
     # level so that tests against the optimization level can be added.
     opt = "s",
+    add_test = True,
     deps = [
         # Keep sorted.
         ":governance--canbench_feature",
