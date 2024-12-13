@@ -45,12 +45,12 @@ def main():
     scanner_job = ScannerJobType.PERIODIC_SCAN
     notify_on_scan_job_succeeded, notify_on_scan_job_failed = {}, {}
     for job_type in ScannerJobType:
-        notify_on_scan_job_succeeded[job_type] = job_type == scanner_job
-        notify_on_scan_job_failed[job_type] = job_type == scanner_job
+        notify_on_scan_job_succeeded[job_type] = False
+        notify_on_scan_job_failed[job_type] = False
 
-    notify_on_finding_risk_assessment_needed: bool = True
-    notify_on_finding_patch_version_available: bool = True
-    notify_on_finding_deleted: bool = True
+    notify_on_finding_risk_assessment_needed: bool = False
+    notify_on_finding_patch_version_available: bool = False
+    notify_on_finding_deleted: bool = False
 
     config = NotificationConfig(
         notify_on_finding_risk_assessment_needed=notify_on_finding_risk_assessment_needed,
@@ -60,7 +60,7 @@ def main():
         notify_on_scan_job_failed=notify_on_scan_job_failed,
         merge_request_base_url=get_ic_repo_merge_request_base_url(),
         ci_pipeline_base_url=get_ic_repo_ci_pipeline_base_url(),
-        notification_handlers=[SlackTrivyFindingNotificationHandler(), SlackDefaultNotificationHandler()],
+        notification_handlers=[],
     )
     notifier = NotificationCreator(config)
     finding_data_source_subscribers = [notifier]
