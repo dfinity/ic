@@ -239,7 +239,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     if upgrade_from_version < 2 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
-        log_message(format!("Upgrading from version {upgrade_from_version} which does store balances in stable structures, clearing stable balances data.").as_str());
+        log_message(format!("Upgrading from version {upgrade_from_version} which does not store balances in stable structures, clearing stable balances data.").as_str());
         clear_stable_balances_data();
         Access::with_ledger_mut(|ledger| {
             ledger.copy_token_pool();
