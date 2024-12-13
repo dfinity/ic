@@ -5,7 +5,9 @@
 #![forbid(unsafe_code)]
 #![forbid(missing_docs)]
 
-pub use ic_crypto_internal_bls12_381_type::*;
+use ic_crypto_internal_bls12_381_type::{
+    G1Affine, G1Projective, G2Affine, G2Prepared, Gt, LagrangeCoefficients, Scalar,
+};
 use rand::{CryptoRng, RngCore};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -94,7 +96,7 @@ impl TransportSecretKey {
         dpk: &DerivedPublicKey,
         did: &[u8],
     ) -> Option<G1Affine> {
-        let msg = augmented_hash_to_g1(&dpk.pt, did);
+        let msg = G1Affine::augmented_hash(&dpk.pt, did);
 
         let k = G1Affine::from(G1Projective::from(&ek.c3) - &ek.c1 * self.secret());
 
@@ -206,22 +208,17 @@ impl DerivedPublicKey {
         self.pt.serialize()
     }
 
+    /// Return the derived point in G2
+    pub fn point(&self) -> &G2Affine {
+        &self.pt
+    }
+
     /// Deserialize a previously serialized derived public key
     pub fn deserialize(bytes: &[u8]) -> Result<Self, DerivedPublicKeyDeserializationError> {
         let pt = G2Affine::deserialize(&bytes)
             .map_err(|_| DerivedPublicKeyDeserializationError::InvalidPublicKey)?;
         Ok(Self { pt })
     }
-}
-
-/// See draft-irtf-cfrg-bls-signature-01 §4.2.2 for details on BLS augmented signatures
-fn augmented_hash_to_g1(pk: &G2Affine, data: &[u8]) -> G1Affine {
-    let domain_sep = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_AUG_";
-
-    let mut signature_input = vec![];
-    signature_input.extend_from_slice(&pk.serialize());
-    signature_input.extend_from_slice(data);
-    G1Affine::hash(domain_sep, &signature_input)
 }
 
 /// Check the validity of an encrypted key or encrypted key share
@@ -320,7 +317,8 @@ impl EncryptedKey {
     }
 
     /// Combines all the given shares into an encrypted key.
-    /// The returned key is guaranteed to be valid.
+    ///
+    /// If the result is Ok(), the returned key is guaranteed to be valid.
     /// Returns the combined key, if it is valid.
     /// Does not take the nodes individual public keys as input.
     pub fn combine_all(
@@ -332,10 +330,11 @@ impl EncryptedKey {
         did: &[u8],
     ) -> Result<Self, EncryptedKeyCombinationError> {
         let c = Self::combine_unchecked(nodes, reconstruction_threshold)?;
-        if !c.is_valid(master_pk, derivation_path, did, tpk) {
-            return Err(EncryptedKeyCombinationError::InvalidShares);
+        if c.is_valid(master_pk, derivation_path, did, tpk) {
+            Ok(c)
+        } else {
+            Err(EncryptedKeyCombinationError::InvalidShares)
         }
-        Ok(c)
     }
 
     /// Filters the valid shares from the given ones, and combines them into a valid key, if possible.
@@ -356,26 +355,35 @@ impl EncryptedKey {
             return Err(EncryptedKeyCombinationError::InsufficientShares);
         }
 
-        let valid_shares: Vec<_> = nodes
-            .iter()
-            .filter(|(_node_index, node_pk, node_eks)| {
-                node_eks.is_valid(master_pk, node_pk, derivation_path, did, tpk)
-            })
-            .take(reconstruction_threshold)
-            .cloned() // TODO: can we avoid cloning somehow?
-            .map(|(node_index, _node_pk, node_eks)| (node_index, node_eks))
-            .collect();
+        // Take the first reconstruction_threshold shares which pass validity check
+        let mut valid_shares = Vec::with_capacity(reconstruction_threshold);
+
+        for (node_index, node_pk, node_eks) in nodes.iter() {
+            if node_eks.is_valid(master_pk, node_pk, derivation_path, did, tpk) {
+                valid_shares.push((*node_index, node_eks.clone()));
+
+                if valid_shares.len() >= reconstruction_threshold {
+                    break;
+                }
+            }
+        }
 
         if valid_shares.len() < reconstruction_threshold {
             return Err(EncryptedKeyCombinationError::InsufficientValidKeyShares);
         }
 
-        // TODO: If combining sufficient valid shares does not guarantee a valid key, we
-        // have to use combine_all (which includes the validity check) instead of
-        // combine_unchecked here (or add an explicit validity check here).
         let c = Self::combine_unchecked(&valid_shares, reconstruction_threshold)?;
 
-        Ok(c)
+        // If sufficient shares are available, and all were valid (which we already checked)
+        // then the resulting signature should always be valid as well.
+        //
+        // This check is mostly to catch the case where the reconstruction_threshold was
+        // somehow incorrect.
+        if c.is_valid(master_pk, derivation_path, did, tpk) {
+            Ok(c)
+        } else {
+            Err(EncryptedKeyCombinationError::InvalidShares)
+        }
     }
 
     /// Check if this encrypted key is valid with respect to the provided derivation path
@@ -387,7 +395,7 @@ impl EncryptedKey {
         tpk: &TransportPublicKey,
     ) -> bool {
         let dpk = DerivedPublicKey::compute_derived_key(master_pk, derivation_path);
-        let msg = augmented_hash_to_g1(&dpk.pt, did);
+        let msg = G1Affine::augmented_hash(&dpk.pt, did);
         check_validity(&self.c1, &self.c2, &self.c3, tpk, &dpk.pt, &msg)
     }
 
@@ -460,7 +468,7 @@ impl EncryptedKeyShare {
 
         let r = Scalar::random(rng);
 
-        let msg = augmented_hash_to_g1(&dpk, did);
+        let msg = G1Affine::augmented_hash(&dpk, did);
 
         let c1 = G1Affine::from(G1Affine::generator() * &r);
         let c2 = G2Affine::from(G2Affine::generator() * &r);
@@ -481,7 +489,7 @@ impl EncryptedKeyShare {
         let dpki = DerivedPublicKey::compute_derived_key(master_pki, derivation_path);
         let dpk = DerivedPublicKey::compute_derived_key(master_pk, derivation_path);
 
-        let msg = augmented_hash_to_g1(&dpk.pt, did);
+        let msg = G1Affine::augmented_hash(&dpk.pt, did);
 
         check_validity(&self.c1, &self.c2, &self.c3, tpk, &dpki.pt, &msg)
     }

@@ -7236,6 +7236,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-sha3 1.0.0",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "zeroize",
 ]
 

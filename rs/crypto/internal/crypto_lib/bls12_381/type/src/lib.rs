@@ -1908,6 +1908,18 @@ declare_muln_vartime_affine_impl_for!(G1Projective, G1Affine);
 impl_debug_using_serialize_for!(G1Affine);
 impl_debug_using_serialize_for!(G1Projective);
 
+impl G1Affine {
+    /// See draft-irtf-cfrg-bls-signature-01 §4.2.2 for details on BLS augmented signatures
+    pub fn augmented_hash(pk: &G2Affine, data: &[u8]) -> Self {
+        let domain_sep = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_AUG_";
+
+        let mut signature_input = vec![];
+        signature_input.extend_from_slice(&pk.serialize());
+        signature_input.extend_from_slice(data);
+        Self::hash(domain_sep, &signature_input)
+    }
+}
+
 define_affine_and_projective_types!(G2Affine, G2Projective, 96);
 declare_addsub_ops_for!(G2Projective);
 declare_mixed_addition_ops_for!(G2Projective, G2Affine);

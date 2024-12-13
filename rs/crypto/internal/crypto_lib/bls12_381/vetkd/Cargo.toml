@@ -16,6 +16,7 @@ zeroize = { workspace = true }
 criterion = { workspace = true }
 hex = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
+rand_chacha = { workspace = true }
 
 [[bench]]
 name = "vetkd"
