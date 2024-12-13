@@ -49,7 +49,7 @@ class SlackApi:
         return None
 
     def send_message(
-        self, message: str, is_block_kit_message: bool = False, thread_id: Optional[str] = None
+        self, message: str, is_block_kit_message: bool = False, thread_id: Optional[str] = None, show_link_preview: Optional[bool] = None
     ) -> Optional[str]:
         if self.log_to_console:
             logging.info(
@@ -70,6 +70,8 @@ class SlackApi:
             data["text"] = message
         if thread_id:
             data["thread_ts"] = thread_id
+        if show_link_preview:
+            data["unfurl_links"] = show_link_preview
 
         api_response = self.__api_request("https://slack.com/api/chat.postMessage", data, retry=3)
         if api_response["ok"]:

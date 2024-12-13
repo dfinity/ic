@@ -226,6 +226,6 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
                 reminders = scan_result.get_slack_thread_msgs_for_reminder()
                 for reminder in reminders:
                     self.slack_api_by_channel[channel_id].send_message(
-                        message=reminder, thread_id=slack_msg_id
+                        message=reminder, thread_id=slack_msg_id, show_link_preview=False
                     )
 
