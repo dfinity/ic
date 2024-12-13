@@ -1,29 +1,28 @@
-import git_lib
 import argparse
-import pathlib
 import logging
+import pathlib
 from enum import Enum
+
+import git_lib
+
 
 def get_logger(level) -> logging.Logger:
     FORMAT = "[%(asctime)s] %(levelname)-8s %(message)s"
     logging.basicConfig(format=FORMAT, level=level)
     return logging.getLogger("logger")
 
+
 class Command(Enum):
     SYNC_AND_CHECKOUT = 1
     COMMIT_AND_CREATE_PR = 2
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        prog="GitCiHelper",
-        description="Tool for automating git operations for CI"
-    )
+    parser = argparse.ArgumentParser(prog="GitCiHelper", description="Tool for automating git operations for CI")
     parser.add_argument(
         "--repo-root", help="Root of the repository", default=pathlib.Path("."), type=pathlib.Path, dest="repo_root"
     )
-    parser.add_argument(
-        "--branch", help="Branch to checkout", type=str
-    )
+    parser.add_argument("--branch", help="Branch to checkout", type=str)
 
     subparsers = parser.add_subparsers(title="subcommands", description="valid commands", help="sub-command help")
 
@@ -44,9 +43,7 @@ def main():
     parser_commit_and_create_pr.add_argument(
         "--repo", help="Github repository, `<owner>/<repo>`", type=str, default="dfinity/ic"
     )
-    parser_commit_and_create_pr.add_argument(
-        "--message", "-m", help="Message to attach to the PR", type=str
-    )
+    parser_commit_and_create_pr.add_argument("--message", "-m", help="Message to attach to the PR", type=str)
     parser_commit_and_create_pr.set_defaults(command=Command.COMMIT_AND_CREATE_PR)
 
     args = parser.parse_args()

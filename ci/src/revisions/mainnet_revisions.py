@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
+import argparse
 import json
 import logging
 import pathlib
 import urllib.request
-import argparse
 
 import git_lib
 
@@ -94,10 +94,7 @@ def get_logger(level) -> logging.Logger:
 def main():
     """Do the main work."""
 
-    parser = argparse.ArgumentParser(
-        prog="GitCiHelper",
-        description="Tool for automating git operations for CI"
-    )
+    parser = argparse.ArgumentParser(prog="GitCiHelper", description="Tool for automating git operations for CI")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose mode")
     args = parser.parse_args()
     logger = get_logger(logging.DEBUG if args.verbose else logging.INFO)
@@ -109,7 +106,9 @@ def main():
 
     git_lib.sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
     update_mainnet_revisions_file(repo_root, logger)
-    git_lib.commit_and_create_pr(repo, repo_root, branch, [SAVED_VERSIONS_PATH], logger, "chore: Update Mainnet IC revisions file")
+    git_lib.commit_and_create_pr(
+        repo, repo_root, branch, [SAVED_VERSIONS_PATH], logger, "chore: Update Mainnet IC revisions file"
+    )
 
 
 if __name__ == "__main__":

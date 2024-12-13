@@ -1,8 +1,8 @@
-import argparse
 import logging
 import pathlib
 import subprocess
 from typing import List
+
 
 def get_repo_root() -> pathlib.Path:
     return pathlib.Path(
@@ -31,7 +31,12 @@ def sync_main_branch_and_checkout_branch(
 
 
 def commit_and_create_pr(
-    repo: str, repo_root: pathlib.Path, branch: str, check_for_updates_in_paths: List[str], logger: logging.Logger, commit_message: str
+    repo: str,
+    repo_root: pathlib.Path,
+    branch: str,
+    check_for_updates_in_paths: List[str],
+    logger: logging.Logger,
+    commit_message: str,
 ):
     git_modified_files = subprocess.check_output(["git", "ls-files", "--modified", "--others"], cwd=repo_root).decode(
         "utf8"
@@ -52,7 +57,7 @@ def commit_and_create_pr(
             "user.email=infra+github-automation@dfinity.org",
             "commit",
             "-m",
-            commit_message
+            commit_message,
         ] + paths_to_add
         logger.info("Running command '%s'", " ".join(cmd))
         subprocess.check_call(
