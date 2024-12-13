@@ -37,7 +37,7 @@ REPOS_TO_SCAN = [
 
 
 def main():
-    logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig(level=logging.DEBUG)
     if not is_env_for_periodic_job():
         logging.warning("skipping periodic TRIVY job because it is run in the wrong environment")
         return
