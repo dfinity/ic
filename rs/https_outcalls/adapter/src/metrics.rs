@@ -47,7 +47,7 @@ impl AdapterMetrics {
             socks_connections_attempts: metrics_registry.int_counter_vec(
                 "socks_connections_attempts_total",
                 "Total number of time the adapter tries to proxy a request via a SOCKS proxy",
-                &["number_of_tries", "status"],
+                &["attempt_number", "status"],
             ),
             socks_cache_size: metrics_registry.int_gauge(
                 "socks_cache_size",
