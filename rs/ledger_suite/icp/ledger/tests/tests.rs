@@ -1750,7 +1750,7 @@ fn test_account_balance_non_standard_account_identifier_length() {
             })
             .unwrap()
         )
-        .expect("failed to query blocks")
+        .expect("failed to query account_balance")
         .bytes(),
         Tokens
     )
@@ -1767,7 +1767,7 @@ fn test_account_balance_non_standard_account_identifier_length() {
             })
             .unwrap()
         )
-        .expect("failed to query blocks")
+        .expect("failed to query account_balance")
         .bytes(),
         Tokens
     )
