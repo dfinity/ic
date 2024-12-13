@@ -25,9 +25,9 @@ filegroup(
 filegroup(
     name = "helper_contracts",
     srcs = [
-        "EthDepositHelper.sol",
-        "ERC20DepositHelper.sol",
         "DepositHelperWithSubaccount.sol",
+        "ERC20DepositHelper.sol",
+        "EthDepositHelper.sol",
     ],
     visibility = ["//visibility:public"],
 )

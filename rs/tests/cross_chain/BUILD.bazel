@@ -1,5 +1,5 @@
 load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test_nns", "oci_tar", "uvm_config_image")
+load("//rs/tests:system_tests.bzl", "oci_tar", "system_test_nns", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -66,18 +66,20 @@ system_test_nns(
             # Keep sorted.
             ":cketh_uvm_config_image",
             "//rs/ethereum/cketh/minter:cketh_minter.wasm.gz",
-            "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz"
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
         ],
     deps = [
         # Keep sorted.
+        "//packages/ic-ethereum-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/ethereum/cketh/minter",
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/nns/constants",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/dfn_candid",
-        "//rs/tests/consensus/utils",
         "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/management_canister_types",
         "//rs/types/types",
@@ -86,8 +88,6 @@ system_test_nns(
         "@crate_index//:reqwest",
         "@crate_index//:serde_json",
         "@crate_index//:slog",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//packages/ic-ethereum-types"
     ],
 )
 
@@ -101,7 +101,7 @@ uvm_config_image(
     name = "cketh_uvm_config_image",
     srcs = [
         ":foundry.tar",
-        "//rs/ethereum/cketh/minter:helper_contracts"
+        "//rs/ethereum/cketh/minter:helper_contracts",
     ],
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
