@@ -4,6 +4,7 @@ use crate::{
     pb::v1::{Ballot, ProposalData, Topic, Topic::NeuronManagement, Vote},
     storage::with_voting_state_machines_mut,
 };
+#[cfg(not(any(test, feature = "canbench-rs")))]
 use ic_nervous_system_long_message::is_message_over_threshold;
 #[cfg(test)]
 use ic_nervous_system_temporary::Temporary;
@@ -29,6 +30,7 @@ const SOFT_VOTING_INSTRUCTIONS_LIMIT: u64 = if cfg!(feature = "test") {
 };
 
 // The following test methods let us test this internally
+#[cfg(any(test, feature = "canbench-rs"))]
 thread_local! {
     static OVER_SOFT_MESSAGE_LIMIT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static CANBENCH_FAKE_INSTRUCTION_COUNTER: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
@@ -39,11 +41,14 @@ fn temporarily_set_over_soft_message_limit(over: bool) -> Temporary {
     Temporary::new(&OVER_SOFT_MESSAGE_LIMIT, over)
 }
 
+// For tests, we want to switch it on and off atomically.  For canbench, we want to
+// actually count the instructions.
+#[cfg(any(test, feature = "canbench-rs"))]
 fn over_soft_message_limit() -> bool {
     if cfg!(test) {
-        OVER_SOFT_MESSAGE_LIMIT.with(|over| over.get())
+        return OVER_SOFT_MESSAGE_LIMIT.with(|over| over.get());
     } else if cfg!(feature = "canbench-rs") {
-        CANBENCH_FAKE_INSTRUCTION_COUNTER.with(|counter| {
+        return CANBENCH_FAKE_INSTRUCTION_COUNTER.with(|counter| {
             let current_instruction_counter = ic_cdk::api::instruction_counter();
             let stored_value = counter.get();
 
@@ -54,34 +59,46 @@ fn over_soft_message_limit() -> bool {
                 counter.set(Some(limit));
                 false // Since it's the first time, assume not over limit
             }
-        })
-    } else {
-        is_message_over_threshold(SOFT_VOTING_INSTRUCTIONS_LIMIT)
+        });
     }
+    // We should not get here
+    true
 }
 
+// Production implementation
+#[cfg(not(any(test, feature = "canbench-rs")))]
+fn over_soft_message_limit() -> bool {
+    is_message_over_threshold(SOFT_VOTING_INSTRUCTIONS_LIMIT)
+}
+
+// canbench doesn't currently support query calls inside of benchmarks
+// We send a no-op message to self to break up the call context into more messages
+#[cfg(feature = "canbench-rs")]
+async fn noop_self_call_if_over_instructions(
+    message_threshold: u64,
+    _panic_threshold: Option<u64>,
+) -> Result<(), String> {
+    if over_soft_message_limit() {
+        let limit = ic_cdk::api::instruction_counter() + message_threshold;
+        CANBENCH_FAKE_INSTRUCTION_COUNTER.with(|counter| {
+            counter.set(Some(limit));
+        });
+    }
+    Ok(())
+}
+
+// Production implementation
+#[cfg(not(feature = "canbench-rs"))]
 async fn noop_self_call_if_over_instructions(
     message_threshold: u64,
     panic_threshold: Option<u64>,
 ) -> Result<(), String> {
-    // canbench doesn't currently support query calls inside of benchmarks
-    // We send a no-op message to self to break up the call context into more messages
-    if cfg!(not(feature = "canbench-rs")) {
-        ic_nervous_system_long_message::noop_self_call_if_over_instructions(
-            message_threshold,
-            panic_threshold,
-        )
-        .await
-        .map_err(|e| e.to_string())
-    } else {
-        if over_soft_message_limit() {
-            let limit = ic_cdk::api::instruction_counter() + SOFT_VOTING_INSTRUCTIONS_LIMIT;
-            CANBENCH_FAKE_INSTRUCTION_COUNTER.with(|counter| {
-                counter.set(Some(limit));
-            });
-        }
-        Ok(())
-    }
+    ic_nervous_system_long_message::noop_self_call_if_over_instructions(
+        message_threshold,
+        panic_threshold,
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 fn proposal_ballots(
