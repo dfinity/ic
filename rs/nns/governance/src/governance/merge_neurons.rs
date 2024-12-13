@@ -6,7 +6,7 @@ use crate::{
         governance_error::ErrorType,
         manage_neuron::{Merge, NeuronIdOrSubaccount},
         manage_neuron_response::MergeResponse,
-        GovernanceError, Neuron as NeuronProto, NeuronState, ProposalData, ProposalStatus,
+        GovernanceError, NeuronState, ProposalData, ProposalStatus, VotingPowerEconomics,
     },
 };
 use ic_base_types::PrincipalId;
@@ -345,13 +345,24 @@ pub fn validate_merge_neurons_before_commit(
 pub fn build_merge_neurons_response(
     source: &Neuron,
     target: &Neuron,
+    voting_power_economics: &VotingPowerEconomics,
     now_seconds: u64,
     requester: PrincipalId,
 ) -> MergeResponse {
-    let source_neuron = Some(NeuronProto::from(source.clone()));
-    let target_neuron = Some(NeuronProto::from(target.clone()));
-    let source_neuron_info = Some(source.get_neuron_info(now_seconds, requester));
-    let target_neuron_info = Some(target.get_neuron_info(now_seconds, requester));
+    let source_neuron = Some(
+        source
+            .clone()
+            .into_proto(voting_power_economics, now_seconds),
+    );
+    let target_neuron = Some(
+        target
+            .clone()
+            .into_proto(voting_power_economics, now_seconds),
+    );
+    let source_neuron_info =
+        Some(source.get_neuron_info(voting_power_economics, now_seconds, requester));
+    let target_neuron_info =
+        Some(target.get_neuron_info(voting_power_economics, now_seconds, requester));
     MergeResponse {
         source_neuron,
         target_neuron,

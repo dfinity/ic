@@ -20,8 +20,7 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, Command as InFlightCommand},
-                CachedUpgradeSteps, MaturityModulation, NeuronInFlightCommand, PendingVersion,
-                SnsMetadata, Version, Versions,
+                MaturityModulation, NeuronInFlightCommand, PendingVersion, SnsMetadata, Version,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -46,16 +45,15 @@ use crate::{
             GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
             GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
             GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
-            GetSnsInitializationParametersResponse, GetUpgradeJournalResponse,
-            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
-            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
-            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
-            ManageSnsMetadata, MintSnsTokens, MintTokensRequest, MintTokensResponse,
-            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-            RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote,
-            WaitForQuietState,
+            GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
+            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
+            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
+            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
+            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
+            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
+            RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds,
+            UpgradeSnsControlledCanister, Vote, WaitForQuietState,
         },
     },
     proposal::{
@@ -98,6 +96,7 @@ use ic_nervous_system_governance::maturity_modulation::{
 };
 use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
+use ic_nervous_system_timestamp::format_timestamp_for_humans;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
@@ -150,6 +149,8 @@ pub const MATURITY_DISBURSEMENT_DELAY_SECONDS: u64 = 7 * 24 * 3600;
 /// This is 7/8 of the maximum number of pages and corresponds to 3.5 GiB.
 pub const HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES: usize =
     MAX_HEAP_SIZE_IN_KIB / WASM32_PAGE_SIZE_IN_KIB * 7 / 8;
+
+pub const MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST: u64 = 100;
 
 /// Prefixes each log line for this canister.
 pub fn log_prefix() -> String {
@@ -433,12 +434,12 @@ impl GovernanceProto {
         result
     }
 
-    /// Gets the current deployed version of the SNS or panics.
-    pub fn deployed_version_or_panic(&self) -> Version {
-        self.deployed_version
-            .as_ref()
-            .cloned()
-            .expect("No version set in Governance.")
+    pub fn deployed_version_or_err(&self) -> Result<Version, String> {
+        if let Some(deployed_version) = &self.deployed_version {
+            Ok(deployed_version.clone())
+        } else {
+            Err("GovernanceProto.deployed_version is not set.".to_string())
+        }
     }
 
     /// Returns 0 if maturity modulation is disabled (per
@@ -2128,11 +2129,13 @@ impl Governance {
                 self.perform_manage_dapp_canister_settings(manage_dapp_canister_settings)
                     .await
             }
-            // TODO[NNS1-3434]: Implement `AdvanceSnsTargetVersion` proposals.
-            Action::AdvanceSnsTargetVersion(_) => Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "AdvanceSnsTargetVersion proposals are not implemented yet.".to_string(),
-            )),
+            Action::AdvanceSnsTargetVersion(_) => {
+                get_action_auxiliary(&self.proto.proposals, ProposalId { id: proposal_id })
+                    .and_then(|action_auxiliary| {
+                        action_auxiliary.unwrap_advance_sns_target_version_or_err()
+                    })
+                    .and_then(|new_target| self.perform_advance_target_version(new_target))
+            }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
             Action::Unspecified(_) => Err(GovernanceError::new_with_message(
@@ -2595,6 +2598,37 @@ impl Governance {
         Ok(())
     }
 
+    /// Best effort to return the deployed version of this SNS.
+    ///
+    /// Normally, the SNS should always have a deployed version, in which case it is returned.
+    /// If this is not the case for whatever reason, this function tries to fetch the running
+    /// version, initialize deployed version with it, and return a copy.
+    pub async fn get_or_reset_deployed_version(&mut self) -> Result<Version, String> {
+        if let Some(deployed_version) = self.proto.deployed_version.clone() {
+            return Ok(deployed_version);
+        }
+
+        log!(
+            ERROR,
+            "The SNS does not have a deployed version. Attempting to reset it ..."
+        );
+
+        let root_canister_id = self.proto.root_canister_id_or_panic();
+
+        let new_deployed_version = get_running_version(&*self.env, root_canister_id).await?;
+
+        // Re-check that a reentrant call to this function did not yet update the state.
+        if let Some(deployed_version) = self.proto.deployed_version.clone() {
+            return Ok(deployed_version);
+        }
+
+        self.proto
+            .deployed_version
+            .replace(new_deployed_version.clone());
+
+        Ok(new_deployed_version)
+    }
+
     /// Return `Ok(true)` if the upgrade was completed successfully, return `Ok(false)` if an
     /// upgrade was successfully kicked-off, but its completion is pending.
     async fn perform_upgrade_to_next_sns_version_legacy(
@@ -2603,7 +2637,13 @@ impl Governance {
     ) -> Result<bool, GovernanceError> {
         self.check_no_upgrades_in_progress(Some(proposal_id))?;
 
-        let current_version = self.proto.deployed_version_or_panic();
+        let current_version = self.get_or_reset_deployed_version().await.map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Could not execute proposal: {}", err),
+            )
+        })?;
+
         let root_canister_id = self.proto.root_canister_id_or_panic();
 
         let UpgradeSnsParams {
@@ -2613,10 +2653,10 @@ impl Governance {
             canister_ids_to_upgrade,
         } = get_upgrade_params(&*self.env, root_canister_id, &current_version)
             .await
-            .map_err(|e| {
+            .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::InvalidProposal,
-                    format!("Could not execute proposal: {}", e),
+                    format!("Could not execute proposal: {}", err),
                 )
             })?;
 
@@ -2856,7 +2896,13 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         self.check_no_upgrades_in_progress(Some(proposal_id))?;
 
-        let current_version = self.proto.deployed_version_or_panic();
+        let current_version = self.get_or_reset_deployed_version().await.map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Could not execute proposal: {}", err),
+            )
+        })?;
+
         let ledger_canister_id = self.proto.ledger_canister_id_or_panic();
 
         let ledger_canister_info = self.env
@@ -2969,9 +3015,9 @@ impl Governance {
 
             if self.env.now() > mark_failed_at_seconds {
                 let error = format!(
-                    "Upgrade marked as failed at timestamp {} seconds. \
-                    Did not find an upgrade in the ledger's canister_info recent_changes.",
-                    self.env.now(),
+                    "Upgrade marked as failed at {}. \
+                     Did not find an upgrade in the ledger's canister_info recent_changes.",
+                    format_timestamp_for_humans(self.env.now()),
                 );
                 return Err(GovernanceError::new_with_message(
                     ErrorType::External,
@@ -3022,6 +3068,25 @@ impl Governance {
                     )),
                 },
             )
+    }
+
+    fn perform_advance_target_version(
+        &mut self,
+        new_target: Version,
+    ) -> Result<(), GovernanceError> {
+        let (_, target_version) = self
+            .proto
+            .validate_new_target_version(Some(new_target))
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidProposal, err))?;
+
+        self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionSet::new(
+            self.proto.target_version.clone(),
+            Some(target_version.clone()),
+        ));
+
+        self.proto.target_version = Some(target_version);
+
+        Ok(())
     }
 
     // Returns an option with the NervousSystemParameters
@@ -4686,10 +4751,11 @@ impl Governance {
             return false;
         }
         self.latest_gc_timestamp_seconds = self.env.now();
+
         log!(
             INFO,
-            "Running GC now at timestamp {} seconds",
-            self.latest_gc_timestamp_seconds
+            "Running GC now at {}.",
+            format_timestamp_for_humans(self.latest_gc_timestamp_seconds),
         );
 
         let max_proposals_to_keep_per_action = match self
@@ -4766,10 +4832,14 @@ impl Governance {
             }
 
             if self.should_refresh_cached_upgrade_steps() {
-                // We only want to refresh the cached_upgrade_steps every UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS
-                // seconds, so we first lock the refresh operation (which will automatically unlock after that interval)
-                self.temporarily_lock_refresh_cached_upgrade_steps();
-                self.refresh_cached_upgrade_steps().await;
+                match self.try_temporarily_lock_refresh_cached_upgrade_steps() {
+                    Err(err) => {
+                        log!(ERROR, "{}", err);
+                    }
+                    Ok(deployed_version) => {
+                        self.refresh_cached_upgrade_steps(deployed_version).await;
+                    }
+                }
             }
 
             self.initiate_upgrade_if_sns_behind_target_version().await;
@@ -4808,14 +4878,25 @@ impl Governance {
         self.maybe_gc();
     }
 
-    // Acquires the "upgrade periodic task lock" (a lock shared between all periodic tasks that relate to upgrades)
-    // if it is currently released or was last acquired over UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS ago.
-    fn acquire_upgrade_periodic_task_lock(&mut self) -> bool {
+    /// Attempts to acquire the lock over SNS upgrade-related periodic tasks.
+    ///
+    /// Succeeds if the lock is currently released or was last acquired
+    /// over `UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS` ago.
+    ///
+    /// Returns whether the lock was acquired.
+    ///
+    /// This function is made public so that it can be called from
+    /// rs/sns/governance/tests/governance.rs where we need to disable upgrade-related periodic
+    /// tasks while testing a orthogonal SNS features (e.g., disburse maturity).
+    pub fn acquire_upgrade_periodic_task_lock(&mut self) -> bool {
         let now = self.env.now();
         match self.upgrade_periodic_task_lock {
             Some(time_acquired)
                 if now
-                    > time_acquired.saturating_add(UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS) =>
+                    >= time_acquired
+                        .checked_add(UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS)
+                        // In case of overflow, we'll unwrap to 0, which should always cause this to evaluate to true
+                        .unwrap_or(0) =>
             {
                 self.upgrade_periodic_task_lock = Some(now);
                 true
@@ -4827,6 +4908,7 @@ impl Governance {
             }
         }
     }
+
     /// Checks if an automatic upgrade is needed and initiates it.
     /// An automatic upgrade is needed if `target_version` is set to a future version on the upgrade path
     async fn initiate_upgrade_if_sns_behind_target_version(&mut self) {
@@ -4836,71 +4918,52 @@ impl Governance {
             return;
         }
 
-        let Some(deployed_version) = self.proto.deployed_version.clone() else {
-            // TODO(NNS1-3445): there should be some way to recover from this state.
-            log!(ERROR, "No deployed version! This is an internal bug");
-            return;
+        let deployed_version = match self.get_or_reset_deployed_version().await {
+            Ok(deployed_version) => deployed_version,
+            Err(err) => {
+                log!(ERROR, "Cannot get or reset deployed version: {}", err);
+                return;
+            }
         };
+
+        let upgrade_steps = self.get_or_reset_upgrade_steps(&deployed_version);
 
         let Some(target_version) = self.proto.target_version.clone() else {
             return;
         };
 
-        let Some(CachedUpgradeSteps {
-            upgrade_steps: Some(Versions {
-                versions: upgrade_steps,
-            }),
-            ..
-        }) = &self.proto.cached_upgrade_steps
-        else {
-            log!(ERROR, "Cached upgrade steps set to None");
-            return;
-        };
-
-        // Find the current position of the deployed version
-        let Some(deployed_position) = upgrade_steps.iter().position(|v| v == &deployed_version)
-        else {
-            let human_readable = format!(
-                "Deployed version {} is not on the upgrade path {:?}",
-                deployed_version, upgrade_steps
-            );
-            log!(ERROR, "{}", human_readable);
-            self.invalidate_cached_upgrade_steps(human_readable);
-            return;
-        };
-
         // Find the target position of the target version
-        let Some(target_position) = upgrade_steps.iter().position(|v| v == &target_version) else {
+        if !upgrade_steps.contains(&target_version) {
             let message = format!(
                 "Target version {} is not on the upgrade path {:?}",
                 target_version, upgrade_steps
             );
-            log!(ERROR, "{}", message);
             self.invalidate_target_version(message);
             return;
         };
 
         // If the target version is the same as the deployed version, there is nothing to do.
-        if target_position == deployed_position {
+        if upgrade_steps.is_current(&target_version) {
             return;
         }
 
-        // If the target version is behind the deployed version, we should reset the target version, since otherwise
-        // people might be under the impression that we could go backwards.
-        if target_position < deployed_position {
-            let message = format!(
-                "Target version {} is behind the deployed version {}",
-                target_version, deployed_version
+        let Some(next_version) = upgrade_steps.next() else {
+            // This should be impossible because we already established that
+            // `target_version` ∈ `upgrade_steps` \ { `current_version` }.
+            // However, if this code path would be taken due to a bug, we would interpret
+            // the situation as "no more work."
+            log!(
+                ERROR,
+                "Taking a code path that was supposed to be impossible. \
+                 target_version = {:?}, upgrade_steps = {:?}.",
+                target_version,
+                upgrade_steps,
             );
-            self.invalidate_target_version(message);
             return;
-        }
-
-        // since `target_position > deployed_position`, `deployed_position + 1 < upgrade_steps.len()`
-        let next_version = upgrade_steps[deployed_position + 1].clone();
+        };
 
         let (canister_type, wasm_hash) =
-            match canister_type_and_wasm_hash_for_upgrade(&deployed_version, &next_version) {
+            match canister_type_and_wasm_hash_for_upgrade(&deployed_version, next_version) {
                 Ok((canister_type, wasm_hash)) => (canister_type, wasm_hash),
 
                 Err(err) => {
@@ -4935,138 +4998,24 @@ impl Governance {
         }
     }
 
-    /// Invalidates the cached upgrade steps.
-    fn invalidate_cached_upgrade_steps(&mut self, human_readable: String) {
-        self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset::new(
-            human_readable,
-            vec![],
-        ));
-        self.proto.cached_upgrade_steps = None;
-    }
-
-    /// Invalidates the cached upgrade steps.
-    fn invalidate_target_version(&mut self, reason: String) {
-        self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionReset::new(
-            self.proto.target_version.clone(),
-            None,
-            reason,
-        ));
-        self.proto.target_version = None;
-    }
-
     fn release_upgrade_periodic_task_lock(&mut self) {
         self.upgrade_periodic_task_lock = None;
     }
 
-    pub fn temporarily_lock_refresh_cached_upgrade_steps(&mut self) {
-        let upgrade_steps =
-            self.proto
-                .cached_upgrade_steps
-                .get_or_insert_with(|| CachedUpgradeSteps {
-                    requested_timestamp_seconds: Some(self.env.now()),
-                    ..Default::default()
-                });
-        upgrade_steps.requested_timestamp_seconds = Some(self.env.now());
-    }
-
-    pub fn should_refresh_cached_upgrade_steps(&mut self) -> bool {
-        let now = self.env.now();
-
-        if let Some(ref cached_upgrade_steps) = self.proto.cached_upgrade_steps {
-            let requested_timestamp_seconds = cached_upgrade_steps
-                .requested_timestamp_seconds
-                .unwrap_or(0);
-            if now - requested_timestamp_seconds < UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS {
-                return false;
-            }
-        }
-
-        true
-    }
-
-    /// Refreshes the cached_upgrade_steps field
-    pub async fn refresh_cached_upgrade_steps(&mut self) {
-        let Some(deployed_version) = self.proto.deployed_version.as_ref() else {
-            log!(
-                ERROR,
-                "Cannot refresh cached_upgrade_steps: deployed_version not set."
-            );
-            return;
-        };
-        let sns_governance_canister_id = self.env.canister_id().get();
-
-        let upgrade_steps = crate::sns_upgrade::get_upgrade_steps(
-            &*self.env,
-            deployed_version.clone(),
-            sns_governance_canister_id,
-        )
-        .await;
-
-        let upgrade_steps = match upgrade_steps {
-            Ok(upgrade_steps) => upgrade_steps,
-            Err(err) => {
-                log!(
-                    ERROR,
-                    "Cannot refresh cached_upgrade_steps: call to SNS-W failed: {}",
-                    err
-                );
-                return;
-            }
-        };
-        let upgrade_steps = Versions {
-            versions: upgrade_steps,
-        };
-
-        // Ensure `cached_upgrade_steps` is initialized
-        let cached_upgrade_steps = self
-            .proto
-            .cached_upgrade_steps
-            .get_or_insert_with(Default::default);
-
-        // Update `response_timestamp_seconds`
-        cached_upgrade_steps.response_timestamp_seconds = Some(self.env.now());
-
-        // Refresh the upgrade steps if they have changed
-        if cached_upgrade_steps.upgrade_steps != Some(upgrade_steps.clone()) {
-            cached_upgrade_steps.upgrade_steps = Some(upgrade_steps.clone());
-            self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsRefreshed::new(
-                upgrade_steps.versions,
-            ));
-        }
-    }
-
-    pub fn get_upgrade_journal(&self) -> GetUpgradeJournalResponse {
-        let cached_upgrade_steps = self.proto.cached_upgrade_steps.clone();
-        match cached_upgrade_steps {
-            Some(cached_upgrade_steps) => GetUpgradeJournalResponse {
-                upgrade_steps: cached_upgrade_steps.upgrade_steps,
-                response_timestamp_seconds: cached_upgrade_steps.response_timestamp_seconds,
-                target_version: self.proto.target_version.clone(),
-                deployed_version: self.proto.deployed_version.clone(),
-                // TODO(NNS1-3416): Bound the size of the response.
-                upgrade_journal: self.proto.upgrade_journal.clone(),
-            },
-            None => GetUpgradeJournalResponse {
-                upgrade_steps: None,
-                response_timestamp_seconds: None,
-                target_version: None,
-                deployed_version: self.proto.deployed_version.clone(),
-                // TODO(NNS1-3416): Bound the size of the response.
-                upgrade_journal: self.proto.upgrade_journal.clone(),
-            },
-        }
-    }
-
+    // This is a test-only function, so panicking should be okay.
     pub fn advance_target_version(
         &mut self,
         request: AdvanceTargetVersionRequest,
     ) -> AdvanceTargetVersionResponse {
-        self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionSet::new(
-            self.proto.target_version.clone(),
-            request.target_version.clone(),
-        ));
+        let AdvanceTargetVersionRequest {
+            target_version: Some(target_version),
+        } = request
+        else {
+            panic!("AdvanceTargetVersionRequest.target_version must be specified.");
+        };
 
-        self.proto.target_version = request.target_version;
+        self.perform_advance_target_version(target_version)
+            .expect("Cannot perform perform_advance_target_version");
 
         AdvanceTargetVersionResponse {}
     }
@@ -5604,10 +5553,10 @@ impl Governance {
 
                 if self.env.now() > mark_failed_at {
                     let message = format!(
-                        "Upgrade marked as failed at {} seconds from unix epoch. \
+                        "Upgrade marked as failed at {}. \
                          Governance could not determine running version from root: {}. \
                          Setting upgrade to failed to unblock retry.",
-                        self.env.now(),
+                        format_timestamp_for_humans(self.env.now()),
                         err,
                     );
                     let status = upgrade_journal_entry::upgrade_outcome::Status::Timeout(Empty {});
@@ -5629,15 +5578,12 @@ impl Governance {
         let deployed_version = match self.proto.deployed_version.as_ref() {
             None => {
                 let message = format!(
-                    "SNS Governance had no recorded deployed_version at timestamp {} seconds. \
+                    "SNS Governance had no recorded deployed_version at {}. \
                      Setting it to currently running {:?} and attempting to proceed.",
-                    self.env.now(),
+                    format_timestamp_for_humans(self.env.now()),
                     running_version,
                 );
-                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset::new(
-                    message,
-                    vec![running_version.clone()],
-                ));
+                self.reset_cached_upgrade_steps(&running_version, message);
 
                 self.proto.deployed_version = Some(running_version.clone());
 
@@ -5654,9 +5600,9 @@ impl Governance {
         if let Err(errs) = expected_changes {
             if self.env.now() > mark_failed_at {
                 let message = format!(
-                    "Upgrade marked as failed at timestamp {} seconds. \
+                    "Upgrade marked as failed at {}. \
                      Running system version does not match expected state:\n- {:?}",
-                    self.env.now(),
+                    format_timestamp_for_humans(self.env.now()),
                     errs.join("- {}\n"),
                 );
                 let status = upgrade_journal_entry::upgrade_outcome::Status::Timeout(Empty {});
@@ -5670,9 +5616,8 @@ impl Governance {
         }
 
         let message = format!(
-            "Upgrade marked successful at timestamp {} seconds, new {:?}",
-            self.env.now(),
-            target_version,
+            "Upgrade marked successful at {}.",
+            format_timestamp_for_humans(self.env.now()),
         );
         let status = upgrade_journal_entry::upgrade_outcome::Status::Success(Empty {});
 
@@ -5759,10 +5704,11 @@ impl Governance {
 
         if now > pending_version.mark_failed_at_seconds {
             let message = format!(
-                "Upgrade marked as failed at {} seconds from UNIX epoch. \
+                "Upgrade marked as failed at {}. \
                 Governance upgrade was manually aborted by calling fail_stuck_upgrade_in_progress \
                 after mark_failed_at_seconds ({}). Setting upgrade to failed to unblock retry.",
-                now, pending_version.mark_failed_at_seconds
+                format_timestamp_for_humans(now),
+                pending_version.mark_failed_at_seconds,
             );
             let status = upgrade_journal_entry::upgrade_outcome::Status::ExternalFailure(Empty {});
 
@@ -6030,3 +5976,12 @@ mod assorted_governance_tests;
 
 #[cfg(test)]
 mod fail_stuck_upgrade_in_progress_tests;
+
+#[cfg(test)]
+mod advance_target_sns_version_tests;
+
+#[cfg(test)]
+mod test_helpers;
+
+#[cfg(feature = "canbench-rs")]
+mod benches;

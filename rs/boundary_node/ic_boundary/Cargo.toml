@@ -16,6 +16,7 @@ tls = []
 
 [dependencies]
 anyhow = { workspace = true }
+anonymization-client = { path = "../anonymization/client" }
 arc-swap = "1.7.1"
 async-scoped = { version = "0.9", features = ["use-tokio"] }
 async-trait = { workspace = true }
@@ -32,14 +33,20 @@ hex = { workspace = true }
 http = { workspace = true }
 http-body = { workspace = true }
 humantime = "2.1"
+ic-agent = "0.39.1"
 ic-base-types = { path = "../../types/base_types" }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "526d34d15cfbf369d8baf2dae9932aa18d570a1d" }
+ic-bn-lib = { workspace = true }
+ic-canister-client = { path = "../../canister_client" }
+ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-config = { path = "../../config" }
+ic-crypto = { path = "../../crypto" }
 ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
+ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-limits = { path = "../../limits" }
 ic-logger = { path = "../../monitoring/logger" }
@@ -63,6 +70,7 @@ nix = { workspace = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
 ratelimit = "0.9.1"
+rate-limits-api = { path = "../rate_limits/api" }
 rcgen = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }

@@ -347,7 +347,7 @@ pub struct DkgMessage {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DkgPayload {
-    #[prost(oneof = "dkg_payload::Val", tags = "1, 2")]
+    #[prost(oneof = "dkg_payload::Val", tags = "1, 3")]
     pub val: ::core::option::Option<dkg_payload::Val>,
 }
 /// Nested message and enum types in `DkgPayload`.
@@ -356,12 +356,12 @@ pub mod dkg_payload {
     pub enum Val {
         #[prost(message, tag = "1")]
         Summary(super::Summary),
-        #[prost(message, tag = "2")]
-        Dealings(super::Dealings),
+        #[prost(message, tag = "3")]
+        DataPayload(super::DkgDataPayload),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Dealings {
+pub struct DkgDataPayload {
     #[prost(message, repeated, tag = "1")]
     pub dealings: ::prost::alloc::vec::Vec<DkgMessage>,
     #[prost(uint64, tag = "2")]
@@ -378,15 +378,19 @@ pub struct Summary {
     #[prost(uint64, tag = "4")]
     pub height: u64,
     #[prost(message, repeated, tag = "5")]
-    pub current_transcripts: ::prost::alloc::vec::Vec<TaggedNiDkgTranscript>,
+    pub current_transcripts_deprecated: ::prost::alloc::vec::Vec<TaggedNiDkgTranscript>,
     #[prost(message, repeated, tag = "6")]
-    pub next_transcripts: ::prost::alloc::vec::Vec<TaggedNiDkgTranscript>,
+    pub next_transcripts_deprecated: ::prost::alloc::vec::Vec<TaggedNiDkgTranscript>,
     #[prost(message, repeated, tag = "7")]
     pub configs: ::prost::alloc::vec::Vec<NiDkgConfig>,
     #[prost(message, repeated, tag = "9")]
     pub initial_dkg_attempts: ::prost::alloc::vec::Vec<InitialDkgAttemptCount>,
     #[prost(message, repeated, tag = "10")]
     pub transcripts_for_remote_subnets: ::prost::alloc::vec::Vec<CallbackIdedNiDkgTranscript>,
+    #[prost(message, repeated, tag = "11")]
+    pub current_transcripts_new: ::prost::alloc::vec::Vec<NiDkgTranscript>,
+    #[prost(message, repeated, tag = "12")]
+    pub next_transcripts_new: ::prost::alloc::vec::Vec<NiDkgTranscript>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TaggedNiDkgTranscript {
@@ -922,7 +926,7 @@ pub struct KeyTranscriptCreation {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgMessage {
-    #[prost(oneof = "i_dkg_message::Msg", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof = "i_dkg_message::Msg", tags = "1, 2, 3, 4, 5, 6, 7")]
     pub msg: ::core::option::Option<i_dkg_message::Msg>,
 }
 /// Nested message and enum types in `IDkgMessage`.
@@ -941,6 +945,8 @@ pub mod i_dkg_message {
         Opening(super::SignedIDkgOpening),
         #[prost(message, tag = "6")]
         SchnorrSigShare(super::SchnorrSigShare),
+        #[prost(message, tag = "7")]
+        VetkdKeyShare(super::VetKdKeyShare),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -960,6 +966,17 @@ pub struct SchnorrSigShare {
     pub request_id: ::core::option::Option<RequestId>,
     #[prost(bytes = "vec", tag = "3")]
     pub sig_share_raw: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct VetKdKeyShare {
+    #[prost(message, optional, tag = "1")]
+    pub signer_id: ::core::option::Option<NodeId>,
+    #[prost(message, optional, tag = "2")]
+    pub request_id: ::core::option::Option<RequestId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub encrypted_key_share: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "4")]
+    pub node_signature: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignedIDkgComplaint {
@@ -1035,7 +1052,7 @@ pub struct PrefixPairSigShare {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgArtifactId {
-    #[prost(oneof = "i_dkg_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof = "i_dkg_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6, 7")]
     pub kind: ::core::option::Option<i_dkg_artifact_id::Kind>,
 }
 /// Nested message and enum types in `IDkgArtifactId`.
@@ -1054,6 +1071,8 @@ pub mod i_dkg_artifact_id {
         Opening(super::PrefixPairIDkg),
         #[prost(message, tag = "6")]
         SchnorrSigShare(super::PrefixPairSigShare),
+        #[prost(message, tag = "7")]
+        VetkdKeyShare(super::PrefixPairSigShare),
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]

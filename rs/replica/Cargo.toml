@@ -10,7 +10,7 @@ documentation.workspace = true
 clap = { workspace = true }
 hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
-ic-async-utils = { path = "../async_utils" }
+ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
 ic-btc-adapter-client = { path = "../bitcoin/client" }
 ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }
@@ -27,6 +27,7 @@ ic-interfaces = { path = "../interfaces" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-tracing-logging-layer = { path = "../monitoring/tracing/logging_layer" }
 ic-logger = { path = "../monitoring/logger" }
 ic-messaging = { path = "../messaging" }
 ic-metrics = { path = "../monitoring/metrics" }
@@ -57,7 +58,6 @@ tikv-jemalloc-ctl = "0.5"
 tikv-jemallocator = "0.5"
 tokio = { workspace = true }
 tracing = { workspace = true }
-tracing-flame = "0.2.0"
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]

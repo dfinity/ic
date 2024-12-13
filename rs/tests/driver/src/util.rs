@@ -90,6 +90,8 @@ pub const CFG_TEMPLATE_BYTES: &[u8] =
 // Requests are multiplexed over H2 requests.
 pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
 
+pub const MAX_TCP_ERROR_RETRIES: usize = 5;
+
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
     ic_agent::identity::BasicIdentity::from_pem(IDENTITY_PEM.as_bytes())
         .expect("Invalid secret key.")
@@ -822,7 +824,9 @@ pub async fn agent_with_client_identity(
     client: reqwest::Client,
     identity: impl Identity + 'static,
 ) -> Result<Agent, AgentError> {
-    let transport = ReqwestTransport::create_with_client(url, client)?.with_use_call_v3_endpoint();
+    let transport = ReqwestTransport::create_with_client(url, client)?
+        .with_use_call_v3_endpoint()
+        .with_max_tcp_errors_retries(MAX_TCP_ERROR_RETRIES);
     let a = Agent::builder()
         .with_transport(transport)
         .with_identity(identity)
@@ -844,36 +848,6 @@ pub async fn agent_with_client_identity(
         .unwrap();
     a.fetch_root_key().await?;
     Ok(a)
-}
-
-/// Creates an agent that routes ingress messages to the asynchronous V2 call endpoint.
-pub async fn agent_using_call_v2_endpoint(
-    url: &str,
-    addr_mapping: IpAddr,
-) -> Result<Agent, AgentError> {
-    let identity = get_identity();
-    let parsed_url = reqwest::Url::parse(url).expect("is valid url");
-
-    let reqwest = reqwest::Client::builder()
-        .timeout(AGENT_REQUEST_TIMEOUT)
-        .danger_accept_invalid_certs(true)
-        .resolve(
-            parsed_url.domain().expect("url has domain"),
-            (addr_mapping, 0).into(),
-        )
-        .build()
-        .expect("Is valid reqwest client");
-
-    let transport = ReqwestTransport::create_with_client(url, reqwest)?;
-
-    let agent = Agent::builder()
-        .with_transport(transport)
-        .with_identity(identity)
-        .build()
-        .unwrap();
-    agent.fetch_root_key().await?;
-
-    Ok(agent)
 }
 
 // Creates an identity to be used with `Agent`.
@@ -1509,14 +1483,25 @@ impl LogStream {
 pub struct MetricsFetcher {
     nodes: Vec<IcNodeSnapshot>,
     metrics: Vec<String>,
+    port: u16,
 }
 
 impl MetricsFetcher {
     /// Create a new [`MetricsFetcher`]
     pub fn new(nodes: impl Iterator<Item = IcNodeSnapshot>, metrics: Vec<String>) -> Self {
+        Self::new_with_port(nodes, metrics, 9090)
+    }
+
+    /// Create a new [`MetricsFetcher`] for a specific port
+    pub fn new_with_port(
+        nodes: impl Iterator<Item = IcNodeSnapshot>,
+        metrics: Vec<String>,
+        port: u16,
+    ) -> Self {
         Self {
             nodes: nodes.collect(),
             metrics,
+            port,
         }
     }
 
@@ -1559,7 +1544,7 @@ impl MetricsFetcher {
             IpAddr::V6(ipv6_addr) => ipv6_addr,
         };
 
-        let socket_addr: SocketAddr = SocketAddr::V6(SocketAddrV6::new(ip_addr, 9090, 0, 0));
+        let socket_addr: SocketAddr = SocketAddr::V6(SocketAddrV6::new(ip_addr, self.port, 0, 0));
         let url = format!("http://{}", socket_addr);
         let response = reqwest::get(url).await?.text().await?;
 

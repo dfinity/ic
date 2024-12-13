@@ -17,7 +17,7 @@ pub struct VetKdArgs {
     #[serde(with = "serde_bytes")]
     pub derivation_id: Vec<u8>,
     #[serde(with = "serde_bytes")]
-    pub encryption_key: Vec<u8>,
+    pub encryption_public_key: Vec<u8>,
 }
 
 impl fmt::Debug for VetKdArgs {
@@ -26,7 +26,10 @@ impl fmt::Debug for VetKdArgs {
             .field("ni_dkg_id", &self.ni_dkg_id)
             .field("derivation_path", &self.derivation_path)
             .field("derivation_id", &HexEncoding::from(&self.derivation_id))
-            .field("encryption_key", &HexEncoding::from(&self.encryption_key))
+            .field(
+                "encryption_public_key",
+                &HexEncoding::from(&self.encryption_public_key),
+            )
             .finish()
     }
 }
@@ -70,21 +73,24 @@ impl std::fmt::Debug for VetKdEncryptedKey {
 impl_display_using_debug!(VetKdEncryptedKey);
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub enum VedKdKeyShareCreationError {
+pub enum VetKdKeyShareCreationError {
     ThresholdSigDataNotFound(ThresholdSigDataNotFoundError),
     SecretKeyNotFound { dkg_id: NiDkgId, key_id: String },
     KeyIdInstantiationError(String),
     TransientInternalError(String),
 }
-impl_display_using_debug!(VedKdKeyShareCreationError);
+impl_display_using_debug!(VetKdKeyShareCreationError);
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub enum VetKdKeyShareVerificationError {}
+pub enum VetKdKeyShareVerificationError {
+    InvalidSignature,
+}
 impl_display_using_debug!(VetKdKeyShareVerificationError);
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum VetKdKeyShareCombinationError {
     InvalidShares(Vec<NodeId>),
+    UnsatisfiedReconstructionThreshold { threshold: u32, share_count: usize },
 }
 impl_display_using_debug!(VetKdKeyShareCombinationError);
 

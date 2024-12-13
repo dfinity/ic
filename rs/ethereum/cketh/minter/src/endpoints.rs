@@ -67,6 +67,7 @@ pub struct MinterInfo {
     pub smart_contract_address: Option<String>,
     pub eth_helper_contract_address: Option<String>,
     pub erc20_helper_contract_address: Option<String>,
+    pub deposit_with_subaccount_helper_contract_address: Option<String>,
     pub supported_ckerc20_tokens: Option<Vec<CkErc20Token>>,
     pub minimum_withdrawal_amount: Option<Nat>,
     pub ethereum_block_height: Option<CandidBlockTag>,

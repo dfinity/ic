@@ -136,6 +136,7 @@ mod tests {
         Principal::try_from_slice(&id.to_le_bytes()).unwrap()
     }
 
+    #[allow(deprecated)]
     fn test_state_args() -> InitArgs {
         InitArgs {
             btc_network: BtcNetwork::Regtest,
@@ -145,8 +146,9 @@ mod tests {
             max_time_in_queue_nanos: 0,
             min_confirmations: None,
             mode: crate::state::Mode::GeneralAvailability,
+            btc_checker_principal: Some(CanisterId::from(0)),
+            check_fee: None,
             kyt_principal: None,
-            new_kyt_principal: Some(CanisterId::from(0)),
             kyt_fee: None,
         }
     }

@@ -7,7 +7,6 @@ package(default_visibility = ["//visibility:public"])
 # WARNING! .git is the directory, not a regular file! only consume it in your rules if you know how exactly bazel works and understand implications!
 exports_files([
     ".git",
-    ".git/index",
     ".rclone.conf",
     ".rclone-anon.conf",
     "buf.yaml",
@@ -97,6 +96,17 @@ test_suite(
     name = "single_large_node",  # the "_test" postfix is dropped on purpose since this target is meant for interactive use.
     tags = ["manual"],
     tests = ["//rs/tests/testing_verification/testnets:single_large_node"],
+)
+
+### Bitcoind
+
+alias(
+    name = "bitcoind",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_arm64": "@bitcoin_core_darwin_arm64//:bitcoind",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@bitcoin_core_darwin_x86//:bitcoind",
+        "@bazel_tools//src/conditions:linux_x86_64": "@bitcoin_core_linux_x86//:bitcoind",
+    }),
 )
 
 ### Pocket IC

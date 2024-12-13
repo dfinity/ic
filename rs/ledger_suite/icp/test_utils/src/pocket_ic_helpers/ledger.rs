@@ -25,7 +25,7 @@ pub fn account_balance(pocket_ic: &PocketIc, account: &AccountIdentifier) -> Tok
     )
 }
 
-pub fn query_blocks(pocket_ic: &PocketIc, start: BlockIndex, length: usize) -> QueryBlocksResponse {
+pub fn query_blocks(pocket_ic: &PocketIc, start: BlockIndex, length: u64) -> QueryBlocksResponse {
     super::query_or_panic(
         pocket_ic,
         candid::Principal::from(LEDGER_CANISTER_ID),
@@ -41,7 +41,7 @@ pub fn query_encoded_blocks(
 ) -> Vec<Block> {
     let get_blocks_args = GetBlocksArgs {
         start: 0u64,
-        length: MAX_BLOCKS_PER_REQUEST,
+        length: MAX_BLOCKS_PER_REQUEST as u64,
     };
     let query_encoded_blocks_response: QueryEncodedBlocksResponse = super::query_or_panic(
         pocket_ic,
@@ -55,7 +55,7 @@ pub fn query_encoded_blocks(
         for archived in query_encoded_blocks_response.archived_blocks {
             let req = GetBlocksArgs {
                 start: archived.start,
-                length: archived.length as usize,
+                length: archived.length,
             };
             let canister_id = archived.callback.canister_id;
             let query_encoded_blocks_response: icp_ledger::GetEncodedBlocksResult =
