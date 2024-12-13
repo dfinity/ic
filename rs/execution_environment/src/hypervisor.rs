@@ -290,7 +290,6 @@ impl Hypervisor {
                     &embedder_config,
                     Arc::clone(&fd_factory),
                     Arc::clone(&state_reader),
-                    true,
                 )
                 .expect("Failed to start sandboxed execution controller");
                 Arc::new(executor)
