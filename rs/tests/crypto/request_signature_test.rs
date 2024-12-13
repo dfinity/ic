@@ -21,7 +21,7 @@ use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,
 };
 use ic_universal_canister::wasm;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, RngCore};
 use slog::{debug, info};
 
 fn main() -> Result<()> {
@@ -76,12 +76,18 @@ pub fn request_signature_test(env: TestEnv) {
                 logger,
                 "Testing valid requests from an ECDSA identity. Should succeed."
             );
-            test_valid_request_succeeds(
-                node_url.as_str(),
-                random_ecdsa_identity(rng),
-                canister.canister_id(),
-            )
-            .await;
+
+            for _ in 0..10 {
+                let identity = random_ecdsa_identity(rng);
+                for _ in 0..10_000 {
+                    test_valid_request_succeeds(
+                        node_url.as_str(),
+                        identity.clone(),
+                        canister.canister_id(),
+                    )
+                    .await;
+                }
+            }
 
             info!(
                 logger,
@@ -229,23 +235,28 @@ async fn test_valid_request_succeeds<T: Identity + 'static>(
     let identity_principal = identity.sender().unwrap();
     let agent = agent_with_identity(url, identity).await.unwrap();
 
+    let rng = &mut rand::thread_rng();
+    let length = rng.gen_range(0..1_000_000);
+    let mut random_data = vec![0; length];
+    rng.fill_bytes(&mut random_data);
+
     let res = agent
         .query(&canister_id, "query")
-        .with_arg(wasm().caller().reply_data_append().reply().build())
+        .with_arg(wasm().reply_data(random_data.as_slice()).build())
         .call()
         .await
         .unwrap();
 
-    assert_eq!(res, identity_principal.as_slice());
+    assert_eq!(res, random_data.as_slice());
 
     let res = agent
         .update(&canister_id, "update")
-        .with_arg(wasm().caller().reply_data_append().reply().build())
+        .with_arg(wasm().caller().reply_data(random_data.as_slice()).build())
         .call_and_wait()
         .await
         .unwrap();
 
-    assert_eq!(res, identity_principal.as_slice());
+    assert_eq!(res, random_data.as_slice());
 }
 
 async fn test_request_with_empty_signature_fails<T: Identity + 'static>(
