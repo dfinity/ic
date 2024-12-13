@@ -2,7 +2,8 @@ use anyhow::Result;
 use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
-use ic_cketh_minter::endpoints::CandidBlockTag;
+use ic_cketh_minter::endpoints::{CandidBlockTag, MinterInfo};
+use ic_cketh_minter::lifecycle::upgrade::UpgradeArg as MinterUpgradeArg;
 use ic_cketh_minter::lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg};
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_consensus_threshold_sig_system_test_utils::{
@@ -40,6 +41,10 @@ use std::env;
 const UNIVERSAL_VM_NAME: &str = "foundry";
 const DOCKER_NETWORK_NAME: &str = "ethereum";
 const FOUNDRY_PORT: u16 = 8545;
+// Keys setup by anvil
+const DEPLOYER_PRIVATE_KEY: &str =
+    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+const USER_PRIVATE_KEY: &str = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -149,7 +154,7 @@ fn ic_xc_cketh_test(env: TestEnv) {
         )
     });
 
-    let (_cketh_ledger, minter) = block_on(async {
+    let (_cketh_ledger, mut minter) = block_on(async {
         let minter_canister = create_canister(&application_subnet_runtime).await;
         let minter = minter_canister.canister_id().get().0;
         let cketh_ledger_canister = install_cketh_ledger(&application_subnet_runtime, minter).await;
@@ -175,6 +180,30 @@ fn ic_xc_cketh_test(env: TestEnv) {
             "getMinterAddress()(address)"
         ),
         minter_address.to_string()
+    );
+
+    block_on(async {
+        minter
+            .upgrade(MinterUpgradeArg {
+                ethereum_contract_address: Some(eth_deposit_helper_contract_address),
+                ..Default::default()
+            })
+            .await
+    });
+
+    let eth_deposit_helper_contract_address = block_on(async {
+        minter
+            .get_minter_info()
+            .await
+            .eth_helper_contract_address
+            .unwrap()
+    });
+    let cketh_deposit_tx_hash = send_smart_contract(
+        &docker_host,
+        &eth_deposit_helper_contract_address,
+        "deposit(bytes32)",
+        "0x1d9facb184cbe453de4841b6b9d9cc95bfc065344e485789b550544529020000",
+        Some("1ether"),
     );
 
     let erc20_deposit_helper_contract_address = deploy_smart_contract(
@@ -292,7 +321,7 @@ fn deploy_smart_contract(
     contract_name: &str,
     constructor_args: &str,
 ) -> String {
-    let json_output = foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm -v /config/{filename}:/contracts/{filename} foundry "forge create --json --rpc-url http://anvil:{FOUNDRY_PORT} --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 /contracts/{filename}:{contract_name} --constructor-args {constructor_args}""#)).unwrap();
+    let json_output = foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm -v /config/{filename}:/contracts/{filename} foundry "forge create --json --rpc-url http://anvil:{FOUNDRY_PORT} --private-key {DEPLOYER_PRIVATE_KEY} /contracts/{filename}:{contract_name} --constructor-args {constructor_args}""#)).unwrap();
     println!(
         "Deployed {filename} with constructor args {constructor_args}: {}",
         json_output
@@ -307,6 +336,23 @@ fn call_smart_contract(
     method: &str,
 ) -> String {
     foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm foundry "cast call {contract_address} '{method}' --rpc-url http://anvil:{FOUNDRY_PORT}""#)).unwrap().trim().to_string()
+}
+
+fn send_smart_contract(
+    foundry: &DeployedUniversalVm,
+    contract_address: &str,
+    method: &str,
+    arg: &str,
+    eth: Option<&str>,
+) -> String {
+    let value = eth.unwrap_or("0");
+    let json_output = foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm foundry "cast send --json {contract_address} '{method}' '{arg}' --value {value} --private-key {USER_PRIVATE_KEY} --rpc-url http://anvil:{FOUNDRY_PORT}""#)).unwrap().trim().to_string();
+    let parsed_output: serde_json::Value = serde_json::from_str(&json_output).unwrap();
+    assert_eq!(parsed_output["status"].as_str().unwrap(), "0x1");
+    parsed_output["transactionHash"]
+        .as_str()
+        .unwrap()
+        .to_string()
 }
 
 pub async fn create_canister(runtime: &Runtime) -> Canister<'_> {
@@ -330,5 +376,19 @@ impl<'a> CkEthMinterCanister<'a> {
             .update_("minter_address", candid, ())
             .await
             .unwrap()
+    }
+
+    async fn get_minter_info(&self) -> MinterInfo {
+        self.canister
+            .update_("get_minter_info", candid, ())
+            .await
+            .unwrap()
+    }
+
+    async fn upgrade(&mut self, arg: MinterUpgradeArg) {
+        self.canister
+            .upgrade_to_self_binary(Encode!(&MinterArg::UpgradeArg(arg)).unwrap())
+            .await
+            .unwrap();
     }
 }
