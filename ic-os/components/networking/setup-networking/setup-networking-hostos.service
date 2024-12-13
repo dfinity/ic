@@ -3,8 +3,8 @@ Description=Setup networking configuration for HostOS
 After=systemd-modules-load.service
 After=systemd-udev-settle.service
 Wants=systemd-udev-settle.service
-Wants=network-online.target
-After=network.target network-online.target
+Before=network.target network-online.target
+Before=systemd-networkd-wait-online.service
 
 [Service]
 Type=oneshot
