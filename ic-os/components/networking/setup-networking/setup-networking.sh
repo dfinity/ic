@@ -80,15 +80,12 @@ function gather_interfaces_by_speed() {
     echo "Interfaces sorted by speed: $SORTED_INTERFACES"
 
     INTERFACE_LIST=$(echo "$SORTED_INTERFACES" | paste -sd, -)
-
 }
 
 function configure_netplan() {
     echo "Configuring netplan..."
     local NETPLAN_TEMPLATE="/opt/ic/share/99-setup.yaml.template"
     local NETPLAN_OUTPUT="/run/netplan/99-setup.yaml"
-
-    
 
     mkdir -p /run/netplan
     cp "$NETPLAN_TEMPLATE" "$NETPLAN_OUTPUT"
@@ -99,7 +96,7 @@ function configure_netplan() {
     sed -i "s|{IPV6_GATEWAY}|$IPV6_GATEWAY|g" "$NETPLAN_OUTPUT"
 
     # Dynamically add ethernets for each interface
-    for IFACE in ${ALL_IFACES}; do
+    for IFACE in ${SORTED_INTERFACES}; do
         sed -i "/^  ethernets:/a \ \ \ \ $IFACE:\n      mtu: 1500\n      optional: true\n      lldp:\n        send: yes\n" "$NETPLAN_OUTPUT"
     done
 
