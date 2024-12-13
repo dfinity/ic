@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass, field
-from typing import Dict, Set, Tuple, List
+from typing import Dict, Set, Tuple, List, Optional
 
 from data_source.slack_findings_failover.parse_format import get_current_iso_timestamp, project_to_list_item
 from integration.slack.slack_block_kit_utils import (
@@ -22,7 +22,7 @@ class SlackScanResult:
     total_vulnerabilities: int = 0
     added_dependencies: Dict[Tuple[str, str, str, str], Set[str]] = field(default_factory=lambda: {})
     removed_dependencies: Dict[Tuple[str, str, str, str], Set[str]] = field(default_factory=lambda: {})
-    unrated_vulnerabilities_reminder: Dict[str,Tuple[str,Set[str]]] = field(default_factory=lambda: {})
+    unrated_vulnerabilities_reminder: Dict[str,Tuple[Optional[str],Set[str]]] = field(default_factory=lambda: {})
 
     def has_updates(self):
         return (
@@ -34,7 +34,7 @@ class SlackScanResult:
             or len(self.unrated_vulnerabilities_reminder) > 0
         )
 
-    def add_unrated_vulnerabilities_reminder(self, vuln_id: str, permalink: str, risk_assessors: Set[str]):
+    def add_unrated_vulnerabilities_reminder(self, vuln_id: str, permalink: Optional[str], risk_assessors: Set[str]):
         if vuln_id in self.unrated_vulnerabilities_reminder:
             raise RuntimeError(f"add_unrated_vulnerabilities_reminder was called twice with the same vuln_id {vuln_id}")
         self.unrated_vulnerabilities_reminder[vuln_id] = (permalink, risk_assessors)
@@ -86,7 +86,10 @@ class SlackScanResult:
         risk_assessors = set()
         res = []
         for vuln_id, (permalink, ras) in self.unrated_vulnerabilities_reminder.items():
-            res.append(f"<{permalink}|{vuln_id}>")
+            if permalink:
+                res.append(f"<{permalink}|{vuln_id}>")
+            else:
+                res.append(f"{vuln_id}")
             risk_assessors.update(ras)
 
         return ["The following findings need risk assessment from " + ", ".join(sorted(list(risk_assessors)))] + res
