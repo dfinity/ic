@@ -50,11 +50,10 @@ use ic_system_test_driver::{
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::*,
     },
-    util::{block_on, get_nns_node, MessageCanister, UniversalCanister},
+    util::{block_on, get_nns_node, MessageCanister},
 };
 use ic_types::{Height, ReplicaVersion};
 use slog::{debug, error, info, Logger};
-use std::fs::File;
 use std::{
     ffi::OsStr,
     fs::{self, OpenOptions},
@@ -63,6 +62,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
+use std::{fs::File, time::Duration};
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
@@ -219,7 +219,14 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
     let id = nns_node.effective_canister_id();
     let canister_id_hex: String = block_on({
         async move {
-            let canister = UniversalCanister::new_with_retries(&agent, id, &log2).await;
+            let canister = MessageCanister::new_with_retries(
+                &agent,
+                id,
+                &log2,
+                Duration::from_secs(120),
+                Duration::from_secs(1),
+            )
+            .await;
             hex::encode(canister.canister_id().as_slice())
         }
     });

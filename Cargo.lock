@@ -6662,6 +6662,7 @@ dependencies = [
  "mockall",
  "num-traits",
  "proptest",
+ "regex",
  "ripemd",
  "scopeguard",
  "serde",
@@ -11678,7 +11679,7 @@ dependencies = [
 
 [[package]]
 name = "ic-rosetta-api"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -17282,6 +17283,7 @@ dependencies = [
  "hyper 1.5.1",
  "hyper-util",
  "ic-agent 0.37.1",
+ "ic-bn-lib",
  "ic-boundary",
  "ic-btc-adapter",
  "ic-btc-interface",
