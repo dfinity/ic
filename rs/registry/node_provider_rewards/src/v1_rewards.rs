@@ -33,7 +33,7 @@ pub fn calculate_rewards(
     let mut rewards_data_per_node_provider = HashMap::default();
 
     let mut all_assigned_metrics = daily_node_metrics(subnet_metrics);
-    let subnets_systematic_fr = systematic_fr_per_subnet(&all_assigned_metrics);
+    let systematic_failure_rates = systematic_fr_per_subnet(&all_assigned_metrics);
     let node_provider_rewardables = rewardables_by_node_provider(rewardable_nodes);
 
     for (node_provider_id, node_provider_rewardables) in node_provider_rewardables {
@@ -57,7 +57,7 @@ pub fn calculate_rewards(
                 .collect::<HashMap<PrincipalId, Vec<DailyNodeMetrics>>>();
         computation_data.assigned_metrics = assigned_metrics.clone();
         let node_daily_fr =
-            nodes_idiosyncratic_fr(&mut logger, &assigned_metrics, &subnets_systematic_fr);
+            nodes_idiosyncratic_fr(&mut logger, &assigned_metrics, &systematic_failure_rates);
         computation_data.node_daily_fr = node_daily_fr.clone();
 
         let rewards = node_provider_rewards(
@@ -74,10 +74,17 @@ pub fn calculate_rewards(
         rewards_data_per_node_provider.insert(node_provider_id, computation_data);
     }
 
+    let systematic_failure_rates: HashMap<PrincipalId, Vec<(TimestampNanos, Decimal)>> =
+        systematic_failure_rates
+            .into_iter()
+            .map(|((subnet, ts), fr)| (subnet, (ts, fr)))
+            .into_group_map();
+
     RewardsPerNodeProvider {
         rewards_per_node_provider,
         rewards_log_per_node_provider,
         rewards_data_per_node_provider,
+        systematic_failure_rates,
     }
 }
 
