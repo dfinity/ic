@@ -222,7 +222,6 @@ fn ic_xc_cketh_test(env: TestEnv) {
         let minter_wasm = Wasm::from_file(
             env::var("CKETH_MINTER_WASM_PATH").expect("CKETH_MINTER_WASM_PATH not set"),
         );
-        let minter_wasm_hash = minter_wasm.sha256_hash();
         minter_wasm
             .install_with_retries_onto_canister(
                 &mut minter_canister,
@@ -231,11 +230,6 @@ fn ic_xc_cketh_test(env: TestEnv) {
             )
             .await
             .unwrap();
-        // status_of_nns_controlled_canister_satisfy(&logger, &minter_canister, |status| {
-        //     status.status == CanisterStatusType::Running
-        //         && status.module_hash.as_deref() == Some(minter_wasm_hash.as_ref())
-        // })
-        // .await;
 
         let minter_canister = CkEthMinterCanister {
             canister: minter_canister,
@@ -308,52 +302,6 @@ pub async fn create_canister(runtime: &Runtime) -> Canister<'_> {
         .await
         .expect("Unable to create canister")
 }
-
-// async fn status_of_nns_controlled_canister_satisfy<P: Fn(&CanisterStatusResult) -> bool>(
-//     logger: &slog::Logger,
-//     target_canister: &Canister<'_>,
-//     predicate: P,
-// ) {
-//     use dfn_candid::candid;
-//
-//     ic_system_test_driver::retry_with_msg_async!(
-//         format!(
-//             "calling canister_status of {} to check if it satisfies the predicate",
-//             target_canister.canister_id()
-//         ),
-//         logger,
-//         Duration::from_secs(60),
-//         Duration::from_secs(1),
-//         || async {
-//             let status: CanisterStatusResult = target_canister
-//                 .update_("canister_status", candid, (target_canister.as_record(),))
-//                 .await
-//                 .map_err(|e| anyhow!(e))?;
-//             info!(
-//                 logger,
-//                 "Canister status of {}: {:?}",
-//                 target_canister.canister_id(),
-//                 status
-//             );
-//             if predicate(&status) {
-//                 Ok(())
-//             } else {
-//                 bail!(
-//                     "Status of {} did not satisfy predicate",
-//                     target_canister.canister_id()
-//                 )
-//             }
-//         }
-//     )
-//     .await
-//     .unwrap_or_else(|e| {
-//         panic!(
-//             "Canister status of {} did not satisfy predicate: {}",
-//             target_canister.canister_id(),
-//             e
-//         )
-//     });
-// }
 
 struct LedgerCanister<'a> {
     canister: Canister<'a>,
