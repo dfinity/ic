@@ -528,26 +528,20 @@ impl UploadAndRestartStep {
         sudo systemctl start ic-replica;\
         sudo systemctl status ic-replica;";
 
-    /// Sets the right state permissions on `src`, by copying the permissions
-    /// of the target path, removing executable permission and giving read
-    /// permissions for the state to group and others.
-    fn cmd_set_permissions(target_path: &str, src: &str) -> String {
+    /// Sets the right state permissions on `target`, by copying the
+    /// permissions of the src path, removing executable permission and
+    /// giving read permissions for the target path to group and others.
+    fn cmd_set_permissions(src: &str, target: &str) -> String {
         let mut set_permissions = String::new();
-        set_permissions.push_str(&format!(
-            "sudo chmod -R --reference={} {};",
-            target_path, src
-        ));
-        set_permissions.push_str(&format!(
-            "sudo chown -R --reference={} {};",
-            target_path, src
-        ));
+        set_permissions.push_str(&format!("sudo chmod -R --reference={} {};", src, target));
+        set_permissions.push_str(&format!("sudo chown -R --reference={} {};", src, target));
         set_permissions.push_str(&format!(
             r"sudo find {} -type f -exec chmod a-x {{}} \;;",
-            src
+            target
         ));
         set_permissions.push_str(&format!(
             r"sudo find {} -type f -exec chmod go+r {{}} \;;",
-            src
+            target
         ));
         set_permissions
     }
