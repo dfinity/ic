@@ -16,7 +16,7 @@ fn bench_intmap(c: &mut Criterion<ProcessTime>) {
     for n in [10u64, 100, 1000].iter().cloned() {
         group.bench_function(BenchmarkId::new("patricia", n), |b| {
             b.iter(|| {
-                let m: IntMap<u64, _> = (0..n).map(|x| (x, value(x))).collect();
+                let m: IntMap<u64, _, _> = (0..n).map(|x| (x, value(x))).collect();
                 black_box(m);
             })
         });
@@ -37,7 +37,7 @@ fn bench_intmap(c: &mut Criterion<ProcessTime>) {
 
     let mut group = c.benchmark_group("Lookup");
     for n in [10u64, 100, 1000].iter().cloned() {
-        let patricia_map: IntMap<u64, Value> = (0..n).map(|x| (x, value(x))).collect();
+        let patricia_map: IntMap<u64, Value, _> = (0..n).map(|x| (x, value(x))).collect();
         let btree_map: Arc<BTreeMap<u64, Value>> =
             Arc::new((0..n).map(|x| (x, value(x))).collect());
         let hash_map: Arc<HashMap<u64, Value>> = Arc::new((0..n).map(|x| (x, value(x))).collect());
@@ -70,8 +70,9 @@ fn bench_intmap(c: &mut Criterion<ProcessTime>) {
 
     let mut group = c.benchmark_group("Union");
     for n in [10u64, 100, 1000].iter().cloned() {
-        let patricia_lmap: IntMap<u64, Value> = (0..n).map(|x| (x, value(x))).collect();
-        let patricia_rmap: IntMap<u64, Value> = (n / 2..n + n / 2).map(|x| (x, value(x))).collect();
+        let patricia_lmap: IntMap<u64, Value, _> = (0..n).map(|x| (x, value(x))).collect();
+        let patricia_rmap: IntMap<u64, Value, _> =
+            (n / 2..n + n / 2).map(|x| (x, value(x))).collect();
 
         let btree_lmap: Arc<BTreeMap<u64, Value>> =
             Arc::new((0..n).map(|x| (x, value(x))).collect());
@@ -122,7 +123,7 @@ fn bench_intmap(c: &mut Criterion<ProcessTime>) {
 
     let mut group = c.benchmark_group("Iter");
     for n in [10u64, 100, 1000].iter().cloned() {
-        let patricia_map: IntMap<u64, Value> = (0..n).map(|x| (x, value(x))).collect();
+        let patricia_map: IntMap<u64, Value, _> = (0..n).map(|x| (x, value(x))).collect();
         let btree_map: Arc<BTreeMap<u64, Value>> =
             Arc::new((0..n).map(|x| (x, value(x))).collect());
         let hash_map: Arc<HashMap<u64, Value>> = Arc::new((0..n).map(|x| (x, value(x))).collect());

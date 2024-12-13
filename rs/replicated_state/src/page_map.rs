@@ -168,7 +168,7 @@ impl<'a> WriteBuffer<'a> {
 /// simply have a copy of the whole PageMap in every canister snapshot.
 #[derive(Clone, Debug, Default)]
 // pub(crate) struct PageDelta(IntMap<u64, Page>);
-pub(crate) struct PageDelta(IntMap<PageIndex, Page>);
+pub(crate) struct PageDelta(IntMap<PageIndex, Page, u64>);
 
 impl PageDelta {
     /// Gets content of the page at the specified index.

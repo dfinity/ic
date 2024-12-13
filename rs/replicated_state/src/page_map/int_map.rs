@@ -4,6 +4,8 @@
 mod test;
 
 use std::cmp::Ordering;
+use std::fmt::Debug;
+use std::ops::{BitAnd, BitOr, BitXor, Not, Shl, Sub};
 use std::sync::Arc;
 
 use ic_validate_eq::ValidateEq;
@@ -11,7 +13,7 @@ use phantom_newtype::Id;
 
 /// Big-endian patricia trees.
 #[derive(Clone, Debug, Default)]
-enum Tree<K, V> {
+enum Tree<K, V, I> {
     /// An empty tree.
     /// Allowing empty trees simplifies the code a bit.
     #[default]
@@ -41,10 +43,10 @@ enum Tree<K, V> {
     ///
     ///   * 0 ≤ branching_bit ≤ 63.
     Branch {
-        prefix: u64,
+        prefix: I,
         branching_bit: u8,
-        left: Arc<Tree<K, V>>,
-        right: Arc<Tree<K, V>>,
+        left: Arc<Tree<K, V, I>>,
+        right: Arc<Tree<K, V, I>>,
     },
 }
 
@@ -52,10 +54,15 @@ enum Tree<K, V> {
 ///
 /// Precondition: p0 ≠ p1
 #[inline]
-fn join<K, V>(p0: u64, t0: Arc<Tree<K, V>>, p1: u64, t1: Arc<Tree<K, V>>) -> Tree<K, V> {
+fn join<K, V, I: IntKey>(
+    p0: I,
+    t0: Arc<Tree<K, V, I>>,
+    p1: I,
+    t1: Arc<Tree<K, V, I>>,
+) -> Tree<K, V, I> {
     let b = branching_bit(p0, p1);
 
-    if p0 & (1 << b) == 0 {
+    if p0 & (I::one() << b) == I::zero() {
         Tree::Branch {
             prefix: mask(p0, b),
             branching_bit: b,
@@ -102,25 +109,76 @@ fn take_arc<T: Clone>(p: Arc<T>) -> T {
 /// See the comments of the public `bounds()` method.
 pub(crate) type Bounds<'a, K, V> = (Option<(&'a K, &'a V)>, Option<(&'a K, &'a V)>);
 
-pub trait AsInt {
-    fn as_int(&self) -> u64;
+pub trait AsInt<I: IntKey> {
+    fn as_int(&self) -> I;
 }
 
-impl AsInt for u64 {
+impl AsInt<u64> for u64 {
     fn as_int(&self) -> u64 {
         *self
     }
 }
 
-impl<Entity> AsInt for Id<Entity, u64> {
+impl<Entity> AsInt<u64> for Id<Entity, u64> {
     fn as_int(&self) -> u64 {
         self.get()
     }
 }
 
-impl<K, V> Tree<K, V>
+pub trait IntKey:
+    Sized
+    + Eq
+    + Ord
+    + Copy
+    + Sub<Self, Output = Self>
+    + BitAnd<Self, Output = Self>
+    + BitOr<Self, Output = Self>
+    + BitXor<Self, Output = Self>
+    + Not<Output = Self>
+    + Shl<u8, Output = Self>
+    + Debug
+{
+    fn zero() -> Self;
+    fn one() -> Self;
+    fn leading_zeros(self) -> u32;
+
+    fn size_bits() -> u8 {
+        size_of::<Self>() as u8 * 8
+    }
+}
+
+impl IntKey for u64 {
+    fn zero() -> Self {
+        0
+    }
+
+    fn one() -> Self {
+        1
+    }
+
+    fn leading_zeros(self) -> u32 {
+        self.leading_zeros()
+    }
+}
+
+impl IntKey for u128 {
+    fn zero() -> Self {
+        0
+    }
+
+    fn one() -> Self {
+        1
+    }
+
+    fn leading_zeros(self) -> u32 {
+        self.leading_zeros()
+    }
+}
+
+impl<K, V, I> Tree<K, V, I>
 where
-    K: AsInt,
+    K: AsInt<I>,
+    I: IntKey,
 {
     fn get(&self, key: &K) -> Option<&V> {
         match self {
@@ -140,7 +198,7 @@ where
             } => {
                 if !matches_prefix(key.as_int(), *prefix, *branching_bit) {
                     None
-                } else if key.as_int() & (1 << branching_bit) == 0 {
+                } else if key.as_int() & (I::one() << *branching_bit) == I::zero() {
                     (*left).get(key)
                 } else {
                     (*right).get(key)
@@ -150,10 +208,11 @@ where
     }
 }
 
-impl<K, V> Tree<K, V>
+impl<K, V, I> Tree<K, V, I>
 where
-    K: AsInt + Ord + Copy,
+    K: AsInt<I> + Ord + Copy,
     V: Clone,
+    I: IntKey,
 {
     /// See the comments of the public `bounds()` method.
     fn bounds(&self, key: &K) -> Bounds<K, V> {
@@ -173,7 +232,7 @@ where
                 Ordering::Less => (None, (*left).min()),
                 Ordering::Greater => ((*right).max(), None),
                 Ordering::Equal => {
-                    if key.as_int() & (1 << branching_bit) == 0 {
+                    if key.as_int() & (I::one() << *branching_bit) == I::zero() {
                         let (start, end) = (*left).bounds(key);
                         if end.is_none() {
                             (start, (*right).min())
@@ -218,7 +277,7 @@ where
                 right,
             } => {
                 if matches_prefix(key.as_int(), prefix, branching_bit) {
-                    if (&key).as_int() & (1 << branching_bit) == 0 {
+                    if (&key).as_int() & (I::one() << branching_bit) == I::zero() {
                         let (left, res) = with_arc2(left, |l| l.insert(key, value));
                         (
                             Tree::Branch {
@@ -272,7 +331,7 @@ where
                 left,
                 right,
             } if matches_prefix(key.as_int(), prefix, branching_bit) => {
-                if key.as_int() & (1 << branching_bit) == 0 {
+                if key.as_int() & (I::one() << branching_bit) == I::zero() {
                     let (left, res) = take_arc(left).remove(key);
                     match left {
                         Tree::Empty => (take_arc(right), res),
@@ -348,7 +407,7 @@ where
                         right: right1,
                     };
                     // Pattern p1 contains p0 as a sub-pattern.
-                    if p1 & (1 << b0) == 0 {
+                    if p1 & (I::one() << b0) == I::zero() {
                         Tree::Branch {
                             prefix: p0,
                             branching_bit: b0,
@@ -371,7 +430,7 @@ where
                         left: left0,
                         right: right0,
                     };
-                    if p0 & (1 << b1) == 0 {
+                    if p0 & (I::one() << b1) == I::zero() {
                         Tree::Branch {
                             prefix: p1,
                             branching_bit: b1,
@@ -406,7 +465,7 @@ where
     }
 }
 
-impl<K, V> Tree<K, V> {
+impl<K, V, I> Tree<K, V, I> {
     fn len(&self) -> usize {
         match self {
             Tree::Empty => 0,
@@ -479,15 +538,15 @@ impl<K, V> Tree<K, V> {
 /// September 1998, pages 77-86,
 /// http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.37.5452
 #[derive(Clone, Debug)]
-pub struct IntMap<K, V>(Tree<K, V>);
+pub struct IntMap<K, V, I>(Tree<K, V, I>);
 
-impl<K, V> Default for IntMap<K, V> {
+impl<K, V, I> Default for IntMap<K, V, I> {
     fn default() -> Self {
         Self(Tree::Empty)
     }
 }
 
-impl<K, V> IntMap<K, V> {
+impl<K, V, I> IntMap<K, V, I> {
     /// Creates a new empty map.
     pub fn new() -> Self {
         Self::default()
@@ -497,7 +556,7 @@ impl<K, V> IntMap<K, V> {
     /// The keys are guaranteed to be sorted.
     ///
     /// A full traversal requires O(N) operations.
-    pub fn iter(&self) -> IntMapIter<'_, K, V> {
+    pub fn iter(&self) -> IntMapIter<'_, K, V, I> {
         IntMapIter::new(&self.0)
     }
 
@@ -530,10 +589,11 @@ impl<K, V> IntMap<K, V> {
     }
 }
 
-impl<K, V> IntMap<K, V>
+impl<K, V, I> IntMap<K, V, I>
 where
-    K: AsInt + Ord + Copy,
+    K: AsInt<I> + Ord + Copy,
     V: Clone,
+    I: IntKey,
 {
     /// Looks up a value by integer key.
     ///
@@ -596,14 +656,15 @@ where
     }
 }
 
-impl<K, V> std::iter::FromIterator<(K, V)> for IntMap<K, V>
+impl<K, V, I> std::iter::FromIterator<(K, V)> for IntMap<K, V, I>
 where
-    K: AsInt + Ord + Copy,
+    K: AsInt<I> + Ord + Copy,
     V: Clone,
+    I: IntKey,
 {
-    fn from_iter<I>(iter: I) -> Self
+    fn from_iter<Iter>(iter: Iter) -> Self
     where
-        I: IntoIterator<Item = (K, V)>,
+        Iter: IntoIterator<Item = (K, V)>,
     {
         let mut m = Self::new();
         for (k, v) in iter {
@@ -613,7 +674,7 @@ where
     }
 }
 
-impl<K: PartialEq, T: PartialEq> PartialEq for IntMap<K, T> {
+impl<K: PartialEq, V: PartialEq, I> PartialEq for IntMap<K, V, I> {
     fn eq(&self, other: &Self) -> bool {
         if self.len() != other.len() {
             return false;
@@ -622,9 +683,9 @@ impl<K: PartialEq, T: PartialEq> PartialEq for IntMap<K, T> {
     }
 }
 
-impl<K: Eq, T: Eq> Eq for IntMap<K, T> {}
+impl<K: Eq, V: Eq, I> Eq for IntMap<K, V, I> {}
 
-impl<K, V> ValidateEq for IntMap<K, V>
+impl<K, V, I> ValidateEq for IntMap<K, V, I>
 where
     K: PartialEq + std::fmt::Debug,
     V: ValidateEq,
@@ -653,15 +714,15 @@ where
 }
 
 #[derive(Clone, Debug)]
-pub struct MutableIntMap<K, V>(Tree<K, V>);
+pub struct MutableIntMap<K, V, I>(Tree<K, V, I>);
 
-impl<K, V> Default for MutableIntMap<K, V> {
+impl<K, V, I> Default for MutableIntMap<K, V, I> {
     fn default() -> Self {
         Self(Tree::Empty)
     }
 }
 
-impl<K, V> MutableIntMap<K, V> {
+impl<K, V, I> MutableIntMap<K, V, I> {
     /// Creates a new empty map.
     pub fn new() -> Self {
         Self::default()
@@ -671,7 +732,7 @@ impl<K, V> MutableIntMap<K, V> {
     /// The keys are guaranteed to be sorted.
     ///
     /// A full traversal requires O(N) operations.
-    pub fn iter(&self) -> IntMapIter<'_, K, V> {
+    pub fn iter(&self) -> IntMapIter<'_, K, V, I> {
         IntMapIter::new(&self.0)
     }
 
@@ -688,6 +749,12 @@ impl<K, V> MutableIntMap<K, V> {
     /// A full traversal requires O(N) operations.
     pub fn values(&self) -> impl Iterator<Item = &V> {
         IntMapIter::new(&self.0).map(|(_k, v)| v)
+    }
+
+    /// Returns the smallest key in the given tree.
+    /// If the tree is empty, then it returns `None`.
+    pub fn min_key(&self) -> Option<&K> {
+        self.0.min().map(|(k, _v)| k)
     }
 
     /// Returns the largest key in the given tree.
@@ -711,10 +778,11 @@ impl<K, V> MutableIntMap<K, V> {
     }
 }
 
-impl<K, V> MutableIntMap<K, V>
+impl<K, V, I> MutableIntMap<K, V, I>
 where
-    K: AsInt + Ord + Copy,
+    K: AsInt<I> + Ord + Copy,
     V: Clone,
+    I: IntKey,
 {
     /// Looks up a value by integer key.
     ///
@@ -779,19 +847,31 @@ where
     /// The keys are guaranteed to be sorted.
     ///
     /// A full traversal requires O(N) operations.
-    pub fn into_iter(self) -> IntMapIntoIter<K, V> {
+    pub fn into_iter(self) -> IntMapIntoIter<K, V, I> {
         IntMapIntoIter::new(self.0)
+    }
+
+    /// Splits the collection into two at the given key. Returns everything after
+    /// the given key, including the key.
+    //
+    // TODO: Make this `O(log N)` instead of `O(N)`.
+    pub fn split_off(&mut self, key: &K) -> Self {
+        let tree = std::mem::take(&mut self.0);
+        let right;
+        (*self, right) = IntMapIntoIter::new(tree).partition(|(k, _v)| k < key);
+        right
     }
 }
 
-impl<K, V> std::iter::FromIterator<(K, V)> for MutableIntMap<K, V>
+impl<K, V, I> std::iter::FromIterator<(K, V)> for MutableIntMap<K, V, I>
 where
-    K: AsInt + Ord + Copy,
+    K: AsInt<I> + Ord + Copy,
     V: Clone,
+    I: IntKey,
 {
-    fn from_iter<I>(iter: I) -> Self
+    fn from_iter<Iter>(iter: Iter) -> Self
     where
-        I: IntoIterator<Item = (K, V)>,
+        Iter: IntoIterator<Item = (K, V)>,
     {
         let mut m = Self::new();
         for (k, v) in iter {
@@ -801,7 +881,23 @@ where
     }
 }
 
-impl<K: PartialEq, T: PartialEq> PartialEq for MutableIntMap<K, T> {
+impl<K, V, I> Extend<(K, V)> for MutableIntMap<K, V, I>
+where
+    K: AsInt<I> + Ord + Copy,
+    V: Clone,
+    I: IntKey,
+{
+    fn extend<Iter>(&mut self, iter: Iter)
+    where
+        Iter: IntoIterator<Item = (K, V)>,
+    {
+        for (k, v) in iter {
+            self.insert(k, v);
+        }
+    }
+}
+
+impl<K: PartialEq, T: PartialEq, I> PartialEq for MutableIntMap<K, T, I> {
     fn eq(&self, other: &Self) -> bool {
         if self.len() != other.len() {
             return false;
@@ -810,9 +906,9 @@ impl<K: PartialEq, T: PartialEq> PartialEq for MutableIntMap<K, T> {
     }
 }
 
-impl<K: Eq, T: Eq> Eq for MutableIntMap<K, T> {}
+impl<K: Eq, T: Eq, I> Eq for MutableIntMap<K, T, I> {}
 
-impl<K, V> ValidateEq for MutableIntMap<K, V>
+impl<K, V, I> ValidateEq for MutableIntMap<K, V, I>
 where
     K: PartialEq + std::fmt::Debug,
     V: ValidateEq,
@@ -841,19 +937,19 @@ where
 }
 
 /// Iterates over an IntMap, visiting keys in sorted order.
-pub struct IntMapIter<'a, K, V>(
+pub struct IntMapIter<'a, K, V, I>(
     /// The stack of subtrees we haven't visited yet.
     /// Trees in the back should be visited first.
-    Vec<&'a Tree<K, V>>,
+    Vec<&'a Tree<K, V, I>>,
 );
 
-impl<'a, K, V> IntMapIter<'a, K, V> {
-    fn new(root: &'a Tree<K, V>) -> Self {
+impl<'a, K, V, I> IntMapIter<'a, K, V, I> {
+    fn new(root: &'a Tree<K, V, I>) -> Self {
         Self(vec![root])
     }
 }
 
-impl<'a, K, V> std::iter::Iterator for IntMapIter<'a, K, V> {
+impl<'a, K, V, I> std::iter::Iterator for IntMapIter<'a, K, V, I> {
     type Item = (&'a K, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -873,22 +969,23 @@ impl<'a, K, V> std::iter::Iterator for IntMapIter<'a, K, V> {
 }
 
 /// Iterates over an IntMap, visiting keys in sorted order.
-pub struct IntMapIntoIter<K, V>(
+pub struct IntMapIntoIter<K, V, I>(
     /// The stack of subtrees we haven't visited yet.
     /// Trees in the back should be visited first.
-    Vec<Tree<K, V>>,
+    Vec<Tree<K, V, I>>,
 );
 
-impl<K, V> IntMapIntoIter<K, V> {
-    fn new(root: Tree<K, V>) -> Self {
+impl<K, V, I> IntMapIntoIter<K, V, I> {
+    fn new(root: Tree<K, V, I>) -> Self {
         Self(vec![root])
     }
 }
 
-impl<K, V> std::iter::Iterator for IntMapIntoIter<K, V>
+impl<K, V, I> std::iter::Iterator for IntMapIntoIter<K, V, I>
 where
     K: Copy,
     V: Clone,
+    I: Copy,
 {
     type Item = (K, V);
 
@@ -910,22 +1007,22 @@ where
 
 /// Finds the most significant bit in which two bit patterns disagree.
 #[inline]
-fn branching_bit(p0: u64, p1: u64) -> u8 {
+fn branching_bit<I: IntKey>(p0: I, p1: I) -> u8 {
     debug_assert_ne!(p0, p1);
-    let zs = (p0 ^ p1).leading_zeros();
-    (63 - zs) as u8
+    let zs = (p0 ^ p1).leading_zeros() as u8;
+    I::size_bits() - 1 - zs
 }
 
 /// Clears all the key bits at or lower than the branching bit.
 #[inline]
-fn mask(key: u64, branching_bit: u8) -> u64 {
-    debug_assert!(branching_bit <= 63);
-    let m = 1 << branching_bit;
-    key & !(m | (m - 1))
+fn mask<I: IntKey>(key: I, branching_bit: u8) -> I {
+    debug_assert!(branching_bit < I::size_bits());
+    let m = I::one() << branching_bit;
+    key & !(m | (m - I::one()))
 }
 
 /// Checks if the key matches the branch prefix.
 #[inline]
-fn matches_prefix(key: u64, branch_prefix: u64, branching_bit: u8) -> bool {
+fn matches_prefix<I: IntKey>(key: I, branch_prefix: I, branching_bit: u8) -> bool {
     mask(key, branching_bit) == branch_prefix
 }
