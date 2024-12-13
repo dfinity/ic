@@ -19,6 +19,7 @@ class Command(Enum):
 
 def main():
     parser = argparse.ArgumentParser(prog="GitCiHelper", description="Tool for automating git operations for CI")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose mode")
     parser.add_argument(
         "--repo-root", help="Root of the repository", default=pathlib.Path("."), type=pathlib.Path, dest="repo_root"
     )
