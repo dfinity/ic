@@ -123,6 +123,7 @@ type RefreshVotingPowerResponse = record {
   // minimal until we discover there is a "real need". YAGNI.
 };
 
+// KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
 type Command = variant {
   Spawn : Spawn;
   Split : Split;
@@ -137,6 +138,8 @@ type Command = variant {
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
   RefreshVotingPower : RefreshVotingPower;
+
+  // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
 };
 
 type Command_1 = variant {
@@ -344,15 +347,18 @@ type GovernanceCachedMetrics = record {
   };
   dissolving_neurons_count_buckets : vec record { nat64; nat64 };
   dissolving_neurons_e8s_buckets_ect : vec record { nat64; float64 };
-  non_self_authenticating_controller_neuron_subset_metrics : opt NeuronSubsetMetrics;
   dissolving_neurons_count : nat64;
   dissolving_neurons_e8s_buckets : vec record { nat64; float64 };
   total_staked_maturity_e8s_equivalent_seed : nat64;
   community_fund_total_staked_e8s : nat64;
   not_dissolving_neurons_e8s_buckets_seed : vec record { nat64; float64 };
-  public_neuron_subset_metrics : opt NeuronSubsetMetrics;
   timestamp_seconds : nat64;
   seed_neuron_count : nat64;
+
+  non_self_authenticating_controller_neuron_subset_metrics : opt NeuronSubsetMetrics;
+  public_neuron_subset_metrics : opt NeuronSubsetMetrics;
+  declining_voting_power_neuron_subset_metrics : opt NeuronSubsetMetrics;
+  fully_lost_voting_power_neuron_subset_metrics : opt NeuronSubsetMetrics;
 };
 
 type GovernanceError = record {
@@ -490,6 +496,7 @@ type ManageNeuron = record {
   neuron_id_or_subaccount : opt NeuronIdOrSubaccount;
 };
 
+// KEEP THIS IN SYNC WITH COMMAND!
 type ManageNeuronCommandRequest = variant {
   Spawn : Spawn;
   Split : Split;
@@ -503,6 +510,9 @@ type ManageNeuronCommandRequest = variant {
   StakeMaturity : StakeMaturity;
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
+  RefreshVotingPower : RefreshVotingPower;
+
+  // KEEP THIS IN SYNC WITH COMMAND!
 };
 
 type ManageNeuronRequest = record {
@@ -570,6 +580,32 @@ type NetworkEconomics = record {
   minimum_icp_xdr_rate : nat64;
   maximum_node_provider_rewards_e8s : nat64;
   neurons_fund_economics : opt NeuronsFundEconomics;
+
+  // Parameters that affect the voting power of neurons.
+  voting_power_economics : opt VotingPowerEconomics;
+};
+
+// Parameters that affect the voting power of neurons.
+type VotingPowerEconomics = record {
+  // If a neuron has not "refreshed" its voting power after this amount of time,
+  // its deciding voting power starts decreasing linearly. See also
+  // clear_following_after_seconds.
+  //
+  // For explanation of what "refresh" means in this context, see
+  // https://dashboard.internetcomputer.org/proposal/132411
+  //
+  // Initially, set to 0.5 years. (The nominal length of a year is 365.25 days).
+  start_reducing_voting_power_after_seconds : opt nat64;
+
+  // After a neuron has experienced voting power reduction for this amount of
+  // time, a couple of things happen:
+  //
+  //     1. Deciding voting power reaches 0.
+  //
+  //     2. Its following on topics other than NeuronManagement are cleared.
+  //
+  // Initially, set to 1/12 years.
+  clear_following_after_seconds : opt nat64;
 };
 
 type Neuron = record {
@@ -729,16 +765,25 @@ type NeuronStakeTransfer = record {
 };
 
 type NeuronSubsetMetrics = record {
-  total_maturity_e8s_equivalent : opt nat64;
-  maturity_e8s_equivalent_buckets : vec record { nat64; nat64 };
-  voting_power_buckets : vec record { nat64; nat64 };
-  total_staked_e8s : opt nat64;
   count : opt nat64;
+
+  total_staked_e8s : opt nat64;
+  total_maturity_e8s_equivalent : opt nat64;
   total_staked_maturity_e8s_equivalent : opt nat64;
-  staked_maturity_e8s_equivalent_buckets : vec record { nat64; nat64 };
-  staked_e8s_buckets : vec record { nat64; nat64 };
+
   total_voting_power : opt nat64;
+  total_deciding_voting_power : opt nat64;
+  total_potential_voting_power : opt nat64;
+
   count_buckets : vec record { nat64; nat64 };
+
+  staked_e8s_buckets : vec record { nat64; nat64 };
+  maturity_e8s_equivalent_buckets : vec record { nat64; nat64 };
+  staked_maturity_e8s_equivalent_buckets : vec record { nat64; nat64 };
+
+  voting_power_buckets : vec record { nat64; nat64 };
+  deciding_voting_power_buckets : vec record { nat64; nat64 };
+  potential_voting_power_buckets : vec record { nat64; nat64 };
 };
 
 type NeuronsFundAuditInfo = record {

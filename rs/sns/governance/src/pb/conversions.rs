@@ -3422,13 +3422,15 @@ impl From<pb_api::UpgradeJournal> for pb::UpgradeJournal {
 }
 
 impl From<pb::GetUpgradeJournalRequest> for pb_api::GetUpgradeJournalRequest {
-    fn from(_: pb::GetUpgradeJournalRequest) -> Self {
-        Self {}
+    fn from(request: pb::GetUpgradeJournalRequest) -> Self {
+        let pb::GetUpgradeJournalRequest { limit, offset } = request;
+        Self { limit, offset }
     }
 }
 impl From<pb_api::GetUpgradeJournalRequest> for pb::GetUpgradeJournalRequest {
-    fn from(_: pb_api::GetUpgradeJournalRequest) -> Self {
-        Self {}
+    fn from(request: pb_api::GetUpgradeJournalRequest) -> Self {
+        let pb_api::GetUpgradeJournalRequest { limit, offset } = request;
+        Self { limit, offset }
     }
 }
 
@@ -3440,6 +3442,7 @@ impl From<pb::GetUpgradeJournalResponse> for pb_api::GetUpgradeJournalResponse {
             target_version: item.target_version.map(|x| x.into()),
             deployed_version: item.deployed_version.map(|x| x.into()),
             upgrade_journal: item.upgrade_journal.map(|x| x.into()),
+            upgrade_journal_entry_count: item.upgrade_journal_entry_count,
         }
     }
 }
@@ -3451,6 +3454,7 @@ impl From<pb_api::GetUpgradeJournalResponse> for pb::GetUpgradeJournalResponse {
             target_version: item.target_version.map(|x| x.into()),
             deployed_version: item.deployed_version.map(|x| x.into()),
             upgrade_journal: item.upgrade_journal.map(|x| x.into()),
+            upgrade_journal_entry_count: item.upgrade_journal_entry_count,
         }
     }
 }
@@ -3705,5 +3709,17 @@ impl From<pb_api::ClaimSwapNeuronsError> for pb::ClaimSwapNeuronsError {
             pb_api::ClaimSwapNeuronsError::Unauthorized => pb::ClaimSwapNeuronsError::Unauthorized,
             pb_api::ClaimSwapNeuronsError::Internal => pb::ClaimSwapNeuronsError::Internal,
         }
+    }
+}
+
+impl From<pb_api::RefreshCachedUpgradeStepsRequest> for pb::RefreshCachedUpgradeStepsRequest {
+    fn from(_: pb_api::RefreshCachedUpgradeStepsRequest) -> Self {
+        Self {}
+    }
+}
+
+impl From<pb::RefreshCachedUpgradeStepsResponse> for pb_api::RefreshCachedUpgradeStepsResponse {
+    fn from(_: pb::RefreshCachedUpgradeStepsResponse) -> Self {
+        Self {}
     }
 }

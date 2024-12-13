@@ -29,7 +29,7 @@ env:
     github.event_name == 'workflow_dispatch' && github.event.inputs.targets ||
     '//rs/tests/nns:node_removal_from_registry_test' }}
   JOBS: |
-    ${{ github.event_name == 'schedule' && '20' ||
+    ${{ github.event_name == 'schedule' && '12' ||
     github.event_name == 'workflow_dispatch' && github.event.inputs.jobs ||
     '32' }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
@@ -48,7 +48,7 @@ jobs:
       group: ln1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:6a548dd4cfee96260b6938fddaa74abc86fc0df5c407d4eef135694b64c288e3
+      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
       options: >-
         -e NODE_NAME -e KUBECONFIG
         --privileged --cgroupns host
@@ -103,7 +103,7 @@ jobs:
       group: ln1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:6a548dd4cfee96260b6938fddaa74abc86fc0df5c407d4eef135694b64c288e3
+      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
       options: >-
         -e NODE_NAME -e KUBECONFIG
         --privileged --cgroupns host

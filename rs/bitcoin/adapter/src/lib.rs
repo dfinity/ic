@@ -52,10 +52,10 @@ mod transaction_store;
 // malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
 
-use crate::{router::start_main_event_loop, stream::StreamEvent};
-pub use blockchainstate::BlockchainState;
-pub use get_successors_handler::GetSuccessorsHandler;
-pub use rpc_server::start_grpc_server;
+use crate::{
+    blockchainstate::BlockchainState, get_successors_handler::GetSuccessorsHandler,
+    router::start_main_event_loop, rpc_server::start_grpc_server, stream::StreamEvent,
+};
 
 /// This struct is used to represent commands given to the adapter in order to interact
 /// with BTC nodes.
@@ -121,7 +121,7 @@ trait ProcessBitcoinNetworkMessage {
 
 /// Commands sent back to the router in order perform actions on the blockchain state.
 #[derive(Debug)]
-pub enum BlockchainManagerRequest {
+pub(crate) enum BlockchainManagerRequest {
     /// Inform the adapter to enqueue the next block headers into the syncing queue.
     EnqueueNewBlocksToDownload(Vec<BlockHeader>),
     /// Inform the adapter to prune the following block hashes from the cache.
@@ -131,7 +131,7 @@ pub enum BlockchainManagerRequest {
 /// The transaction manager is owned by a single thread which listens on a channel
 /// for TransactionManagerRequest messages and executes the corresponding method.
 #[derive(Debug)]
-pub enum TransactionManagerRequest {
+pub(crate) enum TransactionManagerRequest {
     /// Command for executing send_transaction
     SendTransaction(Vec<u8>),
 }
@@ -139,7 +139,7 @@ pub enum TransactionManagerRequest {
 /// The type tracks when then adapter should become idle. The type is
 /// thread-safe.
 #[derive(Clone)]
-pub struct AdapterState {
+pub(crate) struct AdapterState {
     /// The field contains how long the adapter should wait before becoming idle.
     idle_seconds: u64,
 
@@ -209,22 +209,14 @@ pub fn start_server(
 
     let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
     let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(&config, metrics_registry)));
-    let get_successors_handler = GetSuccessorsHandler::new(
-        &config,
-        // The get successor handler should be low latency, and instead of not sharing state and
-        // offloading the computation to an event loop here we directly access the shared state.
-        blockchain_state.clone(),
-        blockchain_manager_tx,
-        metrics_registry,
-    );
-
     let (transaction_manager_tx, transaction_manager_rx) = channel(100);
 
     start_grpc_server(
         config.clone(),
         log.clone(),
         tx,
-        get_successors_handler,
+        blockchain_state.clone(),
+        blockchain_manager_tx,
         transaction_manager_tx,
         metrics_registry,
     );

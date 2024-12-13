@@ -844,6 +844,7 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
 
 mod metrics_tests {
 
+    use ic_nns_common::pb::v1::ProposalId;
     use maplit::btreemap;
 
     use crate::{
@@ -858,6 +859,7 @@ mod metrics_tests {
     #[test]
     fn test_metrics_total_voting_power() {
         let proposal_1 = ProposalData {
+            id: Some(ProposalId { id: 1 }),
             proposal: Some(Proposal {
                 title: Some("Foo Foo Bar".to_string()),
                 action: Some(proposal::Action::Motion(Motion {
@@ -875,6 +877,7 @@ mod metrics_tests {
         };
 
         let proposal_2 = ProposalData {
+            id: Some(ProposalId { id: 2 }),
             proposal: Some(Proposal {
                 title: Some("Foo Foo Bar".to_string()),
                 action: Some(proposal::Action::ManageNeuron(Box::default())),
@@ -923,6 +926,7 @@ mod metrics_tests {
         });
 
         let open_proposal = ProposalData {
+            id: Some(ProposalId { id: 1 }),
             proposal: Some(Proposal {
                 title: Some("open_proposal".to_string()),
                 action: Some(manage_neuron_action.clone()),
@@ -932,6 +936,7 @@ mod metrics_tests {
         };
 
         let rejected_proposal = ProposalData {
+            id: Some(ProposalId { id: 2 }),
             proposal: Some(Proposal {
                 title: Some("rejected_proposal".to_string()),
                 action: Some(manage_neuron_action.clone()),
@@ -942,6 +947,7 @@ mod metrics_tests {
         };
 
         let motion_proposal = ProposalData {
+            id: Some(ProposalId { id: 3 }),
             proposal: Some(Proposal {
                 title: Some("Foo Foo Bar".to_string()),
                 action: Some(motion_action.clone()),
@@ -1461,6 +1467,43 @@ fn test_validate_execute_nns_function() {
 }
 
 #[test]
+fn test_deciding_voting_power_adjustment_factor() {
+    let voting_power_economics = VotingPowerEconomics {
+        start_reducing_voting_power_after_seconds: Some(60),
+        clear_following_after_seconds: Some(30),
+    };
+
+    let deciding_voting_power = |seconds_since_refresh| {
+        let time_since_refresh = Duration::from_secs(seconds_since_refresh);
+        voting_power_economics.deciding_voting_power_adjustment_factor(time_since_refresh)
+    };
+
+    // 100% at first.
+    for seconds_since_refresh in 0..=60 {
+        assert_eq!(
+            deciding_voting_power(seconds_since_refresh),
+            Decimal::from(1),
+        );
+    }
+
+    // Slowly ramp down.
+    for seconds_since_refresh in 60..=90 {
+        let expected_value = Decimal::from(90 - seconds_since_refresh) / Decimal::from(30);
+
+        assert_eq!(deciding_voting_power(seconds_since_refresh), expected_value);
+    }
+    assert_eq!(deciding_voting_power(75), Decimal::try_from(0.5).unwrap());
+
+    // Stuck at 0% after a "very" long time.
+    for seconds_since_refresh in 90..200 {
+        assert_eq!(
+            deciding_voting_power(seconds_since_refresh),
+            Decimal::from(0),
+        );
+    }
+}
+
+#[test]
 fn topic_min_max_test() {
     use strum::IntoEnumIterator;
 
@@ -1537,7 +1580,10 @@ fn test_compute_ballots_for_new_proposal() {
         )
         .with_cached_neuron_stake_e8s(i * E8)
         .build()
-        .into_proto(CREATED_TIMESTAMP_SECONDS + 999)
+        .into_proto(
+            &VotingPowerEconomics::DEFAULT,
+            CREATED_TIMESTAMP_SECONDS + 999,
+        )
     }
 
     let mut neuron_10 = new_neuron(10);
@@ -1604,7 +1650,9 @@ fn test_compute_ballots_for_new_proposal() {
 
     let deciding_vote = |g: &Governance, id, now| {
         g.neuron_store
-            .with_neuron(&NeuronId { id }, |n| n.deciding_voting_power(now))
+            .with_neuron(&NeuronId { id }, |n| {
+                n.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now)
+            })
             .unwrap()
     };
     assert_eq!(tot_potential_voting_power, expected_potential_voting_power);

@@ -61,11 +61,13 @@ LIB_DEPENDENCIES = [
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-bn-lib",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-http-gateway",
     "@crate_index//:ic-utils",
     "@crate_index//:itertools",
     "@crate_index//:rand",
+    "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
@@ -176,15 +178,30 @@ rust_test(
         ":pocket-ic-server",
         "//rs/registry/canister:registry-canister",
         "@ii_dev_canister//file",
+        "@mozilla_root_ca_store//file",
     ],
     env = {
+        "RUST_TEST_THREADS": "2",
         "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
         "II_WASM": "$(rootpath @ii_dev_canister//file)",
+        "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
     tags = [
         "cpu:8",
-        "test_macos",
+        # TODO: enable "test_macos" again when we have fixed the following error on Apple Silicon:
+        #
+        #  ---- test_http_gateway stdout ----
+        #  thread 'test_http_gateway' panicked at rs/pocket_ic_server/tests/test.rs:383:48:
+        #  called `Result::unwrap()` on an `Err` value: reqwest::Error {
+        #    kind: Request, url: "http://7tjcv-pp777-77776-qaaaa-cai.raw.localhost:49380/",
+        #    source: hyper_util::client::legacy::Error(
+        #      Connect,
+        #      ConnectError("tcp connect error", Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" })
+        #    )
+        #  }
+        #
+        #"test_macos",
     ],
     deps = TEST_DEPENDENCIES,
 )
@@ -223,15 +240,18 @@ rust_test(
     aliases = {},
     data = [
         ":pocket-ic-server",
-        "@bitcoin_core//:bitcoind",
+        "//:bitcoind",
         "@bitcoin_example_canister//file",
         "@btc_canister//file",
+        "@mozilla_root_ca_store//file",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "BASIC_BITCOIN_WASM": "$(rootpath @bitcoin_example_canister//file)",
-        "BITCOIND_BIN": "$(rootpath @bitcoin_core//:bitcoind)",
+        "BITCOIND_BIN": "$(rootpath //:bitcoind)",
         "BTC_WASM": "$(rootpath @btc_canister//file)",
+        "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
+    tags = ["test_macos"],
     deps = TEST_DEPENDENCIES,
 )

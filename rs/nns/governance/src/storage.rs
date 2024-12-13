@@ -1,6 +1,6 @@
 use crate::{governance::LOG_PREFIX, pb::v1::AuditEvent};
 
-use crate::pb::v1::ArchivedMonthlyNodeProviderRewards;
+use crate::{pb::v1::ArchivedMonthlyNodeProviderRewards, voting::VotingStateMachines};
 use ic_cdk::println;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
@@ -29,6 +29,8 @@ const NEURON_ACCOUNT_ID_INDEX_MEMORY_ID: MemoryId = MemoryId::new(13);
 const NODE_PROVIDER_REWARDS_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(14);
 const NODE_PROVIDER_REWARDS_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(15);
 
+const VOTING_STATE_MACHINES_MEMORY_ID: MemoryId = MemoryId::new(16);
+
 pub mod neuron_indexes;
 pub mod neurons;
 
@@ -39,6 +41,15 @@ thread_local! {
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
 
     static STATE: RefCell<State> = RefCell::new(State::new());
+
+    // Cannot be part of STATE because it also needs to borrow things in STATE
+    // when being used.
+    static VOTING_STATE_MACHINES: RefCell<VotingStateMachines<VM>> = RefCell::new({
+       MEMORY_MANAGER.with(|memory_manager| {
+            let memory = memory_manager.borrow().get(VOTING_STATE_MACHINES_MEMORY_ID);
+            VotingStateMachines::new(memory)
+        })
+    })
 }
 
 struct State {
@@ -185,6 +196,15 @@ pub(crate) fn with_node_provider_rewards_log<R>(
     })
 }
 
+pub(crate) fn with_voting_state_machines_mut<R>(
+    f: impl FnOnce(&mut VotingStateMachines<VM>) -> R,
+) -> R {
+    VOTING_STATE_MACHINES.with(|voting_state_machines| {
+        let voting_state_machines = &mut voting_state_machines.borrow_mut();
+        f(voting_state_machines)
+    })
+}
+
 /// Validates that some of the data in stable storage can be read, in order to prevent broken
 /// schema. Should only be called in post_upgrade.
 pub fn validate_stable_storage() {
@@ -219,6 +239,14 @@ where
 pub fn reset_stable_memory() {
     MEMORY_MANAGER.with(|mm| *mm.borrow_mut() = MemoryManager::init(DefaultMemoryImpl::default()));
     STATE.with(|cell| *cell.borrow_mut() = State::new());
+    VOTING_STATE_MACHINES.with(|cell| {
+        *cell.borrow_mut() = {
+            MEMORY_MANAGER.with(|memory_manager| {
+                let memory = memory_manager.borrow().get(VOTING_STATE_MACHINES_MEMORY_ID);
+                VotingStateMachines::new(memory)
+            })
+        }
+    });
 }
 
 pub fn grow_upgrades_memory_to(target_pages: u64) {
