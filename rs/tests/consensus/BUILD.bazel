@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -24,7 +24,6 @@ system_test(
     name = "catch_up_loop_prevention_test",
     flaky = True,
     malicious = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
         "k8s",
@@ -47,7 +46,6 @@ system_test(
 system_test(
     name = "catch_up_possible_test",
     malicious = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
         "k8s",
@@ -70,7 +68,6 @@ system_test(
     name = "dual_workload_test",
     env = UNIVERSAL_CANISTER_ENV,
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -114,7 +111,6 @@ system_test(
     env = UNIVERSAL_CANISTER_ENV,
     flaky = True,
     malicious = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
@@ -138,7 +134,6 @@ system_test(
     name = "max_ingress_payload_size_test",
     env = UNIVERSAL_CANISTER_ENV,
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
@@ -162,7 +157,6 @@ system_test(
     name = "max_xnet_payload_size_test",
     env = UNIVERSAL_CANISTER_ENV,
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
@@ -186,7 +180,6 @@ system_test_nns(
     name = "node_graceful_leaving_test",
     env = UNIVERSAL_CANISTER_ENV,
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
@@ -209,7 +202,6 @@ system_test_nns(
     name = "subnet_splitting_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
         "k8s",
@@ -242,7 +234,6 @@ system_test(
     env = UNIVERSAL_CANISTER_ENV,
     flaky = True,
     malicious = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
@@ -269,7 +260,6 @@ system_test(
     env = UNIVERSAL_CANISTER_ENV,
     flaky = True,
     malicious = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
@@ -303,7 +293,6 @@ system_test(
     env = UNIVERSAL_CANISTER_ENV,
     flaky = True,
     malicious = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
@@ -340,7 +329,6 @@ system_test_nns(
     }),
     extra_head_nns_tags = [],
     flaky = False,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
         "manual",
@@ -366,7 +354,6 @@ system_test_nns(
     name = "adding_nodes_to_subnet_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
