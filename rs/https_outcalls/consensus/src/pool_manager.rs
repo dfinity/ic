@@ -33,6 +33,7 @@ use std::{
 pub type CanisterHttpAdapterClient =
     Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
 
+//TODO(SOCKS_PROXY_DL): Make this true.
 const SOCKS_PROXY_DL_ACTIVE: bool = false;
 
 /// [`CanisterHttpPoolManagerImpl`] implements the pool and state monitoring
@@ -148,7 +149,7 @@ impl CanisterHttpPoolManagerImpl {
             .collect()
     }
 
-    fn generate_api_boundary_node_ips(&self) -> Vec<String> {
+    fn generate_api_boundary_node_addrs(&self) -> Vec<String> {
         if !SOCKS_PROXY_DL_ACTIVE {
             return Vec::new();
         }
@@ -226,7 +227,9 @@ impl CanisterHttpPoolManagerImpl {
             .cloned()
             .collect();
 
-        let socks_proxy_addrs = self.generate_api_boundary_node_ips();
+        //TODO: this happens farely rarely. However ideally we should only try to get the
+        // boundary node addresses if the subnet is a system subnet.
+        let socks_proxy_addrs = self.generate_api_boundary_node_addrs();
 
         for (id, context) in http_requests {
             if !request_ids_already_made.contains(&id) {

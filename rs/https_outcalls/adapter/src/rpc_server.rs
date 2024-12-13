@@ -7,14 +7,12 @@ use crate::Config;
 use core::convert::TryFrom;
 use http::{header::USER_AGENT, HeaderName, HeaderValue, Uri};
 use http_body_util::{BodyExt, Full};
+use hyper::body::Incoming;
 use hyper::{
     body::Bytes,
     header::{HeaderMap, ToStrError},
     Method,
 };
-use rand::Rng;
-
-use hyper::body::Incoming;
 use hyper_rustls::HttpsConnector;
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_socks2::SocksConnector;
@@ -27,7 +25,7 @@ use ic_https_outcalls_service::{
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
-use rand::{seq::SliceRandom, thread_rng};
+use rand::{seq::SliceRandom, thread_rng, Rng};
 use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -51,6 +49,7 @@ const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 /// The maximum number of times we will try to connect to a SOCKS proxy.
 const MAX_SOCKS_PROXY_RETRIES: usize = 3;
 
+//TODO(SOCKS_PROXY_DL): Make this > 0.
 /// The probability of using api boundary node addresses for SOCKS proxy dark launch.
 const REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE: u32 = 0;
 
@@ -121,40 +120,27 @@ impl CanisterHttp {
         }
     }
 
-    fn create_socks_client_for_address(
-        &self,
-        address: &str,
-    ) -> Option<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>> {
-        // Create a new HTTP connector
+    fn maybe_add_socks_client_for_address(&self, cache: &mut Cache, address: &str) {
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false);
         http_connector
             .set_connect_timeout(Some(Duration::from_secs(self.http_connect_timeout_secs)));
 
-        match address.parse() {
-            Ok(proxy_addr) => {
-                let proxy_connector = SocksConnector {
-                    proxy_addr,
-                    auth: None,
-                    connector: http_connector,
-                };
-
-                let proxied_https_connector = HttpsConnectorBuilder::new()
+        if let Ok(proxy_addr) = address.parse() {
+            let client = Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(
+                HttpsConnectorBuilder::new()
                     .with_native_roots()
                     .expect("Failed to set native roots")
                     .https_only()
                     .enable_all_versions()
-                    .wrap_connector(proxy_connector);
-
-                let socks_client = Client::builder(TokioExecutor::new())
-                    .build::<_, Full<Bytes>>(proxied_https_connector);
-
-                Some(socks_client)
-            }
-            Err(e) => {
-                debug!(self.logger, "Failed to parse SOCKS address: {}", e);
-                None
-            }
+                    .wrap_connector(SocksConnector {
+                        proxy_addr,
+                        auth: None,
+                        connector: http_connector,
+                    }),
+            );
+            cache.insert(address.to_string(), client);
+            self.metrics.socks_cache_size.set(cache.len() as i64);
         }
     }
 
@@ -187,7 +173,7 @@ impl CanisterHttp {
         }
     }
 
-    async fn https_outcall_dl_socks_proxy(
+    async fn https_outcall_socks_proxy(
         &self,
         socks_proxy_addrs: &[String],
         request: http::Request<Full<Bytes>>,
@@ -215,32 +201,37 @@ impl CanisterHttp {
                 } else {
                     let mut cache_guard = RwLockUpgradableReadGuard::upgrade(cache_guard);
                     self.metrics.socks_cache_miss.inc();
-
-                    match self.create_socks_client_for_address(&next_socks_proxy_addr) {
-                        Some(client) => {
-                            cache_guard.insert(next_socks_proxy_addr.clone(), client.clone());
-                            self.metrics.socks_cache_size.set(cache_guard.len() as i64);
-                            client
-                        }
+                    self.maybe_add_socks_client_for_address(
+                        &mut cache_guard,
+                        &next_socks_proxy_addr,
+                    );
+                    match cache_guard.get(&next_socks_proxy_addr) {
+                        Some(client) => client.clone(),
                         None => {
-                            // there is something wrong with this address, try another one.
+                            debug!(
+                                self.logger,
+                                "Failed to create SOCKS client for address: {}",
+                                next_socks_proxy_addr
+                            );
                             continue;
                         }
                     }
                 }
             };
 
-            self.metrics.socks_connections_attempts.inc();
-
             match socks_client.request(request.clone()).await {
                 Ok(resp) => {
                     self.metrics
-                        .succesful_socks_connections
-                        .with_label_values(&[&tries.to_string()])
+                        .socks_connections_attempts
+                        .with_label_values(&[&tries.to_string(), "success"])
                         .inc();
                     return Ok(resp);
                 }
                 Err(socks_err) => {
+                    self.metrics
+                        .socks_connections_attempts
+                        .with_label_values(&[&tries.to_string(), "failure"])
+                        .inc();
                     debug!(
                         self.logger,
                         "Failed to connect through SOCKS with address {}: {}",
@@ -360,7 +351,7 @@ impl HttpsOutcallsService for CanisterHttp {
                     });
 
                     if should_dl_socks_proxy() {
-                        let dl_result= self.https_outcall_dl_socks_proxy(&req.socks_proxy_addrs, http_req_clone).await;
+                        let dl_result = self.https_outcall_socks_proxy(&req.socks_proxy_addrs, http_req_clone).await;
 
                         self.compare_results(&result, &dl_result);
                     }
