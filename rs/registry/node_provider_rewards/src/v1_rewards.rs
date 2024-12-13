@@ -249,6 +249,10 @@ pub fn node_provider_rewards(
             multiplier_unassigned
         };
 
+        computation_data
+            .rewards_multiplier
+            .insert(node.node_id, reward_multiplier);
+
         let rewards_xdr = logger.execute(
             "Rewards XDR for the node",
             Operation::Multiply(*rewards_xdr_no_penalty, reward_multiplier),

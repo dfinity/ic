@@ -1,11 +1,11 @@
+use crate::v1_logs::RewardsLog;
 use ic_base_types::PrincipalId;
 use ic_management_canister_types::NodeMetricsHistoryResponse;
 use num_traits::FromPrimitive;
 use rust_decimal::Decimal;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::fmt;
-
-use crate::v1_logs::RewardsLog;
 
 pub type RegionNodeTypeCategory = (String, String);
 pub type TimestampNanos = u64;
@@ -63,6 +63,7 @@ impl DailyNodeMetrics {
 
 #[derive(Default)]
 pub struct NodeProviderComputationData {
+    pub rewards_multiplier: HashMap<PrincipalId, Decimal>,
     pub avg_assigned_failure_rate: HashMap<PrincipalId, Decimal>,
     pub region_nodetype_rewards: HashMap<RegionNodeTypeCategory, Decimal>,
     pub node_provider_rewardables: Vec<RewardableNode>,
