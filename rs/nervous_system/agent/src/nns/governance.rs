@@ -8,7 +8,7 @@ use ic_nns_governance_api::pb::v1::{
 pub async fn get_neurons_fund_audit_info<C: CallCanisters>(
     agent: &C,
     nns_proposal_id: ProposalId,
-) -> Result<GetNeuronsFundAuditInfoResponse, C::Error> {
+) -> Result<GetNeuronsFundAuditInfoResponse, C::CallError> {
     let request = GetNeuronsFundAuditInfoRequest {
         nns_proposal_id: Some(nns_proposal_id),
     };

@@ -41,7 +41,7 @@ pub enum AuditError<CallCanistersError: std::error::Error + 'static> {
     SwapNotInFinalState,
 }
 
-fn u64_to_dec<C: CallCanisters>(x: u64) -> Result<Decimal, AuditError<C::Error>> {
+fn u64_to_dec<C: CallCanisters>(x: u64) -> Result<Decimal, AuditError<C::CallError>> {
     ic_neurons_fund::u64_to_dec(x).map_err(|s| AuditError::DecimalConversionError(x, s))
 }
 
@@ -89,7 +89,7 @@ fn audit_check(text: &str, condition: bool) {
 pub async fn validate_sns_swap<C: CallCanisters>(
     agent: &C,
     swap: SwapCanister,
-) -> Result<(), AuditError<C::Error>> {
+) -> Result<(), AuditError<C::CallError>> {
     let swap_derived_state = swap.get_derived_state(agent).await?;
 
     let swap_init = swap.get_init(agent).await?.init.unwrap();
