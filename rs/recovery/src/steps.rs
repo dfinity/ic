@@ -528,26 +528,26 @@ impl UploadAndRestartStep {
         sudo systemctl start ic-replica;\
         sudo systemctl status ic-replica;";
 
-    /// Sets the right state permissions on `upload_dir`, by copying the
-    /// permissions of the original state path, removing executable permission
-    /// and giving read permissions for the state to group and others.
-    fn cmd_set_permissions(ic_state_path: &str, upload_dir: &str) -> String {
+    /// Sets the right state permissions on `src`, by copying the permissions
+    /// of the target path, removing executable permission and giving read
+    /// permissions for the state to group and others.
+    fn cmd_set_permissions(target_path: &str, src: &str) -> String {
         let mut set_permissions = String::new();
         set_permissions.push_str(&format!(
             "sudo chmod -R --reference={} {};",
-            ic_state_path, upload_dir
+            target_path, src
         ));
         set_permissions.push_str(&format!(
             "sudo chown -R --reference={} {};",
-            ic_state_path, upload_dir
+            target_path, src
         ));
         set_permissions.push_str(&format!(
             r"sudo find {} -type f -exec chmod a-x {{}} \;;",
-            upload_dir
+            src
         ));
         set_permissions.push_str(&format!(
             r"sudo find {} -type f -exec chmod go+r {{}} \;;",
-            upload_dir
+            src
         ));
         set_permissions
     }
@@ -589,10 +589,7 @@ impl Step for UploadAndRestartStep {
             }
         }
 
-        // Upload directory to create
-        let upload_dir = format!("{}/{}", IC_DATA_PATH, NEW_IC_STATE);
         let ic_state_path = format!("{}/{}", IC_DATA_PATH, IC_STATE);
-        let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &upload_dir);
         let src = format!("{}/", self.data_src.display());
 
         // Decide: remote or local recovery
@@ -600,7 +597,7 @@ impl Step for UploadAndRestartStep {
             // For remote recoveries, we copy the source directory via rsync.
             // To improve rsync times, we copy the latest checkpoint to the
             // upload directory.
-
+            let upload_dir = format!("{}/{}", IC_DATA_PATH, NEW_IC_STATE);
             let ic_checkpoints_path = format!("{}/{}", IC_DATA_PATH, IC_CHECKPOINTS_PATH);
             // path of highest checkpoint on upload node
             let copy_from = format!(
@@ -640,6 +637,7 @@ impl Step for UploadAndRestartStep {
                 self.key_file.as_ref(),
             )?;
 
+            let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &upload_dir);
             let cmd_replace_state = format!(
                 "sudo rm -r {}; sudo mv {} {};",
                 ic_state_path, upload_dir, ic_state_path
@@ -653,7 +651,9 @@ impl Step for UploadAndRestartStep {
         } else {
             info!(self.logger, "Stopping replica...");
             exec_cmd(Command::new("bash").arg("-c").arg(Self::CMD_STOP_REPLICA))?;
+
             info!(self.logger, "Setting file permissions...");
+            let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &src);
             exec_cmd(Command::new("bash").arg("-c").arg(cmd_set_permissions))?;
 
             // For local recoveries we first backup the original state, and
@@ -663,7 +663,7 @@ impl Step for UploadAndRestartStep {
             info!(self.logger, "Moving original state into {}...", backup_path);
             let mut cmd_backup_state = Command::new("sudo");
             cmd_backup_state.arg("mv");
-            cmd_backup_state.arg(ic_state_path);
+            cmd_backup_state.arg(&ic_state_path);
             cmd_backup_state.arg(backup_path);
             exec_cmd(&mut cmd_backup_state)?;
 
@@ -671,7 +671,7 @@ impl Step for UploadAndRestartStep {
             let mut mv_to_target = Command::new("sudo");
             mv_to_target.arg("mv");
             mv_to_target.arg(src);
-            mv_to_target.arg(upload_dir);
+            mv_to_target.arg(ic_state_path);
             exec_cmd(&mut mv_to_target)?;
 
             info!(self.logger, "Restarting replica...");
