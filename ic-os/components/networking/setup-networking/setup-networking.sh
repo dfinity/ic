@@ -77,8 +77,6 @@ function gather_interfaces_by_speed() {
         exit 1
     fi
 
-    echo "Interfaces sorted by speed: $SORTED_INTERFACES"
-
     INTERFACE_LIST=$(echo "$SORTED_INTERFACES" | paste -sd, -)
 }
 
