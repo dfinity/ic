@@ -7,7 +7,7 @@ load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SN
 DEPENDENCIES = [
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/async_utils",
+    "//rs/http_endpoints/async_utils",
     "//rs/bitcoin/ckbtc/agent",
     "//rs/bitcoin/ckbtc/kyt",
     "//rs/bitcoin/ckbtc/minter",
