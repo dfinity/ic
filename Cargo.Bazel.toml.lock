@@ -1092,7 +1092,7 @@ dependencies = [
  "bitflags 2.6.0",
  "cexpr",
  "clang-sys",
- "itertools 0.12.0",
+ "itertools 0.11.0",
  "lazy_static",
  "lazycell",
  "proc-macro2",
@@ -4957,7 +4957,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=2496803db52d8182f578f098a3ffe4fcb9573fcd#2496803db52d8182f578f098a3ffe4fcb9573fcd"
+source = "git+https://github.com/dfinity/ic-bn-lib?rev=d74a6527fbaf8a2c1a7076983cc84f5c5a727923#d74a6527fbaf8a2c1a7076983cc84f5c5a727923"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -4984,7 +4984,6 @@ dependencies = [
  "hyper 1.5.1",
  "hyper-util",
  "instant-acme",
- "mockall",
  "moka",
  "parse-size",
  "prometheus",
@@ -5003,7 +5002,6 @@ dependencies = [
  "sha1",
  "strum 0.26.3",
  "strum_macros 0.26.4",
- "sync_wrapper 1.0.1",
  "systemstat",
  "thiserror 2.0.3",
  "tokio",
@@ -8568,7 +8566,7 @@ checksum = "0c1318b19085f08681016926435853bbf7858f9c082d0999b80550ff5d9abe15"
 dependencies = [
  "bytes",
  "heck 0.5.0",
- "itertools 0.12.0",
+ "itertools 0.11.0",
  "log",
  "multimap",
  "once_cell",
@@ -8601,7 +8599,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e9552f850d5f0964a4e4d0bf306459ac29323ddfbae05e35a7c0d35cb0803cc5"
 dependencies = [
  "anyhow",
- "itertools 0.12.0",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.87",
@@ -9612,9 +9610,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-acme"
-version = "0.11.1"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d05fdb718e53ad511fa6477187f43f5dcd01b88f39e64ec16d6afc7363767d6"
+checksum = "54f05935c0b1d7c5981c40b768c5d5ed96a43f5cb5166f8f5be09779c5825697"
 dependencies = [
  "async-io",
  "async-trait",
@@ -9631,7 +9629,7 @@ dependencies = [
  "ring 0.17.7",
  "serde",
  "serde_json",
- "thiserror 1.0.68",
+ "thiserror 2.0.3",
  "webpki-roots 0.26.1",
  "x509-parser",
 ]
@@ -12147,9 +12145,9 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vrl"
-version = "0.19.0"
+version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c22ec61cbd43e563df185521f9a2fb2f42f6ab96604a574c82f6564049fb431"
+checksum = "ea6f5f954461e21cacc090537e49f1023c34b6d10e12030b40ca1821a43aca68"
 dependencies = [
  "bytes",
  "cfg-if 1.0.0",

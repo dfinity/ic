@@ -14,7 +14,7 @@ members = [
     "packages/pocket-ic/test_canister",
     "packages/ic-vetkd-utils",
     "rs/artifact_pool",
-    "rs/async_utils",
+    "rs/http_endpoints/async_utils",
     "rs/backup",
     "rs/bitcoin/adapter",
     "rs/bitcoin/client",
@@ -566,7 +566,7 @@ ic-agent = { version = "0.37.1", features = [
     "reqwest",
     "pem",
 ] }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "526d34d15cfbf369d8baf2dae9932aa18d570a1d" }
+ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "d74a6527fbaf8a2c1a7076983cc84f5c5a727923" }
 ic-btc-interface = "0.2.2"
 ic-btc-test-utils = "0.1.0"
 ic-cbor = "2.6.0"

@@ -1,5 +1,5 @@
 {
-  "checksum": "b344eca479cfedf88abc9bad22dc5e3b5058749d7e97869732d8137396906468",
+  "checksum": "2a190b1040f74ca71ac50027321981d70a28dd34237309ae5520350f0d84df63",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -6248,7 +6248,7 @@
               "target": "clang_sys"
             },
             {
-              "id": "itertools 0.12.0",
+              "id": "itertools 0.11.0",
               "target": "itertools"
             },
             {
@@ -30646,7 +30646,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-bn-lib",
           "commitish": {
-            "Rev": "2496803db52d8182f578f098a3ffe4fcb9573fcd"
+            "Rev": "d74a6527fbaf8a2c1a7076983cc84f5c5a727923"
           }
         }
       },
@@ -30760,10 +30760,6 @@
               "target": "instant_acme"
             },
             {
-              "id": "mockall 0.13.0",
-              "target": "mockall"
-            },
-            {
               "id": "moka 0.12.8",
               "target": "moka"
             },
@@ -30800,7 +30796,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-acme 0.11.1",
+              "id": "rustls-acme 0.12.1",
               "target": "rustls_acme"
             },
             {
@@ -30830,10 +30826,6 @@
             {
               "id": "strum 0.26.3",
               "target": "strum"
-            },
-            {
-              "id": "sync_wrapper 1.0.1",
-              "target": "sync_wrapper"
             },
             {
               "id": "systemstat 0.2.3",
@@ -30880,7 +30872,7 @@
               "target": "uuid"
             },
             {
-              "id": "vrl 0.19.0",
+              "id": "vrl 0.20.1",
               "target": "vrl"
             },
             {
@@ -52530,7 +52522,7 @@
               "target": "heck"
             },
             {
-              "id": "itertools 0.12.0",
+              "id": "itertools 0.11.0",
               "target": "itertools"
             },
             {
@@ -52684,7 +52676,7 @@
               "target": "anyhow"
             },
             {
-              "id": "itertools 0.12.0",
+              "id": "itertools 0.11.0",
               "target": "itertools"
             },
             {
@@ -62210,14 +62202,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rustls-acme 0.11.1": {
+    "rustls-acme 0.12.1": {
       "name": "rustls-acme",
-      "version": "0.11.1",
+      "version": "0.12.1",
       "package_url": "https://github.com/FlorianUekermann/rustls-acme",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls-acme/0.11.1/download",
-          "sha256": "3d05fdb718e53ad511fa6477187f43f5dcd01b88f39e64ec16d6afc7363767d6"
+          "url": "https://static.crates.io/crates/rustls-acme/0.12.1/download",
+          "sha256": "54f05935c0b1d7c5981c40b768c5d5ed96a43f5cb5166f8f5be09779c5825697"
         }
       },
       "targets": [
@@ -62305,7 +62297,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.3",
               "target": "thiserror"
             },
             {
@@ -62329,7 +62321,7 @@
           ],
           "selects": {}
         },
-        "version": "0.11.1"
+        "version": "0.12.1"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -78497,14 +78489,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "vrl 0.19.0": {
+    "vrl 0.20.1": {
       "name": "vrl",
-      "version": "0.19.0",
+      "version": "0.20.1",
       "package_url": "https://github.com/vectordotdev/vrl",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/vrl/0.19.0/download",
-          "sha256": "5c22ec61cbd43e563df185521f9a2fb2f42f6ab96604a574c82f6564049fb431"
+          "url": "https://static.crates.io/crates/vrl/0.20.1/download",
+          "sha256": "ea6f5f954461e21cacc090537e49f1023c34b6d10e12030b40ca1821a43aca68"
         }
       },
       "targets": [
@@ -78588,14 +78580,14 @@
               "target": "tracing"
             },
             {
-              "id": "vrl 0.19.0",
+              "id": "vrl 0.20.1",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.19.0"
+        "version": "0.20.1"
       },
       "build_script_attrs": {
         "compile_data_glob": [
