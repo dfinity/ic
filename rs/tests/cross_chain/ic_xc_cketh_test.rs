@@ -30,6 +30,7 @@ use ic_system_test_driver::{
     systest,
     util::{block_on, runtime_from_url},
 };
+use ic_types::Height;
 use icrc_ledger_types::icrc1::account::Account;
 use reqwest::Client;
 use serde_json::json;
@@ -51,7 +52,11 @@ fn setup_with_system_and_application_subnets(env: TestEnv) {
     setup_anvil(&env);
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
-        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .add_nodes(1)
+                .with_dkg_interval_length(Height::from(10)),
+        )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(

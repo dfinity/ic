@@ -30,6 +30,7 @@ ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
+ic-types = { path = "../../types/types" }
 ic-wasm-types = { path = "../../types/wasm_types" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 reqwest = { workspace = true }
