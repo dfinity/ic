@@ -78,6 +78,7 @@ function gather_interfaces_by_speed() {
     fi
 
     INTERFACE_LIST=$(echo "$SORTED_INTERFACES" | paste -sd, -)
+    echo "Interfaces sorted by speed: $INTERFACE_LIST"
 }
 
 function configure_netplan() {
@@ -95,7 +96,7 @@ function configure_netplan() {
 
     # Dynamically add ethernets for each interface
     for IFACE in ${SORTED_INTERFACES}; do
-        sed -i "/^  ethernets:/a \ \ \ \ $IFACE:\n      mtu: 1500\n      optional: true\n      lldp:\n        send: yes\n" "$NETPLAN_OUTPUT"
+        sed -i "/^  ethernets:/a \ \ \ \ $IFACE:\n      mtu: 1500\n      optional: true\n      emit-lldp: true\n" "$NETPLAN_OUTPUT"
     done
 
     echo "Netplan configuration written to $NETPLAN_OUTPUT"
