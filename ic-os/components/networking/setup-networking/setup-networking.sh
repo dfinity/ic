@@ -62,7 +62,7 @@ function gather_interfaces_by_speed() {
 
     for IFACE in $INTERFACES; do
         SPEED_STR=$(ethtool "$IFACE" 2>/dev/null | grep "Speed:" || true)
-        SPEED=$(echo "$SPEED_STR" | grep -oP '\d+' || echo 0)
+        SPEED=$(echo "$SPEED_STR" | grep -Eo '[0-9]+' || echo 0)
         SPEED_MAP["$IFACE"]=$SPEED
     done
 
