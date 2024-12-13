@@ -46,6 +46,12 @@ function generate_addresses() {
         MAC_ADDR=$(/opt/ic/bin/hostos_tool generate-mac-address --node-type HostOS)
         IPV6_ADDR=$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type HostOS)
     fi
+
+    if [ -z "$MAC_ADDR" ] || [ -z "$IPV6_ADDR" ]; then
+        echo "Failed to generate MAC or IPv6 address."
+        exit 1
+    fi
+
     echo "Generated MAC address: $MAC_ADDR"
     echo "Generated IPv6 address: $IPV6_ADDR"
 }
