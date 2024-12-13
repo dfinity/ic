@@ -53,18 +53,14 @@ def main():
     if hasattr(args, "command"):
         repo_root = args.repo_root
         branch = args.branch
-        match args.command:
-            case Command.SYNC_AND_CHECKOUT:
-                main_branch = args.main_branch
-                git_lib.sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
-                return
-            case Command.COMMIT_AND_CREATE_PR:
-                repo = args.repo
-                files = args.files
-                message = args.message
-                git_lib.commit_and_create_pr(repo, repo_root, branch, files, logger, message)
-                return
-
+        if args.command == Command.SYNC_AND_CHECKOUT:
+            main_branch = args.main_branch
+            git_lib.sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
+        elif args.command == Command.COMMIT_AND_CREATE_PR:
+            repo = args.repo
+            files = args.files
+            message = args.message
+            git_lib.commit_and_create_pr(repo, repo_root, branch, files, logger, message)
     else:
         parser.print_help()
 
