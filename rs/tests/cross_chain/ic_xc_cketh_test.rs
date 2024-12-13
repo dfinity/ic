@@ -1,19 +1,19 @@
-use anyhow::{anyhow, bail, Context, Result};
-use candid::{Encode, Nat};
+use anyhow::Result;
+use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
 use ic_cketh_minter::endpoints::CandidBlockTag;
 use ic_cketh_minter::lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg};
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_consensus_threshold_sig_system_test_utils::{
-    enable_chain_key_signing, get_public_key_and_test_signature, make_ecdsa_key_id, make_key,
-    make_key_ids_for_all_schemes,
+    enable_chain_key_signing, get_public_key_and_test_signature, make_key,
 };
 use ic_ethereum_types::Address;
 use ic_icrc1_ledger::{ArchiveOptions, FeatureFlags, InitArgsBuilder, LedgerArgument};
-use ic_management_canister_types::MasterPublicKeyId;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::test_env_api::SubnetSnapshot;
 use ic_system_test_driver::driver::universal_vm::DeployedUniversalVm;
 use ic_system_test_driver::util::MessageCanister;
 use ic_system_test_driver::{
@@ -34,6 +34,7 @@ use ic_types::Height;
 use icrc_ledger_types::icrc1::account::Account;
 use reqwest::Client;
 use serde_json::json;
+use slog::Logger;
 use std::env;
 
 const UNIVERSAL_VM_NAME: &str = "foundry";
@@ -111,22 +112,8 @@ fn ic_xc_cketh_test(env: TestEnv) {
     };
     let governance_canister = Canister::new(&system_subnet_runtime, GOVERNANCE_CANISTER_ID);
 
-    let ecdsa_key_id = make_key("some_key");
-    let key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
-    block_on(async {
-        enable_chain_key_signing(
-            &governance_canister,
-            application_subnet.subnet_id,
-            vec![key_id.clone()],
-            &logger,
-        )
-        .await;
-        let app_node = application_subnet.nodes().next().unwrap();
-        let app_agent = app_node.build_default_agent_async().await;
-        let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
-        get_public_key_and_test_signature(&key_id, &msg_can, false, &logger)
-            .await
-            .expect("Should successfully create and verify the signature");
+    let ecdsa_key_id = block_on(async {
+        activate_threshold_ecdsa(&governance_canister, &application_subnet, &logger).await
     });
 
     let application_subnet_runtime = {
@@ -162,79 +149,12 @@ fn ic_xc_cketh_test(env: TestEnv) {
         )
     });
 
-    let (cketh_ledger, minter) = block_on(async {
-        let mut minter_canister = create_canister(&application_subnet_runtime).await;
+    let (_cketh_ledger, minter) = block_on(async {
+        let minter_canister = create_canister(&application_subnet_runtime).await;
         let minter = minter_canister.canister_id().get().0;
-
-        let mut cketh_ledger_canister = create_canister(&application_subnet_runtime).await;
-        let ledger_id = cketh_ledger_canister.canister_id().get().0;
-        let ledger_init_args = LedgerArgument::Init(
-            // See proposal 126309
-            InitArgsBuilder::with_symbol_and_name("ckETH", "ckETH")
-                .with_minting_account(minter)
-                .with_transfer_fee(2_000_000_000_000_u64)
-                .with_feature_flags(FeatureFlags { icrc2: true })
-                .with_fee_collector_account(Account {
-                    owner: minter,
-                    subaccount: Some([
-                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                        0, 0, 0, 0, 0, 0x0f, 0xee,
-                    ]),
-                })
-                .with_decimals(18)
-                .with_max_memo_length(80)
-                .with_archive_options(ArchiveOptions {
-                    trigger_threshold: 2_000,
-                    num_blocks_to_archive: 1_0000,
-                    node_max_memory_size_bytes: None,
-                    max_message_size_bytes: Some(3_221_225_472),
-                    controller_id: minter.into(),
-                    more_controller_ids: None,
-                    cycles_for_archive_creation: Some(100_000_000_000_000),
-                    max_transactions_per_response: None,
-                })
-                .build(),
-        );
-        let ledger_wasm =
-            Wasm::from_file(env::var("LEDGER_WASM_PATH").expect("LEDGER_WASM_PATH not set"));
-        ledger_wasm
-            .install_with_retries_onto_canister(
-                &mut cketh_ledger_canister,
-                Some(Encode!(&ledger_init_args).unwrap()),
-                None,
-            )
-            .await
-            .unwrap();
-        let cketh_ledger_canister = LedgerCanister {
-            canister: cketh_ledger_canister,
-        };
-
-        let minter_init_args = MinterArg::InitArg(MinterInitArgs {
-            ethereum_network: EthereumNetwork::Mainnet,
-            ecdsa_key_name: ecdsa_key_id.name,
-            ethereum_contract_address: None,
-            ledger_id,
-            ethereum_block_height: CandidBlockTag::Finalized,
-            minimum_withdrawal_amount: Nat::from(30_000_000_000_000_000_u64),
-            next_transaction_nonce: Nat::from(0_u8),
-            last_scraped_block_number: Nat::from(0_u8),
-        });
-        let minter_wasm = Wasm::from_file(
-            env::var("CKETH_MINTER_WASM_PATH").expect("CKETH_MINTER_WASM_PATH not set"),
-        );
-        minter_wasm
-            .install_with_retries_onto_canister(
-                &mut minter_canister,
-                Some(Encode!(&minter_init_args).unwrap()),
-                None,
-            )
-            .await
-            .unwrap();
-
-        let minter_canister = CkEthMinterCanister {
-            canister: minter_canister,
-        };
-
+        let cketh_ledger_canister = install_cketh_ledger(&application_subnet_runtime, minter).await;
+        let ledger_id = cketh_ledger_canister.canister.canister_id().get().0;
+        let minter_canister = install_cketh_minter(minter_canister, &ecdsa_key_id, ledger_id).await;
         (cketh_ledger_canister, minter_canister)
     });
 
@@ -271,6 +191,99 @@ fn ic_xc_cketh_test(env: TestEnv) {
         ),
         minter_address.to_string()
     );
+}
+
+async fn activate_threshold_ecdsa(
+    governance: &Canister<'_>,
+    subnet: &SubnetSnapshot,
+    logger: &Logger,
+) -> EcdsaKeyId {
+    let ecdsa_key_id = make_key("some_key");
+    let key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
+    enable_chain_key_signing(&governance, subnet.subnet_id, vec![key_id.clone()], &logger).await;
+    let app_node = subnet.nodes().next().unwrap();
+    let app_agent = app_node.build_default_agent_async().await;
+    let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
+    get_public_key_and_test_signature(&key_id, &msg_can, false, &logger)
+        .await
+        .expect("Should successfully create and verify the signature");
+    ecdsa_key_id
+}
+
+async fn install_cketh_ledger(runtime: &Runtime, minter: Principal) -> LedgerCanister {
+    let mut cketh_ledger_canister = create_canister(runtime).await;
+    let ledger_init_args = LedgerArgument::Init(
+        // See proposal 126309
+        InitArgsBuilder::with_symbol_and_name("ckETH", "ckETH")
+            .with_minting_account(minter)
+            .with_transfer_fee(2_000_000_000_000_u64)
+            .with_feature_flags(FeatureFlags { icrc2: true })
+            .with_fee_collector_account(Account {
+                owner: minter,
+                subaccount: Some([
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0x0f, 0xee,
+                ]),
+            })
+            .with_decimals(18)
+            .with_max_memo_length(80)
+            .with_archive_options(ArchiveOptions {
+                trigger_threshold: 2_000,
+                num_blocks_to_archive: 1_0000,
+                node_max_memory_size_bytes: None,
+                max_message_size_bytes: Some(3_221_225_472),
+                controller_id: minter.into(),
+                more_controller_ids: None,
+                cycles_for_archive_creation: Some(100_000_000_000_000),
+                max_transactions_per_response: None,
+            })
+            .build(),
+    );
+    let ledger_wasm =
+        Wasm::from_file(env::var("LEDGER_WASM_PATH").expect("LEDGER_WASM_PATH not set"));
+    ledger_wasm
+        .install_with_retries_onto_canister(
+            &mut cketh_ledger_canister,
+            Some(Encode!(&ledger_init_args).unwrap()),
+            None,
+        )
+        .await
+        .unwrap();
+    LedgerCanister {
+        canister: cketh_ledger_canister,
+    }
+}
+
+async fn install_cketh_minter<'a>(
+    mut minter_canister: Canister<'a>,
+    ecdsa_key_id: &EcdsaKeyId,
+    cketh_ledger: Principal,
+) -> CkEthMinterCanister<'a> {
+    let minter_init_args = MinterArg::InitArg(MinterInitArgs {
+        ethereum_network: EthereumNetwork::Mainnet,
+        ecdsa_key_name: ecdsa_key_id.name.clone(),
+        ethereum_contract_address: None,
+        ledger_id: cketh_ledger,
+        ethereum_block_height: CandidBlockTag::Finalized,
+        minimum_withdrawal_amount: Nat::from(30_000_000_000_000_000_u64),
+        next_transaction_nonce: Nat::from(0_u8),
+        last_scraped_block_number: Nat::from(0_u8),
+    });
+    let minter_wasm = Wasm::from_file(
+        env::var("CKETH_MINTER_WASM_PATH").expect("CKETH_MINTER_WASM_PATH not set"),
+    );
+    minter_wasm
+        .install_with_retries_onto_canister(
+            &mut minter_canister,
+            Some(Encode!(&minter_init_args).unwrap()),
+            None,
+        )
+        .await
+        .unwrap();
+
+    CkEthMinterCanister {
+        canister: minter_canister,
+    }
 }
 
 fn deploy_smart_contract(

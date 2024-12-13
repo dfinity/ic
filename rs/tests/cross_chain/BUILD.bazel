@@ -85,6 +85,7 @@ system_test_nns(
         "@crate_index//:candid",
         "@crate_index//:reqwest",
         "@crate_index//:serde_json",
+        "@crate_index//:slog",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//packages/ic-ethereum-types"
     ],
