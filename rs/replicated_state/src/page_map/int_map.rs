@@ -714,11 +714,17 @@ where
 }
 
 #[derive(Clone, Debug)]
-pub struct MutableIntMap<K, V, I>(Tree<K, V, I>);
+pub struct MutableIntMap<K, V, I> {
+    tree: Tree<K, V, I>,
+    len: usize,
+}
 
 impl<K, V, I> Default for MutableIntMap<K, V, I> {
     fn default() -> Self {
-        Self(Tree::Empty)
+        Self {
+            tree: Tree::Empty,
+            len: 0,
+        }
     }
 }
 
@@ -733,7 +739,7 @@ impl<K, V, I> MutableIntMap<K, V, I> {
     ///
     /// A full traversal requires O(N) operations.
     pub fn iter(&self) -> IntMapIter<'_, K, V, I> {
-        IntMapIter::new(&self.0)
+        IntMapIter::new(&self.tree)
     }
 
     /// Returns an iterator over the keys.
@@ -741,40 +747,40 @@ impl<K, V, I> MutableIntMap<K, V, I> {
     ///
     /// A full traversal requires O(N) operations.
     pub fn keys(&self) -> impl Iterator<Item = &K> {
-        IntMapIter::new(&self.0).map(|(k, _v)| k)
+        IntMapIter::new(&self.tree).map(|(k, _v)| k)
     }
 
     /// Returns an iterator over the values, in order by key.
     ///
     /// A full traversal requires O(N) operations.
     pub fn values(&self) -> impl Iterator<Item = &V> {
-        IntMapIter::new(&self.0).map(|(_k, v)| v)
+        IntMapIter::new(&self.tree).map(|(_k, v)| v)
     }
 
     /// Returns the smallest key in the given tree.
     /// If the tree is empty, then it returns `None`.
     pub fn min_key(&self) -> Option<&K> {
-        self.0.min().map(|(k, _v)| k)
+        self.tree.min().map(|(k, _v)| k)
     }
 
     /// Returns the largest key in the given tree.
     /// If the tree is empty, then it returns `None`.
     pub fn max_key(&self) -> Option<&K> {
-        self.0.max().map(|(k, _v)| k)
+        self.tree.max().map(|(k, _v)| k)
     }
 
     /// Returns the number of entries in this map.
     ///
     /// Complexity: O(N)
     pub fn len(&self) -> usize {
-        self.0.len()
+        self.len
     }
 
     /// Returns true if this map is empty.
     ///
     /// Complexity: O(1)
     pub fn is_empty(&self) -> bool {
-        matches!(self.0, Tree::Empty)
+        matches!(self.tree, Tree::Empty)
     }
 }
 
@@ -788,14 +794,14 @@ where
     ///
     /// Complexity: O(min(N, 64))
     pub fn get(&self, key: &K) -> Option<&V> {
-        self.0.get(key)
+        self.tree.get(key)
     }
 
     /// Returns `true` if the map contains a value for the specified key.
     ///
     /// Complexity: O(min(N, 64))
     pub fn contains_key(&self, key: &K) -> bool {
-        self.0.get(key).is_some()
+        self.tree.get(key).is_some()
     }
 
     // Returns `(lower, upper)` inclusive bounds for the given key such that:
@@ -812,16 +818,22 @@ where
     //
     // Complexity: O(min(N, 64))
     pub fn bounds(&self, key: &K) -> Bounds<K, V> {
-        self.0.bounds(key)
+        self.tree.bounds(key)
     }
 
     /// Inserts a new entry into this map.
     ///
     /// Complexity: O(min(N, 64))
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
-        let tree = std::mem::take(&mut self.0);
+        let tree = std::mem::take(&mut self.tree);
         let res;
-        (self.0, res) = tree.insert(key, value);
+        (self.tree, res) = tree.insert(key, value);
+
+        if res.is_none() {
+            self.len += 1;
+        }
+        debug_assert_eq!(self.tree.len(), self.len);
+
         res
     }
 
@@ -829,9 +841,15 @@ where
     ///
     /// Complexity: O(min(N, 64))
     pub fn remove(&mut self, key: &K) -> Option<V> {
-        let tree = std::mem::take(&mut self.0);
+        let tree = std::mem::take(&mut self.tree);
         let res;
-        (self.0, res) = tree.remove(key);
+        (self.tree, res) = tree.remove(key);
+
+        if res.is_some() {
+            self.len -= 1;
+        }
+        debug_assert_eq!(self.tree.len(), self.len);
+
         res
     }
 
@@ -839,8 +857,9 @@ where
     ///
     /// Complexity: O(N + M)
     pub fn union(&mut self, other: Self) {
-        let tree = std::mem::take(&mut self.0);
-        self.0 = tree.union(other.0)
+        let tree = std::mem::take(&mut self.tree);
+        self.tree = tree.union(other.tree);
+        self.len = self.tree.len();
     }
 
     /// Returns an iterator that consumes all key-value pairs.
@@ -848,7 +867,7 @@ where
     ///
     /// A full traversal requires O(N) operations.
     pub fn into_iter(self) -> IntMapIntoIter<K, V, I> {
-        IntMapIntoIter::new(self.0)
+        IntMapIntoIter::new(self.tree)
     }
 
     /// Splits the collection into two at the given key. Returns everything after
@@ -856,9 +875,13 @@ where
     //
     // TODO: Make this `O(log N)` instead of `O(N)`.
     pub fn split_off(&mut self, key: &K) -> Self {
-        let tree = std::mem::take(&mut self.0);
+        let tree = std::mem::take(&mut self.tree);
         let right;
         (*self, right) = IntMapIntoIter::new(tree).partition(|(k, _v)| k < key);
+
+        debug_assert_eq!(self.tree.len(), self.len);
+        debug_assert_eq!(right.tree.len(), right.len);
+
         right
     }
 }

@@ -425,6 +425,9 @@ pub struct CallContextManager {
     /// Call contexts (including deleted ones) that still have open callbacks.
     call_contexts: MutableIntMap<CallContextId, CallContext, u64>,
 
+    /// Counts of open callbacks per call context.
+    outstanding_callbacks: MutableIntMap<CallContextId, usize, u64>,
+
     /// Callbacks still awaiting response, plus the callback of the currently
     /// paused or aborted DTS response execution, if any.
     callbacks: MutableIntMap<CallbackId, Arc<Callback>, u64>,
@@ -774,7 +777,18 @@ impl CallContextManager {
                 .insert((callback.deadline, callback_id), ());
         }
 
+        self.outstanding_callbacks.insert(
+            callback.call_context_id,
+            self.outstanding_callbacks
+                .get(&callback.call_context_id)
+                .unwrap_or(&0)
+                + 1,
+        );
         self.callbacks.insert(callback_id, Arc::new(callback));
+        debug_assert_eq!(
+            calculate_outstanding_callbacks(&self.callbacks),
+            self.outstanding_callbacks
+        );
         debug_assert!(self.stats_ok());
 
         callback_id
@@ -784,11 +798,27 @@ impl CallContextManager {
     /// the callback and return it.
     pub(super) fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>> {
         self.callbacks.remove(&callback_id).inspect(|callback| {
+            let outstanding_callbacks = *self
+                .outstanding_callbacks
+                .get(&callback.call_context_id)
+                .unwrap_or(&0);
+            if outstanding_callbacks <= 1 {
+                self.outstanding_callbacks.remove(&callback.call_context_id);
+            } else {
+                self.outstanding_callbacks
+                    .insert(callback.call_context_id, outstanding_callbacks - 1);
+            }
+
             self.stats.on_unregister_callback(callback);
             if callback.deadline != NO_DEADLINE {
                 self.unexpired_callbacks
                     .remove(&(callback.deadline, callback_id));
             }
+
+            debug_assert_eq!(
+                calculate_outstanding_callbacks(&self.callbacks),
+                self.outstanding_callbacks
+            );
             debug_assert!(self.stats_ok());
         })
     }
@@ -837,14 +867,11 @@ impl CallContextManager {
     }
 
     /// Returns the number of outstanding calls for a given call context.
-    //
-    // TODO: This could be made more efficient by tracking the callback count per
-    // call context in a map.
     pub fn outstanding_calls(&self, call_context_id: CallContextId) -> usize {
-        self.callbacks
-            .iter()
-            .filter(|(_, callback)| callback.call_context_id == call_context_id)
-            .count()
+        *self
+            .outstanding_callbacks
+            .get(&call_context_id)
+            .unwrap_or(&0)
     }
 
     /// Expose the `next_callback_id` field so that the canister sandbox can
@@ -1080,6 +1107,7 @@ impl TryFrom<pb::CallContextManager> for CallContextManager {
                 )?),
             );
         }
+        let outstanding_callbacks = calculate_outstanding_callbacks(&callbacks);
         let unexpired_callbacks = value
             .unexpired_callbacks
             .into_iter()
@@ -1100,6 +1128,7 @@ impl TryFrom<pb::CallContextManager> for CallContextManager {
             next_call_context_id: value.next_call_context_id,
             next_callback_id: value.next_callback_id,
             call_contexts,
+            outstanding_callbacks,
             callbacks,
             unexpired_callbacks,
             stats,
@@ -1121,6 +1150,27 @@ fn calculate_callback_deadlines(
         .map(|(id, callback)| (callback.deadline, *id))
         .filter(|(deadline, _)| *deadline != NO_DEADLINE)
         .collect()
+}
+
+/// Calculates the counts of callbacks per call context.
+///
+/// Time complexity: `O(n)`.
+fn calculate_outstanding_callbacks(
+    callbacks: &MutableIntMap<CallbackId, Arc<Callback>, u64>,
+) -> MutableIntMap<CallContextId, usize, u64> {
+    callbacks
+        .iter()
+        .map(|(_, callback)| callback.call_context_id)
+        .fold(
+            MutableIntMap::<CallContextId, usize, u64>::new(),
+            |mut counts, call_context_id| {
+                counts.insert(
+                    call_context_id,
+                    counts.get(&call_context_id).unwrap_or(&0) + 1,
+                );
+                counts
+            },
+        )
 }
 
 impl AsInt<u128> for (CoarseTime, CallbackId) {
