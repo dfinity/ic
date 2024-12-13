@@ -78,4 +78,4 @@ jobs:
 
           python /tmp/revisions/git_ci_helper.py --repo-root $REPO_ROOT --branch $BRANCH sync-and-checkout --main-branch master
           bazel run --config=ci --repository_cache=/cache/bazel //rs/nervous_system/tools/sync-with-released-nervous-system-wasms
-          python /tmp/revisions/git_ci_helper.py --repo-root $REPO_ROOT --branch $BRANCH commit-and-create-pr --file $FILE --message "chore: Update `mainnet_canisters.json` file"
+          python /tmp/revisions/git_ci_helper.py --repo-root $REPO_ROOT --branch $BRANCH commit-and-create-pr --file $FILE --message "chore: Update mainnet canisters file"
