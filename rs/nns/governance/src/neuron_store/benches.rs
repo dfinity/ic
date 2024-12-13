@@ -2,6 +2,7 @@ use super::*;
 use crate::{
     governance::{MAX_FOLLOWEES_PER_TOPIC, MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON},
     neuron::{DissolveStateAndAge, NeuronBuilder},
+    neuron_data_validation::NeuronDataValidator,
     neurons_fund::{NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot},
     now_seconds,
     pb::v1::{neuron::Followees, BallotInfo, Vote},
@@ -242,7 +243,9 @@ fn neuron_metrics_calculation_heap() -> BenchResult {
     let mut rng = new_rng();
     let neuron_store = set_up_neuron_store(&mut rng, 100, 0);
 
-    bench_fn(|| neuron_store.compute_neuron_metrics(now_seconds(), E8))
+    bench_fn(|| {
+        neuron_store.compute_neuron_metrics(E8, &VotingPowerEconomics::DEFAULT, now_seconds())
+    })
 }
 
 #[bench(raw)]
@@ -252,7 +255,9 @@ fn neuron_metrics_calculation_stable() -> BenchResult {
     let mut rng = new_rng();
     let neuron_store = set_up_neuron_store(&mut rng, 100, 0);
 
-    bench_fn(|| neuron_store.compute_neuron_metrics(now_seconds(), E8))
+    bench_fn(|| {
+        neuron_store.compute_neuron_metrics(E8, &VotingPowerEconomics::DEFAULT, now_seconds())
+    })
 }
 
 fn add_neuron_ready_to_spawn(
@@ -432,4 +437,44 @@ fn list_active_neurons_fund_neurons_stable() -> BenchResult {
     }
 
     bench_fn(|| std::hint::black_box(neuron_store.list_active_neurons_fund_neurons()))
+}
+
+fn validate_all_neurons(neuron_store: &NeuronStore, validator: &mut NeuronDataValidator) {
+    let mut now = now_seconds();
+    loop {
+        validator.maybe_validate(now, neuron_store);
+
+        let still_validating = validator
+            .summary()
+            .current_validation_started_time_seconds
+            .is_some();
+        if !still_validating {
+            break;
+        }
+        now += 1;
+    }
+}
+
+#[bench(raw)]
+fn neuron_data_validation_heap() -> BenchResult {
+    let _t = temporarily_disable_active_neurons_in_stable_memory();
+    let mut rng = new_rng();
+    let neuron_store = set_up_neuron_store(&mut rng, 100, 200);
+    let mut validator = NeuronDataValidator::new();
+
+    bench_fn(|| {
+        validate_all_neurons(&neuron_store, &mut validator);
+    })
+}
+
+#[bench(raw)]
+fn neuron_data_validation_stable() -> BenchResult {
+    let _t = temporarily_enable_active_neurons_in_stable_memory();
+    let mut rng = new_rng();
+    let neuron_store = set_up_neuron_store(&mut rng, 100, 200);
+    let mut validator = NeuronDataValidator::new();
+
+    bench_fn(|| {
+        validate_all_neurons(&neuron_store, &mut validator);
+    })
 }

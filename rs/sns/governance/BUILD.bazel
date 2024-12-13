@@ -30,6 +30,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
+    "//rs/nervous_system/timestamp",
     "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/rust_canisters/canister_log",
@@ -62,7 +63,6 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:strum",
-    "@crate_index//:time",
 ]
 
 MACRO_DEPENDENCIES = [

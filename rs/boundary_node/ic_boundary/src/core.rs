@@ -287,10 +287,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         Some(Arc::new(generic::Limiter::new_from_file(v.clone())))
     } else {
         cli.rate_limiting.rate_limit_generic_canister_id.map(|x| {
-            Arc::new(generic::Limiter::new_from_canister(
-                x,
-                agent.clone().unwrap(),
-            ))
+            Arc::new(if cli.misc.crypto_config.is_some() {
+                generic::Limiter::new_from_canister_update(x, agent.clone().unwrap())
+            } else {
+                generic::Limiter::new_from_canister_query(x, agent.clone().unwrap())
+            })
         })
     };
 

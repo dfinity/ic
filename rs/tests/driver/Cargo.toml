@@ -137,7 +137,7 @@ sha2 = { workspace = true }
 slog = { workspace = true }
 slog-async = { workspace = true }
 slog-term = { workspace = true }
-ssh2 = "0.9.4"
+ssh2 = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }

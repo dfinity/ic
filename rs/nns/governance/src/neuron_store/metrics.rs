@@ -1,7 +1,7 @@
 use super::NeuronStore;
 use crate::{
     neuron_store::Neuron,
-    pb::v1::{NeuronState, Visibility},
+    pb::v1::{NeuronState, Visibility, VotingPowerEconomics},
     storage::{neurons::NeuronSections, with_stable_neuron_store},
 };
 use ic_base_types::PrincipalId;
@@ -60,11 +60,14 @@ pub(crate) struct NeuronMetrics {
     // to the reader.
     pub(crate) non_self_authenticating_controller_neuron_subset_metrics: NeuronSubsetMetrics,
     pub(crate) public_neuron_subset_metrics: NeuronSubsetMetrics,
+    pub(crate) declining_voting_power_neuron_subset_metrics: NeuronSubsetMetrics,
+    pub(crate) fully_lost_voting_power_neuron_subset_metrics: NeuronSubsetMetrics,
 }
 
 impl NeuronMetrics {
     fn increment_non_self_authenticating_controller_neuron_subset_metrics(
         &mut self,
+        voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
         neuron: &Neuron,
     ) {
@@ -80,17 +83,55 @@ impl NeuronMetrics {
         }
 
         self.non_self_authenticating_controller_neuron_subset_metrics
-            .increment(now_seconds, neuron);
+            .increment(voting_power_economics, now_seconds, neuron);
     }
 
-    fn increment_public_neuron_subset_metrics(&mut self, now_seconds: u64, neuron: &Neuron) {
+    fn increment_public_neuron_subset_metrics(
+        &mut self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+        neuron: &Neuron,
+    ) {
         let is_public = neuron.visibility() == Some(Visibility::Public);
         if !is_public {
             return;
         }
 
         self.public_neuron_subset_metrics
-            .increment(now_seconds, neuron);
+            .increment(voting_power_economics, now_seconds, neuron);
+    }
+
+    /// This could modify either declining_voting_power_neuron_subset_metrics, or
+    /// fully_lost_voting_power_neuron_subset_metrics (but not both), since
+    /// those categories are mutually exclusive.
+    fn increment_declining_voting_power_or_fully_lost_voting_power_neuron_subset_metrics(
+        &mut self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+        neuron: &Neuron,
+    ) {
+        let seconds_since_voting_power_refreshed =
+            // Here, we assume that the neuron was not refreshed in the future.
+            // This doesn't always hold in tests though, due to the difficulty
+            // of constructing realistic data/scenarios.
+            now_seconds.saturating_sub(neuron.voting_power_refreshed_timestamp_seconds());
+        let Some(seconds_losing_voting_power) = seconds_since_voting_power_refreshed
+            .checked_sub(voting_power_economics.get_start_reducing_voting_power_after_seconds())
+        else {
+            return;
+        };
+
+        if seconds_losing_voting_power < voting_power_economics.get_clear_following_after_seconds()
+        {
+            self.declining_voting_power_neuron_subset_metrics.increment(
+                voting_power_economics,
+                now_seconds,
+                neuron,
+            );
+        } else {
+            self.fully_lost_voting_power_neuron_subset_metrics
+                .increment(voting_power_economics, now_seconds, neuron);
+        }
     }
 }
 
@@ -104,7 +145,9 @@ pub(crate) struct NeuronSubsetMetrics {
     pub total_maturity_e8s_equivalent: u64,
 
     // Voting power.
-    pub total_voting_power: u64,
+    pub total_voting_power: u64, // Deprecated. Use one of the following instead.
+    pub total_deciding_voting_power: u64, // Used to decide proposals.
+    pub total_potential_voting_power: u64, // Used for voting rewards.
 
     // Broken out by dissolve delay (rounded down to the nearest multiple of 0.5
     // years). For example, if the current dissolve delay of a neuron is 7
@@ -120,19 +163,26 @@ pub(crate) struct NeuronSubsetMetrics {
     pub maturity_e8s_equivalent_buckets: HashMap<u64, u64>,
 
     // Analogous to total_voting_power.
-    pub voting_power_buckets: HashMap<u64, u64>,
+    pub voting_power_buckets: HashMap<u64, u64>, // Deprecated. Use one of the following instead.
+    pub deciding_voting_power_buckets: HashMap<u64, u64>, // See earlier comments.
+    pub potential_voting_power_buckets: HashMap<u64, u64>, // See earlier comments.
 }
 
 impl NeuronSubsetMetrics {
-    fn increment(&mut self, now_seconds: u64, neuron: &Neuron) {
+    fn increment(
+        &mut self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+        neuron: &Neuron,
+    ) {
         let staked_e8s = neuron.minted_stake_e8s();
         let staked_maturity_e8s_equivalent =
             neuron.staked_maturity_e8s_equivalent.unwrap_or_default();
         let maturity_e8s_equivalent = neuron.maturity_e8s_equivalent;
 
-        // TODO: Also provide deciding voting power. Ideally, we'd rename the metrics to
-        // potential_voting_power, but that's probably not worth it.
-        let voting_power = neuron.potential_voting_power(now_seconds);
+        let potential_voting_power = neuron.potential_voting_power(now_seconds);
+        let deciding_voting_power =
+            neuron.deciding_voting_power(voting_power_economics, now_seconds);
 
         let increment = |total: &mut u64, additional_amount| {
             *total = total.saturating_add(additional_amount);
@@ -150,7 +200,12 @@ impl NeuronSubsetMetrics {
             maturity_e8s_equivalent,
         );
 
-        increment(&mut self.total_voting_power, voting_power);
+        increment(&mut self.total_voting_power, potential_voting_power);
+        increment(&mut self.total_deciding_voting_power, deciding_voting_power);
+        increment(
+            &mut self.total_potential_voting_power,
+            potential_voting_power,
+        );
 
         // Increment metrics broken out by dissolve delay.
         let dissolve_delay_bucket = neuron
@@ -173,7 +228,15 @@ impl NeuronSubsetMetrics {
             maturity_e8s_equivalent,
         );
 
-        increment(&mut self.voting_power_buckets, voting_power);
+        increment(&mut self.voting_power_buckets, potential_voting_power);
+        increment(
+            &mut self.deciding_voting_power_buckets,
+            deciding_voting_power,
+        );
+        increment(
+            &mut self.potential_voting_power_buckets,
+            potential_voting_power,
+        );
     }
 }
 
@@ -181,8 +244,9 @@ impl NeuronStore {
     /// Computes neuron metrics.
     pub(crate) fn compute_neuron_metrics(
         &self,
+        neuron_minimum_stake_e8s: u64,
+        voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
-        minimum_stake_e8s: u64,
     ) -> NeuronMetrics {
         let mut metrics = if self.use_stable_memory_for_all_neurons {
             NeuronMetrics {
@@ -202,11 +266,21 @@ impl NeuronStore {
         };
 
         if self.use_stable_memory_for_all_neurons {
-            self.compute_neuron_metrics_all_stable(&mut metrics, now_seconds, minimum_stake_e8s);
+            self.compute_neuron_metrics_all_stable(
+                &mut metrics,
+                neuron_minimum_stake_e8s,
+                voting_power_economics,
+                now_seconds,
+            );
         }
         // During migration, some neurons may be in the heap, so we need to compute
         // metrics for them as well.
-        self.compute_neuron_metrics_current(&mut metrics, now_seconds, minimum_stake_e8s);
+        self.compute_neuron_metrics_current(
+            &mut metrics,
+            neuron_minimum_stake_e8s,
+            voting_power_economics,
+            now_seconds,
+        );
 
         metrics
     }
@@ -214,8 +288,9 @@ impl NeuronStore {
     pub(crate) fn compute_neuron_metrics_all_stable(
         &self,
         metrics: &mut NeuronMetrics,
+        neuron_minimum_stake_e8s: u64,
+        voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
-        minimum_stake_e8s: u64,
     ) {
         with_stable_neuron_store(|stable_neuron_store| {
             let neuron_sections = NeuronSections {
@@ -227,10 +302,20 @@ impl NeuronStore {
             for neuron in stable_neuron_store.range_neurons_sections(.., neuron_sections) {
                 let neuron = &neuron;
                 metrics.increment_non_self_authenticating_controller_neuron_subset_metrics(
+                    voting_power_economics,
                     now_seconds,
                     neuron,
                 );
-                metrics.increment_public_neuron_subset_metrics(now_seconds, neuron);
+                metrics.increment_public_neuron_subset_metrics(
+                    voting_power_economics,
+                    now_seconds,
+                    neuron,
+                );
+                metrics.increment_declining_voting_power_or_fully_lost_voting_power_neuron_subset_metrics(
+                    voting_power_economics,
+                    now_seconds,
+                    neuron,
+                );
 
                 metrics.total_staked_e8s += neuron.minted_stake_e8s();
                 metrics.total_staked_maturity_e8s_equivalent +=
@@ -252,7 +337,7 @@ impl NeuronStore {
                 }
 
                 if 0 < neuron.cached_neuron_stake_e8s
-                    && neuron.cached_neuron_stake_e8s < minimum_stake_e8s
+                    && neuron.cached_neuron_stake_e8s < neuron_minimum_stake_e8s
                 {
                     metrics.neurons_with_invalid_stake_count += 1;
                 }
@@ -386,15 +471,27 @@ impl NeuronStore {
     pub(crate) fn compute_neuron_metrics_current(
         &self,
         metrics: &mut NeuronMetrics,
+        neuron_minimum_stake_e8s: u64,
+        voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
-        minimum_stake_e8s: u64,
     ) {
         for neuron in self.heap_neurons.values() {
             metrics.increment_non_self_authenticating_controller_neuron_subset_metrics(
+                voting_power_economics,
                 now_seconds,
                 neuron,
             );
-            metrics.increment_public_neuron_subset_metrics(now_seconds, neuron);
+            metrics.increment_public_neuron_subset_metrics(
+                voting_power_economics,
+                now_seconds,
+                neuron,
+            );
+            metrics
+                .increment_declining_voting_power_or_fully_lost_voting_power_neuron_subset_metrics(
+                    voting_power_economics,
+                    now_seconds,
+                    neuron,
+                );
 
             metrics.total_staked_e8s += neuron.minted_stake_e8s();
             metrics.total_staked_maturity_e8s_equivalent +=
@@ -412,7 +509,7 @@ impl NeuronStore {
             }
 
             if 0 < neuron.cached_neuron_stake_e8s
-                && neuron.cached_neuron_stake_e8s < minimum_stake_e8s
+                && neuron.cached_neuron_stake_e8s < neuron_minimum_stake_e8s
             {
                 metrics.neurons_with_invalid_stake_count += 1;
             }

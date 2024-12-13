@@ -1,15 +1,4 @@
-use ic_system_test_driver::driver::test_env::RequiredHostFeaturesFromCmdLine;
-use std::fs::File;
-use std::io::{Read, Write};
-use std::path::Path;
-use std::process::{Command, Stdio};
-use std::str;
-use std::time::Duration;
-use std::{env, fs};
-#[rustfmt::skip]
-
 use anyhow::Result;
-
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::{
     SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
@@ -17,12 +6,20 @@ use ic_system_test_driver::driver::driver_setup::{
 use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::group::{SystemTestGroup, COLOCATE_CONTAINER_NAME};
 use ic_system_test_driver::driver::ic::VmResources;
+use ic_system_test_driver::driver::test_env::RequiredHostFeaturesFromCmdLine;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::{get_dependency_path, FarmBaseUrl, SshSession};
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
 use slog::{error, info, Logger};
 use ssh2::Session;
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::Path;
+use std::process::{Command, Stdio};
+use std::str;
+use std::time::Duration;
+use std::{env, fs};
 
 const UVM_NAME: &str = "test-driver";
 const COLOCATED_TEST: &str = "COLOCATED_TEST";
