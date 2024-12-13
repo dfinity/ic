@@ -29,7 +29,6 @@ class SlackScanResult:
             self.new_vulnerabilities > 0
             or self.changed_vulnerabilities > 0
             or self.fixed_vulnerabilities > 0
-            or self.unrated_vulnerabilities > 0
             or len(self.added_dependencies) > 0
             or len(self.removed_dependencies) > 0
             or len(self.unrated_vulnerabilities_reminder) > 0
