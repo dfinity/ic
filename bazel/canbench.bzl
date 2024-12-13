@@ -15,6 +15,7 @@ def rust_canbench(name, results_file, add_test = False, opt = "3", **kwargs):
         name: The name of the rule.
         results_file: The file used store the benchmark results for future comparison.
         add_test: If True add an additional :${name}_test rule that fails if canbench benchmark fails.
+        opt: The optimization level to use for the rust_binary compilation.
         **kwargs: Additional arguments to pass to rust_binary.
     """
 
