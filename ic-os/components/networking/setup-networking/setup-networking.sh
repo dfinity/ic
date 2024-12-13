@@ -65,7 +65,6 @@ function gather_interfaces_by_speed() {
         echo "${SPEED_MAP[$IFACE]} $IFACE"
     done | sort -nrk1 | awk '{print $2}')
 
-    echo "$SORTED_INTERFACES"
 }
 
 function configure_netplan() {
@@ -73,14 +72,17 @@ function configure_netplan() {
     local NETPLAN_TEMPLATE="/opt/ic/share/99-setup.yaml.template"
     local NETPLAN_OUTPUT="/run/netplan/99-setup.yaml"
 
+    echo "Gathering and sorting interfaces by speed..."
     ALL_IFACES=$(gather_interfaces_by_speed)
     if [ -z "$ALL_IFACES" ]; then
         echo "No interfaces found."
         exit 1
     fi
+    echo "Interfaces sorted by speed: $ALL_IFACES"
 
     INTERFACE_LIST=$(echo "$ALL_IFACES" | paste -sd, -)
 
+    mkdir -p /run/netplan
     cp "$NETPLAN_TEMPLATE" "$NETPLAN_OUTPUT"
 
     sed -i "s|{INTERFACES}|$INTERFACE_LIST|g" "$NETPLAN_OUTPUT"
@@ -90,7 +92,7 @@ function configure_netplan() {
 
     # Dynamically add ethernets for each interface
     for IFACE in ${ALL_IFACES}; do
-        sed -i "/^  ethernets:/a \ \ \ \ $IFACE:\n      mtu: 1500\n      optional: true\n      networkd:\n        lldp: true\n" "$NETPLAN_OUTPUT"
+        sed -i "/^  ethernets:/a \ \ \ \ $IFACE:\n      mtu: 1500\n      optional: true\n      lldp:\n        send: yes\n" "$NETPLAN_OUTPUT"
     done
 
     echo "Netplan configuration written to $NETPLAN_OUTPUT"
