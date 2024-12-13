@@ -1,4 +1,4 @@
-use crate::dashboard::DashboardPagingParameters;
+use crate::dashboard::DashboardPaginationParameters;
 use candid::Nat;
 use dashboard::DashboardTemplate;
 use ic_canister_log::log;
@@ -1035,7 +1035,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
     } else if req.path() == "/dashboard" {
         use askama::Template;
 
-        let paging_parameters = match DashboardPagingParameters::from_query_params(&req) {
+        let paging_parameters = match DashboardPaginationParameters::from_query_params(&req) {
             Ok(args) => args,
             Err(error) => {
                 return HttpResponseBuilder::bad_request()

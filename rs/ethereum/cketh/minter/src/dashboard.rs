@@ -151,16 +151,16 @@ impl DashboardPendingDeposit {
 const DEFAULT_PAGE_SIZE: usize = 100;
 
 #[derive(Default, Clone)]
-pub struct DashboardPagingParameters {
+pub struct DashboardPaginationParameters {
     minted_events_start: usize,
     finalized_transactions_start: usize,
     reimbursed_transactions_start: usize,
 }
 
-impl DashboardPagingParameters {
+impl DashboardPaginationParameters {
     pub(crate) fn from_query_params(
         req: &HttpRequest,
-    ) -> Result<DashboardPagingParameters, String> {
+    ) -> Result<DashboardPaginationParameters, String> {
         fn parse_query_param(req: &HttpRequest, param_name: &str) -> Result<usize, String> {
             Ok(match req.raw_query_param(param_name) {
                 Some(arg) => usize::from_str(arg)
@@ -178,7 +178,7 @@ impl DashboardPagingParameters {
 }
 
 #[derive(Clone)]
-pub struct DashboardPaginatedTable<T: Clone> {
+pub struct DashboardPaginatedTable<T> {
     current_page: Vec<T>,
     pagination: DashboardTablePagination,
 }
@@ -186,13 +186,12 @@ pub struct DashboardPaginatedTable<T: Clone> {
 impl<T: Clone> DashboardPaginatedTable<T> {
     pub fn from_items(
         items: &[T],
-        current_page_offset: &usize,
+        current_page_offset: usize,
         page_size: usize,
         num_cols: usize,
         table_reference: &str,
         page_offset_query_param: &str,
     ) -> Self {
-        let current_page_offset = *current_page_offset;
         Self {
             current_page: items
                 .iter()
@@ -209,6 +208,10 @@ impl<T: Clone> DashboardPaginatedTable<T> {
                 page_offset_query_param,
             ),
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.current_page.is_empty()
     }
 
     pub fn has_more_than_one_page(&self) -> bool {
@@ -274,26 +277,34 @@ pub struct DashboardTemplate {
     pub first_synced_block: BlockNumber,
     pub last_observed_block: Option<BlockNumber>,
     pub cketh_ledger_id: Principal,
-    pub minted_events: Vec<MintedEvent>,
+    pub minted_events_table: DashboardPaginatedTable<MintedEvent>,
     pub pending_deposits: Vec<DashboardPendingDeposit>,
     pub invalid_events: BTreeMap<EventSource, InvalidEventReason>,
     pub withdrawal_requests: Vec<DashboardWithdrawalRequest>,
     pub pending_transactions: Vec<DashboardPendingTransaction>,
-    pub finalized_transactions: Vec<DashboardFinalizedTransaction>,
-    pub reimbursed_transactions: Vec<DashboardReimbursedTransaction>,
+    pub finalized_transactions_table: DashboardPaginatedTable<DashboardFinalizedTransaction>,
+    pub reimbursed_transactions_table: DashboardPaginatedTable<DashboardReimbursedTransaction>,
     pub eth_balance: EthBalance,
     pub skipped_blocks: BTreeMap<String, BTreeSet<BlockNumber>>,
     pub supported_ckerc20_tokens: Vec<DashboardCkErc20Token>,
-    pub pagination_parameters: DashboardPagingParameters,
 }
 
 impl DashboardTemplate {
-    pub fn from_state(state: &State, pagination_parameters: DashboardPagingParameters) -> Self {
+    pub fn from_state(state: &State, pagination_parameters: DashboardPaginationParameters) -> Self {
         let mut minted_events: Vec<_> = state.minted_events.values().cloned().collect();
         minted_events.sort_unstable_by_key(|event| {
             let deposit_event = &event.deposit_event;
             Reverse((deposit_event.block_number(), deposit_event.log_index()))
         });
+
+        let minted_events_table = DashboardPaginatedTable::from_items(
+            &minted_events,
+            pagination_parameters.minted_events_start,
+            DEFAULT_PAGE_SIZE,
+            7,
+            "minted-events",
+            "minted_events_start",
+        );
 
         let mut supported_ckerc20_tokens: Vec<_> = state
             .supported_ck_erc20_tokens()
@@ -396,6 +407,15 @@ impl DashboardTemplate {
             .collect();
         finalized_transactions.sort_unstable_by_key(|tx| Reverse(tx.ledger_burn_index));
 
+        let finalized_transactions_table = DashboardPaginatedTable::from_items(
+            &finalized_transactions,
+            pagination_parameters.finalized_transactions_start,
+            DEFAULT_PAGE_SIZE,
+            8,
+            "finalized-transactions",
+            "finalized_transactions_start",
+        );
+
         let mut reimbursed_transactions: Vec<_> = state
             .eth_transactions
             .reimbursed_transactions_iter()
@@ -438,6 +458,15 @@ impl DashboardTemplate {
         reimbursed_transactions
             .sort_unstable_by_key(|reimbursed_tx| Reverse(reimbursed_tx.cketh_ledger_burn_index()));
 
+        let reimbursed_transactions_table = DashboardPaginatedTable::from_items(
+            &reimbursed_transactions,
+            pagination_parameters.reimbursed_transactions_start,
+            DEFAULT_PAGE_SIZE,
+            6,
+            "reimbursed-transactions",
+            "reimbursed_transactions_start",
+        );
+
         DashboardTemplate {
             ethereum_network: state.ethereum_network,
             ecdsa_key_name: state.ecdsa_key_name.clone(),
@@ -451,13 +480,13 @@ impl DashboardTemplate {
             minimum_withdrawal_amount: state.cketh_minimum_withdrawal_amount,
             first_synced_block: state.first_scraped_block_number,
             last_observed_block: state.last_observed_block_number,
-            minted_events,
+            minted_events_table,
             pending_deposits,
             invalid_events: state.invalid_events.clone(),
             withdrawal_requests,
             pending_transactions,
-            finalized_transactions,
-            reimbursed_transactions,
+            finalized_transactions_table,
+            reimbursed_transactions_table,
             eth_balance: state.eth_balance.clone(),
             skipped_blocks: state
                 .skipped_blocks
@@ -465,7 +494,6 @@ impl DashboardTemplate {
                 .map(|(contract_address, blocks)| (contract_address.to_string(), blocks.clone()))
                 .collect(),
             supported_ckerc20_tokens,
-            pagination_parameters,
         }
     }
 }

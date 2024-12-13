@@ -1,5 +1,5 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
-use crate::dashboard::{DashboardPagingParameters, DashboardTemplate};
+use crate::dashboard::{DashboardPaginationParameters, DashboardTemplate};
 use crate::erc20::CkErc20Token;
 use candid::{Nat, Principal};
 use ic_cketh_minter::eth_logs::{
@@ -164,7 +164,7 @@ fn should_display_supported_erc20_tokens() {
         state.ethereum_network = EthereumNetwork::Mainnet;
         state.record_add_ckerc20_token(usdc.clone());
         state.record_add_ckerc20_token(usdt.clone());
-        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
+        DashboardTemplate::from_state(&state, DashboardPaginationParameters::default())
     };
 
     DashboardAssert::assert_that(dashboard)
@@ -213,7 +213,7 @@ fn should_display_pending_deposits_sorted_by_decreasing_block_number() {
         apply_state_transition(&mut state, &EventType::AcceptedDeposit(event_1));
         apply_state_transition(&mut state, &EventType::AcceptedDeposit(event_2));
         apply_state_transition(&mut state, &EventType::AcceptedErc20Deposit(event_3));
-        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
+        DashboardTemplate::from_state(&state, DashboardPaginationParameters::default())
     };
 
     DashboardAssert::assert_that(dashboard)
@@ -311,7 +311,7 @@ fn should_display_minted_events_sorted_by_decreasing_mint_block_index() {
                 mint_block_index: LedgerMintIndex::new(44),
             },
         );
-        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
+        DashboardTemplate::from_state(&state, DashboardPaginationParameters::default())
     };
 
     DashboardAssert::assert_that(dashboard)
@@ -386,7 +386,7 @@ fn should_display_rejected_deposits() {
                 reason: "failed to decode principal".to_string(),
             },
         );
-        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
+        DashboardTemplate::from_state(&state, DashboardPaginationParameters::default())
     };
 
     DashboardAssert::assert_that(dashboard)
@@ -423,7 +423,7 @@ fn should_display_correct_cketh_token_symbol_based_on_network() {
                     LedgerBurnIndex::new(15),
                 )),
             );
-            DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
+            DashboardTemplate::from_state(&state, DashboardPaginationParameters::default())
         };
         DashboardAssert::assert_that(dashboard).has_withdrawal_requests(
             1,
@@ -467,7 +467,7 @@ fn should_display_withdrawal_requests_sorted_by_decreasing_cketh_ledger_burn_ind
                 ..cketh_withdrawal_request_with_index(LedgerBurnIndex::new(17))
             }),
         );
-        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
+        DashboardTemplate::from_state(&state, DashboardPaginationParameters::default())
     };
 
     DashboardAssert::assert_that(dashboard)
@@ -567,7 +567,7 @@ fn should_display_pending_transactions_sorted_by_decreasing_cketh_ledger_burn_in
             );
         }
 
-        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
+        DashboardTemplate::from_state(&state, DashboardPaginationParameters::default())
     };
 
     DashboardAssert::assert_that(dashboard)
@@ -688,7 +688,7 @@ fn should_display_finalized_transactions_sorted_by_decreasing_cketh_ledger_burn_
             );
         }
 
-        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
+        DashboardTemplate::from_state(&state, DashboardPaginationParameters::default())
     };
 
     DashboardAssert::assert_that(dashboard)
@@ -895,7 +895,7 @@ fn should_display_reimbursed_requests() {
                 }
             }
         }
-        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
+        DashboardTemplate::from_state(&state, DashboardPaginationParameters::default())
     };
 
     // Check that we show latest first.
@@ -1006,39 +1006,17 @@ fn should_display_minted_events_pagination() {
     let dashboard = {
         let mut state = initial_state();
         add_minted_events(&mut state, 300);
-        let paging_parameters = DashboardPagingParameters {
+        let paging_parameters = DashboardPaginationParameters {
             minted_events_start: 100, // Second page.
-            ..DashboardPagingParameters::default()
+            ..DashboardPaginationParameters::default()
         };
         DashboardTemplate::from_state(&state, paging_parameters)
     };
 
-    // Events are displayed in order of decreasing index. Page 2 should have events 200 to 101.
+    // Events are displayed in order of decreasing log index. Page 2 should therefore have events 200 to 101.
     DashboardAssert::assert_that(dashboard)
-        .has_minted_events(
-            1,
-            &vec![
-                "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2",
-                "200",
-                "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
-                "ckETH",
-                "10_000_000_000_000_000",
-                "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae",
-                "1",
-            ],
-        )
-        .has_minted_events(
-            100,
-            &vec![
-                "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2",
-                "101",
-                "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
-                "ckETH",
-                "10_000_000_000_000_000",
-                "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae",
-                "1",
-            ],
-        )
+        .has_minted_events_with_log_index(1, "200")
+        .has_minted_events_with_log_index(100, "101")
         .has_minted_events_last_row_text(&vec!["Pages:", "1", "2", "3"])
         .has_minted_events_last_row_links(&vec![
             "?minted_events_start=0#minted-events",
@@ -1051,7 +1029,7 @@ fn should_not_display_minted_events_pagination() {
     let dashboard = {
         let mut state = initial_state();
         add_minted_events(&mut state, 75); // less than 1 full page
-        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
+        DashboardTemplate::from_state(&state, DashboardPaginationParameters::default())
     };
 
     DashboardAssert::assert_that(dashboard).has_minted_events_last_row_text(&vec![
@@ -1070,7 +1048,7 @@ fn should_not_display_finalized_transactions_pagination() {
     let dashboard = {
         let mut state = initial_state();
         add_finalized_transactions(&mut state, 75); // less than 1 full page
-        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
+        DashboardTemplate::from_state(&state, DashboardPaginationParameters::default())
     };
 
     DashboardAssert::assert_that(dashboard).has_finalized_transactions_last_row_text(&vec![
@@ -1090,41 +1068,17 @@ fn should_display_finalized_transactions_pagination() {
     let dashboard = {
         let mut state = initial_state();
         add_finalized_transactions(&mut state, 300);
-        let paging_parameters = DashboardPagingParameters {
+        let paging_parameters = DashboardPaginationParameters {
             finalized_transactions_start: 100, // Second page.
-            ..DashboardPagingParameters::default()
+            ..DashboardPaginationParameters::default()
         };
         DashboardTemplate::from_state(&state, paging_parameters)
     };
 
-    // Transactions are displayed in order of decreasing index. Page 2 should have transactions 200 to 101.
+    // Transactions are displayed in order of decreasing ledger burn index. Page 2 should therefore have transactions 200 to 101.
     DashboardAssert::assert_that(dashboard)
-        .has_finalized_transactions(
-            1,
-            &vec![
-                "200",
-                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
-                "ckSepoliaETH",
-                "1_058_000_000_000_000",
-                "21_000_000_000_000",
-                "4190269",
-                "0x399ba1d76e66175b7fd092050c77b036e0297d36c96d6e06a25c6205b8168774",
-                "Success",
-            ],
-        )
-        .has_finalized_transactions(
-            100,
-            &vec![
-                "101",
-                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
-                "ckSepoliaETH",
-                "1_058_000_000_000_000",
-                "21_000_000_000_000",
-                "4190269",
-                "0x5a7f0423ddcbaf9429bdc18e793fa8b61f56357fb34452eae15e9396d1becd40",
-                "Success",
-            ],
-        )
+        .has_finalized_transactions_with_ledger_burn_index(1, "200")
+        .has_finalized_transactions_with_ledger_burn_index(100, "101")
         .has_finalized_transactions_last_row_text(&vec!["Pages:", "1", "2", "3"])
         .has_finalized_transactions_last_row_links(&vec![
             "?finalized_transactions_start=0#finalized-transactions",
@@ -1137,7 +1091,7 @@ fn should_not_display_reimbursed_transactions_pagination() {
     let dashboard = {
         let mut state = initial_state();
         add_reimbursed_transactions(&mut state, 75); // less than 1 full page
-        DashboardTemplate::from_state(&state, DashboardPagingParameters::default())
+        DashboardTemplate::from_state(&state, DashboardPaginationParameters::default())
     };
 
     DashboardAssert::assert_that(dashboard).has_reimbursed_transactions_last_row_text(&vec![
@@ -1155,37 +1109,17 @@ fn should_display_reimbursed_transactions_pagination() {
     let dashboard = {
         let mut state = initial_state();
         add_reimbursed_transactions(&mut state, 300);
-        let paging_parameters = DashboardPagingParameters {
+        let paging_parameters = DashboardPaginationParameters {
             reimbursed_transactions_start: 100, // Second page.
-            ..DashboardPagingParameters::default()
+            ..DashboardPaginationParameters::default()
         };
         DashboardTemplate::from_state(&state, paging_parameters)
     };
 
-    // Transactions are displayed in order of decreasing index. Page 2 should have transactions 200 to 101.
+    // Transactions are displayed in order of decreasing ledger burn index. Page 2 should therefore have transactions 200 to 101.
     DashboardAssert::assert_that(dashboard)
-        .has_reimbursed_transactions(
-            1,
-            &vec![
-                "200",
-                "123",
-                "ckSepoliaETH",
-                "1_058_000_000_000_000",
-                "0x399ba1d76e66175b7fd092050c77b036e0297d36c96d6e06a25c6205b8168774",
-                "Reimbursed",
-            ],
-        )
-        .has_reimbursed_transactions(
-            100,
-            &vec![
-                "101",
-                "123",
-                "ckSepoliaETH",
-                "1_058_000_000_000_000",
-                "0x5a7f0423ddcbaf9429bdc18e793fa8b61f56357fb34452eae15e9396d1becd40",
-                "Reimbursed",
-            ],
-        )
+        .has_reimbursed_transactions_with_ledger_burn_index(1, "200")
+        .has_reimbursed_transactions_with_ledger_burn_index(100, "101")
         .has_reimbursed_transactions_last_row_text(&vec!["Pages:", "1", "2", "3"])
         .has_reimbursed_transactions_last_row_links(&vec![
             "?reimbursed_transactions_start=0#reimbursed-transactions",
@@ -1194,7 +1128,7 @@ fn should_display_reimbursed_transactions_pagination() {
 }
 
 fn initial_dashboard() -> DashboardTemplate {
-    DashboardTemplate::from_state(&initial_state(), DashboardPagingParameters::default())
+    DashboardTemplate::from_state(&initial_state(), DashboardPaginationParameters::default())
 }
 
 const INITIAL_LAST_SCRAPED_BLOCK_NUMBER: u32 = 3_956_206_u32;
@@ -1811,6 +1745,19 @@ mod assertions {
             )
         }
 
+        pub fn has_minted_events_with_log_index(
+            &self,
+            row_index: u8,
+            expected_value: &str,
+        ) -> &Self {
+            self.has_table_row_string_value_in_column(
+                &format!("#minted-events + table > tbody > tr:nth-child({row_index})"),
+                1,
+                expected_value,
+                "minted-events",
+            )
+        }
+
         pub fn has_minted_events_last_row_text(&self, expected_value: &Vec<&str>) -> &Self {
             self.has_table_row_string_value(
                 "#minted-events + table > tbody > tr:last-child",
@@ -1863,6 +1810,19 @@ mod assertions {
             )
         }
 
+        pub fn has_finalized_transactions_with_ledger_burn_index(
+            &self,
+            row_index: u8,
+            expected_value: &str,
+        ) -> &Self {
+            self.has_table_row_string_value_in_column(
+                &format!("#finalized-transactions + table > tbody > tr:nth-child({row_index})"),
+                0,
+                expected_value,
+                "finalized-transactions",
+            )
+        }
+
         pub fn has_finalized_transactions_last_row_text(
             &self,
             expected_value: &Vec<&str>,
@@ -1892,6 +1852,19 @@ mod assertions {
         ) -> &Self {
             self.has_table_row_string_value(
                 &format!("#reimbursed-transactions + table > tbody > tr:nth-child({row_index})"),
+                expected_value,
+                "reimbursed-transactions",
+            )
+        }
+
+        pub fn has_reimbursed_transactions_with_ledger_burn_index(
+            &self,
+            row_index: u8,
+            expected_value: &str,
+        ) -> &Self {
+            self.has_table_row_string_value_in_column(
+                &format!("#reimbursed-transactions + table > tbody > tr:nth-child({row_index})"),
+                0,
                 expected_value,
                 "reimbursed-transactions",
             )
@@ -1935,6 +1908,31 @@ mod assertions {
                 &string_value, expected_value,
                 "{}. Rendered html: {}",
                 error_msg, self.rendered_html
+            );
+            self
+        }
+
+        fn has_table_row_string_value_in_column(
+            &self,
+            selector: &str,
+            column_index: usize,
+            expected_value: &str,
+            error_msg: &str,
+        ) -> &Self {
+            let actual_value = self.select_only_one(selector);
+            let column_values = actual_value
+                .text()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>();
+            assert_eq!(
+                column_values
+                    .get(column_index)
+                    .expect("column index out of bounds"),
+                &expected_value,
+                "{}. Rendered html: {}",
+                error_msg,
+                self.rendered_html
             );
             self
         }
