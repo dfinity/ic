@@ -27,7 +27,7 @@ function read_variables() {
     # otherwise lead to executing arbitrary shell code!
     while IFS="=" read -r key value; do
         case "$key" in
-            "ipv6_prefix") IPV6_GATEWAY="${value}" ;;
+            "ipv6_gateway") IPV6_GATEWAY="${value}" ;;
         esac
     done <"${CONFIG}"
 
