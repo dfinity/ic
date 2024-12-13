@@ -13,17 +13,16 @@ on:
         required: true
         type: string
 
-      tag:
-        description: 'Tag for the release (required format `anonymization-backend-*`)'
-        required: false
-        type: string
-
 permissions:
   contents: write
 
 env:
   NAME: anonymization-backend
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   build-and-release:
@@ -42,7 +41,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: build
-        shell: bash
         run: |
           TARGET='//rs/boundary_node/anonymization/backend:anonymization_backend'
           bazel build --config=ci ${TARGET}
@@ -50,17 +48,21 @@ jobs:
           OUTPUT='bazel-bin/rs/boundary_node/anonymization/backend/anonymization_backend.wasm.gz'
           mv ${OUTPUT} anonymization_backend.wasm.gz
 
+      - name: artifacts
+        run: |
           ARTIFACTS=(
             anonymization_backend.wasm.gz
           )
 
-          echo "ARTIFACTS=${ARTIFACTS[@]}" >> "${GITHUB_ENV}"
+          echo "ARTIFACTS<<EOF"                                >> $GITHUB_ENV
+          for ARTIFACT in ${ARTIFACTS[@]}; do echo ${ARTIFACT} >> $GITHUB_ENV; done
+          echo "EOF"                                           >> $GITHUB_ENV
 
       - name: checksums
         run: |
           CHECKSUMS=$(mktemp)
 
-          for ARTIFACT in ${ARTIFACTS[@]}; do
+          for ARTIFACT in ${ARTIFACTS}; do
               shasum -a256 ${ARTIFACT} >> ${CHECKSUMS}
           done
 
@@ -68,19 +70,8 @@ jobs:
 
       - name: tag
         run: |
-          RELEASE_TAG='${{ inputs.tag }}'
-          if [[ -z "${RELEASE_TAG}" ]]; then
-            COMMIT_SHORT=$(git rev-parse --short HEAD)
-            RELEASE_TAG="${{ env.NAME }}-${COMMIT_SHORT}"
-          fi
-
-          if [[ ! "${RELEASE_TAG}" =~ ^${{ env.NAME }} ]]; then
-            echo "ERROR: Required tag prefix: ${{ env.NAME }}"
-            exit 1
-          fi
-
-          git tag ${RELEASE_TAG}
-          git push origin tag ${RELEASE_TAG}
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          RELEASE_TAG="${{ env.NAME }}-${COMMIT_SHORT}"
 
           echo "RELEASE_TAG=${RELEASE_TAG}" >> "${GITHUB_ENV}"
 
@@ -111,10 +102,10 @@ jobs:
           echo "NOTES=${NOTES}" >> "${GITHUB_ENV}"
 
       - name: release
-        run: |
-          gh release create \
-            ${RELEASE_TAG} ${ARTIFACTS[@]} \
-                --title '${{ inputs.title }}' \
-                --verify-tag \
-                --latest=false \
-                --notes-file ${NOTES}
+        uses: softprops/action-gh-release@e7a8f85e1c67a31e6ed99a94b41bd0b71bbee6b8
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ inputs.title }}
+          make_latest: false
+          body_path: ${{ env.NOTES }}
+          files: ${{ env.ARTIFACTS }}

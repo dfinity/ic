@@ -664,7 +664,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
             517000006,
         ),
         common::Benchmark(
-            "wasm32/ic0_time()".into(),
+            "wasm64/ic0_time()".into(),
             Module::Test.from_ic0("time", NoParams, Result::I64, Wasm64::Enabled),
             517000006,
         ),
@@ -974,7 +974,8 @@ pub fn execute_update_bench(c: &mut Criterion) {
         c,
         "update",
         &benchmarks,
-        |exec_env: &ExecutionEnvironment,
+        |id: &str,
+         exec_env: &ExecutionEnvironment,
          expected_instructions,
          common::BenchmarkArgs {
              canister_state,
@@ -1024,7 +1025,8 @@ pub fn execute_update_bench(c: &mut Criterion) {
             assert_eq!(
                 expected_instructions,
                 executed_instructions.get(),
-                "Error comparing number of actual and expected instructions"
+                "update the reference number of instructions for '{id}' to {}",
+                executed_instructions.get()
             );
         },
     );
