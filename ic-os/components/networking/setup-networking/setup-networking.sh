@@ -50,63 +50,48 @@ function generate_addresses() {
     echo "Generated IPv6 address: $IPV6_ADDR"
 }
 
-function select_fastest_interface() {
-    echo "Selecting the fastest interface with actual IPv6 connectivity..."
+function gather_interfaces_by_speed() {
     INTERFACES=$(ip -o link show | awk -F': ' '{print $2}' | grep -v '^lo$')
-    BEST_IFACE=""
-    BEST_SPEED=0
+    declare -A SPEED_MAP
 
     for IFACE in $INTERFACES; do
-        echo "Bringing up interface: $IFACE"
-        ip link set dev "$IFACE" up || true
-        sleep 2
-
-        echo "Assigning IPv6 address to $IFACE"
-        ip -6 addr add "${IPV6_ADDR}/64" dev "$IFACE"
-
-        # Give the system time to configure the address
-        sleep 2
-
-        echo "Testing IPv6 connectivity on $IFACE by pinging $IPV6_GATEWAY"
-        if ping6 -c 3 -I "$IFACE" "$IPV6_GATEWAY" >/dev/null 2>&1; then
-            echo "$IFACE can reach IPv6 gateway."
-            SPEED_STR=$(ethtool "$IFACE" 2>/dev/null | grep "Speed:" || true)
-            SPEED=$(echo "$SPEED_STR" | grep -oP '\d+' || echo 0)
-            echo "Interface $IFACE speed: ${SPEED:-0} Mb/s"
-            if [ "${SPEED:-0}" -gt "$BEST_SPEED" ]; then
-                BEST_SPEED=$SPEED
-                BEST_IFACE="$IFACE"
-                echo "New best interface: $BEST_IFACE at $BEST_SPEED Mb/s"
-            fi
-        else
-            echo "$IFACE cannot reach IPv6 gateway."
-        fi
-
-        # Clean up the assigned IPv6 address before checking next interface
-        ip -6 addr flush dev "$IFACE"
-        ip link set dev "$IFACE" down
+        SPEED_STR=$(ethtool "$IFACE" 2>/dev/null | grep "Speed:" || true)
+        SPEED=$(echo "$SPEED_STR" | grep -oP '\d+' || echo 0)
+        SPEED_MAP["$IFACE"]=$SPEED
     done
 
-    if [ -z "$BEST_IFACE" ]; then
-        echo "No suitable interface found with IPv6 connectivity."
-        exit 1
-    fi
-    echo "Using fastest interface: $BEST_IFACE at ${BEST_SPEED}Mb/s"
-    # Bring the best interface back up
-    ip link set dev "$BEST_IFACE" up
-    ip -6 addr add "${IPV6_ADDR}/64" dev "$BEST_IFACE"
+    # Sort interfaces by speed descending
+    SORTED_INTERFACES=$(for IFACE in "${!SPEED_MAP[@]}"; do
+        echo "${SPEED_MAP[$IFACE]} $IFACE"
+    done | sort -nrk1 | awk '{print $2}')
+
+    echo "$SORTED_INTERFACES"
 }
 
 function configure_netplan() {
     echo "Configuring netplan..."
     local NETPLAN_TEMPLATE="/opt/ic/share/99-setup.yaml.template"
-    local NETPLAN_OUTPUT="/etc/netplan/99-setup.yaml"
+    local NETPLAN_OUTPUT="/run/netplan/99-setup.yaml"
+
+    ALL_IFACES=$(gather_interfaces_by_speed)
+    if [ -z "$ALL_IFACES" ]; then
+        echo "No interfaces found."
+        exit 1
+    fi
+
+    INTERFACE_LIST=$(echo "$ALL_IFACES" | paste -sd, -)
 
     cp "$NETPLAN_TEMPLATE" "$NETPLAN_OUTPUT"
-    sed -i "s|{IFACE}|$BEST_IFACE|g" "$NETPLAN_OUTPUT"
+
+    sed -i "s|{INTERFACES}|$INTERFACE_LIST|g" "$NETPLAN_OUTPUT"
     sed -i "s|{MAC_ADDRESS}|$MAC_ADDR|g" "$NETPLAN_OUTPUT"
     sed -i "s|{IPV6_ADDR}|$IPV6_ADDR|g" "$NETPLAN_OUTPUT"
     sed -i "s|{IPV6_GATEWAY}|$IPV6_GATEWAY|g" "$NETPLAN_OUTPUT"
+
+    # Dynamically add ethernets for each interface
+    for IFACE in ${ALL_IFACES}; do
+        sed -i "/^  ethernets:/a \ \ \ \ $IFACE:\n      mtu: 1500\n      optional: true\n      networkd:\n        lldp: true\n" "$NETPLAN_OUTPUT"
+    done
 
     echo "Netplan configuration written to $NETPLAN_OUTPUT"
     echo "Applying netplan..."
@@ -120,7 +105,6 @@ function main() {
     parse_args "$@"
     read_variables
     generate_addresses
-    select_fastest_interface
     configure_netplan
     log_end "$(basename $0)"
 }
