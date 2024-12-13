@@ -16,7 +16,7 @@ def sync_main_branch_and_checkout_branch(
     if not repo_root.exists():
         raise Exception("Expected dir %s to exist", repo_root.name)
 
-    subprocess.call(["git", "fetch", "--detph=1", "--no-tags", "origin", f"{main_branch}:{main_branch}"], cwd=repo_root)
+    subprocess.call(["git", "fetch", "--depth=1", "--no-tags", "origin", f"{main_branch}:{main_branch}"], cwd=repo_root)
 
     result = subprocess.run(["git", "status", "--porcelain"], stdout=subprocess.PIPE, text=True, check=True)
     if result.stdout.strip():
