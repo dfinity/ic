@@ -189,6 +189,7 @@ rust_test(
     },
     tags = [
         "cpu:8",
+        "requires-network",
         # TODO: enable "test_macos" again when we have fixed the following error on Apple Silicon:
         #
         #  ---- test_http_gateway stdout ----
