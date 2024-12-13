@@ -207,6 +207,10 @@ rust_canbench(
     name = "governance-canbench",
     srcs = ["canbench/main.rs"],
     results_file = "canbench/canbench_results.yml",
+    # For some reason, the NNS Governance benchmarks are sensitive to the optimization level.
+    # We would like to figure out why and fix it, but for now, we are reducing the optimization 
+    # level so that tests against the optimization level can be added.
+    opt = "s",
     deps = [
         # Keep sorted.
         ":governance--canbench_feature",
