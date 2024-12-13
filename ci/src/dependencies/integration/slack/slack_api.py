@@ -221,3 +221,19 @@ class SlackApi:
                 raise RuntimeError(
                     f"Slack API conversations.history returned non ok response for URL {url}: {api_response['ok']} with error: {api_response['error'] if 'error' in api_response else 'None'}"
                 )
+
+    def get_permalink(self,  message_id: str) -> Optional[str]:
+        logging.info(
+            "Slack get_permalink for channel '%s' and message '%s'", self.channel_config, message_id
+        )
+
+        # https://api.slack.com/methods/chat.getPermalink#examples
+        api_response = self.__api_request(f"https://slack.com/api/chat.getPermalink?channel={self.channel_config.channel_id}&message_ts={message_id}")
+        if api_response["ok"]:
+            return api_response["permalink"]
+        else:
+            logging.error("Slack API chat.getPermalink failed.")
+            logging.debug(
+                "Slack API chat.getPermalink failed for channel '%s' and message '%s'.", self.channel_config, message_id
+            )
+        return None
