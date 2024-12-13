@@ -1308,6 +1308,7 @@ impl From<&Block> for pb::Block {
             query_stats_payload_bytes,
             idkg_payload,
             vetkd_payload,
+            supports_vetkd_payload,
         ) = if payload.is_summary() {
             (
                 pb::DkgPayload::from(&payload.as_summary().dkg),
@@ -1322,6 +1323,7 @@ impl From<&Block> for pb::Block {
                     .vetkd
                     .as_ref()
                     .map(|vetkd| vetkd.into()),
+                payload.as_summary().supports_vetkd_payload,
             )
         } else {
             let batch = &payload.as_data().batch;
@@ -1334,6 +1336,7 @@ impl From<&Block> for pb::Block {
                 batch.query_stats.clone(),
                 payload.as_data().idkg.as_ref().map(|idkg| idkg.into()),
                 payload.as_data().vetkd.as_ref().map(|vetkd| vetkd.into()),
+                true,
             )
         };
         Self {
@@ -1352,6 +1355,7 @@ impl From<&Block> for pb::Block {
             query_stats_payload_bytes,
             idkg_payload,
             vetkd_payload,
+            supports_vetkd_payload,
             payload_hash: block.payload.get_hash().clone().get().0,
         }
     }
@@ -1415,6 +1419,7 @@ impl TryFrom<pb::Block> for Block {
                     dkg: summary,
                     idkg,
                     vetkd,
+                    supports_vetkd_payload: block.supports_vetkd_payload,
                 })
             }
             dkg::Payload::Data(dkg) => {

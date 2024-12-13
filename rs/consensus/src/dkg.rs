@@ -519,11 +519,7 @@ pub fn make_registry_cup_from_cup_contents(
         parent: Id::from(CryptoHash(Vec::new())),
         payload: Payload::new(
             crypto_hash,
-            BlockPayload::Summary(SummaryPayload {
-                dkg: dkg_summary,
-                idkg: idkg_summary,
-                vetkd: None,
-            }),
+            BlockPayload::Summary(SummaryPayload::new(dkg_summary, idkg_summary)),
         ),
         height: cup_height,
         rank: Rank(0),

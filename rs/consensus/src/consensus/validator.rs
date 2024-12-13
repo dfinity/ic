@@ -2228,11 +2228,7 @@ pub mod test {
             let dkg = block.payload.as_ref().as_summary().dkg.clone();
             block.payload = Payload::new(
                 ic_types::crypto::crypto_hash,
-                BlockPayload::Summary(SummaryPayload {
-                    dkg,
-                    idkg: Some(idkg),
-                    vetkd: None,
-                }),
+                BlockPayload::Summary(SummaryPayload::new(dkg, Some(idkg))),
             );
             proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
 

@@ -70,6 +70,7 @@ message Block {
   bytes canister_http_payload_bytes = 15;
   bytes query_stats_payload_bytes = 16;
   VetKdPayload vetkd_payload = 17;
+  bool supports_vetkd_payload = 18;
 }
 
 message ConsensusMessage {

@@ -72,7 +72,8 @@ use std::convert::TryFrom;
 // The fields are only read by the `Debug` implementation.
 // The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
 #[allow(dead_code)]
-/// Reasons for why an idkg payload might be invalid.
+/// Possible failures which could occur while validating an idkg payload. They don't imply that the
+/// payload is invalid.
 pub(crate) enum IDkgPayloadValidationFailure {
     RegistryClientError(RegistryClientError),
     StateManagerError(StateManagerError),
@@ -82,8 +83,7 @@ pub(crate) enum IDkgPayloadValidationFailure {
 // The fields are only read by the `Debug` implementation.
 // The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
 #[allow(dead_code)]
-/// Possible failures which could occur while validating an idkg payload. They don't imply that the
-/// payload is invalid.
+/// Reasons for why an idkg payload might be invalid.
 pub(crate) enum InvalidIDkgPayloadReason {
     // wrapper of other errors
     UnexpectedSummaryPayload(IDkgPayloadError),

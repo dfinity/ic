@@ -752,8 +752,8 @@ mod tests {
                     .insert(transcript_ref.transcript_id, transcript);
             }
         }
-        BlockPayload::Summary(SummaryPayload {
-            dkg: Summary::new(
+        BlockPayload::Summary(SummaryPayload::new(
+            Summary::new(
                 vec![],
                 BTreeMap::new(),
                 BTreeMap::new(),
@@ -764,9 +764,8 @@ mod tests {
                 height,
                 BTreeMap::new(),
             ),
-            idkg: Some(idkg_summary),
-            vetkd: None,
-        })
+            Some(idkg_summary),
+        ))
     }
 
     fn create_payload_block_with_transcripts(
@@ -1648,11 +1647,8 @@ mod tests {
             assert!(reported > 0);
             assert!(unreported > 0);
 
-            let pl = BlockPayload::Summary(SummaryPayload {
-                dkg: Summary::fake(),
-                idkg: Some(summary.clone()),
-                vetkd: None,
-            });
+            let pl =
+                BlockPayload::Summary(SummaryPayload::new(Summary::fake(), Some(summary.clone())));
             let b = Block::new(
                 CryptoHashOf::from(CryptoHash(Vec::new())),
                 Payload::new(ic_types::crypto::crypto_hash, pl),

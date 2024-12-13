@@ -8,9 +8,9 @@ use crate::{
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use serde::{Deserialize, Serialize};
-use std::cmp::PartialOrd;
 use std::hash::Hash;
 use std::sync::Arc;
+use std::{cmp::PartialOrd, hash::Hasher};
 
 /// A payload, that contains information needed during a regular round.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -23,12 +23,30 @@ pub struct DataPayload {
 }
 
 /// The payload of a summary block.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SummaryPayload {
     pub dkg: dkg::Summary,
     pub idkg: idkg::Summary,
     pub vetkd: vetkd::Summary,
+    pub supports_vetkd_payload: bool,
+}
+
+impl Hash for SummaryPayload {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let SummaryPayload {
+            dkg,
+            idkg,
+            vetkd,
+            supports_vetkd_payload,
+        } = self;
+
+        dkg.hash(state);
+        idkg.hash(state);
+        // supports_vetkd_payload purposefully ignored
+        if *supports_vetkd_payload {
+            vetkd.hash(state);
+        }
+    }
 }
 
 impl SummaryPayload {
@@ -50,6 +68,15 @@ impl SummaryPayload {
             dkg_version.min(idkg_version)
         } else {
             dkg_version
+        }
+    }
+
+    pub fn new(dkg: dkg::Summary, idkg: idkg::Summary) -> Self {
+        Self {
+            dkg,
+            idkg,
+            vetkd: None,
+            supports_vetkd_payload: false,
         }
     }
 }

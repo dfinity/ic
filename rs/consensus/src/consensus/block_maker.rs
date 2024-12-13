@@ -331,11 +331,7 @@ impl BlockMaker {
                     .ok()
                     .flatten();
 
-                    BlockPayload::Summary(SummaryPayload {
-                        dkg: summary,
-                        idkg: idkg_summary,
-                        vetkd: None,
-                    })
+                    BlockPayload::Summary(SummaryPayload::new(summary, idkg_summary))
                 }
                 dkg::Payload::Data(dkg) => {
                     let (batch_payload, dkg, idkg_data) = match status::get_status(

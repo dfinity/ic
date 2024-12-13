@@ -931,11 +931,10 @@ mod tests {
             CryptoHashOf::from(ic_types::crypto::CryptoHash(Vec::new())),
             Payload::new(
                 ic_types::crypto::crypto_hash,
-                BlockPayload::Summary(SummaryPayload {
-                    dkg: ic_types::consensus::dkg::Summary::fake(),
-                    idkg: idkg_payload,
-                    vetkd: None,
-                }),
+                BlockPayload::Summary(SummaryPayload::new(
+                    ic_types::consensus::dkg::Summary::fake(),
+                    idkg_payload,
+                )),
             ),
             Height::from(123),
             ic_types::consensus::Rank(456),

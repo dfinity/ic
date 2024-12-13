@@ -28,11 +28,7 @@ pub trait Fake {
 
 impl Fake for SummaryPayload {
     fn fake() -> Self {
-        Self {
-            dkg: dkg::Summary::fake(),
-            idkg: None,
-            vetkd: None,
-        }
+        Self::new(dkg::Summary::fake(), None)
     }
 }
 

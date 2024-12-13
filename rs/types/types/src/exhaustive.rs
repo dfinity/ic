@@ -3,7 +3,7 @@
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::QuadrupleInCreation;
-use crate::consensus::idkg::IDkgMasterPublicKeyId;
+use crate::consensus::idkg::{self, IDkgMasterPublicKeyId};
 use crate::consensus::idkg::{
     CompletedReshareRequest, CompletedSignature, HasIDkgMasterPublicKeyId, IDkgPayload,
     IDkgReshareRequest, IDkgUIDGenerator, MaskedTranscript, MasterKeyTranscript, PreSigId,
@@ -12,7 +12,8 @@ use crate::consensus::idkg::{
 };
 use crate::consensus::vetkd::CompletedVetKey;
 use crate::consensus::{
-    Block, BlockPayload, CatchUpShareContent, ConsensusMessageHashable, Payload, SummaryPayload,
+    dkg, Block, BlockPayload, CatchUpShareContent, ConsensusMessageHashable, Payload,
+    SummaryPayload,
 };
 use crate::consensus::{CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon};
 use crate::crypto::canister_threshold_sig::idkg::{
@@ -437,6 +438,15 @@ impl<V: ExhaustiveSet + CryptoHashable> ExhaustiveSet for Hashed<CryptoHashOf<V>
             res.push(Hashed::new(crypto_hash, v));
         }
         res
+    }
+}
+
+impl ExhaustiveSet for SummaryPayload {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <(dkg::Summary, idkg::Summary)>::exhaustive_set(rng)
+            .into_iter()
+            .map(|(dkg, idkg)| SummaryPayload::new(dkg, idkg))
+            .collect()
     }
 }
 

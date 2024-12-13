@@ -150,11 +150,7 @@ pub fn make_genesis(summary: dkg::Summary) -> CatchUpPackage {
         Id::from(CryptoHash(Vec::new())),
         Payload::new(
             crypto_hash,
-            BlockPayload::Summary(SummaryPayload {
-                dkg: summary,
-                idkg: None,
-                vetkd: None,
-            }),
+            BlockPayload::Summary(SummaryPayload::new(summary, None)),
         ),
         height,
         Rank(0),

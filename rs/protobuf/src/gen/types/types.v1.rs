@@ -1293,6 +1293,8 @@ pub struct Block {
     pub query_stats_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "17")]
     pub vetkd_payload: ::core::option::Option<VetKdPayload>,
+    #[prost(bool, tag = "18")]
+    pub supports_vetkd_payload: bool,
 }
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, ::prost::Message)]
