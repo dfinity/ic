@@ -1,19 +1,20 @@
 // This canister is used for testing upgrades with arguments and stable memory.
 
-use dfn_core::{api::arg_data, endpoint::over_bytes, println, stable};
+use ic_cdk::{
+    api::{call::arg_data_raw, stable::stable_bytes},
+    post_upgrade, println, query,
+};
 
 fn main() {}
 
-#[export_name = "canister_post_upgrade"]
+#[post_upgrade]
 fn post_upgrade() {
-    dfn_core::printer::hook();
-
-    let arg = arg_data();
+    let arg = arg_data_raw();
     println!("Initializing test canister with arg={:?}", arg);
     stable::set(&arg);
 }
 
-#[export_name = "canister_query read_stable"]
-fn read_stable() {
-    over_bytes(|_| -> Vec<u8> { stable::get() })
+#[query]
+fn read_stable() -> Vec<u8> {
+    stable_bytes()
 }
