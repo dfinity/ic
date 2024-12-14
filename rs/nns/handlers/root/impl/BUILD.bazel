@@ -30,7 +30,6 @@ BASE_DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/registry/transport",
     "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
