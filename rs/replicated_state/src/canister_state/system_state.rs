@@ -1607,6 +1607,11 @@ impl SystemState {
     ///  * `Stopping` system states accept responses only.
     ///  * `Stopped` system states accept neither.
     ///
+    /// # Returns
+    ///  * `Ok(true)` on successful induction of a message of any type.
+    ///  * `Ok(false)` for a best-effort `Response` that was silently dropped.
+    ///  * `Err(_)` on induction failure.
+    ///
     /// # Errors
     ///
     /// On failure, returns the provided message along with a `StateError`:

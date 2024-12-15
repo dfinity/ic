@@ -702,12 +702,14 @@ impl CanisterQueues {
     ///
     ///  * If this is a guaranteed `Response`, the protocol should have reserved a
     ///    slot for it, so the push should not fail for lack of one (although an
-    ///    error may be returned in case of a bug in the upper layers).
+    ///    error may be returned in case of a bug in the upper layers) and `Ok(true)`
+    ///    is returned.
     ///  * If this is a best-effort `Response`, a slot is available and no duplicate
-    ///    (time out) response is already enqueued, it is enqueued.
+    ///    (time out) response is already enqueued, it is enqueued and `Ok(true)` is
+    ///    returned.
     ///  * If this is a best-effort `Response` and a duplicate (time out) response
     ///    is already enqueued (which is implicitly true when no slot is available),
-    ///    the response is silently dropped and `Ok(())` is returned.
+    ///    the response is silently dropped and `Ok(false)` is returned.
     ///
     /// If the message was enqueued, adds the sender to the appropriate input
     /// schedule (local or remote), if not already there.

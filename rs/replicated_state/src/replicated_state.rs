@@ -746,6 +746,9 @@ impl ReplicatedState {
     /// queue, while the messages from the other subnets get pushed to the inter
     /// subnet queues.
     ///
+    /// On success, returns `Ok(true)` if the message was successfully inducted or
+    /// `Ok(false)` if the message was best-effort and silently dropped.
+    ///
     /// On failure (queue full, canister not found, out of memory), returns the
     /// corresponding error and the original message.
     ///
