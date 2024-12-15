@@ -1021,23 +1021,22 @@ impl SchedulerImpl {
                 .system_state
                 .output_queues_for_each(|canister_id, msg| {
                     match state.canister_states.get_mut(canister_id) {
-                        Some(dest_canister) => match dest_canister.push_input(
-                            (*msg).clone(),
-                            &mut subnet_available_memory,
-                            state.metadata.own_subnet_type,
-                            InputQueueType::LocalSubnet,
-                        ) {
-                            Ok(_) => Ok(()),
-                            Err((err, msg)) => {
+                        Some(dest_canister) => dest_canister
+                            .push_input(
+                                (*msg).clone(),
+                                &mut subnet_available_memory,
+                                state.metadata.own_subnet_type,
+                                InputQueueType::LocalSubnet,
+                            )
+                            .map(|_| ())
+                            .map_err(|(err, msg)| {
                                 error!(
                                     self.log,
                                     "Inducting {:?} on same subnet failed with error '{}'.",
                                     &msg,
                                     &err
                                 );
-                                Err(())
-                            }
-                        },
+                            }),
                         None => Err(()),
                     }
                 });
