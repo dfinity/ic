@@ -25,15 +25,15 @@ const RF: &str = "Linear Reduction factor";
 pub fn calculate_rewards(
     days_in_period: u64,
     rewards_table: &NodeRewardsTable,
-    subnet_metrics: HashMap<PrincipalId, Vec<NodeMetricsHistoryResponse>>,
+    node_metrics: HashMap<PrincipalId, Vec<DailyNodeMetrics>>,
     rewardable_nodes: &[RewardableNode],
 ) -> RewardsPerNodeProvider {
     let mut rewards_per_node_provider = HashMap::default();
     let mut rewards_log_per_node_provider = HashMap::default();
     let mut rewards_data_per_node_provider = HashMap::default();
+    let mut node_metrics = node_metrics;
 
-    let mut all_assigned_metrics = daily_node_metrics(subnet_metrics);
-    let systematic_failure_rates = systematic_fr_per_subnet(&all_assigned_metrics);
+    let systematic_failure_rates = systematic_fr_per_subnet(&node_metrics);
     let node_provider_rewardables = rewardables_by_node_provider(rewardable_nodes);
 
     for (node_provider_id, node_provider_rewardables) in node_provider_rewardables {
@@ -50,7 +50,7 @@ pub fn calculate_rewards(
             node_provider_rewardables
                 .iter()
                 .filter_map(|node| {
-                    all_assigned_metrics
+                    node_metrics
                         .remove(&node.node_id)
                         .map(|daily_metrics| (node.node_id, daily_metrics))
                 })
