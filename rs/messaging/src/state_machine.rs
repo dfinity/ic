@@ -22,6 +22,7 @@ mod tests;
 const PHASE_INDUCTION: &str = "induction";
 const PHASE_EXECUTION: &str = "execution";
 const PHASE_MESSAGE_ROUTING: &str = "message_routing";
+const PHASE_TIME_OUT_CALLBACKS: &str = "time_out_callbacks";
 const PHASE_TIME_OUT_MESSAGES: &str = "time_out_messages";
 const PHASE_SHED_MESSAGES: &str = "shed_messages";
 

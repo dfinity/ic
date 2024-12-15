@@ -450,6 +450,7 @@ pub fn apply_canister_state_changes(
     state_changes_error: &IntCounter,
     call_tree_metrics: &dyn CallTreeMetrics,
     call_context_creation_time: Time,
+    deallocate: &dyn Fn(SystemState),
 ) {
     if let Some(CanisterStateChanges {
         globals,
@@ -483,6 +484,7 @@ pub fn apply_canister_state_changes(
                 // call this `apply_canister_state_change` to finish execution.
                 system_state.canister_version += 1;
                 round_limits.subnet_available_callbacks -= callbacks_created as i64;
+                deallocate(clean_system_state);
 
                 call_tree_metrics.observe(request_stats, call_context_creation_time, time);
             }
@@ -507,7 +509,8 @@ pub fn apply_canister_state_changes(
                         )
                     }
                 }
-                *system_state = clean_system_state;
+                let old_system_state = std::mem::replace(system_state, clean_system_state);
+                deallocate(old_system_state);
                 round_limits.subnet_available_memory = clean_subnet_available_memory;
                 output.wasm_result = Err(err);
             }

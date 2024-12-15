@@ -413,6 +413,7 @@ impl Hypervisor {
             state_changes_error,
             call_tree_metrics,
             call_context_creation_time,
+            &|system_state| std::mem::drop(system_state),
         );
         (output, execution_state, system_state)
     }

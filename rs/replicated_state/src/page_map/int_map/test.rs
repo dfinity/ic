@@ -1,4 +1,4 @@
-use super::IntMap;
+use super::{IntMap, MutableIntMap};
 use proptest::prelude::*;
 use std::collections::BTreeMap;
 
@@ -133,4 +133,26 @@ fn test_remove(
         prop_assert_eq!(btree_map.len(), int_map.len());
         prop_assert!(btree_map.iter().eq(int_map.iter()));
     }
+}
+
+#[test_strategy::proptest]
+fn test_split_off(
+    #[strategy(proptest::collection::vec(0u64..20u64, 10))] keys: Vec<u64>,
+    #[strategy(0u64..20u64)] split_key: u64,
+) {
+    let mut btree_map = BTreeMap::new();
+    let mut int_map = MutableIntMap::new();
+    for (value, key) in keys.into_iter().enumerate() {
+        btree_map.insert(key, value);
+        int_map.insert(key, value);
+    }
+
+    let btree_right = btree_map.split_off(&split_key);
+    let int_right = int_map.split_off(&split_key);
+
+    prop_assert_eq!(btree_right.len(), int_right.len());
+    prop_assert!(btree_right.iter().eq(int_right.iter()));
+
+    prop_assert_eq!(btree_map.len(), int_map.len());
+    prop_assert!(btree_map.iter().eq(int_map.iter()));
 }

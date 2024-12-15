@@ -121,7 +121,7 @@ rust_bench(
     name = "replicated_state_intmap_bench",
     testonly = True,
     srcs = [
-        "benches/bench_allocator.rs",
+        "benches/bench_intmap.rs",
     ],
     deps = [":replicated_state"] + BIN_DEPENDENCIES,
 )

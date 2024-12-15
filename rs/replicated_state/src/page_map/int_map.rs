@@ -463,6 +463,37 @@ where
             }
         }
     }
+
+    /// Splits the tree into two at the given key. Returns everything after
+    /// the given key, including the key.
+    pub fn split(self, key: &K) -> (Self, Self) {
+        match self {
+            Tree::Empty => (Tree::Empty, Tree::Empty),
+            Tree::Leaf(k, _) if k.as_int() < key.as_int() => (self, Tree::Empty),
+            Tree::Leaf(..) => (Tree::Empty, self),
+            Tree::Branch {
+                prefix,
+                branching_bit,
+                left,
+                right,
+            } if matches_prefix(key.as_int(), prefix, branching_bit) => {
+                if key.as_int() & (I::one() << branching_bit) == I::zero() {
+                    let (ll, lr) = take_arc(left).split(key);
+                    (ll, lr.union(take_arc(right)))
+                } else {
+                    let (rl, rr) = take_arc(right).split(key);
+                    (take_arc(left).union(rl), rr)
+                }
+            }
+            Tree::Branch { prefix, .. } => {
+                if prefix < key.as_int() {
+                    (self, Tree::Empty)
+                } else {
+                    (Tree::Empty, self)
+                }
+            }
+        }
+    }
 }
 
 impl<K, V, I> Tree<K, V, I> {
@@ -872,17 +903,18 @@ where
 
     /// Splits the collection into two at the given key. Returns everything after
     /// the given key, including the key.
-    //
-    // TODO: Make this `O(log N)` instead of `O(N)`.
     pub fn split_off(&mut self, key: &K) -> Self {
         let tree = std::mem::take(&mut self.tree);
         let right;
-        (*self, right) = IntMapIntoIter::new(tree).partition(|(k, _v)| k < key);
+        (self.tree, right) = tree.split(key);
 
-        debug_assert_eq!(self.tree.len(), self.len);
-        debug_assert_eq!(right.tree.len(), right.len);
+        let old_len = self.len;
+        self.len = self.tree.len();
 
-        right
+        Self {
+            tree: right,
+            len: old_len - self.len,
+        }
     }
 }
 

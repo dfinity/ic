@@ -197,6 +197,17 @@ impl PageDelta {
         self.0 = rhs.0.union(std::mem::take(&mut self.0));
     }
 
+    fn update2<I>(&mut self, rhs: I)
+    where
+        I: IntoIterator<Item = (PageIndex, Page)>,
+    {
+        let mut map = std::mem::take(&mut self.0);
+        for (index, page) in rhs {
+            map = map.insert(index, page).0;
+        }
+        self.0 = map;
+    }
+
     /// Enumerates all the pages in this delta.
     fn iter(&self) -> impl Iterator<Item = (&PageIndex, &'_ Page)> {
         self.0.iter()
@@ -902,6 +913,15 @@ impl PageMap {
         // Delta is a persistent data structure and is cheap to clone.
         self.page_delta.update(delta.clone());
         self.unflushed_delta.update(delta)
+    }
+
+    // Modifies this page map by applying the given page delta to it.
+    fn apply2<I>(&mut self, delta: I)
+    where
+        I: IntoIterator<Item = (PageIndex, Page)> + Clone,
+    {
+        self.page_delta.update2(delta.clone());
+        self.unflushed_delta.update2(delta)
     }
 
     /// Persists the given delta to the specified destination.
