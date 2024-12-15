@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -7,7 +7,6 @@ system_test_nns(
     name = "tecdsa_complaint_test",
     flaky = True,
     malicious = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
@@ -33,7 +32,6 @@ system_test_nns(
     name = "tecdsa_add_nodes_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -62,7 +60,6 @@ system_test_nns(
     name = "tschnorr_message_sizes_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -87,7 +84,6 @@ system_test_nns(
     name = "tecdsa_remove_nodes_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -113,7 +109,6 @@ system_test_nns(
 system_test_nns(
     name = "tecdsa_key_rotation_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -136,7 +131,6 @@ system_test_nns(
 system_test_nns(
     name = "tecdsa_signature_fails_without_cycles_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "system_test_hourly",
@@ -161,7 +155,6 @@ system_test_nns(
 system_test_nns(
     name = "tecdsa_signature_from_nns_without_cycles_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "system_test_hourly",
@@ -182,7 +175,6 @@ system_test_nns(
 system_test_nns(
     name = "tecdsa_signature_from_other_subnet_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "system_test_hourly",
@@ -204,7 +196,6 @@ system_test_nns(
 system_test_nns(
     name = "tecdsa_two_signing_subnets_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "system_test_hourly",
@@ -234,7 +225,6 @@ system_test_nns(
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     # Remove when CON-937 is resolved
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -262,7 +252,6 @@ system_test_nns(
 system_test_nns(
     name = "tecdsa_signature_same_subnet_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "system_test_hourly",
@@ -284,7 +273,6 @@ system_test_nns(
     name = "tecdsa_signature_timeout_test",
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -317,7 +305,6 @@ tecdsa_performance_test_template = system_test_nns(
         "//conditions:default": [],
     }),
     flaky = False,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
         "manual",
