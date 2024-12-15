@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -81,7 +81,6 @@ system_test_nns(
 system_test_nns(
     name = "bn_update_workload_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",  # TODO(BOUN-1039): remove "manual" and add back "system_test_hourly" and "system_test_nightly" when the test is not flaky anymore
     ],
@@ -100,7 +99,6 @@ system_test_nns(
     env = {
         "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
@@ -165,7 +163,6 @@ system_test_nns(
         "boot_image_minimal_size_gibibytes": 500,
     },
     flaky = False,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
@@ -188,7 +185,6 @@ system_test(
     },
     env_inherit = ["BOUNDARY_NODE_IPV6"],
     flaky = False,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "manual",
@@ -213,7 +209,6 @@ system_test(
     },
     env_inherit = ["BOUNDARY_NODE_IPV6"],
     flaky = False,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "manual",

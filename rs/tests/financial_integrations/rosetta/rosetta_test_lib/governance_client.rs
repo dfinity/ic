@@ -1,3 +1,4 @@
+use crate::utils::NeuronDetails;
 use candid::{Decode, Encode, Principal};
 use canister_test::PrincipalId;
 use ic_agent::Agent;
@@ -17,8 +18,6 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on},
 };
 use slog::{debug, Logger};
-
-use super::lib::NeuronDetails;
 
 pub struct GovernanceClient {
     agent: Agent,
