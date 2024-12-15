@@ -25,7 +25,7 @@ use ic_replicated_state::{
 use ic_types::{
     messages::{
         Payload, RejectContext, Request, RequestOrResponse, Response,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MAX_RESPONSE_COUNT_BYTES,
     },
     xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue, StreamSlice},
     CanisterId, SubnetId,
@@ -841,17 +841,6 @@ impl StreamHandlerImpl {
                                     "Inducting request failed: {}\n{:?}", &err, &request
                                 );
                                 return Some((reason, msg));
-                            }
-                            RequestOrResponse::Response(response)
-                                if response.deadline != NO_DEADLINE
-                                    && matches!(
-                                        err,
-                                        StateError::CanisterNotFound(_)
-                                            | StateError::CanisterStopped(_)
-                                    ) =>
-                            {
-                                // These are expected edge cases for best effort responses;
-                                // silently drop them.
                             }
                             RequestOrResponse::Response(response) => {
                                 // Critical error, guaranteed responses (and best-effort responses passing
