@@ -78,7 +78,6 @@ pub struct RewardsPerNodeProvider {
     pub rewards_per_node_provider: HashMap<PrincipalId, Rewards>,
     pub rewards_log_per_node_provider: HashMap<PrincipalId, RewardsLog>,
     pub rewards_data_per_node_provider: HashMap<PrincipalId, NodeProviderComputationData>,
-    pub systematic_failure_rates: HashMap<PrincipalId, Vec<(TimestampNanos, Decimal)>>,
 }
 
 #[derive(Debug, Clone)]

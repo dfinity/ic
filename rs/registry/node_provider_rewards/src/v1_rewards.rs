@@ -74,17 +74,10 @@ pub fn calculate_rewards(
         rewards_data_per_node_provider.insert(node_provider_id, computation_data);
     }
 
-    let systematic_failure_rates: HashMap<PrincipalId, Vec<(TimestampNanos, Decimal)>> =
-        systematic_failure_rates
-            .into_iter()
-            .map(|((subnet, ts), fr)| (subnet, (ts, fr)))
-            .into_group_map();
-
     RewardsPerNodeProvider {
         rewards_per_node_provider,
         rewards_log_per_node_provider,
         rewards_data_per_node_provider,
-        systematic_failure_rates,
     }
 }
 
