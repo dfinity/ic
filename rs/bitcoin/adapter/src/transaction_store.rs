@@ -203,7 +203,7 @@ mod test {
     use super::*;
     use crate::common::test_common::TestChannel;
     use bitcoin::{
-        absolute::LockTime, blockdata::constants::genesis_block, consensus::serialize, Network,
+        absolute::{LockTime, LOCK_TIME_THRESHOLD}, blockdata::constants::genesis_block, consensus::serialize, Network,
         Transaction,
     };
     use ic_logger::replica_logger::no_op_logger;
@@ -305,7 +305,7 @@ mod test {
 
         // Send one transaction. This transaction should be removed first if we are at capacity.
         let mut first_tx = get_transaction();
-        first_tx.lock_time = LockTime::from_height(u32::MAX).unwrap();
+        first_tx.lock_time = LockTime::from_height(LOCK_TIME_THRESHOLD - 1).unwrap();
         let raw_tx = serialize(&first_tx);
         manager.enqueue_transaction(&raw_tx);
 
