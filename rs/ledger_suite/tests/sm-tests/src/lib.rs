@@ -2482,7 +2482,8 @@ pub fn test_upgrade_serialization<Tokens>(
                     ledger_id,
                     ledger_wasm_mainnet.clone(),
                     Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-                ).expect("Downgrading to mainnet should succeed");
+                )
+                .expect("Downgrading to mainnet should succeed");
                 if verify_blocks {
                     // This will also verify the ledger blocks.
                     // The current implementation of the InMemoryLedger cannot get blocks
