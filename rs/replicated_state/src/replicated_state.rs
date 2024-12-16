@@ -746,6 +746,10 @@ impl ReplicatedState {
     /// queue, while the messages from the other subnets get pushed to the inter
     /// subnet queues.
     ///
+    /// On success, returns `Ok(true)` if the message was successfully inducted; or
+    /// `Ok(false)` if the message was a best-effort response that was silently
+    /// dropped.
+    ///
     /// On failure (queue full, canister not found, out of memory), returns the
     /// corresponding error and the original message.
     ///
@@ -754,7 +758,7 @@ impl ReplicatedState {
         &mut self,
         msg: RequestOrResponse,
         subnet_available_memory: &mut i64,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         let own_subnet_type = self.metadata.own_subnet_type;
         let sender = msg.sender();
         let input_queue_type = if sender.get_ref() == self.metadata.own_subnet_id.get_ref()
