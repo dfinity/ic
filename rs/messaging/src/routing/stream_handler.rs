@@ -84,6 +84,7 @@ const METRIC_XNET_MESSAGE_BACKLOG: &str = "mr_xnet_message_backlog";
 
 const LABEL_STATUS: &str = "status";
 const LABEL_VALUE_SUCCESS: &str = "success";
+const LABEL_VALUE_DROPPED: &str = "dropped";
 const LABEL_VALUE_SENDER_SUBNET_MISMATCH: &str = "SenderSubnetMismatch";
 const LABEL_VALUE_RECEIVER_SUBNET_MISMATCH: &str = "ReceiverSubnetMismatch";
 const LABEL_VALUE_REQUEST_MISROUTED: &str = "RequestMisrouted";
@@ -815,7 +816,9 @@ impl StreamHandlerImpl {
                     }
 
                     // Message silently dropped, all done.
-                    Ok(false) => {}
+                    Ok(false) => {
+                        self.observe_inducted_message_status(msg_type, LABEL_VALUE_DROPPED);
+                    }
 
                     // Message not inducted.
                     Err((err, msg)) => {

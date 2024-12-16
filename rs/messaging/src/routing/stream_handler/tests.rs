@@ -2019,7 +2019,7 @@ fn check_stream_handler_generated_reject_signal_canister_migrating() {
 }
 
 #[test]
-fn duplicate_best_effort_response_is_dropped_and_metrics_incremented_only_once() {
+fn duplicate_best_effort_response_is_dropped() {
     with_local_test_setup(
         btreemap![LOCAL_SUBNET => StreamConfig {
             begin: 21,
@@ -2053,6 +2053,8 @@ fn duplicate_best_effort_response_is_dropped_and_metrics_incremented_only_once()
             metrics.assert_inducted_xnet_messages_eq(&[
                 // Response @21 is inducted successfully.
                 (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
+                // Duplicate Response @22 is dropped.
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_DROPPED, 1),
             ]);
             assert_eq!(1, metrics.fetch_inducted_payload_sizes_stats().count);
         },
