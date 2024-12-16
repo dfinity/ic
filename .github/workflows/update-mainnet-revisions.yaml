@@ -76,4 +76,6 @@ jobs:
           # Cache the git helpers so they dont't change between branch changes
           cp -r ci/src/revisions /tmp
 
+          echo $HOME
+
           time python /tmp/revisions/mainnet_revisions.py canisters
