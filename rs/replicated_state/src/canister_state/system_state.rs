@@ -1496,7 +1496,7 @@ impl SystemState {
         request: Request,
         reject_context: RejectContext,
         subnet_ids: &[PrincipalId],
-    ) -> Result<bool, StateError> {
+    ) -> Result<(), StateError> {
         assert_eq!(
             request.sender, self.canister_id,
             "Expected `Request` to have been sent from canister ID {}, but instead got {}",

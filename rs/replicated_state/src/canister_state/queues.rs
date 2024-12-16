@@ -694,8 +694,9 @@ impl CanisterQueues {
 
     /// Enqueues a canister-to-canister message into the induction pool.
     ///
-    /// If the message is a `Request` and is enqueued successfully, this will also
-    /// reserve a slot in the corresponding output queue for the eventual response.
+    /// If the message is a `Request` and it is enqueued successfully `Ok(true)` is
+    /// returned; and a slot is reserved in the corresponding output queue for the
+    /// eventual response.
     ///
     /// If the message is a `Response`, `SystemState` will have already checked for
     /// a matching callback:
@@ -1104,7 +1105,7 @@ impl CanisterQueues {
         request: Request,
         reject_context: RejectContext,
         subnet_ids: &[PrincipalId],
-    ) -> Result<bool, StateError> {
+    ) -> Result<(), StateError> {
         assert!(
             request.receiver == IC_00 || subnet_ids.contains(&request.receiver.get()),
             "reject_subnet_output_request can only be used to reject management canister requests"
@@ -1126,6 +1127,7 @@ impl CanisterQueues {
             deadline: request.deadline,
         }));
         self.push_input(response, InputQueueType::LocalSubnet)
+            .map(|_| ())
             .map_err(|(e, _msg)| e)
     }
 
