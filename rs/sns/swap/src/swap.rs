@@ -2861,6 +2861,16 @@ impl Swap {
             return false;
         }
 
+        // Testflight swaps should not have sales
+        let testflight = self
+            .init
+            .as_ref()
+            .and_then(|init| init.testflight)
+            .unwrap_or_default();
+        if testflight {
+            return false;
+        }
+
         let swap_open_timestamp_seconds = self
             .decentralization_sale_open_timestamp_seconds
             .unwrap_or(now_seconds);

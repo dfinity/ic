@@ -533,7 +533,7 @@ impl SnsInitPayload {
             governance: self.governance_init_args(sns_canister_ids, deployed_version)?,
             ledger: self.ledger_init_args(sns_canister_ids)?,
             root: self.root_init_args(sns_canister_ids, testflight),
-            swap: self.swap_init_args(sns_canister_ids)?,
+            swap: self.swap_init_args(sns_canister_ids, testflight)?,
             index_ng: self.index_ng_init_args(sns_canister_ids),
         })
     }
@@ -664,7 +664,7 @@ impl SnsInitPayload {
     ///
     /// Precondition: Either [`Self::validate_pre_execution`] or [`Self::validate_post_execution`]
     /// (or both) must be `Ok(())`.
-    fn swap_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> Result<SwapInit, String> {
+    fn swap_init_args(&self, sns_canister_ids: &SnsCanisterIds, testflight: bool) -> Result<SwapInit, String> {
         // Safe to cast due to validation
         let min_participants = self
             .min_participants
@@ -703,6 +703,7 @@ impl SnsInitPayload {
                 .neurons_fund_participation_constraints
                 .clone(),
             neurons_fund_participation: self.neurons_fund_participation,
+            testflight: Some(testflight),
         })
     }
 
