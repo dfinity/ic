@@ -40,7 +40,7 @@ component_files = {
     # networking
     Label("networking/setup-networking/setup-networking-setupos.service"): "/etc/systemd/system/setup-networking.service",
     Label("networking/setup-networking/setup-networking.sh"): "/opt/ic/bin/setup-networking.sh",
-    Label("networking/setup-networking/99-setup.yaml.template"): "/opt/ic/share/99-setup.yaml.template",
+    Label("networking/setup-networking/99-setup-netplan.yaml.template"): "/opt/ic/share/99-setup-netplan.yaml.template",
     Label("networking/fallback.conf"): "/etc/systemd/resolved.conf.d/fallback.conf",
     Label("networking/resolv.conf"): "/etc/resolv.conf",
     Label("networking/hosts"): "/etc/hosts",

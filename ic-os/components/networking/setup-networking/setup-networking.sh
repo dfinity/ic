@@ -84,8 +84,8 @@ function gather_interfaces_by_speed() {
 
 function configure_netplan() {
     echo "Configuring netplan..."
-    local NETPLAN_TEMPLATE="/opt/ic/share/99-setup.yaml.template"
-    local NETPLAN_OUTPUT="/run/netplan/99-setup.yaml"
+    local NETPLAN_TEMPLATE="/opt/ic/share/99-setup-netplan.yaml.template"
+    local NETPLAN_OUTPUT="/run/netplan/99-setup-netplan.yaml"
 
     mkdir -p /run/netplan
     cp "$NETPLAN_TEMPLATE" "$NETPLAN_OUTPUT"
