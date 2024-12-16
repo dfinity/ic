@@ -197,8 +197,8 @@ mod tests {
             finalization_shares: 2800,
             random_beacon_shares: 24880,
             random_tape_shares: 24880,
-            cup_shares: 80,
-            cups: 2,
+            cup_shares: 120,
+            cups: 3,
             equivocation_proofs: 980,
         };
         assert_eq!(get_maximum_validated_artifacts(40, 499), max_counts);
