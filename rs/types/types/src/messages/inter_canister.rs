@@ -570,7 +570,7 @@ impl RequestOrResponse {
 }
 
 /// Convenience `CountBytes` implementation that returns the same value as
-/// `RequestOrResponse::Request(self).count_bytes()`, so we don't need to wrap
+/// `RequestOrResponse::Request(self).memory_count_bytes()`, so we don't need to wrap
 /// `self` into a `RequestOrResponse` only to calculate its estimated byte size.
 impl CountBytes for Request {
     fn memory_count_bytes(&self) -> usize {

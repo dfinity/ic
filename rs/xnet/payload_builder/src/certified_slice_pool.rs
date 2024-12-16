@@ -148,7 +148,7 @@ mod header {
     }
 
     impl CountBytes for Header {
-        fn count_bytes(&self) -> usize {
+        fn memory_count_bytes(&self) -> usize {
             self.bytes.len()
         }
     }
@@ -315,7 +315,7 @@ mod messages {
     }
 
     impl CountBytes for Messages {
-        fn count_bytes(&self) -> usize {
+        fn memory_count_bytes(&self) -> usize {
             self.count_bytes
         }
     }
@@ -405,7 +405,8 @@ impl Payload {
         let byte_limit = byte_limit.unwrap_or(usize::MAX);
 
         debug_assert!(EMPTY_PAYLOAD_BYTES <= NON_EMPTY_PAYLOAD_FIXED_BYTES);
-        if byte_limit < EMPTY_PAYLOAD_BYTES + self.header.count_bytes() + NO_MESSAGES_WITNESS_BYTES
+        if byte_limit
+            < EMPTY_PAYLOAD_BYTES + self.header.memory_count_bytes() + NO_MESSAGES_WITNESS_BYTES
         {
             // `byte_limit` smaller than minimum payload size, bail out.
             return Ok((None, Some(self)));
@@ -419,7 +420,7 @@ impl Payload {
             self.messages.as_ref().map(|m| m.begin()),
             self.messages.as_ref().map(|m| m.end()),
         );
-        if self.len() <= message_limit && self.count_bytes() + witness_bytes <= byte_limit {
+        if self.len() <= message_limit && self.memory_count_bytes() + witness_bytes <= byte_limit {
             // Payload under both limits, return it.
             return Ok((Some(self), None));
         }
@@ -431,7 +432,7 @@ impl Payload {
             .expect("Non-zero byte size for empty `messages`.");
 
         // Find the rightmost cutoff point that respects the provided limits.
-        let mut byte_size = NON_EMPTY_PAYLOAD_FIXED_BYTES + self.header.count_bytes();
+        let mut byte_size = NON_EMPTY_PAYLOAD_FIXED_BYTES + self.header.memory_count_bytes();
         let mut cutoff = None;
         let slice_begin = messages.begin();
         for (i, (label, message)) in messages.iter().enumerate() {
@@ -456,7 +457,7 @@ impl Payload {
             // `byte_size` (computed the same way) is below `byte_limit`.
             panic!(
                 "Invalid `messages_count_bytes`: was {}, expecting {}",
-                messages.count_bytes(),
+                messages.memory_count_bytes(),
                 byte_size
             )
         });
@@ -473,11 +474,11 @@ impl Payload {
         let prefix = self.new_partial(prefix)?;
         if prefix.len() == 0 {
             debug_assert_eq!(
-                prefix.count_bytes(),
-                EMPTY_PAYLOAD_BYTES + self.header.count_bytes()
+                prefix.memory_count_bytes(),
+                EMPTY_PAYLOAD_BYTES + self.header.memory_count_bytes()
             );
         } else {
-            debug_assert_eq!(prefix.count_bytes(), byte_size);
+            debug_assert_eq!(prefix.memory_count_bytes(), byte_size);
         }
 
         Ok((Some(prefix), Some(self)))
@@ -719,12 +720,14 @@ impl Payload {
 }
 
 impl CountBytes for Payload {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         match self.messages.as_ref() {
             Some(messages) => {
-                NON_EMPTY_PAYLOAD_FIXED_BYTES + self.header.count_bytes() + messages.count_bytes()
+                NON_EMPTY_PAYLOAD_FIXED_BYTES
+                    + self.header.memory_count_bytes()
+                    + messages.memory_count_bytes()
             }
-            None => EMPTY_PAYLOAD_BYTES + self.header.count_bytes(),
+            None => EMPTY_PAYLOAD_BYTES + self.header.memory_count_bytes(),
         }
     }
 }
@@ -792,7 +795,7 @@ impl UnpackedStreamSlice {
     ) -> CertifiedSliceResult<(Option<Self>, Option<Self>)> {
         // Adjust the byte limit by subtracting the certification size.
         if let Some(byte_limit_) = byte_limit {
-            let certification_count_bytes = self.certification.count_bytes();
+            let certification_count_bytes = self.certification.memory_count_bytes();
             if certification_count_bytes > byte_limit_ {
                 return Ok((None, Some(self)));
             }
@@ -924,13 +927,13 @@ impl UnpackedStreamSlice {
 }
 
 impl CountBytes for UnpackedStreamSlice {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         slice_count_bytes(&self.payload, &self.certification)
     }
 }
 
 /// Returns a deterministic byte size estimate for the provided certified slice,
-/// the exact same as `UnpackedStreamSlice::try_from(packed)?.count_bytes()`. Or
+/// the exact same as `UnpackedStreamSlice::try_from(packed)?.memory_count_bytes()`. Or
 /// an error, if the payload cannot be unpacked.
 ///
 /// Workaround for not being able to implement `impl CountBytes for
@@ -952,9 +955,9 @@ fn slice_count_bytes(payload: &Payload, certification: &Certification) -> usize 
     let stream_end = payload.header.end();
     let slice_begin = payload.messages_begin();
     let slice_end = slice_begin.map(|begin| begin + StreamIndex::new(payload.len() as u64));
-    payload.count_bytes()
+    payload.memory_count_bytes()
         + witness_count_bytes(stream_begin, stream_end, slice_begin, slice_end)
-        + certification.count_bytes()
+        + certification.memory_count_bytes()
 }
 
 impl TryFrom<CertifiedStreamSlice> for UnpackedStreamSlice {
@@ -1137,7 +1140,7 @@ impl CertifiedSlicePool {
     ) -> CertifiedSliceResult<Option<(CertifiedStreamSlice, usize)>> {
         match self.take_slice_impl(subnet_id, begin, msg_limit, byte_limit) {
             Ok(Some(slice)) => {
-                let slice_count_bytes = slice.count_bytes();
+                let slice_count_bytes = slice.memory_count_bytes();
                 debug_assert!(slice_count_bytes <= byte_limit.unwrap_or(usize::MAX));
 
                 self.metrics.observe_take(STATUS_SUCCESS);
@@ -1296,7 +1299,7 @@ impl CertifiedSlicePool {
                 (
                     slice.payload.messages_begin(),
                     slice.payload.len(),
-                    slice.count_bytes(),
+                    slice.memory_count_bytes(),
                 )
             } else {
                 Default::default()
@@ -1311,7 +1314,10 @@ impl CertifiedSlicePool {
 
     /// Returns the total estimated size of the slices in the pool.
     pub fn byte_size(&self) -> usize {
-        self.slices.values().map(|slice| slice.count_bytes()).sum()
+        self.slices
+            .values()
+            .map(|slice| slice.memory_count_bytes())
+            .sum()
     }
 
     /// Places the provided slice into the pool, after trimming off any prefix
@@ -1563,9 +1569,9 @@ fn validate_slice(
 pub mod testing {
     use super::*;
 
-    /// Calls `slice.payload.count_bytes()`.
+    /// Calls `slice.payload.memory_count_bytes()`.
     pub fn payload_count_bytes(slice: &UnpackedStreamSlice) -> usize {
-        slice.payload.count_bytes()
+        slice.payload.memory_count_bytes()
     }
 
     /// Returns the result of calling `witness_count_bytes()` on the given

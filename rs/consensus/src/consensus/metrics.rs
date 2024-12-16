@@ -154,7 +154,7 @@ impl BatchStats {
 
     pub(crate) fn add_from_payload(&mut self, payload: &BatchPayload) {
         self.ingress_messages_delivered += payload.ingress.message_count();
-        self.ingress_message_bytes_delivered += payload.ingress.count_bytes();
+        self.ingress_message_bytes_delivered += payload.ingress.memory_count_bytes();
         self.xnet_bytes_delivered += payload.xnet.size_bytes();
         self.ingress_ids
             .extend_from_slice(&payload.ingress.message_ids());

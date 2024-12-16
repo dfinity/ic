@@ -142,7 +142,7 @@ impl XNetPayloadBuilderFixture {
         let certified_slice = in_slice(stream, from, from, msg_count, log);
         let slice_size_bytes = UnpackedStreamSlice::try_from(certified_slice.clone())
             .unwrap()
-            .count_bytes();
+            .memory_count_bytes();
         {
             let mut slice_pool = self.certified_slice_pool.lock().unwrap();
             slice_pool
@@ -801,7 +801,7 @@ proptest! {
                 .returning(move |_, _, _| Ok(slice.clone()));
             let metrics_registry = MetricsRegistry::new();
             let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(Arc::new(certified_stream_store) as Arc<_>, &metrics_registry)));
-            let prefix_size_bytes = UnpackedStreamSlice::try_from(certified_prefix.clone()).unwrap().count_bytes();
+            let prefix_size_bytes = UnpackedStreamSlice::try_from(certified_prefix.clone()).unwrap().memory_count_bytes();
             {
                 let mut pool = pool.lock().unwrap();
                 pool.put(REMOTE_SUBNET, certified_prefix, REGISTRY_VERSION, log.clone()).unwrap();
@@ -975,7 +975,7 @@ proptest! {
                 .returning(move |_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
             let metrics_registry = MetricsRegistry::new();
             let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(Arc::new(certified_stream_store) as Arc<_>, &metrics_registry)));
-            let prefix_size_bytes = UnpackedStreamSlice::try_from(certified_prefix.clone()).unwrap().count_bytes();
+            let prefix_size_bytes = UnpackedStreamSlice::try_from(certified_prefix.clone()).unwrap().memory_count_bytes();
 
             {
                 let mut pool = pool.lock().unwrap();

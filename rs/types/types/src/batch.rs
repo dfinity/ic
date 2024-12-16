@@ -245,8 +245,8 @@ mod tests {
     /// of a payload section actually produces the empty payload,
     #[test]
     fn default_batch_payload_is_empty() {
-        assert_eq!(IngressPayload::default().count_bytes(), 0);
-        assert_eq!(SelfValidatingPayload::default().count_bytes(), 0);
+        assert_eq!(IngressPayload::default().memory_count_bytes(), 0);
+        assert_eq!(SelfValidatingPayload::default().memory_count_bytes(), 0);
     }
 
     #[test]

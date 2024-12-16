@@ -454,7 +454,7 @@ impl MessagePool {
         let reference = self.next_reference(class, kind);
         let id = reference.into();
 
-        let size_bytes = msg.count_bytes();
+        let size_bytes = msg.memory_count_bytes();
 
         // Update message stats.
         self.message_stats += MessageStats::stats_delta(&msg, context);
@@ -573,7 +573,7 @@ impl MessagePool {
     /// Removes the given message from the load shedding queue.
     fn remove_from_size_queue(&mut self, id: Id, msg: &RequestOrResponse) {
         if id.class() == Class::BestEffort {
-            let removed = self.size_queue.remove(&(msg.count_bytes(), id));
+            let removed = self.size_queue.remove(&(msg.memory_count_bytes(), id));
             debug_assert!(removed);
         }
     }
@@ -776,13 +776,13 @@ impl MessagePool {
                 // Inbound best-effort responses don't have expiration deadlines, but can be
                 // shed.
                 (Inbound, BestEffort, Response) => {
-                    expected_size_queue.insert((msg.count_bytes(), *id));
+                    expected_size_queue.insert((msg.memory_count_bytes(), *id));
                 }
 
                 // All other best-effort messages are enqueued in both priority queues.
                 (_, BestEffort, _) => {
                     expected_deadline_queue.insert((msg.deadline(), *id));
-                    expected_size_queue.insert((msg.count_bytes(), *id));
+                    expected_size_queue.insert((msg.memory_count_bytes(), *id));
                 }
             }
         });
@@ -939,7 +939,7 @@ impl MessageStats {
         use Class::*;
         use Context::*;
 
-        let size_bytes = req.count_bytes();
+        let size_bytes = req.memory_count_bytes();
         let class = if req.deadline == NO_DEADLINE {
             GuaranteedResponse
         } else {
@@ -1011,7 +1011,7 @@ impl MessageStats {
         use Class::*;
         use Context::*;
 
-        let size_bytes = rep.count_bytes();
+        let size_bytes = rep.memory_count_bytes();
         let class = if rep.deadline == NO_DEADLINE {
             GuaranteedResponse
         } else {
