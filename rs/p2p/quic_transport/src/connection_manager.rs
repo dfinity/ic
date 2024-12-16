@@ -495,7 +495,7 @@ impl ConnectionManager {
         // This should be done while holding a write lock to the peer map
         // such that the next read call sees the new id.
 
-        let connection_handle = ConnectionHandle::new(connection, self.metrics.clone());
+        let connection_handle = ConnectionHandle::new(connection);
 
         // dropping the old connection will result in closing it
         if let Some(old_conn) = peer_map_mut.insert(peer_id, connection_handle.clone()) {
