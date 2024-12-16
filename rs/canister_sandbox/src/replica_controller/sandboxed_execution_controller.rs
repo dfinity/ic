@@ -675,6 +675,7 @@ pub struct SandboxedExecutionController {
 
 impl Drop for SandboxedExecutionController {
     fn drop(&mut self) {
+        eprintln!("Dropping sandbox");
         // Evict all the sandbox processes.
         let mut guard = self.backends.lock().unwrap();
         evict_sandbox_processes(

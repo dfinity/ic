@@ -1815,9 +1815,13 @@ impl StateMachine {
     fn into_components(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
         let state_manager = Arc::downgrade(&self.state_manager);
         let result = self.into_components_inner();
+        let mut i = 0i32;
         while state_manager.upgrade().is_some() {
-            eprintln!("WARNING: failed to drop StateManager. Waiting");
             std::thread::sleep(std::time::Duration::from_millis(50));
+            i += 1;
+            if i >= 10 {
+                panic!("Failed to wait for StateManager drop");
+            }
         }
         result
     }

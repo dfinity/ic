@@ -15,15 +15,28 @@ use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use tokio::sync::mpsc::Sender;
 
+struct PrintWhenDropReader {}
+
+impl Drop for PrintWhenDropReader {
+    fn drop(&mut self) {
+        eprintln!("Dropping reader");
+    }
+}
+
 /// Struct that implements the ingress history reader trait. Consumers of this
 /// trait can use this to inspect the ingress history.
 pub struct IngressHistoryReaderImpl {
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    _print_when_drop: Arc<PrintWhenDropReader>,
 }
 
 impl IngressHistoryReaderImpl {
     pub fn new(state_reader: Arc<dyn StateReader<State = ReplicatedState>>) -> Self {
-        Self { state_reader }
+        eprintln!("Creating reader");
+        Self {
+            state_reader,
+            _print_when_drop: Arc::new(PrintWhenDropReader {}),
+        }
     }
 }
 
@@ -75,6 +88,14 @@ struct TransitionStartTime {
     system_time: Instant,
 }
 
+struct PrintWhenDropWriter {}
+
+impl Drop for PrintWhenDropWriter {
+    fn drop(&mut self) {
+        eprintln!("Dropping writer");
+    }
+}
+
 /// Struct that implements the ingress history writer trait. Consumers of this
 /// trait can use this to update the ingress history.
 pub struct IngressHistoryWriterImpl {
@@ -92,6 +113,7 @@ pub struct IngressHistoryWriterImpl {
     message_state_transition_failed_wall_clock_duration_seconds: HistogramVec,
     completed_execution_messages_tx: Sender<(MessageId, Height)>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    _print_when_drop: Arc<PrintWhenDropWriter>,
 }
 
 impl IngressHistoryWriterImpl {
@@ -102,6 +124,7 @@ impl IngressHistoryWriterImpl {
         completed_execution_messages_tx: Sender<(MessageId, Height)>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
+        eprintln!("Creating reader");
         Self {
             config,
             log,
@@ -159,7 +182,8 @@ impl IngressHistoryWriterImpl {
                 &["reject_code", "user_error_code"],
             ),
             completed_execution_messages_tx,
-            state_reader
+            state_reader,
+    _print_when_drop: Arc::new(PrintWhenDropWriter{}),
         }
     }
 }
