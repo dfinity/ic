@@ -98,10 +98,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
     let api_type = ApiType::init(UNIX_EPOCH, vec![], user_test_id(24).get());
     let canister_current_memory_usage = NumBytes::new(0);
     let canister_current_message_memory_usage = NumBytes::new(0);
-    let compilation_cache = Arc::new(CompilationCache::new(
-        NumBytes::new(0),
-        std::path::Path::new("/tmp"),
-    ));
+    let compilation_cache = Arc::new(CompilationCache::new(NumBytes::new(0)));
     WasmExecutionInput {
         api_type: api_type.clone(),
         sandbox_safe_system_state: get_system_state(api_type),

@@ -37,14 +37,9 @@ pub enum CompilationCache {
 }
 
 impl CompilationCache {
-    pub fn new(capacity: NumBytes, dir: &std::path::Path) -> Self {
-        // TODO: Switch back to `Memory` before merging.
-        let dir = tempfile::tempdir_in(dir)
-            .expect("Unable to create temporary directory for compilation cache");
-        Self::Disk {
-            dir,
+    pub fn new(capacity: NumBytes) -> Self {
+        Self::Memory {
             cache: Mutex::new(LruCache::new(capacity)),
-            counter: AtomicU64::new(0),
         }
     }
 
@@ -195,10 +190,7 @@ impl StoredCompilation {
 /// each other if they all try to insert in the cache at the same time.
 #[test]
 fn concurrent_insertions() {
-    let cache = CompilationCache::new(
-        NumBytes::from(30 * 1024 * 1024),
-        std::path::Path::new("/tmp"),
-    );
+    let cache = CompilationCache::new(NumBytes::from(30 * 1024 * 1024));
     let wasm = wat::parse_str("(module)").unwrap();
     let canister_module = CanisterModule::new(wasm.clone());
     let binary = ic_wasm_types::BinaryEncodedWasm::new(wasm.clone());
