@@ -21,7 +21,7 @@ rust_library(
         "@crate_index//:k256",
         "@crate_index//:p256",
         "@crate_index//:rand",
-        "@crate_index//:secp256k1-0-22",
+        "@crate_index//:secp256k1_0_22",
         "@crate_index//:sha2",
     ],
 )
