@@ -125,8 +125,10 @@ impl StateMachine for StateMachineImpl {
         self.metrics
             .timed_out_messages_total
             .inc_by(timed_out_messages as u64);
+        self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
 
         // Time out expired callbacks.
+        let since = Instant::now();
         let (timed_out_callbacks, errors) = state.time_out_callbacks();
         self.metrics
             .timed_out_callbacks_total
@@ -141,8 +143,7 @@ impl StateMachine for StateMachineImpl {
             );
             self.metrics.critical_error_induct_response_failed.inc();
         }
-
-        self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
+        self.observe_phase_duration(PHASE_TIME_OUT_CALLBACKS, &since);
 
         // Preprocess messages and add messages to the induction pool through the Demux.
         let since = Instant::now();
