@@ -579,9 +579,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
             ),
-            "ic-btc-test-utils": crate.spec(
-                version = "^0.1.0",
-            ),
             "ic-canister-log": crate.spec(
                 version = "^0.2.0",
             ),
