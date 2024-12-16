@@ -5,6 +5,7 @@ use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     DefaultMemoryImpl,
 };
+use serde::Deserialize;
 use std::cell::RefCell;
 
 const LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(0);
@@ -69,8 +70,19 @@ fn encode_event(event: &Event) -> Vec<u8> {
 ///
 /// This function panics if the event decoding fails.
 fn decode_event(buf: &[u8]) -> Event {
-    // handle legacy format without timestamp
-    ciborium::de::from_reader(buf).expect("failed to decode a minter event")
+    #[derive(Deserialize, candid::CandidType)]
+    #[serde(untagged)]
+    enum SerializedEvent {
+        Legacy(EventType),
+        Event(Event),
+    }
+    match ciborium::de::from_reader(buf).expect("failed to decode a minter event") {
+        SerializedEvent::Legacy(payload) => Event {
+            timestamp: None,
+            payload,
+        },
+        SerializedEvent::Event(event) => event,
+    }
 }
 
 /// Returns an iterator over all minter events.

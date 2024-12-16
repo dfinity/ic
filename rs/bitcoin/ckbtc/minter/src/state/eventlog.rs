@@ -18,9 +18,10 @@ pub struct GetEventsArg {
     pub length: u64,
 }
 
-// Some events are deprecated and this doesn't play well with generated code via `derive`
+// Some event types are deprecated and this doesn't play well with generated code via `derive`
 // that triggers some deprecation warnings that cannot be whitelisted.
-// The trick is to put the whole Event definition under a module and allow usage of deprecated code inside that module.
+// The trick is to put the whole EventType definition under a module and allow usage of deprecated
+// code inside that module.
 // For convenience, the module is not visible to the outside.
 #[allow(deprecated)]
 mod event {
@@ -206,11 +207,10 @@ mod event {
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub struct Event {
-    /// The canister time at which the minter generated this event.
-    /// This field is optional for backwards compatibility with events recorded before it was added.
-    pub timestamp: Option<u64>,
     /// The event type.
     pub payload: EventType,
+    /// The canister time at which the minter generated this event.
+    pub timestamp: Option<u64>,
 }
 
 #[derive(Debug)]
