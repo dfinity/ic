@@ -60,6 +60,9 @@ pub fn spawn_launcher_process(
             SocketReaderConfig::default(),
         );
         reply_handler.flush_with_errors();
+        // Send a notification to the writer thread to stop.
+        // Otherwise, the writer thread will remain waiting forever.
+        out.stop();
     });
 
     Ok((svc, child_handle))
