@@ -119,8 +119,8 @@ MOUNT=false
 CHROOT_DIR=""
 COMMAND=""
 
-pid_unshare="unshare --fork --pid"
-mount_unshare="$pid_unshare --mount --map-root-user"
+PID_UNSHARE="unshare --fork --pid"
+MOUNT_UNSHARE="$PID_UNSHARE --mount --map-root-user"
 
 run_with_chroot() {
     ((EUID == 0)) || die "This script must be run with root privileges"
@@ -133,7 +133,7 @@ run_with_chroot() {
         warning "$CHROOT_DIR is not a mountpoint. This may have undesirable side effects."
     fi
 
-    $pid_unshare /usr/sbin/chroot "$CHROOT_DIR" "${COMMAND[@]}"
+    $PID_UNSHARE /usr/sbin/chroot "$CHROOT_DIR" "${COMMAND[@]}"
 }
 
 run_without_chroot() {
@@ -187,7 +187,7 @@ fi
 
 if [[ -n "$CHROOT_DIR" ]]; then
     [[ -d "$CHROOT_DIR" ]] || die "Error: $CHROOT_DIR is not a valid directory."
-    $mount_unshare /bin/bash -c "$(declare_all); run_with_chroot"
+    $MOUNT_UNSHARE /bin/bash -c "$(declare_all); run_with_chroot"
 else
-    $mount_unshare /bin/bash -c "$(declare_all); run_without_chroot"
+    $MOUNT_UNSHARE /bin/bash -c "$(declare_all); run_without_chroot"
 fi
