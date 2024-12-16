@@ -26,9 +26,6 @@ RUNNER_DEPENDENCIES = [
     "@crate_index//:anyhow",
 ]
 
-MACRO_DEPENDENCIES = [
-]
-
 rust_library(
     name = "nested",
     testonly = True,
@@ -41,7 +38,6 @@ rust_library(
 system_test_nns(
     name = "registration",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
     ],
@@ -56,7 +52,6 @@ system_test_nns(
 system_test_nns(
     name = "upgrade",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
     ],

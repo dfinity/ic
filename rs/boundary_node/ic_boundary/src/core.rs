@@ -7,7 +7,9 @@ use std::{
 };
 
 use anonymization_client::{
-    Canister as AnonymizationCanister, Track, Tracker as AnonymizationTracker,
+    Canister as AnonymizationCanister,
+    CanisterMethodsBuilder as AnonymizationCanisterMethodsBuilder, Track,
+    Tracker as AnonymizationTracker,
 };
 use anyhow::{anyhow, Context, Error};
 use arc_swap::ArcSwapOption;
@@ -285,10 +287,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         Some(Arc::new(generic::Limiter::new_from_file(v.clone())))
     } else {
         cli.rate_limiting.rate_limit_generic_canister_id.map(|x| {
-            Arc::new(generic::Limiter::new_from_canister(
-                x,
-                agent.clone().unwrap(),
-            ))
+            Arc::new(if cli.misc.crypto_config.is_some() {
+                generic::Limiter::new_from_canister_update(x, agent.clone().unwrap())
+            } else {
+                generic::Limiter::new_from_canister_query(x, agent.clone().unwrap())
+            })
         })
     };
 
@@ -431,7 +434,10 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     // HTTP Logs Anonymization
     let tracker = if let Some(v) = cli.obs.obs_log_anonymization_canister_id {
         let canister = AnonymizationCanister::new(agent.clone().unwrap(), v);
-        Some(AnonymizationTracker::new(Box::new(OsRng), canister.into())?)
+        let cm = AnonymizationCanisterMethodsBuilder::new(canister)
+            .with_metrics(&metrics_registry)
+            .build();
+        Some(AnonymizationTracker::new(Box::new(OsRng), cm)?)
     } else {
         None
     };

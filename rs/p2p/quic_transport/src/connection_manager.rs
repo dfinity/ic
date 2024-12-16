@@ -34,10 +34,10 @@ use axum::{
     middleware::Next, Router,
 };
 use futures::StreamExt;
-use ic_async_utils::JoinMap;
 use ic_base_types::NodeId;
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig};
 use ic_crypto_utils_tls::node_id_from_certificate_der;
+use ic_http_endpoints_async_utils::JoinMap;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -48,6 +48,7 @@ use quinn::{
 };
 use rustls::pki_types::CertificateDer;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use static_assertions::const_assert;
 use thiserror::Error;
 use tokio::{runtime::Handle, select, task::JoinSet};
 use tokio_util::{sync::CancellationToken, time::DelayQueue};
@@ -79,7 +80,14 @@ const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(1);
 /// that were not explicitly closed. I.e replica crash
 const IDLE_TIMEOUT: Duration = Duration::from_secs(5);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-const CONNECT_RETRY_BACKOFF: Duration = Duration::from_secs(3);
+const CONNECT_RETRY_BACKOFF: Duration = Duration::from_secs(5);
+
+// There should be least two probes before timing out a connection.
+const_assert!(KEEP_ALIVE_INTERVAL.as_nanos() < IDLE_TIMEOUT.as_nanos());
+// The application level timeout should no less than the QUIC idle timeout.
+const_assert!(IDLE_TIMEOUT.as_nanos() <= CONNECT_TIMEOUT.as_nanos());
+// The waiting time before re-trying to connect should be no less than the IDLE_TIMEOUT.
+const_assert!(IDLE_TIMEOUT.as_nanos() <= CONNECT_RETRY_BACKOFF.as_nanos());
 
 /// Connection manager is responsible for making sure that
 /// there always exists a healthy connection to each peer
@@ -340,8 +348,9 @@ impl ConnectionManager {
                 },
                 Some(active_result) = self.active_connections.join_next() => {
                     match active_result {
-                        Ok((_, peer_id)) => {
+                        Ok(((), peer_id)) => {
                             self.peer_map.write().unwrap().remove(&peer_id);
+                            self.metrics.peers_removed_total.inc();
                             self.connect_queue.insert(peer_id, Duration::ZERO);
                             self.metrics.peer_map_size.dec();
                             self.metrics.closed_request_handlers_total.inc();
@@ -390,21 +399,14 @@ impl ConnectionManager {
         let subnet_nodes = SomeOrAllNodes::Some(subnet_node_set);
 
         // Set new server config to only accept connections from the current set.
-        match self
-            .tls_config
+        let rustls_server_config = self.tls_config
             .server_config(subnet_nodes, self.topology.latest_registry_version())
-        {
-            Ok(rustls_server_config) => {
-                let quic_server_config = QuicServerConfig::try_from(rustls_server_config).expect("Conversion from RustTls config to Quinn config must succeed as long as this library and quinn use the same RustTls versions.");
-                let mut server_config =
-                    quinn::ServerConfig::with_crypto(Arc::new(quic_server_config));
-                server_config.transport_config(self.transport_config.clone());
-                self.endpoint.set_server_config(Some(server_config));
-            }
-            Err(e) => {
-                error!(self.log, "Failed to get certificate from crypto {:?}", e)
-            }
-        }
+            .expect("The rustls server config must be locally available, otherwise transport can't run.");
+
+        let quic_server_config = QuicServerConfig::try_from(rustls_server_config).expect("Conversion from RustTls config to Quinn config must succeed as long as this library and quinn use the same RustTls versions.");
+        let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(quic_server_config));
+        server_config.transport_config(self.transport_config.clone());
+        self.endpoint.set_server_config(Some(server_config));
 
         // Connect/Disconnect from peers according to new topology
         for (peer_id, _) in self.topology.iter() {
@@ -415,23 +417,19 @@ impl ConnectionManager {
 
         // Remove peer connections that are not part of subnet anymore.
         // Also remove peer connections that have closed connections.
-        let mut peer_map = self.peer_map.write().unwrap();
-        peer_map.retain(|peer_id, conn_handle| {
+        let peer_map = self.peer_map.read().unwrap();
+        peer_map.iter().for_each(|(peer_id, conn_handle)| {
             let peer_left_topology = !self.topology.is_member(peer_id);
             let node_left_topology = !self.topology.is_member(&self.node_id);
             // If peer is not member anymore or this node not part of subnet close connection.
             let should_close_connection = peer_left_topology || node_left_topology;
-
             if should_close_connection {
-                self.metrics.peers_removed_total.inc();
                 conn_handle
                     .conn()
                     .close(VarInt::from_u32(0), b"node not part of subnet anymore");
-                false
-            } else {
-                true
             }
         });
+
         self.metrics.peer_map_size.set(peer_map.len() as i64);
     }
 
