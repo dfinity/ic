@@ -88,7 +88,12 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
 /// fails to decode or its transaction id does not match, then `Error` is returned
 /// together with a text description.
 async fn check_transaction(args: CheckTransactionArgs) -> CheckTransactionResponse {
-    ic_cdk::api::call::msg_cycles_accept128(CHECK_TRANSACTION_CYCLES_SERVICE_FEE);
+    if ic_cdk::api::call::msg_cycles_accept128(CHECK_TRANSACTION_CYCLES_SERVICE_FEE)
+        < CHECK_TRANSACTION_CYCLES_SERVICE_FEE
+    {
+        return CheckTransactionStatus::NotEnoughCycles.into();
+    }
+
     match Txid::try_from(args.txid.as_ref()) {
         Ok(txid) => {
             STATS.with(|s| s.borrow_mut().check_transaction_count += 1);
