@@ -2028,9 +2028,26 @@ fn inability_to_induct_best_effort_response_does_not_raise_a_critical_error_impl
             ..StreamConfig::default()
         }],
         |stream_handler, state, metrics| {
-            stream_handler.induct_loopback_stream(prepare_state(state), &mut (i64::MAX / 2));
+            let state = prepare_state(state);
+
+            // Expecting an unchanged state...
+            let mut expected_state = state.clone();
+            // ...and an empty loopback stream with begin advanced.
+            let loopback_stream = stream_from_config(StreamConfig {
+                begin: 22,
+                signals_end: 22,
+                ..StreamConfig::default()
+            });
+            expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+
+            let inducted_state = stream_handler.induct_loopback_stream(state, &mut (i64::MAX / 2));
+            assert_eq!(expected_state, inducted_state);
+
             // No critical errors raised.
             metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
+            // Nothing was inducted.
+            metrics.assert_inducted_xnet_messages_eq(&[]);
+            assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
         },
     );
 }
