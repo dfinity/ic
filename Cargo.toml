@@ -568,7 +568,6 @@ ic-agent = { version = "0.37.1", features = [
 ] }
 ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "d74a6527fbaf8a2c1a7076983cc84f5c5a727923" }
 ic-btc-interface = "0.2.2"
-ic-btc-test-utils = "0.1.0"
 ic-cbor = "2.6.0"
 ic-cdk = "0.16.0"
 ic-cdk-macros = "0.9.0"
