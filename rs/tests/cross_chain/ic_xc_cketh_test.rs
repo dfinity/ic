@@ -81,7 +81,7 @@ fn setup_anvil(env: &TestEnv) {
             env::var("CKETH_UVM_CONFIG_PATH").expect("CKETH_UVM_CONFIG_PATH not set"),
         ))
         .enable_ipv4() //forge needs to download the version of the solidity compiler indicated in the smart contracts that are being deployed
-        .start(&env)
+        .start(env)
         .expect("failed to setup universal VM");
 
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
@@ -198,7 +198,7 @@ fn ic_xc_cketh_test(env: TestEnv) {
             .eth_helper_contract_address
             .unwrap()
     });
-    let cketh_deposit_tx_hash = send_smart_contract(
+    let _cketh_deposit_tx_hash = send_smart_contract(
         &docker_host,
         &eth_deposit_helper_contract_address,
         "deposit(bytes32)",
@@ -229,11 +229,11 @@ async fn activate_threshold_ecdsa(
 ) -> EcdsaKeyId {
     let ecdsa_key_id = make_key("some_key");
     let key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
-    enable_chain_key_signing(&governance, subnet.subnet_id, vec![key_id.clone()], &logger).await;
+    enable_chain_key_signing(governance, subnet.subnet_id, vec![key_id.clone()], logger).await;
     let app_node = subnet.nodes().next().unwrap();
     let app_agent = app_node.build_default_agent_async().await;
     let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
-    get_public_key_and_test_signature(&key_id, &msg_can, false, &logger)
+    get_public_key_and_test_signature(&key_id, &msg_can, false, logger)
         .await
         .expect("Should successfully create and verify the signature");
     ecdsa_key_id
