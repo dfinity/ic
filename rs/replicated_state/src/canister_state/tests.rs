@@ -267,6 +267,30 @@ fn canister_state_push_input_best_effort_response_no_reserved_slot() {
 }
 
 #[test]
+fn canister_state_push_input_best_effort_response_canister_stopped() {
+    let mut fixture = CanisterStateFixture::new();
+
+    fixture.with_input_slot_reservation();
+    let response = default_input_response(fixture.make_callback(SOME_DEADLINE), SOME_DEADLINE);
+
+    // Stop the canister.
+    fixture
+        .canister_state
+        .system_state
+        .set_status(CanisterStatus::Stopped);
+
+    // The response should be dropped silently.
+    assert_eq!(
+        Ok(()),
+        fixture.push_input(
+            response.into(),
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet
+        )
+    );
+}
+
+#[test]
 fn canister_state_push_input_guaranteed_response_no_matching_callback() {
     let mut fixture = CanisterStateFixture::new();
     // Reserve a slot in the input queue.

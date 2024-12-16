@@ -802,6 +802,21 @@ fn enforce_best_effort_message_limit() {
 }
 
 #[test]
+fn push_best_effort_response_for_non_existent_canister_succeeds() {
+    // A replicated state with no canisters installed.
+    let mut fixture = ReplicatedStateFixture::with_canisters(&[]);
+
+    // Pushing a normal response fails.
+    let response = response_to(CANISTER_ID);
+    assert!(fixture.push_input(response.into()).is_err());
+
+    // Pushing a best-effort response succeeds (i.e. dropped silently).
+    let mut best_effort_response = response_to(CANISTER_ID);
+    best_effort_response.deadline = SOME_DEADLINE;
+    assert_eq!(Ok(()), fixture.push_input(best_effort_response.into()));
+}
+
+#[test]
 fn split() {
     // We will be splitting subnet A into A' and B.
     const SUBNET_A: SubnetId = SUBNET_ID;
