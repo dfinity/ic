@@ -7,6 +7,7 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::get_dependency_path;
 use slog::info;
 use std::{convert::TryFrom, env};
+use xnet_test::StartArgs;
 
 /// Concurrently calls `start` on all canisters in `canisters` with the
 /// given parameters.
@@ -29,15 +30,19 @@ pub async fn start_all_canisters(
         .enumerate()
         .flat_map(|(x, v)| v.iter().enumerate().map(move |(y, v)| (x, y, v)))
     {
-        let input = (&topology, canister_to_subnet_rate, payload_size_bytes);
+        let input = StartArgs {
+            network_topology: topology.clone(),
+            canister_to_subnet_rate,
+            payload_size_bytes,
+        };
         futures.push(async move {
             let _: String = canister
-                .update_("start", candid, input)
+                .update_("start", candid, (input,))
                 .await
-                .unwrap_or_else(|_| {
+                .unwrap_or_else(|e| {
                     panic!(
-                        "Starting canister_idx={} on subnet_idx={}",
-                        canister_idx, subnet_idx
+                        "Starting canister_idx={} on subnet_idx={} failed because of: {}",
+                        canister_idx, subnet_idx, e
                     )
                 });
         });

@@ -2,6 +2,7 @@
 
 use clap::Parser;
 use ic_base_types::CanisterId;
+use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
@@ -328,7 +329,7 @@ fn decode_ledger_stable_memory(cbor: PathBuf, output: &Path) {
         Ok(l) => l,
     };
     let mut records: Vec<LedgerBalanceRecord> = ledger
-        .balances
+        .balances()
         .store
         .iter()
         .map(|(key, icpts)| LedgerBalanceRecord {

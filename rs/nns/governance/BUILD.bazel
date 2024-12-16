@@ -37,6 +37,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/common",
     "//rs/nervous_system/governance",
     "//rs/nervous_system/linear_map",
+    "//rs/nervous_system/long_message",
     "//rs/nervous_system/neurons_fund",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
@@ -197,7 +198,6 @@ rust_library(
 # Usage:
 # bazel run //rs/nns/governance:governance-canbench for benchmarking
 # bazel run //rs/nns/governance:governance-canbench_update for updating the results file.
-# bazel test //rs/nns/governance:governance_canbench_test for checking if the results file is up to date.
 # Currently, updating the results file is not automated, and there are no tests to avoid
 # regression. For now, we can use it as an example for benchmarking as part of an
 # investigation of potential performance issues, or when we make a change that can affect
@@ -207,6 +207,10 @@ rust_canbench(
     name = "governance-canbench",
     srcs = ["canbench/main.rs"],
     add_test = True,
+    # For some reason, the NNS Governance benchmarks are sensitive to the optimization level.
+    # We would like to figure out why and fix it, but for now, we are reducing the optimization
+    # level so that tests against the optimization level can be added.
+    opt = "s",
     results_file = "canbench/canbench_results.yml",
     deps = [
         # Keep sorted.
