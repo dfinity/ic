@@ -86,7 +86,11 @@ pub fn rsync_with_retries(
             key_file,
         ) {
             Err(e) => {
-                if !skip_prompt && !consent_given(&format!(
+                if skip_prompt {
+                    // In non-interactive cases, we wait a short while
+                    // before re-trying rsync.
+                    tokio::thread::sleep(time::Duration::from_secs(10));
+                } else if !consent_given(&format!(
                     "Rsync failed: {e:?}. Do you want to retry the \
                     download for this node?"
                 )) {
@@ -96,7 +100,9 @@ pub fn rsync_with_retries(
             success => return success,
         }
     }
-    Err(RecoveryError::UnexpectedError("Rsync failed, too many retries".into()))
+    Err(RecoveryError::UnexpectedError(
+        "Rsync failed, too many retries".into(),
+    ))
 }
 
 /// Copy the files from src to target using [rsync](https://linux.die.net/man/1/rsync) and options `--delete`, `-acP`.
