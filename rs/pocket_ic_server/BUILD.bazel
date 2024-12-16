@@ -189,7 +189,8 @@ rust_test(
     },
     tags = [
         "cpu:8",
-        # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
+        # TODO: enable "test_macos" again when we have fixed the following error on Apple Silicon:
+        #
         #  ---- test_http_gateway stdout ----
         #  thread 'test_http_gateway' panicked at rs/pocket_ic_server/tests/test.rs:383:48:
         #  called `Result::unwrap()` on an `Err` value: reqwest::Error {
@@ -199,8 +200,8 @@ rust_test(
         #      ConnectError("tcp connect error", Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" })
         #    )
         #  }
-        "requires-network",
-        "test_macos",
+        #
+        #"test_macos",
     ],
     deps = TEST_DEPENDENCIES,
 )
