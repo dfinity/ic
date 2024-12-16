@@ -1488,12 +1488,10 @@ impl SystemApiImpl {
     pub fn update_on_low_wasm_memory_hook_status(&mut self) {
         self.sandbox_safe_system_state
             .check_on_low_wasm_memory_hook_condition(
-                self.memory_usage.memory_allocation.map(
-                    |memory_allocation| match memory_allocation {
-                        MemoryAllocation::Reserved(reserved_bytes) => Some(reserved_bytes),
-                        MemoryAllocation::BestEffort => None,
-                    },
-                ),
+                match self.memory_usage.memory_allocation {
+                    MemoryAllocation::Reserved(reserved_bytes) => Some(reserved_bytes),
+                    MemoryAllocation::BestEffort => None,
+                },
                 self.memory_usage.wasm_memory_limit,
                 self.memory_usage.current_usage,
                 self.memory_usage.wasm_memory_usage,
