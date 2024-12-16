@@ -198,9 +198,9 @@ fn correct_charging_target_canister_for_a_response() {
     let initial_cycles_balance = fixture.system_state.balance();
 
     // Enqueue the request.
-    fixture
+    assert!(fixture
         .push_input(default_input_request(), InputQueueType::RemoteSubnet)
-        .unwrap();
+        .unwrap());
     // Pop the Request, as if processing it.
     fixture.pop_input();
     // Assume it was processed and enqueue a response.
@@ -313,12 +313,12 @@ fn induct_messages_to_self_memory_limit_test_impl(
     );
 
     // Make a slot reservation for `response``.
-    fixture
+    assert!(fixture
         .push_input(
             RequestOrResponse::Request(request0),
             InputQueueType::RemoteSubnet,
         )
-        .unwrap();
+        .unwrap());
     fixture.pop_input().unwrap();
 
     // Pushing an outgoing response will release `MAX_RESPONSE_COUNT_BYTES`.
@@ -370,12 +370,12 @@ fn induct_messages_to_self_full_queue() {
     for _ in 0..DEFAULT_QUEUE_CAPACITY {
         let (request, _) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
         requests.push(request.clone());
-        fixture
+        assert!(fixture
             .push_input(
                 RequestOrResponse::Request(request),
                 InputQueueType::LocalSubnet,
             )
-            .unwrap();
+            .unwrap());
     }
 
     fixture.induct_messages_to_self();
@@ -499,12 +499,12 @@ fn time_out_callbacks() {
     let c4 = simulate_outbound_call(&mut fixture, d2).originator_reply_callback;
 
     // Simulate a paused execution for `rep1`.
-    fixture
+    assert!(fixture
         .push_input(
             RequestOrResponse::Response(rep1),
             InputQueueType::RemoteSubnet,
         )
-        .unwrap();
+        .unwrap());
     let response1 = fixture.pop_input().unwrap();
     fixture
         .system_state
@@ -515,12 +515,12 @@ fn time_out_callbacks() {
         });
 
     // And enqueue `rep2`.
-    fixture
+    assert!(fixture
         .push_input(
             RequestOrResponse::Response(rep2.clone()),
             InputQueueType::RemoteSubnet,
         )
-        .unwrap();
+        .unwrap());
 
     // Time out callbacks with deadlines before `d2` (only applicable to `c3` now).
     assert!(!fixture.system_state.has_expired_callbacks(d1));
