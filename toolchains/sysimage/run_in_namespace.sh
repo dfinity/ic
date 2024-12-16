@@ -120,7 +120,7 @@ CHROOT_DIR=""
 COMMAND=""
 
 pid_unshare="unshare --fork --pid"
-mount_unshare="$pid_unshare --mount --map-auto --map-root-user --setuid 0 --setgid 0"
+mount_unshare="$pid_unshare --mount --map-root-user"
 
 run_with_chroot() {
     ((EUID == 0)) || die "This script must be run with root privileges"

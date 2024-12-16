@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euxo pipefail
+set -euo pipefail
 
 run_in_namespace=$(realpath toolchains/sysimage/run_in_namespace.sh)
 ubuntu_base=$(realpath $UBUNTU_BASE_PATH)
