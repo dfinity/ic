@@ -392,7 +392,7 @@ impl QueryCache {
         data_certificate_expiry_time: Duration,
     ) -> Self {
         QueryCache {
-            cache: Mutex::new(LruCache::new(capacity)),
+            cache: Mutex::new(LruCache::new(capacity, NumBytes::from(0))),
             max_expiry_time,
             data_certificate_expiry_time,
             metrics: QueryCacheMetrics::new(metrics_registry),
