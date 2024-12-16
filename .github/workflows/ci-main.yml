@@ -170,7 +170,15 @@ jobs:
     runs-on:
       labels: macOS
     # Run on protected branches, but only on public repo
-    if: ${{ github.ref_protected && github.repository == 'dfinity/ic' }}
+    # Allow running if CI_MACOS_INTEL label is used
+    if: >
+      ${{
+
+
+        (github.ref_protected && github.repository == 'dfinity/ic') ||
+        (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_MACOS_INTEL'))
+      }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
