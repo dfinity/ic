@@ -799,7 +799,7 @@ impl ReplicatedState {
                     }
                 } else {
                     match msg {
-                        // Best effort responses are silently dropped if the canister is not found.
+                        // Best-effort responses are silently dropped if the canister is not found.
                         RequestOrResponse::Response(response) if response.is_best_effort() => {
                             Ok(false)
                         }

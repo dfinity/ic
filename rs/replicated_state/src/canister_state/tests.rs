@@ -280,7 +280,7 @@ fn canister_state_push_input_best_effort_response_canister_stopped() {
         .system_state
         .set_status(CanisterStatus::Stopped);
 
-    // The response should be dropped silently.
+    // The best-effort response should be dropped silently.
     assert!(!fixture
         .push_input(
             response.into(),

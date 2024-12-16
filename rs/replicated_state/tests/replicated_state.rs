@@ -806,7 +806,7 @@ fn push_best_effort_response_for_non_existent_canister_succeeds() {
     // A replicated state with no canisters installed.
     let mut fixture = ReplicatedStateFixture::with_canisters(&[]);
 
-    // Pushing a normal response fails.
+    // Pushing a guaranteed response fails.
     let response = response_to(CANISTER_ID);
     assert!(fixture.push_input(response.into()).is_err());
 

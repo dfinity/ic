@@ -1642,7 +1642,7 @@ impl SystemState {
         );
 
         match (&msg, &self.status) {
-            // Best effort responses are silently dropped when stopped.
+            // Best-effort responses are silently dropped when stopped.
             (RequestOrResponse::Response(response), CanisterStatus::Stopped { .. })
                 if response.is_best_effort() =>
             {
