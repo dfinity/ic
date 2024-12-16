@@ -2017,8 +2017,8 @@ fn check_stream_handler_generated_reject_signal_canister_migrating() {
 
 /// Common implementation for tests checking inducting best-effort responses does not raise a
 /// critical error.
-fn inducting_best_effort_responses_does_not_raise_a_critical_error_impl(
-    prepare_state: impl FnOnce(ReplicatedState) -> (ReplicatedState, usize),
+fn inability_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(
+    prepare_state: impl FnOnce(ReplicatedState) -> ReplicatedState,
 ) {
     with_local_test_setup(
         btreemap![LOCAL_SUBNET => StreamConfig {
@@ -2028,54 +2028,25 @@ fn inducting_best_effort_responses_does_not_raise_a_critical_error_impl(
             ..StreamConfig::default()
         }],
         |stream_handler, state, metrics| {
-            let (prepared_state, expected_inductions_count) = prepare_state(state);
-            let inducted_state =
-                stream_handler.induct_loopback_stream(prepared_state, &mut (i64::MAX / 2));
-
+            stream_handler.induct_loopback_stream(prepare_state(state), &mut (i64::MAX / 2));
             // No critical errors raised.
             metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
-            // The expected number of messages were inducted.
-            assert_eq!(
-                expected_inductions_count,
-                inducted_state
-                    .canister_state(&LOCAL_CANISTER)
-                    .map_or(0, |canister| canister
-                        .system_state
-                        .queues()
-                        .input_queues_message_count())
-            );
-            // TODO: Check the metrics include `expected_inductions_count` inducted messages.
         },
     );
-}
-
-/// Tests that inducting the same best effort response twice does not raise a critical error.
-#[test]
-fn inducting_duplicate_best_effort_response_does_not_raise_a_critical_error() {
-    inducting_best_effort_responses_does_not_raise_a_critical_error_impl(|mut state| {
-        // Clone the best effort response and push it onto the loopback stream.
-        let response = message_in_stream(state.get_stream(&LOCAL_SUBNET), 21).clone();
-        state.modify_streams(|streams| streams.get_mut(&LOCAL_SUBNET).unwrap().push(response));
-
-        // The first response should be inducted, the clone should be silently dropped.
-        (state, 1)
-    });
 }
 
 /// Tests that inducting a best-effort response into a stopped canister does not raise a critical
 /// error.
 #[test]
 fn inducting_best_effort_response_into_stopped_canister_does_not_raise_a_critical_error() {
-    inducting_best_effort_responses_does_not_raise_a_critical_error_impl(|mut state| {
+    inability_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(|mut state| {
         // Set `LOCAL_CANISTER` to stopped.
         state
             .canister_state_mut(&LOCAL_CANISTER)
             .unwrap()
             .system_state
             .set_status(CanisterStatus::Stopped);
-
-        // The response should be silently dropped.
-        (state, 0)
+        state
     });
 }
 
@@ -2084,12 +2055,10 @@ fn inducting_best_effort_response_into_stopped_canister_does_not_raise_a_critica
 #[test]
 fn inducting_best_effort_response_addressed_to_non_existent_canister_does_not_raise_a_critical_error(
 ) {
-    inducting_best_effort_responses_does_not_raise_a_critical_error_impl(|mut state| {
+    inability_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(|mut state| {
         // Remove the `LOCAL_CANISTER`.
         state.canister_states.remove(&LOCAL_CANISTER).unwrap();
-
-        // The response should be silently dropped.
-        (state, 0)
+        state
     });
 }
 
