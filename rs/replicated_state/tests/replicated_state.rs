@@ -813,7 +813,7 @@ fn push_best_effort_response_for_non_existent_canister_succeeds() {
     // Pushing a best-effort response succeeds (i.e. dropped silently).
     let mut best_effort_response = response_to(CANISTER_ID);
     best_effort_response.deadline = SOME_DEADLINE;
-    assert!(!fixture.push_input(best_effort_response.into()).unwrap());
+    assert_eq!(Ok(false), fixture.push_input(best_effort_response.into()));
 }
 
 #[test]

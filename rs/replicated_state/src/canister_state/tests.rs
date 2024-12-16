@@ -281,13 +281,14 @@ fn canister_state_push_input_best_effort_response_canister_stopped() {
         .set_status(CanisterStatus::Stopped);
 
     // The best-effort response should be dropped silently.
-    assert!(!fixture
-        .push_input(
+    assert_eq!(
+        Ok(false),
+        fixture.push_input(
             response.into(),
             SubnetType::Application,
             InputQueueType::RemoteSubnet
         )
-        .unwrap());
+    );
 }
 
 #[test]
