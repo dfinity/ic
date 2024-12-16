@@ -88,6 +88,7 @@ rust_test(
 
 rust_ic_test(
     name = "ic_icp_index_test",
+    timeout = "long",
     srcs = ["tests/tests.rs"],
     data = [
         ":ic-icp-index-canister.wasm",
@@ -102,5 +103,6 @@ rust_ic_test(
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     },
     flaky = True,
+    tags = ["cpu:4"],
     deps = [":ic-icp-index"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

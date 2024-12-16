@@ -17,6 +17,7 @@ use crate::{
         with_stable_neuron_store_mut,
     },
     use_stable_memory_following_index, Clock, IcClock,
+    CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS,
 };
 use dyn_clone::DynClone;
 use ic_base_types::PrincipalId;
@@ -933,17 +934,12 @@ impl NeuronStore {
         self.heap_neurons.range(range).map(|(_, neuron)| neuron)
     }
 
-    /// Internal - map over neurons after filtering
-    fn filter_map_active_neurons<R>(
-        &self,
-        filter: impl Fn(&Neuron) -> bool,
-        f: impl Fn(&Neuron) -> R,
-    ) -> Vec<R> {
-        self.with_active_neurons_iter(|iter| {
-            iter.filter(|n| filter(n.as_ref()))
-                .map(|n| f(n.as_ref()))
-                .collect()
-        })
+    // TODO remove this after we no longer need to validate neurons in heap.
+    /// Returns an iterator over all neurons in the heap. There is no guarantee that the active
+    /// neurons are all in the heap as they are being migrated to stable memory, so the caller
+    /// should be aware of different storage locations.
+    pub fn heap_neurons_iter(&self) -> impl Iterator<Item = &Neuron> {
+        self.heap_neurons.values()
     }
 
     fn is_active_neurons_fund_neuron(neuron: &Neuron, now: u64) -> bool {
@@ -953,17 +949,22 @@ impl NeuronStore {
     /// List all neuron ids that are in the Neurons' Fund.
     pub fn list_active_neurons_fund_neurons(&self) -> Vec<NeuronsFundNeuron> {
         let now = self.now();
-        self.filter_map_active_neurons(
-            |n| Self::is_active_neurons_fund_neuron(n, now),
-            |n| NeuronsFundNeuron {
-                id: n.id(),
-                controller: n.controller(),
-                hotkeys: pick_most_important_hotkeys(&n.hot_keys),
-                maturity_equivalent_icp_e8s: n.maturity_e8s_equivalent,
+        self.with_active_neurons_iter_sections(
+            |iter| {
+                iter.filter(|neuron| Self::is_active_neurons_fund_neuron(neuron, now))
+                    .map(|neuron| NeuronsFundNeuron {
+                        id: neuron.id(),
+                        controller: neuron.controller(),
+                        hotkeys: pick_most_important_hotkeys(&neuron.hot_keys),
+                        maturity_equivalent_icp_e8s: neuron.maturity_e8s_equivalent,
+                    })
+                    .collect()
+            },
+            NeuronSections {
+                hot_keys: true,
+                ..NeuronSections::NONE
             },
         )
-        .into_iter()
-        .collect()
     }
 
     /// List all neuron ids whose neurons have staked maturity greater than 0.
@@ -1299,7 +1300,7 @@ impl NeuronStore {
         caller: PrincipalId,
     ) -> Vec<NeuronId> {
         let is_non_empty = |neuron_id: &NeuronId| {
-            self.with_neuron(neuron_id, |neuron| neuron.is_funded())
+            self.with_neuron_sections(neuron_id, NeuronSections::NONE, |neuron| neuron.is_funded())
                 .unwrap_or(false)
         };
 
@@ -1394,6 +1395,15 @@ pub fn prune_some_following(
     carry_on: impl FnMut() -> bool,
 ) -> Bound<NeuronId> {
     let now_seconds = neuron_store.now();
+
+    if next == Bound::Unbounded {
+        CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS.with(
+            |start_timestamp_seconds| {
+                start_timestamp_seconds.set(now_seconds);
+            },
+        );
+    }
+
     groom_some_neurons(
         neuron_store,
         |neuron| {
