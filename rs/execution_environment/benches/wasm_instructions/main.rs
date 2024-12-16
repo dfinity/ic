@@ -34,7 +34,8 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
         c,
         "wasm_instructions",
         &benchmarks,
-        |exec_env: &ExecutionEnvironment,
+        |_id: &str,
+         exec_env: &ExecutionEnvironment,
          _expected_iterations,
          common::BenchmarkArgs {
              canister_state,

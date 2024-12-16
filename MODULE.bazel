@@ -37,6 +37,10 @@ archive_override(
     urls = ["https://github.com/bazelbuild/rules_foreign_cc/archive/77d4483fadbb1b7bcace18ed8e8e87e8791050f6.tar.gz"],
 )
 
+# Misc tools
+
+bazel_dep(name = "pigz", version = "2.8")  # (parallel) gzip
+
 # Python dependencies
 
 bazel_dep(name = "rules_python", version = "0.35.0")
@@ -201,7 +205,7 @@ use_repo(oci, "minica", "minica_linux_amd64")
 # used by rosetta image
 oci.pull(
     name = "rust_base",
-    image = "gcr.io/distroless/cc-debian12@sha256:3310655aac0d85eb9d579792387af1ff3eb7a1667823478be58020ab0e0d97a8",
+    image = "gcr.io/distroless/cc-debian11@sha256:8e94f031353596c3fc9db6a2499bcc82dacc40cb71e0703476f9fad41677efdf",
     platforms = ["linux/amd64"],
 )
 use_repo(oci, "rust_base", "rust_base_linux_amd64")
@@ -209,7 +213,7 @@ use_repo(oci, "rust_base", "rust_base_linux_amd64")
 # used in various places as base
 oci.pull(
     name = "ubuntu_base",
-    image = "ghcr.io/dfinity/ubuntu@sha256:77d57fd89366f7d16615794a5b53e124d742404e20f035c22032233f1826bd6a",
+    image = "ghcr.io/dfinity/ubuntu@sha256:965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea",
     platforms = ["linux/amd64"],
 )
 use_repo(oci, "ubuntu_base", "ubuntu_base_linux_amd64")
@@ -247,6 +251,17 @@ use_repo(oci, "alpine_openssl", "alpine_openssl_linux_amd64")
 bazel_dep(name = "rules_distroless", version = "0.3.8")
 
 apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
+
+## Packageset based on an Ubuntu focal snapshot, see manifest file
+## for details
+## To update, comment out the `lock` field below and run:
+##   bazel run @focal//:lock
+apt.install(
+    name = "focal",
+    lock = "//bazel:focal.lock.json",
+    manifest = "//bazel:focal.yaml",
+)
+use_repo(apt, "focal")
 
 # Packageset based on an Ubuntu noble snapshot, see manifest file
 # for details
@@ -428,38 +443,6 @@ http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "ht
 http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 
 http_jar = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_jar")
-
-# Gzip tool
-http_archive(
-    name = "pigz",
-    build_file_content = """
-cc_library(
-    name = "zopfli",
-    hdrs = glob(["zopfli/src/zopfli/*.h"]),
-    srcs = glob(["zopfli/src/zopfli/*.c"]),
-)
-
-cc_binary(
-    name = "pigz",
-    srcs = [
-        "pigz.c",
-        "try.c",
-        "try.h",
-        "yarn.c",
-        "yarn.h",
-    ],
-    linkopts = [
-        "-lm",
-        "-lpthread",
-        "-lz",
-    ],
-    deps = [":zopfli"],
-    visibility = ["//visibility:public"],
-)""",
-    sha256 = "688fe1d805b33a4ae8cbf86ba56aa1a5d647e959219c7d3aeb7d041c228af1ef",
-    strip_prefix = "pigz-2.8",
-    url = "https://github.com/madler/pigz/archive/refs/tags/v2.8.zip",
-)
 
 # TLA+ tools
 http_jar(
@@ -785,7 +768,7 @@ cc_library(
 )
 
 http_archive(
-    name = "bitcoin_core",
+    name = "bitcoin_core_linux_x86",
     build_file_content = """
 package(default_visibility = ["//visibility:public"])
 filegroup(
@@ -801,6 +784,40 @@ filegroup(
     ],
 )
 
+http_archive(
+    name = "bitcoin_core_darwin_x86",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+    name = "bitcoind",
+    srcs = ["bin/bitcoind"],
+)
+""",
+    sha256 = "e1efd8c4605b2aabc876da93b6eee2bedd868ce7d1f02b0220c1001f903b3e2c",
+    strip_prefix = "bitcoin-27.0",
+    urls = [
+        "https://bitcoin.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-apple-darwin.tar.gz",
+        "https://bitcoincore.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-apple-darwin.tar.gz",
+    ],
+)
+
+http_archive(
+    name = "bitcoin_core_darwin_arm64",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+    name = "bitcoind",
+    srcs = ["bin/bitcoind"],
+)
+""",
+    sha256 = "1d9d9b837297a73fc7a3b1cfed376644e3fa25c4e1672fbc143d5946cb52431d",
+    strip_prefix = "bitcoin-27.0",
+    urls = [
+        "https://bitcoin.org/bin/bitcoin-core-27.0/bitcoin-27.0-arm64-apple-darwin.tar.gz",
+        "https://bitcoincore.org/bin/bitcoin-core-27.0/bitcoin-27.0-arm64-apple-darwin.tar.gz",
+    ],
+)
+
 http_file(
     name = "bitcoin_example_canister",
     downloaded_file_path = "basic_bitcoin.wasm.gz",
@@ -810,8 +827,8 @@ http_file(
 
 http_file(
     name = "pocket-ic-mainnet-gz",
-    sha256 = "454891cac2421f3f894759ec5e6b6e48fbb544d79197bc29b88d34b93d78a4f1",
-    url = "https://download.dfinity.systems/ic/52ebccfba8855e23dcad9657a8d6e6be01df71f9/binaries/x86_64-linux/pocket-ic.gz",
+    sha256 = "0935ee6ece312719aae4eabddec2dfc6af34d5edbddf4d3af53bccd1b3636044",
+    url = "https://download.dfinity.systems/ic/172f8c78653c93ad101af75b94251439b4ccf098/binaries/x86_64-linux/pocket-ic.gz",
 )
 
 # Patches
@@ -829,4 +846,12 @@ http_file(
     downloaded_file_path = "ic.did",
     sha256 = "31d4654d60b364420a2e52f546f06b2255dc78ac8c2d768271f004b8946e92cb",
     url = "https://raw.githubusercontent.com/dfinity/portal/407ec5b92d06618c4df9f52e98514c5f4f44313e/docs/references/_attachments/ic.did",
+)
+
+# Mozilla CA certificate store in PEM format
+http_file(
+    name = "mozilla_root_ca_store",
+    downloaded_file_path = "cacert.pem",
+    sha256 = "bb1782d281fe60d4a2dcf41bc229abe3e46c280212597d4abcc25bddf667739b",
+    url = "https://curl.se/ca/cacert-2024-11-26.pem",
 )

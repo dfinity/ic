@@ -27,25 +27,21 @@ pub fn has_ipv6_connectivity(
 ) -> Result<bool> {
     // Format with the prefix length
     let ip = format!("{}/{}", generated_ipv6, ipv6_prefix_length);
-    let interface_down_func = || {
-        eprintln!("Removing ip address and bringing interface down");
-        get_command_stdout("ip", ["addr", "del", &ip, "dev", &interface.name])?;
-        deactivate_link(&interface.name)
-    };
 
     eprintln!(
         "Bringing {} up with ip address {}",
         &interface.name,
         &ip.to_string()
     );
-    get_command_stdout("ip", ["addr", "add", &ip, "dev", &interface.name])?;
+
+    get_command_stdout("ip", &["addr", "add", &ip, "dev", &interface.name])?;
     activate_link(&interface.name)?;
 
     let wait_time = Duration::from_secs(2);
     let ping_target = ping_target.parse::<IpAddr>()?;
     let ping_timeout = Duration::from_secs(3);
-    let result = retry(
-        40,
+    let ping_success = retry(
+        10,
         || {
             eprintln!(
                 "Attempting to ping {}, after {} seconds",
@@ -58,13 +54,13 @@ pub fn has_ipv6_connectivity(
         wait_time,
     );
 
-    if result.is_err() {
+    if ping_success.is_err() {
         eprintln!("Failed to ping from configured interface.");
-        interface_down_func()?;
+        cleanup_interface(&interface.name, &ip)?;
         Ok(false)
     } else {
         eprintln!("Successful ipv6 connectivity");
-        interface_down_func()?;
+        cleanup_interface(&interface.name, &ip)?;
         Ok(true)
     }
 }
@@ -79,9 +75,15 @@ pub fn get_interface_name(interface_path: &PathBuf) -> Result<String> {
         ))
 }
 
+fn cleanup_interface(interface_name: &str, ip: &str) -> Result<()> {
+    eprintln!("Removing ip address and bringing interface down");
+    get_command_stdout("ip", &["addr", "del", ip, "dev", interface_name])?;
+    deactivate_link(interface_name)
+}
+
 fn qualify_and_generate_interface(interface_name: &str) -> Result<Option<Interface>> {
-    let ethtool_output = get_command_stdout("ethtool", [interface_name])?;
-    let link_is_up = is_link_up_from_ethool_output(&ethtool_output)?;
+    let ethtool_output = get_command_stdout("ethtool", &[interface_name])?;
+    let link_is_up = is_link_up_from_ethtool_output(&ethtool_output)?;
 
     if !link_is_up {
         return Ok(None);
@@ -103,7 +105,6 @@ fn qualify_and_generate_interfaces(interface_names: &[&str]) -> Result<Vec<Inter
     // On some hardware ethtool needs time before link status settles.
     // Takes 2.3 seconds for recent NP.
     // Wait a maximum of 20 seconds for link status to settle.
-    let mut result_vec: Vec<Interface> = Vec::new();
     let wait_time = Duration::from_secs(2);
     let interface_results: Vec<Result<Option<Interface>>> = interface_names
         .par_iter()
@@ -117,6 +118,7 @@ fn qualify_and_generate_interfaces(interface_names: &[&str]) -> Result<Vec<Inter
         })
         .collect();
 
+    let mut result_vec = Vec::new();
     for (name, result) in std::iter::zip(interface_names, interface_results) {
         eprintln!("Interface name: {name}");
         match result {
@@ -137,7 +139,7 @@ fn qualify_and_generate_interfaces(interface_names: &[&str]) -> Result<Vec<Inter
     Ok(result_vec)
 }
 
-/// Return vec of Interface's which:
+/// Return vec of Interfaces which:
 ///   Have physical links attached
 ///   Do not contain the string 'virtual'
 pub fn get_interfaces() -> Result<Vec<Interface>> {
@@ -211,6 +213,7 @@ fn parse_fastest_link_mode_from_ethtool_output(output: &str) -> Option<u64> {
     if lines.clone().any(|s| s.contains("10000")) {
         return Some(10000);
     }
+    // TODO: remove use of 1GB link after deprecating gen1 machines
     if lines.clone().any(|s| s.contains("1000")) {
         return Some(1000);
     }
@@ -229,7 +232,7 @@ fn get_speed_from_ethtool_output(output: &str) -> Option<u64> {
     speed
 }
 
-fn is_link_up_from_ethool_output(output: &str) -> Result<bool> {
+fn is_link_up_from_ethtool_output(output: &str) -> Result<bool> {
     output
         .lines()
         .map(|s| s.trim())
@@ -242,33 +245,31 @@ fn is_link_up_from_ethool_output(output: &str) -> Result<bool> {
 }
 
 fn activate_link(interface_name: &str) -> Result<()> {
-    let _ = get_command_stdout("ip", ["link", "set", interface_name, "up"])
+    get_command_stdout("ip", &["link", "set", interface_name, "up"])
         .context("Error bringing interface online")?;
     Ok(())
 }
 
 fn deactivate_link(interface_name: &str) -> Result<()> {
-    let _ = get_command_stdout("ip", ["link", "set", interface_name, "down"])
+    get_command_stdout("ip", &["link", "set", interface_name, "down"])
         .context("Error bringing interface offline")?;
     Ok(())
 }
 
 /// Get paths of all available network interfaces. E.g. /sys/class/net/enp0s31f6
 pub fn get_interface_paths() -> Vec<PathBuf> {
-    let interfaces = match fs::read_dir(SYSFS_NETWORK_DIR) {
-        Ok(itr) => itr,
+    match fs::read_dir(SYSFS_NETWORK_DIR) {
+        Ok(itr) => itr
+            // Keep only the items that are symlinks
+            .filter_map(Result::ok)
+            .map(|dir_entry| dir_entry.path())
+            .filter(|path_buf| path_buf.is_symlink())
+            .collect(),
         Err(e) => {
             eprintln!("Failed to read directory {SYSFS_NETWORK_DIR}: {e}");
-            return Vec::new();
+            Vec::new()
         }
-    };
-
-    // Keep only the items that are symlinks
-    interfaces
-        .filter_map(Result::ok)
-        .map(|dir_entry| dir_entry.path())
-        .filter(|path_buf| path_buf.is_symlink())
-        .collect()
+    }
 }
 
 fn is_valid_network_interface(path: &&PathBuf) -> bool {
@@ -360,21 +361,21 @@ Cannot get wake-on-lan settings: Operation not permitted
 
     #[test]
     fn test_is_link_up_from_ethtool_output() {
-        assert!(is_link_up_from_ethool_output(ETHTOOL_OUTPUT).unwrap());
+        assert!(is_link_up_from_ethtool_output(ETHTOOL_OUTPUT).unwrap());
 
         let negative_output = "
 Cannot get wake-on-lan settings: Operation not permitted
 Current message level: 0x00000007 (7)
 drv probe link
 Link detected: no";
-        assert!(!is_link_up_from_ethool_output(negative_output).unwrap());
+        assert!(!is_link_up_from_ethtool_output(negative_output).unwrap());
 
         let invalid_output = "
 Cannot get wake-on-lan settings: Operation not permitted
 Current message level: 0x00000007 (7)
 drv probe link
 Blink 182 detected";
-        assert!(is_link_up_from_ethool_output(invalid_output).is_err());
+        assert!(is_link_up_from_ethtool_output(invalid_output).is_err());
     }
 
     #[test]

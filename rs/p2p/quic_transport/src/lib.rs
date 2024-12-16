@@ -319,21 +319,9 @@ impl Transport for QuicTransport {
             .get(peer_id)
             .ok_or(TransportError::ConnectionNotFound)?
             .clone();
-        let response_result = peer.rpc(request).await;
-        match response_result {
-            Ok(response) => {
-                bytes_received_counter.inc_by(response.body().len() as u64);
-                Ok(response)
-            }
-            Err(err) => {
-                let counter = &self.metrics.connection_handle_errors_total;
-                observe_transport_error(&err, counter);
-                if let TransportError::Internal(internal_err) = &err {
-                    warn!(self.log, "{:?}", internal_err);
-                }
-                Err(err)
-            }
-        }
+        peer.rpc(request).await.inspect_err(|err| {
+            info!(self.log, "{:#?}", err);
+        })
     }
 
     fn peers(&self) -> Vec<(NodeId, ConnId)> {
