@@ -40,7 +40,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/home/ubuntu/.cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/github/home/.cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
@@ -75,7 +75,5 @@ jobs:
 
           # Cache the git helpers so they dont't change between branch changes
           cp -r ci/src/revisions /tmp
-
-          echo $HOME
 
           time python /tmp/revisions/mainnet_revisions.py canisters
