@@ -2018,7 +2018,7 @@ fn check_stream_handler_generated_reject_signal_canister_migrating() {
 /// Common implementation for tests checking inducting best-effort responses does not raise a
 /// critical error.
 fn inability_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(
-    prepare_state: impl FnOnce(ReplicatedState) -> ReplicatedState,
+    prepare_state: impl FnOnce(&mut ReplicatedState),
 ) {
     with_local_test_setup(
         btreemap![LOCAL_SUBNET => StreamConfig {
@@ -2027,8 +2027,8 @@ fn inability_to_induct_best_effort_response_does_not_raise_a_critical_error_impl
             signals_end: 21,
             ..StreamConfig::default()
         }],
-        |stream_handler, state, metrics| {
-            let state = prepare_state(state);
+        |stream_handler, mut state, metrics| {
+            prepare_state(&mut state);
 
             // Expecting an unchanged state...
             let mut expected_state = state.clone();
@@ -2056,14 +2056,13 @@ fn inability_to_induct_best_effort_response_does_not_raise_a_critical_error_impl
 /// error.
 #[test]
 fn inducting_best_effort_response_into_stopped_canister_does_not_raise_a_critical_error() {
-    inability_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(|mut state| {
+    inability_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(|state| {
         // Set `LOCAL_CANISTER` to stopped.
         state
             .canister_state_mut(&LOCAL_CANISTER)
             .unwrap()
             .system_state
             .set_status(CanisterStatus::Stopped);
-        state
     });
 }
 
@@ -2072,10 +2071,9 @@ fn inducting_best_effort_response_into_stopped_canister_does_not_raise_a_critica
 #[test]
 fn inducting_best_effort_response_addressed_to_non_existent_canister_does_not_raise_a_critical_error(
 ) {
-    inability_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(|mut state| {
+    inability_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(|state| {
         // Remove the `LOCAL_CANISTER`.
         state.canister_states.remove(&LOCAL_CANISTER).unwrap();
-        state
     });
 }
 
