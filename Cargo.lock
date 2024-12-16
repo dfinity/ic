@@ -1166,7 +1166,6 @@ dependencies = [
  "bech32 0.8.1",
  "bitcoin_hashes 0.10.0",
  "secp256k1 0.22.2",
- "serde",
 ]
 
 [[package]]
@@ -1237,9 +1236,6 @@ name = "bitcoin_hashes"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "006cc91e1a1d99819bc5b8214be3555c1f0611b169f527a1fdc54ed1f2b745b0"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "bitcoin_hashes"
@@ -1264,37 +1260,13 @@ dependencies = [
 
 [[package]]
 name = "bitcoincore-rpc"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd0e67dbf7a9971e7f4276f6089e9e814ce0f624a03216b7d92d00351ae7fb3e"
-dependencies = [
- "bitcoincore-rpc-json 0.15.0",
- "jsonrpc 0.12.1",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "bitcoincore-rpc"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aedd23ae0fd321affb4bbbc36126c6f49a32818dc6b979395d24da8c9d4e80ee"
 dependencies = [
- "bitcoincore-rpc-json 0.19.0",
+ "bitcoincore-rpc-json",
  "jsonrpc 0.18.0",
  "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "bitcoincore-rpc-json"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e2ae16202721ba8c3409045681fac790a5ddc791f05731a2df22c0c6bffc0f1"
-dependencies = [
- "bitcoin 0.28.2",
  "serde",
  "serde_json",
 ]
@@ -4097,7 +4069,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
- "bitcoincore-rpc 0.15.0",
+ "bitcoincore-rpc",
  "candid",
  "futures",
  "ic-agent 0.37.1",
@@ -5904,7 +5876,7 @@ name = "ic-btc-adapter"
 version = "0.9.0"
 dependencies = [
  "bitcoin 0.32.5",
- "bitcoincore-rpc 0.19.0",
+ "bitcoincore-rpc",
  "bitcoind",
  "clap 4.5.20",
  "criterion",
@@ -13176,7 +13148,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
- "bitcoincore-rpc 0.19.0",
+ "bitcoincore-rpc",
  "candid",
  "canister-test",
  "dfn_candid",
@@ -14736,16 +14708,6 @@ dependencies = [
  "regex",
  "serde_json",
  "thiserror 1.0.68",
-]
-
-[[package]]
-name = "jsonrpc"
-version = "0.12.1"
-source = "git+https://github.com/apoelstra/rust-jsonrpc?rev=e42044d#e42044d8e0896317488dfbd65eb5563d76e937fe"
-dependencies = [
- "base64 0.13.1",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -17289,7 +17251,7 @@ dependencies = [
  "backoff",
  "base64 0.13.1",
  "bitcoin 0.32.5",
- "bitcoincore-rpc 0.19.0",
+ "bitcoincore-rpc",
  "bytes",
  "candid",
  "clap 4.5.20",
@@ -19442,7 +19404,6 @@ checksum = "295642060261c80709ac034f52fca8e5a9fa2c7d341ded5cdb164b7c33768b2a"
 dependencies = [
  "rand 0.6.5",
  "secp256k1-sys 0.5.2",
- "serde",
 ]
 
 [[package]]
@@ -23118,3 +23079,8 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
+
+[[patch.unused]]
+name = "jsonrpc"
+version = "0.12.1"
+source = "git+https://github.com/apoelstra/rust-jsonrpc?rev=e42044d#e42044d8e0896317488dfbd65eb5563d76e937fe"

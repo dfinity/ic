@@ -232,7 +232,6 @@ mod test {
         block::Version, consensus::deserialize, hashes::hex::FromHex, hashes::Hash, TxMerkleNode,
     };
     use csv::Reader;
-    use proptest::prelude::*;
 
     use super::*;
     use crate::constants::test::{
