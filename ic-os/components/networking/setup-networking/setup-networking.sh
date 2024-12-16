@@ -65,6 +65,7 @@ function gather_interfaces_by_speed() {
 
     INTERFACES=$(ip -o link show | awk -F': ' '{print $2}' | grep -v '^lo$')
     declare -A SPEED_MAP
+
     for IFACE in $INTERFACES; do
         SPEED_STR=$(ethtool "$IFACE" 2>/dev/null | grep "Speed:" || true)
         SPEED=$(echo "$SPEED_STR" | grep -Eo '[0-9]+' || echo 0)
@@ -93,10 +94,10 @@ function configure_netplan() {
     mkdir -p /run/netplan
     cp "$NETPLAN_TEMPLATE" "$NETPLAN_OUTPUT"
 
-    sed -i "s|{INTERFACES}|$INTERFACE_LIST|g" "$NETPLAN_OUTPUT"
-    sed -i "s|{MAC_ADDRESS}|$MAC_ADDR|g" "$NETPLAN_OUTPUT"
-    sed -i "s|{IPV6_ADDR}|$IPV6_ADDR|g" "$NETPLAN_OUTPUT"
-    sed -i "s|{IPV6_GATEWAY}|$IPV6_GATEWAY|g" "$NETPLAN_OUTPUT"
+    sed -i "s|{INTERFACES}|${INTERFACE_LIST}|g" "$NETPLAN_OUTPUT"
+    sed -i "s|{MAC_ADDRESS}|${MAC_ADDR}|g" "$NETPLAN_OUTPUT"
+    sed -i "s|{IPV6_ADDR}|${IPV6_ADDR}|g" "$NETPLAN_OUTPUT"
+    sed -i "s|{IPV6_GATEWAY}|${IPV6_GATEWAY}|g" "$NETPLAN_OUTPUT"
 
     # Dynamically add ethernets for each interface in descending speed
     for IFACE in ${SORTED_INTERFACES}; do
