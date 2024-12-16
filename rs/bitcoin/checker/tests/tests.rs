@@ -486,7 +486,7 @@ fn test_check_transaction_error() {
     let call_id = setup
         .submit_btc_checker_call(
             "check_transaction",
-            Encode!(&CheckTransactionArgs { txid: vec![0;31] }).unwrap(),
+            Encode!(&CheckTransactionArgs { txid: vec![0; 31] }).unwrap(),
             CHECK_TRANSACTION_CYCLES_SERVICE_FEE - 1,
         )
         .expect("submit_call failed to return call id");
