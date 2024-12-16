@@ -849,8 +849,8 @@ impl StreamHandlerImpl {
                                 return Some((reason, msg));
                             }
                             RequestOrResponse::Response(response) => {
-                                // Critical error, guaranteed responses (and best-effort responses passing
-                                // the exceptions above) should always be inducted successfully.
+                                // Responses should always be inducted successfully (or silently dropped,
+                                // in the case of duplicate best-effort responses). But never produce an error.
                                 error!(
                                     self.log,
                                     "{}: Inducting response failed: {}\n{:?}",
