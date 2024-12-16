@@ -1,5 +1,5 @@
 [package]
-name = "sync-with-released-nevous-system-wasms"
+name = "sync-with-released-nervous-system-wasms"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [[bin]]
-name = "sync-with-released-nevous-system-wasms"
+name = "sync-with-released-nervous-system-wasms"
 path = "src/main.rs"
 
 [dependencies]

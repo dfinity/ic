@@ -123,7 +123,7 @@ impl ReplicatedStateFixture {
     fn push_input(
         &mut self,
         msg: RequestOrResponse,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         self.state
             .push_input(msg, &mut SUBNET_AVAILABLE_MEMORY.clone())
     }
@@ -249,13 +249,13 @@ fn memory_taken_by_canister_queues() {
     assert_wasm_custom_sections_memory_taken(0, &fixture);
 
     // Push a request into a canister input queue.
-    fixture
+    assert!(fixture
         .state
         .push_input(
             request_from(OTHER_CANISTER_ID).into(),
             &mut subnet_available_memory,
         )
-        .unwrap();
+        .unwrap());
 
     // Reserved memory for one response.
     assert_execution_memory_taken(0, &fixture);
@@ -300,13 +300,13 @@ fn memory_taken_by_subnet_queues() {
     assert_wasm_custom_sections_memory_taken(0, &fixture);
 
     // Push a request into the subnet input queues.
-    fixture
+    assert!(fixture
         .state
         .push_input(
             request_to(SUBNET_ID.into()).into(),
             &mut subnet_available_memory,
         )
-        .unwrap();
+        .unwrap());
 
     // Reserved memory for one response.
     assert_execution_memory_taken(0, &fixture);
@@ -383,13 +383,13 @@ fn memory_taken_by_wasm_custom_sections() {
     assert_wasm_custom_sections_memory_taken(wasm_metadata_memory.get(), &fixture);
 
     // Push a request into a canister input queue.
-    fixture
+    assert!(fixture
         .state
         .push_input(
             request_from(OTHER_CANISTER_ID).into(),
             &mut subnet_available_memory,
         )
-        .unwrap();
+        .unwrap());
 
     // Reserved memory for one response.
     assert_execution_memory_taken(wasm_metadata_memory.get() as usize, &fixture);
@@ -471,13 +471,13 @@ fn push_subnet_queues_input_respects_subnet_available_memory() {
     assert_wasm_custom_sections_memory_taken(0, &fixture);
 
     // Push a request into the subnet input queues.
-    fixture
+    assert!(fixture
         .state
         .push_input(
             request_to(SUBNET_ID.into()).into(),
             &mut subnet_available_memory,
         )
-        .unwrap();
+        .unwrap());
 
     // Reserved memory for one response.
     assert_execution_memory_taken(0, &fixture);
@@ -526,21 +526,21 @@ fn push_input_queues_respects_local_remote_subnet() {
 
     // Push message from the remote canister, should be in the remote subnet
     // queue.
-    fixture
+    assert!(fixture
         .push_input(request_from(OTHER_CANISTER_ID).into())
-        .unwrap();
+        .unwrap());
     assert_eq!(fixture.remote_subnet_input_schedule(&CANISTER_ID).len(), 1);
 
     // Push message from the local canister, should be in the local subnet queue.
-    fixture
+    assert!(fixture
         .push_input(request_from(CANISTER_ID).into())
-        .unwrap();
+        .unwrap());
     assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 1);
 
     // Push message from the local subnet, should be in the local subnet queue.
-    fixture
+    assert!(fixture
         .push_input(request_from(CanisterId::unchecked_from_principal(SUBNET_ID.get())).into())
-        .unwrap();
+        .unwrap());
     assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 2);
 }
 
@@ -725,7 +725,7 @@ fn time_out_messages_in_subnet_queues() {
     for i in 0..2 {
         let mut request = request_to(SUBNET_ID.into());
         request.deadline = CoarseTime::from_secs_since_unix_epoch(1000 + i as u32);
-        fixture.push_input(request.into()).unwrap();
+        assert!(fixture.push_input(request.into()).unwrap());
     }
 
     // Time out the first request.
@@ -757,7 +757,7 @@ fn enforce_best_effort_message_limit() {
         request.deadline = SOME_DEADLINE;
         request.method_name = String::from_utf8(vec![b'x'; i * 10 + 1]).unwrap();
         message_sizes.push(NumBytes::from(request.count_bytes() as u64));
-        fixture.push_input(request.into()).unwrap();
+        assert!(fixture.push_input(request.into()).unwrap());
     }
 
     assert_eq!(
@@ -854,7 +854,7 @@ fn split() {
     fixture.state.metadata.ingress_history = make_ingress_history(&CANISTERS);
 
     // Subnet queues. Should be preserved on subnet A' only.
-    fixture
+    assert!(fixture
         .push_input(
             RequestBuilder::default()
                 .sender(CANISTER_1)
@@ -862,12 +862,12 @@ fn split() {
                 .build()
                 .into(),
         )
-        .unwrap();
+        .unwrap());
 
     // Set up input schedules. Add a couple of input messages to each canister.
     for sender in CANISTERS {
         for receiver in CANISTERS {
-            fixture
+            assert!(fixture
                 .push_input(
                     RequestBuilder::default()
                         .sender(sender)
@@ -875,7 +875,7 @@ fn split() {
                         .build()
                         .into(),
                 )
-                .unwrap();
+                .unwrap());
         }
     }
     for canister in CANISTERS {

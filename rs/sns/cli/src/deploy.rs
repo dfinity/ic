@@ -159,13 +159,18 @@ pub struct DirectSnsDeployerForTests {
 impl DirectSnsDeployerForTests {
     pub fn new_testflight(
         args: DeployTestflightArgs,
-        sns_init_payload: SnsInitPayload,
+        mut sns_init_payload: SnsInitPayload,
     ) -> Result<Self> {
         let sns_canisters = lookup_or_else_create_canisters(
             args.verbose,
             &args.network,
             Some(args.initial_cycles_per_canister),
         );
+
+        // Populate the SnsInitPayload with the values that would normally be set by the NNS
+        sns_init_payload.nns_proposal_id = Some(0);
+        sns_init_payload.swap_start_timestamp_seconds = Some(0);
+        sns_init_payload.swap_due_timestamp_seconds = Some(0);
 
         // TODO - add version hash to test upgrade path locally?  Where would we find that?
         // TODO[NNS1-2592]: set neurons_fund_participation_constraints to a non-trivial value.

@@ -198,7 +198,8 @@ print_old_report_field() {
     local field="${3}"
     ## Apply name transformations to match between local (new) and remote (old) benchmarks
     ## ic0.call()/1B -> ic0.*call\(\).*1B
-    match=$(echo "${name}" | sed -Ee 's#([^()0-9A-Za-z_]+)#.*#g' -Ee 's#[()]#\\&#g' -Ee 's#_#.#g')
+    match=$(echo "${name}" \
+        | sed -Ee 's#/wasm32##' -Ee 's#([^()0-9A-Za-z_]+)#.*#g' -Ee 's#[()]#\\&#g' -Ee 's#_#.#g')
     set -o pipefail
     cat "${OLD_REPORT}" | rg "${match}" | sed -Ee 's# +# #g' \
         | awk -F '|' "NR == ${line} {printf \$$((${field} + 1))} NR == 3 {exit 1}" \

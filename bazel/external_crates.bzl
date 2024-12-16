@@ -574,13 +574,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "2496803db52d8182f578f098a3ffe4fcb9573fcd",
+                rev = "d74a6527fbaf8a2c1a7076983cc84f5c5a727923",
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
-            ),
-            "ic-btc-test-utils": crate.spec(
-                version = "^0.1.0",
             ),
             "ic-canister-log": crate.spec(
                 version = "^0.2.0",

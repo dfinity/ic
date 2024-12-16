@@ -5,12 +5,12 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/async_utils",
     "//rs/bitcoin/replica_types",
     "//rs/bitcoin/service",
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/execution_environment",
+    "//rs/http_endpoints/async_utils",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
