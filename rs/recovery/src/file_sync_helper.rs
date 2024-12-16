@@ -73,8 +73,10 @@ pub fn rsync_with_retries(
     target: &str,
     require_confirmation: bool,
     key_file: Option<&PathBuf>,
+    skip_prompt: bool,
+    max_retries: usize,
 ) -> RecoveryResult<Option<String>> {
-    loop {
+    for _ in 0..max_retries {
         match rsync(
             logger,
             excludes.clone(),
@@ -84,7 +86,7 @@ pub fn rsync_with_retries(
             key_file,
         ) {
             Err(e) => {
-                if !consent_given(&format!(
+                if !skip_prompt && !consent_given(&format!(
                     "Rsync failed: {e:?}. Do you want to retry the \
                     download for this node?"
                 )) {
@@ -94,7 +96,7 @@ pub fn rsync_with_retries(
             success => return success,
         }
     }
-    Err(RecoveryError::UnexpectedError("Rsync failed".into()))
+    Err(RecoveryError::UnexpectedError("Rsync failed, too many retries".into()))
 }
 
 /// Copy the files from src to target using [rsync](https://linux.die.net/man/1/rsync) and options `--delete`, `-acP`.

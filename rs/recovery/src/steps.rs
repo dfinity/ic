@@ -66,6 +66,7 @@ pub struct DownloadCertificationsStep {
     pub registry_helper: RegistryHelper,
     pub work_dir: PathBuf,
     pub require_confirmation: bool,
+    pub skip_retry_prompt: bool,
     pub key_file: Option<PathBuf>,
     pub admin: bool,
 }
@@ -98,6 +99,8 @@ impl Step for DownloadCertificationsStep {
                 &target.display().to_string(),
                 self.require_confirmation,
                 self.key_file.as_ref(),
+                self.skip_retry_prompt,
+                5,
             )
             .map_err(|e| warn!(self.logger, "Skipping download: {:?}", e));
 
