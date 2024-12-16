@@ -2,8 +2,8 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/async_utils",
     "//rs/config",
+    "//rs/http_endpoints/async_utils",
     "//rs/https_outcalls/service",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",

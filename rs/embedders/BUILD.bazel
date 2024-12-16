@@ -1,7 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_bench", "rust_ic_bench", "rust_ic_test_suite_with_extra_srcs")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
-load("//rs/tests:common.bzl", "MACRO_DEPENDENCIES", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 
 package(default_visibility = ["//visibility:public"])
 

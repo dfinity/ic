@@ -22,7 +22,6 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-tests = { path = "../.." }
 url = { workspace = true }
 xrc-mock = { path = "../../../rosetta-api/tvl/xrc_mock" }
 
