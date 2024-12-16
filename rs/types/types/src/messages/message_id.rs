@@ -58,7 +58,7 @@ impl<'a> Deserialize<'a> for MessageId {
 }
 
 impl CountBytes for MessageId {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         self.0.len()
     }
 }

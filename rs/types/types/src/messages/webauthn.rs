@@ -46,7 +46,7 @@ impl WebAuthnSignature {
 }
 
 impl CountBytes for WebAuthnSignature {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         self.authenticator_data.0.len() + self.client_data_json.0.len() + self.signature.0.len()
     }
 }

@@ -218,10 +218,10 @@ impl HasHeight for Certification {
 }
 
 impl CountBytes for Certification {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         std::mem::size_of::<Height>()
             + self.signed.content.hash.get_ref().0.len()
-            + self.signed.signature.count_bytes()
+            + self.signed.signature.memory_count_bytes()
     }
 }
 

@@ -470,8 +470,8 @@ pub struct CanisterHttpResponse {
 }
 
 impl CountBytes for CanisterHttpResponse {
-    fn count_bytes(&self) -> usize {
-        size_of::<CallbackId>() + size_of::<Time>() + self.content.count_bytes()
+    fn memory_count_bytes(&self) -> usize {
+        size_of::<CallbackId>() + size_of::<Time>() + self.content.memory_count_bytes()
     }
 }
 
@@ -487,10 +487,10 @@ pub enum CanisterHttpResponseContent {
 }
 
 impl CountBytes for CanisterHttpResponseContent {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         match self {
             CanisterHttpResponseContent::Success(payload) => payload.len(),
-            CanisterHttpResponseContent::Reject(err) => err.count_bytes(),
+            CanisterHttpResponseContent::Reject(err) => err.memory_count_bytes(),
         }
     }
 }
@@ -513,7 +513,7 @@ impl From<&CanisterHttpReject> for RejectContext {
 }
 
 impl CountBytes for CanisterHttpReject {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         size_of::<RejectCode>() + self.message.len()
     }
 }
@@ -568,8 +568,8 @@ pub struct CanisterHttpResponseWithConsensus {
 }
 
 impl CountBytes for CanisterHttpResponseWithConsensus {
-    fn count_bytes(&self) -> usize {
-        self.proof.count_bytes() + self.content.count_bytes()
+    fn memory_count_bytes(&self) -> usize {
+        self.proof.memory_count_bytes() + self.content.memory_count_bytes()
     }
 }
 
@@ -584,8 +584,11 @@ pub struct CanisterHttpResponseDivergence {
 }
 
 impl CountBytes for CanisterHttpResponseDivergence {
-    fn count_bytes(&self) -> usize {
-        self.shares.iter().map(|share| share.count_bytes()).sum()
+    fn memory_count_bytes(&self) -> usize {
+        self.shares
+            .iter()
+            .map(|share| share.memory_count_bytes())
+            .sum()
     }
 }
 
@@ -600,7 +603,7 @@ pub struct CanisterHttpResponseMetadata {
 }
 
 impl CountBytes for CanisterHttpResponseMetadata {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         size_of::<CanisterHttpResponseMetadata>()
     }
 }
@@ -637,7 +640,7 @@ pub type CanisterHttpResponseProof =
     Signed<CanisterHttpResponseMetadata, BasicSignatureBatch<CanisterHttpResponseMetadata>>;
 
 impl CountBytes for CanisterHttpResponseProof {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         size_of::<CanisterHttpResponseProof>()
     }
 }

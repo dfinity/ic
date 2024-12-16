@@ -151,7 +151,7 @@ impl IngressPayload {
 }
 
 impl CountBytes for IngressPayload {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         self.buffer.len() + self.id_and_pos.len() * EXPECTED_MESSAGE_ID_LENGTH
     }
 }

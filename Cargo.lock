@@ -13399,6 +13399,7 @@ version = "0.9.0"
 dependencies = [
  "ic-types",
  "lru",
+ "proptest",
 ]
 
 [[package]]
