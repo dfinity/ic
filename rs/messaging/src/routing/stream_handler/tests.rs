@@ -1978,11 +1978,14 @@ fn check_stream_handler_generated_reject_signal_queue_full() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             let mut callback_id = 2;
-            while let Ok(()) = state.push_input(
-                Request(*LOCAL_CANISTER, *LOCAL_CANISTER)
-                    .build_with(CallbackId::new(callback_id), 0),
-                &mut (i64::MAX / 2),
-            ) {
+            while state
+                .push_input(
+                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER)
+                        .build_with(CallbackId::new(callback_id), 0),
+                    &mut (i64::MAX / 2),
+                )
+                .is_ok()
+            {
                 callback_id += 1;
             }
         },
@@ -2015,9 +2018,52 @@ fn check_stream_handler_generated_reject_signal_canister_migrating() {
     );
 }
 
+#[test]
+fn duplicate_best_effort_response_is_dropped() {
+    with_local_test_setup(
+        btreemap![LOCAL_SUBNET => StreamConfig {
+            begin: 21,
+            messages: vec![BestEffortResponse(*LOCAL_CANISTER, *LOCAL_CANISTER, CoarseTime::from_secs_since_unix_epoch(123))],
+            signals_end: 21,
+            ..StreamConfig::default()
+        }],
+        |stream_handler, mut state, metrics| {
+            let response = message_in_stream(state.get_stream(&LOCAL_SUBNET), 21).clone();
+
+            let mut expected_state = state.clone();
+            // The expected state has the response inducted...
+            push_input(&mut expected_state, response.clone());
+            // ...and an empty loopback stream with begin advanced.
+            let loopback_stream = stream_from_config(StreamConfig {
+                begin: 23,
+                signals_end: 23,
+                ..StreamConfig::default()
+            });
+            expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+
+            // Push the clone of the best effort response onto the loopback stream.
+            state.modify_streams(|streams| streams.get_mut(&LOCAL_SUBNET).unwrap().push(response));
+
+            let inducted_state = stream_handler.induct_loopback_stream(state, &mut (i64::MAX / 2));
+            assert_eq!(inducted_state, expected_state);
+
+            // No critical errors raised.
+            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
+            // Only one response was recorded by the metrics.
+            metrics.assert_inducted_xnet_messages_eq(&[
+                // Response @21 is inducted successfully.
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
+                // Duplicate Response @22 is dropped.
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_DROPPED, 1),
+            ]);
+            assert_eq!(1, metrics.fetch_inducted_payload_sizes_stats().count);
+        },
+    );
+}
+
 /// Common implementation for tests checking inducting best-effort responses does not raise a
 /// critical error.
-fn inability_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(
+fn failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(
     prepare_state: impl FnOnce(&mut ReplicatedState),
 ) {
     with_local_test_setup(
@@ -2045,8 +2091,10 @@ fn inability_to_induct_best_effort_response_does_not_raise_a_critical_error_impl
 
             // No critical errors raised.
             metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
-            // Nothing was inducted.
-            metrics.assert_inducted_xnet_messages_eq(&[]);
+            metrics.assert_inducted_xnet_messages_eq(&[
+                // Response @21 is dropped.
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_DROPPED, 1),
+            ]);
             assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
         },
     );
@@ -2056,7 +2104,7 @@ fn inability_to_induct_best_effort_response_does_not_raise_a_critical_error_impl
 /// error.
 #[test]
 fn inducting_best_effort_response_into_stopped_canister_does_not_raise_a_critical_error() {
-    inability_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(|state| {
+    failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(|state| {
         // Set `LOCAL_CANISTER` to stopped.
         state
             .canister_state_mut(&LOCAL_CANISTER)
@@ -2071,7 +2119,7 @@ fn inducting_best_effort_response_into_stopped_canister_does_not_raise_a_critica
 #[test]
 fn inducting_best_effort_response_addressed_to_non_existent_canister_does_not_raise_a_critical_error(
 ) {
-    inability_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(|state| {
+    failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(|state| {
         // Remove the `LOCAL_CANISTER`.
         state.canister_states.remove(&LOCAL_CANISTER).unwrap();
     });
@@ -2169,11 +2217,14 @@ fn legacy_check_stream_handler_generated_reject_response_queue_full() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             let mut callback_id = 2;
-            while let Ok(()) = state.push_input(
-                Request(*LOCAL_CANISTER, *LOCAL_CANISTER)
-                    .build_with(CallbackId::new(callback_id), 0),
-                &mut (i64::MAX / 2),
-            ) {
+            while state
+                .push_input(
+                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER)
+                        .build_with(CallbackId::new(callback_id), 0),
+                    &mut (i64::MAX / 2),
+                )
+                .is_ok()
+            {
                 callback_id += 1;
             }
         },
