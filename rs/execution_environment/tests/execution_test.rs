@@ -41,7 +41,7 @@ const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100 * T);
 ///  * "inc"       increment the counter
 ///  * "read"      read the counter value
 ///  * "persist"   copy the counter value to stable memory
-///  * "load"      restore the counter value from stable memory
+///  * "load"      restore the counter value from the stable memory
 ///  * "copy_to"   copy the counter value to the specified address on the heap
 ///  * "read_at"   read a 32-bit integer at the specified address on the heap
 ///  * "grow_page" grow stable memory by 1 page
