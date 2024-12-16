@@ -14,21 +14,12 @@ use std::task::{Context, Poll};
 use tokio::sync::oneshot;
 use tower::{util::BoxCloneService, Service};
 
-struct PrintWhenDrop {}
-
-impl Drop for PrintWhenDrop {
-    fn drop(&mut self) {
-        eprintln!("Dropping ingress filter");
-    }
-}
-
 #[derive(Clone)]
 pub(crate) struct IngressFilterServiceImpl {
     exec_env: Arc<ExecutionEnvironment>,
     metrics: Arc<IngressFilterMetrics>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_scheduler: QueryScheduler,
-    _print_when_drop: Arc<PrintWhenDrop>,
 }
 
 impl IngressFilterServiceImpl {
@@ -43,7 +34,6 @@ impl IngressFilterServiceImpl {
             metrics,
             state_reader,
             query_scheduler,
-            _print_when_drop: Arc::new(PrintWhenDrop {}),
         })
     }
 }

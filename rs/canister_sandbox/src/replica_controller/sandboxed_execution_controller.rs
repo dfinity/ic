@@ -677,7 +677,6 @@ pub struct SandboxedExecutionController {
 
 impl Drop for SandboxedExecutionController {
     fn drop(&mut self) {
-        eprintln!("Dropping sandbox");
         // Ignore the result because even if it fails, there is not much that
         // can be done.
         let _ = self.stop_monitoring_thread.send(true);

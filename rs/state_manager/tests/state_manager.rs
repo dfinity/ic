@@ -7383,8 +7383,12 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
 }
 
 proptest! {
-// We go for fewer, but longer runs
-#![proptest_config(ProptestConfig::with_cases(5))]
+#![proptest_config(ProptestConfig {
+    // Fork to prevent flaky timeouts due to closed sandbox fds
+    fork: true,
+    // We go for fewer, but longer runs
+    ..ProptestConfig::with_cases(5)
+})]
 
 #[test]
 fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_canister_op(), 1..50)) {
