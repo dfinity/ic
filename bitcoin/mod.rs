@@ -23,6 +23,9 @@ const SEND_TRANSACTION_SUBMISSION_TESTNET: u128 = 2_000_000_000;
 const SEND_TRANSACTION_PAYLOAD_MAINNET: u128 = 20_000_000;
 const SEND_TRANSACTION_PAYLOAD_TESTNET: u128 = 8_000_000;
 
+const GET_BLOCK_HEADERS_MAINNET: u128 = 4_000_000_000;
+const GET_BLOCK_HEADERS_TESTNET: u128 = 4_000_000_000;
+
 /// See [IC method `bitcoin_get_balance`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-bitcoin_get_balance).
 ///
 /// This call requires cycles payment.
@@ -110,6 +113,28 @@ pub async fn bitcoin_get_current_fee_percentiles(
     call_with_payment128(
         Principal::management_canister(),
         "bitcoin_get_current_fee_percentiles",
+        (arg,),
+        cycles,
+    )
+    .await
+}
+
+/// See [IC method `bitcoin_get_block_headers`](https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-bitcoin_get_block_headers).
+///
+/// This call requires cycles payment.
+/// This method handles the cycles cost under the hood.
+/// Check [API fees & Pricing](https://internetcomputer.org/docs/current/developer-docs/integrations/bitcoin/bitcoin-how-it-works/#api-fees--pricing) for more details.
+pub async fn bitcoin_get_block_headers(
+    arg: GetBlockHeadersRequest,
+) -> CallResult<(GetBlockHeadersResponse,)> {
+    let cycles = match arg.network {
+        BitcoinNetwork::Mainnet => GET_BLOCK_HEADERS_MAINNET,
+        BitcoinNetwork::Testnet => GET_BLOCK_HEADERS_TESTNET,
+        BitcoinNetwork::Regtest => 0,
+    };
+    call_with_payment128(
+        Principal::management_canister(),
+        "bitcoin_get_block_headers",
         (arg,),
         cycles,
     )
