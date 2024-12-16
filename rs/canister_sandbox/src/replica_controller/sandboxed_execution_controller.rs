@@ -2322,7 +2322,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+    #[cfg(target_os = "linux")]
     fn monitor_and_evict_thread_collects_rss() {
         let active = 1;
         let spawn_monitor_thread = false;
@@ -2355,7 +2355,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+    #[cfg(target_os = "linux")]
     fn monitor_and_evict_thread_collects_metrics() {
         let active = 1;
         let evicted = 1;
