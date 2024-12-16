@@ -2,12 +2,12 @@
 import argparse
 import json
 import logging
-import pathlib
-import urllib.request
-from typing import List
-from enum import Enum
 import os
+import pathlib
 import subprocess
+import urllib.request
+from enum import Enum
+from typing import List
 
 # from pylib.ic_deployment import IcDeployment
 
@@ -17,9 +17,11 @@ app_subnet_id = "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe
 PUBLIC_DASHBOARD_API = "https://ic-api.internetcomputer.org"
 SAVED_VERSIONS_CANISTERS_PATH = "mainnet-canisters.json"
 
+
 class Command(Enum):
     TESTNETS = 1
     CANISTERS = 2
+
 
 def sync_main_branch_and_checkout_branch(
     repo_root: pathlib.Path, main_branch: str, branch_to_checkout: str, logger: logging.Logger
@@ -95,7 +97,8 @@ def commit_and_create_pr(
                 cwd=repo_root,
             )
 
-def get_saved_versions(repo_root: pathlib.Path):
+
+def get_saved_versions(repo_root: pathlib.Path, file_path: pathlib.Path):
     """
     Return a dict with all saved versions.
 
@@ -112,17 +115,17 @@ def get_saved_versions(repo_root: pathlib.Path):
         }
     }
     """
-    SAVED_VERSIONS_TESTNETS_PATH = repo_root / SAVED_VERSIONS_TESTNETS_PATH
-    if SAVED_VERSIONS_TESTNETS_PATH.exists():
-        with open(SAVED_VERSIONS_TESTNETS_PATH, "r", encoding="utf-8") as f:
+    full_path = repo_root / file_path
+    if full_path.exists():
+        with open(full_path, "r", encoding="utf-8") as f:
             return json.load(f)
     else:
         return {}
 
 
-def update_saved_subnet_version(subnet: str, version: str, repo_root: pathlib.Path):
+def update_saved_subnet_version(subnet: str, version: str, repo_root: pathlib.Path, file_path: pathlib.Path):
     """Update the version that we last saw on a particular IC subnet."""
-    saved_versions = get_saved_versions(repo_root=repo_root)
+    saved_versions = get_saved_versions(repo_root=repo_root, file_path=file_path)
     subnet_versions = saved_versions.get("subnets", {})
     subnet_versions[subnet] = version
     saved_versions["subnets"] = subnet_versions
@@ -130,15 +133,15 @@ def update_saved_subnet_version(subnet: str, version: str, repo_root: pathlib.Pa
         json.dump(saved_versions, f, indent=2)
 
 
-def get_saved_nns_subnet_version(repo_root: pathlib.Path):
+def get_saved_nns_subnet_version(repo_root: pathlib.Path, file_path: pathlib.Path):
     """Get the last known version running on the NNS subnet."""
-    saved_versions = get_saved_versions(repo_root=repo_root)
+    saved_versions = get_saved_versions(repo_root=repo_root, file_path=file_path)
     return saved_versions.get("subnets", {}).get(nns_subnet_id, "")
 
 
-def get_saved_app_subnet_version(repo_root: pathlib.Path):
+def get_saved_app_subnet_version(repo_root: pathlib.Path, file_path: pathlib.Path):
     """Get the last known version running on an App subnet."""
-    saved_versions = get_saved_versions(repo_root=repo_root)
+    saved_versions = get_saved_versions(repo_root=repo_root, file_path=file_path)
     return saved_versions.get("subnets", {}).get(app_subnet_id, "")
 
 
@@ -155,14 +158,18 @@ def get_subnet_replica_version(subnet_id: str) -> str:
         return latest_replica_version
 
 
-def update_mainnet_revisions_testnets_file(repo_root: pathlib.Path, logger: logging.Logger):
+def update_mainnet_revisions_testnets_file(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path):
     current_nns_version = get_subnet_replica_version(nns_subnet_id)
     logger.info("Current NNS subnet (%s) revision: %s", nns_subnet_id, current_nns_version)
     current_app_subnet_version = get_subnet_replica_version(app_subnet_id)
     logger.info("Current App subnet (%s) revision: %s", app_subnet_id, current_app_subnet_version)
 
-    update_saved_subnet_version(subnet=nns_subnet_id, version=current_nns_version, repo_root=repo_root)
-    update_saved_subnet_version(subnet=app_subnet_id, version=current_app_subnet_version, repo_root=repo_root)
+    update_saved_subnet_version(
+        subnet=nns_subnet_id, version=current_nns_version, repo_root=repo_root, file_path=file_path
+    )
+    update_saved_subnet_version(
+        subnet=app_subnet_id, version=current_app_subnet_version, repo_root=repo_root, file_path=file_path
+    )
 
 
 def update_mainnet_revisions_canisters_file(repo_root: pathlib.Path, logger: logging.Logger):
@@ -171,7 +178,7 @@ def update_mainnet_revisions_canisters_file(repo_root: pathlib.Path, logger: log
         "run",
         "--config=ci",
         "--repository_cache=/cache/bazel" if os.environ.get("GITHUB_TOKEN", None) else "",
-        "//rs/nervous_system/tools/sync-with-released-nervous-system-wasms"
+        "//rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
     ]
     logger.info("Running command: %s", " ".join(cmd))
     subprocess.check_call(cmd, cwd=repo_root)
@@ -195,14 +202,10 @@ def get_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(title="subcommands", description="valid commands", help="sub-command help")
 
-    parser_testnets = subparsers.add_parser(
-        "testnets", help=f"Update {SAVED_VERSIONS_TESTNETS_PATH} file"
-    )
+    parser_testnets = subparsers.add_parser("testnets", help=f"Update {SAVED_VERSIONS_TESTNETS_PATH} file")
     parser_testnets.set_defaults(command=Command.TESTNETS)
 
-    parser_canisters = subparsers.add_parser(
-        "canisters", help=f"Update {SAVED_VERSIONS_TESTNETS_PATH} file"
-    )
+    parser_canisters = subparsers.add_parser("canisters", help=f"Update {SAVED_VERSIONS_TESTNETS_PATH} file")
     parser_canisters.set_defaults(command=Command.CANISTERS)
 
     return parser
@@ -226,20 +229,29 @@ def main():
     if args.command == Command.TESTNETS:
         branch = "ic-mainnet-revisions"
         sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
-        update_mainnet_revisions_testnets_file(repo_root, logger)
+        update_mainnet_revisions_testnets_file(repo_root, logger, pathlib.Path(SAVED_VERSIONS_TESTNETS_PATH))
         commit_and_create_pr(
-            repo, repo_root, branch, [SAVED_VERSIONS_TESTNETS_PATH], logger, "chore: Update Mainnet IC revisions testnets file"
+            repo,
+            repo_root,
+            branch,
+            [SAVED_VERSIONS_TESTNETS_PATH],
+            logger,
+            "chore: Update Mainnet IC revisions testnets file",
         )
     elif args.command == Command.CANISTERS:
         branch = "ic-nervous-system-wasms"
         sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
         update_mainnet_revisions_canisters_file(repo_root, logger)
         commit_and_create_pr(
-            repo, repo_root, branch, [SAVED_VERSIONS_CANISTERS_PATH], logger, "chore: Update Mainnet IC revisions canisters file"
+            repo,
+            repo_root,
+            branch,
+            [SAVED_VERSIONS_CANISTERS_PATH],
+            logger,
+            "chore: Update Mainnet IC revisions canisters file",
         )
     else:
         raise Exception("This shouldn't happen")
-
 
 
 if __name__ == "__main__":
