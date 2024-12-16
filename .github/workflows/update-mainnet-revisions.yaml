@@ -32,7 +32,7 @@ jobs:
         run: |
           set -eEuxo pipefail
 
-          time python ci/src/revisions/mainnet_revisions.py
+          time python ci/src/revisions/mainnet_revisions.py testnets
 
   update-nervous-system-wasms:
     runs-on:
@@ -76,6 +76,4 @@ jobs:
           # Cache the git helpers so they dont't change between branch changes
           cp -r ci/src/revisions /tmp
 
-          python /tmp/revisions/git_ci_helper.py --repo-root $REPO_ROOT --branch $BRANCH sync-and-checkout --main-branch master
-          bazel run --config=ci --repository_cache=/cache/bazel //rs/nervous_system/tools/sync-with-released-nervous-system-wasms
-          python /tmp/revisions/git_ci_helper.py --repo-root $REPO_ROOT --branch $BRANCH commit-and-create-pr --file $FILE --message "chore: Update mainnet canisters file"
+          time python /tmp/revisions/mainnet_revisions.py canisters

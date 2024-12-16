@@ -4,16 +4,96 @@ import json
 import logging
 import pathlib
 import urllib.request
-
-import git_lib
+from typing import List
+from enum import Enum
+import os
+import subprocess
 
 # from pylib.ic_deployment import IcDeployment
 
-SAVED_VERSIONS_PATH = "testnet/mainnet_revisions.json"
+SAVED_VERSIONS_TESTNETS_PATH = "testnet/mainnet_revisions.json"
 nns_subnet_id = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
 app_subnet_id = "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"
 PUBLIC_DASHBOARD_API = "https://ic-api.internetcomputer.org"
+SAVED_VERSIONS_CANISTERS_PATH = "mainnet-canisters.json"
 
+class Command(Enum):
+    TESTNETS = 1
+    CANISTERS = 2
+
+def sync_main_branch_and_checkout_branch(
+    repo_root: pathlib.Path, main_branch: str, branch_to_checkout: str, logger: logging.Logger
+):
+    if not repo_root.exists():
+        raise Exception("Expected dir %s to exist", repo_root.name)
+
+    subprocess.call(["git", "fetch", "--depth=1", "--no-tags", "origin", f"{main_branch}:{main_branch}"], cwd=repo_root)
+
+    result = subprocess.run(["git", "status", "--porcelain"], stdout=subprocess.PIPE, text=True, check=True)
+    if result.stdout.strip():
+        raise Exception("Found uncommited work! Commit and then proceed. Uncommited work:\n%s", result.stdout.strip())
+
+    if subprocess.call(["git", "checkout", branch_to_checkout], cwd=repo_root) == 0:
+        # The branch already exists, update the existing MR
+        logger.info("Found an already existing target branch")
+    else:
+        subprocess.check_call(["git", "checkout", "-b", branch_to_checkout], cwd=repo_root)
+    subprocess.check_call(["git", "reset", "--hard", f"origin/{main_branch}"], cwd=repo_root)
+
+
+def commit_and_create_pr(
+    repo: str,
+    repo_root: pathlib.Path,
+    branch: str,
+    check_for_updates_in_paths: List[str],
+    logger: logging.Logger,
+    commit_message: str,
+):
+    git_modified_files = subprocess.check_output(["git", "ls-files", "--modified", "--others"], cwd=repo_root).decode(
+        "utf8"
+    )
+
+    paths_to_add = [path for path in check_for_updates_in_paths if path in git_modified_files]
+
+    if len(paths_to_add) > 0:
+        logger.info("Creating/updating a MR that updates the saved NNS subnet revision")
+        cmd = ["git", "add"] + paths_to_add
+        logger.info("Running command '%s'", " ".join(cmd))
+        subprocess.check_call(cmd, cwd=repo_root)
+        cmd = [
+            "git",
+            "-c",
+            "user.name=CI Automation",
+            "-c",
+            "user.email=infra+github-automation@dfinity.org",
+            "commit",
+            "-m",
+            commit_message,
+        ] + paths_to_add
+        logger.info("Running command '%s'", " ".join(cmd))
+        subprocess.check_call(
+            cmd,
+            cwd=repo_root,
+        )
+        subprocess.check_call(["git", "push", "origin", branch, "-f"], cwd=repo_root)
+
+        if not subprocess.check_output(
+            ["gh", "pr", "list", "--head", branch, "--repo", repo],
+            cwd=repo_root,
+        ).decode("utf8"):
+            subprocess.check_call(
+                [
+                    "gh",
+                    "pr",
+                    "create",
+                    "--head",
+                    branch,
+                    "--repo",
+                    repo,
+                    "--fill",
+                ],
+                cwd=repo_root,
+            )
 
 def get_saved_versions(repo_root: pathlib.Path):
     """
@@ -32,9 +112,9 @@ def get_saved_versions(repo_root: pathlib.Path):
         }
     }
     """
-    saved_versions_path = repo_root / SAVED_VERSIONS_PATH
-    if saved_versions_path.exists():
-        with open(saved_versions_path, "r", encoding="utf-8") as f:
+    SAVED_VERSIONS_TESTNETS_PATH = repo_root / SAVED_VERSIONS_TESTNETS_PATH
+    if SAVED_VERSIONS_TESTNETS_PATH.exists():
+        with open(SAVED_VERSIONS_TESTNETS_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
     else:
         return {}
@@ -46,7 +126,7 @@ def update_saved_subnet_version(subnet: str, version: str, repo_root: pathlib.Pa
     subnet_versions = saved_versions.get("subnets", {})
     subnet_versions[subnet] = version
     saved_versions["subnets"] = subnet_versions
-    with open(repo_root / SAVED_VERSIONS_PATH, "w", encoding="utf-8") as f:
+    with open(repo_root / SAVED_VERSIONS_TESTNETS_PATH, "w", encoding="utf-8") as f:
         json.dump(saved_versions, f, indent=2)
 
 
@@ -75,7 +155,7 @@ def get_subnet_replica_version(subnet_id: str) -> str:
         return latest_replica_version
 
 
-def update_mainnet_revisions_file(repo_root: pathlib.Path, logger: logging.Logger):
+def update_mainnet_revisions_testnets_file(repo_root: pathlib.Path, logger: logging.Logger):
     current_nns_version = get_subnet_replica_version(nns_subnet_id)
     logger.info("Current NNS subnet (%s) revision: %s", nns_subnet_id, current_nns_version)
     current_app_subnet_version = get_subnet_replica_version(app_subnet_id)
@@ -85,30 +165,81 @@ def update_mainnet_revisions_file(repo_root: pathlib.Path, logger: logging.Logge
     update_saved_subnet_version(subnet=app_subnet_id, version=current_app_subnet_version, repo_root=repo_root)
 
 
+def update_mainnet_revisions_canisters_file(repo_root: pathlib.Path, logger: logging.Logger):
+    cmd = [
+        "bazel",
+        "run",
+        "--config=ci",
+        "--repository_cache=/cache/bazel" if os.environ.get("GITHUB_TOKEN", None) else "",
+        "//rs/nervous_system/tools/sync-with-released-nervous-system-wasms"
+    ]
+    logger.info("Running command: %s", " ".join(cmd))
+    subprocess.check_call(cmd, cwd=repo_root)
+
+
 def get_logger(level) -> logging.Logger:
     FORMAT = "[%(asctime)s] %(levelname)-8s %(message)s"
     logging.basicConfig(format=FORMAT, level=level)
     return logging.getLogger("logger")
 
 
+def get_repo_root() -> pathlib.Path:
+    return pathlib.Path(
+        subprocess.run(["git", "rev-parse", "--show-toplevel"], text=True, stdout=subprocess.PIPE).stdout.strip()
+    )
+
+
+def get_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="GitCiHelper", description="Tool for automating git operations for CI")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose mode")
+
+    subparsers = parser.add_subparsers(title="subcommands", description="valid commands", help="sub-command help")
+
+    parser_testnets = subparsers.add_parser(
+        "testnets", help=f"Update {SAVED_VERSIONS_TESTNETS_PATH} file"
+    )
+    parser_testnets.set_defaults(command=Command.TESTNETS)
+
+    parser_canisters = subparsers.add_parser(
+        "canisters", help=f"Update {SAVED_VERSIONS_TESTNETS_PATH} file"
+    )
+    parser_canisters.set_defaults(command=Command.CANISTERS)
+
+    return parser
+
+
 def main():
     """Do the main work."""
 
-    parser = argparse.ArgumentParser(prog="GitCiHelper", description="Tool for automating git operations for CI")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose mode")
+    parser = get_parser()
     args = parser.parse_args()
     logger = get_logger(logging.DEBUG if args.verbose else logging.INFO)
 
     repo = "dfinity/ic"
-    repo_root = git_lib.get_repo_root()
+    repo_root = get_repo_root()
     main_branch = "master"
-    branch = "ic-mainnet-revisions"
 
-    git_lib.sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
-    update_mainnet_revisions_file(repo_root, logger)
-    git_lib.commit_and_create_pr(
-        repo, repo_root, branch, [SAVED_VERSIONS_PATH], logger, "chore: Update Mainnet IC revisions file"
-    )
+    if not hasattr(args, "command"):
+        parser.print_help()
+        exit(1)
+
+    if args.command == Command.TESTNETS:
+        branch = "ic-mainnet-revisions"
+        sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
+        update_mainnet_revisions_testnets_file(repo_root, logger)
+        commit_and_create_pr(
+            repo, repo_root, branch, [SAVED_VERSIONS_TESTNETS_PATH], logger, "chore: Update Mainnet IC revisions testnets file"
+        )
+    elif args.command == Command.CANISTERS:
+        branch = "ic-nervous-system-wasms"
+        sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
+        update_mainnet_revisions_canisters_file(repo_root, logger)
+        commit_and_create_pr(
+            repo, repo_root, branch, [SAVED_VERSIONS_CANISTERS_PATH], logger, "chore: Update Mainnet IC revisions canisters file"
+        )
+    else:
+        raise Exception("This shouldn't happen")
+
 
 
 if __name__ == "__main__":
