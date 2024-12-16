@@ -77,8 +77,8 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
     // Additionally, if the DKG interval is smaller than the minimum chain length,
     // we can have one CUP for every time a full DKG interval fits into e.
     let cups = 2 + e / k
-        // TODO(CON-1454): Because valiators can validate an arbitrary number of
-        // CUPs per invokation in our current implementation, lagging nodes
+        // TODO(CON-1454): Because validators can validate an arbitrary number of
+        // CUPs per invocation in our current implementation, lagging nodes
         // occasionally trigger an alert. Increasing this bound by 1 gets rid
         // of the noisiest ones. Remove this after the validator is fixed.
         + 1;
