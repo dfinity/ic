@@ -97,9 +97,8 @@ impl Step for DownloadCertificationsStep {
                 &target.display().to_string(),
                 self.require_confirmation,
                 self.key_file.as_ref(),
-                5,
             )
-            .map_err(|e| warn!(self.logger, "Failed to download certifications: {:?}", e));
+            .map_err(|e| warn!(self.logger, "Skipping download: {:?}", e));
 
             success || res.is_ok()
         });
