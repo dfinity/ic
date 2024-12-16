@@ -2,12 +2,12 @@
 import argparse
 import json
 import logging
-import os
 import pathlib
-import subprocess
 import urllib.request
-from enum import Enum
 from typing import List
+from enum import Enum
+import os
+import subprocess
 
 # from pylib.ic_deployment import IcDeployment
 
@@ -17,11 +17,9 @@ app_subnet_id = "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe
 PUBLIC_DASHBOARD_API = "https://ic-api.internetcomputer.org"
 SAVED_VERSIONS_CANISTERS_PATH = "mainnet-canisters.json"
 
-
 class Command(Enum):
     TESTNETS = 1
     CANISTERS = 2
-
 
 def sync_main_branch_and_checkout_branch(
     repo_root: pathlib.Path, main_branch: str, branch_to_checkout: str, logger: logging.Logger
@@ -97,7 +95,6 @@ def commit_and_create_pr(
                 cwd=repo_root,
             )
 
-
 def get_saved_versions(repo_root: pathlib.Path, file_path: pathlib.Path):
     """
     Return a dict with all saved versions.
@@ -164,12 +161,8 @@ def update_mainnet_revisions_testnets_file(repo_root: pathlib.Path, logger: logg
     current_app_subnet_version = get_subnet_replica_version(app_subnet_id)
     logger.info("Current App subnet (%s) revision: %s", app_subnet_id, current_app_subnet_version)
 
-    update_saved_subnet_version(
-        subnet=nns_subnet_id, version=current_nns_version, repo_root=repo_root, file_path=file_path
-    )
-    update_saved_subnet_version(
-        subnet=app_subnet_id, version=current_app_subnet_version, repo_root=repo_root, file_path=file_path
-    )
+    update_saved_subnet_version(subnet=nns_subnet_id, version=current_nns_version, repo_root=repo_root, file_path=file_path)
+    update_saved_subnet_version(subnet=app_subnet_id, version=current_app_subnet_version, repo_root=repo_root, file_path=file_path)
 
 
 def update_mainnet_revisions_canisters_file(repo_root: pathlib.Path, logger: logging.Logger):
@@ -177,8 +170,7 @@ def update_mainnet_revisions_canisters_file(repo_root: pathlib.Path, logger: log
         "bazel",
         "run",
         "--config=ci",
-        "--repository_cache=/cache/bazel" if os.environ.get("GITHUB_TOKEN", None) else "",
-        "//rs/nervous_system/tools/sync-with-released-nervous-system-wasms",
+        "//rs/nervous_system/tools/sync-with-released-nervous-system-wasms"
     ]
     logger.info("Running command: %s", " ".join(cmd))
     subprocess.check_call(cmd, cwd=repo_root)
@@ -202,10 +194,14 @@ def get_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(title="subcommands", description="valid commands", help="sub-command help")
 
-    parser_testnets = subparsers.add_parser("testnets", help=f"Update {SAVED_VERSIONS_TESTNETS_PATH} file")
+    parser_testnets = subparsers.add_parser(
+        "testnets", help=f"Update {SAVED_VERSIONS_TESTNETS_PATH} file"
+    )
     parser_testnets.set_defaults(command=Command.TESTNETS)
 
-    parser_canisters = subparsers.add_parser("canisters", help=f"Update {SAVED_VERSIONS_TESTNETS_PATH} file")
+    parser_canisters = subparsers.add_parser(
+        "canisters", help=f"Update {SAVED_VERSIONS_TESTNETS_PATH} file"
+    )
     parser_canisters.set_defaults(command=Command.CANISTERS)
 
     return parser
@@ -231,27 +227,18 @@ def main():
         sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
         update_mainnet_revisions_testnets_file(repo_root, logger, pathlib.Path(SAVED_VERSIONS_TESTNETS_PATH))
         commit_and_create_pr(
-            repo,
-            repo_root,
-            branch,
-            [SAVED_VERSIONS_TESTNETS_PATH],
-            logger,
-            "chore: Update Mainnet IC revisions testnets file",
+            repo, repo_root, branch, [SAVED_VERSIONS_TESTNETS_PATH], logger, "chore: Update Mainnet IC revisions testnets file"
         )
     elif args.command == Command.CANISTERS:
         branch = "ic-nervous-system-wasms"
         sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
         update_mainnet_revisions_canisters_file(repo_root, logger)
         commit_and_create_pr(
-            repo,
-            repo_root,
-            branch,
-            [SAVED_VERSIONS_CANISTERS_PATH],
-            logger,
-            "chore: Update Mainnet IC revisions canisters file",
+            repo, repo_root, branch, [SAVED_VERSIONS_CANISTERS_PATH], logger, "chore: Update Mainnet IC revisions canisters file"
         )
     else:
         raise Exception("This shouldn't happen")
+
 
 
 if __name__ == "__main__":
