@@ -34,9 +34,19 @@ async fn setup_client(uds_path: PathBuf) -> BtcServiceClient<Channel> {
     BtcServiceClient::new(channel)
 }
 
+/// This struct is use to provide a command line interface to the adapter.
+#[derive(Parser)]
+#[clap(version = "0.0.0", author = "DFINITY team <team@dfinity.org>")]
+pub struct Cli {
+    /// This field contains the path to the config file.
+    pub network: Network,
+    pub uds_path: PathBuf,
+}
+
+
 #[tokio::main]
 async fn main() {
-    let config = ic_btc_adapter::Config::default();
+    let cli = Cli::parse();
     let interval_sleep_ms = Duration::from_millis(1000);
     let request_timeout_ms = Duration::from_millis(50);
 
@@ -44,7 +54,7 @@ async fn main() {
     let mut total_processed_block_hashes: usize = 0;
     let mut processed_block_hashes: Vec<BlockHash> = vec![];
     let mut current_anchor = block_0.block_hash();
-    let mut rpc_client = setup_client(uds_path).await;
+    let mut rpc_client = setup_client(config.uds_path).await;
     let total_timer = Instant::now();
 
     loop {
