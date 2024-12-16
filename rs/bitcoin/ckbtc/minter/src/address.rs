@@ -446,7 +446,7 @@ mod tests {
     #[test]
     fn test_check_address() {
         use crate::address::ParseAddressError::BadWitnessLength;
-        use bitcoin::util::address::Payload;
+        use bitcoin::blockdata::script::witness_program::WitnessProgram;
         use bitcoin::Address;
         use std::str::FromStr;
 
@@ -480,8 +480,8 @@ mod tests {
             "bc1q088j3hnr0htc8fjwhk337aply0w3fwj33a56fqkdqfpq8dupgx6q4l0e39",
         ];
         for p2wsh_address in valid_p2wsh_addresses {
-            let expected_p2wsh_pkhash = match Address::from_str(p2wsh_address).unwrap().payload {
-                Payload::WitnessProgram { program, .. } => program,
+            let expected_p2wsh_pkhash = match Address::from_str(p2wsh_address).unwrap().witness_program() {
+                Some(witness_program) => witness_program.program(),
                 _ => panic!("expected P2WSH address"),
             };
             assert_eq!(
@@ -504,10 +504,9 @@ mod tests {
         ];
 
         for taproot_address in taproot_addresses {
-            let expected_taproot_pkhash = match Address::from_str(taproot_address).unwrap().payload
-            {
-                Payload::WitnessProgram { program, .. } => program,
-                _ => panic!("expected taproot address"),
+            let expected_taproot_pkhash = match Address::from_str(taproot_address).unwrap().witness_program() {
+                Some(witness_program) => witness_program.program(),
+                None => panic!("expected taproot address"),
             };
             let expected_taproot_pkhash = expected_taproot_pkhash.try_into().unwrap();
             assert_eq!(

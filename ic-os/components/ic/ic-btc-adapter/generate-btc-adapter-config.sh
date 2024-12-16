@@ -69,7 +69,8 @@ if [ "${SOCKS_FILE}" != "" -a -e "${SOCKS_FILE}" ]; then
     read_socks_proxy "${SOCKS_FILE}"
 fi
 
-BITCOIN_NETWORK='"testnet"'
+#TODO(mihailjianu): change the seeds. 
+BITCOIN_NETWORK='"testnet4"'
 DNS_SEEDS='"testnet-seed.bitcoin.jonasschnelli.ch",
             "seed.tbtc.petertodd.org",
             "seed.testnet.bitcoin.sprovoost.nl",

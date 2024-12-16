@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use bitcoin::consensus::deserialize;
+//TODO(mihailjianu): bitcoin::Transaction works. 
 use bitcoin::{Address as BtcAddress, Network as BtcNetwork, blockdata::transaction::Transaction};
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -1211,7 +1212,7 @@ impl CkBtcSetup {
         .iter()
         .map(|tx_bytes| {
             //TODO(mihailjianu): fix this (Deserialize is private)
-            let tx = deserialize::<Transaction>(tx_bytes)
+            let tx: Transaction = deserialize(tx_bytes)
                 .expect("failed to parse a bitcoin transaction");
 
             (vec_to_txid(tx.compute_txid()[..].to_vec()), tx)

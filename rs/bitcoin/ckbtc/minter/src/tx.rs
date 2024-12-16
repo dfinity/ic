@@ -7,11 +7,14 @@ use ic_crypto_sha2::Sha256;
 use serde_bytes::{ByteBuf, Bytes};
 use std::fmt;
 
+use bitcoin::blockdata::transaction::Version;
+
 pub use ic_btc_interface::{OutPoint, Satoshi, Txid};
 
 /// The current Bitcoin transaction encoding version.
-/// See https://github.com/bitcoin/bitcoin/blob/c90f86e4c7760a9f7ed0a574f54465964e006a64/src/primitives/transaction.h#L291.
-pub const TX_VERSION: u32 = 2;
+/// See https://github.com/bitcoin/bitcoin/blob/c90f86e4c7760a9f7ed0a574f54465964e006a64/src/primitives/transaction.h#L291.\
+//TODO(mihailjianu): make this a bitcoin::transaction::Version. 
+pub const TX_VERSION: Version = Version::TWO;
 
 /// The length of the public key.
 pub const PUBKEY_LEN: usize = 32;
