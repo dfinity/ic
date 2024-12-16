@@ -7,9 +7,9 @@ use crate::{providers, state, Config};
 use bitcoin::Transaction;
 use futures::future::try_join_all;
 use ic_btc_checker::{
-    get_tx_cycle_cost, CheckTransactionIrrecoverableError, CheckTransactionResponse,
-    CheckTransactionRetriable, CheckTransactionStatus, INITIAL_MAX_RESPONSE_BYTES,
-    RETRY_MAX_RESPONSE_BYTES,
+    blocklist::is_blocked, get_tx_cycle_cost, CheckTransactionIrrecoverableError,
+    CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus,
+    INITIAL_MAX_RESPONSE_BYTES, RETRY_MAX_RESPONSE_BYTES,
 };
 use ic_btc_interface::Txid;
 use ic_canister_log::log;
