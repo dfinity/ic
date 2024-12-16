@@ -6616,7 +6616,7 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "bech32 0.9.1",
- "bitcoin 0.32.5",
+ "bitcoin 0.28.2",
  "bs58",
  "candid",
  "candid_parser",

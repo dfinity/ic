@@ -1,7 +1,6 @@
 use assert_matches::assert_matches;
-use bitcoin::consensus::deserialize;
-//TODO(mihailjianu): bitcoin::Transaction works. 
-use bitcoin::{Address as BtcAddress, Network as BtcNetwork, blockdata::transaction::Transaction};
+use bitcoin::util::psbt::serialize::Deserialize;
+use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_bitcoin_canister_mock::{OutPoint, PushUtxoToAddress, Utxo};
@@ -143,11 +142,11 @@ fn input_utxos(tx: &bitcoin::Transaction) -> Vec<bitcoin::OutPoint> {
 }
 
 fn assert_replacement_transaction(old: &bitcoin::Transaction, new: &bitcoin::Transaction) {
-    assert_ne!(old.compute_txid(), new.compute_txid());
+    assert_ne!(old.txid(), new.txid());
     assert_eq!(input_utxos(old), input_utxos(new));
 
-    let new_out_value = new.output.iter().map(|out| out.value.to_sat()).sum::<u64>();
-    let prev_out_value = old.output.iter().map(|out| out.value.to_sat()).sum::<u64>();
+    let new_out_value = new.output.iter().map(|out| out.value).sum::<u64>();
+    let prev_out_value = old.output.iter().map(|out| out.value).sum::<u64>();
     let relay_cost = new.vsize() as u64 * MIN_RELAY_FEE_PER_VBYTE / 1000;
 
     assert!(
@@ -1185,11 +1184,11 @@ impl CkBtcSetup {
 
         self.env
             .advance_time(MIN_CONFIRMATIONS * Duration::from_secs(600) + Duration::from_secs(1));
-        let txid_bytes: [u8; 32] = tx.compute_txid()[..].to_vec().try_into().unwrap();
+        let txid_bytes: [u8; 32] = tx.txid().to_vec().try_into().unwrap();
         self.push_utxo(
             change_address.to_string(),
             Utxo {
-                value: change_utxo.value.to_sat(),
+                value: change_utxo.value,
                 height: 0,
                 outpoint: OutPoint {
                     txid: txid_bytes.into(),
@@ -1211,11 +1210,10 @@ impl CkBtcSetup {
         .unwrap()
         .iter()
         .map(|tx_bytes| {
-            //TODO(mihailjianu): fix this (Deserialize is private)
-            let tx: Transaction = deserialize(tx_bytes)
+            let tx = bitcoin::Transaction::deserialize(tx_bytes)
                 .expect("failed to parse a bitcoin transaction");
 
-            (vec_to_txid(tx.compute_txid()[..].to_vec()), tx)
+            (vec_to_txid(tx.txid().to_vec()), tx)
         })
         .collect()
     }
@@ -1293,7 +1291,7 @@ fn test_transaction_finalization() {
 
     assert_eq!(2, tx.output.len());
     assert_eq!(
-        tx.output[0].value.to_sat(),
+        tx.output[0].value,
         withdrawal_amount - fee_estimate.minter_fee - fee_estimate.bitcoin_fee
     );
 
@@ -1893,7 +1891,7 @@ fn test_retrieve_btc_with_approval() {
 
     assert_eq!(2, tx.output.len());
     assert_eq!(
-        tx.output[0].value.to_sat(),
+        tx.output[0].value,
         withdrawal_amount - fee_estimate.minter_fee - fee_estimate.bitcoin_fee
     );
 
@@ -1990,7 +1988,7 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
 
     assert_eq!(2, tx.output.len());
     assert_eq!(
-        tx.output[0].value.to_sat(),
+        tx.output[0].value,
         withdrawal_amount - fee_estimate.minter_fee - fee_estimate.bitcoin_fee
     );
 

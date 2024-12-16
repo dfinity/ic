@@ -11,10 +11,8 @@ use crate::{
         SubmittedBtcTransaction,
     },
 };
-use bitcoin::blockdata::transaction::Version;
-use bitcoin::Address;
-use bitcoin::Network as BtcNetwork;
-use bitcoin::consensus::{deserialize, serialize};
+use bitcoin::network::constants::Network as BtcNetwork;
+use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_btc_interface::{Network, OutPoint, Satoshi, Txid, Utxo};
@@ -65,7 +63,7 @@ fn dummy_utxo_from_value(v: u64) -> Utxo {
 
 fn address_to_script_pubkey(address: &BitcoinAddress) -> bitcoin::Script {
     let address_string = address.display(Network::Mainnet);
-    let btc_address = bitcoin::Address::from_str(&address_string).unwrap().assume_checked();
+    let btc_address = bitcoin::Address::from_str(&address_string).unwrap();
     btc_address.script_pubkey()
 }
 
@@ -77,33 +75,47 @@ fn network_to_btc_network(network: Network) -> BtcNetwork {
     }
 }
 
-fn address_to_btc_address(address: &BitcoinAddress, network: Network) -> Address {
-    let btc_net = network_to_btc_network(network);
-    use bitcoin::blockdata::script::witness_version::WitnessVersion;
-    use bitcoin::blockdata::script::witness_program::WitnessProgram;
-    use bitcoin::blockdata::script::Script;
-    use bitcoin::key::CompressedPublicKey;
+fn address_to_btc_address(address: &BitcoinAddress, network: Network) -> bitcoin::Address {
+    use bitcoin::util::address::{Payload, WitnessVersion};
     match address {
-        BitcoinAddress::P2wpkhV0(pkhash) => {
-            Address::p2wpkh(&CompressedPublicKey::from_slice(pkhash), btc_net)                
+        BitcoinAddress::P2wpkhV0(pkhash) => bitcoin::Address {
+            payload: Payload::WitnessProgram {
+                version: WitnessVersion::V0,
+                program: pkhash.to_vec(),
+            },
+            network: network_to_btc_network(network),
         },
-        BitcoinAddress::P2wshV0(script_hash) => {
-            Address::p2wsh(Script::from_bytes(script_hash), btc_net)
+        BitcoinAddress::P2wshV0(script_hash) => bitcoin::Address {
+            payload: Payload::WitnessProgram {
+                version: WitnessVersion::V0,
+                program: script_hash.to_vec(),
+            },
+            network: network_to_btc_network(network),
         },
-        BitcoinAddress::P2pkh(pkhash) => {
-            Address::p2pkh(pkhash, btc_net)
+        BitcoinAddress::P2pkh(pkhash) => bitcoin::Address {
+            payload: Payload::PubkeyHash(bitcoin::PubkeyHash::from_hash(
+                bitcoin::hashes::Hash::from_slice(pkhash).unwrap(),
+            )),
+            network: network_to_btc_network(network),
         },
-        BitcoinAddress::P2sh(script_hash) => {
-            Address::p2sh(Script::from_bytes(script_hash), btc_net).expect("coult not create p2sh address: {script_hash}")
+        BitcoinAddress::P2sh(script_hash) => bitcoin::Address {
+            payload: Payload::ScriptHash(bitcoin::ScriptHash::from_hash(
+                bitcoin::hashes::Hash::from_slice(script_hash).unwrap(),
+            )),
+            network: network_to_btc_network(network),
         },
-        BitcoinAddress::P2trV1(pkhash) => {
-            Address::from_witness_program(WitnessProgram::new(WitnessVersion::V1, pkhash).expect("Could not create WitnessProgram from pkhash: {pkhash}"), btc_net)
+        BitcoinAddress::P2trV1(pkhash) => bitcoin::Address {
+            payload: Payload::WitnessProgram {
+                version: WitnessVersion::V1,
+                program: pkhash.to_vec(),
+            },
+            network: network_to_btc_network(network),
         },
     }
 }
 
 fn as_txid(hash: &[u8; 32]) -> bitcoin::Txid {
-    bitcoin::Txid::from_raw_hash(bitcoin::hashes::Hash::from_slice(hash).unwrap())
+    bitcoin::Txid::from_hash(bitcoin::hashes::Hash::from_slice(hash).unwrap())
 }
 
 fn p2wpkh_script_code(pkhash: &[u8; 20]) -> bitcoin::Script {
@@ -120,7 +132,7 @@ fn p2wpkh_script_code(pkhash: &[u8; 20]) -> bitcoin::Script {
 
 fn unsigned_tx_to_bitcoin_tx(tx: &tx::UnsignedTransaction) -> bitcoin::Transaction {
     bitcoin::Transaction {
-        version: tx::TX_VERSION as Version,
+        version: tx::TX_VERSION as i32,
         lock_time: tx.lock_time,
         input: tx
             .inputs
@@ -148,7 +160,7 @@ fn unsigned_tx_to_bitcoin_tx(tx: &tx::UnsignedTransaction) -> bitcoin::Transacti
 
 fn signed_tx_to_bitcoin_tx(tx: &tx::SignedTransaction) -> bitcoin::Transaction {
     bitcoin::Transaction {
-        version: tx::TX_VERSION as Version,
+        version: tx::TX_VERSION as i32,
         lock_time: tx.lock_time,
         input: tx
             .inputs
@@ -616,13 +628,13 @@ proptest! {
         let arb_tx = tx::UnsignedTransaction { inputs, outputs, lock_time };
         println!("{:?}", arb_tx);
         let btc_tx = unsigned_tx_to_bitcoin_tx(&arb_tx);
-        println!("{:?}", serialize(&btc_tx));
+        println!("{:?}", btc_tx.serialize());
 
         let tx_bytes = tx::encode_into(&arb_tx, Vec::<u8>::new());
         println!("{:?}", tx_bytes);
-        let decoded_btc_tx: bitcoin::Transaction = deserialize(&tx_bytes).expect("failed to deserialize an unsigned transaction");
+        let decoded_btc_tx = bitcoin::Transaction::deserialize(&tx_bytes).expect("failed to deserialize an unsigned transaction");
 
-        prop_assert_eq!(serialize(&btc_tx), tx_bytes);
+        prop_assert_eq!(btc_tx.serialize(), tx_bytes);
         prop_assert_eq!(&decoded_btc_tx, &btc_tx);
         prop_assert_eq!(&arb_tx.txid().as_ref().to_vec(), &*btc_tx.txid());
     }
@@ -652,7 +664,7 @@ proptest! {
         let btc_tx = unsigned_tx_to_bitcoin_tx(&arb_tx);
 
         let sighasher = tx::TxSigHasher::new(&arb_tx);
-        let mut btc_sighasher = bitcoin::sighash::SighashCache::new(&btc_tx);
+        let mut btc_sighasher = bitcoin::util::sighash::SighashCache::new(&btc_tx);
 
         for (i, (utxo, _, pubkey)) in inputs_data.iter().enumerate() {
             let mut buf = Vec::<u8>::new();
@@ -681,13 +693,13 @@ proptest! {
         let arb_tx = tx::SignedTransaction { inputs, outputs, lock_time };
         println!("{:?}", arb_tx);
         let btc_tx = signed_tx_to_bitcoin_tx(&arb_tx);
-        println!("{:?}", serialize(&btc_tx));
+        println!("{:?}", btc_tx.serialize());
 
         let tx_bytes = tx::encode_into(&arb_tx, Vec::<u8>::new());
         println!("{:?}", tx_bytes);
-        let decoded_btc_tx: bitcoin::Transaction = deserialize(&tx_bytes).expect("failed to deserialize a signed transaction");
+        let decoded_btc_tx = bitcoin::Transaction::deserialize(&tx_bytes).expect("failed to deserialize a signed transaction");
 
-        prop_assert_eq!(serialize(&btc_tx), tx_bytes);
+        prop_assert_eq!(btc_tx.serialize(), tx_bytes);
         prop_assert_eq!(&decoded_btc_tx, &btc_tx);
         prop_assert_eq!(&arb_tx.wtxid(), &*btc_tx.wtxid());
         prop_assert_eq!(arb_tx.vsize(), btc_tx.vsize());
@@ -1002,13 +1014,13 @@ proptest! {
 
         for network in [Network::Mainnet, Network::Testnet, Network::Regtest].iter() {
             let btc_net = network_to_btc_network(*network);
-            let btc_addr = Address::p2pkh(&pk, btc_net);
+            let btc_addr = bitcoin::Address::p2pkh(&pk, btc_net);
             prop_assert_eq!(
                 Ok(BitcoinAddress::P2pkh(tx::hash160(&pkbytes))),
                 BitcoinAddress::parse(&btc_addr.to_string(), *network)
             );
 
-            let btc_addr = Address::p2wpkh(&pk, btc_net);
+            let btc_addr = bitcoin::Address::p2wpkh(&pk, btc_net).unwrap();
             prop_assert_eq!(
                 Ok(BitcoinAddress::P2wpkhV0(pkhash)),
                 BitcoinAddress::parse(&btc_addr.to_string(), *network)
@@ -1021,7 +1033,7 @@ proptest! {
         for network in [Network::Mainnet, Network::Testnet].iter() {
             let addr_str = address.display(*network);
             let btc_addr = address_to_btc_address(&address, *network);
-            prop_assert_eq!(btc_addr, Address::from_str(&addr_str).unwrap().assume_checked());
+            prop_assert_eq!(btc_addr, bitcoin::Address::from_str(&addr_str).unwrap());
         }
     }
 
