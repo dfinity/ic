@@ -3081,7 +3081,6 @@ dependencies = [
  "ic-agent",
  "ic-bn-lib",
  "ic-btc-interface",
- "ic-btc-test-utils",
  "ic-canister-log",
  "ic-canister-sig-creation",
  "ic-cbor",
@@ -5035,15 +5034,6 @@ dependencies = [
  "candid",
  "serde",
  "serde_bytes",
-]
-
-[[package]]
-name = "ic-btc-test-utils"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be8e0a43145188ba239150f8460d314b0dd6e0ddf7d753c0ef99296103c622dd"
-dependencies = [
- "bitcoin 0.28.2",
 ]
 
 [[package]]

@@ -6078,15 +6078,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-btc-test-utils"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be8e0a43145188ba239150f8460d314b0dd6e0ddf7d753c0ef99296103c622dd"
-dependencies = [
- "bitcoin 0.28.2",
-]
-
-[[package]]
 name = "ic-btc-validation"
 version = "0.9.0"
 dependencies = [
@@ -8350,7 +8341,6 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-btc-interface",
- "ic-btc-test-utils",
  "ic-canister-sandbox-backend-lib",
  "ic-config",
  "ic-crypto-prng",
@@ -10110,7 +10100,6 @@ version = "0.0.1"
 dependencies = [
  "candid",
  "canister-test",
- "dfn_candid",
  "ic-cdk 0.16.0",
  "ic-cdk-timers",
  "ic-config",
@@ -11604,7 +11593,6 @@ dependencies = [
  "ic-base-types",
  "ic-btc-interface",
  "ic-btc-replica-types",
- "ic-btc-test-utils",
  "ic-certification-version",
  "ic-config",
  "ic-crypto-ed25519",

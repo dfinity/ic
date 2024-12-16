@@ -130,7 +130,7 @@ impl CanisterStateFixture {
         msg: RequestOrResponse,
         subnet_type: SubnetType,
         input_queue_type: InputQueueType,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         self.canister_state.push_input(
             msg,
             &mut SUBNET_AVAILABLE_MEMORY.clone(),
@@ -160,12 +160,13 @@ impl CanisterStateFixture {
             self.make_callback(deadline),
             deadline,
         ));
-        self.push_input(
-            response.clone(),
-            SubnetType::Application,
-            InputQueueType::RemoteSubnet,
-        )
-        .unwrap();
+        assert!(self
+            .push_input(
+                response.clone(),
+                SubnetType::Application,
+                InputQueueType::RemoteSubnet,
+            )
+            .unwrap());
 
         // Pop the response and make it into a paused response execution task.
         assert_eq!(
@@ -187,13 +188,13 @@ impl CanisterStateFixture {
 #[test]
 fn canister_state_push_input_request_success() {
     let mut fixture = CanisterStateFixture::new();
-    fixture
+    assert!(fixture
         .push_input(
             default_input_request(NO_DEADLINE),
             SubnetType::Application,
             InputQueueType::RemoteSubnet,
         )
-        .unwrap();
+        .unwrap());
     // Request was enqueued.
     assert!(fixture.canister_state.has_input());
 }
@@ -205,13 +206,13 @@ fn canister_state_push_input_response_success() {
     fixture.with_input_slot_reservation();
     // Pushing input response should succeed.
     let response = default_input_response(fixture.make_callback(NO_DEADLINE), NO_DEADLINE).into();
-    fixture
+    assert!(fixture
         .push_input(
             response,
             SubnetType::Application,
             InputQueueType::RemoteSubnet,
         )
-        .unwrap();
+        .unwrap());
     // Response was enqueued.
     assert!(fixture.canister_state.has_input());
 }
@@ -242,22 +243,22 @@ fn canister_state_push_input_best_effort_response_no_reserved_slot() {
     fixture.with_input_slot_reservation();
     let response = default_input_response(fixture.make_callback(SOME_DEADLINE), SOME_DEADLINE);
     // Push a matching response into the slot.
-    fixture
+    assert!(fixture
         .push_input(
             response.clone().into(),
             SubnetType::Application,
             InputQueueType::RemoteSubnet,
         )
-        .unwrap();
+        .unwrap());
     // Pushing a second best-effort response without a reserved slot should fail
     // silently.
-    fixture
+    assert!(!fixture
         .push_input(
             response.clone().into(),
             SubnetType::Application,
             InputQueueType::RemoteSubnet,
         )
-        .unwrap();
+        .unwrap());
     // Only one response was enqueued.
     assert_eq!(
         Some(CanisterMessage::Response(response.into())),
@@ -293,13 +294,13 @@ fn canister_state_push_input_best_effort_response_no_matching_callback() {
     fixture.with_input_slot_reservation();
     // Push a best-effort input response with a nonexistent callback.
     let response = default_input_response(CallbackId::from(1), SOME_DEADLINE).into();
-    fixture
+    assert!(!fixture
         .push_input(
             response,
             SubnetType::Application,
             InputQueueType::RemoteSubnet,
         )
-        .unwrap();
+        .unwrap());
 
     // Nothing was enqueued.
     assert!(!fixture.canister_state.has_input());
@@ -402,14 +403,13 @@ fn canister_state_push_input_best_effort_response_duplicate_of_paused_response()
     let response = fixture.with_paused_response_execution(SOME_DEADLINE);
 
     // Enqueuing a duplicate response should fail silently.
-    assert_eq!(
-        Ok(()),
-        fixture.push_input(
+    assert!(!fixture
+        .push_input(
             response.clone(),
             SubnetType::Application,
             InputQueueType::RemoteSubnet,
         )
-    );
+        .unwrap());
     // Nothing was enqueued.
     assert!(!fixture.canister_state.has_input());
 }
@@ -451,13 +451,13 @@ fn canister_state_induct_messages_to_self_duplicate_of_paused_response(deadline:
     fixture.pop_output().unwrap();
 
     // Enqueue the inbound response.
-    fixture
+    assert!(fixture
         .push_input(
             response.clone().into(),
             SubnetType::Application,
             InputQueueType::LocalSubnet,
         )
-        .unwrap();
+        .unwrap());
 
     // Pop the response and make it into a paused response execution task.
     let response_canister_message = CanisterMessage::Response(response.clone().into());
@@ -475,13 +475,13 @@ fn canister_state_induct_messages_to_self_duplicate_of_paused_response(deadline:
         });
 
     // Make an output queue slot reservation.
-    fixture
+    assert!(fixture
         .push_input(
             request.clone().into(),
             SubnetType::Application,
             InputQueueType::LocalSubnet,
         )
-        .unwrap();
+        .unwrap());
     fixture.canister_state.pop_input().unwrap();
 
     // Emqueue the response in the output queue.
@@ -605,7 +605,7 @@ fn canister_state_push_input_request_memory_limit_test_impl(
         );
         assert_eq!(initial_subnet_available_memory, subnet_available_memory);
     } else {
-        result.unwrap();
+        assert!(result.unwrap());
 
         // Guaranteed response requests consume `MAX_RESPONSE_COUNT_BYTES` guaranteed
         // response memory. Best-effort requests consume no guaranteed response memory.
@@ -648,14 +648,14 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
 
     let request = default_input_request(NO_DEADLINE);
 
-    canister_state
+    assert!(canister_state
         .push_input(
             request,
             &mut subnet_available_memory,
             own_subnet_type,
             input_queue_type,
         )
-        .unwrap();
+        .unwrap());
 
     assert_eq!(
         initial_memory_usage + NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
@@ -721,7 +721,7 @@ fn canister_state_push_input_response_memory_limit_test_impl(
         default_input_response(fixture.make_callback(NO_DEADLINE), NO_DEADLINE).into();
 
     let mut subnet_available_memory = -13;
-    fixture
+    assert!(fixture
         .canister_state
         .push_input(
             response.clone(),
@@ -729,7 +729,7 @@ fn canister_state_push_input_response_memory_limit_test_impl(
             own_subnet_type,
             input_queue_type,
         )
-        .unwrap();
+        .unwrap());
 
     assert_eq!(
         -13 + MAX_RESPONSE_COUNT_BYTES as i64 - response.count_bytes() as i64,
