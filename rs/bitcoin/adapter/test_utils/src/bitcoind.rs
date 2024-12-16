@@ -8,13 +8,14 @@ use std::{
 use bitcoin::p2p::{Magic, ServiceFlags};
 
 use bitcoin::{
+    block::Header as BlockHeader,
     consensus::{deserialize_partial, encode, serialize},
     p2p::{
         message::{NetworkMessage, RawNetworkMessage},
         message_blockdata::{GetHeadersMessage, Inventory},
         message_network::VersionMessage,
     },
-    Block, BlockHash, block::Header as BlockHeader,
+    Block, BlockHash,
 };
 
 use bitcoin::io as bitcoin_io;
@@ -40,7 +41,7 @@ async fn write_network_message(
 
 async fn handle_getdata(
     socket: &mut TcpStream,
-    msg: &Vec<Inventory>,
+    msg: &[Inventory],
     magic: Magic,
     blocks: Arc<HashMap<BlockHash, Block>>,
 ) -> io::Result<()> {
@@ -65,7 +66,11 @@ async fn handle_ping(socket: &mut TcpStream, val: u64, magic: Magic) -> io::Resu
     write_network_message(socket, magic, NetworkMessage::Pong(val)).await
 }
 
-async fn handle_version(socket: &mut TcpStream, v: &VersionMessage, magic: Magic) -> io::Result<()> {
+async fn handle_version(
+    socket: &mut TcpStream,
+    v: &VersionMessage,
+    magic: Magic,
+) -> io::Result<()> {
     if v.version < MINIMUM_PROTOCOL_VERSION {
         let err = io::Error::new(ErrorKind::Other, "Protocol version too low");
         return Err(err);
@@ -95,7 +100,7 @@ async fn handle_getheaders(
 
         for locator in &msg.locator_hashes {
             if cached_headers.contains_key(locator) {
-                found = Some(locator.clone());
+                found = Some(*locator);
                 break;
             }
         }

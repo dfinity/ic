@@ -203,7 +203,8 @@ mod test {
     use super::*;
     use crate::common::test_common::TestChannel;
     use bitcoin::{
-        absolute::LockTime, blockdata::constants::genesis_block, consensus::serialize, Network, Transaction
+        absolute::LockTime, blockdata::constants::genesis_block, consensus::serialize, Network,
+        Transaction,
     };
     use ic_logger::replica_logger::no_op_logger;
     use std::str::FromStr;
@@ -461,7 +462,9 @@ mod test {
             channel.pop_front().unwrap(),
             Command {
                 address: Some(address2),
-                message: NetworkMessage::Inv(vec![Inventory::Transaction(transaction.compute_txid())])
+                message: NetworkMessage::Inv(vec![Inventory::Transaction(
+                    transaction.compute_txid()
+                )])
             }
         );
     }

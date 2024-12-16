@@ -77,7 +77,8 @@ pub fn validate_header(
         return Err(ValidateHeaderError::InvalidPoWForHeaderTarget);
     }
 
-    let compact_target = get_next_compact_target(network, store, &prev_header, prev_height, header.time);
+    let compact_target =
+        get_next_compact_target(network, store, &prev_header, prev_height, header.time);
     if let Err(err) = header.validate_pow(Target::from_compact(compact_target)) {
         match err {
             ValidationError::BadProofOfWork => println!("bad proof of work"),
@@ -216,7 +217,8 @@ fn compute_next_difficulty(
     // actual_interval will deviate slightly from 2 weeks. Our goal is to
     // readjust the difficulty target so that the expected time taken for the next
     // 2016 blocks is again 2 weeks.
-    let actual_interval = std::cmp::max((prev_header.time as i64) - (last_adjustment_time as i64), 0) as u64;
+    let actual_interval =
+        std::cmp::max((prev_header.time as i64) - (last_adjustment_time as i64), 0) as u64;
 
     CompactTarget::from_next_work_required(prev_header.bits, actual_interval, *network)
 }
@@ -237,8 +239,6 @@ mod test {
         MAINNET_HEADER_586656, MAINNET_HEADER_705600, MAINNET_HEADER_705601, MAINNET_HEADER_705602,
         TESTNET_HEADER_2132555, TESTNET_HEADER_2132556,
     };
-
-    const MOCK_CURRENT_TIME: u64 = 2_634_590_600;
 
     #[derive(Clone)]
     struct StoredHeader {
@@ -361,11 +361,7 @@ mod test {
         let header_2132555 = deserialize_header(TESTNET_HEADER_2132555);
         let header_2132556 = deserialize_header(TESTNET_HEADER_2132556);
         let store = SimpleHeaderStore::new(header_2132555, 2_132_555);
-        let result = validate_header(
-            &Network::Testnet,
-            &store,
-            &header_2132556,
-        );
+        let result = validate_header(&Network::Testnet, &store, &header_2132556);
         assert!(result.is_ok());
     }
 

@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use bitcoin::{Block, BlockHash, block::Header as BlockHeader, Network};
+use bitcoin::{block::Header as BlockHeader, Block, BlockHash, Network};
 use ic_metrics::MetricsRegistry;
 use tokio::sync::mpsc::Sender;
 use tonic::Status;
@@ -168,7 +168,7 @@ fn get_successor_blocks(
             // Retrieve the block from the cache.
             match state.get_block(block_hash) {
                 Some(block) => {
-                    //TODO(mihailjianu): think this through. 
+                    //TODO(mihailjianu): think this through.
                     let block_size = block.total_size();
                     if response_block_size == 0
                         || (response_block_size + block_size <= MAX_BLOCKS_BYTES

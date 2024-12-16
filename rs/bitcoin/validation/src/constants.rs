@@ -12,7 +12,7 @@ pub const TEN_MINUTES: u32 = 60 * 10;
 pub fn max_target(network: &Network) -> Target {
     match network {
         Network::Bitcoin => Target::MAX_ATTAINABLE_MAINNET,
-        Network::Testnet4 => Target::MAX_ATTAINABLE_TESTNET,
+        Network::Testnet => Target::MAX_ATTAINABLE_TESTNET,
         Network::Regtest => Target::MAX_ATTAINABLE_REGTEST,
         Network::Signet => Target::MAX_ATTAINABLE_SIGNET,
         &other => unreachable!("Unsupported network: {:?}", other),

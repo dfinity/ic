@@ -13,7 +13,8 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:csv",
     "@crate_index//:hex",
-    "@crate_index//:primitive-types",
+    #TODO(mihailjianu): figure out why this is needed.
+    #"@crate_index//:primitive-types",
     "@crate_index//:proptest",
 ]
 

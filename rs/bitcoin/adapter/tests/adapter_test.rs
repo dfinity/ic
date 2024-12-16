@@ -55,7 +55,7 @@ impl ForkTestData {
     }
 }
 
-fn  make_get_successors_request(
+fn make_get_successors_request(
     adapter_client: &BitcoinAdapterClient,
     anchor: Vec<u8>,
     headers: Vec<Vec<u8>>,
@@ -379,7 +379,9 @@ fn sync_blocks_at_once(
 }
 
 fn get_blackhole_address() -> Address {
-    Address::from_str("mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn").unwrap().assume_checked()
+    Address::from_str("mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn")
+        .unwrap()
+        .assume_checked()
 }
 
 fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Client, Address, Address) {
@@ -401,8 +403,14 @@ fn create_alice_and_bob_wallets(bitcoind: &BitcoinD) -> (Client, Client, Address
         .create_wallet("bob", None, None, None, None)
         .unwrap();
 
-    let alice_address = alice_client.get_new_address(None, None).unwrap().assume_checked();
-    let bob_address = bob_client.get_new_address(None, None).unwrap().assume_checked();
+    let alice_address = alice_client
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
+    let bob_address = bob_client
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
 
     (alice_client, bob_client, alice_address, bob_address)
 }
@@ -526,7 +534,7 @@ fn test_receives_blocks() {
 
     assert_eq!(0, client.get_blockchain_info().unwrap().blocks);
 
-    //TODO(mihailjianu): check that "assume_checked" is enough. 
+    //TODO(mihailjianu): check that "assume_checked" is enough.
 
     let address = client.get_new_address(None, None).unwrap().assume_checked();
 
@@ -823,13 +831,19 @@ fn test_receives_blocks_from_forks() {
     wait_for_connection(&client1, 2);
     wait_for_connection(&client2, 2);
 
-    let address1 = client1.get_new_address(None, None).unwrap().assume_checked();
+    let address1 = client1
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
     client1.generate_to_address(25, &address1).unwrap();
 
     wait_for_blocks(&client1, 25);
     wait_for_blocks(&client2, 25);
 
-    let address2 = client2.get_new_address(None, None).unwrap().assume_checked();
+    let address2 = client2
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
     client2.generate_to_address(25, &address2).unwrap();
 
     wait_for_blocks(&client1, 50);
@@ -891,7 +905,10 @@ fn test_bfs_order() {
     wait_for_connection(&client1, 2);
     wait_for_connection(&client2, 2);
 
-    let address1 = client1.get_new_address(None, None).unwrap().assume_checked();
+    let address1 = client1
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
     let shared_blocks = client1.generate_to_address(5, &address1).unwrap();
 
     wait_for_blocks(&client1, 5);
@@ -907,7 +924,10 @@ fn test_bfs_order() {
 
     let fork1 = client1.generate_to_address(15, &address1).unwrap();
 
-    let address2 = client2.get_new_address(None, None).unwrap().assume_checked();
+    let address2 = client2
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
     let fork2 = client2.generate_to_address(15, &address2).unwrap();
 
     wait_for_blocks(&client1, 20);

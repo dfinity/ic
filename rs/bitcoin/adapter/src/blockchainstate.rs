@@ -1,9 +1,9 @@
 //! The module is responsible for keeping track of the blockchain state.
 //!
 use crate::{common::BlockHeight, config::Config, metrics::BlockchainStateMetrics};
-use bitcoin::{blockdata::constants::genesis_block, Block, BlockHash, block::Header as BlockHeader, Network};
-
-use bitcoin::hashes::Hash;
+use bitcoin::{
+    block::Header as BlockHeader, blockdata::constants::genesis_block, Block, BlockHash, Network,
+};
 
 use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
@@ -330,18 +330,19 @@ impl BlockchainState {
 
     /// Returns the current size of the block cache.
     pub fn get_block_cache_size(&self) -> usize {
-        self.block_cache.values().fold(0, |sum, b| b.total_size() + sum)
+        self.block_cache
+            .values()
+            .fold(0, |sum, b| b.total_size() + sum)
     }
 }
 
 impl HeaderStore for BlockchainState {
     fn get_with_block_hash(&self, hash: &BlockHash) -> Option<BlockHeader> {
-        self.get_cached_header(hash)
-            .map(|cached| cached.header)
+        self.get_cached_header(hash).map(|cached| cached.header)
     }
 
-    // TODO: this is terribly innefficient. We should: either have and index for this, or 
-    // rething how this is used. 
+    // TODO: this is terribly innefficient. We should: either have and index for this, or
+    // rething how this is used.
     fn get_with_height(&self, height: u32) -> Option<BlockHeader> {
         self.header_cache
             .values()
@@ -549,7 +550,7 @@ mod test {
         let initial_header = state.genesis();
         let mut chain = generate_headers(initial_header.block_hash(), initial_header.time, 16, &[]);
         let last_header = chain.get_mut(10).unwrap();
-        last_header.prev_blockhash = BlockHash::all_zeros();
+        last_header.prev_blockhash = BlockHash::from_raw_hash(bitcoin::hashes::Hash::all_zeros());
 
         let chain_hashes: Vec<BlockHash> = chain.iter().map(|header| header.block_hash()).collect();
         let last_hash = chain_hashes[10];
@@ -586,7 +587,8 @@ mod test {
         assert!(matches!(result, Ok(())));
 
         // Make a block 2's merkle root invalid and try to add the block to the cache.
-        block_2.header.merkle_root = TxMerkleNode::all_zeros();
+        block_2.header.merkle_root =
+            TxMerkleNode::from_raw_hash(bitcoin::hashes::Hash::all_zeros());
         // Block 2's hash will now be changed because of the merkle root change.
         let block_2_hash = block_2.block_hash();
         let result = state.add_block(block_2);

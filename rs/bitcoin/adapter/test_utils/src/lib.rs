@@ -1,7 +1,10 @@
 use std::collections::HashSet;
 
 use bitcoin::{
-    block::{Header as BlockHeader, Version}, consensus::deserialize, hashes::Hash, Block, BlockHash, Target, Transaction, TxMerkleNode
+    block::{Header as BlockHeader, Version},
+    consensus::deserialize,
+    hashes::Hash,
+    Block, BlockHash, Target, Transaction, TxMerkleNode,
 };
 use hex::FromHex;
 use rand::{prelude::StdRng, Rng, SeedableRng};
@@ -59,7 +62,9 @@ fn large_block(prev_blockhash: &BlockHash, prev_time: u32, tx: Transaction) -> B
         block.txdata.push(tx.clone());
     }
 
-    block.header.merkle_root = block.compute_merkle_root().unwrap_or(TxMerkleNode::all_zeros());
+    block.header.merkle_root = block
+        .compute_merkle_root()
+        .unwrap_or(TxMerkleNode::all_zeros());
     solve_proof_of_work(&mut block.header);
     block
 }

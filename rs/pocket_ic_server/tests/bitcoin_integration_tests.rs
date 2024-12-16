@@ -141,7 +141,12 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
     // `n` must be more than 100 (Coinbase maturity rule) so that the reward for the first block can be sent out
     let mut n = 101;
     btc_rpc
-        .generate_to_address(n, &Address::from_str(&bitcoin_address).unwrap().assume_checked())
+        .generate_to_address(
+            n,
+            &Address::from_str(&bitcoin_address)
+                .unwrap()
+                .assume_checked(),
+        )
         .unwrap();
 
     let reward = 50 * 100_000_000; // 50 BTC
@@ -175,7 +180,12 @@ rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dc
             break;
         } else {
             btc_rpc
-                .generate_to_address(1, &Address::from_str(&bitcoin_address).unwrap().assume_checked())
+                .generate_to_address(
+                    1,
+                    &Address::from_str(&bitcoin_address)
+                        .unwrap()
+                        .assume_checked(),
+                )
                 .unwrap();
             n += 1;
         }

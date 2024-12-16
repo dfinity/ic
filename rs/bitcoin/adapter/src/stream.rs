@@ -1,10 +1,10 @@
+use bitcoin::io as bitcoin_io;
 use bitcoin::{
     consensus::serialize,
     p2p::message::RawNetworkMessage,
     p2p::Magic,
     {consensus::encode, p2p::message::NetworkMessage},
 };
-use bitcoin::io as bitcoin_io;
 use futures::TryFutureExt;
 use http::Uri;
 use ic_logger::{debug, error, info, ReplicaLogger};
@@ -230,7 +230,9 @@ impl Stream {
                 // If the read successfully received bytes, then the bytes are added to the
                 // unparsed buffer to attempt another deserialize call. If no bytes found,
                 // return the unexpected end-of-file error.
-                Err(encode::Error::Io(ref err)) if err.kind() == bitcoin_io::ErrorKind::UnexpectedEof => {
+                Err(encode::Error::Io(ref err))
+                    if err.kind() == bitcoin_io::ErrorKind::UnexpectedEof =>
+                {
                     let count = self
                         .read_half
                         .try_read(&mut self.data)
@@ -269,7 +271,7 @@ impl Stream {
     async fn write_message(&mut self, network_message: NetworkMessage) -> StreamResult<()> {
         let raw_network_message = RawNetworkMessage::new(self.magic, network_message);
         let bytes = serialize(&raw_network_message);
-        self.write_half 
+        self.write_half
             .write_all(bytes.as_slice())
             .await
             .map_err(StreamError::Io)?;
@@ -411,8 +413,8 @@ pub mod test {
         tokio::spawn(async move {
             let (mut socket, _addr) = listener.accept().await.unwrap();
             let addr = RawNetworkMessage::new(
-              network.magic(),
-              NetworkMessage::Alert(vec![0; MAX_RAW_MESSAGE_SIZE + 10]),
+                network.magic(),
+                NetworkMessage::Alert(vec![0; MAX_RAW_MESSAGE_SIZE + 10]),
             );
             let mut buf = Vec::new();
             let raw_addr = addr.consensus_encode(&mut buf).unwrap();
@@ -492,16 +494,16 @@ pub mod test {
 
         // Large messgage just below limit.
         let payload_large = RawNetworkMessage::new(
-           network.magic(),
-           NetworkMessage::Alert(vec![0; MAX_RAW_MESSAGE_SIZE - 30])
+            network.magic(),
+            NetworkMessage::Alert(vec![0; MAX_RAW_MESSAGE_SIZE - 30]),
         );
         let mut buf_large = Vec::new();
         let _ = payload_large.consensus_encode(&mut buf_large).unwrap();
 
         // Message that crosses the boundary limit.
         let payload_small = RawNetworkMessage::new(
-          network.magic(),
-          NetworkMessage::Alert(vec![0; 31 + STREAM_BUFFER_SIZE]),
+            network.magic(),
+            NetworkMessage::Alert(vec![0; 31 + STREAM_BUFFER_SIZE]),
         );
         let mut buf_small = Vec::new();
         let _ = payload_small.consensus_encode(&mut buf_small).unwrap();
