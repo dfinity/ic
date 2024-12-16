@@ -2028,25 +2028,27 @@ fn duplicate_best_effort_response_is_dropped_and_metrics_incremented_only_once()
             ..StreamConfig::default()
         }],
         |stream_handler, mut state, metrics| {
-            // Clone the best effort response and push it onto the loopback stream.
             let response = message_in_stream(state.get_stream(&LOCAL_SUBNET), 21).clone();
+
+            let mut expected_state = state.clone();
+            // The expected state has the response inducted...
+            push_input(&mut expected_state, response.clone());
+            // ...and an empty loopback stream with begin advanced.
+            let loopback_stream = stream_from_config(StreamConfig {
+                begin: 23,
+                signals_end: 23,
+                ..StreamConfig::default()
+            });
+            expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
+
+            // Push the clone of the best effort response onto the loopback stream.
             state.modify_streams(|streams| streams.get_mut(&LOCAL_SUBNET).unwrap().push(response));
 
             let inducted_state = stream_handler.induct_loopback_stream(state, &mut (i64::MAX / 2));
+            assert_eq!(inducted_state, expected_state);
 
             // No critical errors raised.
             metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
-            // Only one response is inducted into the state.
-            assert_eq!(
-                1,
-                inducted_state
-                    .canister_state(&LOCAL_CANISTER)
-                    .unwrap()
-                    .system_state
-                    .queues()
-                    .input_queues_message_count()
-            );
-
             // Only one response was recorded by the metrics.
             metrics.assert_inducted_xnet_messages_eq(&[
                 // Response @21 is inducted successfully.
