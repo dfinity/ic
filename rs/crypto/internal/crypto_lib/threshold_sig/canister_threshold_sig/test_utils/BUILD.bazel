@@ -14,7 +14,7 @@ rust_library(
         "//rs/crypto/sha2",
         "//rs/types/types",
         "@crate_index//:assert_matches",
-        #TODO(mihailjianu): Migrate this to bitcoin.
+        #TODO(BTC-CRATE-UPGRADE): Migrate this to bitcoin.
         "@crate_index//:bitcoin_0_28",
         "@crate_index//:ed25519-dalek",
         "@crate_index//:hex",

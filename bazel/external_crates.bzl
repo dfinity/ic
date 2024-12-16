@@ -101,7 +101,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             patch_args = ["-p4"],
             patches = ["@@//bazel:cranelift-codegen-meta.patch"],
         )],
-        #TODO(mihailjianu): check if we need this at all.
         "secp256k1-sys": [crate.annotation(
             # This specific version is used by ic-btc-kyt canister, which
             # requires an extra cfg flag to avoid linking issues.

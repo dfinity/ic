@@ -534,8 +534,6 @@ fn test_receives_blocks() {
 
     assert_eq!(0, client.get_blockchain_info().unwrap().blocks);
 
-    //TODO(mihailjianu): check that "assume_checked" is enough.
-
     let address = client.get_new_address(None, None).unwrap().assume_checked();
 
     client.generate_to_address(150, &address).unwrap();
