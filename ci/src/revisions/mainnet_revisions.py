@@ -2,14 +2,12 @@
 import argparse
 import json
 import logging
-import pathlib
-import urllib.request
-from typing import List
-from enum import Enum
 import os
+import pathlib
 import subprocess
-
-# from pylib.ic_deployment import IcDeployment
+import urllib.request
+from enum import Enum
+from typing import List
 
 SAVED_VERSIONS_SUBNETS_PATH = "testnet/mainnet_revisions.json"
 nns_subnet_id = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
@@ -17,9 +15,11 @@ app_subnet_id = "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe
 PUBLIC_DASHBOARD_API = "https://ic-api.internetcomputer.org"
 SAVED_VERSIONS_CANISTERS_PATH = "mainnet-canisters.json"
 
+
 class Command(Enum):
     SUBNETS = 1
     CANISTERS = 2
+
 
 def sync_main_branch_and_checkout_branch(
     repo_root: pathlib.Path, main_branch: str, branch_to_checkout: str, logger: logging.Logger
@@ -95,6 +95,7 @@ def commit_and_create_pr(
                 cwd=repo_root,
             )
 
+
 def get_saved_versions(repo_root: pathlib.Path, file_path: pathlib.Path):
     """
     Return a dict with all saved versions.
@@ -161,8 +162,12 @@ def update_mainnet_revisions_subnets_file(repo_root: pathlib.Path, logger: loggi
     current_app_subnet_version = get_subnet_replica_version(app_subnet_id)
     logger.info("Current App subnet (%s) revision: %s", app_subnet_id, current_app_subnet_version)
 
-    update_saved_subnet_version(subnet=nns_subnet_id, version=current_nns_version, repo_root=repo_root, file_path=file_path)
-    update_saved_subnet_version(subnet=app_subnet_id, version=current_app_subnet_version, repo_root=repo_root, file_path=file_path)
+    update_saved_subnet_version(
+        subnet=nns_subnet_id, version=current_nns_version, repo_root=repo_root, file_path=file_path
+    )
+    update_saved_subnet_version(
+        subnet=app_subnet_id, version=current_app_subnet_version, repo_root=repo_root, file_path=file_path
+    )
 
 
 def update_mainnet_revisions_canisters_file(repo_root: pathlib.Path, logger: logging.Logger):
@@ -197,14 +202,10 @@ def get_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(title="subcommands", description="valid commands", help="sub-command help")
 
-    parser_subnets = subparsers.add_parser(
-        "subnets", help=f"Update {SAVED_VERSIONS_SUBNETS_PATH} file"
-    )
+    parser_subnets = subparsers.add_parser("subnets", help=f"Update {SAVED_VERSIONS_SUBNETS_PATH} file")
     parser_subnets.set_defaults(command=Command.SUBNETS)
 
-    parser_canisters = subparsers.add_parser(
-        "canisters", help=f"Update {SAVED_VERSIONS_SUBNETS_PATH} file"
-    )
+    parser_canisters = subparsers.add_parser("canisters", help=f"Update {SAVED_VERSIONS_CANISTERS_PATH} file")
     parser_canisters.set_defaults(command=Command.CANISTERS)
 
     return parser
@@ -230,18 +231,27 @@ def main():
         sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
         update_mainnet_revisions_subnets_file(repo_root, logger, pathlib.Path(SAVED_VERSIONS_SUBNETS_PATH))
         commit_and_create_pr(
-            repo, repo_root, branch, [SAVED_VERSIONS_SUBNETS_PATH], logger, "chore: Update Mainnet IC revisions subnets file"
+            repo,
+            repo_root,
+            branch,
+            [SAVED_VERSIONS_SUBNETS_PATH],
+            logger,
+            "chore: Update Mainnet IC revisions subnets file",
         )
     elif args.command == Command.CANISTERS:
         branch = "ic-nervous-system-wasms"
         sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
         update_mainnet_revisions_canisters_file(repo_root, logger)
         commit_and_create_pr(
-            repo, repo_root, branch, [SAVED_VERSIONS_CANISTERS_PATH], logger, "chore: Update Mainnet IC revisions canisters file"
+            repo,
+            repo_root,
+            branch,
+            [SAVED_VERSIONS_CANISTERS_PATH],
+            logger,
+            "chore: Update Mainnet IC revisions canisters file",
         )
     else:
         raise Exception("This shouldn't happen")
-
 
 
 if __name__ == "__main__":
