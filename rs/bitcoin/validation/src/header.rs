@@ -438,64 +438,6 @@ mod test {
         ));
     }
 
-    fn test_next_targets(network: Network, headers_path: &str, up_to_height: usize) {
-        use bitcoin::consensus::Decodable;
-        use std::io::BufRead;
-        let file = std::fs::File::open(
-            PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join(headers_path),
-        )
-        .unwrap();
-
-        let rdr = std::io::BufReader::new(file);
-
-        println!("Loading headers...");
-        let mut headers = vec![];
-        for line in rdr.lines() {
-            let header = line.unwrap();
-            let header = hex::decode(header.trim()).unwrap();
-            let header = BlockHeader::consensus_decode(&mut header.as_slice()).unwrap();
-            headers.push(header);
-        }
-
-        println!("Creating header store...");
-        let mut store = SimpleHeaderStore::new(headers[0], 0);
-        for header in headers[1..].iter() {
-            store.add(*header);
-        }
-
-        println!("Verifying next targets...");
-        proptest!(|(i in 0..up_to_height)| {
-            // Compute what the target of the next header should be.
-            let expected_next_compact_target =
-                get_next_compact_target(&network, &store, &headers[i], i as u32, headers[i + 1].time);
-
-            // Assert that the expected next target matches the next header's target.
-            assert_eq!(
-                expected_next_compact_target,
-                headers[i + 1].bits
-            );
-        });
-    }
-
-    //TODO(mihailjianu): add the csv files.
-    // #[test]
-    // fn mainnet_next_targets() {
-    //     test_next_targets(
-    //         Network::Bitcoin,
-    //         "tests/data/block_headers_mainnet.csv",
-    //         700_000,
-    //     );
-    // }
-
-    // #[test]
-    // fn testnet_next_targets() {
-    //     test_next_targets(
-    //         Network::Testnet,
-    //         "tests/data/block_headers_testnet.csv",
-    //         2_400_000,
-    //     );
-    // }
-
     fn genesis_header(bits: CompactTarget) -> BlockHeader {
         BlockHeader {
             version: Version::ONE,
