@@ -175,7 +175,7 @@ impl TryFrom<Vec<u8>> for WasmHash {
 }
 
 impl CountBytes for WasmHash {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         self.0.len()
     }
 }

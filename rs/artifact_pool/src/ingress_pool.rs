@@ -63,7 +63,7 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
             .op_duration
             .with_label_values(&["insert"])
             .start_timer();
-        let new_artifact_size = artifact.as_ref().count_bytes();
+        let new_artifact_size = artifact.as_ref().memory_count_bytes();
         self.metrics
             .observe_insert(new_artifact_size, INGRESS_MESSAGE_ARTIFACT_TYPE);
         self.peer_counters.observe(artifact.as_ref());
@@ -72,7 +72,7 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
             self.peer_counters.forget(previous.as_ref());
 
             self.metrics.observe_duplicate(
-                previous.as_ref().count_bytes(),
+                previous.as_ref().memory_count_bytes(),
                 INGRESS_MESSAGE_ARTIFACT_TYPE,
             );
         }
@@ -91,7 +91,7 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         if let Some(artifact) = &removed {
             self.peer_counters.forget(artifact.as_ref());
             self.metrics.observe_remove(
-                artifact.as_ref().count_bytes(),
+                artifact.as_ref().memory_count_bytes(),
                 INGRESS_MESSAGE_ARTIFACT_TYPE,
             );
         }
@@ -113,7 +113,7 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         let mut to_remove = self.artifacts.split_off(&key);
         std::mem::swap(&mut to_remove, &mut self.artifacts);
         for artifact in to_remove.values() {
-            let artifact_size = artifact.as_ref().count_bytes();
+            let artifact_size = artifact.as_ref().memory_count_bytes();
             self.peer_counters.forget(artifact.as_ref());
             self.metrics
                 .observe_remove(artifact_size, INGRESS_MESSAGE_ARTIFACT_TYPE);
@@ -128,7 +128,7 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
     fn count_bytes_slow(&self) -> usize {
         self.artifacts
             .values()
-            .map(|item| item.as_ref().count_bytes())
+            .map(|item| item.as_ref().memory_count_bytes())
             .sum()
     }
 
@@ -245,7 +245,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
         let peer_id = artifact.peer_id;
         let ingress_pool_obj = IngressPoolObject::new(peer_id, artifact.message);
         let timestamp = artifact.timestamp;
-        let size = ingress_pool_obj.count_bytes();
+        let size = ingress_pool_obj.memory_count_bytes();
 
         debug!(
             self.log,

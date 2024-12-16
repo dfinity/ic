@@ -765,7 +765,7 @@ fn query_cache_frees_memory_after_invalidated_entries() {
         .build();
     let id = test.canister_from_wat(QUERY_CACHE_WAT).unwrap();
 
-    let count_bytes = query_cache(&test).count_bytes();
+    let count_bytes = query_cache(&test).memory_count_bytes();
     // Initially the cache should be empty, i.e. less than 1MB.
     assert!(count_bytes < BIG_RESPONSE_SIZE);
 
@@ -773,8 +773,8 @@ fn query_cache_frees_memory_after_invalidated_entries() {
     let res = test
         .non_replicated_query(id, "canister_balance_sized_reply", vec![])
         .unwrap();
-    assert_eq!(BIG_RESPONSE_SIZE, res.count_bytes());
-    let count_bytes = query_cache(&test).count_bytes();
+    assert_eq!(BIG_RESPONSE_SIZE, res.memory_count_bytes());
+    let count_bytes = query_cache(&test).memory_count_bytes();
     // After the first reply, the cache should have more than 1MB of data.
     assert!(count_bytes > BIG_RESPONSE_SIZE);
 
@@ -788,8 +788,8 @@ fn query_cache_frees_memory_after_invalidated_entries() {
     let res = test
         .non_replicated_query(id, "canister_balance_sized_reply", vec![])
         .unwrap();
-    assert_eq!(SMALL_RESPONSE_SIZE, res.count_bytes());
-    let count_bytes = query_cache(&test).count_bytes();
+    assert_eq!(SMALL_RESPONSE_SIZE, res.memory_count_bytes());
+    let count_bytes = query_cache(&test).memory_count_bytes();
     // The second 42 reply should invalidate and replace the first 1MB reply in the cache.
     assert!(count_bytes > SMALL_RESPONSE_SIZE);
     assert!(count_bytes < BIG_RESPONSE_SIZE);
@@ -803,7 +803,7 @@ fn query_cache_respects_cache_capacity() {
     let id = test.universal_canister().unwrap();
 
     // Initially the cache should be empty, i.e. less than REPLY_SIZE.
-    let count_bytes = query_cache(&test).count_bytes();
+    let count_bytes = query_cache(&test).memory_count_bytes();
     assert!(count_bytes < REPLY_SIZE);
 
     // All replies should hit the same cache entry.
@@ -812,7 +812,7 @@ fn query_cache_respects_cache_capacity() {
         let _res =
             test.non_replicated_query(id, "query", wasm().reply_data(&[1; REPLY_SIZE / 2]).build());
         // Now there should be only one reply in the cache.
-        let count_bytes = query_cache(&test).count_bytes();
+        let count_bytes = query_cache(&test).memory_count_bytes();
         assert!(count_bytes > REPLY_SIZE);
         assert!(count_bytes < QUERY_CACHE_CAPACITY);
     }
@@ -822,7 +822,7 @@ fn query_cache_respects_cache_capacity() {
         let _res =
             test.non_replicated_query(id, "query", wasm().reply_data(&[2; REPLY_SIZE / 2]).build());
         // Now there should be two replies in the cache.
-        let count_bytes = query_cache(&test).count_bytes();
+        let count_bytes = query_cache(&test).memory_count_bytes();
         assert!(count_bytes > REPLY_SIZE * 2);
         assert!(count_bytes < QUERY_CACHE_CAPACITY);
     }
@@ -832,7 +832,7 @@ fn query_cache_respects_cache_capacity() {
         let _res =
             test.non_replicated_query(id, "query", wasm().reply_data(&[3; REPLY_SIZE / 2]).build());
         // There should be still just two replies in the cache.
-        let count_bytes = query_cache(&test).count_bytes();
+        let count_bytes = query_cache(&test).memory_count_bytes();
         assert!(count_bytes > REPLY_SIZE * 2);
         assert!(count_bytes < QUERY_CACHE_CAPACITY);
     }
@@ -844,12 +844,12 @@ fn query_cache_works_with_zero_cache_capacity() {
     let id = test.universal_canister().unwrap();
 
     // Even with zero capacity the cache data structure uses some bytes for the pointers etc.
-    let initial_count_bytes = query_cache(&test).count_bytes();
+    let initial_count_bytes = query_cache(&test).memory_count_bytes();
 
     // Replies should not change the initial (zero) capacity.
     for _ in 0..ITERATIONS {
         let _res = test.non_replicated_query(id, "query", wasm().reply_data(&[1]).build());
-        let count_bytes = query_cache(&test).count_bytes();
+        let count_bytes = query_cache(&test).memory_count_bytes();
         assert_eq!(initial_count_bytes, count_bytes);
     }
 }

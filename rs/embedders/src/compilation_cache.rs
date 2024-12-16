@@ -39,7 +39,7 @@ pub enum CompilationCache {
 impl CompilationCache {
     pub fn new(capacity: NumBytes) -> Self {
         Self::Memory {
-            cache: Mutex::new(LruCache::new(capacity)),
+            cache: Mutex::new(LruCache::new(capacity, NumBytes::from(1024 * 1024 * 1024))),
         }
     }
 

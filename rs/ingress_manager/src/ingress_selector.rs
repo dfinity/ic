@@ -185,7 +185,7 @@ impl IngressSelector for IngressManager {
                         }
                     };
 
-                    let ingress_size = ingress.count_bytes();
+                    let ingress_size = ingress.memory_count_bytes();
 
                     // Break criterion #1: global byte limit
                     if (accumulated_size + ingress_size) as u64 > byte_limit.get() {
@@ -245,7 +245,7 @@ impl IngressSelector for IngressManager {
         // serialized form does not, we need to remove some `SignedIngress` and try again.
         let payload = loop {
             let payload = IngressPayload::from_iter(messages_in_payload.iter().copied());
-            let payload_size = payload.count_bytes();
+            let payload_size = payload.memory_count_bytes();
             if payload_size < byte_limit.get() as usize {
                 break payload;
             }
@@ -263,7 +263,7 @@ impl IngressSelector for IngressManager {
             }
         };
 
-        let payload_size = payload.count_bytes();
+        let payload_size = payload.memory_count_bytes();
         debug_assert!(payload_size <= byte_limit.get() as usize);
 
         payload
@@ -424,7 +424,7 @@ impl IngressManager {
         num_messages: usize,
         cycles_needed: &mut BTreeMap<CanisterId, Cycles>,
     ) -> ValidationResult<IngressPayloadValidationError> {
-        let ingress_message_size = signed_ingress.count_bytes();
+        let ingress_message_size = signed_ingress.memory_count_bytes();
         // The message is invalid if its size is larger than the configured maximum.
         if ingress_message_size > settings.max_ingress_bytes_per_message {
             return Err(ValidationError::InvalidArtifact(

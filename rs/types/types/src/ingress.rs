@@ -107,7 +107,7 @@ impl IngressStatus {
     pub fn payload_bytes(&self) -> usize {
         match self {
             IngressStatus::Known { state, .. } => match state {
-                IngressState::Completed(result) => result.count_bytes(),
+                IngressState::Completed(result) => result.memory_count_bytes(),
                 IngressState::Failed(error) => error.description().as_bytes().len(),
                 _ => 0,
             },
@@ -177,7 +177,7 @@ pub enum WasmResult {
 }
 
 impl CountBytes for WasmResult {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         match self {
             WasmResult::Reply(bytes) => bytes.len(),
             WasmResult::Reject(string) => string.as_bytes().len(),

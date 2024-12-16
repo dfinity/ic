@@ -31,7 +31,7 @@ pub struct IngressPoolObject {
 impl IngressPoolObject {
     pub fn new(originator_id: NodeId, signed_ingress: SignedIngress) -> Self {
         let message_id = signed_ingress.id();
-        let byte_size = signed_ingress.count_bytes();
+        let byte_size = signed_ingress.memory_count_bytes();
 
         Self {
             signed_ingress,
@@ -43,7 +43,7 @@ impl IngressPoolObject {
 }
 
 impl CountBytes for IngressPoolObject {
-    fn count_bytes(&self) -> usize {
+    fn memory_count_bytes(&self) -> usize {
         self.byte_size
     }
 }

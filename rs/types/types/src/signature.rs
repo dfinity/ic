@@ -18,8 +18,8 @@ pub struct BasicSignature<T> {
 }
 
 impl<T> CountBytes for BasicSignature<T> {
-    fn count_bytes(&self) -> usize {
-        self.signature.get_ref().count_bytes() + std::mem::size_of::<NodeId>()
+    fn memory_count_bytes(&self) -> usize {
+        self.signature.get_ref().memory_count_bytes() + std::mem::size_of::<NodeId>()
     }
 }
 

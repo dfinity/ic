@@ -1817,7 +1817,7 @@ fn push_output_request_oversized_request_memory_limits() {
         .sender(own_canister_id)
         .method_payload(vec![13; 2 * MAX_RESPONSE_COUNT_BYTES])
         .build();
-    let req_size_bytes = req.count_bytes();
+    let req_size_bytes = req.memory_count_bytes();
     assert!(req_size_bytes > MAX_RESPONSE_COUNT_BYTES);
 
     // Pushing succeeds.
