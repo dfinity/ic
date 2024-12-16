@@ -11,14 +11,14 @@ import subprocess
 
 # from pylib.ic_deployment import IcDeployment
 
-SAVED_VERSIONS_TESTNETS_PATH = "testnet/mainnet_revisions.json"
+SAVED_VERSIONS_SUBNETS_PATH = "testnet/mainnet_revisions.json"
 nns_subnet_id = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
 app_subnet_id = "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"
 PUBLIC_DASHBOARD_API = "https://ic-api.internetcomputer.org"
 SAVED_VERSIONS_CANISTERS_PATH = "mainnet-canisters.json"
 
 class Command(Enum):
-    TESTNETS = 1
+    SUBNETS = 1
     CANISTERS = 2
 
 def sync_main_branch_and_checkout_branch(
@@ -126,7 +126,7 @@ def update_saved_subnet_version(subnet: str, version: str, repo_root: pathlib.Pa
     subnet_versions = saved_versions.get("subnets", {})
     subnet_versions[subnet] = version
     saved_versions["subnets"] = subnet_versions
-    with open(repo_root / SAVED_VERSIONS_TESTNETS_PATH, "w", encoding="utf-8") as f:
+    with open(repo_root / SAVED_VERSIONS_SUBNETS_PATH, "w", encoding="utf-8") as f:
         json.dump(saved_versions, f, indent=2)
 
 
@@ -155,7 +155,7 @@ def get_subnet_replica_version(subnet_id: str) -> str:
         return latest_replica_version
 
 
-def update_mainnet_revisions_testnets_file(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path):
+def update_mainnet_revisions_subnets_file(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path):
     current_nns_version = get_subnet_replica_version(nns_subnet_id)
     logger.info("Current NNS subnet (%s) revision: %s", nns_subnet_id, current_nns_version)
     current_app_subnet_version = get_subnet_replica_version(app_subnet_id)
@@ -194,13 +194,13 @@ def get_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(title="subcommands", description="valid commands", help="sub-command help")
 
-    parser_testnets = subparsers.add_parser(
-        "testnets", help=f"Update {SAVED_VERSIONS_TESTNETS_PATH} file"
+    parser_subnets = subparsers.add_parser(
+        "subnets", help=f"Update {SAVED_VERSIONS_SUBNETS_PATH} file"
     )
-    parser_testnets.set_defaults(command=Command.TESTNETS)
+    parser_subnets.set_defaults(command=Command.SUBNETS)
 
     parser_canisters = subparsers.add_parser(
-        "canisters", help=f"Update {SAVED_VERSIONS_TESTNETS_PATH} file"
+        "canisters", help=f"Update {SAVED_VERSIONS_SUBNETS_PATH} file"
     )
     parser_canisters.set_defaults(command=Command.CANISTERS)
 
@@ -222,12 +222,12 @@ def main():
         parser.print_help()
         exit(1)
 
-    if args.command == Command.TESTNETS:
+    if args.command == Command.SUBNETS:
         branch = "ic-mainnet-revisions"
         sync_main_branch_and_checkout_branch(repo_root, main_branch, branch, logger)
-        update_mainnet_revisions_testnets_file(repo_root, logger, pathlib.Path(SAVED_VERSIONS_TESTNETS_PATH))
+        update_mainnet_revisions_subnets_file(repo_root, logger, pathlib.Path(SAVED_VERSIONS_SUBNETS_PATH))
         commit_and_create_pr(
-            repo, repo_root, branch, [SAVED_VERSIONS_TESTNETS_PATH], logger, "chore: Update Mainnet IC revisions testnets file"
+            repo, repo_root, branch, [SAVED_VERSIONS_SUBNETS_PATH], logger, "chore: Update Mainnet IC revisions subnets file"
         )
     elif args.command == Command.CANISTERS:
         branch = "ic-nervous-system-wasms"

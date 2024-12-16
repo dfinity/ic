@@ -32,7 +32,7 @@ jobs:
         run: |
           set -eEuxo pipefail
 
-          time python ci/src/revisions/mainnet_revisions.py testnets
+          time python ci/src/revisions/mainnet_revisions.py subnets
 
   update-nervous-system-wasms:
     runs-on:
@@ -68,12 +68,5 @@ jobs:
 
           # Leftover from previous step of setting up gh cli
           rm gh_tar
-
-          REPO_ROOT=$(git rev-parse --show-toplevel)
-          BRANCH="ic-nervous-system-wasms"
-          FILE="mainnet-canisters.json"
-
-          # Cache the git helpers so they dont't change between branch changes
-          cp -r ci/src/revisions /tmp
 
           time python /tmp/revisions/mainnet_revisions.py canisters
