@@ -1,0 +1,46 @@
+[package]
+name = "rosetta-system-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-canister-client = { path = "../../../canister_client" }
+icp-ledger = { path = "../../../ledger_suite/icp" }
+ic-nns-constants = { path = "../../../nns/constants" }
+ic-nns-governance-api = { path = "../../../nns/governance/api" }
+ic-nns-test-utils = { path = "../../../nns/test_utils" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-ledger-canister-blocks-synchronizer-test-utils = { path = "../../../rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils" }
+ic-rosetta-test-utils = { path = "../../../rosetta-api/icp/test_utils" }
+canister-test = { path = "../../../rust_canisters/canister_test" }
+dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
+ic-test-identity = { path = "../../../test_utilities/identity" }
+ic-system-test-driver = { path = "../../driver" }
+ic-types = { path = "../../../types/types" }
+anyhow = { workspace = true }
+lazy_static = { workspace = true }
+slog = { workspace = true }
+url = { workspace = true }
+ic-ledger-core = { path = "../../../ledger_suite/common/ledger_core" }
+ic-nns-common = { path = "../../../nns/common" }
+ic-rosetta-api = { path = "../../../rosetta-api/icp" }
+rosetta_test_lib = { path = "./rosetta_test_lib" }
+assert-json-diff = "2.0.1"
+rand = { workspace = true }
+serde_json = { workspace = true }
+ic-agent = { workspace = true }
+
+[[bin]]
+name = "rosetta_neuron_follow_test"
+path = "rosetta_neuron_follow_test.rs"
+
+[[bin]]
+name = "rosetta_neuron_voting_test"
+path = "rosetta_neuron_voting_test.rs"
+
+[[bin]]
+name = "rosetta_test"
+path = "rosetta_test.rs"

@@ -36,7 +36,6 @@ rust_library(
         exclude = ["src/main.rs"],
     ),
     crate_name = "ic_icrc1_benchmark_worker",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -45,7 +44,6 @@ rust_canister(
     name = "icrc1_benchmark_worker",
     srcs = ["src/main.rs"],
     crate_name = "ic_icrc1_benchmark_worker_canister",
-    edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":worker.did",
     deps = [":worker"] + DEPENDENCIES,

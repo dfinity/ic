@@ -587,6 +587,17 @@ impl Neuron {
         u64::try_from(result).unwrap()
     }
 
+    pub(crate) fn backfill_voting_power_refreshed_timestamp(&mut self) {
+        // This used to be the default, but we later changed our minds.
+        // The old definition:
+        // https://sourcegraph.com/github.com/dfinity/ic@1956e438af82a5b4aa9713bcbbe385684bf0704f/-/blob/rs/nns/governance/src/lib.rs?L189
+        const EVIL_TIMESTAMP_SECONDS: u64 = 1731628801;
+        if self.voting_power_refreshed_timestamp_seconds == EVIL_TIMESTAMP_SECONDS {
+            self.voting_power_refreshed_timestamp_seconds =
+                DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS;
+        }
+    }
+
     pub(crate) fn ready_to_unstake_maturity(&self, now_seconds: u64) -> bool {
         self.state(now_seconds) == NeuronState::Dissolved
             && self.staked_maturity_e8s_equivalent.unwrap_or(0) > 0
@@ -1586,8 +1597,10 @@ pub struct NeuronBuilder {
     // Fields that don't exist when a neuron is first built. We allow them to be set in tests.
     #[cfg(test)]
     neuron_fees_e8s: u64,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     recent_ballots: Vec<BallotInfo>,
+    #[cfg(any(test, feature = "canbench-rs"))]
+    recent_ballots_next_entry_index: Option<usize>,
     #[cfg(test)]
     transfer: Option<NeuronStakeTransfer>,
     #[cfg(test)]
@@ -1626,8 +1639,10 @@ impl NeuronBuilder {
 
             #[cfg(test)]
             neuron_fees_e8s: 0,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             recent_ballots: Vec::new(),
+            #[cfg(any(test, feature = "canbench-rs"))]
+            recent_ballots_next_entry_index: Some(0),
             #[cfg(test)]
             transfer: None,
             #[cfg(test)]
@@ -1717,9 +1732,12 @@ impl NeuronBuilder {
         self
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     pub fn with_recent_ballots(mut self, recent_ballots: Vec<BallotInfo>) -> Self {
+        let recent_ballots_next_entry_index =
+            Some(recent_ballots.len() % MAX_NEURON_RECENT_BALLOTS);
         self.recent_ballots = recent_ballots;
+        self.recent_ballots_next_entry_index = recent_ballots_next_entry_index;
         self
     }
 
@@ -1750,6 +1768,15 @@ impl NeuronBuilder {
         self
     }
 
+    #[cfg(test)] // To satisfy clippy. Feel free to use in production code.
+    pub fn with_voting_power_refreshed_timestamp_seconds(
+        mut self,
+        voting_power_refreshed_timestamp_seconds: u64,
+    ) -> Self {
+        self.voting_power_refreshed_timestamp_seconds = voting_power_refreshed_timestamp_seconds;
+        self
+    }
+
     pub fn build(self) -> Neuron {
         let NeuronBuilder {
             id,
@@ -1769,8 +1796,10 @@ impl NeuronBuilder {
             neuron_type,
             #[cfg(test)]
             neuron_fees_e8s,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             recent_ballots,
+            #[cfg(any(test, feature = "canbench-rs"))]
+            recent_ballots_next_entry_index,
             #[cfg(test)]
             transfer,
             #[cfg(test)]
@@ -1790,8 +1819,10 @@ impl NeuronBuilder {
         // The below fields are always the default values for a new neuron.
         #[cfg(not(test))]
         let neuron_fees_e8s = 0;
-        #[cfg(not(test))]
+        #[cfg(not(any(test, feature = "canbench-rs")))]
         let recent_ballots = Vec::new();
+        #[cfg(not(any(test, feature = "canbench-rs")))]
+        let recent_ballots_next_entry_index = Some(0);
         #[cfg(not(test))]
         let transfer = None;
         #[cfg(not(test))]
@@ -1811,6 +1842,7 @@ impl NeuronBuilder {
             spawn_at_timestamp_seconds,
             followees,
             recent_ballots,
+            recent_ballots_next_entry_index,
             kyc_verified,
             transfer,
             maturity_e8s_equivalent,
@@ -1822,7 +1854,6 @@ impl NeuronBuilder {
             neuron_type,
             visibility,
             voting_power_refreshed_timestamp_seconds,
-            recent_ballots_next_entry_index: None,
         }
     }
 }

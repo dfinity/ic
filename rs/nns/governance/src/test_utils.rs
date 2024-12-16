@@ -162,6 +162,14 @@ impl MockEnvironment {
             now: Arc::new(Mutex::new(now)),
         }
     }
+
+    pub fn now_setter(&self) -> impl Fn(u64) {
+        let arc = self.now.clone();
+        move |new_now| {
+            let mut now = arc.lock().unwrap();
+            *now = new_now;
+        }
+    }
 }
 
 impl Default for MockEnvironment {

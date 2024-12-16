@@ -54,6 +54,7 @@ pub enum DomainSeparator {
     IDkgTranscript,
     EcdsaSigShare,
     SchnorrSigShare,
+    VetKdKeyShare,
     VetKdEncryptedKeyShareContent,
     IDkgComplaintContent,
     SignedIDkgComplaint,
@@ -114,6 +115,7 @@ impl DomainSeparator {
             DomainSeparator::IDkgTranscript => "ic-idkg-transcript-domain",
             DomainSeparator::EcdsaSigShare => "ic-threshold-ecdsa-sig-share-domain",
             DomainSeparator::SchnorrSigShare => "ic-threshold-schnorr-sig-share-domain",
+            DomainSeparator::VetKdKeyShare => "ic-vetkd-key-share-domain",
             DomainSeparator::VetKdEncryptedKeyShareContent => {
                 "ic-vetkd-encrypted-key-share-content-domain"
             }
