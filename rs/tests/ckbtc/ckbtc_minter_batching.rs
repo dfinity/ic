@@ -61,7 +61,10 @@ pub fn test_batching(env: TestEnv) {
     let btc_rpc = get_btc_client(&env);
     ensure_wallet(&btc_rpc, &logger);
 
-    let default_btc_address = btc_rpc.get_new_address(None, None).unwrap().assume_checked();
+    let default_btc_address = btc_rpc
+        .get_new_address(None, None)
+        .unwrap()
+        .assume_checked();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
     debug!(
         &logger,
@@ -163,7 +166,10 @@ pub fn test_batching(env: TestEnv) {
             "Transfer to the minter account occurred at block {}", transfer_result
         );
 
-        let destination_btc_address = btc_rpc.get_new_address(None, None).unwrap().assume_checked();
+        let destination_btc_address = btc_rpc
+            .get_new_address(None, None)
+            .unwrap()
+            .assume_checked();
 
         info!(&logger, "Call retrieve_btc");
 
