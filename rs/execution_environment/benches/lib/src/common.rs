@@ -299,7 +299,7 @@ where
         SchedulerConfig::application_subnet().dirty_page_overhead,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         Arc::new(FakeStateManager::new()),
-        &Path::new("/tmp"),
+        Path::new("/tmp"),
     ));
 
     let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
