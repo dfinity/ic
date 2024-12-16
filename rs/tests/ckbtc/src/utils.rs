@@ -382,7 +382,8 @@ pub async fn get_btc_address(
     debug!(logger, "Btc address for subaccount is: {}", address);
     // Checking only proper format of address since ECDSA signature is non-deterministic.
     assert_eq!(ADDRESS_LENGTH, address.len());
-    address.parse().unwrap()
+    //TODO(mihailjianu): check all assume_checked.
+    address.parse::<Address<_>>().unwrap().assume_checked()
 }
 
 pub async fn send_to_btc_address(btc_rpc: &Client, logger: &Logger, dst: &Address, amount: u64) {
