@@ -23,8 +23,6 @@ concurrency:
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_JOB_NAME: ${{ github.job }}
-  CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-  CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_EVENT_NAME: ${{ github.event_name }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
@@ -34,7 +32,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:aa25f80a259246429420be01d03294be6d58a5853d75261631c1379a57ef39e8
+    image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -99,6 +97,12 @@ jobs:
     runs-on:
       group: zh1
       labels: dind-large
+    env:
+      AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
+      # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
+      OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
+      CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
+      RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
     steps:
       - <<: *checkout
       - <<: *docker-login
@@ -131,7 +135,7 @@ jobs:
           TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
           # Determine BAZEL_EXTRA_ARGS based on event type or branch name
           BAZEL_EXTRA_ARGS="--test_tag_filters=$TEST_TAG_FILTERS"
-          if [[ "${{ github.event_name }}" == 'merge_group' ]]; then
+          if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
               BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate --flaky_test_attempts=3"
           elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
               BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate"
@@ -140,17 +144,9 @@ jobs:
           fi
           # Export BAZEL_EXTRA_ARGS to environment
           echo "BAZEL_EXTRA_ARGS=$BAZEL_EXTRA_ARGS" >> $GITHUB_ENV
-        env:
-          RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
-        env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
-          # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
-          OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
-          CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
-          RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
         with:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "//..."

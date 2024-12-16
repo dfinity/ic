@@ -10,7 +10,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref }}
   cancel-in-progress: true
 env:
-  CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
   ORG: ${{ github.repository_owner }}
@@ -21,7 +20,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:aa25f80a259246429420be01d03294be6d58a5853d75261631c1379a57ef39e8
+      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
@@ -62,10 +61,12 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:aa25f80a259246429420be01d03294be6d58a5853d75261631c1379a57ef39e8
+      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
+    env:
+      CI_EVENT_NAME: ${{ github.event_name }}
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
@@ -101,7 +102,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:aa25f80a259246429420be01d03294be6d58a5853d75261631c1379a57ef39e8
+      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
       options: >-
         -e NODE_NAME
     if: ${{ github.event_name != 'merge_group' }}
@@ -149,7 +150,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:aa25f80a259246429420be01d03294be6d58a5853d75261631c1379a57ef39e8
+      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
       options: >-
         -e NODE_NAME
     if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')

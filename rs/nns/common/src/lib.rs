@@ -1,7 +1,6 @@
-use crate::pb::v1::NeuronId;
+use crate::pb::v1::{NeuronId, ProposalId};
 use ic_crypto_sha2::Sha256;
-use ic_stable_structures::storable::Bound;
-use ic_stable_structures::Storable;
+use ic_stable_structures::{storable::Bound, Storable};
 use num_traits::bounds::{LowerBounded, UpperBounded};
 use std::{borrow::Cow, convert::TryInto};
 
@@ -44,7 +43,24 @@ impl Storable for NeuronId {
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        NeuronId {
+        Self {
+            id: u64::from_bytes(bytes),
+        }
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: std::mem::size_of::<u64>() as u32,
+        is_fixed_size: true,
+    };
+}
+
+impl Storable for ProposalId {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        self.id.to_bytes()
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        Self {
             id: u64::from_bytes(bytes),
         }
     }

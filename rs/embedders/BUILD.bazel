@@ -1,6 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_bench", "rust_ic_bench", "rust_ic_test_suite_with_extra_srcs")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
+load("//rs/tests:common.bzl", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -193,12 +194,20 @@ rust_library(
     ] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
+UNIVERSAL_CANISTER_TEST_DEPS = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
+    "//rs/universal_canister/impl:universal_canister.module",
+]
+
+UNIVERSAL_CANISTER_TEST_ENV = UNIVERSAL_CANISTER_ENV | {
+    "UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.module)",
+}
+
 rust_ic_bench(
     name = "stable_memory_bench",
     testonly = True,
     srcs = ["benches/stable_memory.rs"],
-    data = DATA,
-    env = ENV,
+    data = DATA + UNIVERSAL_CANISTER_TEST_DEPS,
+    env = ENV | UNIVERSAL_CANISTER_TEST_ENV,
     deps = [
         # Keep sorted.
         ":embedders_bench",
@@ -211,8 +220,8 @@ rust_ic_bench(
     testonly = True,
     srcs = ["benches/heap.rs"],
     compile_data = glob(["benches/test-data/*"]),
-    data = DATA,
-    env = ENV,
+    data = DATA + UNIVERSAL_CANISTER_TEST_DEPS,
+    env = ENV | UNIVERSAL_CANISTER_TEST_ENV,
     deps = [
         # Keep sorted.
         ":embedders_bench",
