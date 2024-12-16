@@ -69,4 +69,4 @@ jobs:
           # Leftover from previous step of setting up gh cli
           rm gh_tar
 
-          time python /tmp/revisions/mainnet_revisions.py canisters
+          time python ci/src/revisions/mainnet_revisions.py canisters
