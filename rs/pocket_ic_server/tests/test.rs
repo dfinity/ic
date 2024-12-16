@@ -1233,7 +1233,7 @@ fn test_invalid_gateway_backend() {
             panic!("Suceeded to create http gateway!")
         }
         CreateHttpGatewayResponse::Error { message } => {
-            assert!(message.contains("An error happened during communication with the replica: error sending request for url"));
+            assert!(message.contains("Timed out fetching root key from http://240.0.0.0"));
         }
     };
 }

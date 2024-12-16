@@ -830,7 +830,11 @@ impl ApiState {
             .with_url(replica_url.clone())
             .build()
             .unwrap();
-        agent.fetch_root_key().await.map_err(|e| e.to_string())?;
+        time::timeout(DEFAULT_SYNC_WAIT_DURATION, async {
+            agent.fetch_root_key().await.map_err(|e| e.to_string())
+        })
+        .await
+        .map_err(|_| format!("Timed out fetching root key from {}", replica_url))??;
 
         let replica_url = replica_url.trim_end_matches('/').to_string();
 
