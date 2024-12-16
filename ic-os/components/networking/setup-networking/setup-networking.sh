@@ -6,17 +6,20 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
-CONFIG="${CONFIG:=/var/ic/config/config.ini}"
-
 function parse_args() {
     if [ $# -ne 1 ]; then
         echo "Usage: $0 <SetupOS|HostOS>"
         exit 1
     fi
+
     NODE_TYPE="$1"
     if [ "$NODE_TYPE" != "SetupOS" ] && [ "$NODE_TYPE" != "HostOS" ]; then
         echo "Invalid node type: $NODE_TYPE"
         exit 1
+    fi
+
+    if [ "$NODE_TYPE" = "SetupOS" ]; then
+        CONFIG="/var/ic/config/config.ini"
     fi
     if [ "$NODE_TYPE" = "HostOS" ]; then
         CONFIG="/boot/config/config.ini"
@@ -59,9 +62,9 @@ function generate_addresses() {
 
 function gather_interfaces_by_speed() {
     echo "Gathering and sorting interfaces by speed..."
+
     INTERFACES=$(ip -o link show | awk -F': ' '{print $2}' | grep -v '^lo$')
     declare -A SPEED_MAP
-
     for IFACE in $INTERFACES; do
         SPEED_STR=$(ethtool "$IFACE" 2>/dev/null | grep "Speed:" || true)
         SPEED=$(echo "$SPEED_STR" | grep -Eo '[0-9]+' || echo 0)
@@ -95,7 +98,7 @@ function configure_netplan() {
     sed -i "s|{IPV6_ADDR}|$IPV6_ADDR|g" "$NETPLAN_OUTPUT"
     sed -i "s|{IPV6_GATEWAY}|$IPV6_GATEWAY|g" "$NETPLAN_OUTPUT"
 
-    # Dynamically add ethernets for each interface
+    # Dynamically add ethernets for each interface in descending speed
     for IFACE in ${SORTED_INTERFACES}; do
         sed -i "/^  ethernets:/a \ \ \ \ $IFACE:\n      mtu: 1500\n      optional: true\n      emit-lldp: true\n" "$NETPLAN_OUTPUT"
     done
