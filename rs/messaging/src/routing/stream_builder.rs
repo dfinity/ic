@@ -224,6 +224,7 @@ impl StreamBuilderImpl {
                 // Arbitrary large amount, pushing a response always returns memory.
                 &mut (i64::MAX / 2),
             )
+            .map(|_| ())
             .unwrap_or_else(|(err, response)| {
                 // Local request, we should never get a `CanisterNotFound`, `CanisterStopped` or
                 // `NonMatchingResponse` error.
@@ -235,7 +236,6 @@ impl StreamBuilderImpl {
                     response
                 );
                 self.metrics.critical_error_induct_response_failed.inc();
-                false
             });
     }
 
