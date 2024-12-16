@@ -1233,7 +1233,7 @@ fn test_invalid_gateway_backend() {
             panic!("Suceeded to create http gateway!")
         }
         CreateHttpGatewayResponse::Error { message } => {
-            assert!(message.contains("Timed out fetching root key from http://240.0.0.0"));
+            assert!(message.contains(&format!("Timed out fetching root key from {}", backend_url)));
         }
     };
 }
