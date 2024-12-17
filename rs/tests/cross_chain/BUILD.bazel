@@ -60,8 +60,7 @@ system_test_nns(
     runtime_deps =
         BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
         GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        [
+        UNIVERSAL_VM_RUNTIME_DEPS + [
             # Keep sorted.
             ":cketh_uvm_config_image",
             "//rs/ethereum/cketh/minter:cketh_minter.wasm.gz",
@@ -96,7 +95,7 @@ system_test_nns(
 filegroup(
     name = "erc20_contract",
     srcs = [
-        "ERC20.sol"
+        "ERC20.sol",
     ],
 )
 
