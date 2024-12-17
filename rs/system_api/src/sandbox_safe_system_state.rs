@@ -61,7 +61,7 @@ pub struct SystemStateChanges {
     pub(super) new_certified_data: Option<Vec<u8>>,
     // pub for testing
     pub callback_updates: Vec<CallbackUpdate>,
-    pub(super) new_global_timer: Option<CanisterTimer>,
+    pub(super) cycles_balance_change: CyclesBalanceChange,
     // The cycles that move from the main balance to the reserved balance.
     // Invariant: `cycles_balance_change` contains
     // `CyclesBalanceChange::Removed(reserved_cycles)`.
@@ -70,7 +70,7 @@ pub struct SystemStateChanges {
     pub(super) call_context_balance_taken: Option<(CallContextId, Cycles)>,
     pub(super) request_slots_used: BTreeMap<CanisterId, usize>,
     pub(super) requests: Vec<Request>,
-    pub(super) cycles_balance_change: CyclesBalanceChange,
+    pub(super) new_global_timer: Option<CanisterTimer>,
     pub(super) canister_log: CanisterLog,
     pub on_low_wasm_memory_hook_condition_check_result: Option<bool>,
 }
