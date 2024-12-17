@@ -577,9 +577,12 @@ impl PrivateKey {
 
     /// Sign a message with BIP340 Schnorr without using an external RNG
     ///
-    /// The aux_rand parameter for BIP340 is just to re-randomize the signature,
-    /// and may prevent certain forms of fault attack. It it is otherwise not necessary
-    /// for security.
+    /// By default BIP340/BIP341 take the output of a random number generator
+    /// which is used to re-randomize the otherwise deterministic nonce generation
+    /// process.
+    ///
+    /// This randomization is not necessary for security, and in some contexts a RNG
+    /// is not easily accessible, or deterministic signatures may be helpful.
     pub fn sign_message_with_bip340_no_rng(&self, message: &[u8]) -> [u8; 64] {
         let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(0);
         self.sign_message_with_bip340(message, &mut rng)
@@ -622,9 +625,12 @@ impl PrivateKey {
 
     /// Sign a message with BIP340 Schnorr with Taproot derivation, without using an external RNG
     ///
-    /// The aux_rand parameter for BIP340 is just to re-randomize the signature,
-    /// and may prevent certain forms of fault attack. It it is otherwise not necessary
-    /// for security.
+    /// By default BIP340/BIP341 take the output of a random number generator
+    /// which is used to re-randomize the otherwise deterministic nonce generation
+    /// process.
+    ///
+    /// This randomization is not necessary for security, and in some contexts a RNG
+    /// is not easily accessible, or deterministic signatures may be helpful.
     pub fn sign_message_with_bip341_no_rng(
         &self,
         message: &[u8],

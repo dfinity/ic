@@ -2152,19 +2152,17 @@ impl StateMachine {
                 let (dk, _cc) = k.derive_subkey(&path);
 
                 if let Some(ref aux) = context.schnorr_args().taproot_tree_root {
-                    if let Ok(sig) =
-                        dk.sign_message_with_bip341_no_rng(&context.schnorr_args().message, aux)
-                    {
-                        sig.to_vec()
-                    } else {
-                        return Err(UserError::new(
-                            ErrorCode::CanisterRejectedMessage,
-                            format!(
-                                "Invalid inputs for BIP341 signature with key {}",
-                                context.key_id()
-                            ),
-                        ));
-                    }
+                    dk.sign_message_with_bip341_no_rng(&context.schnorr_args().message, aux)
+                        .map(|v| v.to_vec())
+                        .map_err(|_| {
+                            UserError::new(
+                                ErrorCode::CanisterRejectedMessage,
+                                format!(
+                                    "Invalid inputs for BIP341 signature with key {}",
+                                    context.key_id()
+                                ),
+                            )
+                        })?
                 } else {
                     dk.sign_message_with_bip340_no_rng(&context.schnorr_args().message)
                         .to_vec()
