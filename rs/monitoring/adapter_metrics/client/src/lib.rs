@@ -1,6 +1,6 @@
 use ic_adapter_metrics_service::adapter_metrics_service_client::AdapterMetricsServiceClient;
 use ic_adapter_metrics_service::ScrapeRequest;
-use ic_async_utils::ExecuteOnTokioRuntime;
+use ic_http_endpoints_async_utils::ExecuteOnTokioRuntime;
 use prometheus::proto::MetricFamily;
 use protobuf::Message;
 use std::{fmt, path::PathBuf, time::Duration};

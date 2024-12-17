@@ -460,7 +460,7 @@ postCBOR' ep path gr = do
         }
   waitFor $ do
     res <- httpLbs request agentManager
-    if responseStatus res == tooManyRequests429
+    if responseStatus res == tooManyRequests429 || responseStatus res == badGateway502
       then return Nothing
       else return $ Just res
 

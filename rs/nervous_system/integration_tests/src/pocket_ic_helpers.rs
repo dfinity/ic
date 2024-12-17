@@ -67,6 +67,7 @@ use pocket_ic::{
 };
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
+use std::ops::Range;
 use std::{collections::BTreeMap, fmt::Write, time::Duration};
 
 pub const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
@@ -96,7 +97,7 @@ pub fn extract_sns_canister_version(
 }
 
 /// Creates a new PocketIc instance with NNS and SNS and application subnet
-pub async fn pocket_ic_for_sns_tests_with_mainnet_versions() -> PocketIc {
+pub async fn pocket_ic_for_sns_tests_with_mainnet_versions() -> (PocketIc, SnsWasms) {
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_sns_subnet()
@@ -104,16 +105,25 @@ pub async fn pocket_ic_for_sns_tests_with_mainnet_versions() -> PocketIc {
         .await;
 
     // Install the (mainnet) NNS canisters.
-    let with_mainnet_nns_canisters = true;
-    install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]).await;
+    {
+        let with_mainnet_nns_canisters = true;
+        install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]).await;
+    }
 
     // Publish (mainnet) SNS Wasms to SNS-W.
-    let with_mainnet_sns_wasms = true;
-    add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_wasms)
-        .await
-        .unwrap();
+    let initial_sns_version = {
+        let with_mainnet_sns_canisters = true;
+        let deployed_sns_starting_info =
+            add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_canisters)
+                .await
+                .unwrap();
+        deployed_sns_starting_info
+            .into_iter()
+            .map(|(canister_type, (_, wasm))| (canister_type, wasm))
+            .collect::<BTreeMap<_, _>>()
+    };
 
-    pocket_ic
+    (pocket_ic, initial_sns_version)
 }
 
 pub async fn install_canister(
@@ -705,13 +715,14 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
     );
 }
 
-/// Gradually advances time by up to `timeout_seconds` seconds, observing the state using
-/// the provided `observe` function after each (evenly-timed) tick.
+/// First, advances time by `expected_event_interval_seconds.start` seconds.
+/// Then, gradually advances time by up to the length of the interval `expected_event_interval_seconds`,
+/// observing the state using the provided `observe` function after each (evenly-timed) tick.
 /// - If the observed state matches the `expected` state, it returns `Ok(())`.
 /// - If the timeout is reached, it returns an error with the last observation.
 ///
-/// The frequency of ticks is 1 per second for small values of `timeout_seconds`, and gradually
-/// lower for larger `timeout_seconds` to guarantee at most 500 ticks.
+/// The frequency of ticks is 1 per second for small intervals of `expected_event_interval_seconds`, and gradually
+/// lower for larger intervals to guarantee at most 500 ticks.
 ///
 /// Example:
 /// ```
@@ -733,7 +744,7 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
 /// ```
 pub async fn await_with_timeout<'a, T, F, Fut>(
     pocket_ic: &'a PocketIc,
-    timeout_seconds: u64,
+    expected_event_interval_seconds: Range<u64>,
     observe: F,
     expected: &T,
 ) -> Result<(), String>
@@ -742,6 +753,13 @@ where
     F: Fn(&'a PocketIc) -> Fut,
     Fut: std::future::Future<Output = T>,
 {
+    assert!(expected_event_interval_seconds.start < expected_event_interval_seconds.end, "expected_event_interval_seconds.start must be less than expected_event_interval_seconds.end");
+    let timeout_seconds =
+        expected_event_interval_seconds.end - expected_event_interval_seconds.start;
+    pocket_ic
+        .advance_time(Duration::from_secs(expected_event_interval_seconds.start))
+        .await;
+
     let mut counter = 0;
     let num_ticks = timeout_seconds.min(500);
     let seconds_per_tick = (timeout_seconds as f64 / num_ticks as f64).ceil() as u64;
@@ -1210,6 +1228,33 @@ pub mod nns {
             version.insert(canister_type, wasm);
             version
         }
+
+        /// Modify the WASM for a given canister type and add it to SNS-W.
+        /// Returns the new (modified) version that is now at the tip of SNS-W.
+        pub async fn modify_and_add_master_wasm(
+            pocket_ic: &PocketIc,
+            mut version: SnsWasms,
+            canister_type: SnsCanisterType,
+            nonce: u32,
+        ) -> SnsWasms {
+            let wasm = match canister_type {
+                SnsCanisterType::Root => build_root_sns_wasm(),
+                SnsCanisterType::Governance => build_governance_sns_wasm(),
+                SnsCanisterType::Ledger => build_ledger_sns_wasm(),
+                SnsCanisterType::Swap => build_swap_sns_wasm(),
+                SnsCanisterType::Index => build_index_ng_sns_wasm(),
+                SnsCanisterType::Unspecified => {
+                    panic!("Where did you get this canister type from?")
+                }
+                SnsCanisterType::Archive => build_archive_sns_wasm(),
+            };
+            let wasm = create_modified_sns_wasm(&wasm, Some(nonce));
+            add_wasm_via_nns_proposal(pocket_ic, wasm.clone())
+                .await
+                .unwrap();
+            version.insert(canister_type, wasm);
+            version
+        }
     }
 }
 
@@ -1346,8 +1391,13 @@ pub mod sns {
         use assert_matches::assert_matches;
         use ic_crypto_sha2::Sha256;
         use ic_nervous_system_agent::sns::governance::GovernanceCanister;
+        use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
         use ic_sns_governance::pb::v1::get_neuron_response;
         use pocket_ic::ErrorCode;
+
+        pub const EXPECTED_UPGRADE_DURATION_MAX_SECONDS: u64 = 1000;
+        pub const EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS: u64 =
+            UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS + 10;
 
         /// Manage an SNS neuron, e.g., to make an SNS Governance proposal.
         async fn manage_neuron(
@@ -2181,11 +2231,6 @@ pub mod sns {
 
         // Generate a bunch of SNS token transactions.
         for i in 0..NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE {
-            let mut archives = ledger::archives(pocket_ic, sns_ledger_canister_id).await;
-            if let Some(archive) = archives.pop() {
-                return PrincipalId::from(archive.canister_id);
-            }
-
             let user_principal_id = PrincipalId::new_user_test_id(i);
             let direct_participant_swap_account = Account {
                 owner: user_principal_id.0,
@@ -2207,7 +2252,14 @@ pub mod sns {
             .await
             .unwrap();
         }
-        panic!("Failed to spawn an Archive canister.")
+
+        let mut archives = ledger::archives(pocket_ic, sns_ledger_canister_id).await;
+
+        let Some(archive) = archives.pop() else {
+            panic!("Failed to spawn an Archive canister.")
+        };
+
+        PrincipalId::from(archive.canister_id)
     }
 
     pub mod root {
