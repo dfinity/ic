@@ -9,18 +9,11 @@ use config::{DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JS
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use network::info::NetworkInfo;
-use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
-use network::{generate_network_config, resolve_mgmt_mac};
+use network::resolve_mgmt_mac;
 use utils::to_cidr;
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Generate systemd network configuration files. Bridges available NIC's for IC IPv6 connectivity.
-    GenerateNetworkConfig {
-        #[arg(short, long, default_value_t = DEFAULT_SYSTEMD_NETWORK_DIR.to_string(), value_name = "DIR")]
-        /// systemd-networkd output directory
-        output_directory: String,
-    },
     GenerateIpv6Address {
         #[arg(short, long, default_value_t = NodeType::SetupOS)]
         node_type: NodeType,
@@ -53,35 +46,6 @@ pub fn main() -> Result<()> {
     let opts = SetupOSArgs::parse();
 
     match opts.command {
-        Some(Commands::GenerateNetworkConfig { output_directory }) => {
-            let config_map = config_map_from_path(Path::new(&opts.config)).context(format!(
-                "Failed to get config.ini settings for path: {}",
-                &opts.config
-            ))?;
-            eprintln!("Using config: {:?}", config_map);
-
-            let network_info = NetworkInfo::from_config_map(&config_map)?;
-            eprintln!("Network info config: {:?}", &network_info);
-
-            let deployment_settings = get_deployment_settings(Path::new(&opts.deployment_file))
-                .context(format!(
-                    "Failed to get deployment settings for file: {}",
-                    &opts.deployment_file
-                ))?;
-            eprintln!("Deployment config: {:?}", deployment_settings);
-
-            let mgmt_mac = resolve_mgmt_mac(deployment_settings.deployment.mgmt_mac)?;
-            let deployment_environment = deployment_settings.deployment.name.parse()?;
-            let generated_mac = calculate_deterministic_mac(
-                &mgmt_mac,
-                deployment_environment,
-                IpVariant::V6,
-                NodeType::SetupOS,
-            );
-            eprintln!("Using generated mac (unformatted) {}", generated_mac);
-
-            generate_network_config(&network_info, &generated_mac, Path::new(&output_directory))
-        }
         Some(Commands::GenerateIpv6Address { node_type }) => {
             let config_map = config_map_from_path(Path::new(&opts.config)).context(format!(
                 "Failed to get config.ini settings for path: {}",

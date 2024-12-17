@@ -1,36 +1,22 @@
-use std::path::Path;
 use std::process::Command;
 
 use anyhow::{Context, Result};
 use regex::Regex;
 
-use crate::systemd::generate_systemd_config_files;
-use deterministic_ips::MacAddr6Ext;
-use info::NetworkInfo;
 use macaddr::MacAddr6;
 
 pub mod info;
-pub mod interfaces;
-pub mod systemd;
 
-/// Write SetupOS or HostOS systemd network configuration.
-/// Requires superuser permissions to run `ipmitool` and write to the systemd directory
-pub fn generate_network_config(
-    network_info: &NetworkInfo,
-    generated_mac: &MacAddr6,
-    output_directory: &Path,
-) -> Result<()> {
-    eprintln!("Generating IPv6 address");
-    let ipv6_address = generated_mac.calculate_slaac(&network_info.ipv6_prefix)?;
-    eprintln!("Using IPv6 address: {ipv6_address}");
+pub const IPV6_NAME_SERVER_NETWORKD_CONTENTS: &str = r#"
+DNS=2606:4700:4700::1111
+DNS=2606:4700:4700::1001
+DNS=2001:4860:4860::8888
+DNS=2001:4860:4860::8844
+"#;
 
-    generate_systemd_config_files(
-        output_directory,
-        network_info,
-        Some(generated_mac),
-        &ipv6_address,
-    )
-}
+pub static SYSFS_NETWORK_DIR: &str = "/sys/class/net";
+
+pub static DEFAULT_SYSTEMD_NETWORK_DIR: &str = "/run/systemd/network";
 
 pub fn resolve_mgmt_mac(config_mac: Option<String>) -> Result<MacAddr6> {
     if let Some(config_mac) = config_mac {
@@ -74,6 +60,13 @@ fn parse_mac_address_from_ipmitool_output(output: &str) -> Result<MacAddr6> {
     let mac = captures.get(1).context(error_msg.clone())?;
 
     Ok(mac.as_str().parse()?)
+}
+
+pub fn restart_systemd_networkd() {
+    let _ = Command::new("timeout")
+        .args(["3", "systemctl", "restart", "systemd-networkd"])
+        .status();
+    // Explicitly don't care about return code status...
 }
 
 #[cfg(test)]
