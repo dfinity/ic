@@ -18,12 +18,14 @@ function parse_args() {
         exit 1
     fi
 
+    # Allow overriding config paths via environment variables
     if [ "$NODE_TYPE" = "SetupOS" ]; then
-        CONFIG="/var/ic/config/config.ini"
+        CONFIG_BASE_PATH="${CONFIG_BASE_PATH:-/var/ic/config}"
+    else
+        CONFIG_BASE_PATH="${CONFIG_BASE_PATH:-/boot/config}"
     fi
-    if [ "$NODE_TYPE" = "HostOS" ]; then
-        CONFIG="/boot/config/config.ini"
-    fi
+
+    CONFIG="${CONFIG_BASE_PATH}/config.ini"
 }
 
 function read_variables() {
@@ -43,12 +45,14 @@ function read_variables() {
 
 function generate_addresses() {
     echo "Generating MAC and IPv6 addresses..."
+    IC_BIN_PATH="${IC_BIN_PATH:-/opt/ic/bin}"
+
     if [ "$NODE_TYPE" = "SetupOS" ]; then
-        MAC_ADDR=$(/opt/ic/bin/setupos_tool generate-mac-address --node-type SetupOS)
-        IPV6_ADDR=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type SetupOS)
+        MAC_ADDR=$("${IC_BIN_PATH}/setupos_tool" generate-mac-address --node-type SetupOS)
+        IPV6_ADDR=$("${IC_BIN_PATH}/setupos_tool" generate-ipv6-address --node-type SetupOS)
     else
-        MAC_ADDR=$(/opt/ic/bin/hostos_tool generate-mac-address --node-type HostOS)
-        IPV6_ADDR=$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type HostOS)
+        MAC_ADDR=$("${IC_BIN_PATH}/hostos_tool" generate-mac-address --node-type HostOS)
+        IPV6_ADDR=$("${IC_BIN_PATH}/hostos_tool" generate-ipv6-address --node-type HostOS)
     fi
 
     if [ -z "$MAC_ADDR" ] || [ -z "$IPV6_ADDR" ]; then
@@ -88,10 +92,13 @@ function gather_interfaces_by_speed() {
 
 function configure_netplan() {
     echo "Configuring netplan..."
-    local NETPLAN_TEMPLATE="/opt/ic/share/99-setup-netplan.yaml.template"
-    local NETPLAN_OUTPUT="/run/netplan/99-setup-netplan.yaml"
+    NETPLAN_TEMPLATE_PATH="${NETPLAN_TEMPLATE_PATH:-/opt/ic/share}"
+    NETPLAN_TEMPLATE="${NETPLAN_TEMPLATE_PATH}/99-setup-netplan.yaml.template"
+    
+    NETPLAN_RUN_PATH="${NETPLAN_RUN_PATH:-/run/netplan}"
+    NETPLAN_OUTPUT="${NETPLAN_RUN_PATH}/99-setup-netplan.yaml"
 
-    mkdir -p /run/netplan
+    mkdir -p "$NETPLAN_RUN_PATH"
     cp "$NETPLAN_TEMPLATE" "$NETPLAN_OUTPUT"
 
     sed -i "s|{INTERFACES}|${INTERFACE_LIST}|g" "$NETPLAN_OUTPUT"

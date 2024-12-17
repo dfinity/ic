@@ -24,9 +24,9 @@ cat >"${TEMP_DIR}/ethtool" <<'EOF'
 #!/bin/bash
 IFACE="$1"
 case "$IFACE" in
-    eth0) echo "Speed: 10000Mb/s" ;;
+    eth0) echo "Speed: 100Mb/s" ;;
     eth1) echo "Speed: 1000Mb/s" ;;
-    eth2) echo "Speed: 100Mb/s" ;;
+    eth2) echo "Speed: 10000Mb/s" ;;
     *) echo "Speed: Unknown" ;;
 esac
 EOF
@@ -40,11 +40,8 @@ export PATH="${TEMP_DIR}:$PATH"
 # Clear any cached command lookups
 hash -r
 
-# We just call gather_interfaces_by_speed and check results.
 gather_interfaces_by_speed
-
-# Expected order (descending by speed) is: eth0, eth1, eth2
-EXPECTED_INTERFACES="eth0,eth1,eth2"
+EXPECTED_INTERFACES="eth2,eth1,eth0"
 
 if [ "${INTERFACE_LIST}" = "${EXPECTED_INTERFACES}" ]; then
     echo "Test passed: Interfaces sorted correctly."
