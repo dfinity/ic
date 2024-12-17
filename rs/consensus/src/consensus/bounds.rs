@@ -76,7 +76,12 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
     // The aggregator/validator may produce one CUP in addition to the current CUP.
     // Additionally, if the DKG interval is smaller than the minimum chain length,
     // we can have one CUP for every time a full DKG interval fits into e.
-    let cups = 2 + e / k;
+    let cups = 2 + e / k
+        // TODO(CON-1454): Because validators can validate an arbitrary number of
+        // CUPs per invocation in our current implementation, lagging nodes
+        // occasionally trigger an alert. Increasing this bound by 1 gets rid
+        // of the noisiest ones. Remove this after the validator is fixed.
+        + 1;
     ArtifactCounts {
         // We keep (f + 1) blocks for every height in range (h2, h3] (=d), and
         // one finalized block per height in range [h0, h2] (=l-d). The block
@@ -192,8 +197,8 @@ mod tests {
             finalization_shares: 2800,
             random_beacon_shares: 24880,
             random_tape_shares: 24880,
-            cup_shares: 80,
-            cups: 2,
+            cup_shares: 120,
+            cups: 3,
             equivocation_proofs: 980,
         };
         assert_eq!(get_maximum_validated_artifacts(40, 499), max_counts);

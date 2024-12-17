@@ -168,6 +168,7 @@ fn schedule_timers() {
     schedule_prune_following(Duration::from_secs(0), Bound::Unbounded);
     schedule_spawn_neurons();
     schedule_unstake_maturity_of_dissolved_neurons();
+    schedule_neuron_data_validation();
     schedule_vote_processing();
 
     // TODO(NNS1-3446): Delete. (This only needs to be run once, but can safely be run multiple times).
@@ -311,6 +312,13 @@ const UNSTAKE_MATURITY_OF_DISSOLVED_NEURONS_INTERVAL: Duration = Duration::from_
 fn schedule_unstake_maturity_of_dissolved_neurons() {
     ic_cdk_timers::set_timer_interval(UNSTAKE_MATURITY_OF_DISSOLVED_NEURONS_INTERVAL, || {
         governance_mut().unstake_maturity_of_dissolved_neurons();
+    });
+}
+
+const NEURON_DATA_VALIDATION_INTERNVAL: Duration = Duration::from_secs(5);
+fn schedule_neuron_data_validation() {
+    ic_cdk_timers::set_timer_interval(NEURON_DATA_VALIDATION_INTERNVAL, || {
+        governance_mut().maybe_run_validations();
     });
 }
 

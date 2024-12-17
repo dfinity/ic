@@ -52,6 +52,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType},
     steps::Step,
+    util::UploadMethod,
     NodeMetrics, Recovery, RecoveryArgs,
 };
 use ic_recovery::{file_sync_helper, get_node_metrics};
@@ -375,7 +376,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: Config) {
         // If the latest CUP is corrupted we can't deploy read-only access
         pub_key: (!cfg.corrupt_cup).then_some(pub_key),
         download_node: None,
-        upload_node: Some(upload_node.get_ip_addr()),
+        upload_method: Some(UploadMethod::Remote(upload_node.get_ip_addr())),
         chain_key_subnet_id: cfg.chain_key.then_some(root_subnet_id),
         next_step: None,
     };
