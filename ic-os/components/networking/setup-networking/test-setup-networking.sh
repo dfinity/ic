@@ -51,13 +51,12 @@ fi
 EOF
     chmod +x "${TEST_DIR}/netplan"
 
-    mkdir -p "${TEST_DIR}/run/netplan"
-    mkdir -p "${TEST_DIR}/boot/config"
     mkdir -p "${TEST_DIR}/var/ic/config"
-
     cat > "${TEST_DIR}/var/ic/config/config.ini" <<'EOF'
 ipv6_gateway=fe80::2
 EOF
+
+    mkdir -p "${TEST_DIR}/run/netplan"
 }
 
 function test_gather_interfaces_by_speed() {
@@ -68,9 +67,9 @@ function test_gather_interfaces_by_speed() {
     gather_interfaces_by_speed
     local EXPECTED_INTERFACES="eth2,eth1,eth0"
     if [ "${INTERFACE_LIST}" = "${EXPECTED_INTERFACES}" ]; then
-        echo "Test passed: gather_interfaces_by_speed"
+        echo "TEST PASSED: gather_interfaces_by_speed"
     else
-        echo "Test failed: gather_interfaces_by_speed"
+        echo "TEST FAILED: gather_interfaces_by_speed"
         exit 1
     fi
 }
@@ -94,7 +93,7 @@ function test_netplan_config() {
     grep -q "fe80::2" "$OUTPUT_FILE" || { echo "Test failed: IPv6 gateway substitution"; exit 1; }
     grep -Eq "interfaces:\s*\[eth2,eth1,eth0\]" "$OUTPUT_FILE" || { echo "Test failed: Interfaces insertion"; exit 1; }
 
-    echo "Test passed: netplan_config"
+    echo "TEST PASSED: netplan_config"
 }
 
 mock_tools
