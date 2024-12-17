@@ -18,6 +18,7 @@ system_test_nns(
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
         "ASSET_CANISTER_WASM_PATH": "$(rootpath @asset_canister//file)",
+        "LONG_ASSET_CANISTER_WASM_PATH": "$(rootpath @long_asset_canister//file)",
     },
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
@@ -61,6 +62,7 @@ system_test_nns(
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
         "ASSET_CANISTER_WASM_PATH": "$(rootpath @asset_canister//file)",
+        "LONG_ASSET_CANISTER_WASM_PATH": "$(rootpath @long_asset_canister//file)",
     },
     flaky = True,
     tags = [
