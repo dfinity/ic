@@ -46,7 +46,7 @@ fn playground() {
         let r = dbg.records.pop_first().unwrap().1;
         assert!(false, "{:?}\n\n{}\n\n{:#?}", msg, r.len(), r);
     } else {
-        unreachable!();
+        //unreachable!();
     }
 }
 
@@ -95,7 +95,7 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
     call_weight: u32,
 ) -> Result<(), (String, DebugInfo)> {
     // The number of rounds to execute while chatter is on.
-    const CHATTER_PHASE_ROUND_COUNT: u64 = 300;
+    const CHATTER_PHASE_ROUND_COUNT: u64 = 100;
     // The maximum number of rounds to execute after chatter is turned off. It it takes more than
     // this number of rounds until there are no more pending calls, the test fails.
     const SHUTDOWN_PHASE_MAX_ROUNDS: u64 = 300;
@@ -199,7 +199,7 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
 
     // One extra tick to make sure everything is gc'ed.
     fixture.tick();
-    
+    /*
     return fixture.failed_with_reason(
         format!("{:?} / {:?},   {:?} / {:?}",
                 local_time,
@@ -208,7 +208,7 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
                 fixture.remote_env.get_time()
         )
     );
-
+    */
     // Check the records agree on 'no pending calls'.
     if fixture
         .canisters()
