@@ -27,6 +27,7 @@ component_files = {
     Label("ic/ic-btc-adapter/ic-btc-testnet-adapter.socket"): "/etc/systemd/system/ic-btc-testnet-adapter.socket",
     Label("ic/setup-permissions/setup-permissions.sh"): "/opt/ic/bin/setup-permissions.sh",
     Label("ic/setup-permissions/setup-permissions.service"): "/etc/systemd/system/setup-permissions.service",
+    Label("ic/setup-permissions/erestorecon.sh"): "/opt/ic/bin/erestorecon.sh",
     Label("ic/share/ark.pem"): "/opt/ic/share/ark.pem",
     Label("ic/ic-crypto-csp/ic-crypto-csp.service"): "/etc/systemd/system/ic-crypto-csp.service",
     Label("ic/ic-crypto-csp/ic-crypto-csp.socket"): "/etc/systemd/system/ic-crypto-csp.socket",
@@ -37,6 +38,7 @@ component_files = {
     Label("ic/generate-ic-config/generate-ic-config.sh"): "/opt/ic/bin/generate-ic-config.sh",
     Label("ic/generate-ic-config/generate-ic-config.service"): "/etc/systemd/system/generate-ic-config.service",
     Label("ic/generate-ic-config/ic.json5.template"): "/opt/ic/share/ic.json5.template",
+    Label("ic/share/ic-boundary.env"): "/opt/ic/share/ic-boundary.env",
 
     # init
     Label("init/bootstrap-ic-node/bootstrap-ic-node.sh"): "/opt/ic/bin/bootstrap-ic-node.sh",
@@ -159,4 +161,7 @@ component_files = {
 
     # fstrim
     Label("fstrim/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
+
+    # TODO(NODE-1519): delete update-config.service after switch to new icos config
+    Label("misc/update-config/update-guestos-config.service"): "/etc/systemd/system/update-config.service",
 }

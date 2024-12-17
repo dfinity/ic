@@ -102,6 +102,7 @@ fn fake_signature_request_args(key_id: MasterPublicKeyId) -> ThresholdArguments 
         MasterPublicKeyId::Schnorr(key_id) => ThresholdArguments::Schnorr(SchnorrArguments {
             key_id,
             message: Arc::new(vec![1; 48]),
+            taproot_tree_root: None,
         }),
         MasterPublicKeyId::VetKd(key_id) => ThresholdArguments::VetKd(VetKdArguments {
             key_id: key_id.clone(),
@@ -216,6 +217,24 @@ pub fn insert_test_sig_inputs<T>(
             .available_pre_signatures
             .insert(pre_sig_id, inputs.sig_inputs_ref.pre_signature());
         block_reader.add_available_pre_signature(pre_sig_id, inputs.sig_inputs_ref.pre_signature());
+    }
+}
+
+pub(crate) trait HasPreSignature {
+    fn pre_signature(&self) -> PreSignatureRef;
+}
+
+impl HasPreSignature for ThresholdSigInputsRef {
+    fn pre_signature(&self) -> PreSignatureRef {
+        match self {
+            ThresholdSigInputsRef::Ecdsa(inputs) => {
+                PreSignatureRef::Ecdsa(inputs.presig_quadruple_ref.clone())
+            }
+            ThresholdSigInputsRef::Schnorr(inputs) => {
+                PreSignatureRef::Schnorr(inputs.presig_transcript_ref.clone())
+            }
+            ThresholdSigInputsRef::VetKd(_) => panic!("No pre-signatures for VetKd."),
+        }
     }
 }
 
@@ -336,6 +355,7 @@ impl From<&ThresholdSchnorrSigInputs> for TestSigInputs {
                 .unwrap(),
                 key_unmasked_ref: UnmaskedTranscript::try_from((height, key)).unwrap(),
             },
+            taproot_tree_root: None,
         };
         TestSigInputs {
             idkg_transcripts,
@@ -1327,6 +1347,7 @@ pub(crate) fn create_schnorr_sig_inputs_with_args(
         Arc::new(vec![0; 128]),
         Randomness::from([0_u8; 32]),
         presig_transcript_ref,
+        None,
     );
 
     TestSigInputs {

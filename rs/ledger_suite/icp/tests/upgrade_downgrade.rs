@@ -22,6 +22,7 @@ use icp_ledger::{
     LedgerCanisterUpgradePayload, Memo, Subaccount, TransferArgs, DEFAULT_TRANSFER_FEE,
 };
 use maplit::hashmap;
+use pocket_ic::CallError;
 use pocket_ic::{PocketIc, PocketIcBuilder};
 use std::time::Duration;
 
@@ -141,26 +142,42 @@ impl Setup {
         }
     }
 
-    fn upgrade_ledger_canister(&self, upgrade_to_version: UpgradeToVersion) {
+    fn upgrade_ledger_canister(&self, upgrade_to_version: UpgradeToVersion, should_succeed: bool) {
         let ledger_wasm = match upgrade_to_version {
             UpgradeToVersion::MainNet => build_mainnet_ledger_wasm(),
             UpgradeToVersion::Latest => build_ledger_wasm(),
         };
         let ledger_upgrade_args = LedgerCanisterUpgradePayload::builder().build().unwrap();
         let canister_id = candid::Principal::from(LEDGER_CANISTER_ID);
-        self.pocket_ic
-            .upgrade_canister(
-                canister_id,
-                ledger_wasm.bytes(),
-                Encode!(&ledger_upgrade_args).unwrap(),
-                None,
-            )
-            .unwrap();
+        match self.pocket_ic.upgrade_canister(
+            canister_id,
+            ledger_wasm.bytes(),
+            Encode!(&ledger_upgrade_args).unwrap(),
+            None,
+        ) {
+            Ok(_) => {
+                if !should_succeed {
+                    panic!("Upgrade should fail!");
+                }
+            }
+            Err(e) => {
+                if should_succeed {
+                    panic!("Upgrade should succeed!");
+                } else {
+                    match e {
+                        CallError::Reject(_) => panic!("Expected UserError!"),
+                        CallError::UserError(user_error) => assert!(user_error
+                            .description
+                            .contains("Trying to downgrade from incompatible version")),
+                    };
+                }
+            }
+        };
         let expected_module_hash = mainnet_ledger_canister_sha256sum();
         self.assert_canister_module_hash(
             canister_id,
             &expected_module_hash,
-            upgrade_to_version == UpgradeToVersion::MainNet,
+            upgrade_to_version == UpgradeToVersion::MainNet && should_succeed,
         );
     }
 
@@ -428,13 +445,13 @@ fn should_upgrade_and_downgrade_canister_suite() {
     setup.create_icp_transfers_until_archive_is_spawned();
 
     setup.upgrade_index_canister(UpgradeToVersion::Latest);
-    setup.upgrade_ledger_canister(UpgradeToVersion::Latest);
+    setup.upgrade_ledger_canister(UpgradeToVersion::Latest, true);
     setup.upgrade_archive_canisters(UpgradeToVersion::Latest);
 
     setup.assert_index_ledger_parity(true);
 
     setup.upgrade_index_canister(UpgradeToVersion::MainNet);
-    setup.upgrade_ledger_canister(UpgradeToVersion::MainNet);
+    setup.upgrade_ledger_canister(UpgradeToVersion::MainNet, true);
     setup.upgrade_archive_canisters(UpgradeToVersion::MainNet);
 
     setup.assert_index_ledger_parity(true);

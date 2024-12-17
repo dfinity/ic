@@ -933,7 +933,7 @@ fn empty_network_topology() {
     };
 
     assert_eq!(
-        network_topology.idkg_signing_subnets(&MasterPublicKeyId::Ecdsa(make_key_id())),
+        network_topology.chain_key_enabled_subnets(&MasterPublicKeyId::Ecdsa(make_key_id())),
         vec![]
     );
 }
@@ -946,14 +946,14 @@ fn network_topology_ecdsa_subnets() {
         routing_table: Arc::new(RoutingTable::default()),
         canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(42),
-        idkg_signing_subnets: btreemap! {
+        chain_key_enabled_subnets: btreemap! {
             key.clone() => vec![subnet_test_id(1)],
         },
         ..Default::default()
     };
 
     assert_eq!(
-        network_topology.idkg_signing_subnets(&key),
+        network_topology.chain_key_enabled_subnets(&key),
         &[subnet_test_id(1)]
     );
 }
@@ -1730,10 +1730,7 @@ fn stream_roundtrip_encoding() {
             payment: Cycles::from(123_456_789_u128),
             method_name: "method_1".into(),
             method_payload: [2_u8, 17_u8, 29_u8, 113_u8].into(),
-            metadata: Some(RequestMetadata::new(
-                17,
-                Time::from_nanos_since_unix_epoch(123),
-            )),
+            metadata: RequestMetadata::new(17, Time::from_nanos_since_unix_epoch(123)),
             deadline: CoarseTime::from_secs_since_unix_epoch(456),
         }
         .into(),

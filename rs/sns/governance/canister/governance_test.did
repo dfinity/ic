@@ -820,7 +820,10 @@ type UpgradeJournal = record {
   entries : vec UpgradeJournalEntry;
 };
 
-type GetUpgradeJournalRequest = record {};
+type GetUpgradeJournalRequest = record {
+  limit : opt nat64;
+  offset : opt nat64;
+};
 
 type GetUpgradeJournalResponse = record {
   upgrade_steps : opt Versions;
@@ -828,6 +831,7 @@ type GetUpgradeJournalResponse = record {
   target_version : opt Version;
   deployed_version : opt Version;
   upgrade_journal : opt UpgradeJournal;
+  upgrade_journal_entry_count: opt nat64;
 };
 
 type AdvanceTargetVersionRequest = record { target_version : opt Version; };
@@ -859,4 +863,5 @@ service : (Governance) -> {
   advance_target_version : (AdvanceTargetVersionRequest) -> (AdvanceTargetVersionResponse);
   reset_timers : (record {}) -> (record {});
   get_timers : (record {}) -> (GetTimersResponse) query;
+  refresh_cached_upgrade_steps : (record {}) -> (record {});
 }

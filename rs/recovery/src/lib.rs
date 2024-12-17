@@ -36,7 +36,7 @@ use std::{
 };
 use steps::*;
 use url::Url;
-use util::{block_on, parse_hex_str};
+use util::{block_on, parse_hex_str, UploadMethod};
 
 pub mod admin_helper;
 pub mod app_subnet_recovery;
@@ -77,6 +77,7 @@ pub const IC_STATE_EXCLUDES: &[&str] = &[
 ];
 pub const IC_STATE: &str = "ic_state";
 pub const NEW_IC_STATE: &str = "new_ic_state";
+pub const OLD_IC_STATE: &str = "old_ic_state";
 pub const IC_REGISTRY_LOCAL_STORE: &str = "ic_registry_local_store";
 pub const CHECKPOINTS: &str = "checkpoints";
 pub const ADMIN: &str = "admin";
@@ -485,20 +486,23 @@ impl Recovery {
 
     /// Return an [UploadAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
-    pub fn get_upload_and_restart_step(&self, node_ip: IpAddr) -> impl Step {
-        self.get_upload_and_restart_step_with_data_src(node_ip, self.work_dir.join(IC_STATE_DIR))
+    pub fn get_upload_and_restart_step(&self, upload_method: UploadMethod) -> impl Step {
+        self.get_upload_and_restart_step_with_data_src(
+            upload_method,
+            self.work_dir.join(IC_STATE_DIR),
+        )
     }
 
     /// Return an [UploadAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
     pub fn get_upload_and_restart_step_with_data_src(
         &self,
-        node_ip: IpAddr,
+        upload_method: UploadMethod,
         data_src: PathBuf,
     ) -> impl Step {
         UploadAndRestartStep {
             logger: self.logger.clone(),
-            node_ip,
+            upload_method,
             work_dir: self.work_dir.clone(),
             data_src,
             require_confirmation: self.ssh_confirmation,

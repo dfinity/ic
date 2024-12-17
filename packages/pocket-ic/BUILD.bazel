@@ -70,19 +70,25 @@ rust_test(
 
 rust_test_suite(
     name = "test",
-    size = "small",
+    size = "medium",
     srcs = ["tests/tests.rs"],
     data = [
         "//packages/pocket-ic/test_canister:test_canister.wasm",
         "//rs/pocket_ic_server:pocket-ic-server",
+        "@mozilla_root_ca_store//file",
     ],
     env = {
+        "RUST_TEST_THREADS": "2",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm)",
     },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = ["cpu:8"],
+    tags = [
+        "cpu:16",
+        "test_macos",
+    ],
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )
 
@@ -92,12 +98,17 @@ rust_test_suite(
     srcs = ["tests/restart.rs"],
     data = [
         "//rs/pocket_ic_server:pocket-ic-server",
+        "@mozilla_root_ca_store//file",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "test_macos",
+    ],
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )
 
@@ -108,13 +119,18 @@ rust_test_suite(
     data = [
         "//packages/pocket-ic/test_canister:test_canister.wasm",
         "//rs/pocket_ic_server:pocket-ic-server",
+        "@mozilla_root_ca_store//file",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm)",
     },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = ["cpu:16"],
+    tags = [
+        "cpu:16",
+        "test_macos",
+    ],
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )

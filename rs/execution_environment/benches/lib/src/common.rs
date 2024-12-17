@@ -31,7 +31,7 @@ use ic_test_utilities_state::canister_from_exec_state;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::{
-    messages::{CallbackId, CanisterMessage, Payload, RejectContext, RequestMetadata, NO_DEADLINE},
+    messages::{CallbackId, CanisterMessage, Payload, RejectContext, NO_DEADLINE},
     methods::{Callback, WasmClosure},
     time::UNIX_EPOCH,
     Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
@@ -127,7 +127,7 @@ where
             call_origin.clone(),
             Cycles::new(10),
             UNIX_EPOCH,
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
     let callback = Callback::new(
@@ -209,7 +209,7 @@ fn run_benchmark<G, I, W, R>(
     G: AsRef<str>,
     I: AsRef<str>,
     W: AsRef<str>,
-    R: Fn(&ExecutionEnvironment, u64, BenchmarkArgs),
+    R: Fn(&str, &ExecutionEnvironment, u64, BenchmarkArgs),
 {
     let mut group = c.benchmark_group(group.as_ref());
     let mut bench_args = None;
@@ -231,7 +231,7 @@ fn run_benchmark<G, I, W, R>(
                     bench_args.as_ref().unwrap().clone()
                 },
                 |args| {
-                    routine(exec_env, expected_ops, args);
+                    routine(id.as_ref(), exec_env, expected_ops, args);
                 },
                 BatchSize::SmallInput,
             );
@@ -257,7 +257,7 @@ fn check_sandbox_defined() -> bool {
 pub fn run_benchmarks<G, R>(c: &mut Criterion, group: G, benchmarks: &[Benchmark], routine: R)
 where
     G: AsRef<str>,
-    R: Fn(&ExecutionEnvironment, u64, BenchmarkArgs) + Copy,
+    R: Fn(&str, &ExecutionEnvironment, u64, BenchmarkArgs) + Copy,
 {
     if !check_sandbox_defined() {
         return;

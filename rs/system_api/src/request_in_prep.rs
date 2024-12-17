@@ -284,7 +284,7 @@ pub(crate) fn into_request(
         method_payload,
         sender_reply_callback: callback_id,
         payment: cycles,
-        metadata: Some(sandbox_safe_system_state.request_metadata.clone()),
+        metadata: sandbox_safe_system_state.request_metadata.clone(),
         deadline,
     };
     // We cannot call `Request::payload_size_bytes()` before constructing the

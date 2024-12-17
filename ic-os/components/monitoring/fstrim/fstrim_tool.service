@@ -3,7 +3,7 @@ Description=Discard unused blocks on /var/lib/ic/crypto filesystem
 
 [Service]
 Type=oneshot
-ExecStart=/opt/ic/bin/fstrim_tool --target /var/lib/ic/crypto --metrics /run/node_exporter/collector_textfile/fstrim.prom
+ExecStart=/opt/ic/bin/fstrim_tool --target /var/lib/ic/crypto --datadir_target /var/lib/ic/data --metrics /run/node_exporter/collector_textfile/fstrim.prom
 DeviceAllow=/dev/vda
 IPAddressDeny=any
 LockPersonality=yes

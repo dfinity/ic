@@ -5,8 +5,8 @@ pub use crate::client::CanisterHttpAdapterClientImpl;
 
 use crate::client::BrokenCanisterHttpClient;
 use ic_adapter_metrics_client::AdapterMetrics;
-use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_config::adapters::AdaptersConfig;
+use ic_http_endpoints_async_utils::ExecuteOnTokioRuntime;
 use ic_interfaces::execution_environment::QueryExecutionService;
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_logger::{error, info, ReplicaLogger};
