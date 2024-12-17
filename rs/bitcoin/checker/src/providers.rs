@@ -141,6 +141,7 @@ fn make_get_request(
 ) -> CanisterHttpRequestArgument {
     let url = match network {
         BtcNetwork::Mainnet => format!("https://{}/api/tx/{}/raw", host, txid),
+        //TODO(mihailjianu): check if this is suitable for testnet4.
         BtcNetwork::Testnet => format!("https://{}/testnet/api/tx/{}/raw", host, txid),
         BtcNetwork::Regtest { .. } => panic!("Request to regtest network requires POST"),
     };

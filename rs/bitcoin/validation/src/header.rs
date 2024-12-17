@@ -101,7 +101,7 @@ fn get_next_compact_target(
     timestamp: u32,
 ) -> CompactTarget {
     match network {
-        Network::Testnet | Network::Regtest => {
+        Network::Testnet | Network::Regtest | Network::Testnet4 => {
             if (prev_height + 1) % DIFFICULTY_ADJUSTMENT_INTERVAL != 0 {
                 // This if statements is reached only for Regtest and Testnet networks
                 // Here is the quote from "https://en.bitcoin.it/wiki/Testnet"
@@ -144,7 +144,7 @@ fn find_next_difficulty_in_chain(
     // This is the maximum difficulty target for the network
     let pow_limit_bits = pow_limit_bits(network);
     match network {
-        Network::Testnet | Network::Regtest => {
+        Network::Testnet | Network::Regtest | Network::Testnet4 => {
             let mut current_header = *prev_header;
             let mut current_height = prev_height;
             let mut current_hash = current_header.block_hash();
