@@ -680,6 +680,7 @@ impl Drop for SandboxedExecutionController {
         // Ignore the result because even if it fails, there is not much that
         // can be done.
         let _ = self.stop_monitoring_thread.send(true);
+
         // Evict all the sandbox processes.
         let mut guard = self.backends.lock().unwrap();
         evict_sandbox_processes(

@@ -1812,6 +1812,7 @@ impl StateMachine {
             self.checkpoint_interval_length.load(Ordering::Relaxed),
         )
     }
+
     fn into_components(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
         let state_manager = Arc::downgrade(&self.state_manager);
         let result = self.into_components_inner();
@@ -1819,7 +1820,7 @@ impl StateMachine {
         while state_manager.upgrade().is_some() {
             std::thread::sleep(std::time::Duration::from_millis(50));
             i += 1;
-            if i >= 10 {
+            if i >= 100 {
                 panic!("Failed to wait for StateManager drop");
             }
         }

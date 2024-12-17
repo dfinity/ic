@@ -159,7 +159,7 @@ impl IngressHistoryWriterImpl {
                 &["reject_code", "user_error_code"],
             ),
             completed_execution_messages_tx,
-            state_reader,
+            state_reader
         }
     }
 }
