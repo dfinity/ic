@@ -33,6 +33,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             patch_args = ["-p1"],
             patches = ["@@//bazel:cc_rs.patch"],
         )],
+        "libssh2-sys": [crate.annotation(
+            # Patch for determinism issues
+            patch_args = ["-p1"],
+            patches = ["@@//bazel:libssh2-sys.patch"],
+        )],
         "curve25519-dalek": [crate.annotation(
             rustc_flags = [
                 "-C",
