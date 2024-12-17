@@ -79,6 +79,10 @@ pub fn test_with_rt_handle(
     info!(log, "{} canisters installed successfully.", canisters.len());
 
     info!(log, "Step 2: Instantiate and start the workload..");
+
+    info!(log, "Sleeping for 30 seconds");
+    std::thread::sleep(Duration::from_secs(30));
+
     let payload: Vec<u8> = vec![0; message_size];
     let generator = {
         let (agents, canisters, payload) = (agents.clone(), canisters.clone(), payload.clone());
