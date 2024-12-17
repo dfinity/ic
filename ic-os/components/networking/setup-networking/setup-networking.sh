@@ -122,4 +122,6 @@ function main() {
     configure_netplan
 }
 
-main "$@"
+if [ "$0" = "$BASH_SOURCE" ]; then
+    main "$@"
+fi
