@@ -2,25 +2,25 @@
 
 set -euo pipefail
 
-TEMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TEMP_DIR"' EXIT
+TEST_DIR="$(mktemp -d)"
+trap 'rm -rf "$TEST_DIR"' EXIT
 
-# Create mock 'ip' command
-cat >"${TEMP_DIR}/ip" <<'EOF'
+SHELL=/bin/bash
+
+function mock_tools_for_gather_interfaces() {
+    cat >"${TEST_DIR}/ip" <<'EOF'
 #!/bin/bash
 if [ "$1" = "-o" ] && [ "$2" = "link" ] && [ "$3" = "show" ]; then
     echo "1: eth0: <BROADCAST,MULTICAST,UP> mtu 1500 qdisc pfifo_fast state UP mode DEFAULT group default qlen 1000"
     echo "2: eth1: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000"
     echo "3: eth2: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000"
 else
-    # Pass through for any other calls (if any)
     /usr/bin/ip "$@"
 fi
 EOF
-chmod +x "${TEMP_DIR}/ip"
+    chmod +x "${TEST_DIR}/ip"
 
-# Create mock 'ethtool' command
-cat >"${TEMP_DIR}/ethtool" <<'EOF'
+    cat >"${TEST_DIR}/ethtool" <<'EOF'
 #!/bin/bash
 IFACE="$1"
 case "$IFACE" in
@@ -30,23 +30,101 @@ case "$IFACE" in
     *) echo "Speed: Unknown" ;;
 esac
 EOF
-chmod +x "${TEMP_DIR}/ethtool"
+    chmod +x "${TEST_DIR}/ethtool"
+}
 
-# Source the original script
-source ./setup-networking.sh
-
-# Update PATH so that our mocks are used
-export PATH="${TEMP_DIR}:$PATH"
-# Clear any cached command lookups
-hash -r
-
-gather_interfaces_by_speed
-EXPECTED_INTERFACES="eth2,eth1,eth0"
-
-if [ "${INTERFACE_LIST}" = "${EXPECTED_INTERFACES}" ]; then
-    echo "Test passed: Interfaces sorted correctly."
-    exit 0
+function mock_tools_for_netplan() {
+    cat > "${TEST_DIR}/ip" <<'EOF'
+#!/bin/bash
+if [ "$1" = "-o" ] && [ "$2" = "link" ] && [ "$3" = "show" ]; then
+    echo "1: ethA: <BROADCAST,MULTICAST,UP> mtu 1500"
+    echo "2: ethB: <BROADCAST,MULTICAST> mtu 1500"
 else
-    echo "Test failed: Expected ${EXPECTED_INTERFACES}, got ${INTERFACE_LIST}"
-    exit 1
+    /usr/bin/ip "$@"
 fi
+EOF
+    chmod +x "${TEST_DIR}/ip"
+
+    cat > "${TEST_DIR}/ethtool" <<'EOF'
+#!/bin/bash
+IFACE="$1"
+case "$IFACE" in
+    ethA) echo "Speed: 10000Mb/s" ;;
+    ethB) echo "Speed: 1000Mb/s" ;;
+    *) echo "Speed: Unknown" ;;
+esac
+EOF
+    chmod +x "${TEST_DIR}/ethtool"
+
+    mkdir -p "${TEST_DIR}/opt/ic/bin"
+    cat > "${TEST_DIR}/opt/ic/bin/setupos_tool" <<'EOF'
+#!/bin/bash
+if [ "$1" = "generate-mac-address" ]; then
+    echo "02:00:00:aa:bb:cc"
+elif [ "$1" = "generate-ipv6-address" ]; then
+    echo "2001:db8::1234"
+fi
+EOF
+    chmod +x "${TEST_DIR}/opt/ic/bin/setupos_tool"
+
+    cat > "${TEST_DIR}/netplan" <<'EOF'
+#!/bin/bash
+if [ "$1" = "generate" ] || [ "$1" = "apply" ]; then
+    exit 0
+fi
+EOF
+    chmod +x "${TEST_DIR}/netplan"
+
+    mkdir -p "${TEST_DIR}/run/netplan"
+    mkdir -p "${TEST_DIR}/boot/config"
+    mkdir -p "${TEST_DIR}/var/ic/config"
+
+    cat > "${TEST_DIR}/var/ic/config/config.ini" <<'EOF'
+ipv6_gateway=fe80::2
+EOF
+}
+
+function test_gather_interfaces_by_speed() {
+    mock_tools_for_gather_interfaces
+    export PATH="${TEST_DIR}:${PATH}"
+    hash -r
+
+    source ./setup-networking.sh
+    gather_interfaces_by_speed
+    local EXPECTED_INTERFACES="eth2,eth1,eth0"
+    if [ "${INTERFACE_LIST}" = "${EXPECTED_INTERFACES}" ]; then
+        echo "Test passed: gather_interfaces_by_speed"
+    else
+        echo "Test failed: gather_interfaces_by_speed"
+        exit 1
+    fi
+}
+
+function test_netplan_config() {
+    mock_tools_for_netplan
+    export PATH="${TEST_DIR}:${PATH}"
+    hash -r
+
+    CONFIG_BASE_PATH="${TEST_DIR}/var/ic/config" \
+    NETPLAN_TEMPLATE_PATH="." \
+    NETPLAN_RUN_PATH="${TEST_DIR}/run/netplan" \
+    IC_BIN_PATH="${TEST_DIR}/opt/ic/bin" \
+    SHELL=/bin/bash \
+    /bin/bash ./setup-networking.sh SetupOS
+
+    local OUTPUT_FILE="${TEST_DIR}/run/netplan/99-setup-netplan.yaml"
+
+    [ -f "$OUTPUT_FILE" ] || { echo "Test failed: netplan output file not created"; exit 1; }
+    grep -q "macaddress: 02:00:00:aa:bb:cc" "$OUTPUT_FILE" || { echo "Test failed: MAC address substitution"; exit 1; }
+    grep -q "2001:db8::1234" "$OUTPUT_FILE" || { echo "Test failed: IPv6 address substitution"; exit 1; }
+    grep -q "fe80::2" "$OUTPUT_FILE" || { echo "Test failed: IPv6 gateway substitution"; exit 1; }
+    grep -Eq "interfaces:\s*\[ethA,ethB\]" "$OUTPUT_FILE" || { echo "Test failed: Interfaces insertion"; exit 1; }
+
+    echo "Test passed: netplan_config"
+}
+
+test_gather_interfaces_by_speed
+test_netplan_config
+
+echo "All tests passed."
+exit 0
