@@ -5,10 +5,10 @@ package(default_visibility = ["//visibility:private"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/async_utils",
     "//rs/bitcoin/service",
     "//rs/bitcoin/validation",
     "//rs/config",
+    "//rs/http_endpoints/async_utils",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "@crate_index//:bitcoin",

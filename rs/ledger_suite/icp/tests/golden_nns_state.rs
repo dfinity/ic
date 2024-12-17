@@ -6,7 +6,10 @@ use ic_ledger_core::Tokens;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
     BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
-use ic_ledger_suite_state_machine_tests::{generate_transactions, TransactionGenerationParameters};
+use ic_ledger_suite_state_machine_tests::metrics::{parse_metric, retrieve_metrics};
+use ic_ledger_suite_state_machine_tests::{
+    generate_transactions, wait_ledger_ready, TransactionGenerationParameters,
+};
 use ic_ledger_test_utils::state_machine_helpers::index::{
     get_all_blocks, wait_until_sync_is_completed,
 };
@@ -25,6 +28,11 @@ use icp_ledger::{
 };
 use std::time::Instant;
 
+/// The number of instructions that can be executed in a single canister upgrade.
+/// The limit (<https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits#resource-constraints-and-limits>)
+/// is actually 300B, but in the ledger implementation we use a value slightly lower than the old
+/// limit 200B.
+const CANISTER_UPGRADE_INSTRUCTION_LIMIT: u64 = 190_000_000_000;
 const INDEX_CANISTER_ID: CanisterId =
     CanisterId::from_u64(LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET);
 const LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(LEDGER_CANISTER_INDEX_IN_NNS_SUBNET);
@@ -239,9 +247,9 @@ fn should_create_state_machine_with_golden_nns_state() {
     setup.perform_upgrade_downgrade_testing(false);
 
     // Upgrade all the canisters to the latest version
-    setup.upgrade_to_master();
+    setup.upgrade_to_master(ExpectMigration::No);
     // Upgrade again to test the pre-upgrade
-    setup.upgrade_to_master();
+    setup.upgrade_to_master(ExpectMigration::No);
 
     // Perform upgrade and downgrade testing
     setup.perform_upgrade_downgrade_testing(true);
@@ -265,6 +273,12 @@ struct Setup {
     master_wasms: Wasms,
     mainnet_wasms: Wasms,
     previous_ledger_state: Option<LedgerState>,
+}
+
+#[derive(Eq, PartialEq)]
+enum ExpectMigration {
+    Yes,
+    No,
 }
 
 impl Setup {
@@ -291,11 +305,15 @@ impl Setup {
         }
     }
 
-    pub fn upgrade_to_master(&self) {
+    pub fn upgrade_to_master(&self, expect_migration: ExpectMigration) {
         println!("Upgrading to master version");
         self.upgrade_index(&self.master_wasms.index);
         self.upgrade_ledger(&self.master_wasms.ledger)
             .expect("should successfully upgrade ledger to new local version");
+        if expect_migration == ExpectMigration::Yes {
+            wait_ledger_ready(&self.state_machine, LEDGER_CANISTER_ID, 100);
+        }
+        self.check_ledger_metrics(expect_migration);
         self.upgrade_archive_canisters(&self.master_wasms.archive);
     }
 
@@ -304,6 +322,7 @@ impl Setup {
         self.upgrade_index(&self.mainnet_wasms.index);
         self.upgrade_ledger(&self.mainnet_wasms.ledger)
             .expect("should successfully downgrade to the mainnet version");
+        self.check_ledger_metrics(ExpectMigration::No);
         self.upgrade_archive_canisters(&self.mainnet_wasms.archive);
     }
 
@@ -319,6 +338,37 @@ impl Setup {
             self.previous_ledger_state.take(),
             should_verify_balances_and_allowances,
         ));
+    }
+
+    fn check_ledger_metrics(&self, expect_migration: ExpectMigration) {
+        let metrics = retrieve_metrics(&self.state_machine, LEDGER_CANISTER_ID);
+        println!("Ledger metrics:");
+        for metric in metrics {
+            println!("  {}", metric);
+        }
+        if expect_migration == ExpectMigration::Yes {
+            let migration_steps = parse_metric(
+                &self.state_machine,
+                LEDGER_CANISTER_ID,
+                "ledger_stable_upgrade_migration_steps",
+            );
+            assert!(
+                migration_steps > 0u64,
+                "Migration steps ({}) should be greater than 0",
+                migration_steps
+            );
+        }
+        let upgrade_instructions = parse_metric(
+            &self.state_machine,
+            LEDGER_CANISTER_ID,
+            "ledger_total_upgrade_instructions_consumed",
+        );
+        assert!(
+            upgrade_instructions < CANISTER_UPGRADE_INSTRUCTION_LIMIT,
+            "Upgrade instructions ({}) should be less than the instruction limit ({})",
+            upgrade_instructions,
+            CANISTER_UPGRADE_INSTRUCTION_LIMIT
+        );
     }
 
     fn list_archives(&self) -> Archives {

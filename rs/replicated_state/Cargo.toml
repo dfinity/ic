@@ -61,7 +61,6 @@ proptest = { workspace = true, optional = true }
 assert_matches = { workspace = true }
 criterion = { workspace = true }
 criterion-time = { path = "../criterion_time" }
-ic-btc-test-utils = { workspace = true }
 ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-crypto-test-utils-keys = { path = "../crypto/test_utils/keys" }
 ic-test-utilities-io = { path = "../test_utilities/io" }
