@@ -3,8 +3,8 @@ use ic_base_types::PrincipalId;
 use ic_btc_checker::{
     blocklist, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse, CheckArg,
     CheckMode, CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionResponse,
-    CheckTransactionRetriable, CheckTransactionStatus, InitArg, UpgradeArg,
-    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    CheckTransactionRetriable, CheckTransactionStatus, CheckTransactionStrArgs, InitArg,
+    UpgradeArg, CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
     INITIAL_MAX_RESPONSE_BYTES,
 };
 use ic_btc_interface::Txid;
@@ -274,20 +274,21 @@ fn test_check_transaction_passed() {
     let txid =
         Txid::from_str("c80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed").unwrap();
     let env = &setup.env;
+    let check_transaction_args = Encode!(&CheckTransactionArgs {
+        txid: txid.as_ref().to_vec()
+    })
+    .unwrap();
+    let check_transaction_str_args = Encode!(&CheckTransactionStrArgs {
+        txid: txid.to_string()
+    })
+    .unwrap();
 
     // Normal operation requires making http outcalls.
     // We'll run this again after testing other CheckMode.
-    let test_normal_operation = || {
+    let test_normal_operation = |method, arg| {
         let cycles_before = setup.env.cycle_balance(setup.caller);
         let call_id = setup
-            .submit_btc_checker_call(
-                "check_transaction",
-                Encode!(&CheckTransactionArgs {
-                    txid: txid.as_ref().to_vec()
-                })
-                .unwrap(),
-                CHECK_TRANSACTION_CYCLES_REQUIRED,
-            )
+            .submit_btc_checker_call(method, arg, CHECK_TRANSACTION_CYCLES_REQUIRED)
             .expect("submit_call failed to return call id");
         // The response body used for testing below is generated from the output of
         //
@@ -375,7 +376,7 @@ fn test_check_transaction_passed() {
     };
 
     // With default installation
-    test_normal_operation();
+    test_normal_operation("check_transaction", check_transaction_args.clone());
 
     // Test CheckMode::RejectAll
     env.tick();
@@ -470,7 +471,7 @@ fn test_check_transaction_passed() {
     )
     .unwrap();
 
-    test_normal_operation();
+    test_normal_operation("check_transaction_str", check_transaction_str_args);
 }
 
 #[test]
@@ -650,6 +651,33 @@ fn test_check_transaction_error() {
         .submit_btc_checker_call(
             "check_transaction",
             Encode!(&CheckTransactionArgs { txid }).unwrap(),
+            CHECK_TRANSACTION_CYCLES_REQUIRED,
+        )
+        .expect("submit_call failed to return call id");
+    let result = setup
+        .env
+        .await_call(call_id)
+        .expect("the fetch request didn't finish");
+    assert!(matches!(
+        decode::<CheckTransactionResponse>(&result),
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
+            CheckTransactionIrrecoverableError::InvalidTransactionId(_)
+        ))
+    ));
+
+    let cycles_after = setup.env.cycle_balance(setup.caller);
+    let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE;
+    let actual_cost = cycles_before - cycles_after;
+    assert!(actual_cost > expected_cost);
+    assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+
+    // Test for malformatted txid in string form
+    let cycles_before = setup.env.cycle_balance(setup.caller);
+    let txid = "a80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475".to_string();
+    let call_id = setup
+        .submit_btc_checker_call(
+            "check_transaction_str",
+            Encode!(&CheckTransactionStrArgs { txid }).unwrap(),
             CHECK_TRANSACTION_CYCLES_REQUIRED,
         )
         .expect("submit_call failed to return call id");
