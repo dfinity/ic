@@ -15,12 +15,7 @@ ALLOWED_UNDECLARED_DEPENDENCIES = {
     "ic-os/components/misc/fetch-property.sh": {
         # fetch-property.sh checks existence of metrics.sh
         "/opt/ic/bin/metrics.sh",
-    },
-    "ic-os/components/networking/setup-networking/setup-networking.sh": {
-        # common setup-networking.sh script used by both SetupOS and HostOS (fix in NODE-1546)
-        "/opt/ic/bin/setupos_tool",
-        "/opt/ic/bin/hostos_tool",
-    },
+    }
 }
 
 # Check file patterns /opt/ic/...
