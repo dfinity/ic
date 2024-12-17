@@ -2627,7 +2627,7 @@ struct ProposeToSetBitcoinConfig {
 
     #[clap(
         long,
-        help = "Updates the number of cycles to charge per 10 instructions."
+        help = "Updates the number of cycles to charge per 10 instructions in a `get_utxos` request."
     )]
     pub get_utxos_cycles_per_ten_instructions: u128,
 
@@ -2681,7 +2681,7 @@ struct ProposeToSetBitcoinConfig {
 
     #[clap(
         long,
-        help = "Updates the number of cycles to charge per 10 instructions."
+        help = "Updates the number of cycles to charge per 10 instructions in a `get_block_headers` request."
     )]
     pub get_block_headers_cycles_per_ten_instructions: u128,
 
