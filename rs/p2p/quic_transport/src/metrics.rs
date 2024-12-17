@@ -9,10 +9,9 @@ use tokio_metrics::TaskMonitor;
 const CONNECTION_RESULT_LABEL: &str = "status";
 const PEER_ID_LABEL: &str = "peer";
 const REQUEST_TASK_MONITOR_NAME: &str = "quic_transport_request_handler";
-const STREAM_TYPE_LABEL: &str = "stream";
 const HANDLER_LABEL: &str = "handler";
 const ERROR_TYPE_LABEL: &str = "error";
-const REQUEST_TYPE_LABEL: &str = "request";
+const QUINN_API_LABEL: &str = "quinn_api";
 pub(crate) const CONNECTION_RESULT_SUCCESS_LABEL: &str = "success";
 pub(crate) const CONNECTION_RESULT_FAILED_LABEL: &str = "failed";
 pub(crate) const ERROR_TYPE_APP: &str = "app";
@@ -117,7 +116,7 @@ impl QuicTransportMetrics {
             request_handle_errors_total: metrics_registry.int_counter_vec(
                 "quic_transport_request_handle_errors_total",
                 "Request handler errors by stream type and error type.",
-                &[STREAM_TYPE_LABEL, ERROR_TYPE_LABEL],
+                &[QUINN_API_LABEL, ERROR_TYPE_LABEL],
             ),
             request_handle_bytes_received_total: metrics_registry.int_counter_vec(
                 "quic_transport_request_handle_bytes_received_total",
@@ -155,9 +154,8 @@ impl QuicTransportMetrics {
             connection_handle_errors_total: metrics_registry.int_counter_vec(
                 "quic_transport_connection_handle_errors_total",
                 "Request handler errors by stream type and error type.",
-                &[REQUEST_TYPE_LABEL, ERROR_TYPE_LABEL],
+                &[QUINN_API_LABEL, ERROR_TYPE_LABEL],
             ),
-
             // Quinn stats
             quinn_path_rtt_seconds: metrics_registry.gauge_vec(
                 "quic_transport_quinn_path_rtt_seconds",
