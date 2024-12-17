@@ -106,7 +106,7 @@ fn test_manage_dapp_canister_settings_successful() {
             Some(1 << 30),
             100_000,
             Some(1_000_000_000),
-            0,
+            Some(0),
         ),
     );
 
@@ -159,7 +159,7 @@ fn test_manage_dapp_canister_settings_successful() {
             Some(0),
             0,
             Some(2_000_000_000),
-            0,
+            Some(0),
         ),
     );
 }
@@ -235,7 +235,7 @@ fn test_manage_dapp_canister_settings_failure() {
             Some(1 << 30),
             100_000,
             Some(1_000_000_000),
-            0,
+            Some(0),
         ),
     );
 
@@ -307,7 +307,7 @@ fn test_manage_dapp_canister_settings_failure() {
             Some(1 << 30),
             100_000,
             Some(1_000_000_000),
-            0,
+            Some(0),
         ),
     );
 
