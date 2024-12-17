@@ -2851,7 +2851,7 @@ fn replicated_query_can_burn_cycles() {
         panic!("unexpected ingress state {:?}", ingress_state);
     };
 
-    // Canister A loses `cycles_to_burn` from its balance...
+    // Canister A loses `cycles_to_burn` from its balance (in addition to execution cost)...
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         initial_cycles - test.canister_execution_cost(canister_id) - cycles_to_burn
