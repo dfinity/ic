@@ -1,5 +1,3 @@
-use candid::candid_method;
-use dfn_candid::{candid, candid_one, candid_one_with_config};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_clients::{
@@ -39,8 +37,7 @@ use std::cell::RefCell;
 
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::println;
-use ic_cdk::{init, post_upgrade, spawn, update};
-use ic_test_utilities::universal_canister::Call;
+use ic_cdk::{init, post_upgrade, query, spawn, update};
 
 fn caller() -> PrincipalId {
     PrincipalId::from(ic_cdk::caller())
@@ -103,7 +100,7 @@ async fn canister_status(canister_id_record: CanisterIdRecord) -> CanisterStatus
 }
 
 #[update]
-fn submit_root_proposal_to_upgrade_governance_canister(
+async fn submit_root_proposal_to_upgrade_governance_canister(
     expected_governance_wasm_sha: serde_bytes::ByteBuf,
     proposal: ChangeCanisterRequest,
 ) -> Result<(), String> {
@@ -112,10 +109,11 @@ fn submit_root_proposal_to_upgrade_governance_canister(
         expected_governance_wasm_sha.to_vec(),
         proposal,
     )
+    .await
 }
 
 #[update]
-fn vote_on_root_proposal_to_upgrade_governance_canister(
+async fn vote_on_root_proposal_to_upgrade_governance_canister(
     proposer: PrincipalId,
     wasm_sha256: serde_bytes::ByteBuf,
     ballot: RootProposalBallot,
@@ -126,6 +124,7 @@ fn vote_on_root_proposal_to_upgrade_governance_canister(
         wasm_sha256.to_vec(),
         ballot,
     )
+    .await
 }
 
 #[update]
