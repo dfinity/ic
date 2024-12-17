@@ -60,6 +60,7 @@ ignored_repo_components = [
     "hostos-scripts/generate-guestos-config/dev-generate-guestos-config.sh",
     "networking/dev-certs/canister_http_test_ca.key",
     "networking/dev-certs/root_cert_gen.sh",
+    "networking/setup-networking/test-setup-networking.sh"
 ]
 
 check_unused_components_test(
