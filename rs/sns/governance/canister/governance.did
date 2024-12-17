@@ -157,7 +157,7 @@ type DefiniteCanisterSettingsArgs = record {
   wasm_memory_limit : opt nat;
   memory_allocation : nat;
   compute_allocation : nat;
-  wasm_memory_threshold : nat;
+  wasm_memory_threshold : opt nat;
 };
 
 type DeregisterDappCanisters = record {
