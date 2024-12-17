@@ -229,7 +229,7 @@ impl PrometheusVm {
                 let file_name = file.file_name();
                 let file_name = file_name.as_os_str().to_str().unwrap();
 
-                let destination_path = dashboard_dir.join(&file_name);
+                let destination_path = dashboard_dir.join(file_name);
 
                 std::fs::copy(file.path(), destination_path)?;
                 info!(logger, "Copying `{}` dashboard...", file_name);
