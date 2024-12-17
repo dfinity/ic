@@ -128,10 +128,7 @@ pub fn execute_replicated_query(
     let message_memory_usage = canister.message_memory_usage();
 
     let request_metadata = match &req {
-        CanisterCall::Request(request) => match &request.metadata {
-            Some(metadata) => metadata.for_downstream_call(),
-            None => RequestMetadata::for_new_call_tree(time),
-        },
+        CanisterCall::Request(request) => request.metadata.for_downstream_call(),
         _ => RequestMetadata::for_new_call_tree(time),
     };
     let call_context_id = canister
