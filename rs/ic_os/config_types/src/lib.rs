@@ -247,7 +247,7 @@ mod tests {
                 domain_name: None,
             },
             icos_settings: ICOSSettings {
-                node_reward_type: Some(String::new()),
+                node_reward_type: None,
                 mgmt_mac: "00:00:00:00:00:00".parse()?,
                 deployment_environment: DeploymentEnvironment::Testnet,
                 logging: Logging::default(),

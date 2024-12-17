@@ -35,7 +35,6 @@ rust_library(
         exclude = ["src/main.rs"],
     ),
     crate_name = "config",
-    edition = "2021",
     deps = DEPENDENCIES,
 )
 
@@ -44,7 +43,6 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     crate_name = "config",
-    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [
         ":config_lib",
