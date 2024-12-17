@@ -87,6 +87,6 @@ fi
 grep -q "macaddress: 02:00:00:aa:bb:cc" "$OUTPUT_FILE" || { echo "Test failed: MAC address not substituted correctly for SetupOS."; exit 1; }
 grep -q "2001:db8::1234" "$OUTPUT_FILE" || { echo "Test failed: IPv6 address not substituted correctly for SetupOS."; exit 1; }
 grep -q "fe80::2" "$OUTPUT_FILE" || { echo "Test failed: IPv6 gateway not substituted correctly for SetupOS."; exit 1; }
-grep -q "interfaces: ethA,ethB" "$OUTPUT_FILE" || { echo "Test failed: Interfaces not inserted correctly for SetupOS."; exit 1; }
+grep -Eq "interfaces:\s*\[ethA,ethB\]" "$OUTPUT_FILE" || { echo "Test failed: Interfaces not inserted correctly for SetupOS."; exit 1; }
 
 echo "Test passed: Netplan output file produced correctly for SetupOS."
