@@ -1812,11 +1812,17 @@ name = "canister_client"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "clap 4.5.20",
  "ic-agent 0.37.1",
  "k256",
  "rate-limits-api",
  "regex",
+ "serde",
+ "serde_yaml",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

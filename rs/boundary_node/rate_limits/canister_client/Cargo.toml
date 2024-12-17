@@ -10,6 +10,12 @@ documentation.workspace = true
 k256 = { version = "0.13.1", features = ["pem"] }
 ic-agent = { workspace = true }
 candid = { workspace = true }
+clap = { workspace = true }
 rate-limits-api = { path = "../api" }
 regex = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
+uuid = { workspace = true }
