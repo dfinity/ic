@@ -476,14 +476,31 @@ fn test_check_transaction_passed() {
 #[test]
 fn test_check_transaction_error() {
     let setup = Setup::new(BtcNetwork::Mainnet);
-    let cycles_before = setup.env.cycle_balance(setup.caller);
     let mut txid =
         Txid::from_str("a80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed")
             .unwrap()
             .as_ref()
             .to_vec();
 
+    // Test should return NotEnoughCycles error, not InvalidTransactionId
+    let call_id = setup
+        .submit_btc_checker_call(
+            "check_transaction",
+            Encode!(&CheckTransactionArgs { txid: vec![0; 31] }).unwrap(),
+            CHECK_TRANSACTION_CYCLES_SERVICE_FEE - 1,
+        )
+        .expect("submit_call failed to return call id");
+    let result = setup
+        .env
+        .await_call(call_id)
+        .expect("the fetch request didn't finish");
+    assert!(matches!(
+        decode::<CheckTransactionResponse>(&result),
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::NotEnoughCycles),
+    ));
+
     // Test for cycles not enough
+    let cycles_before = setup.env.cycle_balance(setup.caller);
     let call_id = setup
         .submit_btc_checker_call(
             "check_transaction",

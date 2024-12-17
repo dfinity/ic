@@ -1,4 +1,4 @@
-use crate::rosetta_tests::setup::subnet_sys;
+use crate::setup::subnet_sys;
 use candid::{Decode, Encode, Principal};
 use dfn_protobuf::ProtoBuf;
 use ic_agent::Agent;
