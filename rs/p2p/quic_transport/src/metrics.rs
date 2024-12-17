@@ -22,6 +22,7 @@ const ERROR_RESET_STREAM: &str = "reset_stream";
 const ERROR_STOPPED_STREAM: &str = "stopped_stream";
 const ERROR_APP_CLOSED_CONN: &str = "app_closed_conn";
 const ERROR_TIMED_OUT_CONN: &str = "timed_out_conn";
+const ERROR_RESET_CONN: &str = "timed_reset_conn";
 const ERROR_TRANSPORT_ERROR: &str = "transport_error_conn";
 const ERROR_LOCALLY_CLOSED_CONN: &str = "locally_closed_conn";
 
@@ -215,19 +216,25 @@ pub fn observe_conn_error(err: &ConnectionError, op: &str, counter: &IntCounterV
             .inc(),
         // This can occur if the peer crashes or experiences connectivity issues.
         ConnectionError::TimedOut => counter.with_label_values(&[op, ERROR_TIMED_OUT_CONN]).inc(),
-        // This should be made infallible.
+        // TODO: This should be made infallible. It is unclear why we observe those errors.
+        // It is similar to a TimedOut error, but the key difference is that TimedOut
+        // usually indicates a failure during data transmission.
+        ConnectionError::Reset => counter.with_label_values(&[op, ERROR_RESET_CONN]).inc(),
+        // TODO: This should be made infallible. It is unclear why we observe those errors.
         ConnectionError::TransportError(_) => counter
             .with_label_values(&[op, ERROR_TRANSPORT_ERROR])
             .inc(),
         // A connection was closed by the QUIC protocol. Overall should be infallible.
-        _ => counter.with_label_values(&[op, INFALIBBLE]).inc(),
+        ConnectionError::VersionMismatch
+        | ConnectionError::ConnectionClosed(_)
+        | ConnectionError::CidsExhausted => counter.with_label_values(&[op, INFALIBBLE]).inc(),
     }
 }
 
 pub fn observe_write_error(err: &WriteError, op: &str, counter: &IntCounterVec) {
     match err {
-        // Occurs when the peer cancels the `RecvStream` future, similar to `ERROR_RESET_STREAM` semantics,
-        // e.g., when the RPC method is part of a `select` branch.
+        // Occurs when the peer cancels the `RecvStream` future, similar to `ERROR_RESET_STREAM` semantics.
+        // e.g., can happen on the receive side when the RPC method is part of a `select` branch.
         WriteError::Stopped(_) => counter.with_label_values(&[op, ERROR_STOPPED_STREAM]).inc(),
         WriteError::ConnectionLost(conn_err) => observe_conn_error(conn_err, op, counter),
         // If any of the following errors occur it means that we have a bug in the protocol implementation or
@@ -240,8 +247,8 @@ pub fn observe_write_error(err: &WriteError, op: &str, counter: &IntCounterVec) 
 
 pub fn observe_read_error(err: &ReadError, op: &str, counter: &IntCounterVec) {
     match err {
-        // Occurs when the peer cancels the `SendStream` future, similar to `ERROR_STOPPED_STREAM` semantics,
-        // e.g., when the RPC method is part of a `select` branch.
+        // Occurs when the peer drops the `ResetStreamOnDrop` guard, similar to `ERROR_STOPPED_STREAM` semantics,
+        // e.g., can happen on the receive side when the RPC method is part of a `select` branch.
         ReadError::Reset(_) => counter.with_label_values(&[op, ERROR_RESET_STREAM]).inc(),
         ReadError::ConnectionLost(conn_err) => observe_conn_error(conn_err, op, counter),
         // If any of the following errors occur it means that we have a bug in the protocol implementation or
