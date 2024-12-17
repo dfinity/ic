@@ -226,7 +226,7 @@ impl PrometheusVm {
                     continue;
                 }
 
-                let file_name = format!("{}.json", file.file_name().as_os_str().to_str().unwrap());
+                let file_name = file.file_name().as_os_str().to_str().unwrap();
 
                 let destination_path = dashboard_dir.join(&file_name);
 
