@@ -6,7 +6,7 @@ TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
 # Create mock 'ip' command
-cat > "${TEMP_DIR}/ip" <<'EOF'
+cat >"${TEMP_DIR}/ip" <<'EOF'
 #!/bin/bash
 if [ "$1" = "-o" ] && [ "$2" = "link" ] && [ "$3" = "show" ]; then
     echo "1: eth0: <BROADCAST,MULTICAST,UP> mtu 1500 qdisc pfifo_fast state UP mode DEFAULT group default qlen 1000"
@@ -20,7 +20,7 @@ EOF
 chmod +x "${TEMP_DIR}/ip"
 
 # Create mock 'ethtool' command
-cat > "${TEMP_DIR}/ethtool" <<'EOF'
+cat >"${TEMP_DIR}/ethtool" <<'EOF'
 #!/bin/bash
 IFACE="$1"
 case "$IFACE" in
