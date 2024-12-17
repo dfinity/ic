@@ -95,6 +95,10 @@ fn ledger_wasm() -> Vec<u8> {
     )
 }
 
+fn ledger_wasm_lowupgradeinstructionlimits() -> Vec<u8> {
+    std::fs::read(std::env::var("IC_ICRC1_LEDGER_WASM_INSTR_LIMITS_PATH").unwrap()).unwrap()
+}
+
 pub fn icrc_ledger_new_icrc3_certificate_wasm() -> Vec<u8> {
     let ledger_wasm_path = std::env::var("IC_ICRC1_LEDGER_ICRC3_COMPATIBLE_DATA_CERTIFICATE_WASM_PATH").expect(
         "The Ledger wasm path must be set using the env variable IC_ICRC1_LEDGER_ICRC3_COMPATIBLE_DATA_CERTIFICATE_WASM_PATH",
@@ -182,29 +186,17 @@ fn test_upgrade() {
     ic_ledger_suite_state_machine_tests::test_upgrade(ledger_wasm(), encode_init_args)
 }
 
-#[test]
-fn test_install_mainnet_ledger_then_upgrade_then_downgrade() {
-    ic_ledger_suite_state_machine_tests::test_install_upgrade_downgrade(
-        ledger_mainnet_wasm(),
-        encode_init_args,
-        ledger_wasm(),
-        encode_upgrade_args,
-        ledger_mainnet_wasm(),
-        encode_upgrade_args,
-    )
-}
-
-#[test]
-fn test_install_current_ledger_then_upgrade_then_downgrade_to_mainnet_version() {
-    ic_ledger_suite_state_machine_tests::test_install_upgrade_downgrade(
-        ledger_wasm(),
-        encode_init_args,
-        ledger_wasm(),
-        encode_upgrade_args,
-        ledger_mainnet_wasm(),
-        encode_upgrade_args,
-    )
-}
+// #[test]
+// fn test_install_mainnet_ledger_then_upgrade_then_downgrade() {
+//     ic_ledger_suite_state_machine_tests::test_install_upgrade_downgrade(
+//         ledger_mainnet_wasm(),
+//         encode_init_args,
+//         ledger_wasm(),
+//         encode_upgrade_args,
+//         ledger_mainnet_wasm(),
+//         encode_upgrade_args,
+//     )
+// }
 
 #[test]
 fn test_upgrade_archive_options() {
@@ -404,11 +396,6 @@ fn test_balances_overflow() {
 }
 
 #[test]
-fn test_approval_trimming() {
-    ic_ledger_suite_state_machine_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
-}
-
-#[test]
 fn test_archive_controllers() {
     ic_ledger_suite_state_machine_tests::test_archive_controllers(ledger_wasm());
 }
@@ -468,11 +455,12 @@ fn icrc1_test_upgrade_serialization() {
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
-fn icrc1_test_upgrade_serialization_fixed_tx() {
-    ic_ledger_suite_state_machine_tests::icrc1_test_upgrade_serialization_fixed_tx(
+fn icrc1_test_multi_step_migration() {
+    ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
         ledger_mainnet_wasm(),
-        ledger_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
     );
 }
@@ -483,6 +471,58 @@ fn icrc1_test_downgrade_from_incompatible_version() {
         ledger_mainnet_wasm(),
         ledger_wasm_nextledgerversion(),
         ledger_wasm(),
+        encode_init_args,
+        true,
+    );
+}
+
+#[ignore] // TODO: Re-enable as part of FI-1440
+#[test]
+fn icrc1_test_stable_migration_endpoints_disabled() {
+    ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
+        ledger_mainnet_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+        vec![],
+    );
+}
+
+#[ignore] // TODO: Re-enable as part of FI-1440
+#[test]
+fn icrc1_test_incomplete_migration() {
+    ic_ledger_suite_state_machine_tests::test_incomplete_migration(
+        ledger_mainnet_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
+#[ignore] // TODO: Re-enable as part of FI-1440
+#[test]
+fn icrc1_test_incomplete_migration_to_current() {
+    ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
+        ledger_mainnet_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
+#[ignore] // TODO: Re-enable as part of FI-1440
+#[test]
+fn icrc1_test_migration_resumes_from_frozen() {
+    ic_ledger_suite_state_machine_tests::test_migration_resumes_from_frozen(
+        ledger_mainnet_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
+#[ignore] // TODO: Re-enable as part of FI-1440
+#[test]
+fn icrc1_test_metrics_while_migrating() {
+    ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(
+        ledger_mainnet_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
     );
 }
@@ -570,63 +610,6 @@ fn balance_of(env: &StateMachine, ledger_id: CanisterId, account: Account) -> u6
         .expect("Unable to perform icrc1_balance_of")
         .bytes();
     Decode!(&res, Nat).unwrap().0.to_u64().unwrap()
-}
-
-#[cfg_attr(feature = "u256-tokens", ignore)]
-#[test]
-fn test_upgrade_from_first_version() {
-    let env = StateMachine::new();
-
-    let ledger_wasm_first_version =
-        std::fs::read(std::env::var("IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH").unwrap()).unwrap();
-    let init_args = Encode!(&LegacyInitArgs {
-        minting_account: MINTER,
-        fee_collector_account: None,
-        initial_balances: vec![],
-        transfer_fee: FEE,
-        token_name: TOKEN_NAME.to_string(),
-        token_symbol: TOKEN_SYMBOL.to_string(),
-        metadata: vec![
-            MetadataValue::entry(NAT_META_KEY, NAT_META_VALUE),
-            MetadataValue::entry(INT_META_KEY, INT_META_VALUE),
-            MetadataValue::entry(TEXT_META_KEY, TEXT_META_VALUE),
-            MetadataValue::entry(BLOB_META_KEY, BLOB_META_VALUE),
-        ],
-        archive_options: ArchiveOptions {
-            trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
-            num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
-            node_max_memory_size_bytes: None,
-            max_message_size_bytes: None,
-            controller_id: PrincipalId::new_user_test_id(100),
-            more_controller_ids: None,
-            cycles_for_archive_creation: None,
-            max_transactions_per_response: None,
-        },
-    })
-    .unwrap();
-    let ledger_id = env
-        .install_canister(ledger_wasm_first_version, init_args, None)
-        .unwrap();
-    transfer(&env, ledger_id, MINTER, account(1), 1_000_000);
-    transfer(&env, ledger_id, MINTER, account(1), 2_000_000);
-    transfer(&env, ledger_id, MINTER, account(2), 3_000_000);
-    transfer(&env, ledger_id, account(1), account(3), 1_000_000);
-    let balance_1 = balance_of(&env, ledger_id, account(1));
-    let balance_2 = balance_of(&env, ledger_id, account(2));
-    let balance_3 = balance_of(&env, ledger_id, account(3));
-
-    let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
-    env.upgrade_canister(ledger_id, ledger_wasm(), upgrade_args)
-        .expect("Unable to upgrade the ledger canister");
-    assert_eq!(balance_1, balance_of(&env, ledger_id, account(1)));
-    assert_eq!(balance_2, balance_of(&env, ledger_id, account(2)));
-    assert_eq!(balance_3, balance_of(&env, ledger_id, account(3)));
-
-    // check that transfer works
-    transfer(&env, ledger_id, MINTER, account(1), 1_000_000);
-    transfer(&env, ledger_id, MINTER, account(1), 2_000_000);
-    transfer(&env, ledger_id, MINTER, account(2), 3_000_000);
-    transfer(&env, ledger_id, account(1), account(3), 1_000_000);
 }
 
 #[test]

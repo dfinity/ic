@@ -17,6 +17,11 @@ set -ue
 ##   | update/ic0_canister_status()           |   1.27G |   1.34G |     +5% |      3.73s |
 ##   | inspect/ic0_msg_method_name_size()     |       - |   1.28G |       - |     23.92s |
 
+if ! which bazel rg >/dev/null; then
+    echo "Error checking dependencies: please ensure 'bazel' and 'rg' are installed"
+    exit 1
+fi
+
 ## To quickly assess the new changes, run benchmarks just once
 QUICK=${QUICK:-}
 if [ -n "${QUICK}" ]; then
@@ -193,7 +198,8 @@ print_old_report_field() {
     local field="${3}"
     ## Apply name transformations to match between local (new) and remote (old) benchmarks
     ## ic0.call()/1B -> ic0.*call\(\).*1B
-    match=$(echo "${name}" | sed -Ee 's#([^()0-9A-Za-z_]+)#.*#g' -Ee 's#[()]#\\&#g' -Ee 's#_#.#g')
+    match=$(echo "${name}" \
+        | sed -Ee 's#/wasm32##' -Ee 's#([^()0-9A-Za-z_]+)#.*#g' -Ee 's#[()]#\\&#g' -Ee 's#_#.#g')
     set -o pipefail
     cat "${OLD_REPORT}" | rg "${match}" | sed -Ee 's# +# #g' \
         | awk -F '|' "NR == ${line} {printf \$$((${field} + 1))} NR == 3 {exit 1}" \

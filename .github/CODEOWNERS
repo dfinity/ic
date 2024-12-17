@@ -60,6 +60,7 @@ go_deps.bzl               @dfinity/idx
 /ic-os/components/boundary-guestos/                                     @dfinity/boundary-node @dfinity/node
 /ic-os/components/boundary-guestos.bzl                                  @dfinity/boundary-node @dfinity/node
 /ic-os/components/init/bootstrap-ic-node/boundary-guestos/              @dfinity/boundary-node @dfinity/node
+/ic-os/components/ic/share/ic-boundary.env                              @dfinity/boundary-node @dfinity/node
 /toolchains/                                                            @dfinity/node
 
 # [metrics-proxy]
@@ -88,15 +89,14 @@ go_deps.bzl               @dfinity/idx
 # [Rust]
 /rs/                                                    @dfinity/ic-interface-owners
 /rs/artifact_pool/                                      @dfinity/consensus
-/rs/async_utils/                                        @dfinity/networking
 /rs/backup/                                             @dfinity/consensus
 /rs/bitcoin/                                            @dfinity/ic-interface-owners
 /rs/bitcoin/adapter/                                    @dfinity/networking
 /rs/bitcoin/ckbtc/                                      @dfinity/cross-chain-team
-/rs/bitcoin/mock/                                       @dfinity/finint
+/rs/bitcoin/mock/                                       @dfinity/cross-chain-team
 /rs/bitcoin/client/                                     @dfinity/networking
 /rs/bitcoin/consensus/                                  @dfinity/execution @dfinity/consensus
-/rs/bitcoin/kyt/                                        @dfinity/cross-chain-team
+/rs/bitcoin/checker/                                    @dfinity/cross-chain-team
 /rs/bitcoin/service/                                    @dfinity/networking
 /rs/bitcoin/replica_types/                              @dfinity/execution
 /rs/bitcoin/validation                                  @dfinity/networking @dfinity/execution
@@ -208,12 +208,12 @@ go_deps.bzl               @dfinity/idx
 /rs/rust_canisters/response_payload_test/               @dfinity/execution
 /rs/rust_canisters/stable_structures/                   @dfinity/execution
 /rs/rust_canisters/stable_memory_integrity              @dfinity/execution
+/rs/rust_canisters/statesync_test                       @dfinity/ic-message-routing-owners
 /rs/rust_canisters/canister_creator                     @dfinity/execution
 /rs/rust_canisters/load_simulator                       @dfinity/execution
 /rs/rust_canisters/xnet_test/                           @dfinity/ic-message-routing-owners
 /rs/rust_canisters/downstream_calls_test/               @dfinity/ic-message-routing-owners
 /rs/rust_canisters/random_traffic_test/                 @dfinity/ic-message-routing-owners
-/rs/scenario_tests/                                     @dfinity/idx
 /rs/sns/                                                @dfinity/nns-team
 /rs/starter/                                            @dfinity/networking
 /rs/state_layout/                                       @dfinity/ic-message-routing-owners
@@ -235,28 +235,25 @@ go_deps.bzl               @dfinity/idx
 /rs/test_utilities/state/                               @dfinity/execution @dfinity/ic-message-routing-owners
 /rs/test_utilities/types/src/batch/                     @dfinity/consensus
 /rs/tests/                                              @dfinity/idx
-/rs/tests/research                                      @dfinity/research @dfinity/idx
-/rs/tests/dashboards/IC/execution-metrics.json          @dfinity/execution @dfinity/idx
-/rs/tests/dashboards/IC/bitcoin.json                    @dfinity/execution @dfinity/idx
-/rs/tests/driver/src/driver/simulate_network.rs         @dfinity/networking
-/rs/tests/boundary_nodes/                               @dfinity/boundary-node @dfinity/idx
-/rs/tests/ckbtc/                                        @dfinity/cross-chain-team @dfinity/idx
-/rs/tests/consensus/                                    @dfinity/consensus @dfinity/idx
-/rs/tests/cross_chain/                                  @dfinity/cross-chain-team @dfinity/idx
-/rs/tests/crypto/                                       @dfinity/crypto-team @dfinity/idx
-/rs/tests/dre/                                          @dfinity/dre @dfinity/idx
-/rs/tests/execution/                                    @dfinity/execution @dfinity/idx
-/rs/tests/financial_integrations/                       @dfinity/finint @dfinity/idx
-/rs/tests/message_routing/                              @dfinity/ic-message-routing-owners @dfinity/idx
-/rs/tests/networking/                                   @dfinity/networking @dfinity/idx
-/rs/tests/nns/                                          @dfinity/nns-team @dfinity/idx
-/rs/tests/node/                                         @dfinity/node @dfinity/idx
-/rs/tests/query_stats/                                  @dfinity/execution @dfinity/consensus @dfinity/idx
-/rs/tests/sdk/                                          @dfinity/sdk @dfinity/idx
-/rs/tests/src/ledger_tests/                             @dfinity/finint  @dfinity/idx
-/rs/tests/src/nns_tests/                                @dfinity/nns-team @dfinity/idx
-/rs/tests/src/rosetta_test.rs                           @dfinity/finint @dfinity/idx
-/rs/tests/src/rosetta_tests/                            @dfinity/finint @dfinity/idx
+/rs/tests/research                                      @dfinity/research
+/rs/tests/driver/src/driver/simulate_network.rs         @dfinity/networking @dfinity/idx
+/rs/tests/boundary_nodes/                               @dfinity/boundary-node
+/rs/tests/ckbtc/                                        @dfinity/cross-chain-team
+/rs/tests/consensus/                                    @dfinity/consensus
+/rs/tests/cross_chain/                                  @dfinity/cross-chain-team
+/rs/tests/crypto/                                       @dfinity/crypto-team
+/rs/tests/dre/                                          @dfinity/dre
+/rs/tests/execution/                                    @dfinity/execution
+/rs/tests/financial_integrations/                       @dfinity/finint
+/rs/tests/message_routing/                              @dfinity/ic-message-routing-owners
+/rs/tests/networking/                                   @dfinity/networking
+/rs/tests/nns/                                          @dfinity/nns-team
+/rs/tests/node/                                         @dfinity/node
+/rs/tests/query_stats/                                  @dfinity/execution @dfinity/consensus
+/rs/tests/sdk/                                          @dfinity/sdk
+/rs/tests/src/ledger_tests/                             @dfinity/finint
+/rs/tests/src/rosetta_test.rs                           @dfinity/finint
+/rs/tests/src/rosetta_tests/                            @dfinity/finint
 /rs/tests/k8s/                                          @dfinity/idx @dfinity/node
 /rs/tla_instrumentation/                                @dfinity/research @dfinity/formal-models
 /rs/tools/                                              @dfinity/ic-interface-owners

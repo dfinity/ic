@@ -117,6 +117,7 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/pocket-ic",
     "//rs/nervous_system/common/test_utils",
     "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
     "//rs/nns/test_utils/golden_nns_state",
@@ -124,6 +125,8 @@ DEV_DEPENDENCIES = [
     "@crate_index//:ic-cbor",
     "@crate_index//:ic-certificate-verification",
     "@crate_index//:ic-certification",
+    "@crate_index//:itertools",
+    "@crate_index//:pretty_assertions",
     "@crate_index//:serde_cbor",
 ]
 
@@ -152,6 +155,7 @@ DEV_DATA = [
     "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "//rs/nns/handlers/root/impl:root-canister",
     "//rs/nns/sns-wasm:sns-wasm-canister",
+    "//rs/pocket_ic_server:pocket-ic-server",
     "//rs/registry/canister:registry-canister",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
     "//rs/sns/governance:sns-governance-canister",
@@ -180,6 +184,7 @@ DEV_ENV = {
     "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
     "MEM_UTILS_TEST_CANISTER_WASM_PATH": "$(rootpath :mem-utils-test-canister)",
+    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     "GOVERNANCE_MEM_TEST_CANISTER_WASM_PATH": "$(rootpath :governance-mem-test-canister)",
     "CANISTER_PLAYGROUND_CANISTER_WASM_PATH": "$(rootpath :canister-playground-canister)",
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
@@ -263,6 +268,7 @@ rust_canister(
 
 rust_ic_test_suite_with_extra_srcs(
     name = "integration_tests_test",
+    timeout = "long",
     srcs = glob(
         ["src/**/*.rs"],
         exclude = [

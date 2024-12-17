@@ -183,6 +183,17 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 		}
 		command := []string{"bazel", "test", target, "--config=systest"}
 		command = append(command, "--cache_test_results=no")
+		icDashboardsDir, err := sparse_checkout("git@github.com:dfinity-ops/k8s.git", "", []string{"bases/apps/ic-dashboards"})
+		if err != nil {
+			cmd.PrintErrln(YELLOW + "Failed to sync k8s dashboards. Received the following error: " + err.Error())
+		} else {
+			cmd.PrintErrln(GREEN + "Successfully synced dashboards to path " + icDashboardsDir)
+			icDashboardsDir = filepath.Join(icDashboardsDir, "bases", "apps", "ic-dashboards")
+			cmd.Println(GREEN + "Will use " + icDashboardsDir + " as a root for dashboards")
+
+			command = append(command, fmt.Sprintf("--test_env=IC_DASHBOARDS_DIR=%s", icDashboardsDir))
+			command = append(command, fmt.Sprintf("--sandbox_add_mount_pair=%s", icDashboardsDir))
+		}
 		command = append(command, fmt.Sprintf("--test_timeout=%s", strconv.Itoa(TESTNET_DEPLOYMENT_TIMEOUT_SEC)))
 		// We let the test-driver (and Bazel command) finish without deleting Farm group.
 		// Afterwards, we interact with the group's ttl via Farm API.
