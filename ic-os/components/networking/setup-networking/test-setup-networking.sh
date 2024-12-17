@@ -33,7 +33,7 @@ EOF
     chmod +x "${TEST_DIR}/ethtool"
 
     mkdir -p "${TEST_DIR}/opt/ic/bin"
-    cat > "${TEST_DIR}/opt/ic/bin/setupos_tool" <<'EOF'
+    cat >"${TEST_DIR}/opt/ic/bin/setupos_tool" <<'EOF'
 #!/bin/bash
 if [ "$1" = "generate-mac-address" ]; then
     echo "02:00:00:aa:bb:cc"
@@ -43,7 +43,7 @@ fi
 EOF
     chmod +x "${TEST_DIR}/opt/ic/bin/setupos_tool"
 
-    cat > "${TEST_DIR}/netplan" <<'EOF'
+    cat >"${TEST_DIR}/netplan" <<'EOF'
 #!/bin/bash
 if [ "$1" = "generate" ] || [ "$1" = "apply" ]; then
     exit 0
@@ -52,7 +52,7 @@ EOF
     chmod +x "${TEST_DIR}/netplan"
 
     mkdir -p "${TEST_DIR}/var/ic/config"
-    cat > "${TEST_DIR}/var/ic/config/config.ini" <<'EOF'
+    cat >"${TEST_DIR}/var/ic/config/config.ini" <<'EOF'
 ipv6_gateway=fe80::2
 EOF
 
@@ -79,19 +79,34 @@ function test_netplan_config() {
     hash -r
 
     CONFIG_BASE_PATH="${TEST_DIR}/var/ic/config" \
-    NETPLAN_TEMPLATE_PATH="." \
-    NETPLAN_RUN_PATH="${TEST_DIR}/run/netplan" \
-    IC_BIN_PATH="${TEST_DIR}/opt/ic/bin" \
-    SHELL=/bin/bash \
-    /bin/bash ./setup-networking.sh SetupOS
+        NETPLAN_TEMPLATE_PATH="." \
+        NETPLAN_RUN_PATH="${TEST_DIR}/run/netplan" \
+        IC_BIN_PATH="${TEST_DIR}/opt/ic/bin" \
+        SHELL=/bin/bash \
+        /bin/bash ./setup-networking.sh SetupOS
 
     local OUTPUT_FILE="${TEST_DIR}/run/netplan/99-setup-netplan.yaml"
 
-    [ -f "$OUTPUT_FILE" ] || { echo "Test failed: netplan output file not created"; exit 1; }
-    grep -q "macaddress: 02:00:00:aa:bb:cc" "$OUTPUT_FILE" || { echo "Test failed: MAC address substitution"; exit 1; }
-    grep -q "2001:db8::1234" "$OUTPUT_FILE" || { echo "Test failed: IPv6 address substitution"; exit 1; }
-    grep -q "fe80::2" "$OUTPUT_FILE" || { echo "Test failed: IPv6 gateway substitution"; exit 1; }
-    grep -Eq "interfaces:\s*\[eth2,eth1,eth0\]" "$OUTPUT_FILE" || { echo "Test failed: Interfaces insertion"; exit 1; }
+    [ -f "$OUTPUT_FILE" ] || {
+        echo "Test failed: netplan output file not created"
+        exit 1
+    }
+    grep -q "macaddress: 02:00:00:aa:bb:cc" "$OUTPUT_FILE" || {
+        echo "Test failed: MAC address substitution"
+        exit 1
+    }
+    grep -q "2001:db8::1234" "$OUTPUT_FILE" || {
+        echo "Test failed: IPv6 address substitution"
+        exit 1
+    }
+    grep -q "fe80::2" "$OUTPUT_FILE" || {
+        echo "Test failed: IPv6 gateway substitution"
+        exit 1
+    }
+    grep -Eq "interfaces:\s*\[eth2,eth1,eth0\]" "$OUTPUT_FILE" || {
+        echo "Test failed: Interfaces insertion"
+        exit 1
+    }
 
     echo "TEST PASSED: netplan_config"
 }
