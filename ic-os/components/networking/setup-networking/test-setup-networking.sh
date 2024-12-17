@@ -7,7 +7,7 @@ trap 'rm -rf "$TEST_DIR"' EXIT
 
 SHELL=/bin/bash
 
-function mock_tools_for_gather_interfaces() {
+function mock_tools() {
     cat >"${TEST_DIR}/ip" <<'EOF'
 #!/bin/bash
 if [ "$1" = "-o" ] && [ "$2" = "link" ] && [ "$3" = "show" ]; then
@@ -27,30 +27,6 @@ case "$IFACE" in
     eth0) echo "Speed: 100Mb/s" ;;
     eth1) echo "Speed: 1000Mb/s" ;;
     eth2) echo "Speed: 10000Mb/s" ;;
-    *) echo "Speed: Unknown" ;;
-esac
-EOF
-    chmod +x "${TEST_DIR}/ethtool"
-}
-
-function mock_tools_for_netplan() {
-    cat > "${TEST_DIR}/ip" <<'EOF'
-#!/bin/bash
-if [ "$1" = "-o" ] && [ "$2" = "link" ] && [ "$3" = "show" ]; then
-    echo "1: ethA: <BROADCAST,MULTICAST,UP> mtu 1500"
-    echo "2: ethB: <BROADCAST,MULTICAST> mtu 1500"
-else
-    /usr/bin/ip "$@"
-fi
-EOF
-    chmod +x "${TEST_DIR}/ip"
-
-    cat > "${TEST_DIR}/ethtool" <<'EOF'
-#!/bin/bash
-IFACE="$1"
-case "$IFACE" in
-    ethA) echo "Speed: 10000Mb/s" ;;
-    ethB) echo "Speed: 1000Mb/s" ;;
     *) echo "Speed: Unknown" ;;
 esac
 EOF
@@ -85,7 +61,6 @@ EOF
 }
 
 function test_gather_interfaces_by_speed() {
-    mock_tools_for_gather_interfaces
     export PATH="${TEST_DIR}:${PATH}"
     hash -r
 
@@ -101,7 +76,6 @@ function test_gather_interfaces_by_speed() {
 }
 
 function test_netplan_config() {
-    mock_tools_for_netplan
     export PATH="${TEST_DIR}:${PATH}"
     hash -r
 
@@ -118,11 +92,12 @@ function test_netplan_config() {
     grep -q "macaddress: 02:00:00:aa:bb:cc" "$OUTPUT_FILE" || { echo "Test failed: MAC address substitution"; exit 1; }
     grep -q "2001:db8::1234" "$OUTPUT_FILE" || { echo "Test failed: IPv6 address substitution"; exit 1; }
     grep -q "fe80::2" "$OUTPUT_FILE" || { echo "Test failed: IPv6 gateway substitution"; exit 1; }
-    grep -Eq "interfaces:\s*\[ethA,ethB\]" "$OUTPUT_FILE" || { echo "Test failed: Interfaces insertion"; exit 1; }
+    grep -Eq "interfaces:\s*\[eth2,eth1,eth0\]" "$OUTPUT_FILE" || { echo "Test failed: Interfaces insertion"; exit 1; }
 
     echo "Test passed: netplan_config"
 }
 
+mock_tools
 test_gather_interfaces_by_speed
 test_netplan_config
 
