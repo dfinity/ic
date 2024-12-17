@@ -52,6 +52,7 @@ system_test_nns(
         "CKETH_UVM_CONFIG_PATH": "$(rootpath :cketh_uvm_config_image)",
         "CKETH_MINTER_WASM_PATH": "$(rootpath //rs/ethereum/cketh/minter:cketh_minter.wasm.gz)",
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
+        "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -62,10 +63,11 @@ system_test_nns(
         BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        CANISTER_RUNTIME_DEPS + [
+        [
             # Keep sorted.
             ":cketh_uvm_config_image",
             "//rs/ethereum/cketh/minter:cketh_minter.wasm.gz",
+            "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
         ],
     deps = [
@@ -73,6 +75,7 @@ system_test_nns(
         "//packages/ic-ethereum-types",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/ethereum/cketh/minter",
+        "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/nns/constants",
         "//rs/registry/subnet_type",
@@ -91,6 +94,13 @@ system_test_nns(
     ],
 )
 
+filegroup(
+    name = "erc20_contract",
+    srcs = [
+        "ERC20.sol"
+    ],
+)
+
 oci_tar(
     name = "foundry.tar",
     image = "@foundry",
@@ -100,6 +110,7 @@ oci_tar(
 uvm_config_image(
     name = "cketh_uvm_config_image",
     srcs = [
+        ":erc20_contract",
         ":foundry.tar",
         "//rs/ethereum/cketh/minter:helper_contracts",
     ],

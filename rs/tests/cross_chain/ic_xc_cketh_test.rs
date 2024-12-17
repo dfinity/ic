@@ -11,8 +11,12 @@ use ic_consensus_threshold_sig_system_test_utils::{
 };
 use ic_ethereum_types::Address;
 use ic_icrc1_ledger::{ArchiveOptions, FeatureFlags, InitArgsBuilder, LedgerArgument};
+use ic_ledger_suite_orchestrator::candid::{
+    AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, OrchestratorArg,
+    UpgradeArg as LedgerSuiteOrchestratorUpgradeArg,
+};
 use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::test_env_api::SubnetSnapshot;
 use ic_system_test_driver::driver::universal_vm::DeployedUniversalVm;
@@ -35,16 +39,12 @@ use ic_types::Height;
 use icrc_ledger_types::icrc1::account::Account;
 use reqwest::Client;
 use serde_json::json;
-use slog::Logger;
+use slog::{info, Logger};
 use std::env;
 
 const UNIVERSAL_VM_NAME: &str = "foundry";
 const DOCKER_NETWORK_NAME: &str = "ethereum";
 const FOUNDRY_PORT: u16 = 8545;
-// Keys setup by anvil
-const DEPLOYER_PRIVATE_KEY: &str =
-    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
-const USER_PRIVATE_KEY: &str = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -167,20 +167,8 @@ fn ic_xc_cketh_test(env: TestEnv) {
         .parse()
         .unwrap();
 
-    let eth_deposit_helper_contract_address = deploy_smart_contract(
-        &docker_host,
-        "EthDepositHelper.sol",
-        "CkEthDeposit",
-        &minter_address.to_string(),
-    );
-    assert_eq!(
-        call_smart_contract(
-            &docker_host,
-            &eth_deposit_helper_contract_address,
-            "getMinterAddress()(address)"
-        ),
-        minter_address.to_string()
-    );
+    let eth_deposit_helper_contract_address =
+        deploy_eth_deposit_helper_contract(&docker_host, &minter_address);
 
     block_on(async {
         minter
@@ -191,35 +179,51 @@ fn ic_xc_cketh_test(env: TestEnv) {
             .await
     });
 
-    let eth_deposit_helper_contract_address = block_on(async {
-        minter
-            .get_minter_info()
-            .await
-            .eth_helper_contract_address
-            .unwrap()
-    });
-    let _cketh_deposit_tx_hash = send_smart_contract(
-        &docker_host,
-        &eth_deposit_helper_contract_address,
-        "deposit(bytes32)",
-        "0x1d9facb184cbe453de4841b6b9d9cc95bfc065344e485789b550544529020000",
-        Some("1ether"),
-    );
+    block_on(async { test_cketh_deposit(&docker_host, &minter).await });
 
-    let erc20_deposit_helper_contract_address = deploy_smart_contract(
-        &docker_host,
-        "ERC20DepositHelper.sol",
-        "CkErc20Deposit",
-        &minter_address.to_string(),
-    );
-    assert_eq!(
-        call_smart_contract(
-            &docker_host,
-            &erc20_deposit_helper_contract_address,
-            "getMinterAddress()(address)"
-        ),
-        minter_address.to_string()
-    );
+    let erc20_contract_address = deploy_erc20_contract(&docker_host);
+    let erc20_deposit_helper_contract_address =
+        deploy_erc20_helper_contract(&docker_host, &minter_address);
+    let lso_canister = block_on(async {
+        let mut lso_canister =
+            install_ledger_suite_orchestrator(&application_subnet_runtime, minter.principal())
+                .await;
+        info!(
+            &logger,
+            "Installed ledger orchestrator canister at {}",
+            lso_canister.principal()
+        );
+        minter
+            .upgrade(MinterUpgradeArg {
+                ledger_suite_orchestrator_id: Some(lso_canister.principal()),
+                erc20_helper_contract_address: Some(erc20_deposit_helper_contract_address),
+                last_erc20_scraped_block_number: Some(Nat::from(0_u8)), //TODO: XC-256 get block number from contract creation
+                ..Default::default()
+            })
+            .await;
+        lso_canister
+            .upgrade(LedgerSuiteOrchestratorUpgradeArg {
+                git_commit_hash: Some("6a8e5fca2c6b4e12966638c444e994e204b42989".to_string()),
+                ..Default::default()
+            })
+            .await;
+        lso_canister
+            .add_erc20(AddErc20Arg {
+                contract: Erc20Contract {
+                    chain_id: Nat::from(1_u8),
+                    address: erc20_contract_address,
+                },
+                ledger_init_arg: LedgerInitArg {
+                    transfer_fee: 1_u8.into(),
+                    decimals: 18,
+                    token_name: "ckEXL".to_string(),
+                    token_symbol: "ckEXL".to_string(),
+                    token_logo: "".to_string(),
+                },
+            })
+            .await;
+        lso_canister
+    });
 }
 
 async fn activate_threshold_ecdsa(
@@ -315,13 +319,136 @@ async fn install_cketh_minter<'a>(
     }
 }
 
+async fn install_ledger_suite_orchestrator(
+    runtime: &Runtime,
+    minter: Principal,
+) -> LedgerSuiteOrchestratorCanister {
+    let mut lso_canister = create_canister(runtime).await;
+    let lso_init_args = OrchestratorArg::InitArg(InitArg {
+        more_controller_ids: vec![ROOT_CANISTER_ID.get().0],
+        minter_id: Some(minter),
+        cycles_management: None,
+    });
+    let lso_wasm = Wasm::from_file(
+        env::var("LEDGER_SUITE_ORCHESTRATOR_WASM_PATH")
+            .expect("LEDGER_SUITE_ORCHESTRATOR_WASM_PATH not set"),
+    );
+    lso_wasm
+        .install_with_retries_onto_canister(
+            &mut lso_canister,
+            Some(Encode!(&lso_init_args).unwrap()),
+            None,
+        )
+        .await
+        .unwrap();
+
+    LedgerSuiteOrchestratorCanister {
+        canister: lso_canister,
+    }
+}
+
+fn deploy_eth_deposit_helper_contract(
+    docker_host: &DeployedUniversalVm,
+    minter_address: &Address,
+) -> String {
+    let eth_deposit_helper_contract_address = deploy_smart_contract(
+        &docker_host,
+        &EthereumAccount::HelperContractDeployer,
+        "EthDepositHelper.sol",
+        "CkEthDeposit",
+        &minter_address.to_string(),
+    );
+    assert_eq!(
+        call_smart_contract(
+            &docker_host,
+            &eth_deposit_helper_contract_address,
+            "getMinterAddress()(address)",
+            &[]
+        ),
+        minter_address.to_string()
+    );
+    eth_deposit_helper_contract_address
+}
+
+async fn test_cketh_deposit(foundry: &DeployedUniversalVm, minter: &CkEthMinterCanister<'_>) {
+    let eth_deposit_helper_contract_address = minter
+        .get_minter_info()
+        .await
+        .eth_helper_contract_address
+        .unwrap();
+    let _cketh_deposit_tx_hash = send_smart_contract(
+        foundry,
+        &EthereumAccount::User,
+        &eth_deposit_helper_contract_address,
+        "deposit(bytes32)",
+        "0x1d9facb184cbe453de4841b6b9d9cc95bfc065344e485789b550544529020000",
+        Some("1ether"),
+    );
+}
+
+fn deploy_erc20_helper_contract(
+    docker_host: &DeployedUniversalVm,
+    minter_address: &Address,
+) -> String {
+    let erc20_deposit_helper_contract_address = deploy_smart_contract(
+        &docker_host,
+        &EthereumAccount::HelperContractDeployer,
+        "ERC20DepositHelper.sol",
+        "CkErc20Deposit",
+        &minter_address.to_string(),
+    );
+    assert_eq!(
+        call_smart_contract(
+            &docker_host,
+            &erc20_deposit_helper_contract_address,
+            "getMinterAddress()(address)",
+            &[]
+        ),
+        minter_address.to_string()
+    );
+    erc20_deposit_helper_contract_address
+}
+
+fn deploy_erc20_contract(foundry: &DeployedUniversalVm) -> String {
+    let initial_supply: u128 = 1_000_000_000_000_000_000_000;
+    let erc20_address = deploy_smart_contract(
+        foundry,
+        &EthereumAccount::Erc20Deployer,
+        "ERC20.sol",
+        "EXLToken",
+        &format!("0x{:x}", initial_supply),
+    );
+    //deployer has initial supply, transfer some ERC-20 tokens to user to play with
+    let user_initial_balance = initial_supply / 1_000;
+    let user_address = EthereumAccount::User.address();
+    let _transfer_tx = send_smart_contract(
+        foundry,
+        &EthereumAccount::Erc20Deployer,
+        &erc20_address,
+        "transfer(address,uint256)",
+        &format!("{user_address} {user_initial_balance}"),
+        None,
+    );
+    let user_balance = call_smart_contract(
+        foundry,
+        &erc20_address,
+        "balanceOf(address)(uint256)",
+        &[user_address],
+    ); //Output is formatted as "1000000000000000000 [1e18]"
+    let user_balance = user_balance.split_ascii_whitespace().next().unwrap();
+    assert_eq!(user_balance.parse::<u128>().unwrap(), user_initial_balance);
+    erc20_address
+}
+
 fn deploy_smart_contract(
     foundry: &DeployedUniversalVm,
+    sender: &EthereumAccount,
     filename: &str,
     contract_name: &str,
     constructor_args: &str,
 ) -> String {
-    let json_output = foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm -v /config/{filename}:/contracts/{filename} foundry "forge create --json --rpc-url http://anvil:{FOUNDRY_PORT} --private-key {DEPLOYER_PRIVATE_KEY} /contracts/{filename}:{contract_name} --constructor-args {constructor_args}""#)).unwrap();
+    let sender_private_key = sender.private_key();
+    let json_output = foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm -v /config/{filename}:/contracts/{filename} foundry "forge create --json --rpc-url http://anvil:{FOUNDRY_PORT} --private-key {sender_private_key} /contracts/{filename}:{contract_name} --constructor-args {constructor_args}""#)).unwrap();
     println!(
         "Deployed {filename} with constructor args {constructor_args}: {}",
         json_output
@@ -334,19 +461,23 @@ fn call_smart_contract(
     foundry: &DeployedUniversalVm,
     contract_address: &str,
     method: &str,
+    args: &[&str],
 ) -> String {
-    foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm foundry "cast call {contract_address} '{method}' --rpc-url http://anvil:{FOUNDRY_PORT}""#)).unwrap().trim().to_string()
+    let arg = args.join(" ");
+    foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm foundry "cast call {contract_address} '{method}' {arg} --rpc-url http://anvil:{FOUNDRY_PORT}""#)).unwrap().trim().to_string()
 }
 
 fn send_smart_contract(
     foundry: &DeployedUniversalVm,
+    sender: &EthereumAccount,
     contract_address: &str,
     method: &str,
     arg: &str,
     eth: Option<&str>,
 ) -> String {
     let value = eth.unwrap_or("0");
-    let json_output = foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm foundry "cast send --json {contract_address} '{method}' '{arg}' --value {value} --private-key {USER_PRIVATE_KEY} --rpc-url http://anvil:{FOUNDRY_PORT}""#)).unwrap().trim().to_string();
+    let sender_private_key = sender.private_key();
+    let json_output = foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm foundry "cast send --json {contract_address} '{method}' {arg} --value {value} --private-key {sender_private_key} --rpc-url http://anvil:{FOUNDRY_PORT}""#)).unwrap().trim().to_string();
     let parsed_output: serde_json::Value = serde_json::from_str(&json_output).unwrap();
     assert_eq!(parsed_output["status"].as_str().unwrap(), "0x1");
     parsed_output["transactionHash"]
@@ -390,5 +521,69 @@ impl<'a> CkEthMinterCanister<'a> {
             .upgrade_to_self_binary(Encode!(&MinterArg::UpgradeArg(arg)).unwrap())
             .await
             .unwrap();
+    }
+
+    fn principal(&self) -> Principal {
+        self.canister.canister_id().get().0
+    }
+}
+
+struct LedgerSuiteOrchestratorCanister<'a> {
+    canister: Canister<'a>,
+}
+
+impl<'a> LedgerSuiteOrchestratorCanister<'a> {
+    async fn upgrade(&mut self, arg: LedgerSuiteOrchestratorUpgradeArg) {
+        self.canister
+            .upgrade_to_self_binary(Encode!(&OrchestratorArg::UpgradeArg(arg)).unwrap())
+            .await
+            .unwrap();
+    }
+
+    async fn add_erc20(&mut self, arg: AddErc20Arg) {
+        self.canister
+            .upgrade_to_self_binary(Encode!(&OrchestratorArg::AddErc20Arg(arg)).unwrap())
+            .await
+            .unwrap();
+    }
+
+    fn principal(&self) -> Principal {
+        self.canister.canister_id().get().0
+    }
+}
+
+/// Accounts created by Anvil on startup
+enum EthereumAccount {
+    Erc20Deployer,
+    HelperContractDeployer,
+    User,
+}
+
+impl EthereumAccount {
+    const ACCOUNT_0: (&str, &str) = (
+        "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+    );
+    const ACCOUNT_1: (&str, &str) = (
+        "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
+    );
+    const ACCOUNT_2: (&str, &str) = (
+        "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+        "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
+    );
+    fn account(&self) -> (&str, &str) {
+        match self {
+            EthereumAccount::Erc20Deployer => Self::ACCOUNT_0,
+            EthereumAccount::HelperContractDeployer => Self::ACCOUNT_1,
+            EthereumAccount::User => Self::ACCOUNT_2,
+        }
+    }
+    pub fn address(&self) -> &str {
+        self.account().0
+    }
+
+    pub fn private_key(&self) -> &str {
+        self.account().1
     }
 }
