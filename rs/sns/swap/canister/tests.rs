@@ -54,7 +54,7 @@ async fn test_get_canister_status() {
             memory_allocation: candid::Nat::from(0_u32),
             freezing_threshold: candid::Nat::from(0_u32),
             wasm_memory_limit: Some(candid::Nat::from(0_u32)),
-            wasm_memory_threshold: candid::Nat::from(0_u32),
+            wasm_memory_threshold: Some(candid::Nat::from(0_u32)),
         },
         memory_size: candid::Nat::from(0_u32),
         cycles: candid::Nat::from(0_u32),
