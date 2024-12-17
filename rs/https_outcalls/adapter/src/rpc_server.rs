@@ -7,6 +7,7 @@ use crate::Config;
 use core::convert::TryFrom;
 use http::{header::USER_AGENT, HeaderName, HeaderValue, Uri};
 use http_body_util::{BodyExt, Full};
+use hyper::body::Incoming;
 use hyper::{
     body::Bytes,
     header::{HeaderMap, ToStrError},
@@ -23,7 +24,11 @@ use ic_https_outcalls_service::{
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use parking_lot::{RwLock, RwLockUpgradableReadGuard};
+use rand::{seq::SliceRandom, thread_rng, Rng};
+use std::collections::BTreeMap;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 use tonic::{Request, Response, Status};
 
@@ -41,15 +46,25 @@ const USER_AGENT_ADAPTER: &str = "ic/1.0";
 /// "the total number of bytes representing the header names and values must not exceed 48KiB".
 const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 
+/// The maximum number of times we will try to connect to a SOCKS proxy.
+const MAX_SOCKS_PROXY_RETRIES: usize = 3;
+
+//TODO(SOCKS_PROXY_DL): Make this > 0.
+/// The probability of using api boundary node addresses for SOCKS proxy dark launch.
+const REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE: u32 = 0;
+
 type OutboundRequestBody = Full<Bytes>;
 
-/// Implements HttpsOutcallsService
-// TODO: consider making this private
+type Cache =
+    BTreeMap<String, Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>;
+
 pub struct CanisterHttp {
     client: Client<HttpsConnector<HttpConnector>, OutboundRequestBody>,
     socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>,
+    cache: Arc<RwLock<Cache>>,
     logger: ReplicaLogger,
     metrics: AdapterMetrics,
+    http_connect_timeout_secs: u64,
 }
 
 impl CanisterHttp {
@@ -98,8 +113,147 @@ impl CanisterHttp {
         Self {
             client,
             socks_client,
+            cache: Arc::new(RwLock::new(BTreeMap::new())),
             logger,
             metrics: AdapterMetrics::new(metrics),
+            http_connect_timeout_secs: config.http_connect_timeout_secs,
+        }
+    }
+
+    fn maybe_add_socks_client_for_address(&self, cache: &mut Cache, address: &str) {
+        let mut http_connector = HttpConnector::new();
+        http_connector.enforce_http(false);
+        http_connector
+            .set_connect_timeout(Some(Duration::from_secs(self.http_connect_timeout_secs)));
+
+        if let Ok(proxy_addr) = address.parse() {
+            let client = Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(
+                HttpsConnectorBuilder::new()
+                    .with_native_roots()
+                    .expect("Failed to set native roots")
+                    .https_only()
+                    .enable_all_versions()
+                    .wrap_connector(SocksConnector {
+                        proxy_addr,
+                        auth: None,
+                        connector: http_connector,
+                    }),
+            );
+            cache.insert(address.to_string(), client);
+            self.metrics.socks_cache_size.set(cache.len() as i64);
+        }
+    }
+
+    fn compare_results(
+        &self,
+        result: &Result<http::Response<Incoming>, String>,
+        dl_result: &Result<http::Response<Incoming>, String>,
+    ) {
+        match (result, dl_result) {
+            (Ok(_), Ok(_)) => {
+                debug!(self.logger, "SOCKS_PROXY_DL: Both requests succeeded");
+            }
+            (Err(_), Err(_)) => {
+                debug!(self.logger, "SOCKS_PROXY_DL: Both requests failed");
+            }
+            (Ok(_), Err(err)) => {
+                debug!(
+                    self.logger,
+                    "SOCKS_PROXY_DL: regular request succeeded, DL request failed with error {}",
+                    err,
+                );
+            }
+            (Err(err), Ok(_)) => {
+                debug!(
+                    self.logger,
+                    "SOCKS_PROXY_DL: DL request succeeded, regular request failed with error {}",
+                    err,
+                );
+            }
+        }
+    }
+
+    // Attemts to load socks the client from the cache. If not present, creates a new socks client and adds it to the cache.
+    fn get_socks_client(
+        &self,
+        address: &str,
+    ) -> Option<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>> {
+        let cache_guard = self.cache.upgradable_read();
+
+        if let Some(client) = cache_guard.get(address) {
+            Some(client.clone())
+        } else {
+            let mut cache_guard = RwLockUpgradableReadGuard::upgrade(cache_guard);
+            self.metrics.socks_cache_miss.inc();
+            self.maybe_add_socks_client_for_address(&mut cache_guard, address);
+            match cache_guard.get(address) {
+                Some(client) => Some(client.clone()),
+                None => {
+                    debug!(
+                        self.logger,
+                        "Failed to create SOCKS client for address: {}", address
+                    );
+                    None
+                }
+            }
+        }
+    }
+
+    async fn https_outcall_socks_proxy(
+        &self,
+        socks_proxy_addrs: &[String],
+        request: http::Request<Full<Bytes>>,
+    ) -> Result<http::Response<Incoming>, String> {
+        let mut socks_proxy_addrs = socks_proxy_addrs.to_owned();
+
+        socks_proxy_addrs.shuffle(&mut thread_rng());
+
+        let mut last_error = None;
+
+        let mut tries = 0;
+
+        for socks_proxy_addr in &socks_proxy_addrs {
+            tries += 1;
+            if tries > MAX_SOCKS_PROXY_RETRIES {
+                break;
+            }
+            let next_socks_proxy_addr = socks_proxy_addr.clone();
+
+            let socks_client = self.get_socks_client(&next_socks_proxy_addr);
+
+            if socks_client.is_none() {
+                continue;
+            }
+            let socks_client = socks_client.unwrap();
+
+            match socks_client.request(request.clone()).await {
+                Ok(resp) => {
+                    self.metrics
+                        .socks_connections_attempts
+                        .with_label_values(&[&tries.to_string(), "success"])
+                        .inc();
+                    return Ok(resp);
+                }
+                Err(socks_err) => {
+                    self.metrics
+                        .socks_connections_attempts
+                        .with_label_values(&[&tries.to_string(), "failure"])
+                        .inc();
+                    debug!(
+                        self.logger,
+                        "Failed to connect through SOCKS with address {}: {}",
+                        next_socks_proxy_addr,
+                        socks_err
+                    );
+                    last_error = Some(socks_err);
+                }
+            }
+        }
+
+        if let Some(last_error) = last_error {
+            Err(last_error.to_string())
+        } else {
+            Err("No SOCKS proxy addresses provided".to_string())
         }
     }
 }
@@ -198,9 +352,18 @@ impl HttpsOutcallsService for CanisterHttp {
                 // fail fast because our interface does not have an ipv4 assigned.
                 Err(direct_err) => {
                     self.metrics.requests_socks.inc();
-                    self.socks_client.request(http_req_clone).await.map_err(|e| {
+
+                    let result = self.socks_client.request(http_req_clone.clone()).await.map_err(|e| {
                         format!("Request failed direct connect {direct_err} and connect through socks {e}")
-                    })
+                    });
+
+                    if should_dl_socks_proxy() {
+                        let dl_result = self.https_outcall_socks_proxy(&req.socks_proxy_addrs, http_req_clone).await;
+
+                        self.compare_results(&result, &dl_result);
+                    }
+
+                    result
                 }
                 Ok(resp)=> Ok(resp),
             }
@@ -306,6 +469,15 @@ impl HttpsOutcallsService for CanisterHttp {
             content: body_bytes.to_vec(),
         }))
     }
+}
+
+#[allow(clippy::absurd_extreme_comparisons)]
+fn should_dl_socks_proxy() -> bool {
+    let mut rng = rand::thread_rng();
+    let random_number: u32 = rng.gen_range(0..100);
+    // This is a dark launch feature. We want to test the SOCKS proxy with a small percentage of requests.
+    // Currently this is set to 0%, hence always false.
+    random_number < REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE
 }
 
 fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {

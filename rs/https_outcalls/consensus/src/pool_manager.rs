@@ -14,6 +14,8 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
+use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
+use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -30,6 +32,9 @@ use std::{
 
 pub type CanisterHttpAdapterClient =
     Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
+
+//TODO(SOCKS_PROXY_DL): Make this true.
+const SOCKS_PROXY_DL_ACTIVE: bool = false;
 
 /// [`CanisterHttpPoolManagerImpl`] implements the pool and state monitoring
 /// functionality that is necessary to ensure that http requests are made and
@@ -144,6 +149,47 @@ impl CanisterHttpPoolManagerImpl {
             .collect()
     }
 
+    fn generate_api_boundary_node_addrs(&self) -> Vec<String> {
+        if !SOCKS_PROXY_DL_ACTIVE {
+            return Vec::new();
+        }
+
+        let latest_registry_version = self.registry_client.get_latest_version();
+
+        self.registry_client
+            .get_api_boundary_node_ids(latest_registry_version)
+            .unwrap_or_else(|e| {
+                warn!(self.log, "Failed to get API boundary node IDs: {:?}", e);
+                Vec::new()
+            })
+            .into_iter()
+            .filter_map(|id| {
+                self.registry_client
+                    .get_node_record(id, latest_registry_version)
+                    .map_err(|e| {
+                        warn!(
+                            self.log,
+                            "Failed to get node record for node ID {:?}: {:?}", id, e
+                        );
+                    })
+                    .ok()
+                    .and_then(|opt_record| {
+                        opt_record.or_else(|| {
+                            warn!(self.log, "No node record found for node ID {:?}", id);
+                            None
+                        })
+                    })
+                    .and_then(|record| {
+                        record.http.or_else(|| {
+                            warn!(self.log, "HTTP information missing for node ID {:?}", id);
+                            None
+                        })
+                    })
+                    .map(|http_info| format!("socks5://[{0}]:1080", http_info.ip_addr))
+            })
+            .collect::<Vec<String>>()
+    }
+
     /// Inform the HttpAdapterShim of any new requests that must be made.
     fn make_new_requests(&self, canister_http_pool: &dyn CanisterHttpPool) {
         let _time = self
@@ -181,6 +227,10 @@ impl CanisterHttpPoolManagerImpl {
             .cloned()
             .collect();
 
+        //TODO: this happens farely rarely. However ideally we should only try to get the
+        // boundary node addresses if the subnet is a system subnet.
+        let socks_proxy_addrs = self.generate_api_boundary_node_addrs();
+
         for (id, context) in http_requests {
             if !request_ids_already_made.contains(&id) {
                 let timeout = context.time + Duration::from_secs(5 * 60);
@@ -192,6 +242,7 @@ impl CanisterHttpPoolManagerImpl {
                         id,
                         timeout,
                         context,
+                        socks_proxy_addrs: socks_proxy_addrs.clone(),
                     })
                 {
                     warn!(
@@ -902,6 +953,7 @@ pub mod test {
                         timeout: ic_types::Time::from_nanos_since_unix_epoch(10)
                             + Duration::from_secs(60 * 5),
                         context: request.clone(),
+                        socks_proxy_addrs: vec![],
                     }))
                     .times(1)
                     .return_const(Ok(()));
