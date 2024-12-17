@@ -1,8 +1,9 @@
-use anyhow::Result;
+use anyhow::{anyhow, bail, Result};
 use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
-use ic_cketh_minter::endpoints::{CandidBlockTag, MinterInfo};
+use futures::future::FutureExt;
+use ic_cketh_minter::endpoints::{CandidBlockTag, CkErc20Token, MinterInfo};
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg as MinterUpgradeArg;
 use ic_cketh_minter::lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg};
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
@@ -12,7 +13,7 @@ use ic_consensus_threshold_sig_system_test_utils::{
 use ic_ethereum_types::Address;
 use ic_icrc1_ledger::{ArchiveOptions, FeatureFlags, InitArgsBuilder, LedgerArgument};
 use ic_ledger_suite_orchestrator::candid::{
-    AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, OrchestratorArg,
+    AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
     UpgradeArg as LedgerSuiteOrchestratorUpgradeArg,
 };
 use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
@@ -41,6 +42,8 @@ use reqwest::Client;
 use serde_json::json;
 use slog::{info, Logger};
 use std::env;
+use std::future::Future;
+use std::time::Duration;
 
 const UNIVERSAL_VM_NAME: &str = "foundry";
 const DOCKER_NETWORK_NAME: &str = "ethereum";
@@ -208,20 +211,37 @@ fn ic_xc_cketh_test(env: TestEnv) {
             })
             .await;
         lso_canister
-            .add_erc20(AddErc20Arg {
-                contract: Erc20Contract {
-                    chain_id: Nat::from(1_u8),
-                    address: erc20_contract_address,
+            .add_erc20(
+                AddErc20Arg {
+                    contract: Erc20Contract {
+                        chain_id: Nat::from(1_u8),
+                        address: erc20_contract_address,
+                    },
+                    ledger_init_arg: LedgerInitArg {
+                        transfer_fee: 1_u8.into(),
+                        decimals: 18,
+                        token_name: "ckEXL".to_string(),
+                        token_symbol: "ckEXL".to_string(),
+                        token_logo: "".to_string(),
+                    },
                 },
-                ledger_init_arg: LedgerInitArg {
-                    transfer_fee: 1_u8.into(),
-                    decimals: 18,
-                    token_name: "ckEXL".to_string(),
-                    token_symbol: "ckEXL".to_string(),
-                    token_logo: "".to_string(),
-                },
-            })
+                &logger,
+            )
             .await;
+        let ckexl = try_async("minter supports ckEXL", &logger, || {
+            minter.get_minter_info().map(|info| {
+                info.supported_ckerc20_tokens
+                    .clone()
+                    .into_iter()
+                    .flatten()
+                    .find(|t| t.ckerc20_token_symbol == "ckEXL")
+                    .ok_or(format!(
+                        "ckEXL not found. Supported ckERC20: {:?}",
+                        info.supported_ckerc20_tokens
+                    ))
+            })
+        })
+        .await;
         lso_canister
     });
 }
@@ -488,7 +508,7 @@ fn send_smart_contract(
 
 pub async fn create_canister(runtime: &Runtime) -> Canister<'_> {
     runtime
-        .create_canister_max_cycles_with_retries()
+        .create_canister(Some(u128::MAX))
         .await
         .expect("Unable to create canister")
 }
@@ -540,11 +560,41 @@ impl<'a> LedgerSuiteOrchestratorCanister<'a> {
             .unwrap();
     }
 
-    async fn add_erc20(&mut self, arg: AddErc20Arg) {
+    async fn add_erc20(&mut self, arg: AddErc20Arg, logger: &slog::Logger) {
         self.canister
-            .upgrade_to_self_binary(Encode!(&OrchestratorArg::AddErc20Arg(arg)).unwrap())
+            .upgrade_to_self_binary(Encode!(&OrchestratorArg::AddErc20Arg(arg.clone())).unwrap())
             .await
             .unwrap();
+        let created_canister_ids = ic_system_test_driver::retry_with_msg_async!(
+            "checking if all canisters are created",
+            logger,
+            Duration::from_secs(100),
+            Duration::from_secs(1),
+            || async {
+                let managed_canister_ids = self.canister_ids(arg.contract.clone()).await;
+                match managed_canister_ids {
+                    None => bail!("No managed canister IDs yet"),
+                    Some(x) if x.ledger.is_some() && x.index.is_some() => Ok(x),
+                    _ => bail!(
+                        "Not all canisters were created yet: {:?}",
+                        managed_canister_ids
+                    ),
+                }
+            }
+        )
+        .await
+        .unwrap_or_else(|e| panic!("Canisters for ERC-20 {:?} were not created: {}", arg, e));
+        info!(
+            &logger,
+            "Created canister IDs: {} for ERC-20 {:?}", created_canister_ids, arg
+        );
+    }
+
+    async fn canister_ids(&self, contract: Erc20Contract) -> Option<ManagedCanisterIds> {
+        self.canister
+            .query_("canister_ids", candid, (contract,))
+            .await
+            .expect("Error while calling canister_ids endpoint")
     }
 
     fn principal(&self) -> Principal {
@@ -586,4 +636,20 @@ impl EthereumAccount {
     pub fn private_key(&self) -> &str {
         self.account().1
     }
+}
+
+async fn try_async<S: AsRef<str>, F, Fut, R>(msg: S, logger: &slog::Logger, f: F) -> R
+where
+    Fut: Future<Output = Result<R, String>>,
+    F: Fn() -> Fut,
+{
+    ic_system_test_driver::retry_with_msg_async!(
+        msg.as_ref(),
+        logger,
+        Duration::from_secs(100),
+        Duration::from_secs(1),
+        || async { f().await.map_err(|e| anyhow!(e)) }
+    )
+    .await
+    .expect("failed despite retries")
 }
