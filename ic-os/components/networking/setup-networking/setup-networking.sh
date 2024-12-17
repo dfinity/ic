@@ -4,7 +4,7 @@ set -o nounset
 set -o pipefail
 
 SHELL="/bin/bash"
-PATH="/sbin:/bin:/usr/sbin:/usr/bin"
+PATH="/sbin:/bin:/usr/sbin:/usr/bin:${PATH}"
 
 function parse_args() {
     if [ $# -ne 1 ]; then
@@ -94,7 +94,6 @@ function configure_netplan() {
     echo "Configuring netplan..."
     NETPLAN_TEMPLATE_PATH="${NETPLAN_TEMPLATE_PATH:-/opt/ic/share}"
     NETPLAN_TEMPLATE="${NETPLAN_TEMPLATE_PATH}/99-setup-netplan.yaml.template"
-    
     NETPLAN_RUN_PATH="${NETPLAN_RUN_PATH:-/run/netplan}"
     NETPLAN_OUTPUT="${NETPLAN_RUN_PATH}/99-setup-netplan.yaml"
 
@@ -113,6 +112,8 @@ function configure_netplan() {
 
     # Fix netplan configuration file permissions to silence warnings
     chmod 0600 "$NETPLAN_OUTPUT"
+
+    cat "$NETPLAN_OUTPUT"
 
     echo "Netplan configuration written to $NETPLAN_OUTPUT"
     echo "Applying netplan..."
