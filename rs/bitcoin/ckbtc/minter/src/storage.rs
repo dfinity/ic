@@ -70,17 +70,14 @@ fn encode_event(event: &Event) -> Vec<u8> {
 ///
 /// This function panics if the event decoding fails.
 fn decode_event(buf: &[u8]) -> Event {
-    #[derive(Deserialize, candid::CandidType)]
+    #[derive(Deserialize)]
     #[serde(untagged)]
     enum SerializedEvent {
         Legacy(EventType),
         Event(Event),
     }
     match ciborium::de::from_reader(buf).expect("failed to decode a minter event") {
-        SerializedEvent::Legacy(payload) => Event {
-            timestamp: None,
-            payload,
-        },
+        SerializedEvent::Legacy(payload) => Event::from_event_type(payload),
         SerializedEvent::Event(event) => event,
     }
 }

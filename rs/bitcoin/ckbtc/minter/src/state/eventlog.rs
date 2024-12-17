@@ -207,10 +207,19 @@ mod event {
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub struct Event {
-    /// The event type.
-    pub payload: EventType,
     /// The canister time at which the minter generated this event.
     pub timestamp: Option<u64>,
+    /// The event type.
+    pub payload: EventType,
+}
+
+impl Event {
+    pub fn from_event_type(payload: EventType) -> Event {
+        Event {
+            timestamp: None,
+            payload,
+        }
+    }
 }
 
 #[derive(Debug)]

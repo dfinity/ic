@@ -202,7 +202,13 @@ impl GetEventsFile {
         let mut decompressed_buffer = Vec::new();
         gz.read_to_end(&mut decompressed_buffer)
             .expect("BUG: failed to decompress events");
-        Decode!(&decompressed_buffer, GetEventsResult).expect("Failed to decode events")
+        // todo() The logic here assumes the compressed events in the file still use the 'old'
+        //  Candid interface (i.e. a vector of `EventTypes`). Once the deployed minter canisters
+        //  on mainnet/testnet return a result with the new interface, the explicit conversion
+        //  from `EventType` to `Event` must be removed.
+        Decode!(&decompressed_buffer, GetEventTypesResult)
+            .expect("Failed to decode events")
+            .into()
     }
 }
 
@@ -218,13 +224,40 @@ async fn get_events(agent: &Agent, minter_id: &Principal, start: u64, length: u6
         .call_and_wait()
         .await
         .expect("Failed to call get_events");
-    Decode!(&raw_result, Vec<Event>).unwrap()
+    // todo() The logic here assumes the result we get from the minter canister `get_events` call
+    //  still uses the 'old' Candid interface (i.e. a vector of `EventTypes`). Once the deployed
+    //  minter canisters on mainnet/testnet return a result with the new interface, the explicit
+    //  conversion from `EventType` to `Event` must be removed.
+    Decode!(&raw_result, Vec<EventType>)
+        .unwrap()
+        .into_iter()
+        .map(Event::from_event_type)
+        .collect()
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct GetEventTypesResult {
+    pub events: Vec<EventType>,
+    pub total_event_count: u64,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct GetEventsResult {
     pub events: Vec<Event>,
     pub total_event_count: u64,
+}
+
+impl From<GetEventTypesResult> for GetEventsResult {
+    fn from(value: GetEventTypesResult) -> Self {
+        Self {
+            events: value
+                .events
+                .into_iter()
+                .map(Event::from_event_type)
+                .collect(),
+            total_event_count: value.total_event_count,
+        }
+    }
 }
 
 /// This struct is used to skip the check invariants when replaying the events
