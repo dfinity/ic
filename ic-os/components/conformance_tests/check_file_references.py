@@ -20,7 +20,7 @@ ALLOWED_UNDECLARED_DEPENDENCIES = {
         # common setup-networking.sh script used by both SetupOS and HostOS (fix in NODE-1546)
         "/opt/ic/bin/setupos_tool",
         "/opt/ic/bin/hostos_tool",
-    }
+    },
 }
 
 # Check file patterns /opt/ic/...
