@@ -97,3 +97,17 @@ sh_test(
     data = ["ic/generate-ic-config/ic.json5.template"],
     tags = ["manual"],
 )
+
+sh_test(
+    name = "test_setup_networking",
+    srcs = [ "networking/setup-networking/test-setup-networking.sh"],
+    args = [
+        "$(execpath networking/setup-networking/setup-networking.sh)",
+        "$(execpath networking/setup-networking/99-setup-netplan.yaml.template)"
+    ],
+    data = [
+        "networking/setup-networking/setup-networking.sh",
+        "networking/setup-networking/99-setup-netplan.yaml.template",
+    ],
+    tags = ["manual"],
+)

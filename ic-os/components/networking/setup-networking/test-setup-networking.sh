@@ -2,6 +2,14 @@
 
 set -euo pipefail
 
+if [ $# -ne 2 ]; then
+    echo "Usage: $0 <path-to-setup-networking.sh> <path-to-99-setup-netplan.yaml.template>"
+    exit 1
+fi
+
+SETUP_SCRIPT="$1"
+TEMPLATE_FILE="$2"
+
 TEST_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEST_DIR"' EXIT
 
@@ -63,7 +71,7 @@ function test_gather_interfaces_by_speed() {
     export PATH="${TEST_DIR}:${PATH}"
     hash -r
 
-    source ./setup-networking.sh
+    source "$SETUP_SCRIPT"
     gather_interfaces_by_speed
     local EXPECTED_INTERFACES="eth2,eth1,eth0"
     if [ "${INTERFACE_LIST}" = "${EXPECTED_INTERFACES}" ]; then
@@ -79,11 +87,11 @@ function test_netplan_config() {
     hash -r
 
     CONFIG_BASE_PATH="${TEST_DIR}/var/ic/config" \
-        NETPLAN_TEMPLATE_PATH="." \
+        NETPLAN_TEMPLATE_PATH="$(dirname "$TEMPLATE_FILE")" \
         NETPLAN_RUN_PATH="${TEST_DIR}/run/netplan" \
         IC_BIN_PATH="${TEST_DIR}/opt/ic/bin" \
         SHELL=/bin/bash \
-        /bin/bash ./setup-networking.sh SetupOS
+        /bin/bash "$SETUP_SCRIPT" SetupOS
 
     local OUTPUT_FILE="${TEST_DIR}/run/netplan/99-setup-netplan.yaml"
 
