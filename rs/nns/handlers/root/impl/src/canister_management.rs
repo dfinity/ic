@@ -135,12 +135,10 @@ async fn try_to_create_and_install_canister(
         memory_allocation: request.memory_allocation,
         sender_canister_version: Some(ic_cdk::api::canister_version()),
     };
-    let install_res: (Result<(), (RejectionCode, String)>,) =
-        call(CanisterId::ic_00().get().0, "install_code", (install_args,)).await?;
+    let install_res: Result<(), (RejectionCode, String)> =
+        call(CanisterId::ic_00().get().0, "install_code", (install_args,)).await;
 
-    install_res
-        .0
-        .map_err(|(code, msg)| format!("error code {}: {}", code as i32, msg))?;
+    install_res.map_err(|(code, msg)| format!("error code {}: {}", code as i32, msg))?;
 
     Ok(id.get_canister_id())
 }

@@ -54,7 +54,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
-    "//rs/rust_canisters/dfn_macro",
+    "@crate_index//:ic-cdk-macros",
 ]
 
 BUILD_DEPENDENCIES = [
