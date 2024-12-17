@@ -3,7 +3,7 @@ use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
 use futures::future::FutureExt;
-use ic_cketh_minter::endpoints::{CandidBlockTag, CkErc20Token, MinterInfo};
+use ic_cketh_minter::endpoints::{CandidBlockTag, MinterInfo};
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg as MinterUpgradeArg;
 use ic_cketh_minter::lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg};
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
@@ -204,7 +204,7 @@ fn ic_xc_cketh_test(env: TestEnv) {
             .await;
         lso
     });
-    let ckEXL = block_on(async {
+    let ckexl_token = block_on(async {
         ledger_orchestrator
             .add_erc20(
                 AddErc20Arg {
@@ -238,7 +238,7 @@ fn ic_xc_cketh_test(env: TestEnv) {
         })
         .await
     });
-    assert_eq!(ckEXL.erc20_contract_address, erc20_contract_address);
+    assert_eq!(ckexl_token.erc20_contract_address, erc20_contract_address);
 
     block_on(async {
         test_cketh_deposit(&docker_host, &minter, &logger).await;
@@ -372,7 +372,7 @@ fn deploy_eth_deposit_helper_contract(
     minter_address: &Address,
 ) -> String {
     let eth_deposit_helper_contract_address = deploy_smart_contract(
-        &docker_host,
+        docker_host,
         &EthereumAccount::HelperContractDeployer,
         "EthDepositHelper.sol",
         "CkEthDeposit",
@@ -380,7 +380,7 @@ fn deploy_eth_deposit_helper_contract(
     );
     assert_eq!(
         call_smart_contract(
-            &docker_host,
+            docker_host,
             &eth_deposit_helper_contract_address,
             "getMinterAddress()(address)",
             &[]
@@ -451,7 +451,7 @@ async fn test_ckerc20_deposit(
     send_smart_contract(
         foundry,
         &EthereumAccount::User,
-        &erc20_contract_address,
+        erc20_contract_address,
         "approve(address,uint256)",
         &[
             &erc20_deposit_helper_contract_address,
@@ -471,7 +471,7 @@ async fn test_ckerc20_deposit(
         &erc20_deposit_helper_contract_address,
         "deposit(address,uint256,bytes32)",
         &[
-            &erc20_contract_address,
+            erc20_contract_address,
             &deposit_amount.to_string(),
             ENCODED_PRINCIPAL,
         ],
@@ -487,7 +487,7 @@ fn deploy_erc20_helper_contract(
     minter_address: &Address,
 ) -> String {
     let erc20_deposit_helper_contract_address = deploy_smart_contract(
-        &docker_host,
+        docker_host,
         &EthereumAccount::HelperContractDeployer,
         "ERC20DepositHelper.sol",
         "CkErc20Deposit",
@@ -495,7 +495,7 @@ fn deploy_erc20_helper_contract(
     );
     assert_eq!(
         call_smart_contract(
-            &docker_host,
+            docker_host,
             &erc20_deposit_helper_contract_address,
             "getMinterAddress()(address)",
             &[]
@@ -522,11 +522,11 @@ fn deploy_erc20_contract(foundry: &DeployedUniversalVm) -> String {
         &EthereumAccount::Erc20Deployer,
         &erc20_address,
         "transfer(address,uint256)",
-        &[&user_address, &user_initial_balance.to_string()],
+        &[user_address, &user_initial_balance.to_string()],
         None,
     );
     assert_eq!(
-        erc20_balance_of(foundry, &erc20_address, &user_address),
+        erc20_balance_of(foundry, &erc20_address, user_address),
         user_initial_balance
     );
     erc20_address
@@ -539,7 +539,7 @@ fn erc20_balance_of(
 ) -> u128 {
     let user_balance = call_smart_contract(
         foundry,
-        &contract_address,
+        contract_address,
         "balanceOf(address)(uint256)",
         &[user_address],
     ); //Output is formatted as "1000000000000000000 [1e18]"
