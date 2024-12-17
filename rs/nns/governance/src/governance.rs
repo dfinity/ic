@@ -6632,15 +6632,6 @@ impl Governance {
         ));
     }
 
-    fn maybe_run_validations(&mut self) {
-        // Running validations might increase heap size. Do not run it when heap should not grow.
-        if self.check_heap_can_grow().is_err() {
-            return;
-        }
-        self.neuron_data_validator
-            .maybe_validate(self.env.now(), &self.neuron_store);
-    }
-
     /// Increment neuron allowances if enough time has passed.
     fn maybe_increase_neuron_allowances(&mut self) {
         // We  increase the allowance over the maximum per hour to account
@@ -6739,7 +6730,6 @@ impl Governance {
 
         self.maybe_gc();
         self.maybe_run_migrations();
-        self.maybe_run_validations();
         self.maybe_increase_neuron_allowances();
     }
 
@@ -6808,6 +6798,15 @@ impl Governance {
         };
 
         Ok(())
+    }
+
+    pub fn maybe_run_validations(&mut self) {
+        // Running validations might increase heap size. Do not run it when heap should not grow.
+        if self.check_heap_can_grow().is_err() {
+            return;
+        }
+        self.neuron_data_validator
+            .maybe_validate(self.env.now(), &self.neuron_store);
     }
 
     /// Returns the 30-day average of the ICP/XDR conversion rate.
