@@ -105,7 +105,7 @@ function configure_netplan() {
     done
 
     # Fix netplan configuration file permissions to silence warnings
-    chmod 0640 "$NETPLAN_OUTPUT"
+    chmod 0600 "$NETPLAN_OUTPUT"
 
     echo "Netplan configuration written to $NETPLAN_OUTPUT"
     echo "Applying netplan..."
