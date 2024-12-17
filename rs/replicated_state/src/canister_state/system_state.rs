@@ -1642,7 +1642,14 @@ impl SystemState {
         );
 
         match (&msg, &self.status) {
-            // Requests and responses are both rejected when stopped.
+            // Best-effort responses are silently dropped when stopped.
+            (RequestOrResponse::Response(response), CanisterStatus::Stopped { .. })
+                if response.is_best_effort() =>
+            {
+                Ok(false)
+            }
+
+            // Requests and guaranteed responses are both rejected when stopped.
             (_, CanisterStatus::Stopped { .. }) => {
                 Err((StateError::CanisterStopped(self.canister_id()), msg))
             }

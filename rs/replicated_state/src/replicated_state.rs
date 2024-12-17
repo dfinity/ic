@@ -798,7 +798,14 @@ impl ReplicatedState {
                         )),
                     }
                 } else {
-                    Err((StateError::CanisterNotFound(receiver), msg))
+                    match msg {
+                        // Best-effort responses are silently dropped if the canister is not found.
+                        RequestOrResponse::Response(response) if response.is_best_effort() => {
+                            Ok(false)
+                        }
+                        // For all other messages this is an error.
+                        _ => Err((StateError::CanisterNotFound(receiver), msg)),
+                    }
                 }
             }
         }

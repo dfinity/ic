@@ -22,7 +22,7 @@ use ic_nns_constants::{
     LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
-use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
+use ic_state_machine_tests::{StateMachine, UserError};
 use icp_ledger::{
     AccountIdentifier, Archives, Block, FeatureFlags, LedgerCanisterPayload, UpgradeArgs,
 };
@@ -247,7 +247,7 @@ fn should_create_state_machine_with_golden_nns_state() {
     setup.perform_upgrade_downgrade_testing(false);
 
     // Upgrade all the canisters to the latest version
-    setup.upgrade_to_master(ExpectMigration::Yes);
+    setup.upgrade_to_master(ExpectMigration::No);
     // Upgrade again to test the pre-upgrade
     setup.upgrade_to_master(ExpectMigration::No);
 
@@ -320,21 +320,8 @@ impl Setup {
     pub fn downgrade_to_mainnet(&self) {
         println!("Downgrading to mainnet version");
         self.upgrade_index(&self.mainnet_wasms.index);
-        match self.upgrade_ledger(&self.mainnet_wasms.ledger) {
-            Ok(_) => {
-                panic!("should fail to downgrade ledger to mainnet version");
-            }
-            Err(err) => {
-                // The ledger will still be running the master version, while the other canisters
-                // will be downgraded to the mainnet version. This is not an ideal situation, nor
-                // is it expected to happen in practice, but for the moment let's run the test to
-                // completion.
-                err.assert_contains(
-                    ErrorCode::CanisterCalledTrap,
-                    "Trying to downgrade from incompatible version",
-                );
-            }
-        }
+        self.upgrade_ledger(&self.mainnet_wasms.ledger)
+            .expect("should successfully downgrade to the mainnet version");
         self.check_ledger_metrics(ExpectMigration::No);
         self.upgrade_archive_canisters(&self.mainnet_wasms.archive);
     }
