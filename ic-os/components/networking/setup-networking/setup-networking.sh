@@ -104,6 +104,9 @@ function configure_netplan() {
         sed -i "/^  ethernets:/a \ \ \ \ $IFACE:\n      mtu: 1500\n      optional: true\n      emit-lldp: true\n" "$NETPLAN_OUTPUT"
     done
 
+    # Fix netplan configuration file permissions to silence warnings
+    chmod 0640 "$NETPLAN_OUTPUT"
+
     echo "Netplan configuration written to $NETPLAN_OUTPUT"
     echo "Applying netplan..."
     netplan generate
