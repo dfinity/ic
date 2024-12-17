@@ -36,7 +36,6 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use anyhow::anyhow;
 use async_trait::async_trait;
 use axum::{
     http::{Request, Response},
@@ -46,10 +45,14 @@ use bytes::Bytes;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use phantom_newtype::AmountOf;
-use quinn::{AsyncUdpSocket, SendStream, VarInt};
+use quinn::{
+    AsyncUdpSocket, ConnectionError, ReadError, ReadToEndError, SendStream, StoppedError, VarInt,
+    WriteError,
+};
+use thiserror::Error;
 use tokio::sync::watch;
 use tokio::task::{JoinError, JoinHandle};
 use tokio_util::{sync::CancellationToken, task::task_tracker::TaskTracker};
@@ -57,6 +60,7 @@ use tracing::instrument;
 
 use crate::connection_handle::ConnectionHandle;
 use crate::connection_manager::start_connection_manager;
+use crate::metrics::{observe_transport_error, QuicTransportMetrics};
 
 mod connection_handle;
 mod connection_manager;
@@ -116,6 +120,7 @@ impl Shutdown {
 #[derive(Clone)]
 pub struct QuicTransport {
     log: ReplicaLogger,
+    metrics: QuicTransportMetrics,
     conn_handles: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
     shutdown: Arc<RwLock<Option<Shutdown>>>,
 }
@@ -152,10 +157,11 @@ impl QuicTransport {
         info!(log, "Starting Quic transport.");
 
         let conn_handles = Arc::new(RwLock::new(HashMap::new()));
+        let metrics = QuicTransportMetrics::new(metrics_registry);
 
         let shutdown = start_connection_manager(
             log,
-            metrics_registry,
+            metrics.clone(),
             rt,
             tls_config.clone(),
             registry_client,
@@ -168,6 +174,7 @@ impl QuicTransport {
 
         QuicTransport {
             log: log.clone(),
+            metrics,
             conn_handles,
             shutdown: Arc::new(RwLock::new(Some(shutdown))),
         }
@@ -209,6 +216,77 @@ impl Drop for ResetStreamOnDrop {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum TransportError {
+    // Occurs when the peer cancels the `RecvStream` or drops the `SendStream` future e.g., when the RPC method is part of a `select` branch.
+    #[error("Stream was cancelled.")]
+    StreamCancelled,
+    /// This can occur during a topology change or when the connection manager attempts to replace an old, broken connection with a new one.
+    #[error("Connection was closed.")]
+    ConnectionClosed,
+    /// This can occur if the peer crashes or experiences connectivity issues.
+    #[error("Connection timed out.")]
+    TimedOut,
+    /// The requested connection is not present at the moment.
+    /// Most likely the connection is being established or the peer was not added to the topology yet.
+    #[error("Connection not found.")]
+    ConnectionNotFound,
+    // A serious internal invariant is broken (i.e. worthy of a bug or outage report).
+    // E.g. we have a bug in the protocol implementation or there is malicious peer on the other side.
+    #[error("{0}")]
+    Internal(Box<dyn std::error::Error + Send>),
+}
+
+impl From<ConnectionError> for TransportError {
+    fn from(err: ConnectionError) -> TransportError {
+        match err {
+            ConnectionError::LocallyClosed | ConnectionError::ApplicationClosed(_) => {
+                TransportError::ConnectionClosed
+            }
+            ConnectionError::TimedOut => TransportError::TimedOut,
+            _ => TransportError::Internal(Box::new(err)),
+        }
+    }
+}
+
+impl From<WriteError> for TransportError {
+    fn from(err: WriteError) -> TransportError {
+        match err {
+            WriteError::Stopped(_) => TransportError::StreamCancelled,
+            WriteError::ConnectionLost(conn_err) => conn_err.into(),
+            _ => TransportError::Internal(Box::new(err)),
+        }
+    }
+}
+
+impl From<ReadError> for TransportError {
+    fn from(err: ReadError) -> TransportError {
+        match err {
+            ReadError::Reset(_) => TransportError::StreamCancelled,
+            ReadError::ConnectionLost(conn_err) => conn_err.into(),
+            _ => TransportError::Internal(Box::new(err)),
+        }
+    }
+}
+
+impl From<StoppedError> for TransportError {
+    fn from(err: StoppedError) -> TransportError {
+        match err {
+            StoppedError::ConnectionLost(conn_err) => conn_err.into(),
+            StoppedError::ZeroRttRejected => TransportError::Internal(Box::new(err)),
+        }
+    }
+}
+
+impl From<ReadToEndError> for TransportError {
+    fn from(err: ReadToEndError) -> TransportError {
+        match err {
+            ReadToEndError::Read(read_err) => read_err.into(),
+            ReadToEndError::TooLong => TransportError::Internal(Box::new(err)),
+        }
+    }
+}
+
 #[async_trait]
 impl Transport for QuicTransport {
     #[instrument(skip(self, request))]
@@ -216,13 +294,30 @@ impl Transport for QuicTransport {
         &self,
         peer_id: &NodeId,
         request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, anyhow::Error> {
+    ) -> Result<Response<Bytes>, TransportError> {
+        let _timer = self
+            .metrics
+            .connection_handle_duration_seconds
+            .with_label_values(&[request.uri().path()])
+            .start_timer();
+
+        let bytes_sent_counter = self
+            .metrics
+            .connection_handle_bytes_sent_total
+            .with_label_values(&[request.uri().path()]);
+        bytes_sent_counter.inc_by(request.body().len() as u64);
+
+        let bytes_received_counter = self
+            .metrics
+            .connection_handle_bytes_received_total
+            .with_label_values(&[request.uri().path()]);
+
         let peer = self
             .conn_handles
             .read()
             .unwrap()
             .get(peer_id)
-            .ok_or(anyhow!("Currently not connected to this peer"))?
+            .ok_or(TransportError::ConnectionNotFound)?
             .clone();
         peer.rpc(request).await.inspect_err(|err| {
             info!(self.log, "{:#?}", err);
@@ -249,7 +344,7 @@ pub trait Transport: Send + Sync {
         &self,
         peer_id: &NodeId,
         request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, anyhow::Error>;
+    ) -> Result<Response<Bytes>, TransportError>;
 
     fn peers(&self) -> Vec<(NodeId, ConnId)>;
 }

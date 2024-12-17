@@ -16,7 +16,7 @@ use axum::{body::Body, Router}; // TODO: try to remove the axum dep here
 use bytes::Bytes;
 use http::{Method, Request, Response, Version};
 use ic_base_types::NodeId;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{warn, ReplicaLogger};
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
 use quinn::RecvStream;
@@ -24,11 +24,8 @@ use tower::ServiceExt;
 
 use crate::{
     connection_handle::ConnectionHandle,
-    metrics::{
-        observe_conn_error, observe_read_to_end_error, observe_stopped_error, observe_write_error,
-        QuicTransportMetrics, ERROR_TYPE_APP, INFALIBBLE, STREAM_TYPE_BIDI,
-    },
-    ConnId, ResetStreamOnDrop, MAX_MESSAGE_SIZE_BYTES,
+    metrics::{observe_transport_error, QuicTransportMetrics},
+    ConnId, ResetStreamOnDrop, TransportError, MAX_MESSAGE_SIZE_BYTES,
 };
 
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
@@ -67,7 +64,6 @@ pub async fn start_stream_acceptor(
                                 handle_bi_stream(
                                     peer_id,
                                     conn_handle.conn_id(),
-                                    metrics.clone(),
                                     router.clone(),
                                     send_stream,
                                     bi_rx
@@ -76,8 +72,12 @@ pub async fn start_stream_acceptor(
                         );
                     }
                     Err(err) => {
-                        info!(log, "Exiting request handler event loop due to conn error {:?}", err.to_string());
-                        observe_conn_error(&err, "accept_bi", &metrics.request_handle_errors_total);
+                        let counter = &metrics.request_handle_errors_total;
+                        let transport_err = err.clone().into();
+                        observe_transport_error(&transport_err, counter);
+                        if let TransportError::Internal(internal_err) = &transport_err {
+                            warn!(log, "{:?}", internal_err);
+                        }
                         break;
                     }
                 }
@@ -86,8 +86,14 @@ pub async fn start_stream_acceptor(
             _ = conn_handle.conn().read_datagram() => {},
             Some(completed_request) = inflight_requests.join_next() => {
                 match completed_request {
-                    Ok(res) => {
-                        let _ = res.inspect_err(|err| info!(every_n_seconds => 60, log, "{:?}", err));
+                    Ok(Ok(())) => (),
+                    Ok(Err(err)) => {
+                        // In theory we can also detect a connection error here and exist the loop. Not sure if it is better or worse?!
+                        let counter = &metrics.request_handle_errors_total;
+                        observe_transport_error(&err, counter);
+                        if let TransportError::Internal(internal_err) = &err {
+                            warn!(log, "{:?}", internal_err);
+                        }
                     }
                     Err(err) => {
                         // Cancelling tasks is ok. Panicking tasks are not.
@@ -105,13 +111,15 @@ pub async fn start_stream_acceptor(
 async fn handle_bi_stream(
     peer_id: NodeId,
     conn_id: ConnId,
-    metrics: QuicTransportMetrics,
     router: Router,
     mut send_stream_guard: ResetStreamOnDrop,
-    recv_stream: RecvStream,
-) -> Result<(), anyhow::Error> {
+    mut recv_stream: RecvStream,
+) -> Result<(), TransportError> {
     // Note that the 'recv_stream' is dropped before we call any method on the 'send_stream'
-    let mut request = read_request(recv_stream, &metrics).await?;
+    let request_bytes = recv_stream.read_to_end(MAX_MESSAGE_SIZE_BYTES).await?;
+    // The destructor stops the stream.
+    std::mem::drop(recv_stream);
+    let mut request = read_request(request_bytes).map_err(TransportError::Internal)?;
     request.extensions_mut().insert::<NodeId>(peer_id);
     request.extensions_mut().insert::<ConnId>(conn_id);
 
@@ -121,54 +129,32 @@ async fn handle_bi_stream(
     let response = tokio::select! {
         response = svc => response.expect("Infallible"),
         stopped = stopped_fut => {
-            return Ok(stopped.map(|_| ()).inspect_err(|err| observe_stopped_error(err, "request_handler", &metrics.request_handle_errors_total))?);
+            return stopped.map(|_| ()).map_err(|_| TransportError::StreamCancelled);
         }
     };
-
-    // Record application level errors.
-    if !response.status().is_success() {
-        metrics
-            .request_handle_errors_total
-            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_APP])
-            .inc();
-    }
 
     // We can ignore the errors because if both peers follow the protocol an errors will only occur
     // if the other peer has closed the connection. In this case `accept_bi` in the peer event
     // loop will close this connection.
-    let response_bytes = to_response_bytes(response).await?;
-    send_stream
-        .write_all(&response_bytes)
+    let response_bytes = to_response_bytes(response)
         .await
-        .inspect_err(|err| {
-            observe_write_error(err, "write_all", &metrics.request_handle_errors_total);
-        })?;
-    send_stream.finish().inspect_err(|_| {
-        metrics
-            .request_handle_errors_total
-            .with_label_values(&["finish", INFALIBBLE])
-            .inc();
-    })?;
-    send_stream.stopped().await.inspect_err(|err| {
-        observe_stopped_error(err, "stopped", &metrics.request_handle_errors_total);
-    })?;
+        .map_err(TransportError::Internal)?;
+    send_stream.write_all(&response_bytes).await?;
+    send_stream
+        .finish()
+        .map_err(|err| TransportError::Internal(Box::new(err)))?;
+    send_stream.stopped().await?;
     Ok(())
 }
 
 // The function returns infallible error.
-async fn read_request(
-    mut recv_stream: RecvStream,
-    metrics: &QuicTransportMetrics,
-) -> Result<Request<Body>, anyhow::Error> {
-    let request_bytes = recv_stream
-        .read_to_end(MAX_MESSAGE_SIZE_BYTES)
-        .await
-        .inspect_err(|err| {
-            observe_read_to_end_error(err, "read_to_end", &metrics.request_handle_errors_total)
-        })?;
-
-    let request_proto = pb::HttpRequest::decode(request_bytes.as_slice())?;
-    let pb_http_method = pb::HttpMethod::try_from(request_proto.method)?;
+fn read_request(
+    request_bytes: Vec<u8>,
+) -> Result<Request<Body>, Box<dyn std::error::Error + Send + 'static>> {
+    let request_proto =
+        pb::HttpRequest::decode(request_bytes.as_slice()).map_err(|err| Box::new(err) as Box<_>)?;
+    let pb_http_method =
+        pb::HttpMethod::try_from(request_proto.method).map_err(|err| Box::new(err) as Box<_>)?;
     let http_method = match pb_http_method {
         pb::HttpMethod::Get => Some(Method::GET),
         pb::HttpMethod::Post => Some(Method::POST),
@@ -194,14 +180,20 @@ async fn read_request(
     }
     // This consumes the body without requiring allocation or cloning the whole content.
     let body_bytes = Bytes::from(request_proto.body);
-    Ok(request_builder.body(Body::from(body_bytes))?)
+    request_builder
+        .body(Body::from(body_bytes))
+        .map_err(|err| Box::new(err) as Box<_>)
 }
 
-async fn to_response_bytes(response: Response<Body>) -> Result<Vec<u8>, anyhow::Error> {
+async fn to_response_bytes(
+    response: Response<Body>,
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send>> {
     let (parts, body) = response.into_parts();
     // Check for axum error in body
     // TODO: Think about this. What is the error that can happen here?
-    let body = axum::body::to_bytes(body, MAX_MESSAGE_SIZE_BYTES).await?;
+    let body = axum::body::to_bytes(body, MAX_MESSAGE_SIZE_BYTES)
+        .await
+        .map_err(|err| Box::new(err) as Box<_>)?;
     let response_proto = pb::HttpResponse {
         status_code: parts.status.as_u16().into(),
         headers: parts
