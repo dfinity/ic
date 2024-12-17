@@ -96,6 +96,7 @@ use ic_nervous_system_governance::maturity_modulation::{
 };
 use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
+use ic_nervous_system_timestamp::format_timestamp_for_humans;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
@@ -439,12 +440,6 @@ impl GovernanceProto {
         } else {
             Err("GovernanceProto.deployed_version is not set.".to_string())
         }
-    }
-
-    /// Gets the current deployed version of the SNS or panics.
-    pub fn deployed_version_or_panic(&self) -> Version {
-        self.deployed_version_or_err()
-            .expect("GovernanceProto.deployed_version must be set.")
     }
 
     /// Returns 0 if maturity modulation is disabled (per
@@ -2603,6 +2598,37 @@ impl Governance {
         Ok(())
     }
 
+    /// Best effort to return the deployed version of this SNS.
+    ///
+    /// Normally, the SNS should always have a deployed version, in which case it is returned.
+    /// If this is not the case for whatever reason, this function tries to fetch the running
+    /// version, initialize deployed version with it, and return a copy.
+    pub async fn get_or_reset_deployed_version(&mut self) -> Result<Version, String> {
+        if let Some(deployed_version) = self.proto.deployed_version.clone() {
+            return Ok(deployed_version);
+        }
+
+        log!(
+            ERROR,
+            "The SNS does not have a deployed version. Attempting to reset it ..."
+        );
+
+        let root_canister_id = self.proto.root_canister_id_or_panic();
+
+        let new_deployed_version = get_running_version(&*self.env, root_canister_id).await?;
+
+        // Re-check that a reentrant call to this function did not yet update the state.
+        if let Some(deployed_version) = self.proto.deployed_version.clone() {
+            return Ok(deployed_version);
+        }
+
+        self.proto
+            .deployed_version
+            .replace(new_deployed_version.clone());
+
+        Ok(new_deployed_version)
+    }
+
     /// Return `Ok(true)` if the upgrade was completed successfully, return `Ok(false)` if an
     /// upgrade was successfully kicked-off, but its completion is pending.
     async fn perform_upgrade_to_next_sns_version_legacy(
@@ -2611,7 +2637,13 @@ impl Governance {
     ) -> Result<bool, GovernanceError> {
         self.check_no_upgrades_in_progress(Some(proposal_id))?;
 
-        let current_version = self.proto.deployed_version_or_panic();
+        let current_version = self.get_or_reset_deployed_version().await.map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Could not execute proposal: {}", err),
+            )
+        })?;
+
         let root_canister_id = self.proto.root_canister_id_or_panic();
 
         let UpgradeSnsParams {
@@ -2621,10 +2653,10 @@ impl Governance {
             canister_ids_to_upgrade,
         } = get_upgrade_params(&*self.env, root_canister_id, &current_version)
             .await
-            .map_err(|e| {
+            .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::InvalidProposal,
-                    format!("Could not execute proposal: {}", e),
+                    format!("Could not execute proposal: {}", err),
                 )
             })?;
 
@@ -2864,7 +2896,13 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         self.check_no_upgrades_in_progress(Some(proposal_id))?;
 
-        let current_version = self.proto.deployed_version_or_panic();
+        let current_version = self.get_or_reset_deployed_version().await.map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Could not execute proposal: {}", err),
+            )
+        })?;
+
         let ledger_canister_id = self.proto.ledger_canister_id_or_panic();
 
         let ledger_canister_info = self.env
@@ -2977,9 +3015,9 @@ impl Governance {
 
             if self.env.now() > mark_failed_at_seconds {
                 let error = format!(
-                    "Upgrade marked as failed at timestamp {} seconds. \
-                    Did not find an upgrade in the ledger's canister_info recent_changes.",
-                    self.env.now(),
+                    "Upgrade marked as failed at {}. \
+                     Did not find an upgrade in the ledger's canister_info recent_changes.",
+                    format_timestamp_for_humans(self.env.now()),
                 );
                 return Err(GovernanceError::new_with_message(
                     ErrorType::External,
@@ -4713,10 +4751,11 @@ impl Governance {
             return false;
         }
         self.latest_gc_timestamp_seconds = self.env.now();
+
         log!(
             INFO,
-            "Running GC now at timestamp {} seconds",
-            self.latest_gc_timestamp_seconds
+            "Running GC now at {}.",
+            format_timestamp_for_humans(self.latest_gc_timestamp_seconds),
         );
 
         let max_proposals_to_keep_per_action = match self
@@ -4839,9 +4878,17 @@ impl Governance {
         self.maybe_gc();
     }
 
-    // Acquires the "upgrade periodic task lock" (a lock shared between all periodic tasks that relate to upgrades)
-    // if it is currently released or was last acquired over UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS ago.
-    fn acquire_upgrade_periodic_task_lock(&mut self) -> bool {
+    /// Attempts to acquire the lock over SNS upgrade-related periodic tasks.
+    ///
+    /// Succeeds if the lock is currently released or was last acquired
+    /// over `UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS` ago.
+    ///
+    /// Returns whether the lock was acquired.
+    ///
+    /// This function is made public so that it can be called from
+    /// rs/sns/governance/tests/governance.rs where we need to disable upgrade-related periodic
+    /// tasks while testing a orthogonal SNS features (e.g., disburse maturity).
+    pub fn acquire_upgrade_periodic_task_lock(&mut self) -> bool {
         let now = self.env.now();
         match self.upgrade_periodic_task_lock {
             Some(time_acquired)
@@ -4871,10 +4918,12 @@ impl Governance {
             return;
         }
 
-        let Some(deployed_version) = self.proto.deployed_version.clone() else {
-            // TODO(NNS1-3445): there should be some way to recover from this state.
-            log!(ERROR, "No deployed version! This is an internal bug");
-            return;
+        let deployed_version = match self.get_or_reset_deployed_version().await {
+            Ok(deployed_version) => deployed_version,
+            Err(err) => {
+                log!(ERROR, "Cannot get or reset deployed version: {}", err);
+                return;
+            }
         };
 
         let upgrade_steps = self.get_or_reset_upgrade_steps(&deployed_version);
@@ -4993,16 +5042,8 @@ impl Governance {
         let maturity_modulation = self.cmc.neuron_maturity_modulation().await;
 
         // Unwrap response.
-        let maturity_modulation = match maturity_modulation {
-            Ok(ok) => ok,
-            Err(err) => {
-                println!(
-                    "{}Couldn't update maturity modulation. Error: {}",
-                    log_prefix(),
-                    err,
-                );
-                return;
-            }
+        let Ok(maturity_modulation) = maturity_modulation else {
+            return;
         };
 
         // Construct new MaturityModulation.
@@ -5504,10 +5545,10 @@ impl Governance {
 
                 if self.env.now() > mark_failed_at {
                     let message = format!(
-                        "Upgrade marked as failed at {} seconds from unix epoch. \
+                        "Upgrade marked as failed at {}. \
                          Governance could not determine running version from root: {}. \
                          Setting upgrade to failed to unblock retry.",
-                        self.env.now(),
+                        format_timestamp_for_humans(self.env.now()),
                         err,
                     );
                     let status = upgrade_journal_entry::upgrade_outcome::Status::Timeout(Empty {});
@@ -5529,9 +5570,9 @@ impl Governance {
         let deployed_version = match self.proto.deployed_version.as_ref() {
             None => {
                 let message = format!(
-                    "SNS Governance had no recorded deployed_version at timestamp {} seconds. \
+                    "SNS Governance had no recorded deployed_version at {}. \
                      Setting it to currently running {:?} and attempting to proceed.",
-                    self.env.now(),
+                    format_timestamp_for_humans(self.env.now()),
                     running_version,
                 );
                 self.reset_cached_upgrade_steps(&running_version, message);
@@ -5551,9 +5592,9 @@ impl Governance {
         if let Err(errs) = expected_changes {
             if self.env.now() > mark_failed_at {
                 let message = format!(
-                    "Upgrade marked as failed at timestamp {} seconds. \
+                    "Upgrade marked as failed at {}. \
                      Running system version does not match expected state:\n- {:?}",
-                    self.env.now(),
+                    format_timestamp_for_humans(self.env.now()),
                     errs.join("- {}\n"),
                 );
                 let status = upgrade_journal_entry::upgrade_outcome::Status::Timeout(Empty {});
@@ -5567,9 +5608,8 @@ impl Governance {
         }
 
         let message = format!(
-            "Upgrade marked successful at timestamp {} seconds, new {:?}",
-            self.env.now(),
-            target_version,
+            "Upgrade marked successful at {}.",
+            format_timestamp_for_humans(self.env.now()),
         );
         let status = upgrade_journal_entry::upgrade_outcome::Status::Success(Empty {});
 
@@ -5656,10 +5696,11 @@ impl Governance {
 
         if now > pending_version.mark_failed_at_seconds {
             let message = format!(
-                "Upgrade marked as failed at {} seconds from UNIX epoch. \
+                "Upgrade marked as failed at {}. \
                 Governance upgrade was manually aborted by calling fail_stuck_upgrade_in_progress \
                 after mark_failed_at_seconds ({}). Setting upgrade to failed to unblock retry.",
-                now, pending_version.mark_failed_at_seconds
+                format_timestamp_for_humans(now),
+                pending_version.mark_failed_at_seconds,
             );
             let status = upgrade_journal_entry::upgrade_outcome::Status::ExternalFailure(Empty {});
 
@@ -5933,3 +5974,6 @@ mod advance_target_sns_version_tests;
 
 #[cfg(test)]
 mod test_helpers;
+
+#[cfg(feature = "canbench-rs")]
+mod benches;

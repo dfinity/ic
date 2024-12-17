@@ -22,6 +22,8 @@ use std::str::FromStr;
 
 const MAX_TICKS: usize = 10;
 
+const TEST_SUBNET_NODES: u16 = 34;
+
 // Because we use universal_canister to make calls with attached cycles to
 // `check_transaction`, the actual_cost would be greater than expected_cost
 // by a small margin. Namely, the universal_canister itself would consume
@@ -119,6 +121,18 @@ fn decode<'a, T: CandidType + Deserialize<'a>>(result: &'a WasmResult) -> T {
 }
 
 #[test]
+fn test_get_tx_cycle_cost() {
+    assert_eq!(
+        get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, 13),
+        97_063_200
+    );
+    assert_eq!(
+        get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, 34),
+        296_697_600
+    );
+}
+
+#[test]
 fn test_check_address() {
     let blocklist_len = blocklist::BTC_ADDRESS_BLOCKLIST.len();
     let blocked_address = blocklist::BTC_ADDRESS_BLOCKLIST[blocklist_len / 2].to_string();
@@ -188,6 +202,7 @@ fn test_check_address() {
         btc_checker_wasm(),
         Encode!(&CheckArg::UpgradeArg(Some(UpgradeArg {
             check_mode: Some(CheckMode::AcceptAll),
+            ..UpgradeArg::default()
         })))
         .unwrap(),
         Some(controller),
@@ -231,6 +246,7 @@ fn test_check_address() {
         btc_checker_wasm(),
         Encode!(&CheckArg::UpgradeArg(Some(UpgradeArg {
             check_mode: Some(CheckMode::RejectAll),
+            ..UpgradeArg::default()
         })))
         .unwrap(),
         Some(controller),
@@ -352,7 +368,7 @@ fn test_check_transaction_passed() {
 
         let cycles_after = env.cycle_balance(setup.caller);
         let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE
-            + 2 * get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES);
+            + 2 * get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES);
         let actual_cost = cycles_before - cycles_after;
         assert!(actual_cost > expected_cost);
         assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
@@ -368,6 +384,7 @@ fn test_check_transaction_passed() {
         btc_checker_wasm(),
         Encode!(&CheckArg::UpgradeArg(Some(UpgradeArg {
             check_mode: Some(CheckMode::RejectAll),
+            ..UpgradeArg::default()
         })))
         .unwrap(),
         Some(setup.controller),
@@ -405,6 +422,7 @@ fn test_check_transaction_passed() {
         btc_checker_wasm(),
         Encode!(&CheckArg::UpgradeArg(Some(UpgradeArg {
             check_mode: Some(CheckMode::AcceptAll),
+            ..UpgradeArg::default()
         })))
         .unwrap(),
         Some(setup.controller),
@@ -445,6 +463,7 @@ fn test_check_transaction_passed() {
         btc_checker_wasm(),
         Encode!(&CheckArg::UpgradeArg(Some(UpgradeArg {
             check_mode: Some(CheckMode::Normal),
+            ..UpgradeArg::default()
         })))
         .unwrap(),
         Some(setup.controller),
@@ -457,14 +476,31 @@ fn test_check_transaction_passed() {
 #[test]
 fn test_check_transaction_error() {
     let setup = Setup::new(BtcNetwork::Mainnet);
-    let cycles_before = setup.env.cycle_balance(setup.caller);
     let mut txid =
         Txid::from_str("a80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed")
             .unwrap()
             .as_ref()
             .to_vec();
 
+    // Test should return NotEnoughCycles error, not InvalidTransactionId
+    let call_id = setup
+        .submit_btc_checker_call(
+            "check_transaction",
+            Encode!(&CheckTransactionArgs { txid: vec![0; 31] }).unwrap(),
+            CHECK_TRANSACTION_CYCLES_SERVICE_FEE - 1,
+        )
+        .expect("submit_call failed to return call id");
+    let result = setup
+        .env
+        .await_call(call_id)
+        .expect("the fetch request didn't finish");
+    assert!(matches!(
+        decode::<CheckTransactionResponse>(&result),
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::NotEnoughCycles),
+    ));
+
     // Test for cycles not enough
+    let cycles_before = setup.env.cycle_balance(setup.caller);
     let call_id = setup
         .submit_btc_checker_call(
             "check_transaction",
@@ -521,8 +557,8 @@ fn test_check_transaction_error() {
         )) if msg.contains("received code 500")
     ));
     let cycles_after = setup.env.cycle_balance(setup.caller);
-    let expected_cost =
-        CHECK_TRANSACTION_CYCLES_SERVICE_FEE + get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES);
+    let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE
+        + get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES);
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
@@ -561,8 +597,8 @@ fn test_check_transaction_error() {
         )) if msg.contains("received code 404")
     ));
     let cycles_after = setup.env.cycle_balance(setup.caller);
-    let expected_cost =
-        CHECK_TRANSACTION_CYCLES_SERVICE_FEE + get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES);
+    let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE
+        + get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES);
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
@@ -601,8 +637,8 @@ fn test_check_transaction_error() {
         )) if msg.contains("TxEncoding")
     ));
     let cycles_after = setup.env.cycle_balance(setup.caller);
-    let expected_cost =
-        CHECK_TRANSACTION_CYCLES_SERVICE_FEE + get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES);
+    let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE
+        + get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES);
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);

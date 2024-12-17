@@ -10,7 +10,7 @@ use macaddr::MacAddr6;
 
 use crate::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use crate::deployment_json::get_deployment_settings;
-use crate::serialize_and_write_config;
+use crate::{deserialize_config, serialize_and_write_config};
 use config_types::*;
 use network::resolve_mgmt_mac;
 
@@ -26,6 +26,18 @@ pub fn update_guestos_config() -> Result<()> {
     let network_conf_path = config_dir.join("network.conf");
     let config_json_path = config_dir.join("config.json");
 
+    // If a config already exists and is Testnet, do not update.
+    if config_json_path.exists() {
+        if let Ok(existing_config) = deserialize_config::<GuestOSConfig, _>(&config_json_path) {
+            if existing_config.icos_settings.deployment_environment
+                == DeploymentEnvironment::Testnet
+            {
+                println!("A new GuestOSConfig already exists and the environment is Testnet. Skipping update.");
+                return Ok(());
+            }
+        }
+    }
+
     let old_config_exists = network_conf_path.exists();
 
     if old_config_exists {
@@ -34,8 +46,8 @@ pub fn update_guestos_config() -> Result<()> {
         let network_settings = network_config_result.network_settings;
         let hostname = network_config_result.hostname.clone();
 
-        let logging = read_filebeat_conf(config_dir)?;
         let nns_urls = read_nns_conf(config_dir)?;
+        let node_reward_type = read_reward_conf(config_dir)?;
 
         let use_nns_public_key = state_root.join("nns_public_key.pem").exists();
         let use_node_operator_private_key =
@@ -46,10 +58,10 @@ pub fn update_guestos_config() -> Result<()> {
         let deployment_environment = DeploymentEnvironment::Mainnet;
 
         let icos_settings = ICOSSettings {
-            node_reward_type: None,
+            node_reward_type,
             mgmt_mac,
             deployment_environment,
-            logging,
+            logging: Logging::default(),
             use_nns_public_key,
             nns_urls,
             use_node_operator_private_key,
@@ -144,36 +156,6 @@ struct NetworkConfigResult {
     hostname: Option<String>,
 }
 
-fn read_filebeat_conf(config_dir: &Path) -> Result<Logging> {
-    let filebeat_conf_path = config_dir.join("filebeat.conf");
-    let conf_map = match read_conf_file(&filebeat_conf_path) {
-        Ok(map) => map,
-        Err(_) => {
-            // Set default values if filebeat.conf doesn't exist
-            return Ok(Logging {
-                elasticsearch_hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 \
-                                       elasticsearch-node-1.mercury.dfinity.systems:443 \
-                                       elasticsearch-node-2.mercury.dfinity.systems:443 \
-                                       elasticsearch-node-3.mercury.dfinity.systems:443"
-                    .to_string(),
-                elasticsearch_tags: None,
-            });
-        }
-    };
-
-    let elasticsearch_hosts = conf_map
-        .get("elasticsearch_hosts")
-        .cloned()
-        .unwrap_or_default();
-
-    let elasticsearch_tags = conf_map.get("elasticsearch_tags").cloned();
-
-    Ok(Logging {
-        elasticsearch_hosts,
-        elasticsearch_tags,
-    })
-}
-
 fn read_nns_conf(config_dir: &Path) -> Result<Vec<Url>> {
     let nns_conf_path = config_dir.join("nns.conf");
     let conf_map = match read_conf_file(&nns_conf_path) {
@@ -205,20 +187,24 @@ fn read_nns_conf(config_dir: &Path) -> Result<Vec<Url>> {
     Ok(nns_urls)
 }
 
+fn read_reward_conf(config_dir: &Path) -> Result<Option<String>> {
+    let reward_conf_path = config_dir.join("reward.conf");
+    let conf_map = read_conf_file(&reward_conf_path)?;
+
+    let node_reward_type = conf_map.get("node_reward_type").cloned();
+
+    Ok(node_reward_type)
+}
+
 fn derive_mgmt_mac_from_hostname(hostname: Option<&str>) -> Result<MacAddr6> {
-    if let Some(hostname) = hostname {
-        if let Some(unformatted_mac) = hostname.strip_prefix("guest-") {
-            unformatted_mac
-                .parse()
-                .map_err(|_| anyhow!("Unable to parse mac address: {}", unformatted_mac))
-        } else {
-            Err(anyhow::anyhow!(
-                "Hostname does not start with 'guest-': {}",
-                hostname
-            ))
-        }
+    if let Some(unformatted_mac) = hostname.and_then(|h| h.strip_prefix("guest-")) {
+        unformatted_mac
+            .parse()
+            .map_err(|_| anyhow!("Unable to parse mac address: {}", unformatted_mac))
     } else {
-        Err(anyhow::anyhow!("Hostname is not specified"))
+        "00:00:00:00:00:00"
+            .parse()
+            .map_err(|_| anyhow!("Unable to parse dummy mac address"))
     }
 }
 
@@ -274,6 +260,19 @@ pub fn update_hostos_config(
     deployment_json_path: &Path,
     hostos_config_json_path: &PathBuf,
 ) -> Result<()> {
+    // If a config already exists and is Testnet, do not update.
+    if hostos_config_json_path.exists() {
+        if let Ok(existing_config) = deserialize_config::<HostOSConfig, _>(&hostos_config_json_path)
+        {
+            if existing_config.icos_settings.deployment_environment
+                == DeploymentEnvironment::Testnet
+            {
+                println!("A new HostOSConfig already exists and the environment is Testnet. Skipping update.");
+                return Ok(());
+            }
+        }
+    }
+
     let old_config_exists = config_ini_path.exists();
 
     if old_config_exists {
@@ -318,11 +317,6 @@ pub fn update_hostos_config(
 
         let deployment_json_settings = get_deployment_settings(deployment_json_path)?;
 
-        let logging = Logging {
-            elasticsearch_hosts: deployment_json_settings.logging.hosts.to_string(),
-            elasticsearch_tags: None,
-        };
-
         let mgmt_mac = resolve_mgmt_mac(deployment_json_settings.deployment.mgmt_mac)?;
 
         let use_nns_public_key = Path::new("/boot/config/nns_public_key.pem").exists();
@@ -334,7 +328,7 @@ pub fn update_hostos_config(
             node_reward_type,
             mgmt_mac,
             deployment_environment: deployment_json_settings.deployment.name.parse()?,
-            logging,
+            logging: Logging::default(),
             use_nns_public_key,
             nns_urls: deployment_json_settings.nns.url.clone(),
             use_node_operator_private_key,
@@ -392,19 +386,10 @@ mod tests {
         let mac = derive_mgmt_mac_from_hostname(hostname)?;
         assert_eq!(mac, expected_mac);
 
-        // Test with invalid hostname (wrong prefix)
-        let invalid_hostname = Some("host-001122334455");
-        let result = derive_mgmt_mac_from_hostname(invalid_hostname);
-        assert!(result.is_err());
-
-        // Test with invalid hostname (wrong length)
-        let invalid_hostname_length = Some("guest-00112233");
-        let result = derive_mgmt_mac_from_hostname(invalid_hostname_length);
-        assert!(result.is_err());
-
-        // Test with None
-        let result = derive_mgmt_mac_from_hostname(None);
-        assert!(result.is_err());
+        // Test empty hostname
+        let expected_mac: MacAddr6 = "00:00:00:00:00:00".parse().unwrap();
+        let mac = derive_mgmt_mac_from_hostname(None)?;
+        assert_eq!(mac, expected_mac);
 
         Ok(())
     }
@@ -459,43 +444,6 @@ mod tests {
         );
 
         assert_eq!(result.hostname, Some("guest-001122334455".to_string()));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_read_filebeat_conf_existing_file() -> Result<()> {
-        let dir = tempdir()?;
-        let filebeat_conf_path = dir.path().join("filebeat.conf");
-        let mut file = fs::File::create(&filebeat_conf_path)?;
-        writeln!(file, "elasticsearch_hosts=host1:9200,host2:9200")?;
-        writeln!(file, "elasticsearch_tags=tag1,tag2")?;
-
-        let logging = read_filebeat_conf(dir.path())?;
-
-        assert_eq!(
-            logging.elasticsearch_hosts,
-            "host1:9200,host2:9200".to_string()
-        );
-        assert_eq!(logging.elasticsearch_tags, Some("tag1,tag2".to_string()));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_read_filebeat_conf_missing_file() -> Result<()> {
-        let dir = tempdir()?;
-        let logging = read_filebeat_conf(dir.path())?;
-
-        assert_eq!(
-            logging.elasticsearch_hosts,
-            "elasticsearch-node-0.mercury.dfinity.systems:443 \
-            elasticsearch-node-1.mercury.dfinity.systems:443 \
-            elasticsearch-node-2.mercury.dfinity.systems:443 \
-            elasticsearch-node-3.mercury.dfinity.systems:443"
-                .to_string()
-        );
-        assert_eq!(logging.elasticsearch_tags, None);
 
         Ok(())
     }

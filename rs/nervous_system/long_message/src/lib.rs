@@ -6,6 +6,7 @@ use ic_cdk::query;
 use ic_nervous_system_temporary::Temporary;
 #[cfg(not(target_arch = "wasm32"))]
 use std::cell::{Cell, RefCell};
+use std::fmt::{Debug, Display, Formatter};
 
 #[query(hidden = true)]
 fn __long_message_noop() {
@@ -71,6 +72,21 @@ pub fn is_message_over_threshold(instructions_threshold: u64) -> bool {
     instructions_used >= instructions_threshold
 }
 
+#[derive(Debug)]
+pub struct OverCallContextError {
+    limit: u64,
+}
+
+impl Display for OverCallContextError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Call context instruction counter exceeded the limit of {}",
+            self.limit
+        )
+    }
+}
+
 /// Breaks the message into smaller parts if the number of instructions used
 /// exceeds the given threshold.
 /// The upper bound is used to determine the maximum number of instructions
@@ -78,23 +94,21 @@ pub fn is_message_over_threshold(instructions_threshold: u64) -> bool {
 ///
 /// Note: Caller is responsible for validity of references across message bounds.  This could be
 /// dangerous in places where global state is being referenced.
-///
-/// # Panics if the number of instructions used exceeds the given panic threshold.
 pub async fn noop_self_call_if_over_instructions(
     message_threshold: u64,
-    panic_threshold: Option<u64>,
-) {
-    // first we check the upper bound to see if we should panic.
-    if let Some(upper_bound) = panic_threshold {
-        if is_call_context_over_threshold(upper_bound) {
-            panic!(
-                "Canister call exceeded the limit of {} instructions in the call context.",
-                upper_bound
-            );
-        }
-    }
-
+    call_context_threshold: Option<u64>,
+) -> Result<(), OverCallContextError> {
+    // We may still need a new message context for whatever cleanup is needed, but also we will
+    // return an error if the call context is over the threshold.
     if is_message_over_threshold(message_threshold) {
         make_noop_call().await;
     }
+
+    if let Some(upper_bound) = call_context_threshold {
+        if is_call_context_over_threshold(upper_bound) {
+            return Err(OverCallContextError { limit: upper_bound });
+        }
+    }
+
+    Ok(())
 }

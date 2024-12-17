@@ -143,6 +143,7 @@ rust_test(
     srcs = glob(["src/**/*.rs"]),
     compile_data = [
         "templates/dashboard.html",
+        "templates/pagination.html",
         "templates/principal_to_bytes.js",
     ],
     crate_features = features,

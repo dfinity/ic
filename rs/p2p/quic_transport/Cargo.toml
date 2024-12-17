@@ -1,7 +1,10 @@
 [package]
 name = "ic-quic-transport"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,7 +15,7 @@ axum = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
-ic-async-utils = { path = "../../async_utils" }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
@@ -26,6 +29,7 @@ prost = { workspace = true }
 quinn = { workspace = true }
 rustls = { workspace = true }
 slog = { workspace = true }
+static_assertions = { workspace = true }
 socket2 = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

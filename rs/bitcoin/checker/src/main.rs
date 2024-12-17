@@ -57,7 +57,7 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
         });
 
     STATS.with(|s| s.borrow_mut().check_transaction_count += 1);
-    match config.check_mode() {
+    match config.check_mode {
         CheckMode::AcceptAll => CheckAddressResponse::Passed,
         CheckMode::RejectAll => CheckAddressResponse::Failed,
         CheckMode::Normal => {
@@ -88,7 +88,12 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
 /// fails to decode or its transaction id does not match, then `Error` is returned
 /// together with a text description.
 async fn check_transaction(args: CheckTransactionArgs) -> CheckTransactionResponse {
-    ic_cdk::api::call::msg_cycles_accept128(CHECK_TRANSACTION_CYCLES_SERVICE_FEE);
+    if ic_cdk::api::call::msg_cycles_accept128(CHECK_TRANSACTION_CYCLES_SERVICE_FEE)
+        < CHECK_TRANSACTION_CYCLES_SERVICE_FEE
+    {
+        return CheckTransactionStatus::NotEnoughCycles.into();
+    }
+
     match Txid::try_from(args.txid.as_ref()) {
         Ok(txid) => {
             STATS.with(|s| s.borrow_mut().check_transaction_count += 1);
@@ -121,8 +126,12 @@ fn transform(raw: TransformArgs) -> HttpResponse {
 fn init(arg: CheckArg) {
     match arg {
         CheckArg::InitArg(init_arg) => set_config(
-            Config::new_and_validate(init_arg.btc_network, init_arg.check_mode)
-                .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err))),
+            Config::new_and_validate(
+                init_arg.btc_network,
+                init_arg.check_mode,
+                state::default_num_subnet_nodes(),
+            )
+            .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err))),
         ),
         CheckArg::UpgradeArg(_) => {
             ic_cdk::trap("cannot init canister state without init args");
@@ -134,11 +143,19 @@ fn init(arg: CheckArg) {
 fn post_upgrade(arg: CheckArg) {
     match arg {
         CheckArg::UpgradeArg(arg) => {
-            if let Some(check_mode) = arg.and_then(|arg| arg.check_mode) {
-                let config = Config::new_and_validate(get_config().btc_network(), check_mode)
+            let old_config = get_config();
+            let num_subnet_nodes = arg
+                .as_ref()
+                .and_then(|arg| arg.num_subnet_nodes)
+                .unwrap_or(old_config.num_subnet_nodes);
+            let check_mode = arg
+                .as_ref()
+                .and_then(|arg| arg.check_mode)
+                .unwrap_or(old_config.check_mode);
+            let config =
+                Config::new_and_validate(old_config.btc_network(), check_mode, num_subnet_nodes)
                     .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err)));
-                set_config(config);
-            }
+            set_config(config);
         }
         CheckArg::InitArg(_) => ic_cdk::trap("cannot upgrade canister state without upgrade args"),
     }
@@ -335,7 +352,8 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                 message: err,
             })?;
         let url = request.url.clone();
-        let cycles = get_tx_cycle_cost(max_response_bytes);
+        let num_subnet_nodes = self.config().num_subnet_nodes;
+        let cycles = get_tx_cycle_cost(max_response_bytes, num_subnet_nodes);
         match http_request(request.clone(), cycles).await {
             Ok((response,)) => {
                 STATS.with(|s| {
@@ -426,7 +444,7 @@ impl FetchEnv for BtcCheckerCanisterEnv {
 ///    in order to compute their corresponding addresses.
 pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
     let env = &BtcCheckerCanisterEnv;
-    match env.config().check_mode() {
+    match env.config().check_mode {
         CheckMode::AcceptAll => CheckTransactionResponse::Passed,
         CheckMode::RejectAll => CheckTransactionResponse::Failed(Vec::new()),
         CheckMode::Normal => {

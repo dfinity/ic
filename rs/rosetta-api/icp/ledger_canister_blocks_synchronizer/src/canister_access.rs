@@ -150,7 +150,7 @@ impl CanisterAccess {
                 "get_blocks_pb",
                 GetBlocksArgs {
                     start,
-                    length: (end - start) as usize,
+                    length: (end - start),
                 },
             )
             .await
