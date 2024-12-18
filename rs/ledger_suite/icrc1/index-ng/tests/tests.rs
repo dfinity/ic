@@ -69,12 +69,6 @@ fn index_init_arg_without_interval(ledger_id: CanisterId) -> IndexInitArg {
     }
 }
 
-fn install_index(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
-    let args = ic_icrc1_index::InitArgs { ledger_id };
-    env.install_canister(index_wasm(), Encode!(&args).unwrap(), None)
-        .unwrap()
-}
-
 fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
     let res = env
         .execute_ingress(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
@@ -242,28 +236,6 @@ fn approve(
         .0
         .to_u64()
         .unwrap()
-}
-
-// Same as get_account_transactions but with the old index interface.
-fn old_get_account_transactions(
-    env: &StateMachine,
-    index_id: CanisterId,
-    account: Account,
-    start: Option<u64>,
-    max_results: u64,
-) -> ic_icrc1_index::GetTransactionsResult {
-    let req = ic_icrc1_index::GetAccountTransactionsArgs {
-        account,
-        start: start.map(|n| n.into()),
-        max_results: max_results.into(),
-    };
-    let req = Encode!(&req).expect("Failed to encode GetAccountTransactionsArgs");
-    let res = env
-        .execute_ingress(index_id, "get_account_transactions", req)
-        .expect("Failed to get_account_transactions")
-        .bytes();
-    Decode!(&res, ic_icrc1_index::GetTransactionsResult)
-        .expect("Failed to decode GetTransactionsResult")
 }
 
 fn get_account_transactions(
@@ -1129,110 +1101,6 @@ fn test_fee_collector() {
             ),
         ],
     );
-}
-
-#[test]
-fn test_get_account_transactions_vs_old_index() {
-    let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
-    let now = SystemTime::now();
-    let minter = Arc::new(minter_identity());
-    let minter_principal = minter.sender().unwrap();
-    runner
-        .run(
-            &(valid_transactions_strategy(minter, FEE, 10, now),),
-            |(transactions,)| {
-                let env = &StateMachine::new();
-                // To match the time of the valid transaction strategy we have to align the StateMachine time with the generated strategy
-                env.set_time(now);
-                let ledger_id = install_ledger(
-                    env,
-                    vec![],
-                    default_archive_options(),
-                    None,
-                    minter_principal,
-                );
-                let index_ng_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
-                let index_id = install_index(env, ledger_id);
-
-                for arg_with_caller in &transactions {
-                    apply_arg_with_caller(env, ledger_id, arg_with_caller.clone());
-                }
-                wait_until_sync_is_completed(env, index_ng_id, ledger_id);
-
-                for account in transactions
-                    .iter()
-                    .flat_map(|tx| tx.accounts())
-                    .collect::<HashSet<Account>>()
-                {
-                    assert_eq!(
-                        old_get_account_transactions(env, index_id, account, None, u64::MAX),
-                        old_get_account_transactions(env, index_ng_id, account, None, u64::MAX),
-                    );
-                }
-
-                Ok(())
-            },
-        )
-        .unwrap();
-}
-
-#[test]
-fn test_upgrade_index_to_index_ng() {
-    let mut runner = TestRunner::new(TestRunnerConfig {
-        cases: 1,
-        max_shrink_iters: 0,
-        ..Default::default()
-    });
-    let now = SystemTime::now();
-    let minter = Arc::new(minter_identity());
-    let minter_principal = minter.sender().unwrap();
-    runner
-        .run(
-            &(valid_transactions_strategy(minter, FEE, 10, now),),
-            |(transactions,)| {
-                let env = &StateMachine::new();
-                // To match the time of the valid transaction strategy we have to align the StateMachine time with the generated strategy
-                env.set_time(now);
-                let ledger_id = install_ledger(
-                    env,
-                    vec![],
-                    default_archive_options(),
-                    None,
-                    minter_principal,
-                );
-                let index_ng_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
-                let index_id = install_index(env, ledger_id);
-
-                for arg_with_caller in &transactions {
-                    apply_arg_with_caller(env, ledger_id, arg_with_caller.clone());
-                }
-
-                env.tick();
-                wait_until_sync_is_completed(env, index_ng_id, ledger_id);
-
-                // Upgrade the index canister to the index-ng.
-                let arg = Encode!(&None::<IndexArg>).unwrap();
-                env.upgrade_canister(index_id, index_ng_wasm(), arg)
-                    .unwrap();
-
-                wait_until_sync_is_completed(env, index_id, ledger_id);
-
-                // Check that the old get_account_transactions still works and return
-                // the right data.
-                for account in transactions
-                    .iter()
-                    .flat_map(|tx| tx.accounts())
-                    .collect::<HashSet<Account>>()
-                {
-                    assert_eq!(
-                        old_get_account_transactions(env, index_id, account, None, u64::MAX),
-                        old_get_account_transactions(env, index_ng_id, account, None, u64::MAX),
-                    );
-                }
-                Ok(())
-            },
-        )
-        .unwrap();
 }
 
 #[test]
