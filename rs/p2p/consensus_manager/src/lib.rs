@@ -65,6 +65,13 @@ impl AbortableBroadcastChannelBuilder {
         UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     ) {
         let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_OUTBOUND_CHANNEL_SIZE);
+        // Making this channel bounded can be problematic since we don't have true multiplexing
+        // of P2P messages.
+        // Possible scenario is - adverts+chunks arrive on the same channel, slow consensus
+        // will result on slow consuption of chunks. Slow consumption of chunks will in turn
+        // result in slower consumptions of adverts. Ideally adverts are consumed at rate
+        // independent of consensus.
+        #[allow(clippy::disallowed_methods)]
         let (inbound_tx, inbound_rx) = tokio::sync::mpsc::unbounded_channel();
 
         assert!(uri_prefix::<WireArtifact>()

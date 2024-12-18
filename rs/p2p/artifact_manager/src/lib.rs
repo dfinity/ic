@@ -454,6 +454,7 @@ mod tests {
 
         let time_source = Arc::new(SysTimeSource::new());
         let (send_tx, mut send_rx) = tokio::sync::mpsc::channel(100);
+        #[allow(clippy::disallowed_methods)]
         let (_, inbound_rx) = tokio::sync::mpsc::unbounded_channel();
         run_artifact_processor::<DummyArtifact>(
             time_source,
