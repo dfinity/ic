@@ -467,7 +467,7 @@ pub fn start_consensus_manager(
         rt_handle.clone(),
         MetricsRegistry::default(),
     );
-    let (outbound_tx, inbound_rx, _) = cm1.add_client(downloader, usize::MAX);
+    let (outbound_tx, inbound_rx, _) = cm1.abortable_broadcast_channel(downloader, usize::MAX);
 
     let artifact_processor_jh = start_test_processor(
         outbound_tx,

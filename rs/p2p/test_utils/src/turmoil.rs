@@ -379,7 +379,7 @@ pub fn add_transport_to_sim<F>(
                     MetricsRegistry::default(),
                 );
                 let (outbound_tx, inbound_tx, _) =
-                    consensus_builder.add_client(downloader, usize::MAX);
+                    consensus_builder.abortable_broadcast_channel(downloader, usize::MAX);
 
                 let artifact_processor_jh = start_test_processor(
                     outbound_tx,

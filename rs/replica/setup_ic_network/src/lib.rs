@@ -340,7 +340,7 @@ fn start_consensus(
                 metrics_registry.clone(),
                 node_id,
             );
-            new_p2p_consensus.add_client(assembler, SLOT_TABLE_NO_LIMIT)
+            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
         } else {
             let assembler = ic_artifact_downloader::FetchArtifact::new(
                 log.clone(),
@@ -349,7 +349,7 @@ fn start_consensus(
                 bouncer,
                 metrics_registry.clone(),
             );
-            new_p2p_consensus.add_client(assembler, SLOT_TABLE_NO_LIMIT)
+            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT)
         };
 
         // Create the consensus client.
@@ -376,7 +376,7 @@ fn start_consensus(
         );
 
         let (outbound_tx, inbound_rx, inbound_tx) =
-            new_p2p_consensus.add_client(assembler, SLOT_TABLE_LIMIT_INGRESS);
+            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_LIMIT_INGRESS);
         // Create the ingress client.
         let jh = create_ingress_handlers(
             outbound_tx,
@@ -411,7 +411,7 @@ fn start_consensus(
         );
 
         let (outbound_tx, inbound_rx, _) =
-            new_p2p_consensus.add_client(assembler, SLOT_TABLE_NO_LIMIT);
+            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT);
         // Create the certification client.
         let jh = create_artifact_handler(
             outbound_tx,
@@ -435,7 +435,7 @@ fn start_consensus(
         );
 
         let (outbound_tx, inbound_rx, _) =
-            new_p2p_consensus.add_client(assembler, SLOT_TABLE_NO_LIMIT);
+            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT);
         // Create the DKG client.
         let jh = create_artifact_handler(
             outbound_tx,
@@ -483,7 +483,7 @@ fn start_consensus(
         );
 
         let (outbound_tx, inbound_rx, _) =
-            new_p2p_consensus.add_client(assembler, SLOT_TABLE_NO_LIMIT);
+            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT);
 
         let jh = create_artifact_handler(
             outbound_tx,
@@ -519,7 +519,7 @@ fn start_consensus(
         );
 
         let (outbound_tx, inbound_rx, _) =
-            new_p2p_consensus.add_client(assembler, SLOT_TABLE_NO_LIMIT);
+            new_p2p_consensus.abortable_broadcast_channel(assembler, SLOT_TABLE_NO_LIMIT);
 
         let jh = create_artifact_handler(
             outbound_tx,
