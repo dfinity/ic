@@ -5969,7 +5969,6 @@ dependencies = [
  "ic-test-utilities-load-wasm",
  "ic-types",
  "ic-universal-canister",
- "num-traits",
  "pocket-ic",
  "proptest",
  "regex",
