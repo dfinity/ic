@@ -823,7 +823,7 @@ fn make_http_query<U: Into<String>>(setup: &Setup, url: U) -> Vec<u8> {
     .unwrap();
 
     assert_eq!(response.status_code, 200_u16);
-    return response.body.into_vec();
+    response.body.into_vec()
 }
 
 fn assert_reply(result: WasmResult) -> Vec<u8> {
@@ -841,7 +841,7 @@ pub struct MetricsAssert {
 
 impl MetricsAssert {
     fn from_querying_metrics(setup: &Setup) -> Self {
-        let response = make_http_query(&setup, "/metrics");
+        let response = make_http_query(setup, "/metrics");
         let metrics = String::from_utf8_lossy(&response)
             .trim()
             .split('\n')
