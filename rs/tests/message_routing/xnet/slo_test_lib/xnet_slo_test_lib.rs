@@ -48,7 +48,7 @@ const PAYLOAD_SIZE_BYTES: u64 = 1024;
 /// filling up its output queue). This should be estimated as:
 ///
 /// `queue_capacity / 10 /* max_rounds roundtrip */`
-const MAX_CANISTER_TO_CANISTER_RATE: usize = 10;
+const MAX_CANISTER_TO_CANISTER_RATE: usize = 5;
 const SEND_RATE_THRESHOLD: f64 = 0.3;
 const ERROR_PERCENTAGE_THRESHOLD: f64 = 5.0;
 const TARGETED_LATENCY_SECONDS: u64 = 20;
@@ -137,6 +137,12 @@ impl Config {
     pub fn with_best_effort_response(self, timeout_seconds: u32) -> Self {
         let mut config = self.clone();
         config.timeout_seconds = timeout_seconds;
+        config
+    }
+
+    pub fn with_payload_bytes(self, payload_size_bytes: u64) -> Self {
+        let mut config = self.clone();
+        config.payload_size_bytes = payload_size_bytes;
         config
     }
 
@@ -487,6 +493,8 @@ pub async fn test_async_impl(
     // We need only one agent (runtime) per subnet for canister installation.
     let endpoints_runtimes = endpoints_runtimes.collect::<Vec<_>>();
     assert_eq!(endpoints_runtimes.len(), config.subnets);
+
+    std::thread::sleep(Duration::from_secs(120));
 
     // Step 1: Install Xnet canisters on each subnet.
     // Step 2: Start all canisters (via update `start` call).
