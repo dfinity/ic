@@ -490,6 +490,7 @@ fn icrc1_test_upgrade_serialization(ledger_mainnet_wasm: Vec<u8>) {
         upgrade_args,
         minter,
         true,
+        true,
     );
 }
 
@@ -519,7 +520,7 @@ fn icrc1_test_downgrade_from_incompatible_version() {
         ledger_wasm_nextledgerversion(),
         ledger_wasm(),
         encode_init_args,
-        true,
+        false,
     );
 }
 

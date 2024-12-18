@@ -2413,6 +2413,7 @@ pub fn test_upgrade_serialization<Tokens>(
     upgrade_args: Vec<u8>,
     minter: Arc<BasicIdentity>,
     verify_blocks: bool,
+    mainnet_on_prev_version: bool,
 ) where
     Tokens: TokensType + Default + std::fmt::Display + From<u64>,
 {
@@ -2470,20 +2471,33 @@ pub fn test_upgrade_serialization<Tokens>(
                 };
 
                 // Test if the old serialized approvals and balances are correctly deserialized
-                // TODO: Expected migration steps should be 1 again in FI-1440.
-                // test_upgrade(ledger_wasm_current.clone(), 1);
+                let expected_steps = if mainnet_on_prev_version { 1 } else { 0 };
+                test_upgrade(ledger_wasm_current.clone(), expected_steps);
                 // Test the new wasm serialization
                 test_upgrade(ledger_wasm_current.clone(), 0);
                 // Test deserializing from memory manager
                 test_upgrade(ledger_wasm_current.clone(), 0);
-                // Downgrade to mainnet should succeed since they are both the same version wrt.
-                // migration to stable structures.
-                env.upgrade_canister(
+                // Downgrade to mainnet if possible.
+                match env.upgrade_canister(
                     ledger_id,
                     ledger_wasm_mainnet.clone(),
                     Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-                )
-                .expect("Downgrading to mainnet should succeed");
+                ) {
+                    Ok(_) => {
+                        if mainnet_on_prev_version {
+                            panic!("Upgrade from future ledger version should fail!")
+                        }
+                    }
+                    Err(e) => {
+                        if mainnet_on_prev_version {
+                            assert!(e
+                                .description()
+                                .contains("Trying to downgrade from incompatible version"))
+                        } else {
+                            panic!("Upgrade to mainnet should succeed!")
+                        }
+                    }
+                };
                 if verify_blocks {
                     // This will also verify the ledger blocks.
                     // The current implementation of the InMemoryLedger cannot get blocks
