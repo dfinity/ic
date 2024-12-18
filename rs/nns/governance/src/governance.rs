@@ -6947,16 +6947,17 @@ impl Governance {
                         LOG_PREFIX, neuron
                     );
 
-                    let staked_neuron_clone = self
+                    let (staked_neuron_clone, original_spawn_at_timestamp_seconds) = self
                         .with_neuron_mut(&neuron_id, |neuron| {
                             // Reset the neuron's maturity and set that it's spawning before we actually mint
                             // the stake. This is conservative to prevent a neuron having _both_ the stake and
                             // the maturity at any point in time.
+                            let original_spawn_ts = neuron.spawn_at_timestamp_seconds;
                             neuron.maturity_e8s_equivalent = 0;
                             neuron.spawn_at_timestamp_seconds = None;
                             neuron.cached_neuron_stake_e8s = neuron_stake;
 
-                            neuron.clone()
+                            (neuron.clone(), original_spawn_ts)
                         })
                         .unwrap();
 
@@ -6991,9 +6992,15 @@ impl Governance {
                             // This is different from what we do in most places because we usually rely
                             // on trapping to retain the lock, but we can't do that here since we're not
                             // working on a single neuron.
-                            lock.retain();
+                            self.with_neuron_mut(&neuron_id, |neuron| {
+                                neuron.maturity_e8s_equivalent = neuron_stake;
+                                neuron.cached_neuron_stake_e8s = 0;
+                                neuron.spawn_at_timestamp_seconds =
+                                    original_spawn_at_timestamp_seconds;
+                            });
                             println!(
-                                "{}Error spawning neuron: {:?}. Ledger update failed with err: {:?}.",
+                                "{}Error spawning neuron: {:?}. Ledger update failed with err: {:?}. \
+                                Reverted state, so another attempt can be made.",
                                 LOG_PREFIX,
                                 neuron_id,
                                 error,
