@@ -8,13 +8,14 @@ use ic_btc_checker::{
     INITIAL_MAX_RESPONSE_BYTES,
 };
 use ic_btc_interface::Txid;
+use ic_cdk::api::call::RejectionCode;
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use pocket_ic::{
     common::rest::{
-        CanisterHttpHeader, CanisterHttpReply, CanisterHttpRequest, CanisterHttpResponse,
-        MockCanisterHttpResponse, RawMessageId,
+        CanisterHttpHeader, CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest,
+        CanisterHttpResponse, MockCanisterHttpResponse, RawMessageId,
     },
     query_candid, PocketIc, PocketIcBuilder, UserError, WasmResult,
 };
@@ -616,6 +617,45 @@ fn test_check_transaction_error() {
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
 
+    // Test for CanisterHttpReject error
+    let cycles_before = setup.env.cycle_balance(setup.caller);
+    let call_id = setup
+        .submit_btc_checker_call(
+            "check_transaction",
+            Encode!(&CheckTransactionArgs { txid: txid.clone() }).unwrap(),
+            CHECK_TRANSACTION_CYCLES_REQUIRED,
+        )
+        .expect("submit_call failed to return call id");
+    let canister_http_requests = tick_until_next_request(&setup.env);
+    setup
+        .env
+        .mock_canister_http_response(MockCanisterHttpResponse {
+            subnet_id: canister_http_requests[0].subnet_id,
+            request_id: canister_http_requests[0].request_id,
+            response: CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
+                reject_code: RejectionCode::SysTransient as u64,
+                message: "Failed to directly connect".to_string(),
+            }),
+            additional_responses: vec![],
+        });
+    let result = setup
+        .env
+        .await_call(call_id)
+        .expect("the fetch request didn't finish");
+    // Reject error is retriable too
+    assert!(matches!(
+        decode::<CheckTransactionResponse>(&result),
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
+            CheckTransactionRetriable::TransientInternalError(msg)
+        )) if msg.contains("Failed to directly connect")
+    ));
+    let cycles_after = setup.env.cycle_balance(setup.caller);
+    let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE
+        + get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES, TEST_SUBNET_NODES);
+    let actual_cost = cycles_before - cycles_after;
+    assert!(actual_cost > expected_cost);
+    assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+
     // Test for malformatted transaction data
     let cycles_before = setup.env.cycle_balance(setup.caller);
     let call_id = setup
@@ -685,7 +725,19 @@ fn test_check_transaction_error() {
 
     // Check metrics
     MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
-        r#"btc_check_requests_total\{type=\"check_transaction\"\} 4 \d+"#,
+        r#"btc_check_requests_total\{type=\"check_transaction\"\} 5 \d+"#,
+    );
+    MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
+        r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"500\"\} 1 \d+"#,
+    );
+    MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
+        r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"200\"\} 1 \d+"#,
+    );
+    MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
+        r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"404\"\} 1 \d+"#,
+    );
+    MetricsAssert::from_querying_metrics(&setup).assert_contains_metric_matching(
+        r#"btc_checker_http_calls_total\{provider=\"[a-z.]*\",status=\"SysTransient\"\} 1 \d+"#,
     );
 }
 
