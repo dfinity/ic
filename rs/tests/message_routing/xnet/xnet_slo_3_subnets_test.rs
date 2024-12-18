@@ -9,7 +9,7 @@ const SUBNETS: usize = 3;
 const NODES_PER_SUBNET: usize = 1;
 const RUNTIME: Duration = Duration::from_secs(600);
 const REQUEST_RATE: usize = 50 << 10;
-const RESPONSE_SIZE: u64 = 50 << 10;
+const RESPONSE_SIZE: u64 = 200;
 const RESPONSE_TIMEOUT_SECONDS: u32 = 300;
 
 const PER_TASK_TIMEOUT: Duration = Duration::from_secs(15 * 60);

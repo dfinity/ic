@@ -494,7 +494,7 @@ pub async fn test_async_impl(
     let endpoints_runtimes = endpoints_runtimes.collect::<Vec<_>>();
     assert_eq!(endpoints_runtimes.len(), config.subnets);
 
-    std::thread::sleep(Duration::from_secs(120));
+    // std::thread::sleep(Duration::from_secs(120));
 
     // Step 1: Install Xnet canisters on each subnet.
     // Step 2: Start all canisters (via update `start` call).
