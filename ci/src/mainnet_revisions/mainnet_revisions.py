@@ -48,7 +48,7 @@ def commit_and_create_pr(
     check_for_updates_in_paths: List[str],
     logger: logging.Logger,
     commit_message: str,
-    description: str
+    description: str,
 ):
     git_modified_files = subprocess.check_output(["git", "ls-files", "--modified", "--others"], cwd=repo_root).decode(
         "utf8"
@@ -94,7 +94,7 @@ def commit_and_create_pr(
                     "--body",
                     description,
                     "--title",
-                    commit_message
+                    commit_message,
                 ],
                 cwd=repo_root,
             )
@@ -246,7 +246,9 @@ This PR is created automatically using [`mainnet_revisions.py`](https://github.c
             [SAVED_VERSIONS_SUBNETS_PATH],
             logger,
             "chore: Update Mainnet IC revisions subnets file",
-            pr_description.format(description="Update mainnet revisions file to include the latest version released on the mainnet.")
+            pr_description.format(
+                description="Update mainnet revisions file to include the latest version released on the mainnet."
+            ),
         )
     elif args.command == Command.CANISTERS:
         branch = "ic-nervous-system-wasms"
@@ -259,7 +261,9 @@ This PR is created automatically using [`mainnet_revisions.py`](https://github.c
             [SAVED_VERSIONS_CANISTERS_PATH],
             logger,
             "chore: Update Mainnet IC revisions canisters file",
-            pr_description.format(description="Update mainnet system canisters revisions file to include the latest WASM version released on the mainnet.")
+            pr_description.format(
+                description="Update mainnet system canisters revisions file to include the latest WASM version released on the mainnet."
+            ),
         )
     else:
         raise Exception("This shouldn't happen")
