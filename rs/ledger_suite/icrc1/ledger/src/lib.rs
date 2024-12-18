@@ -37,7 +37,7 @@ use ic_ledger_core::{
 };
 use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::vec::Vec as StableVec;
+use ic_stable_structures::StableLog;
 use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
@@ -526,8 +526,9 @@ thread_local! {
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BALANCES_MEMORY_ID))));
 
     // vector storing ledger blocks.
-    pub static BLOCKS_MEMORY: RefCell<StableVec<EncodedBlock, VirtualMemory<DefaultMemoryImpl>>> =
-        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableVec::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID)).unwrap()));
+    pub static BLOCKS_MEMORY: RefCell<StableLog<EncodedBlock, VirtualMemory<DefaultMemoryImpl>, VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableLog::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID),
+        memory_manager.borrow().get(BLOCKS_MEMORY_ID)).expect("failed to initialize blocks stable memory")));
 
 }
 
@@ -1357,11 +1358,11 @@ pub struct StableBlockchain {}
 
 impl ArchivelessBlockchain for StableBlockchain {
     fn add_block(&mut self, block: EncodedBlock) -> Result<u64, String> {
-        let res = BLOCKS_MEMORY.with_borrow_mut(|blocks| blocks.push(&block));
-        match res {
-            Ok(_) => Ok(self.len().saturating_sub(1)),
-            Err(e) => Err(e.to_string()),
-        }
+        BLOCKS_MEMORY.with_borrow_mut(|blocks| {
+            blocks
+                .append(&block)
+                .map_err(|e| "failed to add block".to_string())
+        })
     }
 
     fn get_blocks(&self, range: std::ops::Range<u64>) -> Vec<EncodedBlock> {
