@@ -83,7 +83,8 @@ pub fn execute_query_bench(c: &mut Criterion) {
         c,
         "query",
         &benchmarks,
-        |exec_env: &ExecutionEnvironment,
+        |id: &str,
+         exec_env: &ExecutionEnvironment,
          expected_instructions,
          common::BenchmarkArgs {
              canister_state,
@@ -124,7 +125,8 @@ pub fn execute_query_bench(c: &mut Criterion) {
             assert_eq!(
                 expected_instructions,
                 executed_instructions.get(),
-                "Error comparing number of actual and expected instructions"
+                "update the reference number of instructions for '{id}' to {}",
+                executed_instructions.get()
             );
         },
     );
