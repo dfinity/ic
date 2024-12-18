@@ -1,5 +1,3 @@
-schema_version: 1
-rules:
 - canister_id: ryjl3-tyaaa-aaaaa-aaaba-cai
   methods_regex: ^canister_method$
   limit: 2500/1s
