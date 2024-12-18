@@ -39,4 +39,5 @@ ic-universal-canister = { path = "../../universal_canister/lib" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 proptest = { workspace = true }
 tokio = { workspace = true }
+regex = { workspace = true }
 scraper = "0.17.1"

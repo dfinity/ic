@@ -5972,6 +5972,7 @@ dependencies = [
  "num-traits",
  "pocket-ic",
  "proptest",
+ "regex",
  "scraper",
  "serde",
  "serde_json",

@@ -56,7 +56,7 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
             ic_cdk::trap(&format!("Not a Bitcoin {} address: {}", btc_network, err))
         });
 
-    STATS.with(|s| s.borrow_mut().check_transaction_count += 1);
+    STATS.with(|s| s.borrow_mut().check_address_count += 1);
     match config.check_mode {
         CheckMode::AcceptAll => CheckAddressResponse::Passed,
         CheckMode::RejectAll => CheckAddressResponse::Failed,
