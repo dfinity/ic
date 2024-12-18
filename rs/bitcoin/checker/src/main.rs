@@ -29,7 +29,6 @@ struct Stats {
     https_outcall_status: BTreeMap<(String, String), u64>,
     http_response_size: BTreeMap<u32, u64>,
     check_transaction_count: u64,
-    check_address_count: u64,
 }
 
 thread_local! {
@@ -55,7 +54,6 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
             ic_cdk::trap(&format!("Not a Bitcoin {} address: {}", btc_network, err))
         });
 
-    STATS.with(|s| s.borrow_mut().check_address_count += 1);
     match config.check_mode {
         CheckMode::AcceptAll => CheckAddressResponse::Passed,
         CheckMode::RejectAll => CheckAddressResponse::Failed,
@@ -244,11 +242,6 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
                 .value(
                     &[("type", "check_transaction")],
                     stats.check_transaction_count as f64,
-                )
-                .unwrap()
-                .value(
-                    &[("type", "check_address")],
-                    stats.check_address_count as f64,
                 )
                 .unwrap();
         });
