@@ -35,7 +35,7 @@ mod common;
 fn index_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ic-icrc1-index",
+        "ic-icrc1-index-ng",
         &[],
     )
 }
@@ -1217,7 +1217,7 @@ fn test_index_http_request_decoding_quota() {
 mod metrics {
     use crate::index_wasm;
     use candid::Principal;
-    use ic_icrc1_index_ng::InitArg;
+    use ic_icrc1_index_ng::{IndexArg, InitArg};
 
     #[test]
     fn should_export_heap_memory_usage_bytes_metrics() {
@@ -1227,10 +1227,10 @@ mod metrics {
         );
     }
 
-    fn encode_init_args(ledger_id: Principal) -> InitArg {
-        InitArg {
+    fn encode_init_args(ledger_id: Principal) -> Option<IndexArg> {
+        Some(IndexArg::Init(InitArg {
             ledger_id,
             retrieve_blocks_from_ledger_interval_seconds: None,
-        }
+        }))
     }
 }
