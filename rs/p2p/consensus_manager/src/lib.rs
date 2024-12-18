@@ -61,6 +61,8 @@ impl AbortableBroadcastChannelBuilder {
     ) -> (
         Sender<ArtifactTransmit<Artifact>>,
         UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
+        // TODO: remove this by introducing a new channel from the http handler into the processor
+        UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     ) {
         let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_OUTBOUND_CHANNEL_SIZE);
         let (inbound_tx, inbound_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -81,7 +83,7 @@ impl AbortableBroadcastChannelBuilder {
                 rt_handle,
                 outbound_rx,
                 adverts_from_peers_rx,
-                inbound_tx,
+                inbound_tx.clone(),
                 assembler(transport.clone()),
                 transport,
                 topology_watcher,
@@ -98,7 +100,7 @@ impl AbortableBroadcastChannelBuilder {
         );
 
         self.clients.push(Box::new(builder));
-        (outbound_tx, inbound_rx)
+        (outbound_tx, inbound_rx, inbound_tx)
     }
 
     pub fn router(&mut self) -> Router {
