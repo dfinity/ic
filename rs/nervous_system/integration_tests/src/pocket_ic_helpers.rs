@@ -2,9 +2,7 @@ use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_agent::pocketic_impl::PocketIcCallError;
-use ic_nervous_system_agent::sns::Sns;
-use ic_nervous_system_agent::CallCanisters;
+use ic_nervous_system_agent::{pocketic_impl::PocketIcCallError, sns::Sns, CallCanisters};
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -58,8 +56,7 @@ use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{TransferArg, TransferError},
 };
-use itertools::EitherOrBoth;
-use itertools::Itertools;
+use itertools::{EitherOrBoth, Itertools};
 use maplit::btreemap;
 use pocket_ic::{
     management_canister::CanisterSettings, nonblocking::PocketIc, ErrorCode, PocketIcBuilder,
@@ -67,8 +64,7 @@ use pocket_ic::{
 };
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
-use std::ops::Range;
-use std::{collections::BTreeMap, fmt::Write, time::Duration};
+use std::{collections::BTreeMap, fmt::Write, ops::Range, time::Duration};
 
 pub const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
 
@@ -1391,8 +1387,9 @@ pub mod sns {
         use assert_matches::assert_matches;
         use ic_crypto_sha2::Sha256;
         use ic_nervous_system_agent::sns::governance::GovernanceCanister;
-        use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
-        use ic_sns_governance::pb::v1::get_neuron_response;
+        use ic_sns_governance::{
+            governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS, pb::v1::get_neuron_response,
+        };
         use pocket_ic::ErrorCode;
 
         pub const EXPECTED_UPGRADE_DURATION_MAX_SECONDS: u64 = 1000;
@@ -2227,7 +2224,7 @@ pub mod sns {
     ) -> PrincipalId {
         // We assume that this number of transactions are needed,
         // which currently cannot be configured via proposals and is thus hard coded.
-        const NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE: u64 = 2000;
+        const NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE: u64 = 1000;
 
         // Generate a bunch of SNS token transactions.
         for i in 0..NUM_TRANSACTIONS_NEEDED_TO_SPAWN_FIRST_ARCHIVE {

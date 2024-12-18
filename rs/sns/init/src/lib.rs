@@ -588,7 +588,7 @@ impl SnsInitPayload {
                         .unwrap_or(DEFAULT_TRANSFER_FEE.get_e8s()),
                 )
                 .with_archive_options(ArchiveOptions {
-                    trigger_threshold: 2000,
+                    trigger_threshold: 1000,
                     num_blocks_to_archive: 1000,
                     // 1 GB, which gives us 3 GB space when upgrading
                     node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
