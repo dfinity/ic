@@ -442,7 +442,7 @@ fn test_eth_deposit(
     let deposit_amount: u128 = 42_000;
     assert!(eth_balance_of(foundry, EthereumAccount::User.address()) > deposit_amount);
 
-    let minter_balance_before = eth_balance_of(foundry, &minter_address);
+    let minter_balance_before = eth_balance_of(foundry, minter_address);
     info!(
         logger,
         "Depositing {} wei to helper contract {}", deposit_amount, helper_contract_address,
@@ -455,7 +455,7 @@ fn test_eth_deposit(
         helper_contract_args,
         Some(&deposit_amount.to_string()),
     );
-    let minter_balance_after = eth_balance_of(foundry, &minter_address);
+    let minter_balance_after = eth_balance_of(foundry, minter_address);
 
     assert_eq!(minter_balance_after - minter_balance_before, deposit_amount);
 }
@@ -506,7 +506,7 @@ fn test_erc20_deposit(
         ) > deposit_amount
     );
 
-    let minter_balance_before = erc20_balance_of(foundry, erc20_contract_address, &minter_address);
+    let minter_balance_before = erc20_balance_of(foundry, erc20_contract_address, minter_address);
     info!(
         logger,
         "Approving helper smart contract {} to use {} ckEXL",
@@ -518,7 +518,7 @@ fn test_erc20_deposit(
         &EthereumAccount::User,
         erc20_contract_address,
         "approve(address,uint256)",
-        &[&helper_contract_address, &deposit_amount.to_string()],
+        &[helper_contract_address, &deposit_amount.to_string()],
         None,
     );
     info!(
@@ -534,7 +534,7 @@ fn test_erc20_deposit(
         None,
     );
 
-    let minter_balance_after = erc20_balance_of(foundry, erc20_contract_address, &minter_address);
+    let minter_balance_after = erc20_balance_of(foundry, erc20_contract_address, minter_address);
     assert_eq!(minter_balance_after - minter_balance_before, deposit_amount);
 }
 
@@ -570,7 +570,7 @@ async fn test_deposit_with_subaccount(
         test_erc20_deposit(
             foundry,
             &minter_address,
-            &erc20_contract_address,
+            erc20_contract_address,
             &deposit_with_subaccount_helper_contract_address,
             "depositErc20(address,uint256,bytes32,bytes32)",
             &[
