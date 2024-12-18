@@ -370,26 +370,26 @@ pub fn add_transport_to_sim<F>(
             };
 
             let _artifact_processor_jh = if let Some(consensus) = consensus_manager_clone {
-                let (artifact_processor_jh, artifact_manager_event_rx, artifact_sender) =
-                    start_test_processor(
-                        consensus.clone(),
-                        consensus.clone().read().unwrap().clone(),
-                    );
                 let bouncer_factory = Arc::new(consensus.clone().read().unwrap().clone());
-
                 let downloader = FetchArtifact::new(
                     log.clone(),
                     tokio::runtime::Handle::current(),
-                    consensus,
+                    consensus.clone(),
                     bouncer_factory,
                     MetricsRegistry::default(),
                 );
-                consensus_builder.add_client(
-                    artifact_manager_event_rx,
-                    artifact_sender,
+                let (outbound_tx, inbound_tx) = consensus_builder.add_client(
                     downloader,
                     usize::MAX,
                 );
+
+                let artifact_processor_jh =
+                    start_test_processor(
+                        outbound_tx,
+                        inbound_tx,
+                        consensus.clone(),
+                        consensus.clone().read().unwrap().clone(),
+                    );
                 router = Some(router.unwrap_or_default().merge(consensus_builder.router()));
 
                 Some(artifact_processor_jh)
@@ -442,22 +442,19 @@ pub fn waiter_fut(
 
 #[allow(clippy::type_complexity)]
 pub fn start_test_processor(
+    outbound_tx:  mpsc::Sender<ArtifactTransmit<U64Artifact>>,
+    inbound_rx: mpsc::UnboundedReceiver<UnvalidatedArtifactMutation<U64Artifact>>,
     pool: Arc<RwLock<TestConsensus<U64Artifact>>>,
     change_set_producer: TestConsensus<U64Artifact>,
-) -> (
-    Box<dyn JoinGuard>,
-    mpsc::Receiver<ArtifactTransmit<U64Artifact>>,
-    mpsc::UnboundedSender<UnvalidatedArtifactMutation<U64Artifact>>,
-) {
-    let (tx, rx) = tokio::sync::mpsc::channel(1000);
+) -> Box<dyn JoinGuard> {
     let time_source = Arc::new(SysTimeSource::new());
     let client = ic_artifact_manager::Processor::new(pool, change_set_producer);
-    let (jh, sender) = run_artifact_processor(
+    run_artifact_processor(
         time_source,
         MetricsRegistry::default(),
         Box::new(client),
-        tx,
+        outbound_tx,
+        inbound_rx,
         vec![],
-    );
-    (jh, rx, sender)
+    )
 }

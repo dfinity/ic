@@ -16,7 +16,7 @@ use phantom_newtype::AmountOf;
 use tokio::{
     runtime::Handle,
     sync::{
-        mpsc::{Receiver, UnboundedSender},
+        mpsc::{Receiver, Sender, UnboundedReceiver, UnboundedSender},
         watch,
     },
 };
@@ -27,6 +27,8 @@ mod sender;
 
 type StartConsensusManagerFn =
     Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Vec<Shutdown>>;
+
+pub const MAX_OUTBOUND_CHANNEL_SIZE: usize = 100_000;
 
 pub struct AbortableBroadcastChannelBuilder {
     log: ReplicaLogger,
@@ -54,11 +56,15 @@ impl AbortableBroadcastChannelBuilder {
         D: ArtifactAssembler<Artifact, WireArtifact>,
     >(
         &mut self,
-        outbound_artifacts_rx: Receiver<ArtifactTransmit<Artifact>>,
-        inbound_artifacts_tx: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         (assembler, assembler_router): (F, Router),
         slot_limit: usize,
+    ) -> (
+        Sender<ArtifactTransmit<Artifact>>,
+        UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
     ) {
+        let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_OUTBOUND_CHANNEL_SIZE);
+        let (inbound_tx, inbound_rx) = tokio::sync::mpsc::unbounded_channel();
+
         assert!(uri_prefix::<WireArtifact>()
             .chars()
             .all(char::is_alphabetic));
@@ -73,9 +79,9 @@ impl AbortableBroadcastChannelBuilder {
                 log,
                 &metrics_registry,
                 rt_handle,
-                outbound_artifacts_rx,
+                outbound_rx,
                 adverts_from_peers_rx,
-                inbound_artifacts_tx,
+                inbound_tx,
                 assembler(transport.clone()),
                 transport,
                 topology_watcher,
@@ -92,6 +98,7 @@ impl AbortableBroadcastChannelBuilder {
         );
 
         self.clients.push(Box::new(builder));
+        (outbound_tx, inbound_rx)
     }
 
     pub fn router(&mut self) -> Router {
