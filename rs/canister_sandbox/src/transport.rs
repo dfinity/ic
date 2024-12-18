@@ -137,9 +137,12 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
             trigger_background_sending: Condvar::new(),
         });
         let copy_instance = Arc::clone(&instance);
-        std::thread::spawn(move || {
-            copy_instance.background_sending_thread(idle_timeout_to_trim_buffer);
-        });
+        std::thread::Builder::new()
+            .name("CanisterSandbox".to_string())
+            .spawn(move || {
+                copy_instance.background_sending_thread(idle_timeout_to_trim_buffer);
+            })
+            .unwrap();
         instance
     }
 
