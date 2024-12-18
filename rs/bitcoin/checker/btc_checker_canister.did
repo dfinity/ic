@@ -9,6 +9,8 @@ type CheckAddressResponse = variant { Passed; Failed };
 
 type CheckTransactionArgs = record { txid : blob };
 
+type CheckTransactionStrArgs = record { txid : text };
+
 // The result of a check_transaction call.
 type CheckTransactionResponse = variant {
     // When check finishes and all input addresses passed.
@@ -85,7 +87,11 @@ service : (CheckArg) -> {
     // of the return result.
     check_transaction: (CheckTransactionArgs) -> (CheckTransactionResponse);
 
+    // Same as check_transaction, but taking the transaction id argument as a string.
+    check_transaction_str: (CheckTransactionStrArgs) -> (CheckTransactionResponse);
+
     // Return `Passed` if the given Bitcoin address passes the Bitcoin checker, or `Failed` otherwise.
     // May throw error (trap) if the given address is malformed or not a mainnet address.
     check_address: (CheckAddressArgs) -> (CheckAddressResponse) query;
+
 }

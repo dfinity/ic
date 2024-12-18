@@ -1,4 +1,5 @@
 use assert_matches::assert_matches;
+use canister_test::Runtime;
 use dfn_candid::candid_one;
 use ic_base_types::NodeId;
 use ic_canister_client_sender::Sender;
@@ -27,6 +28,7 @@ use ic_registry_transport::{
 use ic_types::PrincipalId;
 use maplit::btreemap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
+use std::time::Duration;
 
 /// Test that new Node Operator records can be added and removed to/from the
 /// Registry
@@ -100,6 +102,16 @@ fn test_node_operator_records_can_be_added_and_removed() {
 
         // Assert that a Node Operator with no nodes can be removed
         let (payload, _) = prepare_add_node_payload(1);
+        // To fix occasional flakiness similar to this error:
+        // invalid TLS certificate: notBefore date (=ASN1Time(2024-12-12 13:17:08.0 +00:00:00)) \
+        //      is in the future compared to current time (=ASN1Time(2024-12-12 13:16:39.0 +00:00:00))\"
+        // we advance time on the state machine by 5 minutes.
+        // The theory is that resource contention is causing the system time to advance while the time
+        // set for the state machine does not, causing the key's time to be in the future.
+        if let Runtime::StateMachine(sm) = &runtime {
+            sm.advance_time(Duration::from_secs(300));
+            sm.tick();
+        };
         let _node_id: NodeId = nns_canisters
             .registry
             .update_from_sender(

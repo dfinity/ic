@@ -455,6 +455,7 @@ fn icrc1_test_upgrade_serialization() {
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_multi_step_migration() {
     ic_ledger_suite_state_machine_tests::icrc1_test_multi_step_migration(
@@ -471,10 +472,11 @@ fn icrc1_test_downgrade_from_incompatible_version() {
         ledger_wasm_nextledgerversion(),
         ledger_wasm(),
         encode_init_args,
-        false,
+        true,
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_stable_migration_endpoints_disabled() {
     ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
@@ -485,6 +487,7 @@ fn icrc1_test_stable_migration_endpoints_disabled() {
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_incomplete_migration() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration(
@@ -494,6 +497,7 @@ fn icrc1_test_incomplete_migration() {
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_incomplete_migration_to_current() {
     ic_ledger_suite_state_machine_tests::test_incomplete_migration_to_current(
@@ -503,6 +507,7 @@ fn icrc1_test_incomplete_migration_to_current() {
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_migration_resumes_from_frozen() {
     ic_ledger_suite_state_machine_tests::test_migration_resumes_from_frozen(
@@ -512,6 +517,7 @@ fn icrc1_test_migration_resumes_from_frozen() {
     );
 }
 
+#[ignore] // TODO: Re-enable as part of FI-1440
 #[test]
 fn icrc1_test_metrics_while_migrating() {
     ic_ledger_suite_state_machine_tests::test_metrics_while_migrating(

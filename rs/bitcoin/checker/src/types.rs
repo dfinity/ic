@@ -19,6 +19,11 @@ pub struct CheckTransactionArgs {
     pub txid: Vec<u8>,
 }
 
+#[derive(CandidType, Debug, Deserialize, Serialize)]
+pub struct CheckTransactionStrArgs {
+    pub txid: String,
+}
+
 #[derive(CandidType, Debug, Clone, Deserialize, Serialize)]
 pub enum CheckTransactionResponse {
     /// When check finishes and all input addresses passed.
