@@ -98,15 +98,12 @@ rust_test(
         ],
         crate_features = conf["crate_features"],
         data = [
-            "//rs/ledger_suite/icrc1/index:index_canister.wasm",
-        ] + [
             conf["index_wasm"],
             conf["ledger_wasm"],
         ],
         env = {
             "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/index-ng",
             "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath " + conf["index_wasm"] + ")",
-            "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index:index_canister.wasm)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath " + conf["ledger_wasm"] + ")",
         },
         extra_srcs = ["tests/common/mod.rs"],
@@ -117,7 +114,6 @@ rust_test(
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
-            "//rs/ledger_suite/icrc1/index",
             "//rs/ledger_suite/icrc1/ledger",
             "//rs/ledger_suite/icrc1/test_utils",
             "//rs/ledger_suite/icrc1/tokens_u64",
