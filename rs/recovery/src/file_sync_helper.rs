@@ -73,7 +73,7 @@ pub fn rsync_with_retries(
     target: &str,
     require_confirmation: bool,
     key_file: Option<&PathBuf>,
-    skip_prompt: bool,
+    auto_retry: bool,
     max_retries: usize,
 ) -> RecoveryResult<Option<String>> {
     for _ in 0..max_retries {
@@ -86,10 +86,11 @@ pub fn rsync_with_retries(
             key_file,
         ) {
             Err(e) => {
-                if skip_prompt {
+                if auto_retry {
                     // In non-interactive cases, we wait a short while
                     // before re-trying rsync.
-                    tokio::thread::sleep(time::Duration::from_secs(10));
+                    warn!(logger, "Rsync failed: {:?}, retrying in 10 seconds...", e);
+                    std::thread::sleep(std::time::Duration::from_secs(10));
                 } else if !consent_given(&format!(
                     "Rsync failed: {e:?}. Do you want to retry the \
                     download for this node?"
