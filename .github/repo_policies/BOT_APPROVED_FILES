@@ -9,4 +9,3 @@ ic-os/setupos/context/docker-base.dev
 ic-os/setupos/context/docker-base.prod
 mainnet-canisters.json
 mainnet_revisions.json
-mainnet-canisters.json
