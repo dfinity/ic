@@ -1,5 +1,5 @@
 {
-  "checksum": "61fa7882b7d8c8b66da348a9f5ed357bc146f15c3115297225877dc099b3dac3",
+  "checksum": "437e6f7903120517b815140fc45624e2c220aa4ef007dc6a066da451c97e90aa",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18821,10 +18821,6 @@
               "target": "ic_btc_interface"
             },
             {
-              "id": "ic-btc-test-utils 0.1.0",
-              "target": "ic_btc_test_utils"
-            },
-            {
               "id": "ic-canister-log 0.2.0",
               "target": "ic_canister_log"
             },
@@ -31118,53 +31114,6 @@
       ],
       "license_file": null
     },
-    "ic-btc-test-utils 0.1.0": {
-      "name": "ic-btc-test-utils",
-      "version": "0.1.0",
-      "package_url": "https://github.com/dfinity/bitcoin-canister",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-btc-test-utils/0.1.0/download",
-          "sha256": "be8e0a43145188ba239150f8460d314b0dd6e0ddf7d753c0ef99296103c622dd"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_btc_test_utils",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_btc_test_utils",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bitcoin 0.28.2",
-              "target": "bitcoin"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.1.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
     "ic-canister-log 0.2.0": {
       "name": "ic-canister-log",
       "version": "0.2.0",
@@ -39322,7 +39271,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/libssh2-sys/0.3.0/download",
-          "sha256": "2dc8a030b787e2119a731f1951d6a773e2280c660f8ec4b0f5e1505a386e71ee"
+          "sha256": "2dc8a030b787e2119a731f1951d6a773e2280c660f8ec4b0f5e1505a386e71ee",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:libssh2-sys.patch"
+          ]
         }
       },
       "targets": [
@@ -87729,7 +87684,6 @@
     "ic-agent 0.37.1",
     "ic-bn-lib 0.1.0",
     "ic-btc-interface 0.2.2",
-    "ic-btc-test-utils 0.1.0",
     "ic-canister-log 0.2.0",
     "ic-canister-sig-creation 1.0.1",
     "ic-cbor 2.6.0",
