@@ -30,6 +30,9 @@ type StartConsensusManagerFn =
 
 const MAX_OUTBOUND_CHANNEL_SIZE: usize = 100_000;
 
+pub type AbortableBroadcastSender<T> = Sender<ArtifactTransmit<T>>;
+pub type AbortableBroadcastReceiver<T> = UnboundedReceiver<UnvalidatedArtifactMutation<T>>;
+
 pub struct AbortableBroadcastChannelBuilder {
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
@@ -49,7 +52,6 @@ impl AbortableBroadcastChannelBuilder {
         }
     }
 
-    #[allow(clippy::type_complexity)]
     pub fn abortable_broadcast_channel<
         Artifact: IdentifiableArtifact,
         WireArtifact: PbArtifact,
@@ -60,8 +62,8 @@ impl AbortableBroadcastChannelBuilder {
         (assembler, assembler_router): (F, Router),
         slot_limit: usize,
     ) -> (
-        Sender<ArtifactTransmit<Artifact>>,
-        UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
+        AbortableBroadcastSender<Artifact>,
+        AbortableBroadcastReceiver<Artifact>,
         // TODO: remove this by introducing a new channel from the http handler into the processor
         UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     ) {
