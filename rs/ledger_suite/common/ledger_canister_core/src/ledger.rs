@@ -134,6 +134,12 @@ pub trait LedgerAccess {
     fn with_ledger_mut<R>(f: impl FnOnce(&mut Self::Ledger) -> R) -> R;
 }
 
+pub trait ArchivelessBlockchain {
+    fn append_block(&mut self, block: EncodedBlock);
+    fn get_blocks(&self, start: u64, end: u64) -> Vec<EncodedBlock>;
+    fn last_block_index(&self) -> u64;
+}
+
 pub trait LedgerData: LedgerContext {
     type ArchiveWasm: ArchiveCanisterWasm;
     type Runtime: Runtime;
@@ -177,6 +183,9 @@ pub trait LedgerData: LedgerContext {
 
     fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm>;
     fn blockchain_mut(&mut self) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm>;
+
+    fn archiveless_blockchain(&self) -> &dyn ArchivelessBlockchain;
+    fn archiveless_blockchain_mut(&mut self) -> &mut dyn ArchivelessBlockchain;
 
     fn transactions_by_hash(&self) -> &BTreeMap<HashOf<Self::Transaction>, BlockIndex>;
     fn transactions_by_hash_mut(&mut self) -> &mut BTreeMap<HashOf<Self::Transaction>, BlockIndex>;

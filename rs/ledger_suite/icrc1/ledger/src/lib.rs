@@ -23,7 +23,8 @@ use ic_ledger_canister_core::{
     archive::ArchiveCanisterWasm,
     blockchain::Blockchain,
     ledger::{
-        apply_transaction_no_trimming, block_locations, LedgerContext, LedgerData, TransactionInfo,
+        apply_transaction_no_trimming, block_locations, ArchivelessBlockchain, LedgerContext,
+        LedgerData, TransactionInfo,
     },
     range_utils,
 };
@@ -555,6 +556,8 @@ pub struct Ledger {
     #[serde(default)]
     stable_approvals: AllowanceTable<StableAllowancesData>,
     blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm>,
+    #[serde(default)]
+    stable_blockchain: StableBlockchain,
 
     minting_account: Account,
     fee_collector: Option<FeeCollector<Account>>,
@@ -645,6 +648,7 @@ impl Ledger {
             approvals: Default::default(),
             stable_approvals: Default::default(),
             blockchain: Blockchain::new_with_archive(archive_options),
+            stable_blockchain: StableBlockchain::default(),
             transactions_by_hash: BTreeMap::new(),
             transactions_by_height: VecDeque::new(),
             minting_account,
@@ -804,6 +808,14 @@ impl LedgerData for Ledger {
 
     fn blockchain_mut(&mut self) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm> {
         &mut self.blockchain
+    }
+
+    fn archiveless_blockchain(&self) -> &dyn ArchivelessBlockchain {
+        &self.stable_blockchain
+    }
+
+    fn archiveless_blockchain_mut(&mut self) -> &mut dyn ArchivelessBlockchain {
+        &mut self.stable_blockchain
     }
 
     fn transactions_by_hash(&self) -> &BTreeMap<HashOf<Self::Transaction>, BlockIndex> {
@@ -1297,5 +1309,21 @@ impl BalancesStore for StableBalances {
                 Ok(new_v)
             }
         }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
+pub struct StableBlockchain {}
+
+impl ArchivelessBlockchain for StableBlockchain {
+    fn append_block(&mut self, block: EncodedBlock) {}
+
+    fn get_blocks(&self, start: u64, end: u64) -> Vec<EncodedBlock> {
+        let mut result = vec![];
+        result
+    }
+
+    fn last_block_index(&self) -> u64 {
+        0
     }
 }
