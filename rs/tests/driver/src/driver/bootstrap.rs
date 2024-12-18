@@ -88,7 +88,7 @@ pub fn init_ic(
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
 
     let replica_version = if ic.with_mainnet_config {
-        let mainnet_nns_revisions_path = "testnet/mainnet_nns_revision.txt".to_string();
+        let mainnet_nns_revisions_path = "mainnet_nns_revision.txt".to_string();
         read_dependency_to_string(mainnet_nns_revisions_path.clone())?
     } else {
         read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?

@@ -138,7 +138,7 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = [
         "//rs/replicated_state:replicated_state_test_binary",
-        "//testnet:mainnet_revisions",
+        "//:mainnet_revisions",
     ],
     deps = [
         "//rs/recovery",

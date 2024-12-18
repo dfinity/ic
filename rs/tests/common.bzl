@@ -11,7 +11,7 @@ GUESTOS_RUNTIME_DEPS = [
     "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
 ]
 
-MAINNET_REVISION_RUNTIME_DEPS = ["//testnet:mainnet_nns_revision"]
+MAINNET_REVISION_RUNTIME_DEPS = ["//:mainnet_nns_revision"]
 
 NNS_CANISTER_WASM_PROVIDERS = {
     "registry-canister": {
