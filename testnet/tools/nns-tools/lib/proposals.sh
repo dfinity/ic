@@ -47,6 +47,10 @@ __Target canister__: [$CANISTER_ID](https://dashboard.internetcomputer.org/canis
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
+## Summary
+
+TODO add a summary of changes
+
 ## New Commits
 
 \`\`\`
@@ -139,6 +143,10 @@ __Proposer__: ${PROPOSER}
 __Source code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
+
+## Summary
+
+TODO add a summary of changes
 
 ## New Commits
 
@@ -253,6 +261,10 @@ __Proposer__: $PROPOSER
 __Source code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
+
+## Summary
+
+TODO add a summary of changes
 
 
 ## New Commits

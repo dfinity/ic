@@ -36,6 +36,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-types = { path = "../../types/types" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
-pocket-ic = { path = "../../../packages/pocket-ic" } 
+pocket-ic = { path = "../../../packages/pocket-ic" }
+proptest = { workspace = true }
 tokio = { workspace = true }
 scraper = "0.17.1"

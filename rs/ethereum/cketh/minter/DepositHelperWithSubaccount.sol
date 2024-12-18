@@ -47,7 +47,7 @@ contract CkDeposit {
     }
 
     /**
-     * @dev Emits the `ReceivedErc20` event if the transfer succeeds.
+     * @dev Emits the `ReceivedEthOrErc20` event if the transfer succeeds.
      */
     function depositErc20(
         address erc20Address,
