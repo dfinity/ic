@@ -282,6 +282,10 @@ impl SignedIngress {
         self.signed.content()
     }
 
+    pub fn signed(&self) -> &HttpRequest<SignedIngressContent> {
+        &self.signed
+    }
+
     pub fn authentication(&self) -> &Authentication {
         self.signed.authentication()
     }
