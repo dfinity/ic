@@ -12,6 +12,7 @@ pub mod proposal;
 mod request_impls;
 pub mod reward;
 pub mod sns_upgrade;
+mod topics;
 mod treasury;
 pub mod types;
 pub mod upgrade_journal;
