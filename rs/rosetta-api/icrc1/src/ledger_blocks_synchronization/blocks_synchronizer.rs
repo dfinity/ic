@@ -10,9 +10,9 @@ use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksResponse};
 use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
-use std::{cmp, collections::HashMap, ops::RangeInclusive, sync::Arc};
+use std::{cmp, collections::HashMap, ops::RangeInclusive, sync::Arc, time::Duration};
 use tokio::sync::Mutex as AsyncMutex;
-use tracing::info;
+use tracing::{error, info};
 
 // The Range of indices to be synchronized.
 // Contains the hashes of the top and end of the index range, which is used to ensure the fetched block interval is valid.
@@ -36,6 +36,18 @@ impl SyncRange {
             trailing_parent_hash,
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct RecurrencyConfig {
+    pub min_recurrency_wait: Duration,
+    pub max_recurrency_wait: Duration,
+    pub backoff_factor: u32,
+}
+
+pub enum RecurrencyMode {
+    OneShot,
+    Recurrent(RecurrencyConfig),
 }
 
 /// This function will check whether there is a gap in the database.
@@ -92,11 +104,9 @@ fn derive_synchronization_gaps(
     Ok(sync_ranges)
 }
 
-/// This function will check for any gaps in the database and between the database and the icrc ledger
-/// After this function is successfully executed all blocks between [0,Ledger_Tip] will be stored in the database.
-pub async fn start_synching_blocks(
-    agent: Arc<Icrc1Agent>,
+async fn verify_and_fix_blockchain_gaps(
     storage_client: Arc<StorageClient>,
+    agent: Arc<Icrc1Agent>,
     maximum_blocks_per_request: u64,
     archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
 ) -> anyhow::Result<()> {
@@ -114,10 +124,18 @@ pub async fn start_synching_blocks(
         )
         .await?;
     }
+    Ok(())
+}
 
-    // After all the gaps have been filled continue with a synchronization from the top of the blockchain.
+async fn sync_blocks_and_balances_from_tip(
+    agent: Arc<Icrc1Agent>,
+    storage_client: Arc<StorageClient>,
+    maximum_blocks_per_request: u64,
+    archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
+) -> anyhow::Result<()> {
+    // Start synchronization from the tip of the blockchain.
     sync_from_the_tip(
-        agent,
+        agent.clone(),
         storage_client.clone(),
         maximum_blocks_per_request,
         archive_canister_ids.clone(),
@@ -128,6 +146,51 @@ pub async fn start_synching_blocks(
     // highest block index for which the account balances have been processed.
     storage_client.update_account_balances()?;
 
+    Ok(())
+}
+
+/// This function will check for any gaps in the database and between the database and the icrc ledger
+/// After this function is successfully executed all blocks between [0,Ledger_Tip] will be stored in the database.
+pub async fn start_synching_blocks(
+    agent: Arc<Icrc1Agent>,
+    storage_client: Arc<StorageClient>,
+    maximum_blocks_per_request: u64,
+    archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
+    recurrency_mode: RecurrencyMode,
+) -> anyhow::Result<()> {
+    let mut current_failure_streak = 0u32;
+    verify_and_fix_blockchain_gaps(
+        storage_client.clone(),
+        agent.clone(),
+        maximum_blocks_per_request,
+        archive_canister_ids.clone(),
+    )
+    .await?;
+    loop {
+        if let Err(e) = sync_blocks_and_balances_from_tip(
+            agent.clone(),
+            storage_client.clone(),
+            maximum_blocks_per_request,
+            archive_canister_ids.clone(),
+        )
+        .await
+        {
+            error!("Error while syncing blocks: {}", e);
+            current_failure_streak += 1;
+        } else {
+            current_failure_streak = 0;
+        }
+
+        match recurrency_mode {
+            RecurrencyMode::OneShot => break,
+            RecurrencyMode::Recurrent(ref config) => {
+                let mut wait_time =
+                    config.min_recurrency_wait * config.backoff_factor.pow(current_failure_streak);
+                wait_time = cmp::min(wait_time, config.max_recurrency_wait);
+                tokio::time::sleep(wait_time).await;
+            }
+        }
+    }
     Ok(())
 }
 
