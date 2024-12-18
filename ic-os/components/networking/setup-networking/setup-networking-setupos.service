@@ -4,8 +4,10 @@ Before=setupos.service
 
 [Service]
 Type=oneshot
+RemainAfterExit=true
 ExecStart=/opt/ic/bin/output-wrapper.sh /dev/ttyS0 /opt/ic/bin/setup-networking.sh SetupOS
-RemainAfterExit=yes
+StandardOutput=tty
+StandardError=tty
 
 [Install]
 WantedBy=multi-user.target

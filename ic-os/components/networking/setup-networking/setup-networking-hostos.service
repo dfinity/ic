@@ -8,8 +8,8 @@ Before=systemd-networkd-wait-online.service
 
 [Service]
 Type=oneshot
-ExecStart=/opt/ic/bin/setup-networking.sh HostOS
 RemainAfterExit=yes
+ExecStart=/opt/ic/bin/setup-networking.sh HostOS
 
 [Install]
 WantedBy=multi-user.target
