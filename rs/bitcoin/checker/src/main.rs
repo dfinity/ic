@@ -10,7 +10,6 @@ use ic_canister_log::{export as export_logs, log};
 use ic_canisters_http_types as http;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
-use num_traits::cast::ToPrimitive;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::str::FromStr;
@@ -27,7 +26,7 @@ use state::{get_config, set_config, Config, FetchGuardError, HttpGetTxError};
 
 #[derive(Default)]
 struct Stats {
-    https_outcall_status: BTreeMap<(String, u16), u64>,
+    https_outcall_status: BTreeMap<(String, String), u64>,
     http_response_size: BTreeMap<u32, u64>,
     check_transaction_count: u64,
     check_address_count: u64,
@@ -360,7 +359,7 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                     let mut stat = s.borrow_mut();
                     *stat
                         .https_outcall_status
-                        .entry((provider.name(), response.status.0.to_u16().unwrap()))
+                        .entry((provider.name(), response.status.0.to_string()))
                         .or_default() += 1;
                     // Calculate size bucket as a series of power of 2s.
                     // Note that the max is bounded by `max_response_bytes`, which fits `u32`.
@@ -410,6 +409,13 @@ impl FetchEnv for BtcCheckerCanisterEnv {
             }
             Err((r, m)) if is_response_too_large(&r, &m) => Err(HttpGetTxError::ResponseTooLarge),
             Err((r, m)) => {
+                STATS.with(|s| {
+                    let mut stat = s.borrow_mut();
+                    *stat
+                        .https_outcall_status
+                        .entry((provider.name(), format!("{:?}", r)))
+                        .or_default() += 1;
+                });
                 log!(
                     DEBUG,
                     "The http_request resulted into error. RejectionCode: {r:?}, Error: {m}, Request: {request:?}"
