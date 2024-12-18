@@ -246,12 +246,22 @@ impl IntoResponse for CborUserError {
     }
 }
 
-pub(crate) fn validation_error_to_http_error(
+pub(crate) fn validation_error_to_http_error<C: std::fmt::Debug>(
+    request: &HttpRequest<C>,
     message_id: MessageId,
     err: RequestValidationError,
     log: &ReplicaLogger,
 ) -> HttpError {
-    info!(log, "msg_id: {}, err: {}", message_id, err);
+    match err {
+        RequestValidationError::InvalidSignature(_) => {
+            info!(
+                log,
+                "msg_id: {}, err: {}, request: {:?}", message_id, err, request.content()
+            )
+        }
+        _ => info!(log, "msg_id: {}, err: {}", message_id, err),
+    }
+
     HttpError {
         status: StatusCode::BAD_REQUEST,
         message: format!("{err}"),
