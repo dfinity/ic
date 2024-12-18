@@ -1,9 +1,6 @@
 use candid::{CandidType, Deserialize};
 use ic_base_types::{CanisterId, NodeId, PrincipalId, SubnetId};
-use ic_cdk::{
-    api::{call, time},
-    call,
-};
+use ic_cdk::call;
 use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -24,13 +21,7 @@ use ic_registry_keys::{
     make_node_record_key, make_routing_table_record_key, make_subnet_record_key,
 };
 use ic_registry_routing_table::RoutingTable;
-use std::{
-    cell::RefCell,
-    collections::BTreeMap,
-    convert::TryFrom,
-    str::FromStr,
-    time::{Duration, SystemTime},
-};
+use std::{cell::RefCell, collections::BTreeMap, convert::TryFrom, str::FromStr};
 
 use crate::now_seconds;
 #[cfg(target_arch = "wasm32")]
