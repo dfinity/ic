@@ -14,7 +14,7 @@ exports_files([
     "clippy.toml",
     "rustfmt.toml",
     "WORKSPACE.bazel",
-    "mainnet-canisters.json",
+    "mainnet-canister-revisions.json",
 ])
 
 jq_dep(
