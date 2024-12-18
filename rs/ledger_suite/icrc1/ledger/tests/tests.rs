@@ -21,7 +21,7 @@ use ic_ledger_suite_state_machine_tests::{
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::generic_value::Value;
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::account::{Account, DEFAULT_SUBACCOUNT};
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::Allowance;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -1292,6 +1292,128 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
     check_icrc3_get_block_limit(vec![(0, 101)]);
     check_icrc3_get_block_limit(vec![(0, 100), (0, 1)]);
     check_icrc3_get_block_limit(vec![(0, 1), (0, 100)]);
+}
+
+use icrc_ledger_types::icrc1::transfer::Memo;
+use serde_bytes::ByteBuf;
+
+fn account_sub(n: u64) -> Account {
+    Account {
+        owner: PrincipalId::new_user_test_id(n).0,
+        subaccount: Some(*DEFAULT_SUBACCOUNT),
+    }
+}
+
+fn transfer_from(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    spender: Account,
+    from: Account,
+    to: Account,
+    amount: u64,
+    now: u64,
+) -> BlockIndex {
+    let transfer_from_args = TransferFromArgs {
+        spender_subaccount: spender.subaccount,
+        from,
+        to,
+        amount: amount.into(),
+        fee: Some(FEE.into()),
+        created_at_time: Some(now),
+        memo: Some(Memo(ByteBuf::from([10u8; 32]))),
+    };
+    let args = Encode!(&transfer_from_args).unwrap();
+    let res = env
+        .execute_ingress_as(spender.owner.into(), ledger_id, "icrc2_transfer_from", args)
+        .expect("Unable to perform icrc1_transfer")
+        .bytes();
+    Decode!(&res, Result<Nat, TransferError>)
+        .unwrap()
+        .expect("Unable to decode icrc1_transfer error")
+        .0
+        .to_u64()
+        .unwrap()
+}
+use ic_ledger_suite_state_machine_tests::system_time_to_nanos;
+
+#[test]
+fn test_get_archiveless_blocks() {
+    let env = StateMachine::new();
+    let minting_account = account(1_000_000);
+
+    let trigger_threshold = 10_000_000;
+    let num_blocks_to_archive = 10;
+
+    let initial_balances = vec![(account(1), Nat::from(1_000_000_000_000u64))];
+
+    let args = LedgerArgument::Init(InitArgs {
+        minting_account,
+        fee_collector_account: None,
+        initial_balances,
+        transfer_fee: Nat::from(FEE),
+        decimals: None,
+        token_name: "Not a Token".to_string(),
+        token_symbol: "NAT".to_string(),
+        metadata: vec![],
+        archive_options: ArchiveOptions {
+            trigger_threshold,
+            num_blocks_to_archive,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: PrincipalId(minting_account.owner),
+            more_controller_ids: None,
+            cycles_for_archive_creation: None,
+            max_transactions_per_response: None,
+        },
+        max_memo_length: None,
+        feature_flags: None,
+    });
+    let args = Encode!(&args).unwrap();
+    let ledger_id = env
+        .install_canister(ledger_wasm(), args, None)
+        .expect("Unable to install the ledger");
+
+    let get_blocks_old = |start: u64, length: u64| {
+        let arg = GetBlocksRequest {
+            start: Nat::from(start),
+            length: Nat::from(length),
+        };
+        get_blocks(&env, ledger_id, arg)
+    };
+
+    let now = env.time();
+
+    for i in 2..3000 {
+        let approval_result = send_approval(
+            &env,
+            ledger_id,
+            account(1).owner,
+            &ApproveArgs {
+                from_subaccount: None,
+                spender: account_sub(i),
+                amount: (2 * FEE).into(),
+                expected_allowance: None,
+                expires_at: Some(u64::MAX),
+                fee: Some(FEE.into()),
+                memo: Some(Memo(ByteBuf::from([10u8; 32]))),
+                created_at_time: Some(system_time_to_nanos(now)),
+            },
+        )
+        .expect("approval failed");
+
+        let tf_result = transfer_from(
+            &env,
+            ledger_id,
+            account_sub(i),
+            account(1),
+            account(i + 10_000),
+            1,
+            system_time_to_nanos(now),
+        );
+        if i % 100 == 0 {
+            println!("iteration {}", i);
+        }
+    }
 }
 
 #[cfg(not(feature = "u256-tokens"))]
