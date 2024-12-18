@@ -96,7 +96,6 @@ fn setup_anvil(env: &TestEnv) {
         deployed_universal_vm
             .block_on_bash_script(&format!(
                 r#"
-# Run nginx auto proxy
 docker load -i /config/foundry.tar
 docker network create {DOCKER_NETWORK_NAME}
 docker run --net {DOCKER_NETWORK_NAME} --detach --rm --name anvil -p {FOUNDRY_PORT}:{FOUNDRY_PORT} foundry:latest "anvil --host 0.0.0.0"
@@ -243,6 +242,26 @@ fn ic_xc_cketh_test(env: TestEnv) {
     block_on(async {
         test_cketh_deposit(&docker_host, &minter, &logger).await;
         test_ckerc20_deposit(&docker_host, &minter, &erc20_contract_address, &logger).await;
+    });
+
+    let deposit_with_subaccount_helper_contract_address =
+        deploy_deposit_with_subaccount_helper_contract(&docker_host, &minter_address);
+    block_on(async {
+        minter
+            .upgrade(MinterUpgradeArg {
+                deposit_with_subaccount_helper_contract_address: Some(
+                    deposit_with_subaccount_helper_contract_address.clone(),
+                ),
+                last_deposit_with_subaccount_scraped_block_number: Some(Nat::from(0_u8)),
+                ..Default::default()
+            })
+            .await
+    });
+
+    block_on(async {
+        test_cketh_deposit(&docker_host, &minter, &logger).await;
+        test_ckerc20_deposit(&docker_host, &minter, &erc20_contract_address, &logger).await;
+        test_deposit_with_subaccount(&docker_host, &minter, &erc20_contract_address, &logger).await;
     });
 }
 
@@ -402,19 +421,38 @@ async fn test_cketh_deposit(
     let deposit_amount: u128 = 42_000;
     assert!(eth_balance_of(foundry, EthereumAccount::User.address()) > deposit_amount);
 
+    test_eth_deposit(
+        foundry,
+        &minter_address,
+        &eth_deposit_helper_contract_address,
+        "deposit(bytes32)",
+        &[ENCODED_PRINCIPAL],
+        logger,
+    );
+}
+
+fn test_eth_deposit(
+    foundry: &DeployedUniversalVm,
+    minter_address: &str,
+    helper_contract_address: &str,
+    helper_contract_method: &str,
+    helper_contract_args: &[&str],
+    logger: &slog::Logger,
+) {
+    let deposit_amount: u128 = 42_000;
+    assert!(eth_balance_of(foundry, EthereumAccount::User.address()) > deposit_amount);
+
     let minter_balance_before = eth_balance_of(foundry, &minter_address);
     info!(
         logger,
-        "Depositing {} wei to ETH helper contract {}",
-        deposit_amount,
-        eth_deposit_helper_contract_address,
+        "Depositing {} wei to helper contract {}", deposit_amount, helper_contract_address,
     );
     let _cketh_deposit_tx_hash = send_smart_contract(
         foundry,
         &EthereumAccount::User,
-        &eth_deposit_helper_contract_address,
-        "deposit(bytes32)",
-        &[ENCODED_PRINCIPAL],
+        helper_contract_address,
+        helper_contract_method,
+        helper_contract_args,
         Some(&deposit_amount.to_string()),
     );
     let minter_balance_after = eth_balance_of(foundry, &minter_address);
@@ -430,10 +468,36 @@ async fn test_ckerc20_deposit(
 ) {
     let minter_info = minter.get_minter_info().await;
     let minter_address = minter_info.minter_address.unwrap();
-    let minter_balance_before = erc20_balance_of(foundry, erc20_contract_address, &minter_address);
     // retrieve helper contract address from minter to ensure ABI does not change
     let erc20_deposit_helper_contract_address = minter_info.erc20_helper_contract_address.unwrap();
     let deposit_amount: u128 = 1000;
+
+    test_erc20_deposit(
+        foundry,
+        &minter_address,
+        erc20_contract_address,
+        &erc20_deposit_helper_contract_address,
+        "deposit(address,uint256,bytes32)",
+        &[
+            erc20_contract_address,
+            &deposit_amount.to_string(),
+            ENCODED_PRINCIPAL,
+        ],
+        deposit_amount,
+        logger,
+    );
+}
+
+fn test_erc20_deposit(
+    foundry: &DeployedUniversalVm,
+    minter_address: &str,
+    erc20_contract_address: &str,
+    helper_contract_address: &str,
+    helper_contract_method: &str,
+    helper_contract_args: &[&str],
+    deposit_amount: u128,
+    logger: &slog::Logger,
+) {
     assert!(
         erc20_balance_of(
             foundry,
@@ -442,10 +506,11 @@ async fn test_ckerc20_deposit(
         ) > deposit_amount
     );
 
+    let minter_balance_before = erc20_balance_of(foundry, erc20_contract_address, &minter_address);
     info!(
         logger,
         "Approving helper smart contract {} to use {} ckEXL",
-        erc20_deposit_helper_contract_address,
+        helper_contract_address,
         deposit_amount
     );
     send_smart_contract(
@@ -453,33 +518,71 @@ async fn test_ckerc20_deposit(
         &EthereumAccount::User,
         erc20_contract_address,
         "approve(address,uint256)",
-        &[
-            &erc20_deposit_helper_contract_address,
-            &deposit_amount.to_string(),
-        ],
+        &[&helper_contract_address, &deposit_amount.to_string()],
         None,
     );
     info!(
         logger,
-        "Depositing {} ckEXL to ERC-20 helper contract {}",
-        deposit_amount,
-        erc20_deposit_helper_contract_address,
+        "Depositing {} ckEXL to helper contract {}", deposit_amount, helper_contract_address,
     );
     send_smart_contract(
         foundry,
         &EthereumAccount::User,
-        &erc20_deposit_helper_contract_address,
-        "deposit(address,uint256,bytes32)",
-        &[
-            erc20_contract_address,
-            &deposit_amount.to_string(),
-            ENCODED_PRINCIPAL,
-        ],
+        helper_contract_address,
+        helper_contract_method,
+        helper_contract_args,
         None,
     );
 
     let minter_balance_after = erc20_balance_of(foundry, erc20_contract_address, &minter_address);
     assert_eq!(minter_balance_after - minter_balance_before, deposit_amount);
+}
+
+async fn test_deposit_with_subaccount(
+    foundry: &DeployedUniversalVm,
+    minter: &CkEthMinterCanister<'_>,
+    erc20_contract_address: &str,
+    logger: &slog::Logger,
+) {
+    const ENCODED_NO_SUBACCOUNT: &str =
+        "0x0000000000000000000000000000000000000000000000000000000000000000";
+    const ENCODED_SUBACCOUNT: &str =
+        "0xff00000000000000000000000000000000000000000000000000000000000000";
+
+    let minter_info = minter.get_minter_info().await;
+    let minter_address = minter_info.minter_address.unwrap();
+    // retrieve helper contract address from minter to ensure ABI does not change
+    let deposit_with_subaccount_helper_contract_address = minter_info
+        .deposit_with_subaccount_helper_contract_address
+        .unwrap();
+    let erc20_deposit_amount: u128 = 1000;
+
+    for subaccount in [ENCODED_NO_SUBACCOUNT, ENCODED_SUBACCOUNT] {
+        test_eth_deposit(
+            foundry,
+            &minter_address,
+            &deposit_with_subaccount_helper_contract_address,
+            "depositEth(bytes32,bytes32)",
+            &[ENCODED_PRINCIPAL, subaccount],
+            logger,
+        );
+
+        test_erc20_deposit(
+            foundry,
+            &minter_address,
+            &erc20_contract_address,
+            &deposit_with_subaccount_helper_contract_address,
+            "depositErc20(address,uint256,bytes32,bytes32)",
+            &[
+                erc20_contract_address,
+                &erc20_deposit_amount.to_string(),
+                ENCODED_PRINCIPAL,
+                subaccount,
+            ],
+            erc20_deposit_amount,
+            logger,
+        );
+    }
 }
 
 fn deploy_erc20_helper_contract(
@@ -530,6 +633,29 @@ fn deploy_erc20_contract(foundry: &DeployedUniversalVm) -> String {
         user_initial_balance
     );
     erc20_address
+}
+
+fn deploy_deposit_with_subaccount_helper_contract(
+    docker_host: &DeployedUniversalVm,
+    minter_address: &Address,
+) -> String {
+    let deposit_helper_contract_with_subaccount_address = deploy_smart_contract(
+        docker_host,
+        &EthereumAccount::HelperContractDeployer,
+        "DepositHelperWithSubaccount.sol",
+        "CkDeposit",
+        &minter_address.to_string(),
+    );
+    assert_eq!(
+        call_smart_contract(
+            docker_host,
+            &deposit_helper_contract_with_subaccount_address,
+            "getMinterAddress()(address)",
+            &[]
+        ),
+        minter_address.to_string()
+    );
+    deposit_helper_contract_with_subaccount_address
 }
 
 fn erc20_balance_of(
