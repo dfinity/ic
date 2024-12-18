@@ -16,17 +16,12 @@ trap 'rm -rf "$TEST_DIR"' EXIT
 SHELL=/bin/bash
 
 function mock_tools() {
-    cat >"${TEST_DIR}/ip" <<'EOF'
-#!/bin/bash
-if [ "$1" = "-o" ] && [ "$2" = "link" ] && [ "$3" = "show" ]; then
-    echo "1: eth0: <BROADCAST,MULTICAST,UP> mtu 1500 qdisc pfifo_fast state UP mode DEFAULT group default qlen 1000"
-    echo "2: eth1: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000"
-    echo "3: eth2: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000"
-else
-    /usr/bin/ip "$@"
-fi
-EOF
-    chmod +x "${TEST_DIR}/ip"
+    export SYS_NET_PATH="${TEST_DIR}/sys/class/net"
+    mkdir -p "${SYS_NET_PATH}"
+    mkdir -p "${TEST_DIR}/sys/devices/mock_devices/"
+    ln -sf "${TEST_DIR}/sys/devices/mock_devices/" "${SYS_NET_PATH}/eth0"
+    ln -sf "${TEST_DIR}/sys/devices/mock_devices/" "${SYS_NET_PATH}/eth1"
+    ln -sf "${TEST_DIR}/sys/devices/mock_devices/" "${SYS_NET_PATH}/eth2"
 
     cat >"${TEST_DIR}/ethtool" <<'EOF'
 #!/bin/bash

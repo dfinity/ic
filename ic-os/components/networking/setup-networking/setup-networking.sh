@@ -67,10 +67,11 @@ function generate_addresses() {
 function gather_interfaces_by_speed() {
     echo "Gathering and sorting interfaces by speed..."
 
-    INTERFACES=$(ip -o link show | awk -F': ' '{print $2}' | grep -v '^lo$')
+    SYS_NET_PATH="${SYS_NET_PATH:-/sys/class/net}"
+    INTERFACES=($(find "$SYS_NET_PATH" -type l -not -lname '*virtual*' -exec basename '{}' ';'))
     declare -A SPEED_MAP
 
-    for IFACE in $INTERFACES; do
+    for IFACE in "${INTERFACES[@]}"; do
         SPEED_STR=$(ethtool "$IFACE" 2>/dev/null | grep "Speed:" || true)
         SPEED=$(echo "$SPEED_STR" | grep -Eo '[0-9]+' || echo 0)
         SPEED_MAP["$IFACE"]=$SPEED
