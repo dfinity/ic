@@ -329,20 +329,8 @@ fn start_consensus(
 
         let consensus_pool = Arc::clone(&consensus_pool);
 
-        let (consensus_tx, consensus_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
-        // Create the consensus client.
-        let (client, jh) = create_artifact_handler(
-            consensus_tx,
-            consensus_impl,
-            time_source.clone(),
-            consensus_pool.clone(),
-            metrics_registry.clone(),
-        );
-
-        join_handles.push(jh);
-
         let bouncer = Arc::new(ConsensusBouncer::new(metrics_registry, message_router));
-        if HASHES_IN_BLOCKS_FEATURE_ENABLED {
+        let (outbound_tx, inbound_rx) = if HASHES_IN_BLOCKS_FEATURE_ENABLED {
             let assembler = ic_artifact_downloader::FetchStrippedConsensusArtifact::new(
                 log.clone(),
                 rt_handle.clone(),
@@ -352,7 +340,7 @@ fn start_consensus(
                 metrics_registry.clone(),
                 node_id,
             );
-            new_p2p_consensus.add_client(consensus_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
+            new_p2p_consensus.add_client(assembler, SLOT_TABLE_NO_LIMIT)
         } else {
             let assembler = ic_artifact_downloader::FetchArtifact::new(
                 log.clone(),
@@ -361,8 +349,20 @@ fn start_consensus(
                 bouncer,
                 metrics_registry.clone(),
             );
-            new_p2p_consensus.add_client(consensus_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
+            new_p2p_consensus.add_client(assembler, SLOT_TABLE_NO_LIMIT)
         };
+
+        // Create the consensus client.
+        let jh = create_artifact_handler(
+            outbound_tx,
+            inbound_rx,
+            consensus_impl,
+            time_source.clone(),
+            consensus_pool.clone(),
+            metrics_registry.clone(),
+        );
+
+        join_handles.push(jh);
     };
 
     let ingress_sender = {
@@ -375,25 +375,19 @@ fn start_consensus(
             metrics_registry.clone(),
         );
 
-        let (ingress_tx, ingress_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
+        let (outbound_tx, inbound_rx) =
+            new_p2p_consensus.add_client(assembler, SLOT_TABLE_LIMIT_INGRESS);
         // Create the ingress client.
-        let (client, jh) = create_ingress_handlers(
-            ingress_tx,
+        let jh = create_ingress_handlers(
+            outbound_tx.clone(),
+            inbound_rx,
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.ingress_pool),
             ingress_manager,
             metrics_registry.clone(),
         );
-
         join_handles.push(jh);
-
-        new_p2p_consensus.add_client(
-            ingress_rx,
-            client.clone(),
-            assembler,
-            SLOT_TABLE_LIMIT_INGRESS,
-        );
-        client
+        outbound_tx
     };
 
     {
@@ -416,17 +410,18 @@ fn start_consensus(
             metrics_registry.clone(),
         );
 
-        let (certification_tx, certification_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
+        let (outbound_tx, inbound_rx) =
+            new_p2p_consensus.add_client(assembler, SLOT_TABLE_NO_LIMIT);
         // Create the certification client.
-        let (client, jh) = create_artifact_handler(
-            certification_tx,
+        let jh = create_artifact_handler(
+            outbound_tx,
+            inbound_rx,
             certifier,
             Arc::clone(&time_source) as Arc<_>,
             artifact_pools.certification_pool,
             metrics_registry.clone(),
         );
         join_handles.push(jh);
-        new_p2p_consensus.add_client(certification_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
     };
 
     {
@@ -439,10 +434,12 @@ fn start_consensus(
             metrics_registry.clone(),
         );
 
-        let (dkg_tx, dkg_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
+        let (outbound_tx, inbound_rx) =
+            new_p2p_consensus.add_client(assembler, SLOT_TABLE_NO_LIMIT);
         // Create the DKG client.
-        let (client, jh) = create_artifact_handler(
-            dkg_tx,
+        let jh = create_artifact_handler(
+            outbound_tx,
+            inbound_rx,
             dkg::DkgImpl::new(
                 node_id,
                 Arc::clone(&consensus_crypto),
@@ -456,10 +453,7 @@ fn start_consensus(
             metrics_registry.clone(),
         );
         join_handles.push(jh);
-
-        new_p2p_consensus.add_client(dkg_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
     };
-
     {
         let finalized = consensus_pool_cache.finalized_block();
         let chain_key_config =
@@ -488,10 +482,12 @@ fn start_consensus(
             metrics_registry.clone(),
         );
 
-        let (idkg_tx, idkg_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
+        let (outbound_tx, inbound_rx) =
+            new_p2p_consensus.add_client(assembler, SLOT_TABLE_NO_LIMIT);
 
-        let (client, jh) = create_artifact_handler(
-            idkg_tx,
+        let jh = create_artifact_handler(
+            outbound_tx,
+            inbound_rx,
             idkg::IDkgImpl::new(
                 node_id,
                 consensus_pool.read().unwrap().get_block_cache(),
@@ -505,10 +501,7 @@ fn start_consensus(
             artifact_pools.idkg_pool,
             metrics_registry.clone(),
         );
-
         join_handles.push(jh);
-
-        new_p2p_consensus.add_client(idkg_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
     };
 
     {
@@ -525,10 +518,11 @@ fn start_consensus(
             metrics_registry.clone(),
         );
 
-        let (outbound_tx, inbound_rx) = new_p2p_consensus.add_client(  assembler, SLOT_TABLE_NO_LIMIT);
+        let (outbound_tx, inbound_rx) =
+            new_p2p_consensus.add_client(assembler, SLOT_TABLE_NO_LIMIT);
 
-        let (client, jh) = create_artifact_handler(
-            http_outcalls_tx,
+        let jh = create_artifact_handler(
+            outbound_tx,
             inbound_rx,
             CanisterHttpPoolManagerImpl::new(
                 Arc::clone(&state_reader),
@@ -545,7 +539,6 @@ fn start_consensus(
             metrics_registry.clone(),
         );
         join_handles.push(jh);
-
     };
 
     (
