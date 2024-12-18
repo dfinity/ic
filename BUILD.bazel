@@ -18,10 +18,10 @@ exports_files([
 ])
 
 jq_dep(
-    name = "mainnet_nns_revision",
+    name = "mainnet_nns_subnet_revision",
     json_path = ".subnets.\\\"tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe\\\"",
     source = "mainnet-subnet-revisions.json",
-    target = "mainnet_nns_revision.txt",
+    target = "mainnet_nns_subnet_revision.txt",
 )
 
 filegroup(

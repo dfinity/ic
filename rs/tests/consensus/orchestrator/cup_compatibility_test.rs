@@ -126,7 +126,7 @@ fn test(env: TestEnv) {
     let log = env.logger();
 
     let mainnet_version =
-        read_dependency_to_string("mainnet_nns_revision.txt").expect("mainnet IC version");
+        read_dependency_to_string("mainnet_nns_subnet_revision.txt").expect("mainnet IC version");
     info!(log, "Continuing with mainnet version {mainnet_version}");
 
     let output_dir = PathBuf::from("cup_compatibility_test");
