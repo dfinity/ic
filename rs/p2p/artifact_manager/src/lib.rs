@@ -20,12 +20,10 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    sync::mpsc::{unbounded_channel, Sender, UnboundedReceiver, UnboundedSender},
+    sync::mpsc::{Sender, UnboundedReceiver},
     time::timeout,
 };
 use tracing::instrument;
-
-type ArtifactEventSender<Artifact> = UnboundedSender<UnvalidatedArtifactMutation<Artifact>>;
 
 /// Metrics for a client artifact processor.
 struct ArtifactProcessorMetrics {
@@ -243,7 +241,7 @@ pub fn create_ingress_handlers<
             + Sync,
     >,
     metrics_registry: MetricsRegistry,
-) ->  Box<dyn JoinGuard> {
+) -> Box<dyn JoinGuard> {
     let client = IngressProcessor::new(ingress_pool.clone(), ingress_handler);
     run_artifact_processor(
         time_source.clone(),
@@ -456,11 +454,13 @@ mod tests {
 
         let time_source = Arc::new(SysTimeSource::new());
         let (send_tx, mut send_rx) = tokio::sync::mpsc::channel(100);
+        let (_, inbound_rx) = tokio::sync::mpsc::unbounded_channel();
         run_artifact_processor::<DummyArtifact>(
             time_source,
             MetricsRegistry::default(),
             Box::new(DummyProcessor),
             send_tx,
+            inbound_rx,
             (0..10).map(Into::into).collect(),
         );
 

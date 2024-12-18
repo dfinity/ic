@@ -334,7 +334,7 @@ fn start_consensus(
             let assembler = ic_artifact_downloader::FetchStrippedConsensusArtifact::new(
                 log.clone(),
                 rt_handle.clone(),
-                consensus_pool,
+                consensus_pool.clone(),
                 artifact_pools.ingress_pool.clone(),
                 bouncer,
                 metrics_registry.clone(),
@@ -345,7 +345,7 @@ fn start_consensus(
             let assembler = ic_artifact_downloader::FetchArtifact::new(
                 log.clone(),
                 rt_handle.clone(),
-                consensus_pool,
+                consensus_pool.clone(),
                 bouncer,
                 metrics_registry.clone(),
             );
@@ -358,7 +358,7 @@ fn start_consensus(
             inbound_rx,
             consensus_impl,
             time_source.clone(),
-            consensus_pool.clone(),
+            consensus_pool,
             metrics_registry.clone(),
         );
 
@@ -482,7 +482,7 @@ fn start_consensus(
             metrics_registry.clone(),
         );
 
-        let (outbound_tx, inbound_rx) =
+        let (outbound_tx, inbound_rx, _) =
             new_p2p_consensus.add_client(assembler, SLOT_TABLE_NO_LIMIT);
 
         let jh = create_artifact_handler(
