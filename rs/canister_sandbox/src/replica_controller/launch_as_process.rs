@@ -109,27 +109,30 @@ pub fn spawn_canister_sandbox_process(
 
     // Set up thread to handle incoming channel -- replies are routed
     // to reply buffer, requests to the RPC request handler given.
-    let thread_handle = std::thread::spawn(move || {
-        let demux = transport::Demux::<_, _, protocol::transport::SandboxToController>::new(
-            Arc::new(rpc::ServerStub::new(
-                Arc::clone(&controller_service) as Arc<_>,
-                out.make_sink::<protocol::ctlsvc::Reply>(),
-            )),
-            reply_handler.clone(),
-        );
-        transport::socket_read_messages::<_, _>(
-            move |message| {
-                demux.handle(message);
-            },
-            socket,
-            SocketReaderConfig::default(),
-        );
-        reply_handler.flush_with_errors();
-        controller_service.flush_with_errors();
-        // Send a notification to the writer thread to stop.
-        // Otherwise, the writer thread will remain waiting forever.
-        out.stop();
-    });
+    let thread_handle = std::thread::Builder::new()
+        .name("CanisterSandbox".to_string())
+        .spawn(move || {
+            let demux = transport::Demux::<_, _, protocol::transport::SandboxToController>::new(
+                Arc::new(rpc::ServerStub::new(
+                    Arc::clone(&controller_service) as Arc<_>,
+                    out.make_sink::<protocol::ctlsvc::Reply>(),
+                )),
+                reply_handler.clone(),
+            );
+            transport::socket_read_messages::<_, _>(
+                move |message| {
+                    demux.handle(message);
+                },
+                socket,
+                SocketReaderConfig::default(),
+            );
+            reply_handler.flush_with_errors();
+            controller_service.flush_with_errors();
+            // Send a notification to the writer thread to stop.
+            // Otherwise, the writer thread will remain waiting forever.
+            out.stop();
+        })
+        .unwrap();
 
     Ok((svc, pid, thread_handle))
 }
