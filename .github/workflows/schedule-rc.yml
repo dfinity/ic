@@ -11,6 +11,7 @@ jobs:
     name: Cut RC
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: PUSH_TO_RC_BRANCH
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
