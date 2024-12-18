@@ -230,7 +230,7 @@ def main():
         parser.print_help()
         exit(1)
 
-    pr_description = """{description}.
+    pr_description = """{description}
 
 This PR is created automatically using [`mainnet_revisions.py`](https://github.com/dfinity/ic/blob/master/ci/src/mainnet_revisions/mainnet_revisions.py)
     """
