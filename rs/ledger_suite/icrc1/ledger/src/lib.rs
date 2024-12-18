@@ -1361,7 +1361,7 @@ impl ArchivelessBlockchain for StableBlockchain {
         BLOCKS_MEMORY.with_borrow_mut(|blocks| {
             blocks
                 .append(&block)
-                .map_err(|e| "failed to add block".to_string())
+                .map_err(|e| format!("failed to add block: {:?}", e))
         })
     }
 
