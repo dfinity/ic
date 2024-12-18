@@ -1927,6 +1927,7 @@ fn observe_replicated_state_metrics(
     let mut num_stopping_canisters = 0;
     let mut num_stopped_canisters = 0;
 
+    let mut num_callbacks = 0;
     let mut num_paused_exec = 0;
     let mut num_aborted_exec = 0;
     let mut num_paused_install = 0;
@@ -1950,8 +1951,17 @@ fn observe_replicated_state_metrics(
     let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
     state.canisters_iter().for_each(|canister| {
         match canister.system_state.get_status() {
-            CanisterStatus::Running { .. } => num_running_canisters += 1,
-            CanisterStatus::Stopping { stop_contexts, .. } => {
+            CanisterStatus::Running {
+                call_context_manager,
+            } => {
+                num_callbacks += call_context_manager.callbacks().len();
+                num_running_canisters += 1;
+            }
+            CanisterStatus::Stopping {
+                call_context_manager,
+                stop_contexts,
+            } => {
+                num_callbacks += call_context_manager.callbacks().len();
                 num_stopping_canisters += 1;
                 // TODO(EXC-1466): Remove once all calls have `call_id` present.
                 num_stop_canister_calls_without_call_id += stop_contexts
@@ -2079,6 +2089,7 @@ fn observe_replicated_state_metrics(
     observe_reading(CanisterStatusType::Stopping, num_stopping_canisters);
     observe_reading(CanisterStatusType::Stopped, num_stopped_canisters);
 
+    metrics.callbacks.set(num_callbacks as i64);
     metrics
         .canister_paused_execution
         .observe(num_paused_exec as f64);

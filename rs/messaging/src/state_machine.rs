@@ -60,7 +60,8 @@ impl StateMachineImpl {
             scheduler,
             demux,
             stream_builder,
-            best_effort_message_memory_capacity: hypervisor_config.subnet_message_memory_capacity,
+            best_effort_message_memory_capacity: hypervisor_config
+                .best_effort_message_memory_capacity,
             log,
             metrics,
         }

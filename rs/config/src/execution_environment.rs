@@ -53,7 +53,7 @@ const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * 
 const SUBNET_MEMORY_RESERVATION: NumBytes = NumBytes::new(10 * GIB);
 
 /// The soft limit on the subnet-wide number of callbacks.
-pub const SUBNET_CALLBACK_SOFT_LIMIT: usize = 1_000_000;
+pub const SUBNET_CALLBACK_SOFT_LIMIT: usize = 5_000_000;
 
 /// The number of callbacks that are guaranteed to each canister.
 pub const CANISTER_GUARANTEED_CALLBACK_QUOTA: usize = 50;
