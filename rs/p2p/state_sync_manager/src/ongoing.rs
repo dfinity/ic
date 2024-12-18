@@ -19,8 +19,8 @@ use std::{
 use crate::metrics::OngoingStateSyncMetrics;
 use crate::routes::{build_chunk_handler_request, parse_chunk_handler_response};
 
-use ic_async_utils::JoinMap;
 use ic_base_types::NodeId;
+use ic_http_endpoints_async_utils::JoinMap;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId};
 use ic_logger::{error, info, ReplicaLogger};
 use ic_quic_transport::{Shutdown, Transport};

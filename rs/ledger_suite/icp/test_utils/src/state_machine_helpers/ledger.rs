@@ -15,7 +15,7 @@ pub fn icp_get_blocks(
 ) -> Vec<icp_ledger::Block> {
     let req = GetBlocksArgs {
         start: start_index.unwrap_or(0u64),
-        length: num_blocks.unwrap_or(u32::MAX as usize),
+        length: num_blocks.unwrap_or(u32::MAX as usize) as u64,
     };
     let req = Encode!(&req).expect("Failed to encode GetBlocksArgs");
     let res = env
@@ -39,7 +39,7 @@ pub fn icp_get_blocks(
         for i in 0..=archived.length / MAX_BLOCKS_PER_REQUEST as u64 {
             let req = GetBlocksArgs {
                 start: archived.start + i * MAX_BLOCKS_PER_REQUEST as u64,
-                length: MAX_BLOCKS_PER_REQUEST,
+                length: MAX_BLOCKS_PER_REQUEST as u64,
             };
             let req = Encode!(&req).expect("Failed to encode GetBlocksArgs for archive node");
             let canister_id = archived.callback.canister_id;
@@ -68,7 +68,7 @@ pub fn icp_get_blocks(
 pub fn icp_query_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::Block> {
     let req = GetBlocksArgs {
         start: 0u64,
-        length: u32::MAX as usize,
+        length: u32::MAX as u64,
     };
     let req = Encode!(&req).expect("Failed to encode GetBlocksArgs");
     let res = env
@@ -81,7 +81,7 @@ pub fn icp_query_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_le
         for i in 0..=archived.length / MAX_BLOCKS_PER_REQUEST as u64 {
             let req = GetBlocksArgs {
                 start: archived.start + i * MAX_BLOCKS_PER_REQUEST as u64,
-                length: MAX_BLOCKS_PER_REQUEST,
+                length: MAX_BLOCKS_PER_REQUEST as u64,
             };
             let req = Encode!(&req).expect("Failed to encode GetBlocksArgs for archive node");
             let canister_id = archived.callback.canister_id;

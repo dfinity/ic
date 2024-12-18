@@ -2470,26 +2470,20 @@ pub fn test_upgrade_serialization<Tokens>(
                 };
 
                 // Test if the old serialized approvals and balances are correctly deserialized
-                test_upgrade(ledger_wasm_current.clone(), 1);
+                // TODO: Expected migration steps should be 1 again in FI-1440.
+                // test_upgrade(ledger_wasm_current.clone(), 1);
                 // Test the new wasm serialization
                 test_upgrade(ledger_wasm_current.clone(), 0);
                 // Test deserializing from memory manager
                 test_upgrade(ledger_wasm_current.clone(), 0);
-                // Downgrade from stable structures to mainnet not possible.
-                match env.upgrade_canister(
+                // Downgrade to mainnet should succeed since they are both the same version wrt.
+                // migration to stable structures.
+                env.upgrade_canister(
                     ledger_id,
                     ledger_wasm_mainnet.clone(),
                     Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-                ) {
-                    Ok(_) => {
-                        panic!("Upgrade from future ledger version should fail!")
-                    }
-                    Err(e) => {
-                        assert!(e
-                            .description()
-                            .contains("Trying to downgrade from incompatible version"))
-                    }
-                };
+                )
+                .expect("Downgrading to mainnet should succeed");
                 if verify_blocks {
                     // This will also verify the ledger blocks.
                     // The current implementation of the InMemoryLedger cannot get blocks

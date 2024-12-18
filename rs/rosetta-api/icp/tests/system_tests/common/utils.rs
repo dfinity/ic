@@ -157,7 +157,7 @@ pub async fn query_encoded_blocks(
     let current_chain_tip_index = response.chain_length.saturating_sub(1);
     let block_request = GetBlocksArgs {
         start: std::cmp::min(min_block_height, current_chain_tip_index),
-        length: std::cmp::min(num_blocks, response.chain_length) as usize,
+        length: std::cmp::min(num_blocks, response.chain_length),
     };
     Decode!(
         &agent

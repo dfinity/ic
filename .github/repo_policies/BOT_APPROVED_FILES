@@ -7,4 +7,5 @@ ic-os/hostos/context/docker-base.dev
 ic-os/hostos/context/docker-base.prod
 ic-os/setupos/context/docker-base.dev
 ic-os/setupos/context/docker-base.prod
+mainnet-canisters.json
 testnet/mainnet_revisions.json

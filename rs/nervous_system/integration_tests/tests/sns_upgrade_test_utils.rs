@@ -11,6 +11,7 @@ use ic_nervous_system_integration_tests::{
     },
 };
 use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
+use ic_sns_governance::pb::v1::upgrade_journal_entry;
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::SnsCanisterType;
 
@@ -72,15 +73,17 @@ pub async fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
         eprintln!("Upgrade pass {}", upgrade_pass);
 
         eprintln!("Adding all WASMs ...");
+        let mut expected_upgrade_steps = vec![];
         for canister_type in &sns_canisters_to_upgrade {
-            eprintln!("modify_and_add_wasm for {:?} ...", canister_type);
-            latest_sns_version = nns::sns_wasm::modify_and_add_wasm(
+            eprintln!("modify_and_add_master_wasm for {:?} ...", canister_type);
+            latest_sns_version = nns::sns_wasm::modify_and_add_master_wasm(
                 &pocket_ic,
                 latest_sns_version,
                 *canister_type,
                 upgrade_pass,
             )
             .await;
+            expected_upgrade_steps.push(hash_sns_wasms(&latest_sns_version));
         }
 
         eprintln!("wait for the upgrade steps to be refreshed ...");
@@ -100,6 +103,18 @@ pub async fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
         )
         .await
         .unwrap();
+
+        eprintln!("assert that the upgrade steps are correct ...");
+        {
+            assert_eq!(
+                sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id)
+                    .await
+                    .upgrade_steps
+                    .unwrap()
+                    .versions[1..],
+                expected_upgrade_steps
+            );
+        }
 
         eprintln!("advance the target version to the latest version. ...");
         sns::governance::propose_to_advance_sns_target_version(
@@ -123,5 +138,38 @@ pub async fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
         )
         .await
         .unwrap();
+    }
+
+    eprintln!(
+        "Asserting that there have been {} successful upgrades",
+        2 * sns_canisters_to_upgrade.len()
+    );
+    {
+        let upgrade_journal =
+            sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id)
+                .await
+                .upgrade_journal
+                .unwrap()
+                .entries;
+        let upgrade_successes = upgrade_journal
+            .into_iter()
+            .filter_map(|entry| entry.event)
+            .filter(|event| {
+                matches!(
+                    event,
+                    upgrade_journal_entry::Event::UpgradeOutcome(
+                        upgrade_journal_entry::UpgradeOutcome {
+                            status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
+                                _
+                            )),
+                            ..
+                        }
+                    )
+                )
+            });
+        assert_eq!(
+            upgrade_successes.count(),
+            2 * sns_canisters_to_upgrade.len()
+        );
     }
 }
