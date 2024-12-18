@@ -467,13 +467,14 @@ pub fn start_consensus_manager(
         rt_handle.clone(),
         MetricsRegistry::default(),
     );
-    let (outbound_tx, inbound_rx) = cm1.add_client(
-        downloader,
-        usize::MAX,
-    );
+    let (outbound_tx, inbound_rx, _) = cm1.add_client(downloader, usize::MAX);
 
-    let artifact_processor_jh =
-        start_test_processor(outbound_tx, inbound_rx, pool.clone(), pool.clone().read().unwrap().clone());
+    let artifact_processor_jh = start_test_processor(
+        outbound_tx,
+        inbound_rx,
+        pool.clone(),
+        pool.clone().read().unwrap().clone(),
+    );
     (artifact_processor_jh, cm1)
 }
 

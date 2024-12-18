@@ -378,18 +378,15 @@ pub fn add_transport_to_sim<F>(
                     bouncer_factory,
                     MetricsRegistry::default(),
                 );
-                let (outbound_tx, inbound_tx) = consensus_builder.add_client(
-                    downloader,
-                    usize::MAX,
-                );
+                let (outbound_tx, inbound_tx, _) =
+                    consensus_builder.add_client(downloader, usize::MAX);
 
-                let artifact_processor_jh =
-                    start_test_processor(
-                        outbound_tx,
-                        inbound_tx,
-                        consensus.clone(),
-                        consensus.clone().read().unwrap().clone(),
-                    );
+                let artifact_processor_jh = start_test_processor(
+                    outbound_tx,
+                    inbound_tx,
+                    consensus.clone(),
+                    consensus.clone().read().unwrap().clone(),
+                );
                 router = Some(router.unwrap_or_default().merge(consensus_builder.router()));
 
                 Some(artifact_processor_jh)
@@ -442,7 +439,7 @@ pub fn waiter_fut(
 
 #[allow(clippy::type_complexity)]
 pub fn start_test_processor(
-    outbound_tx:  mpsc::Sender<ArtifactTransmit<U64Artifact>>,
+    outbound_tx: mpsc::Sender<ArtifactTransmit<U64Artifact>>,
     inbound_rx: mpsc::UnboundedReceiver<UnvalidatedArtifactMutation<U64Artifact>>,
     pool: Arc<RwLock<TestConsensus<U64Artifact>>>,
     change_set_producer: TestConsensus<U64Artifact>,

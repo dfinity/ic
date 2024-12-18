@@ -76,6 +76,7 @@ impl AbortableBroadcastChannelBuilder {
         let rt_handle = self.rt_handle.clone();
         let metrics_registry = self.metrics_registry.clone();
 
+        let inbound_tx_c = inbound_tx.clone();
         let builder = move |transport: Arc<dyn Transport>, topology_watcher| {
             start_consensus_manager(
                 log,
@@ -83,7 +84,7 @@ impl AbortableBroadcastChannelBuilder {
                 rt_handle,
                 outbound_rx,
                 adverts_from_peers_rx,
-                inbound_tx.clone(),
+                inbound_tx,
                 assembler(transport.clone()),
                 transport,
                 topology_watcher,
@@ -100,7 +101,7 @@ impl AbortableBroadcastChannelBuilder {
         );
 
         self.clients.push(Box::new(builder));
-        (outbound_tx, inbound_rx, inbound_tx)
+        (outbound_tx, inbound_rx, inbound_tx_c)
     }
 
     pub fn router(&mut self) -> Router {

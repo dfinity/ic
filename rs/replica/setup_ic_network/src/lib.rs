@@ -330,7 +330,7 @@ fn start_consensus(
         let consensus_pool = Arc::clone(&consensus_pool);
 
         let bouncer = Arc::new(ConsensusBouncer::new(metrics_registry, message_router));
-        let (outbound_tx, inbound_rx) = if HASHES_IN_BLOCKS_FEATURE_ENABLED {
+        let (outbound_tx, inbound_rx, _) = if HASHES_IN_BLOCKS_FEATURE_ENABLED {
             let assembler = ic_artifact_downloader::FetchStrippedConsensusArtifact::new(
                 log.clone(),
                 rt_handle.clone(),
@@ -375,11 +375,11 @@ fn start_consensus(
             metrics_registry.clone(),
         );
 
-        let (outbound_tx, inbound_rx) =
+        let (outbound_tx, inbound_rx, inbound_tx) =
             new_p2p_consensus.add_client(assembler, SLOT_TABLE_LIMIT_INGRESS);
         // Create the ingress client.
         let jh = create_ingress_handlers(
-            outbound_tx.clone(),
+            outbound_tx,
             inbound_rx,
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.ingress_pool),
@@ -387,7 +387,7 @@ fn start_consensus(
             metrics_registry.clone(),
         );
         join_handles.push(jh);
-        outbound_tx
+        inbound_tx
     };
 
     {
@@ -410,7 +410,7 @@ fn start_consensus(
             metrics_registry.clone(),
         );
 
-        let (outbound_tx, inbound_rx) =
+        let (outbound_tx, inbound_rx, _) =
             new_p2p_consensus.add_client(assembler, SLOT_TABLE_NO_LIMIT);
         // Create the certification client.
         let jh = create_artifact_handler(
@@ -434,7 +434,7 @@ fn start_consensus(
             metrics_registry.clone(),
         );
 
-        let (outbound_tx, inbound_rx) =
+        let (outbound_tx, inbound_rx, _) =
             new_p2p_consensus.add_client(assembler, SLOT_TABLE_NO_LIMIT);
         // Create the DKG client.
         let jh = create_artifact_handler(
@@ -518,7 +518,7 @@ fn start_consensus(
             metrics_registry.clone(),
         );
 
-        let (outbound_tx, inbound_rx) =
+        let (outbound_tx, inbound_rx, _) =
             new_p2p_consensus.add_client(assembler, SLOT_TABLE_NO_LIMIT);
 
         let jh = create_artifact_handler(
