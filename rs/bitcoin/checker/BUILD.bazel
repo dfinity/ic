@@ -106,5 +106,6 @@ rust_ic_test(
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
+        "@crate_index//:regex",
     ],
 )
