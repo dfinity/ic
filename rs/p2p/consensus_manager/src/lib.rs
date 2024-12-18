@@ -49,7 +49,8 @@ impl AbortableBroadcastChannelBuilder {
         }
     }
 
-    pub fn add_client<
+    #[allow(clippy::type_complexity)]
+    pub fn abortable_broadcast_channel<
         Artifact: IdentifiableArtifact,
         WireArtifact: PbArtifact,
         F: FnOnce(Arc<dyn Transport>) -> D + 'static,
