@@ -2,7 +2,6 @@ use std::{
     collections::HashMap,
     os::unix::{net::UnixStream, prelude::FromRawFd},
     sync::{Arc, Condvar, Mutex},
-    thread,
 };
 
 use crate::{
