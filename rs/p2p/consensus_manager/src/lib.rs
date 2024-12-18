@@ -28,7 +28,7 @@ mod sender;
 type StartConsensusManagerFn =
     Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Vec<Shutdown>>;
 
-pub const MAX_OUTBOUND_CHANNEL_SIZE: usize = 100_000;
+const MAX_OUTBOUND_CHANNEL_SIZE: usize = 100_000;
 
 pub struct AbortableBroadcastChannelBuilder {
     log: ReplicaLogger,
