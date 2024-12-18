@@ -20,13 +20,13 @@ exports_files([
 jq_dep(
     name = "mainnet_nns_revision",
     json_path = ".subnets.\\\"tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe\\\"",
-    source = "mainnet_revisions.json",
+    source = "mainnet-subnet-revisions.json",
     target = "mainnet_nns_revision.txt",
 )
 
 filegroup(
     name = "mainnet_revisions",
-    srcs = ["mainnet_revisions.json"],
+    srcs = ["mainnet-subnet-revisions.json"],
 )
 
 # bazel/workspace_status.sh will write the current timestamp to this file on every run to provade an input that always changes for some targets.
