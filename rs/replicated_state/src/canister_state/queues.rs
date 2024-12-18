@@ -695,20 +695,23 @@ impl CanisterQueues {
 
     /// Enqueues a canister-to-canister message into the induction pool.
     ///
-    /// If the message is a `Request` and is enqueued successfully, this will also
-    /// reserve a slot in the corresponding output queue for the eventual response.
+    /// If the message is a `Request` and it is enqueued successfully `Ok(true)` is
+    /// returned; and a slot is reserved in the corresponding output queue for the
+    /// eventual response.
     ///
     /// If the message is a `Response`, `SystemState` will have already checked for
     /// a matching callback:
     ///
     ///  * If this is a guaranteed `Response`, the protocol should have reserved a
     ///    slot for it, so the push should not fail for lack of one (although an
-    ///    error may be returned in case of a bug in the upper layers).
+    ///    error may be returned in case of a bug in the upper layers) and `Ok(true)`
+    ///    is returned.
     ///  * If this is a best-effort `Response`, a slot is available and no duplicate
-    ///    (time out) response is already enqueued, it is enqueued.
+    ///    (time out) response is already enqueued, it is enqueued and `Ok(true)` is
+    ///    returned.
     ///  * If this is a best-effort `Response` and a duplicate (time out) response
     ///    is already enqueued (which is implicitly true when no slot is available),
-    ///    the response is silently dropped and `Ok(())` is returned.
+    ///    the response is silently dropped and `Ok(false)` is returned.
     ///
     /// If the message was enqueued, adds the sender to the appropriate input
     /// schedule (local or remote), if not already there.
@@ -727,7 +730,7 @@ impl CanisterQueues {
         &mut self,
         msg: RequestOrResponse,
         input_queue_type: InputQueueType,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
         let sender = msg.sender();
         let input_queue = match msg {
             RequestOrResponse::Request(_) => {
@@ -764,7 +767,7 @@ impl CanisterQueues {
                                 ));
                             } else {
                                 // But it's OK for a best-effort response. Silently drop it.
-                                return Ok(());
+                                return Ok(false);
                             }
                         }
                         queue
@@ -788,7 +791,7 @@ impl CanisterQueues {
                                 .callbacks_with_enqueued_response
                                 .get(&response.originator_reply_callback)
                                 .is_some());
-                            return Ok(());
+                            return Ok(false);
                         }
                     }
                 }
@@ -810,7 +813,7 @@ impl CanisterQueues {
 
         debug_assert_eq!(Ok(()), self.test_invariants());
         debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
-        Ok(())
+        Ok(true)
     }
 
     /// Enqueues a "deadline expired" compact response for the given best-effort
@@ -1134,6 +1137,7 @@ impl CanisterQueues {
             deadline: request.deadline,
         }));
         self.push_input(response, InputQueueType::LocalSubnet)
+            .map(|_| ())
             .map_err(|(e, _msg)| e)
     }
 
@@ -2067,7 +2071,7 @@ pub mod testing {
             &mut self,
             msg: RequestOrResponse,
             input_queue_type: InputQueueType,
-        ) -> Result<(), (StateError, RequestOrResponse)>;
+        ) -> Result<bool, (StateError, RequestOrResponse)>;
 
         /// Publicly exposes the local sender input_schedule.
         fn local_sender_schedule(&self) -> &VecDeque<CanisterId>;
@@ -2100,7 +2104,7 @@ pub mod testing {
             &mut self,
             msg: RequestOrResponse,
             input_queue_type: InputQueueType,
-        ) -> Result<(), (StateError, RequestOrResponse)> {
+        ) -> Result<bool, (StateError, RequestOrResponse)> {
             self.push_input(msg, input_queue_type)
         }
 

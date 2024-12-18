@@ -13,7 +13,7 @@ use helpers::{
     get_proposer_and_sender, get_subnet_ids, get_subnet_record_with_details, parse_proposal_url,
     shortened_pid_string, shortened_subnet_string,
 };
-use ic_btc_interface::{Flag, SetConfigRequest};
+use ic_btc_interface::{Fees, Flag, SetConfigRequest};
 use ic_canister_client::{Agent, Sender};
 use ic_canister_client_sender::SigKeys;
 use ic_crypto_utils_threshold_sig_der::{
@@ -2618,6 +2618,78 @@ struct ProposeToSetBitcoinConfig {
         help = "Whether or not to disable the API if canister isn't fully synced."
     )]
     pub disable_api_if_not_fully_synced: Option<bool>,
+
+    #[clap(
+        long,
+        help = "Updates the base fee to charge for all `get_utxos` requests."
+    )]
+    pub get_utxos_base: u128,
+
+    #[clap(
+        long,
+        help = "Updates the number of cycles to charge per 10 instructions in a `get_utxos` request."
+    )]
+    pub get_utxos_cycles_per_ten_instructions: u128,
+
+    #[clap(
+        long,
+        help = "Updates the maximum amount of cycles that can be charged in a `get_utxos` request."
+    )]
+    pub get_utxos_maximum: u128,
+
+    #[clap(
+        long,
+        help = "Updates the flat fee to charge for a `get_balance` request."
+    )]
+    pub get_balance: u128,
+
+    #[clap(
+        long,
+        help = "Updates the maximum amount of cycles that can be charged in a `get_balance` request."
+    )]
+    pub get_balance_maximum: u128,
+
+    #[clap(
+        long,
+        help = "Updates the flat fee to charge for a `get_current_fee_percentiles` request."
+    )]
+    pub get_current_fee_percentiles: u128,
+
+    #[clap(
+        long,
+        help = "Updates the maximum amount of cycles that can be charged in a `get_current_fee_percentiles` request."
+    )]
+    pub get_current_fee_percentiles_maximum: u128,
+
+    #[clap(
+        long,
+        help = "Updates the base fee to charge for all `send_transaction` requests."
+    )]
+    pub send_transaction_base: u128,
+
+    #[clap(
+        long,
+        help = "Updates the number of cycles to charge for each byte in the transaction."
+    )]
+    pub send_transaction_per_byte: u128,
+
+    #[clap(
+        long,
+        help = "Updates the base fee to charge for all `get_block_headers` requests."
+    )]
+    pub get_block_headers_base: u128,
+
+    #[clap(
+        long,
+        help = "Updates the number of cycles to charge per 10 instructions in a `get_block_headers` request."
+    )]
+    pub get_block_headers_cycles_per_ten_instructions: u128,
+
+    #[clap(
+        long,
+        help = "Updates the maximum amount of cycles that can be charged in a `get_block_headers` request."
+    )]
+    pub get_block_headers_maximum: u128,
 }
 
 impl ProposalTitle for ProposeToSetBitcoinConfig {
@@ -2638,7 +2710,7 @@ impl ProposalTitle for ProposeToSetBitcoinConfig {
 #[async_trait]
 impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
     async fn payload(&self, _: &Agent) -> BitcoinSetConfigProposal {
-        let request = SetConfigRequest {
+        let request: SetConfigRequest = SetConfigRequest {
             stability_threshold: self.stability_threshold,
             api_access: self
                 .api_access
@@ -2652,6 +2724,21 @@ impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
                 } else {
                     Flag::Disabled
                 }
+            }),
+            fees: Some(Fees {
+                get_utxos_base: self.get_utxos_base,
+                get_utxos_cycles_per_ten_instructions: self.get_utxos_cycles_per_ten_instructions,
+                get_utxos_maximum: self.get_utxos_maximum,
+                get_balance: self.get_balance,
+                get_balance_maximum: self.get_balance_maximum,
+                get_current_fee_percentiles: self.get_current_fee_percentiles,
+                get_current_fee_percentiles_maximum: self.get_current_fee_percentiles_maximum,
+                send_transaction_base: self.send_transaction_base,
+                send_transaction_per_byte: self.send_transaction_per_byte,
+                get_block_headers_base: self.get_block_headers_base,
+                get_block_headers_cycles_per_ten_instructions: self
+                    .get_block_headers_cycles_per_ten_instructions,
+                get_block_headers_maximum: self.get_block_headers_maximum,
             }),
             ..Default::default()
         };

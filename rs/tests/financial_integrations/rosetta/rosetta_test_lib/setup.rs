@@ -1,4 +1,4 @@
-use crate::rosetta_tests::{lib::hex2addr, rosetta_client::RosettaApiClient};
+use crate::{rosetta_client::RosettaApiClient, utils::hex2addr};
 use candid::Encode;
 use canister_test::{Canister, CanisterId, Runtime};
 use ic_ledger_core::Tokens;
@@ -90,7 +90,7 @@ fn check_nodes_health(env: &TestEnv) {
     info!(&env.logger(), "All nodes are ready, IC setup succeeded.");
 }
 
-pub(crate) fn subnet_sys(env: &TestEnv) -> SubnetSnapshot {
+pub fn subnet_sys(env: &TestEnv) -> SubnetSnapshot {
     env.topology_snapshot()
         .subnets()
         .find(|s| s.subnet_type() == SubnetType::System)

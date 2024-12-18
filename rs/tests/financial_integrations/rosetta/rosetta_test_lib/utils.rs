@@ -1,9 +1,5 @@
-use super::governance_client::GovernanceClient;
-use crate::rosetta_tests::{
-    ledger_client::LedgerClient,
-    lib::convert::{neuron_account_from_public_key, neuron_subaccount_bytes_from_public_key},
-    rosetta_client::RosettaApiClient,
-};
+use crate::governance_client::GovernanceClient;
+use crate::{ledger_client::LedgerClient, rosetta_client::RosettaApiClient};
 use candid::Principal;
 use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_ledger_core::{block::BlockIndex, Tokens};
@@ -11,10 +7,11 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::{neuron::DissolveState, Neuron};
 use ic_rosetta_api::{
-    convert,
     convert::{
-        from_hex, from_model_account_identifier, operations_to_requests, to_hex,
-        to_model_account_identifier,
+        from_hex, from_model_account_identifier, from_transaction_operation_results,
+        neuron_account_from_public_key, neuron_subaccount_bytes_from_public_key,
+        operations_to_requests, to_hex, to_model_account_identifier,
+        transaction_results_to_api_error,
     },
     errors,
     errors::ApiError,
@@ -32,8 +29,8 @@ use ic_rosetta_api::{
     },
     request_types::{
         AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
-        NeuronInfo, RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake, StakeMaturity,
-        StartDissolve, StopDissolve,
+        NeuronInfo, RefreshVotingPower, RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn,
+        Stake, StakeMaturity, StartDissolve, StopDissolve,
     },
     transaction_id::TransactionIdentifier,
     DEFAULT_TOKEN_SYMBOL,
@@ -56,7 +53,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-pub(crate) fn make_user(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, PrincipalId) {
+pub fn make_user(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, PrincipalId) {
     make_user_ed25519(seed)
 }
 
@@ -85,11 +82,11 @@ pub fn to_public_key<T: RosettaSupportedKeyPair>(keypair: &T) -> PublicKey {
     }
 }
 
-pub(crate) fn one_day_from_now_nanos() -> u64 {
+pub fn one_day_from_now_nanos() -> u64 {
     (ic_types::time::current_time() + Duration::from_secs(24 * 60 * 60)).as_nanos_since_unix_epoch()
 }
 
-pub(crate) fn hex2addr(a: &str) -> AccountIdentifier {
+pub fn hex2addr(a: &str) -> AccountIdentifier {
     AccountIdentifier::from_hex(a).unwrap()
 }
 
@@ -156,7 +153,7 @@ where
     .await
     {
         Ok((submit_res, charged_fee)) => {
-            let results = convert::from_transaction_operation_results(
+            let results = from_transaction_operation_results(
                 submit_res.metadata.try_into().unwrap(),
                 DEFAULT_TOKEN_SYMBOL,
             )
@@ -378,6 +375,7 @@ where
             | Request::StakeMaturity(StakeMaturity { account, .. })
             | Request::NeuronInfo(NeuronInfo { account, .. })
             | Request::ListNeurons(ListNeurons { account, .. })
+            | Request::RefreshVotingPower(RefreshVotingPower { account, .. })
             | Request::Follow(Follow { account, .. }) => {
                 all_sender_account_ids.push(to_model_account_identifier(&account));
             }
@@ -716,13 +714,13 @@ pub fn create_neuron(
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct NeuronDetails {
-    pub(crate) account_id: AccountIdentifier,
-    pub(crate) key_pair: EdKeypair,
-    pub(crate) public_key: PublicKey,
-    pub(crate) principal_id: PrincipalId,
-    pub(crate) neuron_subaccount_identifier: u64,
-    pub(crate) neuron: Neuron,
-    pub(crate) neuron_account: AccountIdentifier,
+    pub account_id: AccountIdentifier,
+    pub key_pair: EdKeypair,
+    pub public_key: PublicKey,
+    pub principal_id: PrincipalId,
+    pub neuron_subaccount_identifier: u64,
+    pub neuron: Neuron,
+    pub neuron_account: AccountIdentifier,
 }
 
 pub fn assert_canister_error(err: &RosettaError, code: u32, text: &str) {
@@ -880,9 +878,10 @@ where
                     fee,
                 ))
             } else {
-                Err(errors::convert_to_error(
-                    &convert::transaction_results_to_api_error(results, DEFAULT_TOKEN_SYMBOL),
-                ))
+                Err(errors::convert_to_error(&transaction_results_to_api_error(
+                    results,
+                    DEFAULT_TOKEN_SYMBOL,
+                )))
             }
         })
 }
