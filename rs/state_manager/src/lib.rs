@@ -62,7 +62,7 @@ use ic_types::{
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SnapshotId,
     SubnetId,
 };
-use ic_utils_thread::{deallocation_thread::DeallocatorThread, JoinOnDrop};
+use ic_utils_thread::{deallocator_thread::DeallocatorThread, JoinOnDrop};
 use ic_validate_eq::ValidateEq;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use prost::Message;

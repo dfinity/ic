@@ -79,7 +79,7 @@ use ic_types::{
     CanisterId, Cycles, NumBytes, NumInstructions, ReplicaVersion, SubnetId, Time,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
-use ic_utils_thread::deallocation_thread::{DeallocationSender, DeallocatorThread};
+use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
 use ic_wasm_types::WasmHash;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;

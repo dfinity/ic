@@ -26,7 +26,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{CanisterTimer, Cycles, NumBytes, NumInstructions, Time};
-use ic_utils_thread::deallocation_thread::DeallocationSender;
+use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
 #[cfg(test)]

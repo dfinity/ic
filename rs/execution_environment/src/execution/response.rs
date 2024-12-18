@@ -25,7 +25,7 @@ use ic_types::messages::{
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::Cycles;
 use ic_types::{NumBytes, NumInstructions, Time};
-use ic_utils_thread::deallocation_thread::DeallocationSender;
+use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
 use crate::execution::common::{
