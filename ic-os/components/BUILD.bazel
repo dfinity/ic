@@ -60,7 +60,7 @@ ignored_repo_components = [
     "hostos-scripts/generate-guestos-config/dev-generate-guestos-config.sh",
     "networking/dev-certs/canister_http_test_ca.key",
     "networking/dev-certs/root_cert_gen.sh",
-    "networking/setup-networking/test-setup-networking.sh"
+    "networking/setup-networking/test-setup-networking.sh",
 ]
 
 check_unused_components_test(
@@ -101,14 +101,14 @@ sh_test(
 
 sh_test(
     name = "test_setup_networking",
-    srcs = [ "networking/setup-networking/test-setup-networking.sh"],
+    srcs = ["networking/setup-networking/test-setup-networking.sh"],
     args = [
         "$(execpath networking/setup-networking/setup-networking.sh)",
-        "$(execpath networking/setup-networking/99-setup-netplan.yaml.template)"
+        "$(execpath networking/setup-networking/99-setup-netplan.yaml.template)",
     ],
     data = [
-        "networking/setup-networking/setup-networking.sh",
         "networking/setup-networking/99-setup-netplan.yaml.template",
+        "networking/setup-networking/setup-networking.sh",
     ],
     tags = ["manual"],
 )
