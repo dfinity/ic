@@ -1,7 +1,7 @@
 # Rate-Limiting Canister Client
 
 ```
-cargo run -- \
+./rate-limiting-canister-client \
     --config-file=ratelimits.yml \
     --canister-id=pawub-syaaa-aaaam-qb7zq-cai \
     --identity-key="XYZ"
