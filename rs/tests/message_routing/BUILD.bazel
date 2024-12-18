@@ -137,7 +137,7 @@ system_test(
     name = "queues_compatibility_test",
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = [
-        "//:mainnet_revisions",
+        "//:mainnet_subnet_revisions",
         "//rs/replicated_state:replicated_state_test_binary",
     ],
     deps = [

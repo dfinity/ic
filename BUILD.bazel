@@ -25,7 +25,7 @@ jq_dep(
 )
 
 filegroup(
-    name = "mainnet_revisions",
+    name = "mainnet_subnet_revisions",
     srcs = ["mainnet-subnet-revisions.json"],
 )
 
