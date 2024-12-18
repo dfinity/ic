@@ -37,6 +37,7 @@ use ic_ledger_core::{
 };
 use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::vec::Vec as StableVec;
 use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
@@ -497,6 +498,7 @@ const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
 const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
 const BALANCES_MEMORY_ID: MemoryId = MemoryId::new(3);
+const BLOCKS_MEMORY_ID: MemoryId = MemoryId::new(4);
 
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
@@ -522,6 +524,11 @@ thread_local! {
     // account -> tokens - map storing ledger balances.
     pub static BALANCES_MEMORY: RefCell<StableBTreeMap<Account, Tokens, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BALANCES_MEMORY_ID))));
+
+    // vector storing ledger blocks.
+    pub static BLOCKS_MEMORY: RefCell<StableVec<EncodedBlock, VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableVec::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID)).unwrap()));
+
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -1013,6 +1020,25 @@ impl Ledger {
         (locations.local_blocks.start, local_blocks, archived_blocks)
     }
 
+    fn query_archiveless_blocks<B>(
+        &self,
+        start: BlockIndex,
+        length: usize,
+        decode: impl Fn(&EncodedBlock) -> B,
+    ) -> (u64, Vec<B>) {
+        let range = range_utils::make_range(start, length);
+        let max_blocks_range = range_utils::take(&range, MAX_TRANSACTIONS_PER_REQUEST);
+
+        let local_blocks: Vec<B> = self
+            .stable_blockchain
+            .get_blocks(max_blocks_range)
+            .iter()
+            .map(decode)
+            .collect();
+
+        (start, local_blocks)
+    }
+
     /// Returns transactions in the specified range.
     pub fn get_transactions(&self, start: BlockIndex, length: usize) -> GetTransactionsResponse {
         let (first_index, local_transactions, archived_transactions) = self.query_blocks(
@@ -1031,6 +1057,20 @@ impl Ledger {
             log_length: Nat::from(self.blockchain.chain_length()),
             transactions: local_transactions,
             archived_transactions,
+        }
+    }
+
+    /// Returns blocks in the specified range.
+    pub fn get_archiveless_blocks(&self, start: BlockIndex, length: usize) -> GetBlocksResponse {
+        let (first_index, local_blocks) =
+            self.query_archiveless_blocks(start, length, encoded_block_to_generic_block);
+
+        GetBlocksResponse {
+            first_index: Nat::from(first_index),
+            chain_length: self.stable_blockchain.len(),
+            certificate: ic_cdk::api::data_certificate().map(serde_bytes::ByteBuf::from),
+            blocks: local_blocks,
+            archived_blocks: vec![],
         }
     }
 
@@ -1316,14 +1356,32 @@ impl BalancesStore for StableBalances {
 pub struct StableBlockchain {}
 
 impl ArchivelessBlockchain for StableBlockchain {
-    fn append_block(&mut self, block: EncodedBlock) {}
+    fn add_block(&mut self, block: EncodedBlock) -> Result<u64, String> {
+        let res = BLOCKS_MEMORY.with_borrow_mut(|blocks| blocks.push(&block));
+        match res {
+            Ok(_) => Ok(self.len().saturating_sub(1)),
+            Err(e) => Err(e.to_string()),
+        }
+    }
 
-    fn get_blocks(&self, start: u64, end: u64) -> Vec<EncodedBlock> {
+    fn get_blocks(&self, range: std::ops::Range<u64>) -> Vec<EncodedBlock> {
         let mut result = vec![];
+        BLOCKS_MEMORY.with_borrow(|blocks| {
+            let full_range = range_utils::make_range(0, self.len() as usize);
+            let available_range = range_utils::intersect(&range, &full_range)
+                .unwrap_or_else(|_| range_utils::make_range(0, 0));
+            for i in available_range {
+                result.push(blocks.get(i).unwrap())
+            }
+        });
         result
     }
 
-    fn last_block_index(&self) -> u64 {
-        0
+    fn len(&self) -> u64 {
+        BLOCKS_MEMORY.with_borrow(|blocks| blocks.len())
+    }
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }

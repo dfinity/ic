@@ -798,6 +798,16 @@ fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
     Access::with_ledger(|ledger| ledger.get_blocks(start, length as usize))
 }
 
+#[cfg(not(feature = "get-blocks-disabled"))]
+#[query]
+#[candid_method(query)]
+fn get_archiveless_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
+    let (start, length) = req
+        .as_start_and_length()
+        .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
+    Access::with_ledger(|ledger| ledger.get_archiveless_blocks(start, length as usize))
+}
+
 #[query]
 #[candid_method(query)]
 fn get_data_certificate() -> DataCertificate {
