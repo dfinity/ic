@@ -437,6 +437,7 @@ fn try_apply_canister_state_changes(
 /// - A mismatch between checks dones by the Wasm executor and checks done when
 ///   applying the changes due to a bug.
 /// - An escape from the Wasm sandbox that corrupts the execution output.
+#[allow(clippy::too_many_arguments)]
 pub fn apply_canister_state_changes(
     canister_state_changes: Option<CanisterStateChanges>,
     execution_state: &mut ExecutionState,
